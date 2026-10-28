@@ -438,9 +438,6 @@ export interface ChatCommand {
   groupIds: string[];
   /** Lowercased usernames granted direct access. */
   usernames: string[];
-  /** Epoch ms. */
-  createdAt: number;
-  updatedAt: number;
 }
 
 /** A group of users a chat command can be limited to. */
@@ -452,9 +449,6 @@ export interface ChatCommandGroup {
   isBuiltIn?: boolean;
   /** ISO time, as the engine reports it. */
   engineCreatedAt: string;
-  /** Epoch ms. */
-  createdAt: number;
-  updatedAt: number;
 }
 
 interface ChatCommandDefinition {
