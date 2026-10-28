@@ -1,15 +1,13 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  type AlertStepSource,
+  type AlertTargetUse,
+  alertTargetUses,
+  alertWidgetNamesAcross,
+} from "@shared/alert-widgets";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
-import {
-  type AlertTargetUse,
-  alertStepTargets,
-  alertWidgetNamesOf,
-  DEFAULT_ALERT_WIDGET_NAME,
-  type PlacedWidget,
-  placedWidgetsOf,
-} from "@shared/alert-widgets";
 import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 
 export type SceneWidgetCatalogRow = Doc<"moduleWidgets"> & { moduleName: string };
@@ -74,10 +72,6 @@ export const listForInstance = query({
   },
 });
 
-function placedWidgets(scene: Doc<"scenes">): PlacedWidget[] {
-  return placedWidgetsOf(scene.widgets ?? []);
-}
-
 async function alertWidgetIdsOf(ctx: QueryCtx, instanceId: Id<"instances">): Promise<Set<string>> {
   const defs = await instanceWidgetDefinitions(ctx, instanceId);
   return new Set(defs.filter((def) => def.hostsSurface === "alert").map((def) => def.widgetId));
@@ -85,7 +79,7 @@ async function alertWidgetIdsOf(ctx: QueryCtx, instanceId: Id<"instances">): Pro
 
 // Every name an alert widget answers to across the instance's scenes, for the
 // Alert action's target picker. Only names some scene has are offered, so a step
-// cannot pick a target nothing will play on; the default leads when present.
+// cannot pick a target nothing will play on.
 export const alertWidgetNames = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<string[]> => {
@@ -98,16 +92,10 @@ export const alertWidgetNames = query({
       .query("scenes")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
-
-    const names = new Set<string>();
-    for (const scene of scenes) {
-      for (const name of alertWidgetNamesOf(placedWidgets(scene), alertWidgetIds)) {
-        names.add(name);
-      }
-    }
-    const hasDefault = names.delete(DEFAULT_ALERT_WIDGET_NAME);
-    const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
-    return hasDefault ? [DEFAULT_ALERT_WIDGET_NAME, ...sorted] : sorted;
+    return alertWidgetNamesAcross(
+      scenes.map((scene) => scene.widgets ?? []),
+      alertWidgetIds
+    );
   },
 });
 
@@ -136,40 +124,32 @@ export const alertTargetUsage = query({
       .query("scenes")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
-    const elsewhere = new Set<string>();
-    for (const scene of scenes) {
-      if (scene.engineSceneId === engineSceneId) {
-        continue;
-      }
-      for (const name of alertWidgetNamesOf(placedWidgets(scene), alertWidgetIds)) {
-        elsewhere.add(name);
-      }
-    }
+    const elsewhere = alertWidgetNamesAcross(
+      scenes.filter((scene) => scene.engineSceneId !== engineSceneId).map((scene) => scene.widgets ?? []),
+      alertWidgetIds
+    );
 
-    const uses: AlertTargetUse[] = [];
+    const sources: AlertStepSource[] = [];
     const workflows = await ctx.db
       .query("workflows")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     for (const workflow of workflows) {
       const definition = workflow.definition as { name?: unknown; tasks?: unknown } | null;
-      const tasks = Array.isArray(definition?.tasks) ? definition.tasks : [];
-      const name =
-        typeof definition?.name === "string" && definition.name ? definition.name : workflow.engineWorkflowId;
-      for (const target of alertStepTargets(tasks)) {
-        uses.push({ target, kind: "workflow", name });
-      }
+      sources.push({
+        kind: "workflow",
+        name: typeof definition?.name === "string" && definition.name ? definition.name : workflow.engineWorkflowId,
+        steps: Array.isArray(definition?.tasks) ? definition.tasks : [],
+      });
     }
     const commands = await ctx.db
       .query("chatCommands")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     for (const command of commands) {
-      for (const target of alertStepTargets(command.actions)) {
-        uses.push({ target, kind: "command", name: `!${command.command}` });
-      }
+      sources.push({ kind: "command", name: `!${command.command}`, steps: command.actions });
     }
 
-    return { alertWidgetIds: Array.from(alertWidgetIds), elsewhere: Array.from(elsewhere), uses };
+    return { alertWidgetIds: Array.from(alertWidgetIds), elsewhere, uses: alertTargetUses(sources) };
   },
 });
