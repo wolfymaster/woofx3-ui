@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import type { RecapSupporter, StreamRecapEngineDetail } from "@convex/lib/streamRecap";
+import type { RecapSupporter, StreamRecapEngineDetail } from "@shared/stream-recap";
 import { useQuery } from "convex/react";
 import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";

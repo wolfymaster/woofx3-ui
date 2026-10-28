@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { SupporterMetric, SupporterStream } from "@convex/lib/supporters";
+import type { SupporterMetric, SupporterStream } from "@shared/supporters";
 import { useAction, useQuery } from "convex/react";
 import { Copy, Gem, Gift, Loader2, Megaphone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

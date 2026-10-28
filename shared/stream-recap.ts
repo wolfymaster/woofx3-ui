@@ -1,5 +1,3 @@
-import type { EngineApi } from "./engineInstanceUrl";
-
 /**
  * Engine analytics shapes the stream recap reads. They must match
  * `LeaderboardQuery`, `Leaderboard`, `LeaderboardEntry` and `StreamGaugeSample`
@@ -73,12 +71,6 @@ export interface StreamSessionEvents {
   total: number;
 }
 
-export interface StreamRecapEngineApi extends EngineApi {
-  getLeaderboard(query: LeaderboardQuery): Promise<Leaderboard | null>;
-  getStreamSessionGauges(sessionId: string): Promise<StreamGaugeSample[] | null>;
-  getStreamSessionEvents(query: StreamSessionEventsQuery): Promise<StreamSessionEvents | null>;
-}
-
 /** Most events a recap asks for: the engine's own cap, so one call carries the whole timeline when it fits. */
 export const RECAP_EVENT_LIMIT = 1000;
 
@@ -148,7 +140,8 @@ const INVALID_CREDENTIALS_MESSAGE = "Invalid client credentials";
 // non-2xx answer, before any RPC in the batch ran.
 const HTTP_BATCH_FAILURE_PREFIX = "RPC request failed:";
 
-function shorten(message: string): string {
+/** `message` trimmed, and cut to `MAX_ENGINE_ERROR_LENGTH` with an ellipsis when longer. */
+export function shortEngineMessage(message: string): string {
   const trimmed = message.trim();
   if (trimmed.length <= MAX_ENGINE_ERROR_LENGTH) {
     return trimmed;
@@ -167,9 +160,9 @@ export function classifyEngineCallError(error: unknown): EngineCallFailure {
     return { status: "rejected" };
   }
   if (error instanceof TypeError || message.startsWith(HTTP_BATCH_FAILURE_PREFIX)) {
-    return { status: "unreachable", message: shorten(message) };
+    return { status: "unreachable", message: shortEngineMessage(message) };
   }
-  return { status: "failed", message: shorten(message) };
+  return { status: "failed", message: shortEngineMessage(message) };
 }
 
 /**

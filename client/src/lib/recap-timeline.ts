@@ -1,6 +1,6 @@
 import type { RecapClip } from "@convex/lib/recapClips";
 import type { RecapMarker } from "@convex/lib/recapMarkers";
-import type { RecapEvent, RecapEventKind, RecapTimelineEvents } from "@convex/lib/streamRecap";
+import type { RecapEvent, RecapEventKind, RecapTimelineEvents } from "@shared/stream-recap";
 import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import type { RecapMarkersState } from "@/hooks/use-recap-markers";
 import type { RecapTimelineEventsState } from "@/hooks/use-recap-timeline-events";
