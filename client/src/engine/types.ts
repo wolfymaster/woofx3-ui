@@ -773,8 +773,6 @@ export interface SceneWidgetCatalogRow {
     transitions: { id: string; label: string }[];
     effects: { id: string; label: string }[];
   };
-  /** Epoch ms. */
-  createdAt: number;
 }
 
 /** One Alert step, in a workflow or a chat command, and the alert widget name it plays on. */

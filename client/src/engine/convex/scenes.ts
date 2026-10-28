@@ -55,7 +55,6 @@ function toSceneWidgetCatalogRow(row: WidgetCatalogRow): SceneWidgetCatalogRow {
     createdByType: row.createdByType,
     createdByRef: row.createdByRef,
     behaviorKinds: row.behaviorKinds,
-    createdAt: row.createdAt,
   };
 }
 

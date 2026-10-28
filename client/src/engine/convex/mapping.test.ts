@@ -267,7 +267,6 @@ const MAPPING_CASES: MappingCase[] = [
         directory: "widgets/alert-box",
         alertTypes: ["follow"],
         settings: [],
-        createdAt: 3,
       },
     ],
   },
