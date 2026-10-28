@@ -336,8 +336,6 @@ const MAPPING_CASES: MappingCase[] = [
         layout: { width: 1920 },
         behaviors: { enter: "fade" },
         inputs: [],
-        createdAt: 1,
-        updatedAt: 2,
       },
     ],
   },

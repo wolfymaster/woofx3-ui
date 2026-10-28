@@ -391,9 +391,6 @@ export interface AlertComposition {
   inputs: unknown[];
   createdByType?: string;
   createdByRef?: string;
-  /** Epoch ms. */
-  createdAt: number;
-  updatedAt: number;
 }
 
 /** A new library alert: the composition in the engine's stored JSON shapes. */
