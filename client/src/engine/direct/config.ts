@@ -9,6 +9,14 @@ export interface DirectGatewayConfig {
   transientsPerKey: number;
   /** How many recent envelope ids the event sink remembers to drop a second delivery of one event. */
   seenEnvelopeIds: number;
+  /** How many times a read is tried before its error reaches the screen, the first try included. */
+  queryAttempts: number;
+  /**
+   * How long stream-event subscriptions may keep changing before the engine
+   * is told the types they want, in ms, so a screen mounting several of them
+   * registers once.
+   */
+  streamRegistrationDelayMs: number;
 }
 
 export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
@@ -18,10 +26,14 @@ export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
   transientTtlMs: 60_000,
   transientsPerKey: 200,
   seenEnvelopeIds: 512,
+  queryAttempts: 3,
+  streamRegistrationDelayMs: 100,
 };
 
 export function validateDirectGatewayConfig(config: DirectGatewayConfig): void {
   requirePositiveInteger("DirectGateway", "transientTtlMs", config.transientTtlMs);
   requirePositiveInteger("DirectGateway", "transientsPerKey", config.transientsPerKey);
   requirePositiveInteger("DirectGateway", "seenEnvelopeIds", config.seenEnvelopeIds);
+  requirePositiveInteger("DirectGateway", "queryAttempts", config.queryAttempts);
+  requirePositiveInteger("DirectGateway", "streamRegistrationDelayMs", config.streamRegistrationDelayMs);
 }
