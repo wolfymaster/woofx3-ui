@@ -29,8 +29,11 @@ const { newMessagePortRpcSession }: typeof import("capnweb") = await import(
   import.meta.resolve("capnweb", import.meta.resolve("@woofx3/api/client"))
 );
 
-/** The engine methods the fake serves. Typed against the real contract, so drift is a compile error. */
-type FakeEngineSurface = Pick<
+/**
+ * The engine methods every fake session serves. Typed against the real
+ * contract, so drift is a compile error.
+ */
+export type FakeEngineSurface = Pick<
   Woofx3EngineApi,
   "ping" | "getEngineCapabilities" | "subscribeEngineEvents" | "answerEngineRequest"
 >;
@@ -40,10 +43,15 @@ interface Subscription {
   seq: number;
 }
 
-class FakeApi extends RpcTarget implements FakeEngineSurface {
+/**
+ * One authenticated session's API. A test that needs more of the engine
+ * extends it: capnweb serves the methods on an RpcTarget's prototype, so a
+ * subclass's methods are callable over the channel like these.
+ */
+export class FakeApi extends RpcTarget implements FakeEngineSurface {
   subscription: Subscription | null = null;
 
-  constructor(private readonly engine: FakeEngine) {
+  constructor(protected readonly engine: FakeEngine) {
     super();
   }
 
@@ -80,7 +88,7 @@ class FakeGateway extends RpcTarget {
       // The engine's own refusal, word for word (woofx3 api/src/gateway.ts).
       throw new Error("Invalid client credentials");
     }
-    const api = new FakeApi(this.engine);
+    const api = this.engine.createApi(this.engine);
     this.engine.sessions.push(api);
     return api;
   }
@@ -99,15 +107,18 @@ export class FakeEngine {
   /** False makes every new session break before it answers, as an engine that is down does. */
   reachable = true;
   /** Methods that never answer, as an engine that hangs does. */
-  readonly unanswered = new Set<keyof FakeEngineSurface>();
+  readonly unanswered = new Set<keyof Woofx3EngineApi>();
   readonly answers: Array<{ requestId: string; answer: EngineRequestAnswer }> = [];
   readonly sessions: FakeApi[] = [];
   sessionsOpened = 0;
   subscribeCalls = 0;
   private readonly serverPorts: MessagePort[] = [];
 
+  /** Builds each authenticated session's API; pass a factory for a `FakeApi` subclass to serve more methods. */
+  constructor(readonly createApi: (engine: FakeEngine) => FakeApi = (engine) => new FakeApi(engine)) {}
+
   /** Resolves when `method` may answer: never, while it is unanswered. */
-  answering(method: keyof FakeEngineSurface): Promise<void> {
+  answering(method: keyof Woofx3EngineApi): Promise<void> {
     return this.unanswered.has(method) ? new Promise<void>(() => {}) : Promise.resolve();
   }
 
