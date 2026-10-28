@@ -7,6 +7,7 @@ import {
   makeCallbackEnvelope,
   type SceneSnapshot,
   type StreamEventFrame,
+  type Workflow,
 } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
@@ -19,8 +20,10 @@ import { toSceneId } from "./ids";
 import { directKeys } from "./keys";
 import { directOverlaysGateway } from "./overlays";
 import { directRequestsGateway } from "./requests";
+import { directScenesGateway } from "./scenes";
 import { directStatusGateway } from "./status";
 import { directStreamOpsGateway } from "./stream-ops";
+import type { AvailableWidget } from "./testing/DirectFakeApi";
 import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
 
 // The namespaces against a fake engine over real capnweb: reads load through
@@ -427,5 +430,157 @@ describe("overlays", () => {
     expect(rotated).not.toBe(first);
     expect(await urlOf(scene)).toBe(rotated);
     expect(state.overlayTokens.map((token) => token.status)).toEqual(["revoked", "active"]);
+  });
+});
+
+const ALERT_WIDGET = "woofx3:widget:alert";
+
+function scene(id: string, widgets: unknown[] = []): SceneSnapshot {
+  return {
+    ...compositionSnapshot(id, "scene"),
+    widgetsJson: JSON.stringify(widgets),
+    layoutJson: '{"width":1280}',
+    createdAt: "2026-10-28T10:00:00Z",
+    updatedAt: "2026-10-28T11:00:00Z",
+  };
+}
+
+const alertPlacement = (name: string) => ({ widgetCanonicalId: ALERT_WIDGET, settings: { name } });
+
+function widget(manifestId: string, createdByType: string, createdByRef: string, hostsSurface = ""): AvailableWidget {
+  return {
+    id: `w-${manifestId}`,
+    manifestId,
+    name: manifestId,
+    description: "",
+    directory: manifestId,
+    alertTypes: [],
+    settingsSchema: "[]",
+    surfaces: ["scene"],
+    hostsSurface,
+    taxonomy: [],
+    behaviorKinds: { transitions: [], effects: [] },
+    createdByType,
+    createdByRef,
+  };
+}
+
+function alertWorkflow(id: string, name: string, target: string): Workflow {
+  return {
+    id,
+    name,
+    description: "",
+    isEnabled: true,
+    definition: {
+      id,
+      name,
+      trigger: { type: "event", event: "channel.follow" },
+      tasks: [{ id: "t-1", type: "action", action: "alert", parameters: { target } }],
+    },
+    stats: { runsToday: 0, successRate: 0 },
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+describe("scenes", () => {
+  test("reads whole scenes, sized from their layout, and reads them again when one changes", async () => {
+    const { runtime, state, engine } = await connected();
+    state.scenes = [scene("s-1")];
+    const read = renderDirect(() => directScenesGateway(runtime).useScenes());
+    const scenes = await read.until((value) => value !== undefined, "the scenes");
+    expect(scenes?.[0]).toMatchObject({
+      id: toSceneId("s-1"),
+      engineSceneId: "s-1",
+      width: 1280,
+      height: 1080,
+      backgroundColor: "transparent",
+      updatedAt: Date.parse("2026-10-28T11:00:00Z"),
+    });
+
+    state.scenes = [scene("s-1"), scene("s-2")];
+    await engine.pushEvent(
+      makeCallbackEnvelope({ type: EngineEventType.SCENE_CREATED, scene: state.scenes[1] }, "engine", "e-6")
+    );
+    await read.until((value) => value?.length === 2, "the new scene");
+    read.unmount();
+  });
+
+  test("an engine that cannot hand over whole scenes has none to show", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    harness.engine.capabilities = harness.engine.capabilities.filter(
+      (id) => id !== ENGINE_CAPABILITIES.scenesSnapshots
+    );
+    await harness.connect();
+    const read = renderDirect(() => directScenesGateway(harness.runtime).useScenes());
+    await waitFor(() => read.error() !== undefined, "the read to fail");
+    expect(read.error()).toBeInstanceOf(GatewayUnsupportedError);
+    expect(harness.state.callsOf("listSceneSnapshots")).toEqual([]);
+  });
+
+  test("the widget catalog groups a module's widgets under its name and the engine's own as built in", async () => {
+    const { runtime, state } = await connected();
+    state.widgets = [
+      widget("now_playing", "MODULE", "spotify:1.0.0:abc1234"),
+      widget("alert", "SYSTEM", "woofx3", "alert"),
+    ];
+    state.modules = [
+      {
+        name: "Spotify",
+        version: "1.0.0",
+        state: "active",
+        createdByType: "USER",
+        moduleId: "spotify",
+        moduleKey: "spotify:1.0.0:abc1234",
+        manifest: null,
+      },
+    ];
+    const read = renderDirect(() => directScenesGateway(runtime).useWidgetCatalog());
+    const catalog = await read.until((value) => value !== undefined, "the catalog");
+    expect(catalog?.map((row) => [row.widgetId, row.moduleName, row.moduleId])).toEqual([
+      ["spotify:widget:now_playing", "Spotify", "spotify"],
+      ["woofx3:widget:alert", "Built-in", undefined],
+    ]);
+    read.unmount();
+  });
+
+  test("alert widget names and target usage come from the scenes, commands and every page of workflows", async () => {
+    const harness = createDirectHarness({ workflowPageSize: 1 });
+    harnesses.push(harness);
+    await harness.connect();
+    const { runtime, state } = harness;
+    state.widgets = [widget("alert", "SYSTEM", "woofx3", "alert")];
+    state.scenes = [scene("s-1", [alertPlacement("side")]), scene("s-2", [alertPlacement("default")])];
+    state.commands = [
+      { ...command("c-1", "hype"), actions: [{ action: "alert", parameters: { target: "side" } }] },
+    ] as CommandSnapshot[];
+    state.workflows = [alertWorkflow("w-1", "Follow", "default"), alertWorkflow("w-2", "Raid", "side")];
+    const scenes = directScenesGateway(runtime);
+
+    const names = renderDirect(() => scenes.useAlertWidgetNames());
+    expect(await names.until((value) => value !== undefined, "the names")).toEqual(["default", "side"]);
+
+    const usage = renderDirect(() => scenes.useAlertTargetUsage("s-1"));
+    const answer = await usage.until((value) => value !== undefined, "the usage");
+    expect(answer).toEqual({
+      alertWidgetIds: [ALERT_WIDGET],
+      elsewhere: ["default"],
+      uses: [
+        { target: "default", kind: "workflow", name: "Follow" },
+        { target: "side", kind: "workflow", name: "Raid" },
+        { target: "side", kind: "command", name: "!hype" },
+      ],
+    });
+    expect(state.callsOf("getWorkflows")).toHaveLength(3);
+    names.unmount();
+    usage.unmount();
+  });
+
+  test("a preview of a scene the engine does not have is null, and mints nothing", async () => {
+    const { runtime, state } = await connected();
+    const preview = renderDirect(() => directOverlaysGateway(runtime).usePreviewUrlRequest()).current();
+    expect(await preview(toSceneId("missing"))).toBeNull();
+    expect(state.callsOf("mintOverlayToken")).toEqual([]);
   });
 });

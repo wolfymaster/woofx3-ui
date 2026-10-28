@@ -1,3 +1,4 @@
+import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { OverlaysGateway } from "@/engine/gateway";
 import type { SceneId } from "@/engine/types";
 import { fromSceneId } from "./ids";
@@ -42,9 +43,22 @@ export function directOverlaysGateway(runtime: DirectRuntime): OverlaysGateway {
     return rotated.url;
   };
 
+  // The contract's null for a scene the engine does not have, asked before a
+  // token is minted for it; an engine that cannot say refuses the mint instead.
+  const previewUrl = async (sceneId: SceneId) => {
+    if (runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
+      const engineSceneId = fromSceneId(sceneId);
+      const scene = await runtime.call("getSceneSnapshot", (api) => api.getSceneSnapshot(engineSceneId));
+      if (scene === null) {
+        return null;
+      }
+    }
+    return browserSourceUrl(sceneId);
+  };
+
   return {
     useBrowserSourceUrlRequest: () => useEngineRequest(browserSourceUrl),
     useRotateBrowserSourceUrlRequest: () => useEngineRequest(rotateBrowserSourceUrl),
-    usePreviewUrlRequest: () => useEngineRequest(browserSourceUrl),
+    usePreviewUrlRequest: () => useEngineRequest(previewUrl),
   };
 }

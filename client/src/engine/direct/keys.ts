@@ -18,6 +18,15 @@ export const directKeys = {
     list: () => ["alertLibrary", "list"] as const,
     detail: (engineCompositionId: string) => ["alertLibrary", "detail", engineCompositionId] as const,
   },
+  scenes: {
+    all: ["scenes"] as const,
+    list: () => ["scenes", "list"] as const,
+    detail: (engineSceneId: string) => ["scenes", "detail", engineSceneId] as const,
+    widgetCatalog: () => ["scenes", "widgetCatalog"] as const,
+    alertWidgetNames: () => ["scenes", "alertWidgetNames"] as const,
+    allAlertTargetUsage: ["scenes", "alertTargetUsage"] as const,
+    alertTargetUsage: (engineSceneId: string) => ["scenes", "alertTargetUsage", engineSceneId] as const,
+  },
   commands: {
     all: ["commands"] as const,
     list: () => ["commands", "list"] as const,

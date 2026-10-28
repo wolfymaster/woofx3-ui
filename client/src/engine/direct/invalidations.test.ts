@@ -31,9 +31,9 @@ describe("INVALIDATIONS", () => {
       [k.status.liveState()],
     ],
     [
-      "a deleted command refreshes the command list",
+      "a deleted command refreshes the command list and the alert target usage",
       makeCallbackEnvelope({ type: EngineEventType.COMMAND_DELETED, commandId: "c-1" }),
-      [k.commands.list()],
+      [k.commands.list(), k.scenes.allAlertTargetUsage],
     ],
     [
       "a deleted group refreshes the groups and its members",
@@ -49,6 +49,16 @@ describe("INVALIDATIONS", () => {
       "a deleted library alert refreshes the alert library",
       makeCallbackEnvelope({ type: EngineEventType.SCENE_DELETED, sceneId: "a-1", kind: "alert" }),
       [k.alertLibrary.all],
+    ],
+    [
+      "a deleted scene refreshes every scene read",
+      makeCallbackEnvelope({ type: EngineEventType.SCENE_DELETED, sceneId: "s-1", kind: "scene" }),
+      [k.scenes.all],
+    ],
+    [
+      "a deleted workflow refreshes the alert target usage",
+      makeCallbackEnvelope({ type: EngineEventType.WORKFLOW_DELETED, workflowId: "w-1" }),
+      [k.scenes.allAlertTargetUsage],
     ],
     [
       "an engine response feeds a transient event and caches nothing",
