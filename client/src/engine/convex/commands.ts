@@ -29,8 +29,6 @@ function toChatCommand(row: Doc<"chatCommands">): ChatCommand {
     visibility: row.visibility,
     groupIds: row.groupIds,
     usernames: row.usernames,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
   };
 }
 
@@ -41,8 +39,6 @@ function toChatCommandGroup(row: Doc<"chatCommandGroups">): ChatCommandGroup {
     description: row.description,
     isBuiltIn: row.isBuiltIn,
     engineCreatedAt: row.engineCreatedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
   };
 }
 

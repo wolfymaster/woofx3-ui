@@ -26,3 +26,16 @@ export class EngineTimeoutError extends Error {
     this.name = "EngineTimeoutError";
   }
 }
+
+/**
+ * The gateway has no way to serve this member: what it reads or changes is
+ * kept somewhere this gateway does not reach. A read throws it and a request
+ * rejects with it, so a screen that uses the member is one to hide, not one
+ * that shows an empty answer as if it were true.
+ */
+export class GatewayUnsupportedError extends Error {
+  constructor(readonly member: string) {
+    super(`This connection to the engine cannot serve ${member}`);
+    this.name = "GatewayUnsupportedError";
+  }
+}
