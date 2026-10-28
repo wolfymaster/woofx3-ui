@@ -13,6 +13,11 @@ export const directKeys = {
     alerts: (limit: number) => ["alertQueue", "alerts", limit] as const,
     overview: (hourStart: number) => ["alertQueue", "overview", hourStart] as const,
   },
+  alertLibrary: {
+    all: ["alertLibrary"] as const,
+    list: () => ["alertLibrary", "list"] as const,
+    detail: (engineCompositionId: string) => ["alertLibrary", "detail", engineCompositionId] as const,
+  },
   commands: {
     all: ["commands"] as const,
     list: () => ["commands", "list"] as const,

@@ -1,5 +1,5 @@
 import type { QueryKey } from "@tanstack/react-query";
-import { type CallbackEnvelope, type CallbackEventByType, EngineEventType } from "@woofx3/api";
+import { type CallbackEnvelope, type CallbackEventByType, type CompositionKind, EngineEventType } from "@woofx3/api";
 import { directKeys as k } from "./keys";
 
 type Invalidation<T extends EngineEventType> = (event: CallbackEventByType[T]) => readonly QueryKey[];
@@ -10,6 +10,11 @@ const NONE = (): readonly QueryKey[] => [];
 const ALERT = (): readonly QueryKey[] => [k.alertQueue.all];
 const LIVE_STATE = (): readonly QueryKey[] => [k.status.liveState()];
 const COMMANDS = (): readonly QueryKey[] => [k.commands.list()];
+
+/** The engine keeps scenes and library alerts in one table and reports both as `scene.*`, told apart by kind. */
+function compositionKeys(kind: CompositionKind): readonly QueryKey[] {
+  return kind === "alert" ? [k.alertLibrary.all] : [];
+}
 
 /**
  * The cached reads each engine event may have made stale. Keyed by every
@@ -50,9 +55,9 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.WORKFLOW_RUN_RECORDED]: NONE,
   [EngineEventType.WORKFLOW_RUN_UPDATED]: NONE,
   [EngineEventType.WORKFLOW_RUN_STEP_RECORDED]: NONE,
-  [EngineEventType.SCENE_CREATED]: NONE,
-  [EngineEventType.SCENE_UPDATED]: NONE,
-  [EngineEventType.SCENE_DELETED]: NONE,
+  [EngineEventType.SCENE_CREATED]: (event) => compositionKeys(event.scene.kind),
+  [EngineEventType.SCENE_UPDATED]: (event) => compositionKeys(event.scene.kind),
+  [EngineEventType.SCENE_DELETED]: (event) => compositionKeys(event.kind),
   [EngineEventType.ALERT_RECORDED]: ALERT,
   [EngineEventType.ALERT_PLAYING]: ALERT,
   [EngineEventType.ALERT_REPLAYED]: ALERT,

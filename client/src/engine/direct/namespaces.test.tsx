@@ -1,14 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { type CommandSnapshot, EngineEventType, makeCallbackEnvelope, type StreamEventFrame } from "@woofx3/api";
+import {
+  type AlertComposition,
+  type CommandSnapshot,
+  ENGINE_CAPABILITIES,
+  EngineEventType,
+  makeCallbackEnvelope,
+  type SceneSnapshot,
+  type StreamEventFrame,
+} from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
+import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directCommandsGateway } from "./commands";
 import { directEventLogGateway } from "./event-log";
+import { toSceneId } from "./ids";
 import { directKeys } from "./keys";
+import { directOverlaysGateway } from "./overlays";
 import { directRequestsGateway } from "./requests";
 import { directStatusGateway } from "./status";
+import { directStreamOpsGateway } from "./stream-ops";
 import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
 
 // The namespaces against a fake engine over real capnweb: reads load through
@@ -229,5 +241,191 @@ describe("requests", () => {
     const answered = await correlated.until((value) => value.event != null, "the answer");
     expect(answered.event).toMatchObject({ correlationKey: key, type: "engine.response", data: { n: 1 } });
     correlated.unmount();
+  });
+});
+
+function libraryAlert(id: string, name: string): AlertComposition {
+  return {
+    id,
+    name,
+    description: "",
+    widgetsJson: '[{"widgetCanonicalId":"woofx3:widget:text","settings":{"text":{"$input":"who"}}}]',
+    layoutJson: '{"width":800}',
+    behaviorsJson: "{}",
+    inputsJson: '[{"id":"who","label":"Who","type":"text"}]',
+    hasDraft: false,
+    createdByType: "USER",
+    createdByRef: "",
+  };
+}
+
+function compositionSnapshot(id: string, kind: "scene" | "alert"): SceneSnapshot {
+  return {
+    id,
+    kind,
+    name: id,
+    description: "",
+    widgetsJson: "[]",
+    layoutJson: "{}",
+    behaviorsJson: "{}",
+    inputsJson: "[]",
+    createdByType: "USER",
+    createdByRef: "",
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+describe("alertLibrary", () => {
+  test("lists the library by name, with the inputs' `$` keys escaped as every gateway serves them", async () => {
+    const { runtime, state } = await connected();
+    state.alertCompositions = [libraryAlert("a-2", "Raid"), libraryAlert("a-1", "Follow")];
+    const read = renderDirect(() => directAlertLibraryGateway(runtime).useAlerts());
+    const alerts = await read.until((value) => value !== undefined, "the library");
+    expect(alerts?.map((alert) => alert.name)).toEqual(["Follow", "Raid"]);
+    expect(alerts?.[0]).toMatchObject({
+      engineCompositionId: "a-1",
+      description: undefined,
+      widgets: [{ widgetCanonicalId: "woofx3:widget:text", settings: { text: { __$input: "who" } } }],
+      layout: { width: 800 },
+      inputs: [{ id: "who", label: "Who", type: "text" }],
+    });
+    read.unmount();
+  });
+
+  test("a library alert's event reads the library again, and a scene's does not", async () => {
+    const { runtime, state, engine } = await connected();
+    const read = renderDirect(() => directAlertLibraryGateway(runtime).useAlerts());
+    await read.until((value) => value !== undefined, "the library");
+
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.SCENE_UPDATED, scene: compositionSnapshot("s-1", "scene") },
+        "engine",
+        "e-4"
+      )
+    );
+    state.alertCompositions = [libraryAlert("a-1", "Follow")];
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.SCENE_CREATED, scene: compositionSnapshot("a-1", "alert") },
+        "engine",
+        "e-5"
+      )
+    );
+    await read.until((value) => value?.length === 1, "the new alert");
+    expect(state.callsOf("listAlertCompositions")).toHaveLength(2);
+    read.unmount();
+  });
+
+  test("an engine with no library reads as empty and refuses a new alert", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    harness.engine.capabilities = harness.engine.capabilities.filter(
+      (id) => id !== ENGINE_CAPABILITIES.compositionsAlerts
+    );
+    await harness.connect();
+    const library = directAlertLibraryGateway(harness.runtime);
+    const read = renderDirect(() => library.useAlerts());
+    expect(await read.until((value) => value !== undefined, "the library")).toEqual([]);
+    const create = renderDirect(() => library.useCreateRequest()).current();
+    await expect(create({ name: "Follow", widgetsJson: "[]", layoutJson: "{}", behaviorsJson: "{}" })).rejects.toThrow(
+      "doesn't keep an alert library"
+    );
+    expect(harness.state.callsOf("listAlertCompositions")).toEqual([]);
+    read.unmount();
+  });
+
+  test("a preview URL expires when the engine said, counted from before it was asked", async () => {
+    const { runtime, state, clock } = await connected();
+    state.compositionPreview = { url: "http://scenes.test/preview/composition?token=t", expiresInSeconds: 300 };
+    const preview = renderDirect(() => directAlertLibraryGateway(runtime).usePreviewUrlRequest()).current();
+    expect(await preview()).toEqual({
+      url: "http://scenes.test/preview/composition?token=t",
+      expiresAt: clock.now() + 300_000,
+    });
+  });
+});
+
+describe("streamOps", () => {
+  const entry = (platformUserId: string, total: number) => ({
+    platform: "twitch",
+    platformUserId,
+    userName: platformUserId,
+    total,
+    events: 1,
+  });
+
+  test("a leaderboard ranks named viewers only, and refuses a stream the engine no longer has", async () => {
+    const { runtime, state } = await connected();
+    state.leaderboards.bits = [entry("u-1", 500), entry("", 300)];
+    state.unknownSessions = ["gone"];
+    const leaderboard = renderDirect(() => directStreamOpsGateway(runtime).useSupporterLeaderboardRequest()).current();
+
+    expect(await leaderboard({ metric: "bits", minTotal: 1 })).toEqual([
+      { platformUserId: "u-1", userName: "u-1", total: 500, events: 1 },
+    ]);
+    const gone = await leaderboard({ metric: "bits", minTotal: 1, sessionId: "gone" }).catch((e: Error) => e);
+    expect(String(gone)).toContain("no longer exists");
+    await expect(leaderboard({ metric: "bits", minTotal: 0 })).rejects.toThrow("at least 1");
+    expect(state.callsOf("getLeaderboard")).toHaveLength(2);
+  });
+
+  test("a viewer's totals cover their lifetime and the recent streams that went live", async () => {
+    const { runtime, state } = await connected();
+    const totals = (bits: number, sessionId: string | null) => ({
+      platform: "twitch",
+      platformUserId: "u-1",
+      userName: "Viewer",
+      sessionId,
+      bits,
+      cheers: 1,
+      giftedSubs: 0,
+      gifts: 0,
+    });
+    const segment = [{ startedAt: "2026-10-27T10:00:00Z", endedAt: "2026-10-27T11:00:00Z" }];
+    state.sessions = [
+      { id: "s-2", status: "closed", startedAt: "2026-10-27T10:00:00Z", endedAt: null, segments: segment },
+      { id: "s-1", status: "closed", startedAt: "2026-10-26T10:00:00Z", endedAt: null, segments: [] },
+    ];
+    state.viewerTotals = { "u-1": totals(900, null), "u-1:s-2": totals(100, "s-2") };
+    const lookUp = renderDirect(() => directStreamOpsGateway(runtime).useViewerSupportTotalsRequest()).current();
+
+    const answer = await lookUp("u-1");
+    expect(answer.userName).toBe("Viewer");
+    expect(answer.lifetime).toEqual({ bits: 900, cheers: 1, giftedSubs: 0, gifts: 0 });
+    expect(answer.recent.map((row) => [row.stream.id, row.totals.bits])).toEqual([["s-2", 100]]);
+  });
+
+  test("a recap of a stream the engine no longer has says so rather than rejecting", async () => {
+    const { runtime, state } = await connected();
+    state.unknownSessions = ["gone"];
+    const detail = renderDirect(() => directStreamOpsGateway(runtime).useRecapEngineDetailRequest()).current();
+    expect(await detail("gone")).toEqual({ status: "unknown_session" });
+  });
+
+  test("the stored recap summary is a dashboard's record, which this gateway has none of", async () => {
+    const { runtime } = await connected();
+    const refresh = renderDirect(() => directStreamOpsGateway(runtime).useOpenSessionRefreshRequest()).current();
+    await expect(refresh()).rejects.toBeInstanceOf(GatewayUnsupportedError);
+  });
+});
+
+describe("overlays", () => {
+  test("a scene's browser-source URL is made on first ask and the same after that until rotated", async () => {
+    const { runtime, state } = await connected();
+    const overlays = directOverlaysGateway(runtime);
+    const urlOf = renderDirect(() => overlays.useBrowserSourceUrlRequest()).current();
+    const rotate = renderDirect(() => overlays.useRotateBrowserSourceUrlRequest()).current();
+    const scene = toSceneId("s-1");
+
+    const first = await urlOf(scene);
+    expect(await urlOf(scene)).toBe(first);
+    expect(state.callsOf("mintOverlayToken")).toHaveLength(1);
+
+    const rotated = await rotate(scene);
+    expect(rotated).not.toBe(first);
+    expect(await urlOf(scene)).toBe(rotated);
+    expect(state.overlayTokens.map((token) => token.status)).toEqual(["revoked", "active"]);
   });
 });

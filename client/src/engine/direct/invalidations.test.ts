@@ -46,6 +46,11 @@ describe("INVALIDATIONS", () => {
       [k.commands.members("g-1")],
     ],
     [
+      "a deleted library alert refreshes the alert library",
+      makeCallbackEnvelope({ type: EngineEventType.SCENE_DELETED, sceneId: "a-1", kind: "alert" }),
+      [k.alertLibrary.all],
+    ],
+    [
       "an engine response feeds a transient event and caches nothing",
       makeCallbackEnvelope({
         type: EngineEventType.ENGINE_RESPONSE_RECEIVED,
