@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { Square } from "lucide-react";
 import {
   type ActionObject,
@@ -6,7 +7,6 @@ import {
   acceptsInstance,
   actionObjectKey,
   actionObjects,
-  BUILTIN_MODULE_LABEL,
   FLOW_BLOCKS,
   findTargetField,
   initialParameters,

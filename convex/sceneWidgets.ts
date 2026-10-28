@@ -5,10 +5,11 @@ import {
   alertTargetUses,
   alertWidgetNamesAcross,
 } from "@shared/alert-widgets";
+import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
-import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
+import { resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 
 export type SceneWidgetCatalogRow = Doc<"moduleWidgets"> & { moduleName: string };
 
