@@ -20,6 +20,7 @@ export default defineConfig({
       { find: /^@\/(.*)$/, replacement: path.resolve(import.meta.dirname, "client", "src") + "/$1" },
       { find: /^@assets\/(.*)$/, replacement: path.resolve(import.meta.dirname, "attached_assets") + "/$1" },
       { find: /^@convex\/(.*)$/, replacement: path.resolve(import.meta.dirname, "convex") + "/$1" },
+      { find: /^@shared\/(.*)$/, replacement: path.resolve(import.meta.dirname, "shared") + "/$1" },
       // `@woofx3/api` → index.ts; `@woofx3/api/<sub>` → <sub>.ts
       {
         find: /^@woofx3\/api\/(.+)$/,

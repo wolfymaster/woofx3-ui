@@ -1,8 +1,8 @@
-// Pure parsers for the engine's scene webhook payloads (widgetsJson, layoutJson,
-// behaviorsJson, inputsJson and the kind), extracted from the webhook upserts so
-// they can be unit-tested without the Convex runtime. All are total: malformed or
-// unexpected input yields safe defaults rather than throwing — webhook handlers
-// must never crash on bad data.
+// Pure parsers for the JSON columns of the engine's stored compositions
+// (widgetsJson, layoutJson, behaviorsJson, inputsJson) and their kind, as both
+// the Convex webhook cache and the direct gateway receive them. All are total:
+// malformed or unexpected input yields safe defaults rather than throwing, so
+// one bad row never fails a webhook or a whole scene list.
 
 export interface SceneLayout {
   width?: number;

@@ -6,7 +6,7 @@ import {
   parseSceneLayout,
   parseSceneWidgets,
   tablesForDeletedComposition,
-} from "./sceneSerialization";
+} from "./scene-serialization";
 
 describe("parseSceneWidgets", () => {
   test("parses a valid widgets array", () => {
