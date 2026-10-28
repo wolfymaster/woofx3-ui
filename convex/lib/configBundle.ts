@@ -62,11 +62,15 @@ export type ConfigImportReasonCode =
   | "unknown_action"
   | "unknown_group"
   | "unknown_workflow"
+  /** Something the item depends on (a group, a sub-workflow) will not be imported. */
+  | "dependency_blocked"
   | "invalid"
   /** Every free name the rename policy tries is taken. */
   | "rename_exhausted"
   /** Applying members would grant these usernames access; the message names them. */
   | "grants_access"
+  /** The backup carries members or usernames this import leaves out, since it does not apply members. */
+  | "members_not_applied"
   /** A workflow runs moderation or stream-editing actions. */
   | "privileged_action";
 

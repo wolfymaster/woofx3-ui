@@ -1186,9 +1186,11 @@ export type ConfigImportReasonCode =
   | "unknown_action"
   | "unknown_group"
   | "unknown_workflow"
+  | "dependency_blocked"
   | "invalid"
   | "rename_exhausted"
   | "grants_access"
+  | "members_not_applied"
   | "privileged_action";
 
 export interface ConfigImportReason {
