@@ -143,7 +143,7 @@ Both fire with the `test` origin (`shared/manual-run-origin.ts`). The engine doe
 
 The engine refuses a workflow it cannot set up (bad parameters, a step naming a missing action, a trigger that fails to register). Such a workflow stays enabled but never fires by itself, so the UI marks it.
 
-- **Storage:** Convex `workflowHealth`, one row per `(instanceId, engineWorkflowId)`, separate from `workflows` so a report can land before the workflow row does. Rules and payload shapes live in `convex/lib/workflowHealth.ts`.
+- **Storage:** Convex `workflowHealth`, one row per `(instanceId, engineWorkflowId)`, separate from `workflows` so a report can land before the workflow row does. Rules and payload shapes live in `shared/workflow-health.ts`.
 - **Inputs:** the `workflow.health.snapshot` webhook (sent on engine start and api reconnect; authoritative, anything unlisted is ok), the `workflow.health.changed` webhook (one transition), and the `workflowHealth.resync` action, which calls the engine's `getWorkflowHealth()` with the snapshot's replace-all meaning. A report older than the stored one (by the engine's `since`) is ignored.
 - **Resync:** on list-page mount (at most every 5 minutes per instance) and whenever the live engine session connects (at most every minute), throttled server-side in `workflowHealthSyncs`. An engine without the RPC is recorded as `unsupported` and shows nothing.
 - **Where it shows:** a red badge with the engine's reason in a popover (`components/workflows/not-running-badge.tsx`) on list rows, the editor header, and the event trigger cards (Alerts, Counters, Timers, Queues), plus a one-line dashboard notice linking to the list. `workflowHealth.listNotRunning` returns only enabled, mirrored workflows.

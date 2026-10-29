@@ -1,5 +1,6 @@
 import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
 import { widgetCanonicalKey } from "@shared/widget-key";
+import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "@shared/workflow-health";
 import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "@shared/workflow-test-run";
 import type { InboundWebhookResponse } from "@woofx3/api";
 import type { CallbackEnvelope, CallbackEvent, WorkflowRunCancelledEvent } from "@woofx3/api/webhooks";
@@ -52,7 +53,6 @@ import {
   storageChangedTransient,
   widgetStatusTransient,
 } from "./lib/webhookTransients";
-import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
 import { canonicalIdForStorageKey } from "./resourceValues";

@@ -1,11 +1,4 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { getInstanceMembership } from "./lib/teamAccess";
 import {
   isStillLoadingError,
   type ParsedWorkflowHealth,
@@ -18,7 +11,14 @@ import {
   type ReplaceAllPlan,
   type StoredHealthRow,
   shouldResync,
-} from "./lib/workflowHealth";
+} from "@shared/workflow-health";
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
+import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
 
 /**
