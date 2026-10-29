@@ -8,15 +8,16 @@ use std::any::TypeId;
 use ts_rs::{Config, TS};
 
 use super::{
-    AddressView, Availability, CompanionState, ConfirmAddressArgs, DiscoveryView, EndpointView,
-    EnqueueShoutoutArgs, IntegrationsView, LocalEngineSession, ModuleView, ReadyUpdate, RelayView,
-    RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs,
-    TestEndpointArgs, TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES,
-    INTEGRATIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT, STREAM_START_MARKER_EVENT,
+    AddressView, Availability, ChooseHostModeArgs, CompanionState, ConfirmAddressArgs,
+    DiscoveryView, EndpointView, EnqueueShoutoutArgs, HostModeView, IntegrationsView,
+    LocalEngineSession, ModuleView, ReadyUpdate, RelayView, RemoveShoutoutArgs,
+    ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
+    TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES, INTEGRATIONS_EVENT,
+    SHOUTOUT_QUEUE_EVENT, STATE_EVENT, STREAM_START_MARKER_EVENT,
 };
 use crate::host::{
-    MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
-    ShoutoutQueueView, StreamStartMarker,
+    HostModeKind, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry,
+    ShoutoutEntryId, ShoutoutQueueView, StreamStartMarker,
 };
 use crate::AddressOrigin;
 
@@ -92,6 +93,8 @@ pub fn window_bindings() -> String {
         declaration::<ShoutoutEnqueued>(&cfg),
         declaration::<StreamStartMarker>(&cfg),
         declaration::<MarkerRequestOutcome>(&cfg),
+        declaration::<HostModeKind>(&cfg),
+        declaration::<HostModeView>(&cfg),
         declaration::<SetEndpointEnabledArgs>(&cfg),
         declaration::<ConfirmAddressArgs>(&cfg),
         declaration::<UseDiscoveredArgs>(&cfg),
@@ -100,6 +103,7 @@ pub fn window_bindings() -> String {
         declaration::<EnqueueShoutoutArgs>(&cfg),
         declaration::<RemoveShoutoutArgs>(&cfg),
         declaration::<ReorderShoutoutsArgs>(&cfg),
+        declaration::<ChooseHostModeArgs>(&cfg),
     ];
     let events = [
         ("STATE_EVENT", STATE_EVENT),
