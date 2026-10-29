@@ -160,6 +160,7 @@ import type * as lib_previewDeployment from "../lib/previewDeployment.js";
 import type * as lib_previewEngine from "../lib/previewEngine.js";
 import type * as lib_recapClips from "../lib/recapClips.js";
 import type * as lib_recapMarkers from "../lib/recapMarkers.js";
+import type * as lib_registrationError from "../lib/registrationError.js";
 import type * as lib_relayCredential from "../lib/relayCredential.js";
 import type * as lib_releaseVersion from "../lib/releaseVersion.js";
 import type * as lib_resourceKinds from "../lib/resourceKinds.js";
@@ -204,6 +205,7 @@ import type * as lib_twitchScopeHealth from "../lib/twitchScopeHealth.js";
 import type * as lib_twitchTokenGrant from "../lib/twitchTokenGrant.js";
 import type * as lib_twitchUsers from "../lib/twitchUsers.js";
 import type * as lib_webhookEndpointKey from "../lib/webhookEndpointKey.js";
+import type * as lib_webhookTransients from "../lib/webhookTransients.js";
 import type * as lib_widgetBehaviorKinds from "../lib/widgetBehaviorKinds.js";
 import type * as lib_widgetKey from "../lib/widgetKey.js";
 import type * as lib_widgetThemes from "../lib/widgetThemes.js";
@@ -219,6 +221,7 @@ import type * as migrations_backfillCommandActions from "../migrations/backfillC
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
 import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
+import type * as migrations_dropModuleArchiveBlobs from "../migrations/dropModuleArchiveBlobs.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
 import type * as moderation from "../moderation.js";
 import type * as moduleAssets from "../moduleAssets.js";
@@ -451,6 +454,7 @@ declare const fullApi: ApiFromModules<{
   "lib/previewEngine": typeof lib_previewEngine;
   "lib/recapClips": typeof lib_recapClips;
   "lib/recapMarkers": typeof lib_recapMarkers;
+  "lib/registrationError": typeof lib_registrationError;
   "lib/relayCredential": typeof lib_relayCredential;
   "lib/releaseVersion": typeof lib_releaseVersion;
   "lib/resourceKinds": typeof lib_resourceKinds;
@@ -495,6 +499,7 @@ declare const fullApi: ApiFromModules<{
   "lib/twitchTokenGrant": typeof lib_twitchTokenGrant;
   "lib/twitchUsers": typeof lib_twitchUsers;
   "lib/webhookEndpointKey": typeof lib_webhookEndpointKey;
+  "lib/webhookTransients": typeof lib_webhookTransients;
   "lib/widgetBehaviorKinds": typeof lib_widgetBehaviorKinds;
   "lib/widgetKey": typeof lib_widgetKey;
   "lib/widgetThemes": typeof lib_widgetThemes;
@@ -510,6 +515,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
   "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
+  "migrations/dropModuleArchiveBlobs": typeof migrations_dropModuleArchiveBlobs;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
   moderation: typeof moderation;
   moduleAssets: typeof moduleAssets;
