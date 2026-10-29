@@ -172,6 +172,7 @@ import type * as lib_sceneEditorSession from "../lib/sceneEditorSession.js";
 import type * as lib_sceneOverlayUrl from "../lib/sceneOverlayUrl.js";
 import type * as lib_sceneSerialization from "../lib/sceneSerialization.js";
 import type * as lib_secretCompare from "../lib/secretCompare.js";
+import type * as lib_sectionAccess from "../lib/sectionAccess.js";
 import type * as lib_sessionSummary from "../lib/sessionSummary.js";
 import type * as lib_setupApply from "../lib/setupApply.js";
 import type * as lib_setupImport_build from "../lib/setupImport/build.js";
@@ -482,6 +483,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sceneOverlayUrl": typeof lib_sceneOverlayUrl;
   "lib/sceneSerialization": typeof lib_sceneSerialization;
   "lib/secretCompare": typeof lib_secretCompare;
+  "lib/sectionAccess": typeof lib_sectionAccess;
   "lib/sessionSummary": typeof lib_sessionSummary;
   "lib/setupApply": typeof lib_setupApply;
   "lib/setupImport/build": typeof lib_setupImport_build;
