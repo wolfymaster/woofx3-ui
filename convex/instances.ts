@@ -11,6 +11,7 @@ import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { deleteUserPage } from "./lib/userPages";
 
 /**
  * An instance row as members may see it. `webhookSecret` authenticates the
@@ -263,6 +264,8 @@ export const deleteInstanceData = internalMutation({
         await ctx.db.delete(row._id);
       }
     }
+
+    await deleteUserPage(ctx, instanceId);
 
     const instance = await ctx.db.get(instanceId);
     if (instance?.companionHostname) {
