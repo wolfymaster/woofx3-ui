@@ -105,7 +105,7 @@ export interface ReadOptions {
   enabled?: boolean;
 }
 
-/** Which instance the gateway and the engine hooks act on, owned by `EngineGatewayProvider`. */
+/** Which instance the gateway and the engine hooks act on, set by `EngineScopeProvider`. */
 export interface EngineScope {
   /** The confirmed current instance, or null while the membership list loads or when there is none. */
   instanceId: InstanceId | null;

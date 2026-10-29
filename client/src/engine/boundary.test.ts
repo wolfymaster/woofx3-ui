@@ -28,7 +28,7 @@ const CONVEX_GENERATED_TYPE = /\b(?:Id|Doc|FunctionReturnType|FunctionArgs)</;
 // Engine code reaches the instance through useEngineScope(), so no gateway
 // depends on how the Convex adapter learns which instance is selected. Only
 // the boot wiring picks the adapter and feeds it the selected instance.
-const BOOT_WIRING = join(ENGINE_DIR, "context.tsx");
+const BOOT_WIRING_DIR = join(ENGINE_DIR, "boot");
 const INSTANCE_SELECTION = join(CLIENT_SRC, "hooks", "use-instance");
 
 // Outside client/src/engine, screens reach the engine through the gateway's
@@ -120,7 +120,7 @@ function engineFilesNamingConvex(): string[] {
 
 function engineFilesReachingBootDependencies(): string[] {
   return engineFilesOutsideAdapter()
-    .filter((path) => path !== BOOT_WIRING)
+    .filter((path) => !isWithin(path, BOOT_WIRING_DIR))
     .filter((path) => bootOnlyImports(path, readFileSync(path, "utf8")).length > 0)
     .map((path) => relative(CLIENT_SRC, path))
     .sort();
@@ -377,7 +377,7 @@ describe("direct adapter boundary", () => {
     directLeaks
   );
   const reachingDirect = offenders(
-    appFiles.filter((path) => path !== BOOT_WIRING),
+    appFiles.filter((path) => !isWithin(path, BOOT_WIRING_DIR)),
     directAdapterImports
   );
   const usingTanstack = offenders(appFiles, (_file, source) => tanstackQueryImports(source));

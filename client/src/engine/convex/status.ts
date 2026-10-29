@@ -34,7 +34,7 @@ function useSetOverlayPublicUrlRequest() {
 }
 
 // The URL names the engine, so this one call needs no scope and works
-// outside EngineGatewayProvider, before any instance exists.
+// outside any engine scope, before an instance exists.
 function useConnectionTestRequest() {
   const testConnection = useAction(api.engineHealth.testConnection);
   return useCallback((url: string) => testConnection({ url }), [testConnection]);
