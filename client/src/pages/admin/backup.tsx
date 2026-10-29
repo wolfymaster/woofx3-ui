@@ -59,6 +59,7 @@ import {
   splitReasons,
   writeCount,
 } from "@/lib/config-backup";
+import { MARKETPLACE_PATH, marketplaceListingPath } from "@/lib/marketplace-route";
 
 const CONFLICT_POLICY_TEXT: Record<ConfigConflictPolicy, { label: string; description: string }> = {
   skip: {
@@ -278,14 +279,14 @@ function PlanView({ plan }: { plan: ConfigImportPlan }) {
             <ul className="list-disc pl-5">
               {plan.missingModules.map((module) => (
                 <li key={module.moduleId}>
-                  <Link href={`/modules/${encodeURIComponent(module.moduleId)}`} className="underline">
+                  <Link href={marketplaceListingPath(module.moduleId)} className="underline">
                     {module.moduleId}
                   </Link>{" "}
                   (exported from version {module.version})
                 </li>
               ))}
             </ul>
-            <Link href="/modules" className="mt-2 inline-block underline">
+            <Link href={MARKETPLACE_PATH} className="mt-2 inline-block underline">
               Browse modules
             </Link>
           </AlertDescription>

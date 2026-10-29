@@ -1,16 +1,15 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { Check, Loader2, Store } from "lucide-react";
+import { Check, Loader2, Store, Upload } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation } from "wouter";
-import { HelpTip } from "@/components/common/help-tip";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
-import { getCategoryColor, getCategoryCounts } from "@/components/modules/module-category";
+import { getCategoryColor } from "@/components/modules/module-category";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
-import type { MarketplaceListItem } from "@/hooks/use-marketplace-catalog";
+import { MARKETPLACE_PATH, MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
 import { cn } from "@/lib/utils";
 
 export interface InstalledModuleItem {
@@ -24,25 +23,39 @@ export interface InstalledModuleItem {
   moduleKey?: string;
   isInstalled: boolean;
   status?: "pending" | "delivering" | "installed" | "failed";
+  marketplaceListingId?: string;
+  archiveKey?: string;
 }
 
-const ALL_CATEGORIES = "all";
+/**
+ * Where an installed module came from, as far as this dashboard knows: a
+ * marketplace listing it was installed from, or an archive someone uploaded.
+ * Null when neither is recorded.
+ */
+export type ModuleProvenance = "marketplace" | "uploaded";
+
+export function moduleProvenance(module: {
+  marketplaceListingId?: string;
+  archiveKey?: string;
+}): ModuleProvenance | null {
+  if (module.marketplaceListingId) {
+    return "marketplace";
+  }
+  return module.archiveKey ? "uploaded" : null;
+}
+
+const PROVENANCE_LABEL: { readonly [P in ModuleProvenance]: string } = {
+  marketplace: "Marketplace",
+  uploaded: "Uploaded",
+};
 
 interface ModuleSidebarProps {
-  catalog: MarketplaceListItem[] | null;
-  selectedCategory: string;
-  onSelectCategory: (category: string) => void;
   selectedId: Id<"moduleRepository"> | null;
   onSelectModule: (moduleId: Id<"moduleRepository">) => void;
 }
 
-export function ModuleSidebar({
-  catalog,
-  selectedCategory,
-  onSelectCategory,
-  selectedId,
-  onSelectModule,
-}: ModuleSidebarProps) {
+/** The Marketplace tab's installed modules, and the ways to add one. */
+export function ModuleSidebar({ selectedId, onSelectModule }: ModuleSidebarProps) {
   const { instance } = useInstance();
   const [, navigate] = useLocation();
 
@@ -51,58 +64,32 @@ export function ModuleSidebar({
     | undefined;
 
   const installedModules = useMemo(() => (repoModules || []).filter((m) => m.status === "installed"), [repoModules]);
-  const categoryCounts = useMemo(() => getCategoryCounts(catalog ?? []), [catalog]);
-  const totalCount = catalog?.length ?? 0;
 
   return (
     <div className={SIDEBAR_RAIL}>
-      <div className="p-2 border-b">
-        <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => navigate("/modules")}>
+      <div className="p-2 border-b flex flex-col gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start gap-2"
+          onClick={() => navigate(MARKETPLACE_PATH)}
+        >
           <Store className="h-3.5 w-3.5" />
-          Browse Store
+          Browse Marketplace
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start gap-2"
+          onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Upload a module
         </Button>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          <div className="flex items-center justify-between px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-            Categories
-            <HelpTip term="module" />
-          </div>
-          <button
-            type="button"
-            onClick={() => onSelectCategory(ALL_CATEGORIES)}
-            className={cn(
-              "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm cursor-pointer hover:bg-accent",
-              selectedCategory === ALL_CATEGORIES && "bg-accent font-medium"
-            )}
-          >
-            <span>All Modules</span>
-            <span className="text-[11px] text-muted-foreground">{totalCount}</span>
-          </button>
-          {categoryCounts.map(({ category, count }) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => onSelectCategory(category)}
-              className={cn(
-                "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm cursor-pointer hover:bg-accent",
-                selectedCategory === category && "bg-accent font-medium"
-              )}
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                <span
-                  className="h-1.5 w-1.5 rounded-sm shrink-0"
-                  style={{ backgroundColor: getCategoryColor(category) }}
-                />
-                <span className="truncate">{category}</span>
-              </span>
-              <span className="text-[11px] text-muted-foreground shrink-0">{count}</span>
-            </button>
-          ))}
-
-          <div className="h-px bg-border my-3 mx-1" />
-
           <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             Installed ({installedModules.length})
           </div>
@@ -117,6 +104,7 @@ export function ModuleSidebar({
           )}
           {installedModules.map((module) => {
             const isSelected = selectedId === module._id;
+            const provenance = moduleProvenance(module);
             return (
               <button
                 key={module._id}
@@ -143,7 +131,10 @@ export function ModuleSidebar({
                       <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
                     )}
                   </div>
-                  <span className="text-[11px] text-muted-foreground truncate block">v{module.version}</span>
+                  <span className="text-[11px] text-muted-foreground truncate block">
+                    v{module.version}
+                    {provenance && ` · ${PROVENANCE_LABEL[provenance]}`}
+                  </span>
                 </div>
               </button>
             );
