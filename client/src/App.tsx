@@ -6,6 +6,7 @@ import { Route, Switch, useLocation, useSearch } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AdminOnly } from "@/components/layout/admin-only";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
+import { USER_PAGE_PATH } from "@/components/layout/nav-config";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -76,6 +77,7 @@ const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
+const UserPage = lazy(() => import("@/pages/user-page"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -224,6 +226,7 @@ function AppRoutes() {
                     <Route path="/stream/scenes" component={Scenes} />
                     <Route path="/stream/scenes/:id" component={Scenes} />
                     <Route path="/stream/supporters" component={Supporters} />
+                    <Route path={USER_PAGE_PATH} component={UserPage} />
                     <Route path="/stream/assets" component={Assets} />
                     <Route path="/stream/starter-packs" component={StarterPacks} />
                     <Route path="/stream/workflows" component={Workflows} />
