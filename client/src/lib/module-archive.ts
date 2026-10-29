@@ -107,3 +107,15 @@ export async function computeModuleKey(moduleId: string, version: string, archiv
   const hash = await sha256Hex(archive);
   return `${moduleId}:${version}:${hash.slice(0, MODULE_KEY_HASH_LENGTH)}`;
 }
+
+export const MODULE_ARCHIVE_CONTENT_TYPE = "application/zip";
+
+/**
+ * The name an uploaded archive is stored under: its module key with the
+ * colons made safe, so no two builds share a name. Stored archives share the
+ * storage root's names with media files, and a name already taken is refused.
+ */
+export async function moduleArchiveFileName(manifestId: string, version: string, archive: Uint8Array): Promise<string> {
+  const key = await computeModuleKey(manifestId, version, archive);
+  return `${key.replaceAll(":", "-")}.zip`;
+}

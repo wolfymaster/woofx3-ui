@@ -31,16 +31,14 @@ The id is an installed module's bare key or a marketplace id. A module that is n
 
 ## Custom upload (`/marketplace/upload`)
 
-Installs are **asynchronous** and correlated via a `moduleKey` echoed by the engine in its webhook callback.
+The page reads a module zip as bytes (`client/src/lib/module-archive.ts`): text files open in the editor, an edit replaces that file's bytes, and every other file is installed as uploaded. It checks the manifest has an id and a version, and asks for approval of any permission or local endpoint the installed version (if any) lacked.
 
-1. The page uploads the ZIP to Convex storage (`assets.generateUploadUrl`), then calls the mutation `api.moduleRepository.uploadAndDeliver` with a **client-generated `moduleKey`**. This mutation does **not** create a `moduleRepository` row yet — it schedules the internal action `moduleEngine.deliverZipToInstance`.
-2. `deliverZipToInstance` fetches the archive from storage, base64-encodes it, and calls `rpc.installModuleZip(fileName, zipBase64, { moduleKey })` on the engine. The engine performs the install in the background and POSTs back `module.installed` or `module.install_failed` to `/api/webhooks/woofx3`, echoing the same `moduleKey` in `data.moduleKey`.
-3. The UI follows the key with `useTransientEvent(instanceId, moduleKey)` from the engine gateway, which subscribes to `api.transientEvents.get`. Convex realtime pushes the event the moment the webhook handler emits it:
-   - **`progress`** — surfaced by `deliverZipToInstance` transient errors or manual emits during delivery.
-   - **`success`** — written by `moduleWebhook.processModuleInstalled`, which also upserts the `moduleRepository` row and its triggers/actions.
-   - **`error`** — written on failure (delivery or engine-reported install_failed) with a human-readable message.
+Installing goes through `modules.useArchiveInstallRequest`:
 
-A hash of the in-browser zip is logged against the hash computed on the Convex side and the engine side to help diagnose byte-drift across the delivery.
+1. **Store.** The archive becomes a `custom_module` resource in the instance's own storage, through the same upload grant every file uses (`resources.requestUpload` with `kind: "custom_module"`, a PUT, then `completeUpload`). The engine keeps it out of the media library and never serves it at a URL. It is named after its module key (`moduleArchiveFileName`), and the same build already stored is installed again rather than stored twice.
+2. **Limit.** On hosted storage the upload is held to `storage.hostedModuleArchiveBytes` (50 MiB by default) in place of the per-file limit, and counts toward `storage.hostedAssetBytes` with everything else. A self-hosted or local engine has no limit.
+3. **Install.** `moduleEngine.installFromResource` asks the engine (`installModuleFromResource`, capability `modules.resourceInstall`) to install from the stored archive with the approved permission and local endpoint ids. The engine refuses an archive declaring anything beyond them, and resolves with the module key at once.
+4. **Outcome.** The page follows the key with `useTransientEvent`: `module.installed` or `module.install_failed` arrive as `module.install` transient events, and the installed module records the archive it came from (`uploadResourceId`). The archive cannot be deleted while its module is installed.
 
 ## Update an installed module
 

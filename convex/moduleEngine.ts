@@ -1,10 +1,12 @@
 "use node";
 
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalAction } from "./_generated/server";
+import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi, engineApiUrl } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
 /**
  * Map an engine RPC error to a user-friendly message. The capnweb layer throws
@@ -86,6 +88,41 @@ export const listEngineModules = action({
       console.error("listEngineModules RPC failed:", e);
       throw toFriendlyEngineError(e, bundle.url);
     }
+  },
+});
+
+/**
+ * Install a module from an archive the streamer uploaded to their own storage
+ * (a `custom_module` resource). The engine reads the archive itself, refuses
+ * any permission or local endpoint its manifest declares outside the
+ * approved lists, and resolves at once with the key the install's outcome is
+ * reported under, as a `module.install` transient event.
+ */
+export const installFromResource = action({
+  args: {
+    instanceId: v.id("instances"),
+    resourceId: v.string(),
+    approvedPermissions: v.array(v.string()),
+    approvedLocalEndpoints: v.array(v.string()),
+  },
+  handler: async (
+    ctx,
+    { instanceId, resourceId, approvedPermissions, approvedLocalEndpoints }
+  ): Promise<{ moduleKey: string }> => {
+    await requireInstanceRoleInAction(ctx, instanceId);
+    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+    if (!instance?.clientId || !instance.clientSecret) {
+      throw new ConvexError("This instance is not connected to its engine yet.");
+    }
+    const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
+    if (!hasEngineCapability(await fetchEngineCapabilities(engine), "modules.resourceInstall")) {
+      throw new ConvexError("This engine can't install uploaded modules. Update the engine to upload one.");
+    }
+    return await createEngineRpcSession<EngineApi>(
+      engine.url,
+      engine.clientId,
+      engine.clientSecret
+    ).installModuleFromResource(resourceId, { approvedPermissions, approvedLocalEndpoints });
   },
 });
 
