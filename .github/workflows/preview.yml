@@ -52,7 +52,6 @@ env:
   ENGINE_REPOSITORY: wolfymaster/woofx3
   ENGINE_REF: master
   ENGINE_API_DIR: woofx3/shared/clients/typescript/api
-  ENGINE_SCENE_DIR: woofx3/shared/clients/typescript/scene
   PR_NUMBER: ${{ github.event.pull_request.number }}
   HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
@@ -122,6 +121,10 @@ jobs:
           ref: ${{ env.HEAD_SHA }}
           path: woofx3-ui
 
+      # The image installs from the engine's workspace lockfile, and bun
+      # refuses a workspace whose member manifests are missing, so the checkout
+      # holds the root manifest, the lockfile, every workspace package.json and
+      # the sources of the two packages the UI imports.
       - name: Checkout woofx3 engine (shared types only)
         uses: actions/checkout@v7
         with:
@@ -129,9 +132,17 @@ jobs:
           ref: ${{ env.ENGINE_REF }}
           path: woofx3
           sparse-checkout: |
-            shared/clients/typescript/api
-            shared/clients/typescript/scene
-          sparse-checkout-cone-mode: true
+            /package.json
+            /bun.lock
+            /api/package.json
+            /connectors/package.json
+            /db/package.json
+            /sceneManager/package.json
+            /shared/common/typescript/package.json
+            /shared/clients/typescript/*/package.json
+            /shared/clients/typescript/api/
+            /shared/clients/typescript/scene/
+          sparse-checkout-cone-mode: false
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -199,8 +210,7 @@ jobs:
         with:
           context: woofx3-ui
           build-contexts: |
-            engine-api=${{ github.workspace }}/${{ env.ENGINE_API_DIR }}
-            engine-scene=${{ github.workspace }}/${{ env.ENGINE_SCENE_DIR }}
+            engine=${{ github.workspace }}/woofx3
           build-args: |
             BUN_VERSION=${{ env.BUN_VERSION }}
             VITE_CONVEX_URL=${{ steps.convex.outputs.convex_url }}
