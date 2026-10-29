@@ -1,5 +1,11 @@
 import { PAGE_LAYOUTS, type PageLayout, type PageRegion, type PublicPageSection } from "@shared/user-pages";
+import { LockedSectionView } from "./viewer/locked-section";
 import { PageWidgetView } from "./widgets/page-widget";
+
+/** A locked section has no id, so it is keyed by its place on the page. */
+function sectionKey(section: PublicPageSection, index: number): string {
+  return section.kind === "open" ? `open:${section.id}` : `locked:${index}`;
+}
 
 /**
  * A page's sections laid out in its layout's regions, each region's sections
@@ -7,14 +13,15 @@ import { PageWidgetView } from "./widgets/page-widget";
  * the order PAGE_LAYOUTS lists them.
  */
 export function PageRegions({ layout, sections }: { layout: PageLayout; sections: PublicPageSection[] }) {
-  const inRegion = (region: PageRegion) => sections.filter((section) => section.region === region);
+  const keyed = sections.map((section, index) => ({ section, key: sectionKey(section, index) }));
+  const inRegion = (region: PageRegion) => keyed.filter(({ section }) => section.region === region);
   const regions = PAGE_LAYOUTS[layout].regions;
   switch (layout) {
     case "single":
       return (
         <div className="mx-auto flex max-w-2xl flex-col gap-6" data-region="main">
-          {inRegion("main").map((section) => (
-            <SectionView key={section.id} section={section} />
+          {inRegion("main").map(({ section, key }) => (
+            <SectionView key={key} section={section} />
           ))}
         </div>
       );
@@ -23,8 +30,8 @@ export function PageRegions({ layout, sections }: { layout: PageLayout; sections
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           {regions.map((region) => (
             <div key={region} className="flex flex-col gap-6" data-region={region}>
-              {inRegion(region).map((section) => (
-                <SectionView key={section.id} section={section} />
+              {inRegion(region).map(({ section, key }) => (
+                <SectionView key={key} section={section} />
               ))}
             </div>
           ))}
@@ -34,13 +41,13 @@ export function PageRegions({ layout, sections }: { layout: PageLayout; sections
       return (
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-6" data-region="hero">
-            {inRegion("hero").map((section) => (
-              <SectionView key={section.id} section={section} prominent />
+            {inRegion("hero").map(({ section, key }) => (
+              <SectionView key={key} section={section} prominent />
             ))}
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-region="grid">
-            {inRegion("grid").map((section) => (
-              <SectionView key={section.id} section={section} />
+            {inRegion("grid").map(({ section, key }) => (
+              <SectionView key={key} section={section} />
             ))}
           </div>
         </div>
@@ -50,9 +57,13 @@ export function PageRegions({ layout, sections }: { layout: PageLayout; sections
 
 /**
  * One section: its title, then its widgets divided by rules. A hero section
- * is set larger and without a panel, so it reads as part of the header.
+ * is set larger and without a panel, so it reads as part of the header. A
+ * locked section is the same slate wherever it sits.
  */
 function SectionView({ section, prominent = false }: { section: PublicPageSection; prominent?: boolean }) {
+  if (section.kind === "locked") {
+    return <LockedSectionView requirement={section.requirement} reason={section.reason} />;
+  }
   const titleId = `section-${section.id}`;
   return (
     <section
