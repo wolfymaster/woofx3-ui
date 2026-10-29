@@ -13,6 +13,7 @@ import {
   viewerReturnTarget,
   viewerReturnUrl,
 } from "./lib/viewerAuth";
+import { checkEdgeGate } from "./lib/viewerEdgeGate";
 import { viewerPlatformClient } from "./lib/viewerPlatforms";
 import { viewerRateLimiter } from "./lib/viewerRateLimits";
 import { sealViewerToken, viewerTokenKeyFromEnv } from "./lib/viewerTokenCipher";
@@ -22,6 +23,11 @@ import { logger } from "./logger";
 //
 //   GET /api/viewer-auth/<platform>/start?return_to=<page URL>&nonce=<nonce>
 //   GET /api/viewer-auth/<platform>/callback   (the platform's redirect URL)
+//
+// Pages never call the start route themselves: they go to the edge's
+// `<user pages origin>/u/_/viewer-auth/<platform>/start`, which limits sign-in
+// per client address and forwards here with the edge secret
+// (lib/viewerEdgeGate.ts). A start without it is refused.
 //
 // The callback path must be registered as a redirect URL with the platform's
 // app, as the streamer sign-in callback is.
@@ -51,6 +57,14 @@ function failBack(target: ViewerReturnTarget, error: ViewerAuthErrorCode, detail
 
 function startHandler(platform: ViewerPlatform) {
   return httpAction(async (ctx, request) => {
+    const gate = await checkEdgeGate(request.headers, process.env);
+    if (!gate.ok) {
+      if (gate.refusal === "not_configured") {
+        logger.error("refusing viewer sign-in: the edge gate is not configured", { problem: gate.problem });
+        return refuse(500, "Viewer sign-in is not configured");
+      }
+      return refuse(401, "Viewer sign-in starts from the page");
+    }
     const url = new URL(request.url);
     const allowed = allowedReturnOrigins(process.env.USER_PAGES_BASE_URL);
     const target = viewerReturnTarget(url.searchParams.get("return_to"), allowed);
