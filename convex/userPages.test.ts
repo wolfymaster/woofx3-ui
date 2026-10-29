@@ -23,11 +23,17 @@ interface Fixture {
 }
 
 interface FixtureOptions {
+  hosting?: "managed" | "external";
+  /** Whether the default plan includes the userPages feature. */
   entitled?: boolean;
-  managed?: boolean;
+  /**
+   * Whether the engine holds a slug. Only managed engines get one today; an
+   * external engine with a slug stands in for one linked to an account.
+   */
+  slug?: boolean;
 }
 
-async function fixture({ entitled = true, managed = true }: FixtureOptions = {}): Promise<Fixture> {
+async function fixture({ hosting = "managed", entitled = false, slug = true }: FixtureOptions = {}): Promise<Fixture> {
   const t = newBackend();
   const ids = await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", { name: "Owner" });
@@ -38,11 +44,12 @@ async function fixture({ entitled = true, managed = true }: FixtureOptions = {})
       accountId,
       name: "Main",
       url: "https://engine.example",
+      hosting,
       createdAt: 1,
     });
     await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
     await ctx.db.insert("instanceMembers", { instanceId, userId: memberId, role: "member" });
-    if (managed) {
+    if (slug) {
       await ctx.db.insert("engineProvisioning", {
         instanceId,
         accountId,
@@ -156,7 +163,7 @@ describe("forEditing", () => {
   });
 
   test("has no slug for an instance that is not a managed engine", async () => {
-    const f = await fixture({ managed: false });
+    const f = await fixture({ hosting: "external", slug: false });
     expect((await f.owner.query(api.userPages.forEditing, { instanceId: f.instanceId }))?.slug).toBeNull();
   });
 });
@@ -317,12 +324,21 @@ describe("publish", () => {
     expect(await publishedContent(f)).toBeNull();
   });
 
-  test("refuses an account whose plan does not include pages, and keeps the draft", async () => {
-    const f = await fixture({ entitled: false });
+  test.each([
+    ["a managed engine without the feature", { hosting: "managed", entitled: false }],
+    ["an external engine with the feature", { hosting: "external", entitled: true }],
+  ] as const)("publishes for %s", async (_name, options) => {
+    const f = await fixture(options);
     const revision = await saved(f, "a");
-    await expect(f.owner.mutation(api.userPages.publish, { instanceId: f.instanceId, revision })).rejects.toThrow(
-      "Not included in your plan"
-    );
+    await f.owner.mutation(api.userPages.publish, { instanceId: f.instanceId, revision });
+    expect(await publishedContent(f)).toEqual(withText("a"));
+  });
+
+  test("refuses an external engine whose plan does not include pages, and keeps the draft", async () => {
+    const f = await fixture({ hosting: "external", entitled: false });
+    const revision = await saved(f, "a");
+    const refused = await refusal(f.owner.mutation(api.userPages.publish, { instanceId: f.instanceId, revision }));
+    expect(refused.code).toBe("not_entitled");
     expect(await publishedContent(f)).toBeNull();
     const page = await f.owner.query(api.userPages.forEditing, { instanceId: f.instanceId });
     expect(page?.canPublish).toBe(false);
@@ -330,7 +346,7 @@ describe("publish", () => {
   });
 
   test("refuses an instance with no slug", async () => {
-    const f = await fixture({ managed: false });
+    const f = await fixture({ slug: false });
     const revision = await saved(f, "a");
     const refused = await refusal(f.owner.mutation(api.userPages.publish, { instanceId: f.instanceId, revision }));
     expect(refused.code).toBe("no_slug");

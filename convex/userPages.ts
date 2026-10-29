@@ -3,11 +3,11 @@ import { checkPageContent, defaultPageContent, type PageContent, pageContentVali
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
-import { accountEntitlements, requireEntitlement } from "./lib/entitlementAccess";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { getInstanceMembership } from "./lib/teamAccess";
 import {
   bindingProblems,
+  instanceAllowsUserPages,
   pageSlugForInstance,
   requireRevision,
   userPageForInstance,
@@ -15,13 +15,13 @@ import {
 } from "./lib/userPages";
 
 // The owner's side of a user page. Any member may edit the draft; publishing
-// puts the instance's name on a public page, so it takes an admin, and it is
-// the paid step, so it alone needs the `userPages` entitlement.
+// puts the instance's name on a public page, so it takes an admin, and it
+// alone is gated by plan (instanceAllowsUserPages).
 
 export interface UserPageForEditing {
   /** The name the page is published under, or null when the instance has none (it is not a managed engine). */
   slug: string | null;
-  /** Whether the account's plan lets it publish. */
+  /** Whether the plan lets this instance have a live page. */
   canPublish: boolean;
   draft: { revision: number; content: PageContent; savedAt: number | null };
   published: { revision: number; publishedAt: number } | null;
@@ -40,7 +40,7 @@ export const forEditing = query({
       return null;
     }
     const slug = await pageSlugForInstance(ctx, instanceId);
-    const canPublish = (await accountEntitlements(ctx, instance.accountId)).features.includes("userPages");
+    const canPublish = await instanceAllowsUserPages(ctx, instance);
     const page = await userPageForInstance(ctx, instanceId);
     if (!page) {
       return {
@@ -131,7 +131,12 @@ export const publish = mutation({
     if (!instance) {
       throw new Error("Instance not found");
     }
-    await requireEntitlement(ctx, instance.accountId, "userPages");
+    if (!(await instanceAllowsUserPages(ctx, instance))) {
+      throw userPageRefusal({
+        code: "not_entitled",
+        message: "Your plan does not include a public page for this engine",
+      });
+    }
     if ((await pageSlugForInstance(ctx, instanceId)) === null) {
       throw userPageRefusal({ code: "no_slug", message: "Pages can be published from managed engines only" });
     }

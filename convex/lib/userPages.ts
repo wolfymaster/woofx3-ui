@@ -2,6 +2,7 @@ import { type PageContent, type PageProblem, type ResourceBinding, widgetBinding
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { accountEntitlements } from "./entitlementAccess";
 import { parseKindRef } from "./resourceKinds";
 
 /** Provisioning states in which the maintenance API no longer holds the engine's slug for it. */
@@ -22,6 +23,25 @@ export async function pageSlugForInstance(ctx: QueryCtx, instanceId: Id<"instanc
     return null;
   }
   return SLUG_RELEASED_STATUSES.has(provisioning.status) ? null : provisioning.slug;
+}
+
+/**
+ * Whether an instance may have a live page. Every hosted plan includes pages,
+ * so a managed engine always may; any other engine (self-hosted, or a local
+ * one linked to an account) needs the account's `userPages` feature, the
+ * paid subscription. Publishing and the public read both ask this, so a page
+ * whose account loses the feature goes offline without being unpublished.
+ */
+export function userPagesAllowed(hosting: Doc<"instances">["hosting"], features: readonly string[]): boolean {
+  return hosting === "managed" || features.includes("userPages");
+}
+
+export async function instanceAllowsUserPages(ctx: QueryCtx, instance: Doc<"instances">): Promise<boolean> {
+  // Hosting alone decides for a managed engine, so its plan is not read.
+  if (userPagesAllowed(instance.hosting, [])) {
+    return true;
+  }
+  return userPagesAllowed(instance.hosting, (await accountEntitlements(ctx, instance.accountId)).features);
 }
 
 export async function userPageForInstance(
@@ -112,7 +132,8 @@ export async function deleteUserPage(ctx: MutationCtx, instanceId: Id<"instances
 export type UserPageRefusal =
   | { code: "invalid_content"; message: string; problems: PageProblem[] }
   | { code: "stale_draft"; message: string }
-  | { code: "no_slug"; message: string };
+  | { code: "no_slug"; message: string }
+  | { code: "not_entitled"; message: string };
 
 export function userPageRefusal(refusal: UserPageRefusal): ConvexError<UserPageRefusal> {
   return new ConvexError(refusal);

@@ -30,8 +30,8 @@ export interface EntitlementLimitDefinition {
 
 /** Every feature a plan, an account override or a flag rule can name. */
 export const ENTITLEMENT_FEATURES = {
-  // Publishing one; editing a draft is open to every account, so a page can
-  // be built before the plan that publishes it is bought.
+  // A live page for an engine Convex does not host; managed engines have one
+  // on every plan. See lib/userPages.ts userPagesAllowed.
   userPages: {
     description: "A public page for your channel",
   },
