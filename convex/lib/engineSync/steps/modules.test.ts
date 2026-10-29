@@ -37,11 +37,23 @@ describe("modulesStep", () => {
     expect(snapshot.marketplaceEdition).toBe(2);
   });
 
+  test("forwards the uploaded archive a module came from, and whether the engine ships it", async () => {
+    const t = run([
+      { ...base, uploadResourceId: "res-1", createdByType: "USER" },
+      { ...base, moduleId: "woofx3", moduleKey: "woofx3:1.0.0:abcdef1", createdByType: "SYSTEM" },
+    ]);
+    await t.done;
+    const [uploaded, bundled] = t.sent[0].args.snapshots as Record<string, unknown>[];
+    expect([uploaded.uploadResourceId, uploaded.builtIn]).toEqual(["res-1", false]);
+    expect([bundled.uploadResourceId, bundled.builtIn]).toEqual([undefined, true]);
+  });
+
   test("an engine that predates provenance sends neither field, and none is invented", async () => {
     const t = run([base]);
     await t.done;
     const [snapshot] = t.sent[0].args.snapshots as Record<string, unknown>[];
     expect("marketplaceListingId" in snapshot).toBe(false);
     expect("marketplaceEdition" in snapshot).toBe(false);
+    expect("uploadResourceId" in snapshot).toBe(false);
   });
 });

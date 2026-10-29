@@ -51,7 +51,26 @@ export interface MarketplaceProvenance {
 }
 
 /** The parts of a `moduleRepository` row this reads. */
-export interface InstalledModuleRef extends MarketplaceProvenance {
+/**
+ * Where an install came from: a marketplace listing, or an archive the
+ * streamer uploaded (by the engine resource holding it). An install has at
+ * most one; the engine refuses both at once.
+ */
+export interface InstallProvenance extends MarketplaceProvenance {
+  uploadResourceId?: string;
+}
+
+/**
+ * A row's provenance with every field named, so a patch clears what no longer
+ * holds: an upload replacing a listing install drops the listing.
+ */
+export interface ResolvedProvenance {
+  marketplaceListingId: string | undefined;
+  marketplaceEdition: number | undefined;
+  uploadResourceId: string | undefined;
+}
+
+export interface InstalledModuleRef extends InstallProvenance {
   moduleKey?: string;
 }
 
@@ -75,6 +94,11 @@ export interface InstalledListing {
  * the module comment for why that holds for every module that lacks it.
  */
 export function installedListing(row: InstalledModuleRef): InstalledListing | undefined {
+  // An uploaded module is no listing, whatever its manifest id happens to share
+  // with one: reading the key as a listing id would mark that listing installed.
+  if (row.uploadResourceId) {
+    return undefined;
+  }
   const [manifestId, version] = (row.moduleKey ?? "").split(":");
   const listingId = row.marketplaceListingId?.trim();
   if (listingId) {
@@ -114,8 +138,8 @@ export function installedVersionsByListing(rows: readonly InstalledModuleRef[]):
  * `moduleKey`. Provenance belongs to one install, so it is only kept while the
  * key it was recorded for is still the row's key.
  *
- * 1. What the engine reports for the module, when it reports a listing: the
- *    engine recorded it at install time.
+ * 1. What the engine reports for the module, when it reports a listing or an
+ *    uploaded archive: the engine recorded it at install time.
  * 2. What Convex recorded when it started the install of `moduleKey`.
  * 3. The row's own, if its key has not changed.
  * 4. None: the row now holds a build nobody recorded, and the key is all
@@ -128,24 +152,44 @@ export function resolveProvenance({
   existing,
 }: {
   moduleKey: string | undefined;
-  reported?: MarketplaceProvenance;
+  reported?: InstallProvenance;
   recorded?: MarketplaceProvenance | null;
   existing?: InstalledModuleRef | null;
-}): MarketplaceProvenance {
+}): ResolvedProvenance {
+  if (reported?.uploadResourceId) {
+    return {
+      marketplaceListingId: undefined,
+      marketplaceEdition: undefined,
+      uploadResourceId: reported.uploadResourceId,
+    };
+  }
   if (reported?.marketplaceListingId) {
-    return pick(reported);
+    return fromListing(reported);
   }
   if (recorded?.marketplaceListingId) {
-    return pick(recorded);
+    return fromListing(recorded);
   }
-  if (existing?.marketplaceListingId && moduleKey !== undefined && existing.moduleKey === moduleKey) {
-    return pick(existing);
+  if (moduleKey !== undefined && existing?.moduleKey === moduleKey) {
+    if (existing.uploadResourceId) {
+      return {
+        marketplaceListingId: undefined,
+        marketplaceEdition: undefined,
+        uploadResourceId: existing.uploadResourceId,
+      };
+    }
+    if (existing.marketplaceListingId) {
+      return fromListing(existing);
+    }
   }
-  return { marketplaceListingId: undefined, marketplaceEdition: undefined };
+  return { marketplaceListingId: undefined, marketplaceEdition: undefined, uploadResourceId: undefined };
 }
 
-function pick(provenance: MarketplaceProvenance): MarketplaceProvenance {
-  return { marketplaceListingId: provenance.marketplaceListingId, marketplaceEdition: provenance.marketplaceEdition };
+function fromListing(provenance: MarketplaceProvenance): ResolvedProvenance {
+  return {
+    marketplaceListingId: provenance.marketplaceListingId,
+    marketplaceEdition: provenance.marketplaceEdition,
+    uploadResourceId: undefined,
+  };
 }
 
 /**

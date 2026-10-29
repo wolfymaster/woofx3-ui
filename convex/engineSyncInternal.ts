@@ -1127,6 +1127,8 @@ export const reconcileModules = internalMutation({
         tags: v.array(v.string()),
         marketplaceListingId: v.optional(v.string()),
         marketplaceEdition: v.optional(v.number()),
+        uploadResourceId: v.optional(v.string()),
+        builtIn: v.boolean(),
       })
     ),
   },
@@ -1155,7 +1157,11 @@ export const reconcileModules = internalMutation({
       // recorded for the key fills in.
       const provenance = resolveProvenance({
         moduleKey,
-        reported: { marketplaceListingId: snap.marketplaceListingId, marketplaceEdition: snap.marketplaceEdition },
+        reported: {
+          marketplaceListingId: snap.marketplaceListingId,
+          marketplaceEdition: snap.marketplaceEdition,
+          uploadResourceId: snap.uploadResourceId,
+        },
         recorded: await recordedProvenance(ctx, instanceId, moduleKey),
         existing,
       });
@@ -1168,6 +1174,7 @@ export const reconcileModules = internalMutation({
         statusMessage: undefined,
         moduleKey,
         ...provenance,
+        builtIn: snap.builtIn,
         description: snap.description || existing?.description || "",
         tags: snap.tags.length > 0 ? snap.tags : (existing?.tags ?? []),
         ...(snap.author ? { author: snap.author } : {}),

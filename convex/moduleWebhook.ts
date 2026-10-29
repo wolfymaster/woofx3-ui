@@ -268,8 +268,13 @@ export const processModuleInstalled = internalMutation({
     moduleVersion: v.string(),
     triggers: v.array(triggerValidator),
     actions: v.array(actionValidator),
+    // The archive an upload was installed from, when the engine reports one.
+    uploadResourceId: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, triggers, actions }) => {
+  handler: async (
+    ctx,
+    { instanceId, correlationKey, moduleName, moduleVersion, triggers, actions, uploadResourceId }
+  ) => {
     // Check if this instance already has the row (idempotency)
     const record = await ctx.db
       .query("moduleRepository")
@@ -280,13 +285,14 @@ export const processModuleInstalled = internalMutation({
 
     const superseded = record ? null : await findSupersededModule(ctx, instanceId, correlationKey);
 
-    // Which listing the build is: what Convex recorded when it started the
-    // install, or, for a row whose key is unchanged, what the row already says.
-    // The callback itself carries neither.
+    // Where the build came from: the uploaded archive the callback names, what
+    // Convex recorded when it started a listing install, or, for a row whose
+    // key is unchanged, what the row already says.
     const existing = record ?? superseded;
     const moduleKey = record?.moduleKey ?? correlationKey;
     const provenance = resolveProvenance({
       moduleKey,
+      reported: { uploadResourceId },
       recorded: await recordedProvenance(ctx, instanceId, moduleKey),
       existing,
     });
