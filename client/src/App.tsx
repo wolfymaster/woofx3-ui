@@ -21,9 +21,13 @@ import {
 } from "@/lib/command-editor-route";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
 import {
+  legacyModulesRedirect,
   MARKETPLACE_AUTHOR_ROUTE,
+  MARKETPLACE_INSTALLED_MODULE_ROUTE,
+  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_LISTING_ROUTE,
   MARKETPLACE_PATH,
+  MARKETPLACE_UPLOAD_PATH,
   modulesIndexRedirect,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
@@ -142,6 +146,11 @@ function ModulesIndexRedirect() {
   return <Redirect to={modulesIndexRedirect(useSearch())} />;
 }
 
+/** An old `/modules/…` path, forwarded into the Marketplace tab (see `legacyModulesRedirect`). */
+function LegacyModulesRedirect({ params }: { params: { rest: string } }) {
+  return <Redirect to={legacyModulesRedirect(params.rest, useSearch())} />;
+}
+
 function AppRoutes() {
   const [location] = useLocation();
 
@@ -228,13 +237,12 @@ function AppRoutes() {
                     <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
                     <Route path={MARKETPLACE_PATH} component={Marketplace} />
 
-                    {/* The install surface. /modules/install and /modules/installed are
-                      linked from elsewhere in the app and from an install's own redirect,
-                      so they stay; the two storefront routes under /modules forward to
-                      their /marketplace equivalents for old bookmarks. */}
-                    <Route path="/modules/install" component={ModuleInstall} />
-                    <Route path="/modules/installed" component={Modules} />
-                    <Route path="/modules/:moduleId" component={Modules} />
+                    <Route path={MARKETPLACE_UPLOAD_PATH} component={ModuleInstall} />
+                    <Route path={MARKETPLACE_INSTALLED_PATH} component={Modules} />
+                    <Route path={MARKETPLACE_INSTALLED_MODULE_ROUTE} component={Modules} />
+
+                    {/* Where installed modules used to live; old links forward into the Marketplace tab. */}
+                    <Route path="/modules/:rest" component={LegacyModulesRedirect} />
                     <Route path="/modules" component={ModulesIndexRedirect} />
 
                     {/* Help section */}
