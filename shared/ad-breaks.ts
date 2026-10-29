@@ -114,6 +114,23 @@ export function helixErrorText(body: string): string {
   return body.trim();
 }
 
+/**
+ * A Helix ads answer's body, or the sentence its failure reads as. The
+ * caller raises the sentence in whatever form its transport keeps.
+ */
+export async function readAdAnswer(operation: AdHelixOperation, response: Response): Promise<HelixBody> {
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: adHelixErrorMessage(operation, response.status, helixErrorText(await response.text())),
+    };
+  }
+  return parseHelixBody(operation, await response.text());
+}
+
+export const AD_SCHEDULE_UNREADABLE_MESSAGE = "Twitch answered with an ad schedule this page cannot read.";
+export const AD_SNOOZE_UNREADABLE_MESSAGE = "Twitch snoozed the ad but answered with something this page cannot read.";
+
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }

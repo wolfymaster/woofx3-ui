@@ -1,15 +1,16 @@
 import {
   AD_MANAGE_SCOPE,
   AD_READ_SCOPE,
+  AD_SCHEDULE_UNREADABLE_MESSAGE,
   AD_SCOPE_MISSING_MESSAGE,
+  AD_SNOOZE_UNREADABLE_MESSAGE,
   type AdHelixOperation,
   type AdSchedule,
   type AdSnoozeResult,
   adHelixErrorMessage,
-  helixErrorText,
   parseHelixAdSchedule,
-  parseHelixBody,
   parseHelixSnoozeResult,
+  readAdAnswer,
 } from "@shared/ad-breaks";
 import { missingTwitchScopeMessage } from "@shared/twitch-link-refusal";
 import type { TwitchHelixResult } from "@woofx3/api";
@@ -76,10 +77,7 @@ export async function callHelix(
     const reason = err instanceof Error ? err.message : String(err);
     throw new ConvexError(adHelixErrorMessage(operation, 0, `Twitch could not be reached (${reason})`));
   }
-  if (!response.ok) {
-    throw new ConvexError(adHelixErrorMessage(operation, response.status, helixErrorText(await response.text())));
-  }
-  const parsed = parseHelixBody(operation, await response.text());
+  const parsed = await readAdAnswer(operation, response);
   if (!parsed.ok) {
     throw new ConvexError(parsed.message);
   }
@@ -93,7 +91,7 @@ export const getSchedule = action({
     const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.ads"), "read");
     const schedule = parseHelixAdSchedule(body, new Date().toISOString());
     if (!schedule) {
-      throw new ConvexError("Twitch answered with an ad schedule this page cannot read.");
+      throw new ConvexError(AD_SCHEDULE_UNREADABLE_MESSAGE);
     }
     return schedule;
   },
@@ -106,7 +104,7 @@ export const snoozeNextAd = action({
     const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.ads"), "snooze");
     const result = parseHelixSnoozeResult(body, new Date().toISOString());
     if (!result) {
-      throw new ConvexError("Twitch snoozed the ad but answered with something this page cannot read.");
+      throw new ConvexError(AD_SNOOZE_UNREADABLE_MESSAGE);
     }
     return result;
   },

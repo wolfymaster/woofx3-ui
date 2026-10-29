@@ -7,6 +7,7 @@ import {
   parseHelixAdSchedule,
   parseHelixBody,
   parseHelixSnoozeResult,
+  readAdAnswer,
   toLocalTime,
 } from "./ad-breaks";
 
@@ -152,5 +153,25 @@ describe("helixErrorText", () => {
       "channel is not live"
     );
     expect(helixErrorText("upstream timeout ")).toBe("upstream timeout");
+  });
+});
+
+describe("readAdAnswer", () => {
+  test("a success is its JSON body", async () => {
+    expect(await readAdAnswer("read", new Response('{"data":[]}', { status: 200 }))).toEqual({
+      ok: true,
+      body: { data: [] },
+    });
+  });
+
+  test("a failure is its sentence, with Twitch's own message where the streamer can act on it", async () => {
+    const refused = new Response('{"error":"Bad Request","status":400,"message":"channel is not live"}', {
+      status: 400,
+    });
+    expect(await readAdAnswer("snooze", refused)).toEqual({ ok: false, message: "channel is not live" });
+    expect(await readAdAnswer("read", new Response(null, { status: 403 }))).toEqual({
+      ok: false,
+      message: AD_SCOPE_MISSING_MESSAGE,
+    });
   });
 });
