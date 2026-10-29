@@ -33,6 +33,7 @@ export default defineConfig({
             { text: "Admin & team", link: "/ui/admin-team" },
             { text: "Importing from Firebot and Streamer.bot", link: "/ui/setup-imports" },
             { text: "Auth & onboarding", link: "/ui/auth-onboarding" },
+            { text: "Viewer sign-in", link: "/ui/viewer-sign-in" },
             { text: "Companion app", link: "/ui/companion" },
             { text: "User pages", link: "/ui/user-pages" },
             { text: "Convex & HTTP", link: "/ui/convex-surface" },
