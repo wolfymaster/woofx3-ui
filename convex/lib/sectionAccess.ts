@@ -15,12 +15,17 @@ export type PageViewer =
   | {
       kind: "signed_in";
       roles:
-        | { kind: "known"; follower: boolean; subscriberTier: SubscriberTier | null }
+        | { kind: "known"; follower: boolean; subscriberTier: SubscriberTier | null; checkedAt: number }
         /** Never checked on this channel, or the last check expired. */
         | { kind: "unknown" }
         /** The page's channel cannot be checked for this viewer at all. */
         | { kind: "uncheckable" };
     };
+
+/** Whether a section's visibility depends on the viewer's roles, not only on whether they are signed in. */
+export function gatedOnRoles(visibility: SectionVisibility): boolean {
+  return visibility.kind === "follower" || visibility.kind === "subscriber" || visibility.kind === "tier";
+}
 
 export type SectionAccess = { kind: "open" } | { kind: "locked"; reason: LockedSectionReason };
 

@@ -85,6 +85,10 @@ export type PublicPageSection =
  * - `page`: the published page as this viewer may see it. `rolesStale` is
  *   true when some section is locked only because the viewer's roles are
  *   missing or expired (`roles_unknown`), so a role refresh could open it.
+ *   `rolesRenewAt` (milliseconds since the epoch) is when the viewer's
+ *   current roles should be refreshed so they are replaced before they
+ *   expire; null when no role check is in use (anonymous, no roles yet, or
+ *   no section gated on roles).
  * - `unavailable`: an engine holds the name, but nothing is published there
  *   (never published, taken offline, or the plan no longer includes pages).
  * - `unclaimed`: no engine holds the name. Whether it can still be claimed is
@@ -99,6 +103,7 @@ export type PublicPageLookup =
       theme: PageContent["theme"];
       sections: PublicPageSection[];
       rolesStale: boolean;
+      rolesRenewAt: number | null;
       publishedAt: number;
     }
   | { kind: "unavailable" }

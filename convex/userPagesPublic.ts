@@ -39,7 +39,12 @@ async function pageViewer(
   }
   return {
     kind: "signed_in",
-    roles: { kind: "known", follower: roles.follower, subscriberTier: roles.subscriberTier },
+    roles: {
+      kind: "known",
+      follower: roles.follower,
+      subscriberTier: roles.subscriberTier,
+      checkedAt: roles.checkedAt,
+    },
   };
 }
 

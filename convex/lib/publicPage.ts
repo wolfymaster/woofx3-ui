@@ -11,7 +11,8 @@ import type {
   SectionRequirement,
 } from "@shared/user-pages";
 import type { Doc } from "../_generated/dataModel";
-import { type PageViewer, type SectionAccess, sectionAccess } from "./sectionAccess";
+import { gatedOnRoles, type PageViewer, type SectionAccess, sectionAccess } from "./sectionAccess";
+import { viewerRolesRenewAt } from "./viewerAuth";
 
 /** What a published page's widgets read besides their own config. */
 export interface PublicPageSources {
@@ -104,5 +105,19 @@ export function toPublicPage(
       : { kind: "locked", region: section.region, requirement: requirementOf(section), reason: access.reason }
   );
   const rolesStale = decided.some(({ access }) => access.kind === "locked" && access.reason === "roles_unknown");
-  return { kind: "page", slug, layout: content.layout, theme: content.theme, sections, rolesStale, publishedAt };
+  const usesRoles = content.sections.some((section) => gatedOnRoles(section.visibility));
+  const rolesRenewAt =
+    usesRoles && viewer.kind === "signed_in" && viewer.roles.kind === "known"
+      ? viewerRolesRenewAt(viewer.roles.checkedAt)
+      : null;
+  return {
+    kind: "page",
+    slug,
+    layout: content.layout,
+    theme: content.theme,
+    sections,
+    rolesStale,
+    rolesRenewAt,
+    publishedAt,
+  };
 }

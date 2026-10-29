@@ -16,7 +16,7 @@ const VISIBILITIES: Record<string, SectionVisibility> = {
 
 const known = (follower: boolean, subscriberTier: 1 | 2 | 3 | null): PageViewer => ({
   kind: "signed_in",
-  roles: { kind: "known", follower, subscriberTier },
+  roles: { kind: "known", follower, subscriberTier, checkedAt: 1 },
 });
 
 const VIEWERS: Record<string, PageViewer> = {

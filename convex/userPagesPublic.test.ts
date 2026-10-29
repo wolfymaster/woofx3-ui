@@ -10,6 +10,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { generateOpaqueToken, hashOpaqueToken } from "./lib/oauthHandoff";
 import { COUNTER, type Fixture, type FixtureOptions, fixture } from "./lib/userPages.fixtures";
+import { VIEWER_ROLES_RENEW_LEAD_MS, VIEWER_ROLES_TTL_MS } from "./lib/viewerAuth";
 
 const SECRET = "woofx3:counter:secret";
 
@@ -568,6 +569,28 @@ describe("bySlug for a viewer", () => {
     expect(page.rolesStale).toBe(true);
     expect(page.sections[0]).toMatchObject({ kind: "locked", reason: "roles_unknown" });
     expectNoGatedContent(page);
+  });
+
+  test("tells a viewer with current roles when to renew them, and nobody else", async () => {
+    const f = await seeded();
+    await publishContent(f, content([PUBLIC_COUNTER, gated({ kind: "follower" })]));
+    await linkChannel(f);
+    expect((await shownPage(f)).rolesRenewAt).toBeNull();
+    const viewer = await signInViewer(f);
+    expect((await shownPage(f, viewer.sessionToken)).rolesRenewAt).toBeNull();
+    await cacheRoles(f, viewer, { follower: false, subscriberTier: null });
+    const page = await shownPage(f, viewer.sessionToken);
+    expect(page.rolesRenewAt).toBe(1 + VIEWER_ROLES_TTL_MS - VIEWER_ROLES_RENEW_LEAD_MS);
+    expect(page.sections[1]).toMatchObject({ kind: "locked", reason: "not_eligible" });
+  });
+
+  test("gives no renewal time on a page with no section gated on roles", async () => {
+    const f = await seeded();
+    await publishContent(f, content([PUBLIC_COUNTER, gated({ kind: "signed_in" })]));
+    await linkChannel(f);
+    const viewer = await signInViewer(f);
+    await cacheRoles(f, viewer, { follower: true, subscriberTier: 1 });
+    expect((await shownPage(f, viewer.sessionToken)).rolesRenewAt).toBeNull();
   });
 
   test("keeps the position of a locked section among open ones", async () => {
