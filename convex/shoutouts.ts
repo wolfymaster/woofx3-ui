@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -25,7 +26,7 @@ import {
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch, authorizeTwitchUnattended } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
+import { fetchTwitchUser } from "./lib/twitchUsers";
 
 const TWITCH_CHATTERS_URL = "https://api.twitch.tv/helix/chat/chatters";
 const TWITCH_SHOUTOUTS_URL = "https://api.twitch.tv/helix/chat/shoutouts";

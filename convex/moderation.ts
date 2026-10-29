@@ -16,6 +16,7 @@ import {
   validateBlockedTerm,
   validateTimeoutSeconds,
 } from "@shared/moderation";
+import { normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
 import type { TwitchHelixResult } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -25,7 +26,7 @@ import type { EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
+import { fetchTwitchUser } from "./lib/twitchUsers";
 
 // Moderation for the dashboard widget: blocked terms, timeouts and bans, and
 // chat lockdown modes. Straight to Helix with the broadcaster's token, the same

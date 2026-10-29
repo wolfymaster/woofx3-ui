@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { canReadChannelRole, normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -19,13 +20,10 @@ import {
   normalizeEmail,
 } from "./lib/teamAccess";
 import {
-  canReadChannelRole,
   fetchHasChannelRole,
   fetchTwitchAppCredentials,
   fetchTwitchUser,
   type HelixCredentials,
-  normalizeTwitchLogin,
-  type TwitchUser,
 } from "./lib/twitchUsers";
 
 const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;

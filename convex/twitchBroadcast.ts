@@ -1,8 +1,9 @@
+import { normalizeTwitchLogin } from "@shared/twitch-users";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { fetchTwitchUser, normalizeTwitchLogin } from "./lib/twitchUsers";
+import { fetchTwitchUser } from "./lib/twitchUsers";
 
 // Chat message / announce / shoutout for the dashboard's Broadcast Controls
 // panel and macro pad.
