@@ -159,7 +159,7 @@ export async function recordViewerRoleRefresh(ctx: MutationCtx, record: RefreshR
       .query("viewerPlatformTokens")
       .withIndex("by_viewer", (q) => q.eq("viewerId", viewerId))
       .unique();
-    if (row && refreshOutcomeApplies({ refreshToken: row.sealedRefreshToken }, tokens.usedSealedRefreshToken)) {
+    if (row && refreshOutcomeApplies(row.sealedRefreshToken, tokens.usedSealedRefreshToken)) {
       if (tokens.renewed) {
         await ctx.db.patch(row._id, tokens.renewed);
       } else {

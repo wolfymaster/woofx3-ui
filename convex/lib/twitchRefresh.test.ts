@@ -20,14 +20,14 @@ describe("isRevokedRefreshResponse", () => {
 
 describe("refreshOutcomeApplies", () => {
   test("applies while the link still holds the token that was exchanged", () => {
-    expect(refreshOutcomeApplies({ refreshToken: "r1" }, "r1")).toBe(true);
+    expect(refreshOutcomeApplies("r1", "r1")).toBe(true);
   });
 
   // A relink between reading the link and hearing back from Twitch replaced
   // the token; a late "Invalid refresh token" for the old one must not mark
   // the new grant revoked, and late new tokens must not overwrite it.
   test("does not apply after a relink replaced the token", () => {
-    expect(refreshOutcomeApplies({ refreshToken: "r2" }, "r1")).toBe(false);
+    expect(refreshOutcomeApplies("r2", "r1")).toBe(false);
   });
 
   test("does not apply to a deleted link", () => {
