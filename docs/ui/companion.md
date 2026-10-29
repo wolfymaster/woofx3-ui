@@ -100,14 +100,14 @@ How the relay ends a connection decides what the companion does next:
 
 ## Local mode
 
-In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The window has no switch for it; it is selected only by a file in the app's config directory (`%APPDATA%\tv.woofx3.companion\desktop-host.json` on Windows, `~/.config/tv.woofx3.companion/desktop-host.json` on Linux):
+In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The desktop installer bundles an engine and starts in local mode; the companion installer starts as the tray app. The window has no switch between them; a file in the app's config directory overrides the installer's default (`%APPDATA%\tv.woofx3.companion\desktop-host.json` on Windows, `~/.config/tv.woofx3.companion/desktop-host.json` on Linux):
 
 ```json
 { "mode": "local", "engineDir": "C:\\woofx3\\engine", "apiPort": 5050 }
 ```
 
-- Without the file, or with `{ "mode": "companion" }`, the companion is the tray app described above and runs no engine.
-- `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Installers do not bundle one, so local mode needs `engineDir`.
+- Without the file the app runs in its installer's mode. With `{ "mode": "companion" }` it is the tray app described above and runs no engine.
+- `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Only the desktop installer bundles one, so local mode from the companion installer needs `engineDir`.
 - `apiPort` is the port the engine's api listens on, 5050 (an engine release's own default) unless set.
 - A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup, so a typo never quietly turns local mode off. The reason appears in a message box and is appended to `startup-error.log` in the app's log directory (`%LOCALAPPDATA%\tv.woofx3.companion\logs` on Windows).
 

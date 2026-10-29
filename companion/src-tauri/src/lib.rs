@@ -33,8 +33,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use woofx3_companion_core::host::{
-    HostMode, MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView, StreamStartMarker,
-    HOST_CONFIG_FILE,
+    HostMode, LocalEngineSettings, MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView,
+    StreamStartMarker, HOST_CONFIG_FILE,
 };
 
 use cloud::CloudLink;
@@ -555,7 +555,7 @@ pub fn run() {
 /// shows before exiting.
 fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
     let config = app.path().app_config_dir()?.join(HOST_CONFIG_FILE);
-    match HostMode::load(&config)? {
+    match HostMode::load(&config, default_host_mode())? {
         HostMode::Companion => Ok(LocalEngine::Off),
         HostMode::Local(settings) => Ok(LocalEngine::start(
             &settings,
@@ -563,6 +563,16 @@ fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
             &app.path().app_local_data_dir()?,
             Arc::new(app.handle().clone()),
         )?),
+    }
+}
+
+/// The mode without a host configuration file: a build that bundles an engine
+/// runs it, and the companion build runs none.
+fn default_host_mode() -> HostMode {
+    if cfg!(feature = "bundled-engine") {
+        HostMode::Local(LocalEngineSettings::default())
+    } else {
+        HostMode::Companion
     }
 }
 
