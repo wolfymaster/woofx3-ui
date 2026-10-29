@@ -56,6 +56,7 @@ import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
 import { canonicalIdForStorageKey } from "./resourceValues";
+import { registerViewerAuthRoutes } from "./viewerAuthHttp";
 import "./browserSource";
 import "./moduleWebhook";
 
@@ -1461,6 +1462,8 @@ http.route({ path: MACRO_TRIGGER_PATH, method: "POST", handler: macroTriggerHand
 http.route({ path: MACRO_TRIGGER_PATH, method: "GET", handler: macroTriggerHandler });
 http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "POST", handler: macroTriggerHandler });
 http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macroTriggerHandler });
+
+registerViewerAuthRoutes(http);
 
 export default http;
 
