@@ -3,6 +3,7 @@ import {
   addTagProblem,
   categoriesFromHelix,
   categoryProblem,
+  categorySearchProblem,
   changedFields,
   channelInfoFromHelix,
   characterCount,
@@ -11,8 +12,11 @@ import {
   lengthCounter,
   MAX_TAGS,
   markerDescriptionProblem,
+  readMarkerAnswer,
   type StreamInfo,
   sizedBoxArtUrl,
+  streamInfoChangesProblem,
+  streamInfoFailure,
   tagProblem,
   tagsProblem,
   tagWarning,
@@ -20,6 +24,7 @@ import {
   titleProblem,
   toHelixPatch,
   unappliedFields,
+  withBoxArt,
 } from "./stream-info";
 
 const JUST_CHATTING = { id: "509658", name: "Just Chatting" };
@@ -246,5 +251,59 @@ describe("Helix parsing", () => {
 
   test("sizedBoxArtUrl resizes a filled URL", () => {
     expect(sizedBoxArtUrl("https://x/ttv-boxart/9-52x72.jpg", 104, 144)).toBe("https://x/ttv-boxart/9-104x144.jpg");
+  });
+});
+
+describe("Helix answers", () => {
+  const ART = "https://static-cdn.jtvnw.net/ttv-boxart/509658-52x72.jpg";
+
+  test("a failure carries Twitch's message, or names reconnecting and rate limits", async () => {
+    const said = async (status: number, body: string) =>
+      (await streamInfoFailure("Couldn't add a marker", new Response(body, { status }))).message;
+    expect(await said(400, '{"message":"The tag contains an invalid character"}')).toBe(
+      "Couldn't add a marker: The tag contains an invalid character"
+    );
+    expect(await said(500, "")).toBe("Couldn't add a marker: Twitch answered 500");
+    expect(await said(401, "")).toContain("Reconnect Twitch");
+    expect(await said(429, "")).toContain("rate-limiting");
+  });
+
+  test("a marker's 404 means not live or no VODs, and its answer is read leniently", async () => {
+    const missing = await readMarkerAnswer(new Response(null, { status: 404 })).catch((e: Error) => e);
+    expect(String(missing)).toContain("Not live, or past broadcasts are off");
+    const body = JSON.stringify({ data: [{ position_seconds: 42, created_at: "2026-10-01T00:00:00Z" }] });
+    expect(await readMarkerAnswer(new Response(body, { status: 200 }))).toEqual({
+      positionSeconds: 42,
+      createdAt: "2026-10-01T00:00:00Z",
+    });
+    expect(await readMarkerAnswer(new Response("{}", { status: 200 }))).toEqual({
+      positionSeconds: null,
+      createdAt: null,
+    });
+  });
+
+  test("box art the caller knows is reused for the same category, and looked up otherwise", async () => {
+    const looked: string[] = [];
+    const fetchCategory = async (id: string) => {
+      looked.push(id);
+      return { ...JUST_CHATTING, boxArtUrl: ART };
+    };
+    const known = { categoryId: JUST_CHATTING.id, boxArtUrl: ART };
+    expect((await withBoxArt(info(), known, fetchCategory)).category?.boxArtUrl).toBe(ART);
+    expect(looked).toEqual([]);
+    expect((await withBoxArt(info(), undefined, fetchCategory)).category?.boxArtUrl).toBe(ART);
+    expect(looked).toEqual([JUST_CHATTING.id]);
+    expect(await withBoxArt(info({ category: null }), undefined, fetchCategory)).toEqual(info({ category: null }));
+  });
+
+  test("a lookup that finds no art keeps the category without it", async () => {
+    expect((await withBoxArt(info(), undefined, async () => null)).category).toEqual(JUST_CHATTING);
+  });
+
+  test("searches and changes are refused by the same rules the widget shows", () => {
+    expect(categorySearchProblem("x".repeat(101))).toContain("100 characters");
+    expect(categorySearchProblem("")).toBeNull();
+    expect(streamInfoChangesProblem({ title: " " })).toBe("The title can't be empty");
+    expect(streamInfoChangesProblem({ category: null })).toBeNull();
   });
 });
