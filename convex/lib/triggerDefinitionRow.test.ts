@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { triggerDefinitionRow } from "@shared/definition-rows";
 import { triggerSnapshot } from "./engineSync/steps/triggers";
-import { triggerDefinitionRow } from "./triggerDefinitionRow";
 
 const segmentEntered = {
   id: "viewer_segment_entered",
