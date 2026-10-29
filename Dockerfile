@@ -4,37 +4,38 @@
 #
 # The client imports the engine's shared type package (`@woofx3/api`) and its
 # composition package (`@woofx3/scene`) from a sibling woofx3 checkout, which
-# lies outside this build context. They come in as the named contexts
-# `engine-api` and `engine-scene` and are placed at the same relative paths
-# (`../woofx3/shared/clients/typescript/{api,scene}`) that vite.config.ts
-# resolves.
+# lies outside this build context. The checkout comes in as the named context
+# `engine` and is placed at `/src/woofx3`, where vite.config.ts resolves
+# `../woofx3/shared/clients/typescript/...`.
+#
+# The engine is a bun workspace with one lockfile at its root, so dependencies
+# are installed from that lockfile, filtered to the two packages the UI uses.
+# bun needs every workspace member's package.json to be present, but only the
+# sources of `api` and `scene` are copied in.
 #
 #   docker build \
-#     --build-context engine-api=../woofx3/shared/clients/typescript/api \
-#     --build-context engine-scene=../woofx3/shared/clients/typescript/scene \
+#     --build-context engine=../woofx3 \
 #     --build-arg VITE_CONVEX_URL=https://<deployment>.convex.cloud \
 #     --build-arg VITE_CONVEX_SITE_URL=https://<deployment>.convex.site \
 #     -t woofx3-ui .
 #
-# Without `--build-context engine-api=...` (or `engine-scene=...`) the build
-# fails trying to pull an image of that name.
+# Without `--build-context engine=...` the build fails trying to pull an image
+# named `engine`.
 
 ARG BUN_VERSION=1.3.14
 
 FROM oven/bun:${BUN_VERSION} AS build
 
-WORKDIR /src/woofx3/shared/clients/typescript/api
-COPY --from=engine-api package.json bun.lock ./
-RUN bun install --frozen-lockfile
-# The whole package, subdirectories included (the client imports
-# `@woofx3/api/scene-editor/*`), minus tests and any node_modules the host
-# installed into the context: the dependencies come from the install above.
-COPY --from=engine-api --exclude=**/node_modules --exclude=**/*.test.ts . ./
+# Manifests first, so the install layer is reused until a dependency changes.
+WORKDIR /src/woofx3
+COPY --from=engine --parents --exclude=**/node_modules package.json bun.lock **/package.json ./
+RUN bun install --frozen-lockfile --filter @woofx3/api --filter @woofx3/scene
 
-# The scene package has no runtime dependencies of its own: what it imports
-# from outside itself comes from the api package installed above.
-WORKDIR /src/woofx3/shared/clients/typescript/scene
-COPY --from=engine-scene --exclude=**/node_modules --exclude=tests . ./
+# The api package whole, subdirectories included (the client imports
+# `@woofx3/api/scene-editor/*`), and the scene package, minus tests and any
+# node_modules the host installed into the context: the dependencies come from
+# the install above.
+COPY --from=engine --parents --exclude=**/node_modules --exclude=**/*.test.ts --exclude=shared/clients/typescript/scene/tests shared/clients/typescript/api shared/clients/typescript/scene ./
 
 WORKDIR /src/woofx3-ui
 # postinstall runs ensure-engine-path.mjs, which checks ../woofx3 is in place.
