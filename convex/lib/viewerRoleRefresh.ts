@@ -19,6 +19,11 @@ export interface RoleRefreshInput {
   grant: ViewerTokenGrant | null;
   viewerPlatformUserId: string;
   broadcasterPlatformUserId: string;
+  /**
+   * Asked once, only when the platform is about to be called; false refuses
+   * the refresh. Spends the viewer's rate-limit bucket.
+   */
+  admit: () => Promise<boolean>;
 }
 
 export type RoleRefreshOutcome =
@@ -27,6 +32,7 @@ export type RoleRefreshOutcome =
   | { kind: "checked"; roles: ViewerRoleFacts; refreshedGrant: ViewerTokenGrant | null }
   /** The platform refused the refresh token; the viewer must sign in again. */
   | { kind: "reauth_required"; revoked: boolean }
+  | { kind: "rate_limited" }
   /** `fromOutage` is set when a recent failure answered without asking the platform. */
   | { kind: "unavailable"; refreshedGrant: ViewerTokenGrant | null; fromOutage: boolean };
 
@@ -40,6 +46,9 @@ export async function refreshViewerRoles(input: RoleRefreshInput): Promise<RoleR
   }
   if (viewerRolesOutageActive(input.outage, now)) {
     return { kind: "unavailable", refreshedGrant: null, fromOutage: true };
+  }
+  if (!(await input.admit())) {
+    return { kind: "rate_limited" };
   }
 
   let current = grant;

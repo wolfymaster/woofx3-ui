@@ -60,6 +60,7 @@ function input(client: ViewerPlatformClient, overrides: Partial<Parameters<typeo
     grant: GRANT,
     viewerPlatformUserId: "V1",
     broadcasterPlatformUserId: "B1",
+    admit: async () => true,
     ...overrides,
   };
 }
@@ -193,5 +194,49 @@ describe("unavailable results are cached briefly", () => {
       refreshedGrant: null,
       fromOutage: false,
     });
+  });
+});
+
+describe("per-viewer rate limit", () => {
+  /** A gate that admits `allowed` calls and counts every time it was asked. */
+  function gate(allowed: number) {
+    let asked = 0;
+    return {
+      admit: async () => {
+        asked += 1;
+        return asked <= allowed;
+      },
+      asked: () => asked,
+    };
+  }
+
+  test("a refused gate stops the refresh before the platform is called", async () => {
+    const { client, asked } = fakeClient({});
+    const limit = gate(0);
+    expect(await refreshViewerRoles(input(client, { admit: limit.admit }))).toEqual({ kind: "rate_limited" });
+    expect(asked).toEqual([]);
+  });
+
+  test("cache hits and outage answers do not spend the bucket", async () => {
+    const { client } = fakeClient({});
+    const limit = gate(0);
+    const cached = { follower: true, subscriberTier: null, checkedAt: NOW };
+    await refreshViewerRoles(input(client, { cached, admit: limit.admit }));
+    await refreshViewerRoles(input(client, { outage: { failedAt: NOW }, admit: limit.admit }));
+    await refreshViewerRoles(input(client, { grant: null, admit: limit.admit }));
+    expect(limit.asked()).toBe(0);
+  });
+
+  test("one admitted refresh spends one token, renewals and retries included", async () => {
+    const { client } = fakeClient({
+      roles: [
+        { ok: false, error: "unauthorized" },
+        { ok: true, value: FOLLOWER },
+      ],
+      refresh: [{ ok: true, value: RENEWED }],
+    });
+    const limit = gate(1);
+    expect((await refreshViewerRoles(input(client, { admit: limit.admit }))).kind).toBe("checked");
+    expect(limit.asked()).toBe(1);
   });
 });

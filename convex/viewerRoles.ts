@@ -13,6 +13,7 @@ import {
   viewerSessionLive,
 } from "./lib/viewerAuth";
 import { type ViewerTokenGrant, viewerPlatformClient } from "./lib/viewerPlatforms";
+import { viewerRateLimiter } from "./lib/viewerRateLimits";
 import { refreshViewerRoles } from "./lib/viewerRoleRefresh";
 import { broadcasterForInstance, viewerRolesFor } from "./lib/viewerSessionAuth";
 import { openViewerToken, sealViewerToken, viewerTokenKeyFromEnv } from "./lib/viewerTokenCipher";
@@ -27,7 +28,13 @@ export type RefreshRolesResult =
   | { ok: true; follower: boolean; subscriberTier: SubscriberTier | null; checkedAt: number }
   | {
       ok: false;
-      error: "not_signed_in" | "broadcaster_not_linked" | "platform_mismatch" | "reauth_required" | "unavailable";
+      error:
+        | "not_signed_in"
+        | "broadcaster_not_linked"
+        | "platform_mismatch"
+        | "reauth_required"
+        | "rate_limited"
+        | "unavailable";
     };
 
 const refreshRolesResultValidator = v.union(
@@ -44,6 +51,7 @@ const refreshRolesResultValidator = v.union(
       v.literal("broadcaster_not_linked"),
       v.literal("platform_mismatch"),
       v.literal("reauth_required"),
+      v.literal("rate_limited"),
       v.literal("unavailable")
     ),
   })
@@ -259,10 +267,14 @@ export const refresh = action({
       grant,
       viewerPlatformUserId: viewer.platformUserId,
       broadcasterPlatformUserId: broadcaster.platformUserId,
+      admit: async () => (await viewerRateLimiter.limit(ctx, "viewerRolesRefresh", { key: viewer._id })).ok,
     });
 
     if (outcome.kind === "cached") {
       return { ok: true, ...outcome.roles };
+    }
+    if (outcome.kind === "rate_limited") {
+      return { ok: false, error: "rate_limited" };
     }
 
     const sealRenewed = async (renewed: ViewerTokenGrant | null) => {
