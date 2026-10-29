@@ -4,7 +4,10 @@
 
 Screens reach the instance's engine through one interface, `EngineGateway` (`client/src/engine/gateway.ts`): one namespace per domain (status, scenes, workflows, commands, …), each a set of React hooks. `useEngineGateway()` returns the gateway the app booted with, and the hooks in `client/src/engine/hooks/` wrap its members for components.
 
-Today the only implementation is the Convex one in `client/src/engine/convex/`. Its reads subscribe to the Convex functions that mirror engine state, and its requests call the Convex actions that relay to the engine. A second implementation that talks to the engine directly has to satisfy the same interface.
+There are two implementations:
+
+- **Convex** (`client/src/engine/convex/`): its reads subscribe to the Convex functions that mirror engine state, and its requests call the Convex actions that relay to the engine. The app boots with it.
+- **Direct** (`client/src/engine/direct/`, `createDirectEngineGateway`): it talks to one engine over a capnweb session with no Convex in between, for the desktop app running its own engine. Reads are cached in one TanStack Query client and refreshed by the engine's event stream; requests call the engine's methods. Members whose data only Convex keeps (macros, module OAuth, setup imports, starter packs, the shoutout queue, the go-live checklist, pin history and stream info presets) throw or reject with `GatewayUnsupportedError`, naming the member, rather than answering empty.
 
 ## Decision
 
