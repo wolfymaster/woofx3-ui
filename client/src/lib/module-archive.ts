@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { unzipSync, zipSync } from "fflate";
 
 /**
  * Reading and writing module zip archives for the install flow.
@@ -16,19 +16,48 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 const MODULE_KEY_HASH_LENGTH = 7;
 
 /**
- * Every file entry of a zip, decoded as UTF-8 text and keyed by its path inside
- * the archive. Directory entries (paths ending in "/") are dropped.
+ * Every file entry of a zip, as the bytes stored, keyed by its path inside the
+ * archive. Directory entries (paths ending in "/") are dropped. A module can
+ * carry images, fonts or wasm, so nothing is decoded here: see `textOf`.
  */
-export function readModuleArchive(bytes: Uint8Array): Record<string, string> {
+export function readModuleArchive(bytes: Uint8Array): Record<string, Uint8Array> {
   const entries = unzipSync(bytes);
-  const files: Record<string, string> = {};
+  const files: Record<string, Uint8Array> = {};
   for (const [path, content] of Object.entries(entries)) {
     if (path.endsWith("/")) {
       continue;
     }
-    files[path] = strFromU8(content);
+    files[path] = content;
   }
   return files;
+}
+
+const UTF8 = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * A file's content as text, or null for a binary file: one that is not valid
+ * UTF-8 or holds a NUL byte, which no text format a module ships uses.
+ */
+export function textOf(content: Uint8Array): string | null {
+  let text: string;
+  try {
+    text = UTF8.decode(content);
+  } catch {
+    return null;
+  }
+  return text.includes("\u0000") ? null : text;
+}
+
+/** The text files among `files`, decoded; binary files are left out. */
+export function textFilesOf(files: Record<string, Uint8Array>): Record<string, string> {
+  const texts: Record<string, string> = {};
+  for (const [path, content] of Object.entries(files)) {
+    const text = textOf(content);
+    if (text !== null) {
+      texts[path] = text;
+    }
+  }
+  return texts;
 }
 
 /**
@@ -52,8 +81,8 @@ export function getCommonDirectoryPrefix(paths: string[]): string {
   return "";
 }
 
-/** Zips the files at the archive root, stripping any common wrapper directory. */
-export function buildModuleArchive(files: Record<string, string>): Uint8Array {
+/** Zips the files' bytes at the archive root, stripping any common wrapper directory. */
+export function buildModuleArchive(files: Record<string, Uint8Array>): Uint8Array {
   const prefix = getCommonDirectoryPrefix(Object.keys(files));
   const entries: Record<string, Uint8Array> = {};
   for (const [path, content] of Object.entries(files)) {
@@ -61,7 +90,7 @@ export function buildModuleArchive(files: Record<string, string>): Uint8Array {
     if (rootPath.length === 0) {
       throw new Error(`Archive entry "${path}" has no name below its directory`);
     }
-    entries[rootPath] = strToU8(content);
+    entries[rootPath] = content;
   }
   return zipSync(entries, { level: 6 });
 }

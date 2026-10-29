@@ -4,11 +4,20 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { strToU8, zipSync } from "fflate";
-import { buildModuleArchive, computeModuleKey, getCommonDirectoryPrefix, readModuleArchive } from "./module-archive";
+import { strFromU8, strToU8, zipSync } from "fflate";
+import {
+  buildModuleArchive,
+  computeModuleKey,
+  getCommonDirectoryPrefix,
+  readModuleArchive,
+  textFilesOf,
+  textOf,
+} from "./module-archive";
 
 const manifest = JSON.stringify({ id: "hello_world", name: "Hello World", version: "1.2.0" });
 const handler = 'export function main(ctx) {\n  return { message: "héllo ✓" };\n}\n';
+// The start of a PNG: not valid UTF-8, and holding NUL bytes.
+const icon = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0xff, 0xfe]);
 
 // An archive as a user would zip it from a folder: a wrapper directory with
 // explicit directory entries.
@@ -18,15 +27,38 @@ function wrappedUpload(): Uint8Array {
     "hello/functions/": new Uint8Array(0),
     "hello/manifest.json": strToU8(manifest),
     "hello/functions/main.js": strToU8(handler),
+    "hello/assets/icon.png": icon,
   });
 }
 
+const decoded = (files: Record<string, Uint8Array>) =>
+  Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, Array.from(bytes)]));
+
 describe("readModuleArchive", () => {
-  test("returns file entries as text and drops directory entries", () => {
-    expect(readModuleArchive(wrappedUpload())).toEqual({
-      "hello/manifest.json": manifest,
-      "hello/functions/main.js": handler,
+  test("returns every file entry's bytes as stored and drops directory entries", () => {
+    expect(decoded(readModuleArchive(wrappedUpload()))).toEqual({
+      "hello/manifest.json": Array.from(strToU8(manifest)),
+      "hello/functions/main.js": Array.from(strToU8(handler)),
+      "hello/assets/icon.png": Array.from(icon),
     });
+  });
+});
+
+describe("textOf", () => {
+  test.each([
+    ["UTF-8 text", strToU8(handler), handler],
+    ["an empty file", new Uint8Array(0), ""],
+    ["bytes that are not UTF-8", new Uint8Array([0xff, 0xfe, 0x41]), null],
+    ["valid UTF-8 holding a NUL byte", new Uint8Array([0x41, 0x00, 0x42]), null],
+  ] as const)("%s", (_case, bytes, text) => {
+    expect(textOf(bytes)).toBe(text);
+  });
+
+  test("the text files of an archive leave its binary files out", () => {
+    expect(Object.keys(textFilesOf(readModuleArchive(wrappedUpload()))).sort()).toEqual([
+      "hello/functions/main.js",
+      "hello/manifest.json",
+    ]);
   });
 });
 
@@ -43,12 +75,14 @@ describe("getCommonDirectoryPrefix", () => {
 });
 
 describe("buildModuleArchive", () => {
-  test("round-trips the files at the archive root", () => {
+  test("round-trips every file's bytes, binary ones included, at the archive root", () => {
     const archive = buildModuleArchive(readModuleArchive(wrappedUpload()));
-    expect(readModuleArchive(archive)).toEqual({
-      "manifest.json": manifest,
-      "functions/main.js": handler,
+    expect(decoded(readModuleArchive(archive))).toEqual({
+      "manifest.json": Array.from(strToU8(manifest)),
+      "functions/main.js": Array.from(strToU8(handler)),
+      "assets/icon.png": Array.from(icon),
     });
+    expect(strFromU8(readModuleArchive(archive)["functions/main.js"])).toBe(handler);
   });
 
   // The engine extracts uploads with the system `unzip` binary
@@ -62,6 +96,7 @@ describe("buildModuleArchive", () => {
       expect(result.status).toBe(0);
       expect(readFileSync(join(dir, "manifest.json"), "utf8")).toBe(manifest);
       expect(readFileSync(join(dir, "functions/main.js"), "utf8")).toBe(handler);
+      expect(Array.from(readFileSync(join(dir, "assets/icon.png")))).toEqual(Array.from(icon));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
