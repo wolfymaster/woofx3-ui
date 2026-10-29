@@ -11,6 +11,8 @@ import type {
   LeaderboardQuery,
   PaginatedStreamSessions,
   PaginatedWorkflows,
+  ResourceInstanceDefinition,
+  RunActionsInput,
   SceneSnapshot,
   StreamEventFrame,
   StreamEventSubscriber,
@@ -67,6 +69,11 @@ type DirectFakeSurface = Pick<
   | "getWorkflowRun"
   | "getWorkflowHealth"
   | "listWorkflowRunSnapshots"
+  | "listAllResourceInstances"
+  | "listResourceInstancesForModule"
+  | "getResourceValues"
+  | "createResourceInstance"
+  | "runActions"
 >;
 
 export type AvailableWidget = Awaited<ReturnType<Woofx3EngineApi["getAvailableWidgets"]>>["widgets"][number];
@@ -102,6 +109,9 @@ export class FakeEngineState {
   workflowRuns: Record<string, WorkflowRunDetail> = {};
   /** Every recorded run, newest first, as `listWorkflowRunSnapshots` lists them. */
   runSnapshots: WorkflowRunSnapshot[] = [];
+  resourceInstances: ResourceInstanceDefinition[] = [];
+  /** Resource values by canonical id; an instance not here holds nothing yet. */
+  resourceValues: Record<string, unknown> = {};
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
   /** Every call the fake served, by method, with its arguments. */
@@ -371,6 +381,49 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return this.state.runSnapshots
       .filter((run) => query.workflowId === undefined || run.workflowId === query.workflowId)
       .slice(0, query.limit);
+  }
+
+  async listAllResourceInstances(): Promise<ResourceInstanceDefinition[]> {
+    this.state.record("listAllResourceInstances");
+    return this.state.resourceInstances;
+  }
+
+  async listResourceInstancesForModule(moduleKey: string, moduleName?: string): Promise<ResourceInstanceDefinition[]> {
+    this.state.record("listResourceInstancesForModule", moduleKey, moduleName);
+    return this.state.resourceInstances.filter((instance) => instance.moduleKey === moduleKey);
+  }
+
+  async getResourceValues(canonicalIds: string[]): Promise<Record<string, unknown>> {
+    this.state.record("getResourceValues", canonicalIds);
+    return Object.fromEntries(canonicalIds.map((id) => [id, this.state.resourceValues[id] ?? null]));
+  }
+
+  async createResourceInstance(
+    moduleName: string,
+    kind: string,
+    instanceId: string,
+    displayName: string,
+    settings?: Record<string, unknown>
+  ): Promise<ResourceInstanceDefinition> {
+    this.state.record("createResourceInstance", moduleName, kind, instanceId, displayName, settings);
+    const created: ResourceInstanceDefinition = {
+      id: `row-${this.state.resourceInstances.length + 1}`,
+      moduleId: "uuid",
+      moduleName,
+      kind,
+      instanceId,
+      displayName,
+      canonicalId: `${moduleName}:${kind}:${instanceId}`,
+      moduleKey: `${moduleName}:1.0.0:abc`,
+      settings: settings ?? {},
+    };
+    this.state.resourceInstances = [...this.state.resourceInstances, created];
+    return created;
+  }
+
+  async runActions(input: RunActionsInput): Promise<{ requested: true; triggerId: string }> {
+    this.state.record("runActions", input);
+    return { requested: true, triggerId: "trigger-1" };
   }
 
   async getWorkflowHealth(): Promise<WorkflowHealth[]> {
