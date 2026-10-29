@@ -1,5 +1,5 @@
 {
-  "include": ["client/src/**/*"],
+  "include": ["client/src/**/*", "shared/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts", "**/*.test.tsx", "convex"],
   "compilerOptions": {
     "incremental": true,
@@ -19,6 +19,7 @@
     "paths": {
       "@/*": ["./client/src/*"],
       "@convex/*": ["./convex/*"],
+      "@shared/*": ["./shared/*"],
       "@woofx3/api": ["../woofx3/shared/clients/typescript/api/index.ts"],
       "@woofx3/api/*": ["../woofx3/shared/clients/typescript/api/*.ts"],
       "@woofx3/scene/*": ["../woofx3/shared/clients/typescript/scene/*/index.ts"],
