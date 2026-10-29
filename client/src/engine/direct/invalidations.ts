@@ -7,18 +7,31 @@ type Invalidation<T extends EngineEventType> = (event: CallbackEventByType[T]) =
 /** Nothing cached reads what the event reports. */
 const NONE = (): readonly QueryKey[] => [];
 
-const ALERT = (): readonly QueryKey[] => [k.alertQueue.all];
+/** A run's detail lists the alerts it published, and an alert names the run as its `workflowId`. */
+const ALERT = (event: { alert: { workflowId?: string } }): readonly QueryKey[] =>
+  event.alert.workflowId ? [k.alertQueue.all, k.workflows.run(event.alert.workflowId)] : [k.alertQueue.all];
 const LIVE_STATE = (): readonly QueryKey[] => [k.status.liveState()];
 // Alert Steps live in commands and workflows, so a change to either can
 // leave a scene's alert widgets unused, or used again.
 const COMMANDS = (): readonly QueryKey[] => [k.commands.list(), k.scenes.allAlertTargetUsage];
-const WORKFLOWS = (): readonly QueryKey[] => [k.scenes.allAlertTargetUsage];
+/** Which workflows are enabled also decides which health errors are news. */
+const workflowKeys = (engineWorkflowId: string): readonly QueryKey[] => [
+  k.workflows.list(),
+  k.workflows.detail(engineWorkflowId),
+  k.workflows.health(),
+  k.scenes.allAlertTargetUsage,
+];
+/** What modules are installed decides the triggers and actions the builder offers. */
+const CATALOG = (): readonly QueryKey[] => [k.workflows.catalog()];
+const RUN = (engineRunId: string): readonly QueryKey[] => [k.workflows.run(engineRunId), k.workflows.allRunLists];
+const HEALTH = (): readonly QueryKey[] => [k.workflows.health()];
 /** Which widgets are installed decides the catalog and which placements host alerts. */
 const WIDGETS = (): readonly QueryKey[] => [
   k.scenes.widgetCatalog(),
   k.scenes.alertWidgetNames(),
   k.scenes.allAlertTargetUsage,
 ];
+const MODULES = (): readonly QueryKey[] => [...WIDGETS(), ...CATALOG()];
 
 /** The engine keeps scenes and library alerts in one table and reports both as `scene.*`, told apart by kind. */
 function compositionKeys(kind: CompositionKind): readonly QueryKey[] {
@@ -33,17 +46,17 @@ function compositionKeys(kind: CompositionKind): readonly QueryKey[] {
  * nothing.
  */
 export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> } = {
-  [EngineEventType.MODULE_INSTALLED]: WIDGETS,
+  [EngineEventType.MODULE_INSTALLED]: MODULES,
   [EngineEventType.MODULE_INSTALL_FAILED]: NONE,
-  [EngineEventType.MODULE_DELETED]: WIDGETS,
+  [EngineEventType.MODULE_DELETED]: MODULES,
   [EngineEventType.MODULE_DELETE_FAILED]: NONE,
-  [EngineEventType.MODULE_TRIGGER_REGISTERED]: NONE,
-  [EngineEventType.MODULE_ACTION_REGISTERED]: NONE,
-  [EngineEventType.MODULE_FUNCTION_REGISTERED]: NONE,
+  [EngineEventType.MODULE_TRIGGER_REGISTERED]: CATALOG,
+  [EngineEventType.MODULE_ACTION_REGISTERED]: CATALOG,
+  [EngineEventType.MODULE_FUNCTION_REGISTERED]: CATALOG,
   [EngineEventType.MODULE_WIDGET_REGISTERED]: WIDGETS,
-  [EngineEventType.MODULE_TRIGGER_DEREGISTERED]: NONE,
-  [EngineEventType.MODULE_ACTION_DEREGISTERED]: NONE,
-  [EngineEventType.MODULE_FUNCTION_DEREGISTERED]: NONE,
+  [EngineEventType.MODULE_TRIGGER_DEREGISTERED]: CATALOG,
+  [EngineEventType.MODULE_ACTION_DEREGISTERED]: CATALOG,
+  [EngineEventType.MODULE_FUNCTION_DEREGISTERED]: CATALOG,
   [EngineEventType.MODULE_WIDGET_DEREGISTERED]: WIDGETS,
   [EngineEventType.MODULE_ASSET_REGISTERED]: NONE,
   [EngineEventType.MODULE_ASSET_DEREGISTERED]: NONE,
@@ -52,18 +65,18 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED]: NONE,
   [EngineEventType.MODULE_STORAGE_CHANGED]: NONE,
   [EngineEventType.ENGINE_RESPONSE_RECEIVED]: NONE,
-  [EngineEventType.WORKFLOW_CREATED]: WORKFLOWS,
-  [EngineEventType.WORKFLOW_UPDATED]: WORKFLOWS,
-  [EngineEventType.WORKFLOW_DELETED]: WORKFLOWS,
+  [EngineEventType.WORKFLOW_CREATED]: (event) => workflowKeys(event.workflow.id),
+  [EngineEventType.WORKFLOW_UPDATED]: (event) => workflowKeys(event.workflow.id),
+  [EngineEventType.WORKFLOW_DELETED]: (event) => workflowKeys(event.workflowId),
   [EngineEventType.WORKFLOW_RUN_STARTED]: NONE,
   [EngineEventType.WORKFLOW_RUN_COMPLETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_FAILED]: NONE,
   [EngineEventType.WORKFLOW_RUN_CANCELLED]: NONE,
-  [EngineEventType.WORKFLOW_HEALTH_CHANGED]: NONE,
-  [EngineEventType.WORKFLOW_HEALTH_SNAPSHOT]: NONE,
-  [EngineEventType.WORKFLOW_RUN_RECORDED]: NONE,
-  [EngineEventType.WORKFLOW_RUN_UPDATED]: NONE,
-  [EngineEventType.WORKFLOW_RUN_STEP_RECORDED]: NONE,
+  [EngineEventType.WORKFLOW_HEALTH_CHANGED]: HEALTH,
+  [EngineEventType.WORKFLOW_HEALTH_SNAPSHOT]: HEALTH,
+  [EngineEventType.WORKFLOW_RUN_RECORDED]: (event) => RUN(event.run.id),
+  [EngineEventType.WORKFLOW_RUN_UPDATED]: (event) => RUN(event.run.id),
+  [EngineEventType.WORKFLOW_RUN_STEP_RECORDED]: (event) => [k.workflows.run(event.step.executionId)],
   [EngineEventType.SCENE_CREATED]: (event) => compositionKeys(event.scene.kind),
   [EngineEventType.SCENE_UPDATED]: (event) => compositionKeys(event.scene.kind),
   [EngineEventType.SCENE_DELETED]: (event) => compositionKeys(event.kind),
