@@ -10,17 +10,25 @@ function asStringArray(value: unknown): string[] {
 }
 
 /**
- * The listing an installed module came from, as the engine reports it.
- * An engine that predates install provenance sends neither field, and its
- * absence is the only sign of that: no capability advertises it.
+ * Where an installed module came from, as the engine reports it: a listing,
+ * or an uploaded archive. An engine that predates install provenance sends
+ * none of these fields, and their absence is the only sign of that: no
+ * capability advertises it.
  */
-function reportedProvenance(module: { marketplaceListingId?: unknown; marketplaceEdition?: unknown }) {
-  const provenance: { marketplaceListingId?: string; marketplaceEdition?: number } = {};
+function reportedProvenance(module: {
+  marketplaceListingId?: unknown;
+  marketplaceEdition?: unknown;
+  uploadResourceId?: unknown;
+}) {
+  const provenance: { marketplaceListingId?: string; marketplaceEdition?: number; uploadResourceId?: string } = {};
   if (typeof module.marketplaceListingId === "string" && module.marketplaceListingId !== "") {
     provenance.marketplaceListingId = module.marketplaceListingId;
   }
   if (typeof module.marketplaceEdition === "number" && Number.isFinite(module.marketplaceEdition)) {
     provenance.marketplaceEdition = module.marketplaceEdition;
+  }
+  if (typeof module.uploadResourceId === "string" && module.uploadResourceId !== "") {
+    provenance.uploadResourceId = module.uploadResourceId;
   }
   return provenance;
 }
@@ -59,6 +67,8 @@ export const modulesStep: SyncStep = {
         author: asString(manifest.author),
         category: asString(manifest.category),
         tags: asStringArray(manifest.taxonomy),
+        // `SYSTEM` marks a module the engine ships with and cannot uninstall.
+        builtIn: module.createdByType === "SYSTEM",
         ...reportedProvenance(module),
       };
     });

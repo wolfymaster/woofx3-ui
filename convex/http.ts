@@ -628,6 +628,7 @@ http.route({
           // events.
           triggers: [],
           actions: [],
+          uploadResourceId: event.source === "upload" ? event.uploadResourceId : undefined,
         });
         // Neither install path (marketplace or direct zip upload) reliably has
         // the manifest in hand at this point, so fetch the engine's

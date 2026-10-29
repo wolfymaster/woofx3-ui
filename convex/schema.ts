@@ -662,6 +662,11 @@ export default defineSchema({
     statusMessage: v.optional(v.string()),
     marketplaceListingId: v.optional(v.string()),
     marketplaceEdition: v.optional(v.number()),
+    // The engine resource holding the archive a module was installed from,
+    // when someone uploaded it rather than installing a listing.
+    uploadResourceId: v.optional(v.string()),
+    // A module the engine ships with itself, which nobody installed.
+    builtIn: v.optional(v.boolean()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_name_version", ["instanceId", "name", "version"])

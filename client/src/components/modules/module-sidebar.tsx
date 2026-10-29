@@ -24,29 +24,38 @@ export interface InstalledModuleItem {
   isInstalled: boolean;
   status?: "pending" | "delivering" | "installed" | "failed";
   marketplaceListingId?: string;
+  uploadResourceId?: string;
+  builtIn?: boolean;
   archiveKey?: string;
 }
 
 /**
- * Where an installed module came from, as far as this dashboard knows: a
- * marketplace listing it was installed from, or an archive someone uploaded.
- * Null when neither is recorded.
+ * Where an installed module came from, as far as this dashboard knows: the
+ * engine itself, an archive someone uploaded, or a marketplace listing. Null
+ * when none is recorded. A module stored with a Convex-held archive was
+ * uploaded before the engine recorded uploads.
  */
-export type ModuleProvenance = "marketplace" | "uploaded";
+export type ModuleProvenance = "builtIn" | "uploaded" | "marketplace";
 
 export function moduleProvenance(module: {
+  builtIn?: boolean;
+  uploadResourceId?: string;
   marketplaceListingId?: string;
   archiveKey?: string;
 }): ModuleProvenance | null {
-  if (module.marketplaceListingId) {
-    return "marketplace";
+  if (module.builtIn) {
+    return "builtIn";
   }
-  return module.archiveKey ? "uploaded" : null;
+  if (module.uploadResourceId || module.archiveKey) {
+    return "uploaded";
+  }
+  return module.marketplaceListingId ? "marketplace" : null;
 }
 
 const PROVENANCE_LABEL: { readonly [P in ModuleProvenance]: string } = {
-  marketplace: "Marketplace",
+  builtIn: "Built in",
   uploaded: "Uploaded",
+  marketplace: "Marketplace",
 };
 
 interface ModuleSidebarProps {

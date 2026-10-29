@@ -15,7 +15,7 @@ integration's OAuth return, `/modules/install` to the upload page and
 
 - **Convex** holds the repository of **engine-confirmed** modules: a `moduleRepository` row is only written after the engine sends a `module.installed` webhook. A module that is mid-install or whose delivery failed does **not** appear in the catalog — its state is communicated through transient events instead (see below).
 - The page reads `api.moduleRepository.list` (local Convex rows) and merges in live engine state via the **Convex action** `api.moduleEngine.listEngineModules`. The browser does **not** call the engine directly for module browsing — `WoofxTransport` is reserved for realtime channels (chat, stream status).
-- The sidebar (`components/modules/module-sidebar.tsx`) lists the installed modules, each marked **Marketplace** when it records the listing it came from, or **Uploaded** when it was installed from an uploaded archive. Choosing one opens its page. With nothing chosen, the page offers to upload a module or browse the marketplace.
+- The sidebar (`components/modules/module-sidebar.tsx`) lists the installed modules, each marked by where it came from: **Built in** for a module the engine ships with, **Uploaded** for one installed from an uploaded archive (the engine reports the resource holding it as `uploadResourceId`), or **Marketplace** for one installed from a listing. An uploaded module is never read as a listing, even when its manifest id matches one (`installedListing`). Choosing one opens its page. With nothing chosen, the page offers to upload a module or browse the marketplace.
 
 ## Module detail (`/marketplace/installed/:id`)
 

@@ -49,6 +49,10 @@ describe("installedListing", () => {
     });
   });
 
+  test("an uploaded module is no listing, even when its manifest id matches one", () => {
+    expect(installedListing({ moduleKey: "cozy:1.0.0:abcdef0", uploadResourceId: "res-1" })).toBeUndefined();
+  });
+
   test("a row with neither a key nor provenance is no listing", () => {
     expect(installedListing({})).toBeUndefined();
     expect(installedListing({ moduleKey: "" })).toBeUndefined();
@@ -124,6 +128,31 @@ describe("resolveProvenance", () => {
       marketplaceListingId: "cozy-v2",
       marketplaceEdition: 2,
     });
+  });
+
+  test("an upload the engine reports replaces a listing, and a listing replaces an upload", () => {
+    const fromListing = { moduleKey: key, marketplaceListingId: "cozy", marketplaceEdition: 1 };
+    expect(
+      resolveProvenance({ moduleKey: key, reported: { uploadResourceId: "res-1" }, existing: fromListing })
+    ).toEqual({
+      marketplaceListingId: undefined,
+      marketplaceEdition: undefined,
+      uploadResourceId: "res-1",
+    });
+    const fromUpload = { moduleKey: key, uploadResourceId: "res-1" };
+    expect(
+      resolveProvenance({
+        moduleKey: key,
+        reported: { marketplaceListingId: "cozy-v2", marketplaceEdition: 2 },
+        existing: fromUpload,
+      })
+    ).toEqual({ marketplaceListingId: "cozy-v2", marketplaceEdition: 2, uploadResourceId: undefined });
+  });
+
+  test("a row keeps its upload while its key is unchanged, and loses it for a new build", () => {
+    const existing = { moduleKey: key, uploadResourceId: "res-1" };
+    expect(resolveProvenance({ moduleKey: key, existing }).uploadResourceId).toBe("res-1");
+    expect(resolveProvenance({ moduleKey: "cozy:2.1.0:1234567", existing }).uploadResourceId).toBeUndefined();
   });
 
   test("a new build nobody recorded clears the row's provenance, leaving the key to say what it is", () => {
