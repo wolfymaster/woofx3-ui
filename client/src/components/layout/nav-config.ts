@@ -2,6 +2,7 @@ import {
   ArchiveRestore,
   CircleHelp,
   FolderOpen,
+  Globe,
   GraduationCap,
   HandHeart,
   HardDrive,
@@ -30,6 +31,7 @@ import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
 export const STARTER_PACKS_PATH = "/stream/starter-packs";
+export const USER_PAGE_PATH = "/stream/page";
 
 export interface NavItem {
   id: string;
@@ -101,6 +103,7 @@ export const STREAM_ITEMS: NavItem[] = [
   { id: "scenes", label: "Scenes", icon: STREAM_OBJECT_ICONS.scenes, href: "/stream/scenes" },
   { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
   { id: "supporters", label: "Supporters", icon: HandHeart, href: "/stream/supporters" },
+  { id: "user-page", label: "Your page", icon: Globe, href: USER_PAGE_PATH },
   { id: "assets", label: "Media", icon: FolderOpen, href: "/stream/assets" },
   { id: "starter-packs", label: "Starter Packs", icon: PackagePlus, href: STARTER_PACKS_PATH },
 ];
