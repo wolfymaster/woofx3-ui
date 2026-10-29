@@ -60,6 +60,15 @@ The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashe
 
 Without `desktop-host.json` the app runs its build's default, and `host_mode` tells the dashboard the mode was not chosen. The dashboard then asks the streamer, and `choose_host_mode` writes `{"mode": "local"}` or `{"mode": "companion"}` and restarts the app into it, stopping the engine first because a restart skips the exit hook that otherwise stops it. It only writes a file that is not there yet (a hard link from a fully written temporary file, so the file appears whole or not at all), so settings written by hand are never replaced.
 
+### The dashboard's two modes
+
+In the desktop build `client/src/main.tsx` starts at `client/src/desktop/DesktopApp.tsx`, which asks the host for the mode. Until one is chosen it shows the chooser (`ModeChooser.tsx`): run woofx3 on this computer, or sign in to an account. Once chosen it loads one of two roots, each its own chunk:
+
+- **Signed in** (`companion` mode): the hosted app, `client/src/App.tsx`, as on the web.
+- **On this computer** (`local` mode): `LocalApp.tsx`. It asks the host for `local_engine_session` every second until the engine is ready and registered, showing how startup is going (starting, updating its data, or why it stopped), then boots the direct engine gateway on those credentials (`LocalEngineGatewayProvider` in `client/src/engine/boot/local.tsx`). The engine session reconnects by itself if the engine restarts, under the same credentials.
+
+Local mode has no Convex client, so it serves only pages that reach the engine through its gateway: `client/src/desktop/local-routes.tsx` lists them, and `local-routes.test.ts` walks every import from `LocalApp.tsx` and fails on any that reaches Convex (its client or hooks, the generated API, `useInstance`, or the hosted gateway). `LocalShell.tsx` frames them with the app's sections cut down to those pages (`navItemsServed`), and a status bar fed by the engine alone. A path local mode does not serve leads to its home, the commands page. A page joins local mode once nothing it loads reaches Convex.
+
 ## Integrations
 
 A module that controls something on the streamer's network declares it in `local[]` (an endpoint with a protocol, the settings holding its host, port and password, and optionally how to discover it). The Integrations tab is generated from those entries for the modules installed on the companion's instance; nothing in it is written per integration. The Rust side (`companion/src-tauri/src/integrations.rs`) runs while the pairing is paired and confirmed, and stops with it.
