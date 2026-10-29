@@ -1,5 +1,3 @@
-import type { RpcTarget } from "@woofx3/api/client";
-
 /**
  * One value a workflow reads as `${viewer.<path>}`, from the engine's
  * `listViewerFacts()` (capability `workflow.viewerFacts`). Declared here because
@@ -15,10 +13,6 @@ export interface ViewerFact {
   valueKind: "string" | "number" | "timestamp";
   /** Absent on `id`, `platform` and `name`, which are not facts. */
   window?: "lifetime" | "session";
-}
-
-export interface ViewerFactsApi extends RpcTarget {
-  listViewerFacts(): Promise<unknown>;
 }
 
 const VALUE_KINDS: ReadonlySet<string> = new Set(["string", "number", "timestamp"]);

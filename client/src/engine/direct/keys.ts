@@ -27,6 +27,17 @@ export const directKeys = {
     allAlertTargetUsage: ["scenes", "alertTargetUsage"] as const,
     alertTargetUsage: (engineSceneId: string) => ["scenes", "alertTargetUsage", engineSceneId] as const,
   },
+  workflows: {
+    all: ["workflows"] as const,
+    list: () => ["workflows", "list"] as const,
+    detail: (engineWorkflowId: string) => ["workflows", "detail", engineWorkflowId] as const,
+    catalog: () => ["workflows", "catalog"] as const,
+    allRuns: ["workflows", "run"] as const,
+    run: (engineRunId: string) => ["workflows", "run", engineRunId] as const,
+    allRunLists: ["workflows", "runs"] as const,
+    runs: (engineWorkflowId: string, limit: number) => ["workflows", "runs", engineWorkflowId, limit] as const,
+    health: () => ["workflows", "health"] as const,
+  },
   commands: {
     all: ["commands"] as const,
     list: () => ["commands", "list"] as const,

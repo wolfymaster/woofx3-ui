@@ -1,8 +1,14 @@
+import { parseViewerFacts, type ViewerFact } from "@shared/viewer-facts";
+import type { RpcTarget } from "@woofx3/api/client";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
-import { parseViewerFacts, type ViewerFact, type ViewerFactsApi } from "./lib/engineViewerFacts";
+
+interface ViewerFactsApi extends RpcTarget {
+  listViewerFacts(): Promise<unknown>;
+}
+
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
 /**

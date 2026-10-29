@@ -1,4 +1,4 @@
-import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { REPLAY_ORIGIN } from "@shared/manual-run-origin";
 import { History, Loader2, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";

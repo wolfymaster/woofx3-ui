@@ -1,12 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { WorkflowDefinition } from "@woofx3/api";
-import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalAction } from "./_generated/server";
-import { CORRELATION_TIMEOUT_MS, nextPollDelayMs } from "./lib/completionPolling";
-import { unescapeDollarKeys } from "./lib/dollarKeys";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import {
   buildTriggerOptions,
   type CancelWorkflowResult,
@@ -14,11 +7,39 @@ import {
   OPTIONS_PROBE_WORKFLOW,
   type OptionsSupport,
   optionsWereIgnored,
-  type TestRunEngineApi,
+  type TriggerWorkflowOptions,
+  type TriggerWorkflowResponse,
   type UnmetTriggerCondition,
-} from "./lib/engineTestRun";
-import { manualRunOrigin, UNRECORDED_ORIGIN } from "./lib/manualRunOrigin";
+} from "@shared/workflow-test-run";
+import type { WorkflowDefinition } from "@woofx3/api";
+import type { RpcTarget } from "@woofx3/api/client";
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalAction } from "./_generated/server";
+import { CORRELATION_TIMEOUT_MS, nextPollDelayMs } from "./lib/completionPolling";
+import { unescapeDollarKeys } from "./lib/dollarKeys";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { manualRunOrigin } from "./lib/manualRunOrigin";
 import { logger } from "./logger";
+
+/**
+ * The slice of the engine API test runs use, typed to the engine that has
+ * the options. Calls against an older engine still succeed: capnweb passes
+ * the extra argument, which the older method ignores.
+ */
+interface TestRunEngineApi extends RpcTarget {
+  triggerWorkflowByName(
+    workflowNameOrId: string,
+    parameters?: Record<string, string>,
+    userId?: string,
+    triggerId?: string,
+    triggeredBy?: string,
+    options?: TriggerWorkflowOptions
+  ): Promise<TriggerWorkflowResponse>;
+  /** Returns nothing on an engine whose cancel only marks the history row. */
+  cancelWorkflow(executionId: string, reason?: string): Promise<CancelWorkflowResult | undefined | null>;
+}
 
 /**
  * The engine accepted a change but its webhook echo did not arrive in time.

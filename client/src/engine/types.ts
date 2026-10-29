@@ -955,7 +955,6 @@ export interface WorkflowRunRecord {
   completedAt?: string;
   engineCreatedAt: string;
   engineUpdatedAt: string;
-  createdAt: number;
 }
 
 /** One recorded attempt at a step of a run. Engine times are ISO strings; `createdAt` is epoch ms. */
@@ -976,7 +975,6 @@ export interface WorkflowRunStep {
   completedAt?: string;
   engineCreatedAt: string;
   engineUpdatedAt: string;
-  createdAt: number;
 }
 
 /** An alert a recorded run played. */

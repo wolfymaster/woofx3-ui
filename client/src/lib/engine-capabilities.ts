@@ -1,4 +1,4 @@
-import type { OptionsSupport } from "@convex/lib/engineTestRun";
+import type { OptionsSupport } from "@shared/workflow-test-run";
 import type { EngineCapability, EngineCapabilityReport } from "@/engine/types";
 
 /** What the browser knows about an instance's engine features; see useEngineCapabilities. */

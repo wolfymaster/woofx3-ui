@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { HEALTH_STILL_LOADING_MESSAGE, RESYNC_MIN_INTERVAL_MS } from "@shared/workflow-health";
 import {
   type AlertComposition,
   type CommandSnapshot,
@@ -11,6 +12,7 @@ import {
 } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
+import type { WorkflowRun } from "@/engine/types";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
 import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
@@ -25,6 +27,7 @@ import { directStatusGateway } from "./status";
 import { directStreamOpsGateway } from "./stream-ops";
 import type { AvailableWidget } from "./testing/DirectFakeApi";
 import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
+import { directWorkflowsGateway } from "./workflows";
 
 // The namespaces against a fake engine over real capnweb: reads load through
 // the cache, engine events and resyncs refresh them, and requests go out on
@@ -478,8 +481,8 @@ function alertWorkflow(id: string, name: string, target: string): Workflow {
       tasks: [{ id: "t-1", type: "action", action: "alert", parameters: { target } }],
     },
     stats: { runsToday: 0, successRate: 0 },
-    createdAt: "",
-    updatedAt: "",
+    createdAt: "2026-10-28T09:00:00Z",
+    updatedAt: "2026-10-28T09:00:00Z",
   };
 }
 
@@ -582,5 +585,144 @@ describe("scenes", () => {
     const preview = renderDirect(() => directOverlaysGateway(runtime).usePreviewUrlRequest()).current();
     expect(await preview(toSceneId("missing"))).toBeNull();
     expect(state.callsOf("mintOverlayToken")).toEqual([]);
+  });
+});
+
+describe("workflows", () => {
+  test("reads every page of workflows with their `$` keys escaped, and reads them again when one changes", async () => {
+    const harness = createDirectHarness({ workflowPageSize: 1 });
+    harnesses.push(harness);
+    await harness.connect();
+    const { runtime, state, engine } = harness;
+    state.workflows = [alertWorkflow("w-1", "Follow", "default"), alertWorkflow("w-2", "Raid", "side")];
+    const workflows = directWorkflowsGateway(runtime);
+    const read = renderDirect(() => workflows.useWorkflows());
+    const hasAny = renderDirect(() => workflows.useHasAny());
+    const listed = await read.until((value) => value?.length === 2, "the workflows");
+    expect(listed?.map((w) => w.engineWorkflowId)).toEqual(["w-1", "w-2"]);
+    expect(await hasAny.until((value) => value !== undefined, "whether any exist")).toBe(true);
+
+    state.workflows = [state.workflows[0]];
+    await engine.pushEvent(
+      makeCallbackEnvelope({ type: EngineEventType.WORKFLOW_DELETED, workflowId: "w-2" }, "engine", "e-7")
+    );
+    await read.until((value) => value?.length === 1, "the list read again");
+    read.unmount();
+    hasAny.unmount();
+  });
+
+  test("a new workflow goes out with its `$` keys unescaped and resolves with the engine's id", async () => {
+    const { runtime, state } = await connected();
+    const create = renderDirect(() => directWorkflowsGateway(runtime).useCreateRequest()).current();
+    const created = await create({
+      name: "Follow",
+      trigger: { type: "event", event: "channel.follow", __$ref: "woofx3:trigger:follow" },
+      tasks: [],
+    });
+    expect(created).toEqual({ engineWorkflowId: "workflow-1" });
+    const sent = state.callsOf("createWorkflow")[0][0] as { definition: { trigger: Record<string, unknown> } };
+    expect(sent.definition.trigger).toHaveProperty("$ref", "woofx3:trigger:follow");
+  });
+
+  test("a manual run carries the key it resolves with and says the run was not recorded by default", async () => {
+    const { runtime, state } = await connected();
+    state.workflows = [alertWorkflow("w-1", "Follow", "default")];
+    const trigger = renderDirect(() => directWorkflowsGateway(runtime).useTriggerRequest()).current();
+    const result = await trigger({ workflowNameOrId: "w-1", options: { dryRun: true } });
+    const [name, , , triggerId, origin, options] = state.callsOf("triggerWorkflowByName")[0];
+    expect([name, triggerId, origin, options]).toEqual(["w-1", result.triggerId, "dashboard", { dryRun: true }]);
+    expect(result).toMatchObject({ status: "started", executionId: "exec-w-1", dryRun: true, optionsIgnored: false });
+  });
+
+  test("the options probe names a workflow nobody has, and an engine that cannot find it takes no options", async () => {
+    const { runtime, state } = await connected();
+    const probe = renderDirect(() => directWorkflowsGateway(runtime).useTestRunCapabilitiesRequest()).current();
+    expect(await probe()).toEqual({ options: "unsupported" });
+    expect(state.workflows).toEqual([]);
+  });
+
+  test("a workflow's run history is newest first, its limit clamped into the engine's range", async () => {
+    const { runtime, state } = await connected();
+    const snapshot = (id: string, workflowId: string) => ({
+      id,
+      workflowId,
+      status: "completed",
+      triggerEvent: "{}",
+      createdAt: "2026-10-28T10:00:00Z",
+      updatedAt: "2026-10-28T10:00:00Z",
+    });
+    state.runSnapshots = [snapshot("run-2", "w-1"), snapshot("run-x", "w-2"), snapshot("run-1", "w-1")];
+    const read = renderDirect(() => directWorkflowsGateway(runtime).useRuns("w-1", 10_000));
+    const runs = await read.until((value) => value !== undefined, "the runs");
+    expect(runs?.map((run) => [run.engineRunId, run.hasTriggerEvent])).toEqual([
+      ["run-2", true],
+      ["run-1", true],
+    ]);
+    expect(state.callsOf("listWorkflowRunSnapshots")).toEqual([[{ workflowId: "w-1", limit: 200 }]]);
+    read.unmount();
+  });
+
+  test("lists the health errors of enabled workflows only", async () => {
+    const { runtime, state } = await connected();
+    state.workflows = [
+      alertWorkflow("w-1", "Follow", "default"),
+      { ...alertWorkflow("w-2", "Raid", "side"), isEnabled: false },
+    ];
+    state.workflowHealth = [
+      { workflowId: "w-1", status: "error", reason: "bad trigger", since: "2026-10-28T10:00:00Z" },
+      { workflowId: "w-2", status: "error", reason: "bad trigger", since: "2026-10-28T10:00:00Z" },
+    ];
+    const read = renderDirect(() => directWorkflowsGateway(runtime).useNotRunning());
+    expect(await read.until((value) => value !== undefined, "the health")).toEqual([
+      { engineWorkflowId: "w-1", reason: "bad trigger", since: "2026-10-28T10:00:00Z" },
+    ]);
+    read.unmount();
+  });
+
+  test("a health resync is throttled, and an engine still loading neither fails nor holds the throttle", async () => {
+    const { runtime, state, clock } = await connected();
+    const resync = renderDirect(() => directWorkflowsGateway(runtime).useHealthResyncRequest()).current();
+    state.workflowHealth = new Error(HEALTH_STILL_LOADING_MESSAGE);
+    expect(await resync("mount")).toBe("loading");
+
+    state.workflowHealth = [];
+    expect(await resync("mount")).toBe("ok");
+    expect(await resync("mount")).toBe("skipped");
+    clock.advance(RESYNC_MIN_INTERVAL_MS.mount);
+    expect(await resync("mount")).toBe("ok");
+  });
+
+  test("pushes each run as it starts and settles, named after its workflow, keeping its start", async () => {
+    const { runtime, state, engine } = await connected();
+    state.workflows = [alertWorkflow("w-1", "Follow", "default")];
+    const workflows = directWorkflowsGateway(runtime);
+    const list = renderDirect(() => workflows.useWorkflows());
+    await list.until((value) => value !== undefined, "the workflows");
+    const subscribe = renderDirect(() => workflows.useRunsSubscription()).current();
+    const runs: WorkflowRun[] = [];
+    const unsubscribe = subscribe((run) => runs.push(run));
+
+    const run = { workflowId: "w-1", executionId: "run-1" };
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.WORKFLOW_RUN_STARTED, ...run, occurredAt: "2026-10-28T10:00:00Z" },
+        "engine",
+        "e-8"
+      )
+    );
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.WORKFLOW_RUN_COMPLETED, ...run, occurredAt: "2026-10-28T10:00:05Z" },
+        "engine",
+        "e-9"
+      )
+    );
+    await waitFor(() => runs.length === 2, "both reports");
+    expect(runs.map((r) => [r.workflowName, r.status, r.startedAt.toISOString()])).toEqual([
+      ["Follow", "running", "2026-10-28T10:00:00.000Z"],
+      ["Follow", "completed", "2026-10-28T10:00:00.000Z"],
+    ]);
+    unsubscribe();
+    list.unmount();
   });
 });

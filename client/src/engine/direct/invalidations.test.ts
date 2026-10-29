@@ -26,6 +26,22 @@ describe("INVALIDATIONS", () => {
       [k.alertQueue.all],
     ],
     [
+      "an alert a run published refreshes the queue and that run",
+      makeCallbackEnvelope({
+        type: EngineEventType.ALERT_PLAYING,
+        alert: {
+          id: "a-2",
+          payload: "{}",
+          workflowId: "run-1",
+          sourceEventId: "",
+          status: "playing",
+          createdAt: "2026-10-28T12:00:00Z",
+          updatedAt: "2026-10-28T12:00:01Z",
+        },
+      }),
+      [k.alertQueue.all, k.workflows.run("run-1")],
+    ],
+    [
       "a stream going offline refreshes the live state",
       makeCallbackEnvelope({ type: EngineEventType.STREAM_OFFLINE, twitchUserId: "u-1" }),
       [k.status.liveState()],
@@ -56,9 +72,35 @@ describe("INVALIDATIONS", () => {
       [k.scenes.all],
     ],
     [
-      "a deleted workflow refreshes the alert target usage",
+      "a deleted workflow refreshes the workflows, its health and the alert target usage",
       makeCallbackEnvelope({ type: EngineEventType.WORKFLOW_DELETED, workflowId: "w-1" }),
-      [k.scenes.allAlertTargetUsage],
+      [k.workflows.list(), k.workflows.detail("w-1"), k.workflows.health(), k.scenes.allAlertTargetUsage],
+    ],
+    [
+      "a recorded step refreshes its run",
+      makeCallbackEnvelope({
+        type: EngineEventType.WORKFLOW_RUN_STEP_RECORDED,
+        step: {
+          id: "s-1",
+          executionId: "run-1",
+          taskId: "t-1",
+          status: "completed",
+          attempt: 1,
+          stepIndex: 0,
+          createdAt: "",
+          updatedAt: "",
+        },
+      }),
+      [k.workflows.run("run-1")],
+    ],
+    [
+      "a module's new trigger refreshes the builder's catalog",
+      makeCallbackEnvelope({
+        type: EngineEventType.MODULE_TRIGGER_DEREGISTERED,
+        moduleKey: "counter",
+        triggers: [],
+      } as never),
+      [k.workflows.catalog()],
     ],
     [
       "an engine response feeds a transient event and caches nothing",

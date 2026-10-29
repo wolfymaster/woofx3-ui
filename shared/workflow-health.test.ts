@@ -17,7 +17,7 @@ import {
   subMillisecondNanos,
   WORKFLOW_HEALTH_CHANGED_EVENT_TYPE,
   WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE,
-} from "./workflowHealth";
+} from "./workflow-health";
 
 const T0 = "2026-09-28T10:00:00.000Z";
 const T0_MS = Date.parse(T0);

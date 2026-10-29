@@ -1,4 +1,4 @@
-import type { OptionsSupport } from "@convex/lib/engineTestRun";
+import type { OptionsSupport } from "@shared/workflow-test-run";
 import { useEffect, useState } from "react";
 import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
