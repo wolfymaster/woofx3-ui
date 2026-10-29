@@ -29,6 +29,24 @@ import type {
   StreamStatus,
   TriggerWorkflowOptions,
   TriggerWorkflowResponse,
+  TwitchAddBlockedTermParams,
+  TwitchBanUserParams,
+  TwitchChatPinParams,
+  TwitchCreateStreamMarkerParams,
+  TwitchGetBlockedTermsParams,
+  TwitchGetChattersParams,
+  TwitchGetGamesParams,
+  TwitchGetUsersParams,
+  TwitchHelixResult,
+  TwitchLinkInfo,
+  TwitchModifyChannelInformationParams,
+  TwitchRemoveBlockedTermParams,
+  TwitchSearchCategoriesParams,
+  TwitchSendChatAnnouncementParams,
+  TwitchSendChatMessageParams,
+  TwitchSendShoutoutParams,
+  TwitchUnbanUserParams,
+  TwitchUpdateChatSettingsParams,
   UninstallModuleResponse,
   ViewerTotals,
   ViewerTotalsQuery,
@@ -95,7 +113,34 @@ type DirectFakeSurface = Pick<
   | "listModuleFiles"
   | "getModuleFile"
   | "uninstallModule"
+  | "getTwitchLink"
+  | TwitchFakeMethod
 >;
+
+/** The engine Twitch methods the fake answers, each with `FakeEngineState.twitchAnswer`. */
+export type TwitchFakeMethod =
+  | "twitchGetChannelInformation"
+  | "twitchGetGames"
+  | "twitchSearchCategories"
+  | "twitchModifyChannelInformation"
+  | "twitchCreateStreamMarker"
+  | "twitchGetAdSchedule"
+  | "twitchSnoozeNextAd"
+  | "twitchGetUsers"
+  | "twitchGetBlockedTerms"
+  | "twitchAddBlockedTerm"
+  | "twitchRemoveBlockedTerm"
+  | "twitchBanUser"
+  | "twitchUnbanUser"
+  | "twitchGetChatSettings"
+  | "twitchUpdateChatSettings"
+  | "twitchSendChatMessage"
+  | "twitchSendChatAnnouncement"
+  | "twitchSendShoutout"
+  | "twitchGetChatters"
+  | "twitchGetChatPins"
+  | "twitchUnpinChatMessage"
+  | "twitchCreateClip";
 
 export type AvailableWidget = Awaited<ReturnType<Woofx3EngineApi["getAvailableWidgets"]>>["widgets"][number];
 
@@ -151,6 +196,13 @@ export class FakeEngineState {
   moduleFiles: Record<string, ModuleFileList> = {};
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
+  twitchLink: TwitchLinkInfo = { linked: false, revision: 1 };
+  /** What each Twitch method answers, given its arguments; no answer configured fails the call. */
+  twitchAnswer: (method: TwitchFakeMethod, params: unknown) => TwitchHelixResult = (method) => ({
+    ok: false,
+    code: "failed",
+    error: `no answer configured for ${method}`,
+  });
   /** Every call the fake served, by method, with its arguments. */
   readonly calls: Array<{ method: keyof DirectFakeSurface; args: unknown[] }> = [];
   /** The latest stream subscription of each session, in the order they were made. */
@@ -565,5 +617,103 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   ): Promise<{ dispatched: boolean }> {
     this.state.record("dispatchFieldOptionsRequest", reference, correlationKey);
     return { dispatched: true };
+  }
+
+  async getTwitchLink(): Promise<TwitchLinkInfo> {
+    this.state.record("getTwitchLink");
+    return this.state.twitchLink;
+  }
+
+  private twitch(method: TwitchFakeMethod, params?: unknown): TwitchHelixResult {
+    this.state.record(method, ...(params === undefined ? [] : [params]));
+    return this.state.twitchAnswer(method, params);
+  }
+
+  async twitchGetChannelInformation(): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetChannelInformation");
+  }
+
+  async twitchGetGames(params: TwitchGetGamesParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetGames", params);
+  }
+
+  async twitchSearchCategories(params: TwitchSearchCategoriesParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchSearchCategories", params);
+  }
+
+  async twitchModifyChannelInformation(params: TwitchModifyChannelInformationParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchModifyChannelInformation", params);
+  }
+
+  async twitchCreateStreamMarker(params: TwitchCreateStreamMarkerParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchCreateStreamMarker", params);
+  }
+
+  async twitchGetAdSchedule(): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetAdSchedule");
+  }
+
+  async twitchSnoozeNextAd(): Promise<TwitchHelixResult> {
+    return this.twitch("twitchSnoozeNextAd");
+  }
+
+  async twitchGetUsers(params: TwitchGetUsersParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetUsers", params);
+  }
+
+  async twitchGetBlockedTerms(params: TwitchGetBlockedTermsParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetBlockedTerms", params);
+  }
+
+  async twitchAddBlockedTerm(params: TwitchAddBlockedTermParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchAddBlockedTerm", params);
+  }
+
+  async twitchRemoveBlockedTerm(params: TwitchRemoveBlockedTermParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchRemoveBlockedTerm", params);
+  }
+
+  async twitchBanUser(params: TwitchBanUserParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchBanUser", params);
+  }
+
+  async twitchUnbanUser(params: TwitchUnbanUserParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchUnbanUser", params);
+  }
+
+  async twitchGetChatSettings(): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetChatSettings");
+  }
+
+  async twitchUpdateChatSettings(params: TwitchUpdateChatSettingsParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchUpdateChatSettings", params);
+  }
+
+  async twitchSendChatMessage(params: TwitchSendChatMessageParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchSendChatMessage", params);
+  }
+
+  async twitchSendChatAnnouncement(params: TwitchSendChatAnnouncementParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchSendChatAnnouncement", params);
+  }
+
+  async twitchSendShoutout(params: TwitchSendShoutoutParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchSendShoutout", params);
+  }
+
+  async twitchGetChatters(params: TwitchGetChattersParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetChatters", params);
+  }
+
+  async twitchGetChatPins(): Promise<TwitchHelixResult> {
+    return this.twitch("twitchGetChatPins");
+  }
+
+  async twitchUnpinChatMessage(params: TwitchChatPinParams): Promise<TwitchHelixResult> {
+    return this.twitch("twitchUnpinChatMessage", params);
+  }
+
+  async twitchCreateClip(): Promise<TwitchHelixResult> {
+    return this.twitch("twitchCreateClip");
   }
 }

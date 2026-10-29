@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { AD_SCOPE_MISSING_MESSAGE } from "@shared/ad-breaks";
+import { missingTwitchScopeMessage, TWITCH_NOT_CONNECTED_MESSAGE } from "@shared/twitch-link-refusal";
 import { HEALTH_STILL_LOADING_MESSAGE, RESYNC_MIN_INTERVAL_MS } from "@shared/workflow-health";
 import {
   type AlertComposition,
@@ -8,27 +10,34 @@ import {
   makeCallbackEnvelope,
   type SceneSnapshot,
   type StreamEventFrame,
+  type TwitchHelixResult,
   type Workflow,
 } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
 import type { WorkflowRun } from "@/engine/types";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
+import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
+import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directEventLogGateway } from "./event-log";
 import { toModuleId, toSceneId } from "./ids";
 import { directKeys } from "./keys";
+import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
 import { directOverlaysGateway } from "./overlays";
+import { directPinsGateway } from "./pins";
 import { directRequestsGateway } from "./requests";
 import { directScenesGateway } from "./scenes";
 import { directStatusGateway } from "./status";
+import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
-import type { AvailableWidget } from "./testing/DirectFakeApi";
+import type { AvailableWidget, FakeEngineState, TwitchFakeMethod } from "./testing/DirectFakeApi";
 import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
+import { directTwitchChatGateway } from "./twitch-chat";
 import { directWorkflowsGateway } from "./workflows";
 
 // The namespaces against a fake engine over real capnweb: reads load through
@@ -995,5 +1004,405 @@ describe("modules", () => {
       .current()({} as never)
       .catch((error: Error) => error);
     expect(archive).toBeInstanceOf(GatewayUnsupportedError);
+  });
+});
+
+/** Links the fake engine to the broadcaster `b-1` with `scopes`. */
+function linkTwitch(state: FakeEngineState, scopes: string[]): void {
+  state.twitchLink = {
+    linked: true,
+    revision: 2,
+    userId: "b-1",
+    login: "streamer",
+    displayName: "Streamer",
+    profileImageUrl: null,
+    scopes,
+    expiresAt: null,
+    authFailedAt: null,
+  };
+}
+
+/** Answers each Twitch method from `answers`; a method not there fails the call. */
+function answerTwitch(
+  state: FakeEngineState,
+  answers: Partial<Record<TwitchFakeMethod, (params: unknown) => TwitchHelixResult>>
+): void {
+  state.twitchAnswer = (method, params) =>
+    answers[method]?.(params) ?? { ok: false, code: "failed", error: `unexpected ${method}` };
+}
+
+const ok = (body: unknown): TwitchHelixResult => ({ ok: true, body });
+const refused = (status: number, message: string): TwitchHelixResult => ({
+  ok: false,
+  code: "helix",
+  error: message,
+  status,
+  body: JSON.stringify({ error: "Bad Request", status, message }),
+});
+
+const failure = (promise: Promise<unknown>): Promise<unknown> =>
+  promise.then(
+    () => null,
+    (error: unknown) => error
+  );
+const twitchCalls = (state: FakeEngineState) =>
+  state.calls.map((call) => call.method).filter((method) => method.startsWith("twitch"));
+
+describe("adBreaks", () => {
+  test("reads the schedule against the gateway's clock, and snoozes", async () => {
+    const { runtime, state, clock } = await connected();
+    linkTwitch(state, ["channel:read:ads", "channel:manage:ads"]);
+    answerTwitch(state, {
+      twitchGetAdSchedule: () =>
+        ok({
+          data: [
+            {
+              next_ad_at: 1_790_000_000,
+              last_ad_at: 0,
+              duration: 90,
+              preroll_free_time: 600,
+              snooze_count: 2,
+              snooze_refresh_at: "",
+            },
+          ],
+        }),
+      twitchSnoozeNextAd: () => ok({ data: [{ snooze_count: 1, snooze_refresh_at: 0, next_ad_at: 1_790_000_300 }] }),
+    });
+    const ads = directAdBreaksGateway(runtime);
+    const schedule = await renderDirect(() => ads.useScheduleRequest()).current()();
+    expect(schedule).toEqual({
+      nextAdAt: new Date(1_790_000_000_000).toISOString(),
+      lastAdAt: null,
+      durationSeconds: 90,
+      prerollFreeSeconds: 600,
+      snoozeCount: 2,
+      snoozeRefreshAt: null,
+      serverNow: new Date(clock.now()).toISOString(),
+    });
+    expect((await renderDirect(() => ads.useSnoozeRequest()).current()()).snoozeCount).toBe(1);
+  });
+
+  test("a link without the ads scope asks for a reconnect before calling Twitch", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["channel:read:ads"]);
+    const snooze = renderDirect(() => directAdBreaksGateway(runtime).useSnoozeRequest()).current();
+    const error = await failure(snooze());
+    expect(String(error)).toContain(AD_SCOPE_MISSING_MESSAGE);
+    expect(twitchCalls(state)).toEqual([]);
+  });
+
+  test("a snooze Twitch refuses shows Twitch's reason", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["channel:manage:ads"]);
+    answerTwitch(state, { twitchSnoozeNextAd: () => refused(429, "no snoozes left") });
+    const snooze = renderDirect(() => directAdBreaksGateway(runtime).useSnoozeRequest()).current();
+    expect(String(await failure(snooze()))).toContain("no snoozes left");
+  });
+});
+
+describe("moderation", () => {
+  const ALL = [
+    "moderator:manage:blocked_terms",
+    "moderator:manage:banned_users",
+    "moderator:manage:chat_settings",
+    "moderator:read:chat_settings",
+  ];
+
+  test("access follows the link's scopes, and is read again when the link changes", async () => {
+    const { runtime, state, engine } = await connected();
+    const moderation = directModerationGateway(runtime);
+    const read = renderDirect(() => moderation.useAccess());
+    await read.until((value) => value !== undefined, "the access");
+    expect(read.current()?.ban).toBe("not-linked");
+
+    linkTwitch(state, ["moderator:manage:banned_users"]);
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.TWITCH_LINK_CHANGED, revision: 2, linked: true, userId: "b-1", authFailedAt: null },
+        "engine",
+        "e-1"
+      )
+    );
+    await read.until((value) => value?.ban === "ready", "the new link");
+    expect(read.current()).toEqual({
+      addBlockedTerm: "needs-reconnect",
+      removeBlockedTerm: "needs-reconnect",
+      timeout: "ready",
+      ban: "ready",
+      chatSettings: "needs-reconnect",
+    });
+    read.unmount();
+  });
+
+  test("lists every page of blocked terms, and adds and removes one", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ALL);
+    answerTwitch(state, {
+      twitchGetBlockedTerms: (params) =>
+        (params as { after?: string }).after === undefined
+          ? ok({ data: [{ id: "t-1", text: "spam" }], pagination: { cursor: "next" } })
+          : ok({ data: [{ id: "t-2", text: "scam", expires_at: "2026-11-01T00:00:00Z" }], pagination: {} }),
+      twitchAddBlockedTerm: () => ok({ data: [{ id: "t-3", text: "bots" }] }),
+      twitchRemoveBlockedTerm: () => ok(null),
+    });
+    const moderation = directModerationGateway(runtime);
+    expect(await renderDirect(() => moderation.useBlockedTermsRequest()).current()()).toEqual({
+      terms: [
+        { id: "t-1", text: "spam", createdAt: null, expiresAt: null },
+        { id: "t-2", text: "scam", createdAt: null, expiresAt: "2026-11-01T00:00:00Z" },
+      ],
+      truncated: false,
+    });
+    expect(state.callsOf("twitchGetBlockedTerms")).toEqual([[{ first: 100 }], [{ first: 100, after: "next" }]]);
+    expect((await renderDirect(() => moderation.useAddBlockedTermRequest()).current()("  bots ")).id).toBe("t-3");
+    expect(state.callsOf("twitchAddBlockedTerm")).toEqual([[{ text: "bots" }]]);
+    await renderDirect(() => moderation.useRemoveBlockedTermRequest()).current()("t-3");
+    expect(state.callsOf("twitchRemoveBlockedTerm")).toEqual([[{ id: "t-3" }]]);
+  });
+
+  test("a ban looks the viewer up by login, and refuses the broadcaster's own account", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ALL);
+    answerTwitch(state, {
+      twitchGetUsers: (params) => {
+        const login = (params as { login: string }).login;
+        return ok({ data: [{ id: login === "streamer" ? "b-1" : "v-1", login, display_name: "Someone" }] });
+      },
+      twitchBanUser: () => ok({ data: [{}] }),
+    });
+    const ban = renderDirect(() => directModerationGateway(runtime).useBanRequest()).current();
+    expect(await ban("@SomeOne", " spam ")).toEqual({ login: "someone", displayName: "Someone" });
+    expect(state.callsOf("twitchBanUser")).toEqual([[{ user_id: "v-1", reason: "spam" }]]);
+    expect(String(await failure(ban("streamer")))).toContain("You can't moderate your own account");
+  });
+
+  test("a timeout Twitch refuses reads as the widget's sentence", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ALL);
+    answerTwitch(state, {
+      twitchGetUsers: () => ok({ data: [{ id: "v-1", login: "someone" }] }),
+      twitchBanUser: () => refused(400, "The user specified in the user_id field is already banned."),
+    });
+    const timeout = renderDirect(() => directModerationGateway(runtime).useTimeoutRequest()).current();
+    expect(String(await failure(timeout("someone", 60)))).toContain(
+      "That user is banned, so a timeout would do nothing."
+    );
+    expect(String(await failure(timeout("someone", 0)))).toContain("at least one second");
+  });
+
+  test("chat modes are read with the read scope alone and changed by the fields given", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["moderator:read:chat_settings"]);
+    answerTwitch(state, {
+      twitchGetChatSettings: () => ok({ data: [{ slow_mode: true, slow_mode_wait_time: 30 }] }),
+      twitchUpdateChatSettings: () => ok({ data: [{ emote_mode: true }] }),
+    });
+    const moderation = directModerationGateway(runtime);
+    expect(await renderDirect(() => moderation.useChatSettingsRequest()).current()()).toEqual({
+      emoteMode: false,
+      followerMode: false,
+      followerModeDuration: null,
+      slowMode: true,
+      slowModeWaitTime: 30,
+      subscriberMode: false,
+    });
+    const update = renderDirect(() => moderation.useUpdateChatSettingsRequest()).current();
+    expect(String(await failure(update({ emoteMode: true })))).toContain(
+      missingTwitchScopeMessage("moderator:manage:chat_settings")
+    );
+    linkTwitch(state, ALL);
+    runtime.queryClient.removeQueries({ queryKey: directKeys.twitch.link() });
+    expect((await update({ emoteMode: true })).emoteMode).toBe(true);
+    expect(state.callsOf("twitchUpdateChatSettings")).toEqual([[{ emote_mode: true }]]);
+  });
+});
+
+describe("twitchChat", () => {
+  test("sends a message, and rejects with Twitch's reason when it drops one", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["user:write:chat"]);
+    let dropped = false;
+    answerTwitch(state, {
+      twitchSendChatMessage: () =>
+        ok({
+          data: [dropped ? { is_sent: false, drop_reason: { message: "Held by AutoMod" } } : { is_sent: true }],
+        }),
+    });
+    const send = renderDirect(() => directTwitchChatGateway(runtime).useSendMessageRequest()).current();
+    await send("  hello  ");
+    expect(state.callsOf("twitchSendChatMessage")).toEqual([[{ message: "hello" }]]);
+    dropped = true;
+    expect(String(await failure(send("hello")))).toContain("Held by AutoMod");
+    expect(String(await failure(send(" ")))).toContain("A chat message needs some text");
+  });
+
+  test("announces in a color, and shouts out a channel by its id", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["moderator:manage:announcements", "moderator:manage:shoutouts"]);
+    answerTwitch(state, {
+      twitchSendChatAnnouncement: () => ok(null),
+      twitchGetUsers: (params) =>
+        (params as { login: string }).login === "friend"
+          ? ok({ data: [{ id: "f-1", login: "friend" }] })
+          : ok({ data: [] }),
+      twitchSendShoutout: () => ok(null),
+    });
+    const chat = directTwitchChatGateway(runtime);
+    await renderDirect(() => chat.useSendAnnouncementRequest()).current()({ message: "Raid!", color: "purple" });
+    expect(state.callsOf("twitchSendChatAnnouncement")).toEqual([[{ message: "Raid!", color: "purple" }]]);
+    const shoutout = renderDirect(() => chat.useSendShoutoutRequest()).current();
+    await shoutout("@Friend");
+    expect(state.callsOf("twitchSendShoutout")).toEqual([[{ to_broadcaster_id: "f-1" }]]);
+    expect(String(await failure(shoutout("nobody")))).toContain('No Twitch channel called "nobody"');
+  });
+
+  test("lists chatters, and an unlinked engine says Twitch is not connected", async () => {
+    const { runtime, state } = await connected();
+    const chatters = renderDirect(() => directTwitchChatGateway(runtime).useChattersRequest()).current();
+    expect(String(await failure(chatters()))).toContain(missingTwitchScopeMessage("moderator:read:chatters"));
+
+    linkTwitch(state, ["moderator:read:chatters"]);
+    runtime.queryClient.removeQueries({ queryKey: directKeys.twitch.link() });
+    answerTwitch(state, {
+      twitchGetChatters: () => ok({ data: [{ user_id: "1", user_login: "someone", user_name: "SomeOne" }] }),
+    });
+    expect(await chatters()).toEqual([{ userId: "1", login: "someone", displayName: "SomeOne" }]);
+    expect(state.callsOf("twitchGetChatters")).toEqual([[{ first: 1000 }]]);
+  });
+});
+
+describe("clips", () => {
+  test("clips the live stream, names an offline channel, and needs a link", async () => {
+    const { runtime, state } = await connected();
+    const create = renderDirect(() => directClipsGateway(runtime).useCreateRequest()).current();
+    expect(String(await failure(create()))).toContain(TWITCH_NOT_CONNECTED_MESSAGE);
+
+    linkTwitch(state, []);
+    runtime.queryClient.removeQueries({ queryKey: directKeys.twitch.link() });
+    let live = true;
+    answerTwitch(state, {
+      twitchCreateClip: () =>
+        live ? ok({ data: [{ id: "c-1", edit_url: "https://clips.test/c-1" }] }) : refused(404, ""),
+    });
+    expect(await create()).toEqual({ clipId: "c-1", editUrl: "https://clips.test/c-1" });
+    live = false;
+    expect(String(await failure(create()))).toContain("the channel has to be live");
+  });
+
+  test("an engine that has no answer from Twitch says why", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, []);
+    state.twitchAnswer = () => ({ ok: false, code: "unavailable", error: "twitch is off" });
+    const create = renderDirect(() => directClipsGateway(runtime).useCreateRequest()).current();
+    expect(String(await failure(create()))).toContain("The engine's Twitch connection is not running");
+  });
+});
+
+describe("streamInfo", () => {
+  const SCOPE = ["channel:manage:broadcast"];
+  const ART = "https://static-cdn.jtvnw.net/ttv-boxart/509658-{width}x{height}.jpg";
+
+  test("reads the channel with its box art, reusing art the caller already has", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, SCOPE);
+    answerTwitch(state, {
+      twitchGetChannelInformation: () =>
+        ok({ data: [{ title: "Cozy", game_id: "509658", game_name: "Just Chatting", tags: ["English"] }] }),
+      twitchGetGames: () => ok({ data: [{ id: "509658", name: "Just Chatting", box_art_url: ART }] }),
+    });
+    const channel = renderDirect(() => directStreamInfoGateway(runtime).useChannelRequest()).current();
+    const sized = "https://static-cdn.jtvnw.net/ttv-boxart/509658-52x72.jpg";
+    expect(await channel()).toEqual({
+      title: "Cozy",
+      category: { id: "509658", name: "Just Chatting", boxArtUrl: sized },
+      tags: ["English"],
+    });
+    await channel({ categoryId: "509658", boxArtUrl: sized });
+    expect(state.callsOf("twitchGetGames")).toHaveLength(1);
+  });
+
+  test("an update sends only the fields given and reports what Twitch did not take", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, SCOPE);
+    answerTwitch(state, {
+      twitchModifyChannelInformation: () => ok(null),
+      twitchGetChannelInformation: () => ok({ data: [{ title: "Old", game_id: "", game_name: "", tags: [] }] }),
+    });
+    const update = renderDirect(() => directStreamInfoGateway(runtime).useUpdateRequest()).current();
+    const result = await update({ title: " New ", category: null });
+    expect(state.callsOf("twitchModifyChannelInformation")).toEqual([[{ title: "New", game_id: "" }]]);
+    expect(result).toEqual({ info: { title: "Old", category: null, tags: [] }, unapplied: ["title"] });
+    expect(String(await failure(update({})))).toContain("Nothing to update");
+  });
+
+  test("searches categories, and drops a marker only on a live stream with VODs", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, SCOPE);
+    answerTwitch(state, {
+      twitchSearchCategories: () => ok({ data: [{ id: "1", name: "Chess" }] }),
+      twitchCreateStreamMarker: () => refused(404, "not live"),
+    });
+    const streamInfo = directStreamInfoGateway(runtime);
+    const search = renderDirect(() => streamInfo.useSearchCategoriesRequest()).current();
+    expect(await search(" chess ")).toEqual([{ id: "1", name: "Chess", boxArtUrl: null }]);
+    expect(await search("  ")).toEqual([]);
+    expect(state.callsOf("twitchSearchCategories")).toEqual([[{ query: "chess", first: 10 }]]);
+    const marker = renderDirect(() => streamInfo.useCreateMarkerRequest()).current();
+    expect(String(await failure(marker("highlight")))).toContain("Not live, or past broadcasts are off");
+    expect(state.callsOf("twitchCreateStreamMarker")).toEqual([[{ description: "highlight" }]]);
+  });
+
+  test("presets are kept in the account, which the engine cannot reach", async () => {
+    const { runtime } = await connected();
+    const streamInfo = directStreamInfoGateway(runtime);
+    const save = await failure(renderDirect(() => streamInfo.useSavePresetRequest()).current()({} as never));
+    expect(save).toBeInstanceOf(GatewayUnsupportedError);
+    const read = renderDirect(() => streamInfo.usePresets());
+    expect(read.error()).toBeInstanceOf(GatewayUnsupportedError);
+  });
+});
+
+describe("pins", () => {
+  test("reads the current pin, pins a new message as it is posted, and unpins", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["moderator:read:chat_messages", "moderator:manage:chat_messages", "user:write:chat"]);
+    answerTwitch(state, {
+      twitchGetChatPins: () =>
+        ok({ data: [{ message_id: "m-1", message: { text: "Follow!" }, sender_user_name: "Streamer" }] }),
+      twitchSendChatMessage: () => ok({ data: [{ message_id: "m-2", is_sent: true }] }),
+      twitchUnpinChatMessage: () => ok(null),
+    });
+    const pins = directPinsGateway(runtime);
+    expect(await renderDirect(() => pins.useCurrentRequest()).current()()).toEqual({
+      messageId: "m-1",
+      content: "Follow!",
+      authorName: "Streamer",
+      expiresAt: null,
+    });
+    expect(await renderDirect(() => pins.usePinNewRequest()).current()(" Hydrate ")).toEqual({ messageId: "m-2" });
+    expect(state.callsOf("twitchSendChatMessage")).toEqual([[{ message: "Hydrate", pin: true }]]);
+    await renderDirect(() => pins.useUnpinRequest()).current()("m-2");
+    expect(state.callsOf("twitchUnpinChatMessage")).toEqual([[{ message_id: "m-2" }]]);
+  });
+
+  test("pinning a new message needs both the send and the pin scope", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["user:write:chat"]);
+    const pinNew = renderDirect(() => directPinsGateway(runtime).usePinNewRequest()).current();
+    expect(String(await failure(pinNew("Hydrate")))).toContain(
+      missingTwitchScopeMessage("moderator:manage:chat_messages")
+    );
+    expect(twitchCalls(state)).toEqual([]);
+  });
+
+  test("the pin history is kept in the account, which the engine cannot reach", async () => {
+    const { runtime } = await connected();
+    const pins = directPinsGateway(runtime);
+    expect(renderDirect(() => pins.useHistory()).error()).toBeInstanceOf(GatewayUnsupportedError);
+    for (const request of [pins.useRepinRequest, pins.useRemoveFromHistoryRequest]) {
+      expect(await failure(renderDirect(() => request()).current()("entry" as never))).toBeInstanceOf(
+        GatewayUnsupportedError
+      );
+    }
   });
 });

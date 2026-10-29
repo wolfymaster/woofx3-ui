@@ -42,6 +42,11 @@ describe("INVALIDATIONS", () => {
       [k.alertQueue.all, k.workflows.run("run-1")],
     ],
     [
+      "a change to the Twitch link refreshes the link the Twitch namespaces read",
+      makeCallbackEnvelope({ type: EngineEventType.TWITCH_LINK_CHANGED, revision: 2, linked: false }),
+      [k.twitch.link()],
+    ],
+    [
       "a stream going offline refreshes the live state",
       makeCallbackEnvelope({ type: EngineEventType.STREAM_OFFLINE, twitchUserId: "u-1" }),
       [k.status.liveState()],

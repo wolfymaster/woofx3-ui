@@ -45,6 +45,10 @@ export const directKeys = {
     values: () => ["moduleResources", "values"] as const,
     kinds: () => ["moduleResources", "kinds"] as const,
   },
+  twitch: {
+    all: ["twitch"] as const,
+    link: () => ["twitch", "link"] as const,
+  },
   commands: {
     all: ["commands"] as const,
     list: () => ["commands", "list"] as const,
