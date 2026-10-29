@@ -4,6 +4,7 @@ import type { MutationCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
 import { parseKindRef, rowsOfKind } from "./lib/resourceKinds";
 import { isInstanceMember } from "./lib/teamAccess";
+import { refreshPageStateSettings } from "./lib/userPageState";
 import { findResourceKind } from "./resourceKinds";
 
 const resourceInstanceValidator = v.object({
@@ -203,6 +204,7 @@ async function upsertRow(
   } else {
     await ctx.db.insert("moduleResourceInstances", row);
   }
+  await refreshPageStateSettings(ctx, instanceId, row.canonicalId, row.settings);
 }
 
 export const upsertFromWebhook = internalMutation({

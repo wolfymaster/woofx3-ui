@@ -16,6 +16,7 @@ import type { ProblemReport } from "./problems";
 /** The resource kinds a widget can bind, as `{module}:{kind}`. */
 export const BINDABLE_RESOURCE_KINDS = [COUNTER_KIND, TIMER_KIND] as const;
 export type BindableResourceKind = (typeof BINDABLE_RESOURCE_KINDS)[number];
+export const bindableResourceKindValidator = v.union(v.literal(COUNTER_KIND), v.literal(TIMER_KIND));
 
 /** An engine resource a widget shows the value of, by the canonical id `{module}:{kind}:{id}`. */
 export interface ResourceBinding {

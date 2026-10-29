@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { rebuildPageState } from "./lib/userPageState";
 import {
   bindingProblems,
   instanceAllowsUserPages,
@@ -163,6 +164,7 @@ export const publish = mutation({
       savedAt: now,
     });
     await ctx.db.patch(page._id, { publishedRevisionId, publishedAt: now, updatedAt: now });
+    await rebuildPageState(ctx, instanceId, draft.content);
     if (previous) {
       await ctx.db.delete(previous._id);
     }
@@ -180,6 +182,7 @@ export const unpublish = mutation({
       return null;
     }
     await ctx.db.patch(page._id, { publishedRevisionId: undefined, publishedAt: undefined, updatedAt: Date.now() });
+    await rebuildPageState(ctx, instanceId, null);
     await ctx.db.delete(page.publishedRevisionId);
     return null;
   },

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
+import { refreshPageStateValue } from "./lib/userPageState";
 
 /**
  * The storage key every resource kind keeps an instance's value under, in the
@@ -49,6 +50,7 @@ async function upsertValue(ctx: MutationCtx, instanceId: Id<"instances">, canoni
   } else {
     await ctx.db.insert("resourceValues", row);
   }
+  await refreshPageStateValue(ctx, instanceId, canonicalId, row.value);
 }
 
 /** One value, from the storage-changed webhook. */
