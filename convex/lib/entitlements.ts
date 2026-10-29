@@ -29,7 +29,13 @@ export interface EntitlementLimitDefinition {
 }
 
 /** Every feature a plan, an account override or a flag rule can name. */
-export const ENTITLEMENT_FEATURES = {} as const satisfies Record<string, EntitlementFeatureDefinition>;
+export const ENTITLEMENT_FEATURES = {
+  // Publishing one; editing a draft is open to every account, so a page can
+  // be built before the plan that publishes it is bought.
+  userPages: {
+    description: "A public page for your channel",
+  },
+} as const satisfies Record<string, EntitlementFeatureDefinition>;
 
 /** Every limit a plan or an account override can set. */
 export const ENTITLEMENT_LIMITS = {
