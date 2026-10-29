@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
+import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { kindViewFor } from "@/components/resources/kind-views";
 
 describe("kindViewFor", () => {

@@ -1,5 +1,5 @@
-import { bareKind, parseKindRef, resourceKindMatches } from "@convex/lib/resourceKinds";
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
+import { bareKind, parseKindRef, resourceKindMatches } from "@shared/resource-kinds";
 import { Braces, Clock, Hourglass, type LucideIcon, MessageSquare, Puzzle, Radio, Split } from "lucide-react";
 import { taxonomyLabel } from "@/lib/alert-groups";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";

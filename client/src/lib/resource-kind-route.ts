@@ -1,4 +1,4 @@
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
+import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 
 /** Where a kind other than the built-in ones lives: `<base>/<module>/<kind>`. */
 export const RESOURCE_KINDS_BASE = "/stream/resources";

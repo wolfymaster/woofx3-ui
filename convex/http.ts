@@ -1,3 +1,4 @@
+import { canonicalIdForStorageKey } from "@shared/resource-values";
 import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
 import { widgetCanonicalKey } from "@shared/widget-key";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "@shared/workflow-health";
@@ -55,7 +56,6 @@ import {
 } from "./lib/webhookTransients";
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
-import { canonicalIdForStorageKey } from "./resourceValues";
 import "./browserSource";
 import "./moduleWebhook";
 

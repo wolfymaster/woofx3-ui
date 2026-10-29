@@ -38,6 +38,13 @@ export const directKeys = {
     runs: (engineWorkflowId: string, limit: number) => ["workflows", "runs", engineWorkflowId, limit] as const,
     health: () => ["workflows", "health"] as const,
   },
+  moduleResources: {
+    all: ["moduleResources"] as const,
+    instances: () => ["moduleResources", "instances"] as const,
+    ofKinds: (kinds: readonly string[]) => ["moduleResources", "ofKinds", ...kinds] as const,
+    values: () => ["moduleResources", "values"] as const,
+    kinds: () => ["moduleResources", "kinds"] as const,
+  },
   commands: {
     all: ["commands"] as const,
     list: () => ["commands", "list"] as const,

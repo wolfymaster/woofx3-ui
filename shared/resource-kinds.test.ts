@@ -8,7 +8,7 @@ import {
   resolveResourceKind,
   resourceKindMatches,
   rowsOfKind,
-} from "./resourceKinds";
+} from "./resource-kinds";
 
 function declares(moduleName: string, ...kinds: string[]): KindDeclarer {
   return {

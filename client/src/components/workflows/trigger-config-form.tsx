@@ -1,5 +1,5 @@
-import { bareKind, parseKindRef } from "@convex/lib/resourceKinds";
 import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
+import { bareKind, parseKindRef } from "@shared/resource-kinds";
 import { FileAudio, FileImage, FileVideo, Link2, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";

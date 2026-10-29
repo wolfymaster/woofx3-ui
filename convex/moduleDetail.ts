@@ -1,5 +1,6 @@
 "use node";
 
+import { type ManifestResourceKind, parseManifestResourceKinds } from "@shared/resource-kinds";
 import { type ConfigField, LIST_ITEM_FIELD_TYPES, parseFieldList } from "@woofx3/api/ui-schema";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -18,7 +19,6 @@ import {
 } from "./lib/moduleFunctionSummary";
 import { moduleOAuthIntegrationIds } from "./lib/moduleOAuth";
 import { parseManifestPermissions } from "./lib/modulePermissions";
-import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
 import { logger } from "./logger";
 import {
   fetchMarketplaceArchiveManifest,

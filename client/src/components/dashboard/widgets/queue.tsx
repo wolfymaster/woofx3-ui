@@ -1,4 +1,4 @@
-import { QUEUE_KIND } from "@convex/lib/resourceKinds";
+import { QUEUE_KIND } from "@shared/resource-kinds";
 import { ChevronsRight, Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "wouter";
