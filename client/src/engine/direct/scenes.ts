@@ -3,7 +3,14 @@ import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import type { ScenesGateway } from "@/engine/gateway";
-import type { AlertTargetUsage, NewScene, SceneChanges, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
+import type {
+  AlertTargetUsage,
+  NewScene,
+  SceneChanges,
+  SceneRecord,
+  SceneWidgetCatalogRow,
+  WidgetThemesRead,
+} from "@/engine/types";
 import { commandsRead } from "./commands";
 import { directKeys as k } from "./keys";
 import { toSceneRecord, toSceneWidgetCatalogRow } from "./map/scenes";
@@ -28,6 +35,25 @@ function scenesRead(runtime: DirectRuntime): EngineRead<SceneRecord[]> {
       requireSnapshots(runtime, "scenes.useScenes");
       const { scenes } = await runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots());
       return scenes.map(toSceneRecord);
+    },
+  };
+}
+
+/**
+ * A failed read answers `unavailable` instead of failing: a theme picker
+ * shows that rather than breaking the form it sits in.
+ */
+function widgetThemesRead(runtime: DirectRuntime, widgetCanonicalId: string): EngineRead<WidgetThemesRead> {
+  return {
+    queryKey: k.scenes.widgetThemes(widgetCanonicalId),
+    queryFn: async () => {
+      try {
+        const { themes } = await runtime.call("listWidgetThemes", (api) => api.listWidgetThemes(widgetCanonicalId));
+        return { status: "loaded", themes };
+      } catch (error) {
+        runtime.logger.warn("could not read a widget's themes", { widgetCanonicalId, error });
+        return { status: "unavailable" };
+      }
     },
   };
 }
@@ -157,9 +183,6 @@ export function directScenesGateway(runtime: DirectRuntime): ScenesGateway {
     return { success };
   };
 
-  const widgetThemes = (widgetCanonicalId: string) =>
-    runtime.call("listWidgetThemes", (api) => api.listWidgetThemes(widgetCanonicalId));
-
   const editorSession = (engineSceneId: string) =>
     runtime.call("getSceneEditorSession", (api) => api.getSceneEditorSession(engineSceneId));
 
@@ -175,7 +198,7 @@ export function directScenesGateway(runtime: DirectRuntime): ScenesGateway {
     useCreateRequest: () => useEngineRequest(create),
     useUpdateRequest: () => useEngineRequest(update),
     useRemoveRequest: () => useEngineRequest(remove),
-    useWidgetThemesRequest: () => useEngineRequest(widgetThemes),
+    useWidgetThemes: (widgetCanonicalId) => useEngineQuery(runtime, widgetThemesRead(runtime, widgetCanonicalId)),
     useEditorSessionRequest: () => useEngineRequest(editorSession),
     useRepairRequest: () => useEngineRequest(repair),
   };

@@ -1,10 +1,9 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { Label } from "@/components/ui/label";
+import { useModuleAssets } from "@/engine/hooks/use-modules";
+import type { ModuleAsset, ModuleId } from "@/engine/types";
 import { cn } from "@/lib/utils";
 
 /** The property a step's `asset` fields carry to name the module whose assets they list. */
@@ -16,15 +15,36 @@ export const ASSET_MODULE_PROPERTY = "assetModuleId";
  * narrowed to the field's `kinds`, and stores the asset's canonical id; the
  * streamer's own uploads are a `media` field's business.
  */
-function ModuleAssetField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
-  const moduleId = field[ASSET_MODULE_PROPERTY] as Id<"moduleRepository"> | undefined;
+function ModuleAssetField(props: Parameters<CustomFieldRenderer>[0]) {
+  const moduleId = props.field[ASSET_MODULE_PROPERTY] as ModuleId | undefined;
+  return moduleId ? (
+    <InstalledModuleAssetField {...props} moduleId={moduleId} />
+  ) : (
+    <AssetChoices {...props} assets={null} />
+  );
+}
+
+type AssetFieldProps = Pick<Parameters<CustomFieldRenderer>[0], "field" | "value" | "onChange">;
+
+function InstalledModuleAssetField({ moduleId, ...props }: AssetFieldProps & { moduleId: ModuleId }) {
+  const kinds = Array.isArray(props.field.kinds) ? (props.field.kinds as string[]) : undefined;
+  const assets = useModuleAssets(moduleId, kinds);
+  return <AssetChoices {...props} assets={assets} />;
+}
+
+/** `assets` is null for a field whose module is not installed, and undefined while they load. */
+function AssetChoices({
+  field,
+  value,
+  onChange,
+  assets,
+}: AssetFieldProps & { assets: ModuleAsset[] | null | undefined }) {
   const kinds = Array.isArray(field.kinds) ? (field.kinds as string[]) : undefined;
-  const assets = useQuery(api.moduleAssets.listForModule, moduleId ? { moduleId, kinds } : "skip");
   const selected = typeof value === "string" ? value : "";
   const labelId = `${field.id}-label`;
 
   let body: ReactNode;
-  if (!moduleId) {
+  if (assets === null) {
     body = <p className="text-xs text-muted-foreground">This action's module isn't installed, so it has no files.</p>;
   } else if (assets === undefined) {
     body = <p className="text-xs text-muted-foreground">Loading the module's files…</p>;
@@ -82,7 +102,7 @@ function ModuleAssetField({ field, value, onChange }: Parameters<CustomFieldRend
 
 export const ModuleAssetFieldRenderer: CustomFieldRenderer = (props) => <ModuleAssetField {...props} />;
 
-/** The step's `asset` fields told which module's files they list, by the module's Convex id. */
+/** The step's `asset` fields told which installed module's files they list. */
 export function withAssetModule(fields: ConfigField[], moduleId: string | undefined): ConfigField[] {
   if (!moduleId) {
     return fields;

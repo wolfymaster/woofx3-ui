@@ -32,8 +32,14 @@ const WIDGETS = (): readonly QueryKey[] => [
   k.scenes.alertWidgetNames(),
   k.scenes.allAlertTargetUsage,
 ];
-/** A module's manifest declares its resource kinds, so what is installed decides them too. */
-export const MODULE_INVALIDATIONS = (): readonly QueryKey[] => [...WIDGETS(), ...CATALOG(), k.moduleResources.all];
+/** A module's manifest declares its resource kinds and themes, so what is installed decides them too. */
+export const MODULE_INVALIDATIONS = (): readonly QueryKey[] => [
+  ...WIDGETS(),
+  ...CATALOG(),
+  k.moduleResources.all,
+  k.scenes.allWidgetThemes,
+  k.modules.all,
+];
 const RESOURCE_INSTANCES = (): readonly QueryKey[] => [k.moduleResources.all];
 
 /** The engine keeps scenes and library alerts in one table and reports both as `scene.*`, told apart by kind. */
@@ -61,8 +67,8 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.MODULE_ACTION_DEREGISTERED]: CATALOG,
   [EngineEventType.MODULE_FUNCTION_DEREGISTERED]: CATALOG,
   [EngineEventType.MODULE_WIDGET_DEREGISTERED]: WIDGETS,
-  [EngineEventType.MODULE_ASSET_REGISTERED]: NONE,
-  [EngineEventType.MODULE_ASSET_DEREGISTERED]: NONE,
+  [EngineEventType.MODULE_ASSET_REGISTERED]: () => [k.modules.all],
+  [EngineEventType.MODULE_ASSET_DEREGISTERED]: () => [k.modules.all],
   [EngineEventType.MODULE_RESOURCE_INSTANCE_CREATED]: RESOURCE_INSTANCES,
   [EngineEventType.MODULE_RESOURCE_INSTANCE_UPDATED]: RESOURCE_INSTANCES,
   [EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED]: RESOURCE_INSTANCES,

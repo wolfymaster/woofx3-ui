@@ -50,6 +50,7 @@ import type {
   UninstallModuleResponse,
   ViewerTotals,
   ViewerTotalsQuery,
+  WidgetThemes,
   Woofx3EngineApi,
   Workflow,
   WorkflowCatalog,
@@ -91,6 +92,7 @@ type DirectFakeSurface = Pick<
   | "listSceneSnapshots"
   | "getSceneSnapshot"
   | "getAvailableWidgets"
+  | "listWidgetThemes"
   | "listEngineModules"
   | "getWorkflows"
   | "getWorkflow"
@@ -177,6 +179,8 @@ export class FakeEngineState {
   overlayTokens: OverlayToken[] = [];
   scenes: SceneSnapshot[] = [];
   widgets: AvailableWidget[] = [];
+  /** Themes by widget canonical id; a widget not here is refused. */
+  widgetThemes: Record<string, WidgetThemes["themes"]> = {};
   modules: EngineModuleSummary[] = [];
   workflows: Workflow[] = [];
   workflowCatalog: WorkflowCatalog = { triggers: [], actions: [], functions: [] };
@@ -398,6 +402,15 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async getAvailableWidgets(): Promise<{ widgets: AvailableWidget[] }> {
     this.state.record("getAvailableWidgets");
     return { widgets: this.state.widgets };
+  }
+
+  async listWidgetThemes(widgetCanonicalId: string): Promise<WidgetThemes> {
+    this.state.record("listWidgetThemes", widgetCanonicalId);
+    const themes = this.state.widgetThemes[widgetCanonicalId];
+    if (themes === undefined) {
+      throw new Error(`no widget ${widgetCanonicalId}`);
+    }
+    return { widget: widgetCanonicalId, contractVersion: 1, themes };
   }
 
   async listEngineModules(): Promise<EngineModuleSummary[]> {

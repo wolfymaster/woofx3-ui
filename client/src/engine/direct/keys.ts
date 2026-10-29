@@ -25,6 +25,8 @@ export const directKeys = {
     widgetCatalog: () => ["scenes", "widgetCatalog"] as const,
     alertWidgetNames: () => ["scenes", "alertWidgetNames"] as const,
     allAlertTargetUsage: ["scenes", "alertTargetUsage"] as const,
+    allWidgetThemes: ["scenes", "widgetThemes"] as const,
+    widgetThemes: (widgetCanonicalId: string) => ["scenes", "widgetThemes", widgetCanonicalId] as const,
     alertTargetUsage: (engineSceneId: string) => ["scenes", "alertTargetUsage", engineSceneId] as const,
   },
   workflows: {
@@ -37,6 +39,10 @@ export const directKeys = {
     allRunLists: ["workflows", "runs"] as const,
     runs: (engineWorkflowId: string, limit: number) => ["workflows", "runs", engineWorkflowId, limit] as const,
     health: () => ["workflows", "health"] as const,
+  },
+  modules: {
+    all: ["modules"] as const,
+    assets: (moduleId: string, kinds: readonly string[]) => ["modules", "assets", moduleId, ...kinds] as const,
   },
   moduleResources: {
     all: ["moduleResources"] as const,
