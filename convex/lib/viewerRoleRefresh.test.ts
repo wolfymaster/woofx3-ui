@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { VIEWER_ROLES_TTL_MS } from "./viewerAuth";
+import { VIEWER_ROLES_TTL_MS, VIEWER_ROLES_UNAVAILABLE_TTL_MS } from "./viewerAuth";
 import type { PlatformResult, ViewerPlatformClient, ViewerRoleFacts, ViewerTokenGrant } from "./viewerPlatforms";
 import { refreshViewerRoles, VIEWER_TOKEN_REFRESH_MARGIN_MS } from "./viewerRoleRefresh";
 
@@ -56,6 +56,7 @@ function input(client: ViewerPlatformClient, overrides: Partial<Parameters<typeo
     client,
     now: NOW,
     cached: null,
+    outage: null,
     grant: GRANT,
     viewerPlatformUserId: "V1",
     broadcasterPlatformUserId: "B1",
@@ -155,6 +156,42 @@ describe("tokens", () => {
     expect(await refreshViewerRoles(input(client, { grant }))).toEqual({
       kind: "unavailable",
       refreshedGrant: RENEWED,
+      fromOutage: false,
+    });
+  });
+});
+
+describe("unavailable results are cached briefly", () => {
+  test("a recent outage answers unavailable without asking the platform", async () => {
+    const { client, asked } = fakeClient({});
+    const outage = { failedAt: NOW - VIEWER_ROLES_UNAVAILABLE_TTL_MS + 1 };
+    expect(await refreshViewerRoles(input(client, { outage }))).toEqual({
+      kind: "unavailable",
+      refreshedGrant: null,
+      fromOutage: true,
+    });
+    expect(asked).toEqual([]);
+  });
+
+  test("asks the platform again once the outage window has passed", async () => {
+    const { client, asked } = fakeClient({ roles: [{ ok: true, value: FOLLOWER }] });
+    const outage = { failedAt: NOW - VIEWER_ROLES_UNAVAILABLE_TTL_MS };
+    expect((await refreshViewerRoles(input(client, { outage }))).kind).toBe("checked");
+    expect(asked).toEqual(["roles:a1"]);
+  });
+
+  test("a fresh role cache still answers during an outage", async () => {
+    const { client } = fakeClient({});
+    const cached = { follower: true, subscriberTier: null, checkedAt: NOW };
+    expect((await refreshViewerRoles(input(client, { cached, outage: { failedAt: NOW } }))).kind).toBe("cached");
+  });
+
+  test("a failed check is reported as a new outage, not one from the cache", async () => {
+    const { client } = fakeClient({ roles: [{ ok: false, error: "unavailable" }] });
+    expect(await refreshViewerRoles(input(client))).toEqual({
+      kind: "unavailable",
+      refreshedGrant: null,
+      fromOutage: false,
     });
   });
 });

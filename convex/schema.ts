@@ -2154,4 +2154,15 @@ export default defineSchema({
     subscriberTier: subscriberTierValidator,
     checkedAt: v.number(),
   }).index("by_viewer_and_platform_and_broadcaster", ["viewerId", "platform", "broadcasterPlatformUserId"]),
+
+  // viewerRoleOutages: when the platform last could not answer a role check
+  // for a viewer on one broadcaster's channel. While it is younger than
+  // VIEWER_ROLES_UNAVAILABLE_TTL_MS a refresh answers "unavailable" without
+  // asking again. Deleted by the next successful check.
+  viewerRoleOutages: defineTable({
+    viewerId: v.id("viewers"),
+    platform: viewerPlatformValidator,
+    broadcasterPlatformUserId: v.string(),
+    failedAt: v.number(),
+  }).index("by_viewer_and_platform_and_broadcaster", ["viewerId", "platform", "broadcasterPlatformUserId"]),
 });

@@ -43,6 +43,13 @@ export const VIEWER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
  */
 export const VIEWER_ROLES_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * How long a role check the platform could not answer is remembered, so an
+ * outage costs one platform call per viewer and channel per window rather than
+ * one per page view.
+ */
+export const VIEWER_ROLES_UNAVAILABLE_TTL_MS = 60 * 1000;
+
 /** Query parameters the callback adds to the page URL it returns to. */
 export const VIEWER_RETURN_PARAMS = {
   code: "viewer_code",
@@ -177,4 +184,9 @@ export function viewerSessionLive(row: { expiresAt: number } | null, now: number
 /** Whether cached roles are recent enough to use without asking the platform again. */
 export function viewerRolesFresh(roles: { checkedAt: number } | null, now: number): boolean {
   return roles !== null && now - roles.checkedAt < VIEWER_ROLES_TTL_MS;
+}
+
+/** Whether a recent failed role check still stands in for asking the platform again. */
+export function viewerRolesOutageActive(outage: { failedAt: number } | null, now: number): boolean {
+  return outage !== null && now - outage.failedAt < VIEWER_ROLES_UNAVAILABLE_TTL_MS;
 }

@@ -3,7 +3,7 @@
  * Convex action that persists the outcome so the decision can be tested with
  * only the platform's HTTP faked.
  */
-import { type ViewerRoles, viewerRolesFresh } from "./viewerAuth";
+import { type ViewerRoles, viewerRolesFresh, viewerRolesOutageActive } from "./viewerAuth";
 import type { ViewerPlatformClient, ViewerRoleFacts, ViewerTokenGrant } from "./viewerPlatforms";
 
 /** Refresh an access token this close to expiring before using it. */
@@ -13,6 +13,8 @@ export interface RoleRefreshInput {
   client: ViewerPlatformClient;
   now: number;
   cached: ViewerRoles | null;
+  /** The last check the platform could not answer, if any. */
+  outage: { failedAt: number } | null;
   /** The viewer's opened grant, or null when they must sign in again. */
   grant: ViewerTokenGrant | null;
   viewerPlatformUserId: string;
@@ -25,7 +27,8 @@ export type RoleRefreshOutcome =
   | { kind: "checked"; roles: ViewerRoleFacts; refreshedGrant: ViewerTokenGrant | null }
   /** The platform refused the refresh token; the viewer must sign in again. */
   | { kind: "reauth_required"; revoked: boolean }
-  | { kind: "unavailable"; refreshedGrant: ViewerTokenGrant | null };
+  /** `fromOutage` is set when a recent failure answered without asking the platform. */
+  | { kind: "unavailable"; refreshedGrant: ViewerTokenGrant | null; fromOutage: boolean };
 
 export async function refreshViewerRoles(input: RoleRefreshInput): Promise<RoleRefreshOutcome> {
   const { client, now, cached, grant } = input;
@@ -35,6 +38,9 @@ export async function refreshViewerRoles(input: RoleRefreshInput): Promise<RoleR
   if (grant === null) {
     return { kind: "reauth_required", revoked: false };
   }
+  if (viewerRolesOutageActive(input.outage, now)) {
+    return { kind: "unavailable", refreshedGrant: null, fromOutage: true };
+  }
 
   let current = grant;
   let refreshedGrant: ViewerTokenGrant | null = null;
@@ -43,7 +49,7 @@ export async function refreshViewerRoles(input: RoleRefreshInput): Promise<RoleR
     if (!renewed.ok) {
       return renewed.error === "revoked"
         ? { kind: "reauth_required", revoked: true }
-        : { kind: "unavailable", refreshedGrant };
+        : { kind: "unavailable", refreshedGrant, fromOutage: false };
     }
     current = renewed.value;
     refreshedGrant = renewed.value;
@@ -69,7 +75,7 @@ export async function refreshViewerRoles(input: RoleRefreshInput): Promise<RoleR
   if (!check.ok) {
     return check.error === "unauthorized"
       ? { kind: "reauth_required", revoked: false }
-      : { kind: "unavailable", refreshedGrant };
+      : { kind: "unavailable", refreshedGrant, fromOutage: false };
   }
   return { kind: "checked", roles: check.value, refreshedGrant };
 }

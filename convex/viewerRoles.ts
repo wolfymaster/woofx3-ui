@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { refreshOutcomeApplies } from "./lib/twitchRefresh";
 import {
@@ -54,7 +54,23 @@ interface RefreshContext {
   viewer: { _id: Id<"viewers">; platform: ViewerPlatform; platformUserId: string };
   broadcaster: { platform: ViewerPlatform; platformUserId: string } | null;
   cached: ViewerRoles | null;
+  outage: { failedAt: number } | null;
   tokens: Doc<"viewerPlatformTokens"> | null;
+}
+
+/** The outage row for one viewer on one broadcaster's channel, if any. */
+async function outageRow(
+  ctx: QueryCtx,
+  viewerId: Id<"viewers">,
+  platform: ViewerPlatform,
+  broadcasterPlatformUserId: string
+): Promise<Doc<"viewerRoleOutages"> | null> {
+  return ctx.db
+    .query("viewerRoleOutages")
+    .withIndex("by_viewer_and_platform_and_broadcaster", (q) =>
+      q.eq("viewerId", viewerId).eq("platform", platform).eq("broadcasterPlatformUserId", broadcasterPlatformUserId)
+    )
+    .unique();
 }
 
 /** Internal: the result carries the viewer's sealed tokens. */
@@ -74,6 +90,7 @@ export const refreshContext = internalQuery({
     }
     const broadcaster = await broadcasterForInstance(ctx, instanceId);
     const cached = broadcaster ? await viewerRolesFor(ctx, viewer._id, broadcaster.platformUserId) : null;
+    const outage = broadcaster ? await outageRow(ctx, viewer._id, viewer.platform, broadcaster.platformUserId) : null;
     const tokens = await ctx.db
       .query("viewerPlatformTokens")
       .withIndex("by_viewer", (q) => q.eq("viewerId", viewer._id))
@@ -83,73 +100,115 @@ export const refreshContext = internalQuery({
       viewer: { _id: viewer._id, platform: viewer.platform, platformUserId: viewer.platformUserId },
       broadcaster,
       cached,
+      outage: outage ? { failedAt: outage.failedAt } : null,
       tokens,
     };
   },
 });
 
+const renewedTokensValidator = v.object({
+  usedSealedRefreshToken: v.string(),
+  renewed: v.union(
+    v.null(),
+    v.object({
+      sealedAccessToken: v.string(),
+      sealedRefreshToken: v.string(),
+      expiresAt: v.number(),
+      scopes: v.array(v.string()),
+    })
+  ),
+});
+
+const channelOutcomeValidator = v.object({
+  platform: viewerPlatformValidator,
+  broadcasterPlatformUserId: v.string(),
+  result: v.union(
+    v.object({
+      kind: v.literal("checked"),
+      follower: v.boolean(),
+      subscriberTier: subscriberTierValidator,
+      checkedAt: v.number(),
+    }),
+    v.object({ kind: v.literal("unavailable"), failedAt: v.number() })
+  ),
+});
+
+export interface RefreshRecord {
+  viewerId: Id<"viewers">;
+  tokens?: typeof renewedTokensValidator.type;
+  channel?: typeof channelOutcomeValidator.type;
+}
+
 /**
  * Writes what a refresh learned: renewed tokens (unless a new sign-in replaced
- * the grant meanwhile), a refused grant, and the roles themselves.
+ * the grant meanwhile) or a refused grant, and for the channel either the new
+ * roles, which end any outage, or the time the platform could not answer.
  */
+export async function recordViewerRoleRefresh(ctx: MutationCtx, record: RefreshRecord, now: number): Promise<void> {
+  const { viewerId, tokens, channel } = record;
+  if (tokens) {
+    const row = await ctx.db
+      .query("viewerPlatformTokens")
+      .withIndex("by_viewer", (q) => q.eq("viewerId", viewerId))
+      .unique();
+    if (row && refreshOutcomeApplies({ refreshToken: row.sealedRefreshToken }, tokens.usedSealedRefreshToken)) {
+      if (tokens.renewed) {
+        await ctx.db.patch(row._id, tokens.renewed);
+      } else {
+        await ctx.db.patch(row._id, { authFailedAt: now });
+      }
+    }
+  }
+  if (!channel) {
+    return;
+  }
+  const { platform, broadcasterPlatformUserId, result } = channel;
+  const outage = await outageRow(ctx, viewerId, platform, broadcasterPlatformUserId);
+  if (result.kind === "unavailable") {
+    if (outage) {
+      await ctx.db.patch(outage._id, { failedAt: result.failedAt });
+    } else {
+      await ctx.db.insert("viewerRoleOutages", {
+        viewerId,
+        platform,
+        broadcasterPlatformUserId,
+        failedAt: result.failedAt,
+      });
+    }
+    return;
+  }
+  if (outage) {
+    await ctx.db.delete(outage._id);
+  }
+  const roles = {
+    platform,
+    broadcasterPlatformUserId,
+    follower: result.follower,
+    subscriberTier: result.subscriberTier,
+    checkedAt: result.checkedAt,
+  };
+  const existing = await ctx.db
+    .query("viewerRoles")
+    .withIndex("by_viewer_and_platform_and_broadcaster", (q) =>
+      q.eq("viewerId", viewerId).eq("platform", platform).eq("broadcasterPlatformUserId", broadcasterPlatformUserId)
+    )
+    .unique();
+  if (existing) {
+    await ctx.db.patch(existing._id, roles);
+  } else {
+    await ctx.db.insert("viewerRoles", { viewerId, ...roles });
+  }
+}
+
 export const recordRefresh = internalMutation({
   args: {
     viewerId: v.id("viewers"),
-    tokens: v.optional(
-      v.object({
-        usedSealedRefreshToken: v.string(),
-        renewed: v.union(
-          v.null(),
-          v.object({
-            sealedAccessToken: v.string(),
-            sealedRefreshToken: v.string(),
-            expiresAt: v.number(),
-            scopes: v.array(v.string()),
-          })
-        ),
-      })
-    ),
-    roles: v.optional(
-      v.object({
-        platform: viewerPlatformValidator,
-        broadcasterPlatformUserId: v.string(),
-        follower: v.boolean(),
-        subscriberTier: subscriberTierValidator,
-        checkedAt: v.number(),
-      })
-    ),
+    tokens: v.optional(renewedTokensValidator),
+    channel: v.optional(channelOutcomeValidator),
   },
   returns: v.null(),
-  handler: async (ctx, { viewerId, tokens, roles }) => {
-    if (tokens) {
-      const row = await ctx.db
-        .query("viewerPlatformTokens")
-        .withIndex("by_viewer", (q) => q.eq("viewerId", viewerId))
-        .unique();
-      if (row && refreshOutcomeApplies({ refreshToken: row.sealedRefreshToken }, tokens.usedSealedRefreshToken)) {
-        if (tokens.renewed) {
-          await ctx.db.patch(row._id, tokens.renewed);
-        } else {
-          await ctx.db.patch(row._id, { authFailedAt: Date.now() });
-        }
-      }
-    }
-    if (roles) {
-      const existing = await ctx.db
-        .query("viewerRoles")
-        .withIndex("by_viewer_and_platform_and_broadcaster", (q) =>
-          q
-            .eq("viewerId", viewerId)
-            .eq("platform", roles.platform)
-            .eq("broadcasterPlatformUserId", roles.broadcasterPlatformUserId)
-        )
-        .unique();
-      if (existing) {
-        await ctx.db.patch(existing._id, roles);
-      } else {
-        await ctx.db.insert("viewerRoles", { viewerId, ...roles });
-      }
-    }
+  handler: async (ctx, record) => {
+    await recordViewerRoleRefresh(ctx, record, Date.now());
     return null;
   },
 });
@@ -173,7 +232,7 @@ export const refresh = action({
     if (context === null || !viewerSessionLive(context.session, now)) {
       return { ok: false, error: "not_signed_in" };
     }
-    const { viewer, broadcaster, cached, tokens } = context;
+    const { viewer, broadcaster, cached, outage, tokens } = context;
     if (broadcaster === null) {
       return { ok: false, error: "broadcaster_not_linked" };
     }
@@ -196,6 +255,7 @@ export const refresh = action({
       client: viewerPlatformClient(viewer.platform),
       now,
       cached,
+      outage,
       grant,
       viewerPlatformUserId: viewer.platformUserId,
       broadcasterPlatformUserId: broadcaster.platformUserId,
@@ -229,11 +289,16 @@ export const refresh = action({
       }
       return { ok: false, error: "reauth_required" };
     }
+    const channel = { platform: viewer.platform, broadcasterPlatformUserId: broadcaster.platformUserId };
     if (outcome.kind === "unavailable") {
-      const renewedTokens = await sealRenewed(outcome.refreshedGrant);
-      if (renewedTokens) {
-        await ctx.runMutation(internal.viewerRoles.recordRefresh, { viewerId: viewer._id, tokens: renewedTokens });
+      if (outcome.fromOutage) {
+        return { ok: false, error: "unavailable" };
       }
+      await ctx.runMutation(internal.viewerRoles.recordRefresh, {
+        viewerId: viewer._id,
+        tokens: await sealRenewed(outcome.refreshedGrant),
+        channel: { ...channel, result: { kind: "unavailable", failedAt: now } },
+      });
       logger.warn("viewer role check unavailable", { platform: viewer.platform });
       return { ok: false, error: "unavailable" };
     }
@@ -242,7 +307,7 @@ export const refresh = action({
     await ctx.runMutation(internal.viewerRoles.recordRefresh, {
       viewerId: viewer._id,
       tokens: await sealRenewed(outcome.refreshedGrant),
-      roles: { platform: viewer.platform, broadcasterPlatformUserId: broadcaster.platformUserId, ...roles },
+      channel: { ...channel, result: { kind: "checked", ...roles } },
     });
     return { ok: true, ...roles };
   },
