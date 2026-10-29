@@ -34,6 +34,7 @@ export default defineConfig({
             { text: "Importing from Firebot and Streamer.bot", link: "/ui/setup-imports" },
             { text: "Auth & onboarding", link: "/ui/auth-onboarding" },
             { text: "Companion app", link: "/ui/companion" },
+            { text: "User pages", link: "/ui/user-pages" },
             { text: "Convex & HTTP", link: "/ui/convex-surface" },
           ],
         },

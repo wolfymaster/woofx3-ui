@@ -18,7 +18,8 @@ Deploys queue behind each other and are never cancelled partway. A manual run (*
 The UI is a static Vite build served by Caddy (`deploy/Caddyfile`):
 
 - Any path that is not a file serves `index.html`, because Wouter routes on the client. Deep links and refreshes work.
-- Files under `/assets/` are content-hashed and cached for a year. A missing asset is a 404, not `index.html`.
+- `/u/<slug>` is the public user page, a separate build in `dist/u` (see [User pages](/ui/user-pages)). Every `/u/` path that is not under `/u/assets/` serves `/u/index.html`, so the dashboard never answers one; bare `/u` and `/u/` redirect to `/`.
+- Files under `/assets/` and `/u/assets/` are content-hashed and cached for a year. A missing asset is a 404, not `index.html`.
 - Everything else, including `index.html`, is served `no-cache`, so a new deploy is picked up on the next load.
 - Caddy listens on `$PORT`, which Railway sets (8080 when unset).
 
