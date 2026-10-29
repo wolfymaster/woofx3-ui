@@ -7,6 +7,7 @@ import { refreshOutcomeApplies } from "./lib/twitchRefresh";
 import {
   type SubscriberTier,
   subscriberTierValidator,
+  VIEWER_ROLES_TTL_MS,
   type ViewerPlatform,
   type ViewerRoles,
   viewerPlatformValidator,
@@ -22,7 +23,8 @@ import { logger } from "./logger";
 // Keeps a viewer's follower and subscriber status on one broadcaster's channel
 // current, asking the platform with the viewer's own token. Page queries read
 // the cached result through `viewerRolesFor`; a page calls `refresh` when what
-// it has is missing or older than VIEWER_ROLES_TTL_MS.
+// it has is missing. A cached row is deleted VIEWER_ROLES_TTL_MS after its
+// check, so a row a query finds is fresh and a query needs no clock.
 
 export type RefreshRolesResult =
   | { ok: true; follower: boolean; subscriberTier: SubscriberTier | null; checkedAt: number }
@@ -150,7 +152,8 @@ export interface RefreshRecord {
 /**
  * Writes what a refresh learned: renewed tokens (unless a new sign-in replaced
  * the grant meanwhile) or a refused grant, and for the channel either the new
- * roles, which end any outage, or the time the platform could not answer.
+ * roles, which end any outage and are deleted once they expire, or the time
+ * the platform could not answer.
  */
 export async function recordViewerRoleRefresh(ctx: MutationCtx, record: RefreshRecord, now: number): Promise<void> {
   const { viewerId, tokens, channel } = record;
@@ -201,12 +204,42 @@ export async function recordViewerRoleRefresh(ctx: MutationCtx, record: RefreshR
       q.eq("viewerId", viewerId).eq("platform", platform).eq("broadcasterPlatformUserId", broadcasterPlatformUserId)
     )
     .unique();
+  let rolesId: Id<"viewerRoles">;
   if (existing) {
     await ctx.db.patch(existing._id, roles);
+    rolesId = existing._id;
   } else {
-    await ctx.db.insert("viewerRoles", { viewerId, ...roles });
+    rolesId = await ctx.db.insert("viewerRoles", { viewerId, ...roles });
+  }
+  await ctx.scheduler.runAt(result.checkedAt + VIEWER_ROLES_TTL_MS, internal.viewerRoles.expireRoles, {
+    id: rolesId,
+    checkedAt: result.checkedAt,
+  });
+}
+
+/**
+ * Deletes cached roles once the check they record has expired. A later check
+ * moves `checkedAt` on and schedules its own expiry, so a row checked again
+ * since is left alone.
+ */
+export async function expireViewerRoles(
+  ctx: MutationCtx,
+  args: { id: Id<"viewerRoles">; checkedAt: number }
+): Promise<void> {
+  const row = await ctx.db.get(args.id);
+  if (row && row.checkedAt === args.checkedAt) {
+    await ctx.db.delete(args.id);
   }
 }
+
+export const expireRoles = internalMutation({
+  args: { id: v.id("viewerRoles"), checkedAt: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await expireViewerRoles(ctx, args);
+    return null;
+  },
+});
 
 export const recordRefresh = internalMutation({
   args: {
