@@ -158,7 +158,6 @@ import type * as lib_recapClips from "../lib/recapClips.js";
 import type * as lib_recapMarkers from "../lib/recapMarkers.js";
 import type * as lib_relayCredential from "../lib/relayCredential.js";
 import type * as lib_releaseVersion from "../lib/releaseVersion.js";
-import type * as lib_resourceKinds from "../lib/resourceKinds.js";
 import type * as lib_runTriggerEvent from "../lib/runTriggerEvent.js";
 import type * as lib_safeRedirect from "../lib/safeRedirect.js";
 import type * as lib_sceneCascade from "../lib/sceneCascade.js";
@@ -439,7 +438,6 @@ declare const fullApi: ApiFromModules<{
   "lib/recapMarkers": typeof lib_recapMarkers;
   "lib/relayCredential": typeof lib_relayCredential;
   "lib/releaseVersion": typeof lib_releaseVersion;
-  "lib/resourceKinds": typeof lib_resourceKinds;
   "lib/runTriggerEvent": typeof lib_runTriggerEvent;
   "lib/safeRedirect": typeof lib_safeRedirect;
   "lib/sceneCascade": typeof lib_sceneCascade;
