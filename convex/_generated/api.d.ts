@@ -109,7 +109,6 @@ import type * as lib_instanceTeardown from "../lib/instanceTeardown.js";
 import type * as lib_integrationClientId from "../lib/integrationClientId.js";
 import type * as lib_invitationTarget from "../lib/invitationTarget.js";
 import type * as lib_knownDiscoverers from "../lib/knownDiscoverers.js";
-import type * as lib_localEndpoints from "../lib/localEndpoints.js";
 import type * as lib_macroExecution from "../lib/macroExecution.js";
 import type * as lib_macroTrigger from "../lib/macroTrigger.js";
 import type * as lib_macroVariables from "../lib/macroVariables.js";
@@ -130,10 +129,7 @@ import type * as lib_marketplaceInstallRecords from "../lib/marketplaceInstallRe
 import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_moduleArchiveFiles from "../lib/moduleArchiveFiles.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
-import type * as lib_moduleFunctionSummary from "../lib/moduleFunctionSummary.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
-import type * as lib_moduleOAuth from "../lib/moduleOAuth.js";
-import type * as lib_modulePermissions from "../lib/modulePermissions.js";
 import type * as lib_moduleSettingsVisibility from "../lib/moduleSettingsVisibility.js";
 import type * as lib_notifications from "../lib/notifications.js";
 import type * as lib_oauthCallback from "../lib/oauthCallback.js";
@@ -389,7 +385,6 @@ declare const fullApi: ApiFromModules<{
   "lib/integrationClientId": typeof lib_integrationClientId;
   "lib/invitationTarget": typeof lib_invitationTarget;
   "lib/knownDiscoverers": typeof lib_knownDiscoverers;
-  "lib/localEndpoints": typeof lib_localEndpoints;
   "lib/macroExecution": typeof lib_macroExecution;
   "lib/macroTrigger": typeof lib_macroTrigger;
   "lib/macroVariables": typeof lib_macroVariables;
@@ -410,10 +405,7 @@ declare const fullApi: ApiFromModules<{
   "lib/moderation": typeof lib_moderation;
   "lib/moduleArchiveFiles": typeof lib_moduleArchiveFiles;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
-  "lib/moduleFunctionSummary": typeof lib_moduleFunctionSummary;
   "lib/moduleKey": typeof lib_moduleKey;
-  "lib/moduleOAuth": typeof lib_moduleOAuth;
-  "lib/modulePermissions": typeof lib_modulePermissions;
   "lib/moduleSettingsVisibility": typeof lib_moduleSettingsVisibility;
   "lib/notifications": typeof lib_notifications;
   "lib/oauthCallback": typeof lib_oauthCallback;
