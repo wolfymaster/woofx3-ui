@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { COUNTER_KIND } from "@convex/lib/resourceKinds";
+import { COUNTER_KIND } from "@shared/resource-kinds";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Clapperboard, Loader2, Maximize2, Plus, Radio, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

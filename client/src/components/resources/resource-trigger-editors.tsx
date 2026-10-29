@@ -1,4 +1,4 @@
-import { bareKind } from "@convex/lib/resourceKinds";
+import { bareKind } from "@shared/resource-kinds";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { EventTriggerList } from "@/components/alerts/event-trigger-list";

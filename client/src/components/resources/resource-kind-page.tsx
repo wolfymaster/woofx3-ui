@@ -1,4 +1,4 @@
-import { bareKind, parseKindRef, WOOFX3_MODULE } from "@convex/lib/resourceKinds";
+import { bareKind, parseKindRef, WOOFX3_MODULE } from "@shared/resource-kinds";
 import { Boxes, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";

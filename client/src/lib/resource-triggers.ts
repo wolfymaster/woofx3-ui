@@ -1,4 +1,4 @@
-import { resourceKindMatches } from "@convex/lib/resourceKinds";
+import { resourceKindMatches } from "@shared/resource-kinds";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
 /** A trigger that can be narrowed to one instance of a resource kind, and the field that does it. */

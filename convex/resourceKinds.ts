@@ -1,12 +1,12 @@
-import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
-import { type QueryCtx, query } from "./_generated/server";
 import {
   type KindDeclarer,
   manifestModuleName,
   parseManifestResourceKinds,
   resolveResourceKind,
-} from "./lib/resourceKinds";
+} from "@shared/resource-kinds";
+import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
+import { type QueryCtx, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
 
 /**

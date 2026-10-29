@@ -1,4 +1,4 @@
-import { bareKind, parseKindRef } from "@convex/lib/resourceKinds";
+import { bareKind, parseKindRef } from "@shared/resource-kinds";
 import { ChevronLeft, Plus, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
