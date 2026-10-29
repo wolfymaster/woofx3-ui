@@ -464,10 +464,7 @@ export default defineSchema({
   // platformLinks: OAuth grants for streaming platforms (Twitch, etc.) per
   // instance. The tokens are stored sealed with PLATFORM_TOKEN_ENCRYPTION_KEY
   // (lib/tokenCipher.ts) and read and written only through
-  // lib/platformLinkTokens.ts. Rows linked before sealing still hold
-  // accessToken/refreshToken in the clear until
-  // migrations/sealPlatformLinkTokens converts them; every write stores the
-  // sealed pair and clears the plaintext one.
+  // lib/platformLinkTokens.ts.
   platformLinks: defineTable({
     instanceId: v.id("instances"),
     platform: v.string(),
@@ -475,10 +472,8 @@ export default defineSchema({
     platformUsername: v.string(),
     profileImageUrl: v.optional(v.string()),
     channelId: v.string(),
-    sealedAccessToken: v.optional(v.string()),
-    sealedRefreshToken: v.optional(v.string()),
-    accessToken: v.optional(v.string()),
-    refreshToken: v.optional(v.string()),
+    sealedAccessToken: v.string(),
+    sealedRefreshToken: v.string(),
     expiresAt: v.number(),
     scopes: v.array(v.string()),
     connectedByUserId: v.optional(v.string()),
@@ -1328,13 +1323,9 @@ export default defineSchema({
         platformUserId: v.string(),
         platformUsername: v.string(),
         profileImageUrl: v.optional(v.string()),
-        // Sealed like platformLinks, which they are copied into. A handoff
-        // stored before sealing carries plaintext instead and is refused when
-        // claimed; it expires within HANDOFF_TTL_MS either way.
-        sealedAccessToken: v.optional(v.string()),
-        sealedRefreshToken: v.optional(v.string()),
-        accessToken: v.optional(v.string()),
-        refreshToken: v.optional(v.string()),
+        // Sealed like platformLinks, which they are copied into.
+        sealedAccessToken: v.string(),
+        sealedRefreshToken: v.string(),
         expiresAt: v.number(),
         scopes: v.array(v.string()),
       })

@@ -4,8 +4,8 @@ import { generateOpaqueToken, hashOpaqueToken } from "./lib/oauthHandoff";
 import { insertTwitchLink, linkFixture, readLink } from "./lib/platformLinks.fixtures";
 
 // The functions that hand a streamer's Twitch token to its callers: each
-// returns the token in the clear, whichever shape the row stores it in, and
-// none returns or leaves behind anything else.
+// returns the token in the clear, and none returns or leaves behind anything
+// else.
 
 const savedFetch = globalThis.fetch;
 afterEach(() => {
@@ -37,31 +37,20 @@ describe("ensureFreshTwitchToken", () => {
     expect(token?.accessToken).toBe("access-1");
   });
 
-  test("reads a link not sealed yet", async () => {
+  test("renews a link and stores the renewed grant sealed", async () => {
     const f = await linkFixture();
-    await insertTwitchLink(f, { plaintext: true });
+    const linkId = await insertTwitchLink(f, { expiresAt: Date.now() });
+    const sent = twitchRenews({ access_token: "access-2", refresh_token: "refresh-2" });
+
     const token = await f.t.action(internal.platformRealtime.ensureFreshTwitchToken, { instanceId: f.instanceId });
-    expect(token?.accessToken).toBe("access-1");
+
+    expect(sent).toEqual(["refresh-1"]);
+    expect(token?.accessToken).toBe("access-2");
+    const row = await readLink(f.t, linkId);
+    expectNoTokenIn(row, "access-2", "refresh-2");
+    expect(await f.cipher.open(row?.sealedAccessToken ?? "")).toBe("access-2");
+    expect(await f.cipher.open(row?.sealedRefreshToken ?? "")).toBe("refresh-2");
   });
-
-  for (const plaintext of [false, true]) {
-    test(`renews a ${plaintext ? "plaintext" : "sealed"} link and stores the renewed grant sealed`, async () => {
-      const f = await linkFixture();
-      const linkId = await insertTwitchLink(f, { plaintext, expiresAt: Date.now() });
-      const sent = twitchRenews({ access_token: "access-2", refresh_token: "refresh-2" });
-
-      const token = await f.t.action(internal.platformRealtime.ensureFreshTwitchToken, { instanceId: f.instanceId });
-
-      expect(sent).toEqual(["refresh-1"]);
-      expect(token?.accessToken).toBe("access-2");
-      const row = await readLink(f.t, linkId);
-      expect(row?.accessToken).toBeUndefined();
-      expect(row?.refreshToken).toBeUndefined();
-      expectNoTokenIn(row, "access-2", "refresh-2");
-      expect(await f.cipher.open(row?.sealedAccessToken ?? "")).toBe("access-2");
-      expect(await f.cipher.open(row?.sealedRefreshToken ?? "")).toBe("refresh-2");
-    });
-  }
 
   test("refuses a link sealed under another key rather than handing out garbage", async () => {
     const f = await linkFixture();
@@ -84,26 +73,23 @@ describe("grantTokenToEngine", () => {
 });
 
 describe("getPlatformLinks", () => {
-  for (const plaintext of [false, true]) {
-    test(`returns no token field from a ${plaintext ? "plaintext" : "sealed"} link`, async () => {
-      const f = await linkFixture();
-      await insertTwitchLink(f, { plaintext });
-      const rows = await f.owner.query(api.instances.getPlatformLinks, { instanceId: f.instanceId });
-      expect(rows).toHaveLength(1);
-      for (const key of ["accessToken", "refreshToken", "sealedAccessToken", "sealedRefreshToken"]) {
-        expect(key in rows[0]).toBe(false);
-      }
-      expectNoTokenIn(rows, "access-1", "refresh-1", "p1.");
-    });
-  }
+  test("returns no token field", async () => {
+    const f = await linkFixture();
+    await insertTwitchLink(f);
+    const rows = await f.owner.query(api.instances.getPlatformLinks, { instanceId: f.instanceId });
+    expect(rows).toHaveLength(1);
+    for (const key of ["accessToken", "refreshToken", "sealedAccessToken", "sealedRefreshToken"]) {
+      expect(key in rows[0]).toBe(false);
+    }
+    expectNoTokenIn(rows, "access-1", "refresh-1", "p1.");
+  });
 });
 
 describe("completeConnect", () => {
-  async function storeHandoff(
-    f: Awaited<ReturnType<typeof linkFixture>>,
-    code: string,
-    tokens: Record<string, string>
-  ): Promise<void> {
+  test("replaces the link's grant with the sealed one from the handoff", async () => {
+    const f = await linkFixture();
+    const linkId = await insertTwitchLink(f);
+    const code = generateOpaqueToken();
     await f.t.run(async (ctx) => {
       await ctx.db.insert("oauthConnectHandoffs", {
         codeHash: await hashOpaqueToken(code),
@@ -114,22 +100,13 @@ describe("completeConnect", () => {
         twitch: {
           platformUserId: "42",
           platformUsername: "wolfy",
+          sealedAccessToken: await f.cipher.seal("access-9"),
+          sealedRefreshToken: await f.cipher.seal("refresh-9"),
           expiresAt: 4_000_000_000_000,
           scopes: ["chat:read"],
-          ...tokens,
         },
         createdAt: Date.now(),
       });
-    });
-  }
-
-  test("writes the sealed grant over a plaintext link and clears the plaintext", async () => {
-    const f = await linkFixture();
-    const linkId = await insertTwitchLink(f, { plaintext: true });
-    const code = generateOpaqueToken();
-    await storeHandoff(f, code, {
-      sealedAccessToken: await f.cipher.seal("access-9"),
-      sealedRefreshToken: await f.cipher.seal("refresh-9"),
     });
 
     const result = await f.t.mutation(internal.twitchIntegration.completeConnect, {
@@ -139,20 +116,7 @@ describe("completeConnect", () => {
 
     expect(result.ok).toBe(true);
     const row = await readLink(f.t, linkId);
-    expect(row?.accessToken).toBeUndefined();
-    expect(row?.refreshToken).toBeUndefined();
     expect(await f.cipher.open(row?.sealedAccessToken ?? "")).toBe("access-9");
-  });
-
-  test("refuses a handoff stored with plaintext tokens", async () => {
-    const f = await linkFixture();
-    const code = generateOpaqueToken();
-    await storeHandoff(f, code, { accessToken: "access-9", refreshToken: "refresh-9" });
-    const result = await f.t.mutation(internal.twitchIntegration.completeConnect, {
-      codeHash: await hashOpaqueToken(code),
-      userId: f.ownerId,
-    });
-    expect(result).toEqual({ ok: false, error: "connect_code_invalid" });
-    expect(await f.t.run((ctx) => ctx.db.query("platformLinks").take(1))).toEqual([]);
+    expect(await f.cipher.open(row?.sealedRefreshToken ?? "")).toBe("refresh-9");
   });
 });

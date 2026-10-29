@@ -70,28 +70,6 @@ Each key is 32 random bytes, base64url: `openssl rand -base64 32 | tr '+/' '-_' 
 
 Without `PLATFORM_TOKEN_ENCRYPTION_KEY`, connecting Twitch and every Twitch call fail rather than store or read a token in the clear.
 
-### Sealing links stored in the clear
-
-Links connected before encryption hold their tokens in plaintext until the sealing migration converts them. Until it has run, reads accept either shape, and every write (a connect, a relink, a token refresh) stores the sealed pair and removes the plaintext one.
-
-1. Set `PLATFORM_TOKEN_ENCRYPTION_KEY` on the deployment.
-2. Deploy the release that seals tokens.
-3. Run the migration. It reads links a page at a time and seals each one on its own; a link it cannot convert is recorded and left as it was:
-
-   ```bash
-   bunx convex run --prod migrations/sealPlatformLinkTokens:default
-   ```
-
-4. Check the report it returns, or the latest run at any time:
-
-   ```bash
-   bunx convex run --prod migrations/sealPlatformLinkTokens:status
-   ```
-
-   A finished migration shows `status: "completed"` and `failed: 0`. Run it again: it is safe to repeat, and a second run should show `converted: 0` with every link `skipped`. Each listed failure names the link and why it could not be sealed; fix or disconnect those links and run it again.
-
-5. Only then deploy the release that drops the plaintext fields from the schema. Convex refuses to deploy that schema while any link still holds a plaintext token, so deploying it too early fails without harm.
-
 ## Rolling back
 
 - **UI**: in Railway, open the UI service's deployments and redeploy an earlier one. Each deployment is pinned to an image SHA, so this restores that exact build. The next merge to `master` deploys over it.

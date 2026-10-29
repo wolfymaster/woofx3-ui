@@ -10,7 +10,7 @@ import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
-import { openPlatformLinkTokens, platformTokenCipher, storedTokensPatch } from "./lib/platformLinkTokens";
+import { openPlatformLinkTokens, platformTokenCipher } from "./lib/platformLinkTokens";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
@@ -105,10 +105,6 @@ export const completeConnect = internalMutation({
     if (refusal) {
       return { ok: false, error: "relink_mismatch", detail: refusal };
     }
-    const { sealedAccessToken, sealedRefreshToken } = twitch;
-    if (sealedAccessToken === undefined || sealedRefreshToken === undefined) {
-      return { ok: false, error: "connect_code_invalid" };
-    }
 
     const link = {
       instanceId,
@@ -117,16 +113,17 @@ export const completeConnect = internalMutation({
       platformUsername: twitch.platformUsername,
       profileImageUrl: twitch.profileImageUrl,
       channelId: twitch.platformUserId,
+      sealedAccessToken: twitch.sealedAccessToken,
+      sealedRefreshToken: twitch.sealedRefreshToken,
       expiresAt: twitch.expiresAt,
       scopes: twitch.scopes,
       connectedByUserId: userId,
     };
-    const sealed = { sealedAccessToken, sealedRefreshToken };
     if (existing) {
       // A fresh grant supersedes a refresh Twitch refused earlier.
-      await ctx.db.patch(existing._id, { ...link, ...storedTokensPatch(sealed), authFailedAt: undefined });
+      await ctx.db.patch(existing._id, { ...link, authFailedAt: undefined });
     } else {
-      await ctx.db.insert("platformLinks", { ...link, ...sealed });
+      await ctx.db.insert("platformLinks", link);
     }
     return { ok: true, redirectTo, instanceId };
   },
