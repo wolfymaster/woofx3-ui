@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Id } from "./_generated/dataModel";
+import { VIEWER_ROLES_TTL_MS } from "./lib/viewerAuth";
 import { fakeViewerCtx } from "./lib/viewerDb.fakes";
-import { recordViewerRoleRefresh } from "./viewerRoles";
+import { expireViewerRoles, recordViewerRoleRefresh } from "./viewerRoles";
 
 const NOW = 1_800_000_000_000;
 const VIEWER = "viewers:1" as Id<"viewers">;
@@ -53,5 +54,61 @@ describe("recordViewerRoleRefresh", () => {
       NOW
     );
     expect(fake.tables.get("viewerRoleOutages")).toHaveLength(1);
+  });
+});
+
+describe("cached roles expiry", () => {
+  const checked = (checkedAt: number) =>
+    ({ kind: "checked", follower: true, subscriberTier: null, checkedAt }) as const;
+
+  test("a stored check schedules its own deletion at the end of its lifetime", async () => {
+    const fake = fakeViewerCtx();
+    await recordViewerRoleRefresh(fake.ctx, { viewerId: VIEWER, channel: { ...CHANNEL, result: checked(NOW) } }, NOW);
+    const [row] = fake.tables.get("viewerRoles") ?? [];
+    expect(fake.scheduled).toEqual([{ at: NOW + VIEWER_ROLES_TTL_MS, args: { id: row?._id, checkedAt: NOW } }]);
+  });
+
+  test("an outage schedules nothing", async () => {
+    const fake = fakeViewerCtx();
+    await recordViewerRoleRefresh(
+      fake.ctx,
+      { viewerId: VIEWER, channel: { ...CHANNEL, result: { kind: "unavailable", failedAt: NOW } } },
+      NOW
+    );
+    expect(fake.scheduled).toEqual([]);
+  });
+
+  test("deletes the roles the expiring check recorded", async () => {
+    const fake = fakeViewerCtx();
+    await recordViewerRoleRefresh(fake.ctx, { viewerId: VIEWER, channel: { ...CHANNEL, result: checked(NOW) } }, NOW);
+    const [expiry] = fake.scheduled;
+    await expireViewerRoles(fake.ctx, expiry?.args as Parameters<typeof expireViewerRoles>[1]);
+    expect(fake.tables.get("viewerRoles")).toEqual([]);
+  });
+
+  test("leaves roles checked again since the expiring check", async () => {
+    const fake = fakeViewerCtx();
+    await recordViewerRoleRefresh(fake.ctx, { viewerId: VIEWER, channel: { ...CHANNEL, result: checked(NOW) } }, NOW);
+    const later = NOW + VIEWER_ROLES_TTL_MS + 1;
+    await recordViewerRoleRefresh(
+      fake.ctx,
+      { viewerId: VIEWER, channel: { ...CHANNEL, result: checked(later) } },
+      later
+    );
+    const [first, second] = fake.scheduled;
+    await expireViewerRoles(fake.ctx, first?.args as Parameters<typeof expireViewerRoles>[1]);
+    expect(fake.tables.get("viewerRoles")).toMatchObject([{ checkedAt: later }]);
+    await expireViewerRoles(fake.ctx, second?.args as Parameters<typeof expireViewerRoles>[1]);
+    expect(fake.tables.get("viewerRoles")).toEqual([]);
+  });
+
+  test("expiring roles that are already gone succeeds", async () => {
+    const fake = fakeViewerCtx();
+    await recordViewerRoleRefresh(fake.ctx, { viewerId: VIEWER, channel: { ...CHANNEL, result: checked(NOW) } }, NOW);
+    const [expiry] = fake.scheduled;
+    const args = expiry?.args as Parameters<typeof expireViewerRoles>[1];
+    await expireViewerRoles(fake.ctx, args);
+    await expireViewerRoles(fake.ctx, args);
+    expect(fake.tables.get("viewerRoles")).toEqual([]);
   });
 });

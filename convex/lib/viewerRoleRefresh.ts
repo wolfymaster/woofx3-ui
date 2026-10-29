@@ -3,7 +3,7 @@
  * Convex action that persists the outcome so the decision can be tested with
  * only the platform's HTTP faked.
  */
-import { type ViewerRoles, viewerRolesFresh, viewerRolesOutageActive } from "./viewerAuth";
+import { type ViewerRoles, viewerRolesDueForRenewal, viewerRolesOutageActive } from "./viewerAuth";
 import type { ViewerPlatformClient, ViewerRoleFacts, ViewerTokenGrant } from "./viewerPlatforms";
 
 /** Refresh an access token this close to expiring before using it. */
@@ -38,7 +38,7 @@ export type RoleRefreshOutcome =
 
 export async function refreshViewerRoles(input: RoleRefreshInput): Promise<RoleRefreshOutcome> {
   const { client, now, cached, grant } = input;
-  if (cached !== null && viewerRolesFresh(cached, now)) {
+  if (cached !== null && !viewerRolesDueForRenewal(cached, now)) {
     return { kind: "cached", roles: cached };
   }
   if (grant === null) {

@@ -36,6 +36,7 @@ export default defineConfig({
             { text: "Auth & onboarding", link: "/ui/auth-onboarding" },
             { text: "Viewer sign-in", link: "/ui/viewer-sign-in" },
             { text: "Companion app", link: "/ui/companion" },
+            { text: "User pages", link: "/ui/user-pages" },
             { text: "Convex & HTTP", link: "/ui/convex-surface" },
           ],
         },

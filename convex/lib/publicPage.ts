@@ -1,15 +1,18 @@
-import {
-  isPublicSection,
-  type PageContent,
-  type PageWidget,
-  type PageWidgetConfig,
-  type PublicLiveStatus,
-  type PublicPageLookup,
-  type PublicPageSection,
-  type PublicPageWidget,
-  type PublicResourceState,
+import type {
+  PageContent,
+  PageSection,
+  PageWidget,
+  PageWidgetConfig,
+  PublicLiveStatus,
+  PublicPageLookup,
+  PublicPageSection,
+  PublicPageWidget,
+  PublicResourceState,
+  SectionRequirement,
 } from "@shared/user-pages";
 import type { Doc } from "../_generated/dataModel";
+import { gatedOnRoles, type PageViewer, type SectionAccess, sectionAccess } from "./sectionAccess";
+import { viewerRolesRenewAt } from "./viewerAuth";
 
 /** What a published page's widgets read besides their own config. */
 export interface PublicPageSources {
@@ -55,21 +58,66 @@ function toPublicWidget(widget: PageWidget, sources: PublicPageSources): PublicP
   }
 }
 
+/** Each section of `content` with whether `viewer` may see it, in page order. */
+export function sectionsForViewer(
+  content: PageContent,
+  viewer: PageViewer
+): { section: PageSection; access: SectionAccess }[] {
+  return content.sections.map((section) => ({ section, access: sectionAccess(section.visibility, viewer) }));
+}
+
+/** The sections `viewer` may see, the only ones whose bindings and live facts the read loads. */
+export function openSections(content: PageContent, viewer: PageViewer): PageSection[] {
+  return sectionsForViewer(content, viewer)
+    .filter(({ access }) => access.kind === "open")
+    .map(({ section }) => section);
+}
+
+function requirementOf(section: PageSection): SectionRequirement {
+  if (section.visibility.kind === "public") {
+    throw new Error(`public section ${section.id} cannot be locked`);
+  }
+  return section.visibility;
+}
+
 /**
- * The published content as a visitor may see it: public sections only, until
- * the read knows who the viewer is, and every binding replaced by its value.
+ * The published content as `viewer` may see it, every binding replaced by its
+ * value. A section the viewer may not see keeps its place as a locked
+ * placeholder carrying only its region and requirement.
  */
 export function toPublicPage(
   slug: string,
   content: PageContent,
   publishedAt: number,
+  viewer: PageViewer,
   sources: PublicPageSources
 ): Extract<PublicPageLookup, { kind: "page" }> {
-  const sections: PublicPageSection[] = content.sections.filter(isPublicSection).map((section) => ({
-    id: section.id,
-    region: section.region,
-    ...(section.title !== undefined ? { title: section.title } : {}),
-    widgets: section.widgets.map((widget) => toPublicWidget(widget, sources)),
-  }));
-  return { kind: "page", slug, layout: content.layout, theme: content.theme, sections, publishedAt };
+  const decided = sectionsForViewer(content, viewer);
+  const sections: PublicPageSection[] = decided.map(({ section, access }) =>
+    access.kind === "open"
+      ? {
+          kind: "open",
+          id: section.id,
+          region: section.region,
+          ...(section.title !== undefined ? { title: section.title } : {}),
+          widgets: section.widgets.map((widget) => toPublicWidget(widget, sources)),
+        }
+      : { kind: "locked", region: section.region, requirement: requirementOf(section), reason: access.reason }
+  );
+  const rolesStale = decided.some(({ access }) => access.kind === "locked" && access.reason === "roles_unknown");
+  const usesRoles = content.sections.some((section) => gatedOnRoles(section.visibility));
+  const rolesRenewAt =
+    usesRoles && viewer.kind === "signed_in" && viewer.roles.kind === "known"
+      ? viewerRolesRenewAt(viewer.roles.checkedAt)
+      : null;
+  return {
+    kind: "page",
+    slug,
+    layout: content.layout,
+    theme: content.theme,
+    sections,
+    rolesStale,
+    rolesRenewAt,
+    publishedAt,
+  };
 }

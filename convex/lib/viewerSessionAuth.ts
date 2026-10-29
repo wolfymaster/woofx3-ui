@@ -57,9 +57,10 @@ export async function requireViewer(ctx: QueryCtx, sessionToken: string): Promis
 
 /**
  * The viewer's cached roles on a broadcaster's channel, or null when they
- * were never checked. Freshness is the caller's call (`viewerRolesFresh`):
- * a query has no clock, so a page shows what is cached and asks
- * `viewerRoles.refresh` for newer facts.
+ * were never checked or the check has expired. A row is deleted
+ * VIEWER_ROLES_TTL_MS after its check (viewerRoles.ts), so what this returns
+ * is fresh without the query reading a clock; a page asks
+ * `viewerRoles.refresh` when it gets null.
  */
 export async function viewerRolesFor(
   ctx: QueryCtx,

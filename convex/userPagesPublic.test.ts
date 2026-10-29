@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { defaultPageContent, type PageContent, type PageSection, type PublicPageLookup } from "@shared/user-pages";
+import {
+  defaultPageContent,
+  type PageContent,
+  type PageSection,
+  type PublicPageLookup,
+  type SectionVisibility,
+} from "@shared/user-pages";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { generateOpaqueToken, hashOpaqueToken } from "./lib/oauthHandoff";
 import { COUNTER, type Fixture, type FixtureOptions, fixture } from "./lib/userPages.fixtures";
+import { VIEWER_ROLES_RENEW_LEAD_MS, VIEWER_ROLES_TTL_MS } from "./lib/viewerAuth";
 
 const SECRET = "woofx3:counter:secret";
 
@@ -64,20 +73,29 @@ async function publishContent(f: Fixture, page: PageContent): Promise<void> {
   await f.owner.mutation(api.userPages.publish, { instanceId: f.instanceId, revision });
 }
 
-async function lookup(f: Fixture, slug = "wolfy"): Promise<PublicPageLookup> {
-  return f.t.query(api.userPagesPublic.bySlug, { slug });
+async function lookup(f: Fixture, slug = "wolfy", sessionToken?: string): Promise<PublicPageLookup> {
+  return f.t.query(api.userPagesPublic.bySlug, sessionToken === undefined ? { slug } : { slug, sessionToken });
 }
 
-async function shownPage(f: Fixture): Promise<Extract<PublicPageLookup, { kind: "page" }>> {
-  const result = await lookup(f);
+async function shownPage(f: Fixture, sessionToken?: string): Promise<Extract<PublicPageLookup, { kind: "page" }>> {
+  const result = await lookup(f, "wolfy", sessionToken);
   if (result.kind !== "page") {
     throw new Error(`expected a page, got ${result.kind}`);
   }
   return result;
 }
 
+/** The first widget of the page's first section, which the test expects to be open. */
+function firstWidget(page: Extract<PublicPageLookup, { kind: "page" }>) {
+  const section = page.sections[0];
+  if (section?.kind !== "open") {
+    throw new Error("expected the first section to be open");
+  }
+  return section.widgets[0];
+}
+
 function counterState(page: Extract<PublicPageLookup, { kind: "page" }>) {
-  const widget = page.sections[0]?.widgets[0];
+  const widget = firstWidget(page);
   if (widget?.type !== "counter") {
     throw new Error("expected the first widget to be the counter");
   }
@@ -169,15 +187,21 @@ describe("bySlug", () => {
     expect((await lookup(f)).kind).toBe("page");
   });
 
-  test("leaves out sections that are not public, and the values only they bind", async () => {
+  test("shows an anonymous visitor a gated section only as its requirement, and none of what it binds", async () => {
     const f = await seeded();
     await publishContent(f, content([PUBLIC_COUNTER, SUBSCRIBER_SECRET]));
     const page = await shownPage(f);
-    expect(page.sections.map((section) => section.id)).toEqual(["stats"]);
+    expect(page.sections).toMatchObject([
+      { kind: "open", id: "stats" },
+      { kind: "locked", region: "main", requirement: { kind: "subscriber" }, reason: "sign_in" },
+    ]);
+    expect(Object.keys(page.sections[1] ?? {}).sort()).toEqual(["kind", "reason", "region", "requirement"]);
+    expect(page.rolesStale).toBe(false);
     const json = JSON.stringify(page);
     expect(json).not.toContain("4242");
     expect(json).not.toContain("subs only");
     expect(json).not.toContain("For subs");
+    expect(json).not.toContain('"subs"');
   });
 
   test("never names the account, the instance or a resource", async () => {
@@ -217,7 +241,7 @@ describe("bySlug", () => {
       });
     });
     const page = await shownPage(f);
-    expect(page.sections[0]?.widgets[0]).toMatchObject({ live: { isLive: true, title: "Deathless run" } });
+    expect(firstWidget(page)).toMatchObject({ live: { isLive: true, title: "Deathless run" } });
     expect(JSON.stringify(page)).not.toContain("Elden Ring");
   });
 });
@@ -321,11 +345,290 @@ describe("the published values", () => {
       canonicalId: TIMER,
       value: running,
     });
-    expect((await shownPage(f)).sections[0]?.widgets[0]).toEqual({
+    expect(firstWidget(await shownPage(f))).toEqual({
       id: "break",
       type: "timer",
       config: {},
       state: { kind: "woofx3:timer", value: running, settings: { duration: 300 } },
     });
+  });
+});
+
+const BROADCASTER = "B1";
+
+/** Links the fixture's instance to a Twitch channel, as onboarding does. */
+async function linkChannel(f: Fixture, platform = "twitch"): Promise<void> {
+  await f.t.run(async (ctx) => {
+    await ctx.db.insert("platformLinks", {
+      instanceId: f.instanceId,
+      platform,
+      platformUserId: BROADCASTER,
+      platformUsername: "wolfy",
+      channelId: BROADCASTER,
+      accessToken: "streamer-access",
+      refreshToken: "streamer-refresh",
+      expiresAt: 1,
+      scopes: [],
+    });
+  });
+}
+
+interface SignedInViewer {
+  viewerId: Id<"viewers">;
+  sessionToken: string;
+}
+
+async function signInViewer(f: Fixture): Promise<SignedInViewer> {
+  const sessionToken = generateOpaqueToken();
+  const tokenHash = await hashOpaqueToken(sessionToken);
+  const viewerId = await f.t.run(async (ctx) => {
+    const id = await ctx.db.insert("viewers", {
+      platform: "twitch",
+      platformUserId: "V1",
+      login: "viewer",
+      displayName: "Viewer",
+      updatedAt: 1,
+    });
+    await ctx.db.insert("viewerSessions", { tokenHash, viewerId: id, origin: "https://woofx3.tv", expiresAt: 1 });
+    return id;
+  });
+  return { viewerId, sessionToken };
+}
+
+async function cacheRoles(
+  f: Fixture,
+  viewer: SignedInViewer,
+  roles: { follower: boolean; subscriberTier: 1 | 2 | 3 | null }
+): Promise<Id<"viewerRoles">> {
+  return f.t.run(async (ctx) =>
+    ctx.db.insert("viewerRoles", {
+      viewerId: viewer.viewerId,
+      platform: "twitch",
+      broadcasterPlatformUserId: BROADCASTER,
+      checkedAt: 1,
+      ...roles,
+    })
+  );
+}
+
+function gated(visibility: SectionVisibility): PageSection {
+  return {
+    id: "secret-giveaway",
+    region: "main",
+    title: "Secret giveaway code",
+    visibility,
+    widgets: [counterWidget("secret", SECRET), { id: "note", type: "text", config: { markdown: "the code is HOWL" } }],
+  };
+}
+
+/** Everything a gated section holds that must not reach a viewer who may not see it. */
+const GATED_CONTENT = ["4242", "HOWL", "Secret giveaway code", "secret-giveaway", '"note"'];
+
+function expectNoGatedContent(page: Extract<PublicPageLookup, { kind: "page" }>): void {
+  const json = JSON.stringify(page);
+  for (const fragment of GATED_CONTENT) {
+    expect(json).not.toContain(fragment);
+  }
+}
+
+type ViewerState =
+  | "anonymous"
+  | "invalid token"
+  | "signed out"
+  | "signed in, no roles cached"
+  | "signed in, channel not linked"
+  | "not following"
+  | "follower"
+  | "tier 1"
+  | "tier 2"
+  | "tier 3";
+
+/** Sets up `state` on a fixture whose page is already published, returning the token to read with. */
+async function arrange(f: Fixture, state: ViewerState): Promise<string | undefined> {
+  if (state === "anonymous") {
+    return undefined;
+  }
+  if (state === "invalid token") {
+    return generateOpaqueToken();
+  }
+  if (state !== "signed in, channel not linked") {
+    await linkChannel(f);
+  }
+  const viewer = await signInViewer(f);
+  switch (state) {
+    case "signed out":
+      await f.t.mutation(api.viewerSession.signOut, { sessionToken: viewer.sessionToken });
+      break;
+    case "signed in, no roles cached":
+    case "signed in, channel not linked":
+      break;
+    case "not following":
+      await cacheRoles(f, viewer, { follower: false, subscriberTier: null });
+      break;
+    case "follower":
+      await cacheRoles(f, viewer, { follower: true, subscriberTier: null });
+      break;
+    case "tier 1":
+      await cacheRoles(f, viewer, { follower: false, subscriberTier: 1 });
+      break;
+    case "tier 2":
+      await cacheRoles(f, viewer, { follower: true, subscriberTier: 2 });
+      break;
+    case "tier 3":
+      await cacheRoles(f, viewer, { follower: true, subscriberTier: 3 });
+      break;
+  }
+  return viewer.sessionToken;
+}
+
+type Outcome = "open" | "sign_in" | "roles_unknown" | "not_eligible" | "unverifiable";
+
+const VISIBILITIES: [string, SectionVisibility][] = [
+  ["signed_in", { kind: "signed_in" }],
+  ["follower", { kind: "follower" }],
+  ["subscriber", { kind: "subscriber" }],
+  ["tier 2", { kind: "tier", level: 2 }],
+];
+
+// Columns follow VISIBILITIES: signed_in, follower, subscriber, tier 2.
+const OUTCOMES: Record<ViewerState, Outcome[]> = {
+  anonymous: ["sign_in", "sign_in", "sign_in", "sign_in"],
+  "invalid token": ["sign_in", "sign_in", "sign_in", "sign_in"],
+  "signed out": ["sign_in", "sign_in", "sign_in", "sign_in"],
+  "signed in, no roles cached": ["open", "roles_unknown", "roles_unknown", "roles_unknown"],
+  "signed in, channel not linked": ["open", "unverifiable", "unverifiable", "unverifiable"],
+  "not following": ["open", "not_eligible", "not_eligible", "not_eligible"],
+  follower: ["open", "open", "not_eligible", "not_eligible"],
+  "tier 1": ["open", "not_eligible", "open", "not_eligible"],
+  "tier 2": ["open", "open", "open", "open"],
+  "tier 3": ["open", "open", "open", "open"],
+};
+
+describe("bySlug for a viewer", () => {
+  for (const [state, outcomes] of Object.entries(OUTCOMES) as [ViewerState, Outcome[]][]) {
+    VISIBILITIES.forEach(([visibilityName, visibility], column) => {
+      const outcome = outcomes[column];
+      test(`a ${visibilityName} section for ${state} is ${outcome}`, async () => {
+        const f = await seeded();
+        await publishContent(f, content([PUBLIC_COUNTER, gated(visibility)]));
+        const page = await shownPage(f, await arrange(f, state));
+        expect(page.sections[0]).toMatchObject({ kind: "open", id: "stats" });
+        if (outcome === "open") {
+          expect(page.sections[1]).toMatchObject({
+            kind: "open",
+            id: "secret-giveaway",
+            title: "Secret giveaway code",
+            widgets: [{ id: "secret", state: { value: 4242 } }, { id: "note" }],
+          });
+        } else {
+          expect(page.sections[1]).toEqual({
+            kind: "locked",
+            region: "main",
+            requirement: visibility,
+            reason: outcome,
+          });
+          expectNoGatedContent(page);
+        }
+        expect(page.rolesStale).toBe(outcome === "roles_unknown");
+      });
+    });
+  }
+
+  test("a public section is open in every viewer state", async () => {
+    for (const state of Object.keys(OUTCOMES) as ViewerState[]) {
+      const f = await seeded();
+      await publishContent(f, content([PUBLIC_COUNTER]));
+      const page = await shownPage(f, await arrange(f, state));
+      expect(page.sections).toMatchObject([{ kind: "open", id: "stats" }]);
+      expect(page.rolesStale).toBe(false);
+    }
+  });
+
+  test("roles on a channel on another platform do not count", async () => {
+    const f = await seeded();
+    await publishContent(f, content([gated({ kind: "follower" })]));
+    await linkChannel(f, "youtube");
+    const viewer = await signInViewer(f);
+    await cacheRoles(f, viewer, { follower: true, subscriberTier: 3 });
+    const page = await shownPage(f, viewer.sessionToken);
+    expect(page.sections).toEqual([
+      { kind: "locked", region: "main", requirement: { kind: "follower" }, reason: "unverifiable" },
+    ]);
+    expectNoGatedContent(page);
+  });
+
+  test("locks a section again once its viewer's roles expire, and asks for a refresh", async () => {
+    const f = await seeded();
+    await publishContent(f, content([gated({ kind: "follower" })]));
+    await linkChannel(f);
+    const viewer = await signInViewer(f);
+    const rolesId = await cacheRoles(f, viewer, { follower: true, subscriberTier: null });
+    expect((await shownPage(f, viewer.sessionToken)).sections[0]?.kind).toBe("open");
+    await f.t.mutation(internal.viewerRoles.expireRoles, { id: rolesId, checkedAt: 1 });
+    const page = await shownPage(f, viewer.sessionToken);
+    expect(page.rolesStale).toBe(true);
+    expect(page.sections[0]).toMatchObject({ kind: "locked", reason: "roles_unknown" });
+    expectNoGatedContent(page);
+  });
+
+  test("tells a viewer with current roles when to renew them, and nobody else", async () => {
+    const f = await seeded();
+    await publishContent(f, content([PUBLIC_COUNTER, gated({ kind: "follower" })]));
+    await linkChannel(f);
+    expect((await shownPage(f)).rolesRenewAt).toBeNull();
+    const viewer = await signInViewer(f);
+    expect((await shownPage(f, viewer.sessionToken)).rolesRenewAt).toBeNull();
+    await cacheRoles(f, viewer, { follower: false, subscriberTier: null });
+    const page = await shownPage(f, viewer.sessionToken);
+    expect(page.rolesRenewAt).toBe(1 + VIEWER_ROLES_TTL_MS - VIEWER_ROLES_RENEW_LEAD_MS);
+    expect(page.sections[1]).toMatchObject({ kind: "locked", reason: "not_eligible" });
+  });
+
+  test("gives no renewal time on a page with no section gated on roles", async () => {
+    const f = await seeded();
+    await publishContent(f, content([PUBLIC_COUNTER, gated({ kind: "signed_in" })]));
+    await linkChannel(f);
+    const viewer = await signInViewer(f);
+    await cacheRoles(f, viewer, { follower: true, subscriberTier: 1 });
+    expect((await shownPage(f, viewer.sessionToken)).rolesRenewAt).toBeNull();
+  });
+
+  test("keeps the position of a locked section among open ones", async () => {
+    const f = await seeded();
+    const after: PageSection = { ...PUBLIC_COUNTER, id: "after", widgets: [] };
+    await publishContent(f, content([PUBLIC_COUNTER, gated({ kind: "subscriber" }), after]));
+    const page = await shownPage(f);
+    expect(page.sections.map((section) => (section.kind === "open" ? section.id : "locked"))).toEqual([
+      "stats",
+      "locked",
+      "after",
+    ]);
+  });
+
+  test("does not load live facts for a live-status widget the viewer may not see", async () => {
+    const f = await seeded();
+    await publishContent(
+      f,
+      content([
+        {
+          id: "live",
+          region: "main",
+          visibility: { kind: "follower" },
+          widgets: [
+            { id: "status", type: "live-status", config: { showTitle: true, showGame: true, showViewerCount: true } },
+          ],
+        },
+      ])
+    );
+    await f.t.run(async (ctx) => {
+      await ctx.db.insert("instanceLiveState", {
+        instanceId: f.instanceId,
+        isLive: true,
+        streamTitle: "Members-only stream",
+        lastUpdateSource: "webhook",
+        lastUpdatedAt: 1,
+      });
+    });
+    expect(JSON.stringify(await shownPage(f))).not.toContain("Members-only stream");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { VIEWER_ROLES_TTL_MS, VIEWER_ROLES_UNAVAILABLE_TTL_MS } from "./viewerAuth";
+import { VIEWER_ROLES_RENEW_LEAD_MS, VIEWER_ROLES_TTL_MS, VIEWER_ROLES_UNAVAILABLE_TTL_MS } from "./viewerAuth";
 import type { PlatformResult, ViewerPlatformClient, ViewerRoleFacts, ViewerTokenGrant } from "./viewerPlatforms";
 import { refreshViewerRoles, VIEWER_TOKEN_REFRESH_MARGIN_MS } from "./viewerRoleRefresh";
 
@@ -66,11 +66,20 @@ function input(client: ViewerPlatformClient, overrides: Partial<Parameters<typeo
 }
 
 describe("role cache TTL", () => {
-  test("uses cached roles within the TTL without asking the platform", async () => {
+  test("uses cached roles until their renewal is due without asking the platform", async () => {
     const { client, asked } = fakeClient({});
-    const cached = { follower: false, subscriberTier: null, checkedAt: NOW - VIEWER_ROLES_TTL_MS + 1 };
+    const checkedAt = NOW - (VIEWER_ROLES_TTL_MS - VIEWER_ROLES_RENEW_LEAD_MS) + 1;
+    const cached = { follower: false, subscriberTier: null, checkedAt };
     expect(await refreshViewerRoles(input(client, { cached }))).toEqual({ kind: "cached", roles: cached });
     expect(asked).toEqual([]);
+  });
+
+  test("renews cached roles the lead time before they expire", async () => {
+    const { client, asked } = fakeClient({ roles: [{ ok: true, value: FOLLOWER }] });
+    const checkedAt = NOW - (VIEWER_ROLES_TTL_MS - VIEWER_ROLES_RENEW_LEAD_MS);
+    const cached = { follower: false, subscriberTier: null, checkedAt };
+    expect((await refreshViewerRoles(input(client, { cached }))).kind).toBe("checked");
+    expect(asked).toEqual(["roles:a1"]);
   });
 
   test("asks the platform once the cache is older than the TTL", async () => {

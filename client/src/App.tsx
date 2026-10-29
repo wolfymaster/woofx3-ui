@@ -129,6 +129,31 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * `/u/<slug>` is the public user page, a separate app the server answers
+ * (deploy/Caddyfile), so an in-app link there reloads to fetch it. A dashboard
+ * that was itself loaded at `/u/` was served there by mistake; it shows
+ * not-found instead of reloading forever.
+ */
+const USER_PAGE_PREFIX = "/u/";
+const LOADED_AT_USER_PAGE = window.location.pathname.startsWith(USER_PAGE_PREFIX);
+
+function UserPageHandoff() {
+  useEffect(() => {
+    if (!LOADED_AT_USER_PAGE) {
+      window.location.reload();
+    }
+  }, []);
+  if (!LOADED_AT_USER_PAGE) {
+    return null;
+  }
+  return (
+    <Suspense fallback={null}>
+      <NotFound />
+    </Suspense>
+  );
+}
+
 /** Legacy `/settings/:tab` values that still map onto an Admin screen. */
 const ADMIN_PATHS = new Set(["engine", "integrations", "storage", "appearance"]);
 
@@ -181,6 +206,8 @@ function AppRoutes() {
           <CompanionPair />
         </AuthGuard>
       </Route>
+
+      <Route path={`${USER_PAGE_PREFIX}*`} component={UserPageHandoff} />
 
       {/* Protected app routes */}
       <Route>
