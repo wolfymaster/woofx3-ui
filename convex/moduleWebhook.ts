@@ -248,13 +248,11 @@ async function findSupersededModule(
 
 /**
  * Process a module.installed webhook callback from the engine.
- * Flips the "pending" moduleRepository record created by uploadAndDeliver to
- * "installed", leaving its manifest untouched. Marketplace installs don't
- * create a pending record up front (no client-parsed manifest exists for
- * them), so that path falls back to inserting a manifest-less row here —
- * http.ts schedules moduleManifestSync.syncManifest right after this
+ * Marks the module's row installed, inserting a manifest-less one when
+ * nothing recorded the module before (no install path creates a row up
+ * front). http.ts schedules moduleManifestSync.syncManifest right after this
  * returns, which fetches the engine's authoritative manifest and backfills
- * it regardless of which path was taken.
+ * it.
  *
  * An upgrade arrives here as a new versioned moduleKey for a module that is
  * already installed, and is applied to the existing row rather than inserted
@@ -325,7 +323,6 @@ export const processModuleInstalled = internalMutation({
         version: moduleVersion,
         tags: [],
         manifest: {},
-        archiveKey: "",
         status: "installed" as const,
         ...provenance,
       });
@@ -478,9 +475,8 @@ export const processRegisteredDefinitions = internalMutation({
 
 /**
  * Process a module.install_failed webhook callback from the engine.
- * Flips the "pending" moduleRepository record created by uploadAndDeliver to
- * "failed" (if one exists — marketplace installs don't create one up front),
- * then emits a transient error event.
+ * Marks a module row still pending as failed, if one exists, then emits a
+ * transient error event.
  */
 export const processModuleInstallFailed = internalMutation({
   args: {
@@ -534,6 +530,8 @@ async function cascadeDeleteModuleRecord(
   instanceId: Id<"instances">,
   record: Doc<"moduleRepository">
 ) {
+  // A row from before uploads moved to the engine's storage can still hold
+  // its archive in Convex storage, until migrations/dropModuleArchiveBlobs runs.
   if (record.archiveKey) {
     await ctx.storage.delete(record.archiveKey as Id<"_storage">);
   }
