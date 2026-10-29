@@ -1,10 +1,10 @@
-import type { PageContent, PageSection } from "./page";
+import type { PageContent, PageSection, SectionVisibility } from "./page";
 import type { BindableResourceKind, PageWidget, PageWidgetConfig } from "./widgets";
 
 /**
  * A published page as a visitor receives it. Bindings are replaced by the
  * values they show, so no canonical id, instance id or account id leaves
- * Convex, and only sections every visitor may see are included.
+ * Convex, and only sections this viewer may see carry their content.
  */
 
 /**
@@ -46,16 +46,45 @@ export type PublicPageWidget =
     }
   | { id: string; type: "live-status"; config: PageWidgetConfig<"live-status">; live: PublicLiveStatus };
 
-export interface PublicPageSection {
-  id: string;
-  region: PageSection["region"];
-  title?: string;
-  widgets: PublicPageWidget[];
-}
+/** Who a section that is not public is for. */
+export type SectionRequirement = Exclude<SectionVisibility, { kind: "public" }>;
+
+/**
+ * Why a section is locked for this viewer:
+ * - `sign_in`: nobody is signed in, or the session has ended.
+ * - `roles_unknown`: signed in, but the viewer's roles on the channel are
+ *   missing or expired; `viewerRoles.refresh` can find out.
+ * - `not_eligible`: the viewer's current roles do not meet the requirement.
+ * - `unverifiable`: roles cannot be checked on this page at all (the
+ *   streamer's channel is not linked, or is on another platform).
+ */
+export type LockedSectionReason = "sign_in" | "roles_unknown" | "not_eligible" | "unverifiable";
+
+/**
+ * A section as this viewer receives it. A locked one says only where it sits
+ * and who it is for: no id, title or widget, since an owner may name a
+ * section after what it hides.
+ */
+export type PublicPageSection =
+  | {
+      kind: "open";
+      id: string;
+      region: PageSection["region"];
+      title?: string;
+      widgets: PublicPageWidget[];
+    }
+  | {
+      kind: "locked";
+      region: PageSection["region"];
+      requirement: SectionRequirement;
+      reason: LockedSectionReason;
+    };
 
 /**
  * What `userPagesPublic.bySlug` answers:
- * - `page`: the published page.
+ * - `page`: the published page as this viewer may see it. `rolesStale` is
+ *   true when some section is locked only because the viewer's roles are
+ *   missing or expired (`roles_unknown`), so a role refresh could open it.
  * - `unavailable`: an engine holds the name, but nothing is published there
  *   (never published, taken offline, or the plan no longer includes pages).
  * - `unclaimed`: no engine holds the name. Whether it can still be claimed is
@@ -69,6 +98,7 @@ export type PublicPageLookup =
       layout: PageContent["layout"];
       theme: PageContent["theme"];
       sections: PublicPageSection[];
+      rolesStale: boolean;
       publishedAt: number;
     }
   | { kind: "unavailable" }

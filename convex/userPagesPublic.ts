@@ -1,35 +1,56 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
-import {
-  isPublicSection,
-  type PageContent,
-  type PublicPageLookup,
-  type PublicResourceState,
-  pageBindings,
-} from "@shared/user-pages";
+import { type PageSection, type PublicPageLookup, type PublicResourceState, pageBindings } from "@shared/user-pages";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, type QueryCtx, query } from "./_generated/server";
-import { normalizeSlug, slugAvailability } from "./lib/maintenanceClient";
-import { type PublicPageSources, toPublicPage } from "./lib/publicPage";
-import { instanceAllowsUserPages, instanceHoldingSlug, requireRevision, userPageForInstance } from "./lib/userPages";
+import { slugAvailability } from "./lib/maintenanceClient";
+import { openSections, type PublicPageSources, toPublicPage } from "./lib/publicPage";
+import type { PageViewer } from "./lib/sectionAccess";
+import { instanceAllowsUserPages, instanceForPageSlug, requireRevision, userPageForInstance } from "./lib/userPages";
+import { broadcasterForInstance, viewerFromSession, viewerRolesFor } from "./lib/viewerSessionAuth";
 
 // The visitor's side of a user page, open to anyone. It reads only Convex:
 // nothing a visitor does reaches the engine. What it returns is the published
-// page and the values its public sections bind, never an id that names an
-// account, an instance or a resource.
+// page, the sections the viewer may see and the values only those bind, never
+// an id that names an account, an instance or a resource.
 
-/** Longer than any slug the maintenance API issues, so a longer one is answered without a read. */
-const MAX_SLUG_LENGTH = 63;
-
-/** Values for the resources `content`'s public sections bind, from the projection. */
-async function publicStates(
+/**
+ * The viewer `sessionToken` signs in, as section visibility sees them on the
+ * page of `instanceId`. Fails closed: a token that signs nobody in is an
+ * anonymous visitor.
+ */
+async function pageViewer(
   ctx: QueryCtx,
   instanceId: Id<"instances">,
-  content: PageContent
+  sessionToken: string | null
+): Promise<PageViewer> {
+  const viewer = await viewerFromSession(ctx, sessionToken);
+  if (!viewer) {
+    return { kind: "anonymous" };
+  }
+  const broadcaster = await broadcasterForInstance(ctx, instanceId);
+  if (!broadcaster || broadcaster.platform !== viewer.platform) {
+    return { kind: "signed_in", roles: { kind: "uncheckable" } };
+  }
+  const roles = await viewerRolesFor(ctx, viewer._id, broadcaster.platformUserId);
+  if (!roles) {
+    return { kind: "signed_in", roles: { kind: "unknown" } };
+  }
+  return {
+    kind: "signed_in",
+    roles: { kind: "known", follower: roles.follower, subscriberTier: roles.subscriberTier },
+  };
+}
+
+/** Values for the resources `sections` bind, from the projection. */
+async function sectionStates(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  sections: readonly PageSection[]
 ): Promise<Map<string, PublicResourceState>> {
   const states = new Map<string, PublicResourceState>();
-  for (const binding of pageBindings(content.sections.filter(isPublicSection))) {
+  for (const binding of pageBindings(sections)) {
     const row = await ctx.db
       .query("userPageState")
       .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", binding.canonicalId))
@@ -41,14 +62,12 @@ async function publicStates(
   return states;
 }
 
-async function publicLive(
+async function sectionLive(
   ctx: QueryCtx,
   instanceId: Id<"instances">,
-  content: PageContent
+  sections: readonly PageSection[]
 ): Promise<PublicPageSources["live"]> {
-  const showsLive = content.sections
-    .filter(isPublicSection)
-    .some((section) => section.widgets.some((widget) => widget.type === "live-status"));
+  const showsLive = sections.some((section) => section.widgets.some((widget) => widget.type === "live-status"));
   if (!showsLive) {
     return null;
   }
@@ -59,22 +78,24 @@ async function publicLive(
 }
 
 /**
- * The page published at `/u/<slug>`. `unavailable` covers every reason an
- * engine's page is not shown (never published, taken offline, or no longer on
- * the plan) without saying which, and the page's content is kept for when it
- * returns.
+ * The page published at `/u/<slug>`, as the viewer `sessionToken` signs in
+ * may see it (an anonymous visitor without one). `unavailable` covers every
+ * reason an engine's page is not shown (never published, taken offline, or no
+ * longer on the plan) without saying which, and the page's content is kept
+ * for when it returns.
+ *
+ * A query cannot ask the platform, so a section gated on roles the viewer has
+ * no current check for comes back locked with `rolesStale` set; the page then
+ * calls `viewerRoles.refresh`, whose write re-runs this query.
  */
 export const bySlug = query({
-  args: { slug: v.string() },
+  args: { slug: v.string(), sessionToken: v.optional(v.string()) },
   handler: async (ctx, args): Promise<PublicPageLookup> => {
-    const slug = normalizeSlug(args.slug);
-    if (slug === "" || slug.length > MAX_SLUG_LENGTH) {
+    const held = await instanceForPageSlug(ctx, args.slug);
+    if (!held) {
       return { kind: "unclaimed" };
     }
-    const instanceId = await instanceHoldingSlug(ctx, slug);
-    if (!instanceId) {
-      return { kind: "unclaimed" };
-    }
+    const { slug, instanceId } = held;
     const instance = await ctx.db.get(instanceId);
     const page = await userPageForInstance(ctx, instanceId);
     if (!instance || !page?.publishedRevisionId || page.publishedAt === undefined) {
@@ -84,11 +105,13 @@ export const bySlug = query({
       return { kind: "unavailable" };
     }
     const { content } = await requireRevision(ctx, page.publishedRevisionId);
+    const viewer = await pageViewer(ctx, instanceId, args.sessionToken ?? null);
+    const shown = openSections(content, viewer);
     const [states, live] = await Promise.all([
-      publicStates(ctx, instanceId, content),
-      publicLive(ctx, instanceId, content),
+      sectionStates(ctx, instanceId, shown),
+      sectionLive(ctx, instanceId, shown),
     ]);
-    return toPublicPage(slug, content, page.publishedAt, { states, live });
+    return toPublicPage(slug, content, page.publishedAt, viewer, { states, live });
   },
 });
 
