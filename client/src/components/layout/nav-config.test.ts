@@ -4,7 +4,9 @@ import {
   flattenNavItems,
   isNavGroupOpen,
   isNavItemActive,
+  type NavItem,
   navItemsFor,
+  navItemsServed,
   STREAM_ITEMS,
   withAlertsChildren,
 } from "@/components/layout/nav-config";
@@ -123,5 +125,38 @@ describe("withAlertsChildren", () => {
       throw new Error("the Alerts entry is missing");
     }
     expect(isNavGroupOpen(mergedAlerts, "/stream/resources/wheel_spin/wheel/prizes")).toBe(true);
+  });
+});
+
+describe("navItemsServed", () => {
+  const icon = () => null;
+  const items: NavItem[] = [
+    { id: "a", label: "A", icon, href: "/a" },
+    {
+      id: "s",
+      label: "S",
+      icon,
+      href: "/s",
+      children: [
+        { id: "s1", label: "S1", icon, href: "/s/1" },
+        { id: "s2", label: "S2", icon, href: "/s/2" },
+      ],
+    },
+  ];
+
+  test("keeps served entries and their served children", () => {
+    const served = navItemsServed(items, (href) => ["/a", "/s", "/s/2"].includes(href));
+    expect(served.map((item) => item.id)).toEqual(["a", "s"]);
+    expect(served[1].children?.map((item) => item.id)).toEqual(["s2"]);
+  });
+
+  test("an entry without its own page leads to its first served child", () => {
+    const served = navItemsServed(items, (href) => href === "/s/2");
+    expect(served).toHaveLength(1);
+    expect(served[0]).toMatchObject({ id: "s", href: "/s/2" });
+  });
+
+  test("drops an entry with nothing served", () => {
+    expect(navItemsServed(items, () => false)).toEqual([]);
   });
 });
