@@ -28,15 +28,14 @@ To build and run it locally, from the `woofx3-ui` checkout with the engine check
 
 ```bash
 docker build \
-  --build-context engine-api=../woofx3/shared/clients/typescript/api \
-  --build-context engine-scene=../woofx3/shared/clients/typescript/scene \
+  --build-context engine=../woofx3 \
   --build-arg VITE_CONVEX_URL=https://<deployment>.convex.cloud \
   --build-arg VITE_CONVEX_SITE_URL=https://<deployment>.convex.site \
   -t woofx3-ui .
 docker run --rm -p 8080:8080 woofx3-ui
 ```
 
-The `engine-api` and `engine-scene` build contexts supply the engine's shared type package (`@woofx3/api`) and its composition package (`@woofx3/scene`, the scene editor's model and headless editor). Both live outside this repository.
+The `engine` build context is the engine checkout. It supplies the engine's shared type package (`@woofx3/api`) and its composition package (`@woofx3/scene`, the scene editor's model and headless editor), which live outside this repository. Their dependencies are installed from the engine's workspace lockfile (`bun.lock` at its root), filtered to those two packages, so the context needs the root `package.json`, `bun.lock` and every workspace member's `package.json` as well as the two packages' sources. The deploy workflows check out exactly that subset of the engine.
 
 ## Secrets and variables
 
