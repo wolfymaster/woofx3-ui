@@ -403,9 +403,12 @@ export interface ModulesGateway {
    */
   useBundleInstallRequest(): (listingId: string) => Promise<MarketplaceBundleInstall>;
   /**
-   * Installs or upgrades a module from an archive built in the browser;
-   * resolves once the engine has been handed it, and the outcome is reported
-   * under `moduleKey` (`transientEvents`).
+   * Installs or upgrades a module from an archive built in the browser. The
+   * archive is kept in the instance's own storage, where it counts toward any
+   * storage limit, and the engine installs it from there. Resolves once the
+   * engine has the request; the outcome is reported under `moduleKey`
+   * (`transientEvents`). Rejects when the archive does not fit the storage
+   * limit, or the engine cannot install uploaded modules.
    */
   useArchiveInstallRequest(): (install: ModuleArchiveInstall) => Promise<{ moduleKey: string }>;
   /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */

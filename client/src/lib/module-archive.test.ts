@@ -9,6 +9,7 @@ import {
   buildModuleArchive,
   computeModuleKey,
   getCommonDirectoryPrefix,
+  moduleArchiveFileName,
   readModuleArchive,
   textFilesOf,
   textOf,
@@ -115,5 +116,13 @@ describe("computeModuleKey", () => {
     const engineKey = `hello_world:1.2.0:${engineHash.slice(0, 7)}`;
 
     expect(await computeModuleKey("hello_world", "1.2.0", archive)).toBe(engineKey);
+  });
+});
+
+describe("moduleArchiveFileName", () => {
+  test("names a stored archive after its module key, with no colons", async () => {
+    const archive = buildModuleArchive(readModuleArchive(wrappedUpload()));
+    const key = await computeModuleKey("hello_world", "1.2.0", archive);
+    expect(await moduleArchiveFileName("hello_world", "1.2.0", archive)).toBe(`${key.replaceAll(":", "-")}.zip`);
   });
 });

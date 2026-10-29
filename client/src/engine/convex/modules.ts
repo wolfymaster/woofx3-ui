@@ -1,6 +1,5 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
@@ -11,8 +10,10 @@ import type {
   ModuleId,
   ModuleStorageUsage,
 } from "@/engine/types";
+import { MODULE_ARCHIVE_CONTENT_TYPE, moduleArchiveFileName } from "@/lib/module-archive";
+import { putToGrant } from "@/lib/upload-grant";
 import { fromModuleId, toModuleId } from "./ids";
-import { useInstanceAction, useInstanceMutation } from "./scope";
+import { useInstanceAction } from "./scope";
 
 function toModuleDetail(result: FunctionReturnType<typeof api.moduleDetail.getModuleDetail>): ModuleDetail {
   return {
@@ -129,29 +130,47 @@ function useStorageUsageRequest() {
 }
 
 /**
- * Convex keeps the archive in its file storage, records the module as
- * pending with its manifest, and hands the archive to the engine from a
- * scheduled action.
+ * The archive goes to the instance's own storage through the same upload
+ * grant every file uses, as a `custom_module` resource: on hosted storage it
+ * is checked against the module archive limit and counts toward the total.
+ * The engine then installs it from there, checking the approvals itself.
+ * The same build already stored (same name, so same key) is installed again
+ * rather than stored twice.
  */
 function useArchiveInstallRequest() {
-  const generateUploadUrl = useMutation(api.moduleRepository.generateUploadUrl);
-  const uploadAndDeliver = useInstanceMutation(api.moduleRepository.uploadAndDeliver);
+  const requestUpload = useInstanceAction(api.resources.requestUpload);
+  const completeUpload = useInstanceAction(api.resources.completeUpload);
+  const removeResource = useInstanceAction(api.resources.remove);
+  const installFromResource = useInstanceAction(api.moduleEngine.installFromResource);
+  const listResources = useInstanceAction(api.resources.list);
   return useCallback(
-    async ({ archive, moduleKey, name, description, version, tags, manifest }: ModuleArchiveInstall) => {
-      const uploadUrl = await generateUploadUrl();
-      const uploaded = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/zip" },
-        body: new Blob([archive], { type: "application/zip" }),
-      });
-      if (!uploaded.ok) {
-        throw new Error("Upload failed");
+    async ({ archive, manifestId, version, approvedPermissions, approvedLocalEndpoints }: ModuleArchiveInstall) => {
+      const name = await moduleArchiveFileName(manifestId, version, archive);
+      const stored = await listResources({ folderId: null, kind: "custom_module", search: name, pageSize: 10 });
+      const existing = stored.resources.find((resource) => resource.name === name && resource.status === "ready");
+      if (existing) {
+        return installFromResource({ resourceId: existing.id, approvedPermissions, approvedLocalEndpoints });
       }
-      const { storageId } = (await uploaded.json()) as { storageId: Id<"_storage"> };
-      await uploadAndDeliver({ moduleKey, name, description, version, tags, manifest, archiveKey: storageId });
-      return { moduleKey };
+      const body = new Blob([archive], { type: MODULE_ARCHIVE_CONTENT_TYPE });
+      const grant = await requestUpload({
+        name,
+        contentType: MODULE_ARCHIVE_CONTENT_TYPE,
+        parentId: null,
+        size: body.size,
+        kind: "custom_module",
+      });
+      try {
+        await putToGrant(grant, body);
+      } catch (err) {
+        // Best effort: the upload already failed, and a reservation that
+        // outlives it is untidy rather than harmful.
+        await removeResource({ resourceId: grant.resource.id }).catch(() => {});
+        throw err;
+      }
+      await completeUpload({ resourceId: grant.resource.id });
+      return installFromResource({ resourceId: grant.resource.id, approvedPermissions, approvedLocalEndpoints });
     },
-    [generateUploadUrl, uploadAndDeliver]
+    [listResources, requestUpload, completeUpload, removeResource, installFromResource]
   );
 }
 

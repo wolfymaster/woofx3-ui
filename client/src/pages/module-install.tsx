@@ -32,8 +32,9 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
+import { actionErrorMessage } from "@/lib/action-error";
 import { MARKETPLACE_INSTALLED_PATH } from "@/lib/marketplace-route";
-import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } from "@/lib/module-archive";
+import { buildModuleArchive, readModuleArchive, textFilesOf } from "@/lib/module-archive";
 import { getLanguageFromPath } from "@/lib/module-files";
 import { bareModuleKey } from "@/lib/module-key";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
@@ -278,13 +279,6 @@ function parseEditedManifest(files: Record<string, string>): Record<string, unkn
   }
 }
 
-function toSnakeCase(str: string): string {
-  return str
-    .replace(/([a-z])([A-Z])/g, "$1_$2")
-    .replace(/[\s-]+/g, "_")
-    .toLowerCase();
-}
-
 export default function ModuleInstall() {
   const [, navigate] = useLocation();
   const { mode } = useTheme();
@@ -491,43 +485,32 @@ export default function ModuleInstall() {
       setInstallError("No instance selected. Please select an instance first.");
       return;
     }
+    const manifestId = typeof editedManifest?.id === "string" ? editedManifest.id.trim() : "";
+    const version = typeof editedManifest?.version === "string" ? editedManifest.version.trim() : "";
+    if (!manifestId || !version) {
+      setInstallError("The module's manifest.json needs an id and a version.");
+      return;
+    }
 
     setIsInstalling(true);
     setInstallError(null);
     try {
-      const archive = buildModuleArchive(files);
-      const manifest: Record<string, unknown> = editedManifest ?? {};
-
-      const name = (manifest.name as string) || Object.keys(files)[0]?.split("/")[0] || "Unknown Module";
-      const description = (manifest.description as string) || "";
-      const version = (manifest.version as string) || "1.0.0";
-      const tags: string[] = Array.isArray(manifest.tags) ? (manifest.tags as string[]) : [];
-
-      // Generate deterministic moduleKey: id:version:hash
-      // This key is passed to the engine and echoed back in the webhook,
-      // then used as the correlationKey for the transient event subscription.
-      const moduleId = (manifest.id as string) || toSnakeCase(name);
-      const moduleKey = await computeModuleKey(moduleId, version, archive);
-
-      console.log("[module-install] moduleKey components", {
-        manifestId: manifest.id,
-        manifestName: manifest.name,
-        moduleId,
+      // The engine refuses anything the manifest declares beyond these lists.
+      // The approval dialog asked only about what the installed version
+      // lacked; the rest was approved when that version was installed.
+      const { moduleKey } = await installArchive({
+        archive: buildModuleArchive(files),
+        manifestId,
         version,
-        zipSize: archive.byteLength,
-        moduleKey,
+        approvedPermissions: declaredPermissions ?? [],
+        approvedLocalEndpoints: (declaredLocalEndpoints ?? []).map((endpoint) => endpoint.id),
       });
-
-      await installArchive({ archive, moduleKey, name, description, version, tags, manifest });
-
-      // Subscribe to transient events for this moduleKey
       setPendingModuleKey(moduleKey);
     } catch (error) {
-      console.error("Failed to install module:", error);
-      setInstallError(error instanceof Error ? error.message : "Failed to install module. Please try again.");
+      setInstallError(actionErrorMessage(error));
       setIsInstalling(false);
     }
-  }, [files, editedManifest, instanceId, installArchive]);
+  }, [files, editedManifest, instanceId, installArchive, declaredPermissions, declaredLocalEndpoints]);
 
   const handleInstallClick = useCallback(() => {
     if (permissionsNeedingApproval.length > 0 || localEndpointsNeedingApproval.length > 0) {

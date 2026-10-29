@@ -45,6 +45,14 @@ export const ENTITLEMENT_LIMITS = {
     unit: "bytes",
     default: 10 * 1024 * 1024,
   },
+  // A module archive is code and its assets, which runs well past a photo's
+  // size, so it has its own per-file limit; it still counts toward
+  // `storage.hostedAssetBytes`.
+  "storage.hostedModuleArchiveBytes": {
+    description: "Largest uploaded module archive on hosted storage",
+    unit: "bytes",
+    default: 50 * 1024 * 1024,
+  },
   // Soft: nothing refuses a write over it. Module storage lives on a managed
   // engine's ephemeral disk and its replica in our bucket, so the dashboard
   // warns its owner, and operators see it in the backoffice; see

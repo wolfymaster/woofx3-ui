@@ -2,7 +2,12 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
 import { accountEntitlements } from "./lib/entitlementAccess";
-import { type HostedStorageLimits, hostedStorageLimits, hostedUploadRefusal } from "./lib/hostedStorage";
+import {
+  type HostedStorageLimits,
+  hostedStorageLimits,
+  hostedUploadKind,
+  hostedUploadRefusal,
+} from "./lib/hostedStorage";
 
 // Hosted storage limits are checked against the engine's own total of its
 // resources plus reservations: bytes promised to grants the engine may not
@@ -82,10 +87,11 @@ export const reserve = internalMutation({
     engineBytes: v.number(),
     readAt: v.number(),
     size: v.number(),
+    kind: hostedUploadKind,
   },
   handler: async (
     ctx,
-    { instanceId, engineBytes, readAt, size }
+    { instanceId, engineBytes, readAt, size, kind }
   ): Promise<{ reservationId: Id<"hostedStorageReservations"> } | { refusal: string }> => {
     if (!Number.isSafeInteger(size) || size <= 0) {
       throw new Error(`Upload size must be a whole number of bytes above 0; got ${size}`);
@@ -98,7 +104,7 @@ export const reserve = internalMutation({
     if (outstanding === null) {
       return { refusal: "Too many uploads are in progress. Wait for them to finish, then try again." };
     }
-    const refusal = hostedUploadRefusal(limits, engineBytes + outstanding, size);
+    const refusal = hostedUploadRefusal(limits, engineBytes + outstanding, size, kind);
     if (refusal !== null) {
       return { refusal };
     }
