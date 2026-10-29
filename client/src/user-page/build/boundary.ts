@@ -18,6 +18,8 @@ export const USER_PAGE_LOCAL_MODULES: readonly string[] = [
   "shared/user-pages/",
   "convex/_generated/api.js",
   "convex/lib/resourceKinds.ts",
+  // Web Crypto only: the sign-in nonce has to be the token shape Convex checks.
+  "convex/lib/oauthHandoff.ts",
 ];
 
 /** Packages that exist for signing in, the engine connection or the desktop app. */
