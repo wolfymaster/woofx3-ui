@@ -11,12 +11,13 @@ import {
   parseHelixBody,
   parseHelixSnoozeResult,
 } from "@shared/ad-breaks";
+import { missingTwitchScopeMessage } from "@shared/twitch-link-refusal";
 import type { TwitchHelixResult } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import type { EngineApi } from "./lib/engineInstanceUrl";
-import { type AuthorizedTwitchCall, authorizeTwitch, missingTwitchScopeMessage } from "./lib/twitchAuth";
+import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 
 // The Ad breaks dashboard widget's schedule and snooze, straight to Helix like

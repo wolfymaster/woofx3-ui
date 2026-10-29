@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { missingTwitchScopeMessage } from "@shared/twitch-link-refusal";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -28,7 +29,6 @@ import {
   authorizeTwitchUnattended,
   authorizeTwitchUnscoped,
   freshTwitchCredentials,
-  missingTwitchScopeMessage,
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";

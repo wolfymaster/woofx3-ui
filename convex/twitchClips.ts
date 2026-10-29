@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { TWITCH_NOT_CONNECTED_MESSAGE } from "@shared/twitch-link-refusal";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
@@ -41,7 +42,7 @@ export const createClip = action({
       instanceId: args.instanceId,
     });
     if (!token) {
-      throw new Error("Twitch is not connected for this instance");
+      throw new Error(TWITCH_NOT_CONNECTED_MESSAGE);
     }
 
     const clientId = process.env.AUTH_TWITCH_ID;
