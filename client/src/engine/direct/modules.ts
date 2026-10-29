@@ -1,7 +1,6 @@
 import {
   applyMarketplaceMetadata,
   type MarketplaceMergeData,
-  manifestDeclarations,
   marketplaceDetail,
   marketplaceMetadataOf,
 } from "@shared/module-detail";
