@@ -2101,7 +2101,7 @@ export default defineSchema({
   }).index("by_platform_and_platform_user_id", ["platform", "platformUserId"]),
 
   // viewerPlatformTokens: the viewer's grant, sealed with
-  // VIEWER_TOKEN_ENCRYPTION_KEY (lib/viewerTokenCipher.ts). Kept off the
+  // VIEWER_TOKEN_ENCRYPTION_KEY (lib/tokenCipher.ts). Kept off the
   // viewers row so reading a profile never loads a token. authFailedAt is set
   // when the platform refuses the refresh token; only a new sign-in clears it.
   viewerPlatformTokens: defineTable({
