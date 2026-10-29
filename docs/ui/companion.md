@@ -31,16 +31,6 @@ companion/
 
 The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Unpairing, or a pairing that fails or is cancelled, closes it again once the calls that release the pairing on the server have finished. Closing a window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one's dashboard (`tauri-plugin-single-instance`).
 
-### The desktop dashboard
-
-The repo-root `vite.config.ts` has a `desktop` mode. It writes the dashboard into `companion/dist/`, the app's `frontendDist`, and the companion window's build writes into `companion/dist/companion/` beside it. It sets `__WOOFX3_DESKTOP__` (`IS_DESKTOP` in `client/src/lib/desktop.ts`), which is false in the web build, so desktop-only code is dropped from it. And it points the dashboard at the Convex deployment the Rust side compiles in, `WOOFX3_CONVEX_URL` (plus `WOOFX3_CONVEX_SITE_URL` when the deployment's HTTP origin is not derived from it), so one variable configures both; the build fails without it.
-
-Twitch sign-in leaves for twitch.tv and returns to the web app's origin, which the desktop window cannot follow, so the desktop dashboard offers password sign-in only.
-
-In dev, `bun run dev` in `companion/` starts both dev servers: the dashboard on port 1421 (the app's `devUrl`), which proxies `/companion` to the companion window's server on 1420.
-
-The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin, and frames only from Twitch's player and clips.
-
 The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails, and so does any build whose URL is not an `http` or `https` URL with a host; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
 
 ```bash
@@ -55,6 +45,20 @@ Everything that carries traffic lives in `companion/core`, which has no Tauri de
 ```bash
 bun run companion:test    # cargo test --manifest-path companion/core/Cargo.toml
 ```
+
+### The desktop dashboard
+
+The repo-root `vite.config.ts` has a `desktop` mode. It writes the dashboard into `companion/dist/`, the app's `frontendDist`, and the companion window's build writes into `companion/dist/companion/` beside it. It sets `__WOOFX3_DESKTOP__` (`IS_DESKTOP` in `client/src/lib/desktop.ts`), which is false in the web build, so desktop-only code is dropped from it. And it points the dashboard at the Convex deployment the Rust side compiles in, `WOOFX3_CONVEX_URL` (plus `WOOFX3_CONVEX_SITE_URL` when the deployment's HTTP origin is not derived from it), so one variable configures both; the build fails without it.
+
+Twitch sign-in leaves for twitch.tv and returns to the web app's origin, which the desktop window cannot follow, so the desktop dashboard offers password sign-in only.
+
+In dev, `bun run dev` in `companion/` starts both dev servers: the dashboard on port 1421 (the app's `devUrl`), which proxies `/companion` to the companion window's server on 1420.
+
+The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin, and frames only from Twitch's player and clips.
+
+### Choosing a mode
+
+Without `desktop-host.json` the app runs its build's default, and `host_mode` tells the dashboard the mode was not chosen. The dashboard then asks the streamer, and `choose_host_mode` writes `{"mode": "local"}` or `{"mode": "companion"}` and restarts the app into it, stopping the engine first because a restart skips the exit hook that otherwise stops it. It only writes a file that is not there yet (a hard link from a fully written temporary file, so the file appears whole or not at all), so settings written by hand are never replaced.
 
 ## Integrations
 
@@ -137,7 +141,7 @@ In local mode the companion runs the engine's orchestrator as its one sidecar pr
 - On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs. The exit is noticed without reaping the orchestrator, so the group id stays reserved until it has been killed and a kill can never reach an unrelated group. A supervisor that is dropped rather than stopped kills the tree as well.
 - When the orchestrator fails it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
 - When it exits cleanly without being asked (it has no enabled services, or something else stopped it), the sidecar stops for good with that reason rather than restarting it.
-- The orchestrator migrates the database first, as its run-once `migrate` step, before anything that opens the database starts. While the step runs, the engine's phase is migrating, and the window's `local_engine_session` answers `migrating`. The step reports `completed` when it succeeds.
+- The orchestrator migrates the database first, as its run-once `migrate` step, before anything that opens the database starts. While the step runs, the engine's phase is migrating, and the dashboard's `local_engine_session` answers `migrating`. The step reports `completed` when it succeeds.
 - A failed migration is final. The orchestrator reports an error naming `migrate`, then its own error, and exits 1. Running it again would fail the same way, and the engine must not start on a half-migrated database, so the sidecar stops for good. `local_engine_session` then answers `stopped` with the reason, as it does after a clean exit nobody asked for. Any other failure keeps the restart policy.
 
 The engine is configured as a local engine (`core/src/host/engine.rs`), following the desktop recipe in the engine's `docs/services/deployment.md`:
@@ -165,11 +169,11 @@ Once the engine is ready, the companion becomes its client (`core/src/host/regis
 
 The capnweb calls are plain HTTP batch requests to `http://127.0.0.1:<apiPort>/api` (`core/src/host/capnweb.rs`, `gateway.rs`), with a 10-second timeout, or 20 seconds for the calls the engine forwards to Twitch, so the engine's own 10-second Twitch timeout answers first. Each call is a single request with no origin, which the engine allows. They never go through a proxy, whatever the environment or the OS says, since they carry the registration token and the client secret. A reply is decoded only where the companion reads it (`registerClient`'s credentials), so a field the engine adds to `getEngineInfo` cannot break the check. An `abort` from the engine, which ends the whole session, is reported with the engine's reason.
 
-The client secret stays in the Rust process and the credential store. The window asks for it with the `local_engine_session` command, wrapped in `companion/ui/src/host.ts`, which answers `notLocal` in companion mode, `starting` until registration succeeds, `failed` with the reason, or `ready` with the api URL, client id and client secret the window needs to open its own capnweb session.
+The client secret stays in the Rust process and the credential store. The dashboard window asks for it with the `local_engine_session` command, wrapped in `client/src/desktop/host.ts`, which answers `notLocal` in companion mode, `starting` until registration succeeds, `failed` with the reason, or `ready` with the api URL, client id and client secret the window needs to open its own capnweb session.
 
 ### Window permissions
 
-The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window has no capability, so it can call nothing. A test keeps the capability and the list in step.
+The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue and the stream start marker. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
 
 ## Updates
 
