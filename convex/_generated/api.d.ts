@@ -130,7 +130,6 @@ import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_moduleArchiveFiles from "../lib/moduleArchiveFiles.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
-import type * as lib_moduleSettingsVisibility from "../lib/moduleSettingsVisibility.js";
 import type * as lib_notifications from "../lib/notifications.js";
 import type * as lib_oauthCallback from "../lib/oauthCallback.js";
 import type * as lib_oauthErrors from "../lib/oauthErrors.js";
@@ -406,7 +405,6 @@ declare const fullApi: ApiFromModules<{
   "lib/moduleArchiveFiles": typeof lib_moduleArchiveFiles;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
   "lib/moduleKey": typeof lib_moduleKey;
-  "lib/moduleSettingsVisibility": typeof lib_moduleSettingsVisibility;
   "lib/notifications": typeof lib_notifications;
   "lib/oauthCallback": typeof lib_oauthCallback;
   "lib/oauthErrors": typeof lib_oauthErrors;
