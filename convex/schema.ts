@@ -7,7 +7,6 @@ import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
-import { migrationNameValidator } from "./lib/migrationRuns";
 import { notificationAudienceValidator } from "./lib/notifications";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -2228,27 +2227,4 @@ export default defineSchema({
     settings: v.record(v.string(), v.any()),
     updatedAt: v.number(),
   }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
-
-  // migrationRuns: one row per run of a tracked data migration
-  // (convex/migrations), with what it did. A migration converges when run
-  // again, so a run left "running" by an action that died is superseded by
-  // the next run rather than resumed.
-  migrationRuns: defineTable({
-    migration: migrationNameValidator,
-    status: v.union(v.literal("running"), v.literal("completed")),
-    startedAt: v.number(),
-    finishedAt: v.optional(v.number()),
-    scanned: v.number(),
-    converted: v.number(),
-    skipped: v.number(),
-    failed: v.number(),
-  }).index("by_migration", ["migration"]),
-
-  // migrationRowFailures: a row a migration run could not convert, and why.
-  // The row itself is left as it was; the next run tries it again.
-  migrationRowFailures: defineTable({
-    runId: v.id("migrationRuns"),
-    documentId: v.string(),
-    reason: v.string(),
-  }).index("by_run", ["runId"]),
 });
