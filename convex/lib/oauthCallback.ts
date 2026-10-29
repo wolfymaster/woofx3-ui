@@ -16,6 +16,8 @@ export const OAUTH_CALLBACK_PATHS = {
   twitch: "/api/auth/twitch/callback",
   /** Every module's own OAuth integrations (`moduleOAuth.ts`). */
   module: "/api/integrations/oauth/callback",
+  /** Viewers signing in on a user page with Twitch (`viewerAuthHttp.ts`). */
+  viewerTwitch: "/api/viewer-auth/twitch/callback",
 } as const;
 
 export type OAuthCallbackProvider = keyof typeof OAUTH_CALLBACK_PATHS;

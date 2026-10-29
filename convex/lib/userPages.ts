@@ -4,25 +4,50 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { accountEntitlements } from "./entitlementAccess";
 import { parseKindRef } from "./resourceKinds";
+import { rebuildPageState } from "./userPageState";
 
 /** Provisioning states in which the maintenance API no longer holds the engine's slug for it. */
 const SLUG_RELEASED_STATUSES: ReadonlySet<Doc<"engineProvisioning">["status"]> = new Set(["deprovisioning", "deleted"]);
 
 /**
- * The name a page is published under: its managed engine's slug, once the
- * maintenance API has allocated it (`maintenanceEngineId` is set when it
- * answers) and until the engine is torn down. Null for every other instance,
- * which has no name to publish under.
+ * Whether the row's engine holds its slug: once the maintenance API has
+ * allocated it (`maintenanceEngineId` is set when it answers) and until the
+ * engine is torn down.
+ */
+function holdsSlug(provisioning: Doc<"engineProvisioning">): boolean {
+  return provisioning.maintenanceEngineId !== undefined && !SLUG_RELEASED_STATUSES.has(provisioning.status);
+}
+
+/**
+ * The name a page is published under: its managed engine's slug. Null for
+ * every other instance, which has no name to publish under.
  */
 export async function pageSlugForInstance(ctx: QueryCtx, instanceId: Id<"instances">): Promise<string | null> {
   const provisioning = await ctx.db
     .query("engineProvisioning")
     .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
     .first();
-  if (!provisioning || provisioning.maintenanceEngineId === undefined) {
-    return null;
+  return provisioning && holdsSlug(provisioning) ? provisioning.slug : null;
+}
+
+/**
+ * Released slugs stay on their provisioning rows, and the maintenance API
+ * reissues one only after its engine is gone, so a slug matches a handful of
+ * rows at most, of which one at most holds it.
+ */
+const MAX_ROWS_PER_SLUG = 20;
+
+/** The instance whose engine holds `slug` (lowercase, as stored), or null when none does. */
+export async function instanceHoldingSlug(ctx: QueryCtx, slug: string): Promise<Id<"instances"> | null> {
+  const rows = await ctx.db
+    .query("engineProvisioning")
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
+    .take(MAX_ROWS_PER_SLUG);
+  const holders = rows.filter(holdsSlug);
+  if (holders.length > 1) {
+    throw new Error(`Slug "${slug}" is held by ${holders.length} engines`);
   }
-  return SLUG_RELEASED_STATUSES.has(provisioning.status) ? null : provisioning.slug;
+  return holders[0]?.instanceId ?? null;
 }
 
 /**
@@ -112,8 +137,9 @@ export async function bindingProblems(
   return problems;
 }
 
-/** Removes an instance's page and both its revisions, for instance deletion. */
+/** Removes an instance's page, both its revisions and its published values, for instance deletion. */
 export async function deleteUserPage(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
+  await rebuildPageState(ctx, instanceId, null);
   const page = await userPageForInstance(ctx, instanceId);
   if (!page) {
     return;

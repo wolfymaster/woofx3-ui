@@ -1,5 +1,5 @@
 import { authTables } from "@convex-dev/auth/server";
-import { pageContentValidator } from "@shared/user-pages";
+import { bindableResourceKindValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
@@ -7,7 +7,9 @@ import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
+import { migrationNameValidator } from "./lib/migrationRuns";
 import { notificationAudienceValidator } from "./lib/notifications";
+import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // Must match SessionSummarySession and SessionSummaryTotals in
@@ -345,6 +347,9 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_account", ["accountId"])
     .index("by_maintenance_engine", ["maintenanceEngineId"])
+    // A public page is found by its engine's slug. Released slugs stay on their
+    // rows, so a slug can match more than one; see lib/userPages.ts holdsSlug.
+    .index("by_slug", ["slug"])
     .index("by_status", ["status"]),
 
   // maintenanceEvents: delivered maintenance-API callback ids. The endpoint is
@@ -457,7 +462,13 @@ export default defineSchema({
     .index("by_instance_module", ["instanceId", "moduleId"])
     .index("by_instance_module_key", ["instanceId", "moduleId", "key"]),
 
-  // platformLinks: OAuth tokens for streaming platforms (Twitch, etc.) per instance
+  // platformLinks: OAuth grants for streaming platforms (Twitch, etc.) per
+  // instance. The tokens are stored sealed with PLATFORM_TOKEN_ENCRYPTION_KEY
+  // (lib/tokenCipher.ts) and read and written only through
+  // lib/platformLinkTokens.ts. Rows linked before sealing still hold
+  // accessToken/refreshToken in the clear until
+  // migrations/sealPlatformLinkTokens converts them; every write stores the
+  // sealed pair and clears the plaintext one.
   platformLinks: defineTable({
     instanceId: v.id("instances"),
     platform: v.string(),
@@ -465,8 +476,10 @@ export default defineSchema({
     platformUsername: v.string(),
     profileImageUrl: v.optional(v.string()),
     channelId: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
+    sealedAccessToken: v.optional(v.string()),
+    sealedRefreshToken: v.optional(v.string()),
+    accessToken: v.optional(v.string()),
+    refreshToken: v.optional(v.string()),
     expiresAt: v.number(),
     scopes: v.array(v.string()),
     connectedByUserId: v.optional(v.string()),
@@ -1316,8 +1329,13 @@ export default defineSchema({
         platformUserId: v.string(),
         platformUsername: v.string(),
         profileImageUrl: v.optional(v.string()),
-        accessToken: v.string(),
-        refreshToken: v.string(),
+        // Sealed like platformLinks, which they are copied into. A handoff
+        // stored before sealing carries plaintext instead and is refused when
+        // claimed; it expires within HANDOFF_TTL_MS either way.
+        sealedAccessToken: v.optional(v.string()),
+        sealedRefreshToken: v.optional(v.string()),
+        accessToken: v.optional(v.string()),
+        refreshToken: v.optional(v.string()),
         expiresAt: v.number(),
         scopes: v.array(v.string()),
       })
@@ -2081,6 +2099,91 @@ export default defineSchema({
     body: v.string(),
   }).index("by_post", ["postId"]),
 
+  // ── Viewer identity (user pages) ──────────────────────────────────────────
+  // Viewers sign in on a streamer's public page with their platform account.
+  // They are not Convex Auth users: their sessions are rows in viewerSessions,
+  // which no dashboard authorization reads. See lib/viewerAuth.ts.
+
+  // viewers: one row per platform account that has signed in on a page.
+  viewers: defineTable({
+    platform: viewerPlatformValidator,
+    platformUserId: v.string(),
+    login: v.string(),
+    displayName: v.string(),
+    avatarUrl: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_platform_and_platform_user_id", ["platform", "platformUserId"]),
+
+  // viewerPlatformTokens: the viewer's grant, sealed with
+  // VIEWER_TOKEN_ENCRYPTION_KEY (lib/tokenCipher.ts). Kept off the
+  // viewers row so reading a profile never loads a token. authFailedAt is set
+  // when the platform refuses the refresh token; only a new sign-in clears it.
+  viewerPlatformTokens: defineTable({
+    viewerId: v.id("viewers"),
+    sealedAccessToken: v.string(),
+    sealedRefreshToken: v.string(),
+    expiresAt: v.number(),
+    scopes: v.array(v.string()),
+    authFailedAt: v.optional(v.number()),
+  }).index("by_viewer", ["viewerId"]),
+
+  // viewerLoginStates: a sign-in waiting on the platform's consent page,
+  // under the SHA-256 of its OAuth state. Single use; expires after ten minutes.
+  viewerLoginStates: defineTable({
+    stateHash: v.string(),
+    platform: viewerPlatformValidator,
+    returnOrigin: v.string(),
+    returnPath: v.string(),
+    nonceHash: v.string(),
+    createdAt: v.number(),
+  }).index("by_state_hash", ["stateHash"]),
+
+  // viewerHandoffs: a finished sign-in waiting for the page to exchange its
+  // one-time code (by SHA-256) and nonce for a session. Single use; expires
+  // after five minutes.
+  viewerHandoffs: defineTable({
+    codeHash: v.string(),
+    viewerId: v.id("viewers"),
+    origin: v.string(),
+    nonceHash: v.string(),
+    createdAt: v.number(),
+  }).index("by_code_hash", ["codeHash"]),
+
+  // viewerSessions: a signed-in viewer on one page origin, by SHA-256 of the
+  // session token. A row exists only while its session is live: sign-out and
+  // expiry both delete it.
+  viewerSessions: defineTable({
+    tokenHash: v.string(),
+    viewerId: v.id("viewers"),
+    origin: v.string(),
+    expiresAt: v.number(),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_viewer", ["viewerId"]),
+
+  // viewerRoles: what the platform last said about a viewer on one
+  // broadcaster's channel, cached for VIEWER_ROLES_TTL_MS. subscriberTier is
+  // null when the viewer is not subscribed.
+  viewerRoles: defineTable({
+    viewerId: v.id("viewers"),
+    platform: viewerPlatformValidator,
+    broadcasterPlatformUserId: v.string(),
+    follower: v.boolean(),
+    subscriberTier: subscriberTierValidator,
+    checkedAt: v.number(),
+  }).index("by_viewer_and_platform_and_broadcaster", ["viewerId", "platform", "broadcasterPlatformUserId"]),
+
+  // viewerRoleOutages: when the platform last could not answer a role check
+  // for a viewer on one broadcaster's channel. While it is younger than
+  // VIEWER_ROLES_UNAVAILABLE_TTL_MS a refresh answers "unavailable" without
+  // asking again. Deleted by the next successful check.
+  viewerRoleOutages: defineTable({
+    viewerId: v.id("viewers"),
+    platform: viewerPlatformValidator,
+    broadcasterPlatformUserId: v.string(),
+    failedAt: v.number(),
+  }).index("by_viewer_and_platform_and_broadcaster", ["viewerId", "platform", "broadcasterPlatformUserId"]),
+
   // userPages: an instance's public page at /u/<engine slug>, at most one per
   // instance. Content lives in revisions, so the draft can change while the
   // published copy is what visitors see; publishing swaps publishedRevisionId
@@ -2108,4 +2211,44 @@ export default defineSchema({
     savedBy: v.id("users"),
     savedAt: v.number(),
   }),
+
+  // userPageState: the values published pages show, one row per resource the
+  // instance's published revision binds, and nothing else. It is what the
+  // public page read serves values from, so a value no published page binds
+  // can never reach a visitor. Rebuilt on publish; refreshed from the same
+  // writes that keep resourceValues and moduleResourceInstances current. See
+  // convex/lib/userPageState.ts.
+  userPageState: defineTable({
+    instanceId: v.id("instances"),
+    canonicalId: v.string(),
+    kind: bindableResourceKindValidator,
+    // As resourceValues holds it; null before the resource is first written.
+    value: v.any(),
+    // Only the settings a visitor needs to read `value`.
+    settings: v.record(v.string(), v.any()),
+    updatedAt: v.number(),
+  }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
+
+  // migrationRuns: one row per run of a tracked data migration
+  // (convex/migrations), with what it did. A migration converges when run
+  // again, so a run left "running" by an action that died is superseded by
+  // the next run rather than resumed.
+  migrationRuns: defineTable({
+    migration: migrationNameValidator,
+    status: v.union(v.literal("running"), v.literal("completed")),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    scanned: v.number(),
+    converted: v.number(),
+    skipped: v.number(),
+    failed: v.number(),
+  }).index("by_migration", ["migration"]),
+
+  // migrationRowFailures: a row a migration run could not convert, and why.
+  // The row itself is left as it was; the next run tries it again.
+  migrationRowFailures: defineTable({
+    runId: v.id("migrationRuns"),
+    documentId: v.string(),
+    reason: v.string(),
+  }).index("by_run", ["runId"]),
 });

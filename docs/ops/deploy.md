@@ -28,15 +28,14 @@ To build and run it locally, from the `woofx3-ui` checkout with the engine check
 
 ```bash
 docker build \
-  --build-context engine-api=../woofx3/shared/clients/typescript/api \
-  --build-context engine-scene=../woofx3/shared/clients/typescript/scene \
+  --build-context engine=../woofx3 \
   --build-arg VITE_CONVEX_URL=https://<deployment>.convex.cloud \
   --build-arg VITE_CONVEX_SITE_URL=https://<deployment>.convex.site \
   -t woofx3-ui .
 docker run --rm -p 8080:8080 woofx3-ui
 ```
 
-The `engine-api` and `engine-scene` build contexts supply the engine's shared type package (`@woofx3/api`) and its composition package (`@woofx3/scene`, the scene editor's model and headless editor). Both live outside this repository.
+The `engine` build context is the engine checkout. It supplies the engine's shared type package (`@woofx3/api`) and its composition package (`@woofx3/scene`, the scene editor's model and headless editor), which live outside this repository. Their dependencies are installed from the engine's workspace lockfile (`bun.lock` at its root), filtered to those two packages, so the context needs the root `package.json`, `bun.lock` and every workspace member's `package.json` as well as the two packages' sources. The deploy workflows check out exactly that subset of the engine.
 
 ## Secrets and variables
 
@@ -54,6 +53,43 @@ Everything environment-specific lives in the `production` GitHub Environment (**
 The deploy does not manage Convex environment variables (`AUTH_TWITCH_*`, `SITE_URL`, JWT keys, storage configuration). They are set on the production deployment in the Convex dashboard.
 
 Railway pulls the image from GHCR. The `woofx3-ui` package must be public, or the Railway service needs registry credentials (a GitHub token with `read:packages`). The image holds only the public client bundle.
+
+## Platform token encryption
+
+Convex keeps each instance's Twitch grant (`platformLinks`) so it can renew the access token and hand it to the engine. The access and refresh tokens are stored encrypted with AES-256-GCM (`convex/lib/tokenCipher.ts`), so a database export or a dashboard data view alone does not give them away. Only Convex functions running in actions open them, through `convex/lib/platformLinkTokens.ts`; no query returns them, sealed or not, to a browser or to the ops API.
+
+Each kind of token has its own key, so one can be replaced without touching the other:
+
+| Convex variable | Seals | Key id |
+|-----------------|-------|--------|
+| `PLATFORM_TOKEN_ENCRYPTION_KEY` | Streamer grants in `platformLinks` and the Twitch connect handoff | `p1` |
+| `VIEWER_TOKEN_ENCRYPTION_KEY` | Viewer grants in `viewerPlatformTokens` ([Viewer sign-in](../ui/viewer-sign-in.md)) | `v1` |
+
+Each key is 32 random bytes, base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`. Set it on the production deployment and in the preview default variables (previews get their own value; their links are thrown away with the deployment). A sealed value starts with its key id (`p1.…`), so a later rotation can tell values sealed under the old key from the new one. Changing a key without resealing makes every grant it sealed unreadable: streamers would have to reconnect Twitch.
+
+Without `PLATFORM_TOKEN_ENCRYPTION_KEY`, connecting Twitch and every Twitch call fail rather than store or read a token in the clear.
+
+### Sealing links stored in the clear
+
+Links connected before encryption hold their tokens in plaintext until the sealing migration converts them. Until it has run, reads accept either shape, and every write (a connect, a relink, a token refresh) stores the sealed pair and removes the plaintext one.
+
+1. Set `PLATFORM_TOKEN_ENCRYPTION_KEY` on the deployment.
+2. Deploy the release that seals tokens.
+3. Run the migration. It reads links a page at a time and seals each one on its own; a link it cannot convert is recorded and left as it was:
+
+   ```bash
+   bunx convex run --prod migrations/sealPlatformLinkTokens:default
+   ```
+
+4. Check the report it returns, or the latest run at any time:
+
+   ```bash
+   bunx convex run --prod migrations/sealPlatformLinkTokens:status
+   ```
+
+   A finished migration shows `status: "completed"` and `failed: 0`. Run it again: it is safe to repeat, and a second run should show `converted: 0` with every link `skipped`. Each listed failure names the link and why it could not be sealed; fix or disconnect those links and run it again.
+
+5. Only then deploy the release that drops the plaintext fields from the schema. Convex refuses to deploy that schema while any link still holds a plaintext token, so deploying it too early fails without harm.
 
 ## Rolling back
 
