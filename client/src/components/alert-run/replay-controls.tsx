@@ -1,4 +1,4 @@
-import { isRecordedOrigin, type ManualRunOrigin, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { isRecordedOrigin, type ManualRunOrigin, UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, StepForward } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";

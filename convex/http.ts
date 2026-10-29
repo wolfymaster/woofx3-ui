@@ -1,5 +1,6 @@
 import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
 import { widgetCanonicalKey } from "@shared/widget-key";
+import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "@shared/workflow-test-run";
 import type { InboundWebhookResponse } from "@woofx3/api";
 import type { CallbackEnvelope, CallbackEvent, WorkflowRunCancelledEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
@@ -13,7 +14,6 @@ import { ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLi
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { engineActivityPatch } from "./lib/engineSync/activity";
-import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "./lib/engineTestRun";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
   buildForwardedRequest,

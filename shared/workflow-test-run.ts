@@ -1,5 +1,3 @@
-import type { RpcTarget } from "@woofx3/api/client";
-
 /**
  * Engine shapes for test runs, declared here because the engine checkout this
  * repo builds against may predate them. Must match `TriggerWorkflowOptions`,
@@ -62,24 +60,6 @@ export interface CancelWorkflowResult {
   /** The run's status after the call. */
   status: string;
   message: string;
-}
-
-/**
- * The slice of the engine API test runs use, typed to the engine that has
- * the options. Calls against an older engine still succeed: capnweb passes
- * the extra argument, which the older method ignores.
- */
-export interface TestRunEngineApi extends RpcTarget {
-  triggerWorkflowByName(
-    workflowNameOrId: string,
-    parameters?: Record<string, string>,
-    userId?: string,
-    triggerId?: string,
-    triggeredBy?: string,
-    options?: TriggerWorkflowOptions
-  ): Promise<TriggerWorkflowResponse>;
-  /** Returns nothing on an engine whose cancel only marks the history row. */
-  cancelWorkflow(executionId: string, reason?: string): Promise<CancelWorkflowResult | undefined | null>;
 }
 
 /**

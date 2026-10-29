@@ -1,4 +1,4 @@
-import { REPLAY_ORIGIN, TEST_RUN_ORIGIN, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { REPLAY_ORIGIN, TEST_RUN_ORIGIN, UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import { parseEngineTime, toneFor } from "@/lib/workflow-run-timeline";
 
 /**

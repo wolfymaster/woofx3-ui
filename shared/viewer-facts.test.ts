@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseViewerFacts } from "./engineViewerFacts";
+import { parseViewerFacts } from "./viewer-facts";
 
 describe("parseViewerFacts", () => {
   test("keeps well-formed entries in the engine's order", () => {

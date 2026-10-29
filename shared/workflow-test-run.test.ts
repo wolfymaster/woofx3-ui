@@ -6,7 +6,7 @@ import {
   MAX_TRIGGER_DATA_BYTES,
   optionsWereIgnored,
   type TriggerWorkflowResponse,
-} from "./engineTestRun";
+} from "./workflow-test-run";
 
 describe("dryRunWouldDo", () => {
   it("reads the description a dry-run step recorded", () => {
