@@ -33,7 +33,7 @@ const WIDGETS = (): readonly QueryKey[] => [
   k.scenes.allAlertTargetUsage,
 ];
 /** A module's manifest declares its resource kinds, so what is installed decides them too. */
-const MODULES = (): readonly QueryKey[] => [...WIDGETS(), ...CATALOG(), k.moduleResources.all];
+export const MODULE_INVALIDATIONS = (): readonly QueryKey[] => [...WIDGETS(), ...CATALOG(), k.moduleResources.all];
 const RESOURCE_INSTANCES = (): readonly QueryKey[] => [k.moduleResources.all];
 
 /** The engine keeps scenes and library alerts in one table and reports both as `scene.*`, told apart by kind. */
@@ -49,9 +49,9 @@ function compositionKeys(kind: CompositionKind): readonly QueryKey[] {
  * nothing.
  */
 export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> } = {
-  [EngineEventType.MODULE_INSTALLED]: MODULES,
+  [EngineEventType.MODULE_INSTALLED]: MODULE_INVALIDATIONS,
   [EngineEventType.MODULE_INSTALL_FAILED]: NONE,
-  [EngineEventType.MODULE_DELETED]: MODULES,
+  [EngineEventType.MODULE_DELETED]: MODULE_INVALIDATIONS,
   [EngineEventType.MODULE_DELETE_FAILED]: NONE,
   [EngineEventType.MODULE_TRIGGER_REGISTERED]: CATALOG,
   [EngineEventType.MODULE_ACTION_REGISTERED]: CATALOG,
