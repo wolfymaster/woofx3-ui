@@ -2,15 +2,7 @@ import { useCallback, useState } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
 import type { Resource } from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
-
-/**
- * A PUT that never reached storage throws a bare TypeError: a refused CORS
- * preflight is indistinguishable from an unreachable host to the page that
- * made the request, by design. Storage on a bucket the operator has not given
- * a CORS policy fails exactly this way, so the message names that first.
- */
-const UNREACHABLE_STORAGE =
-  "the browser could not reach storage. If assets are stored on S3 or R2, that bucket needs a CORS policy allowing PUT from this site — or set the engine's storage.uploadMode to relay.";
+import { putToGrant } from "@/lib/upload-grant";
 
 /**
  * Uploads files to engine-backed storage.
@@ -74,30 +66,16 @@ export function useResourceUpload() {
             });
           }
 
-          const headers = new Headers();
-          for (const header of grant.headers) {
-            // The grant is bound to the file's exact length, but browsers
-            // forbid page code from setting Content-Length: fetch sends it
-            // from the File body, which is the size the grant was issued for.
-            if (header.name.toLowerCase() === "content-length") {
-              continue;
-            }
-            headers.set(header.name, header.value);
-          }
-
           // The grant reserved a row before the bytes were sent, so a PUT that
           // never landed leaves a resource holding nothing. It is dropped here
           // rather than left in the list as an asset that cannot be opened.
-          let response: Response;
           try {
-            response = await fetch(grant.uploadUrl, { method: grant.method, headers, body: file });
+            await putToGrant(grant, file);
           } catch (err) {
             await discardReservation(grant.resource.id);
-            throw Object.assign(new Error(`${file.name}: ${UNREACHABLE_STORAGE}`, { cause: err }), { uploaded: done });
-          }
-          if (!response.ok) {
-            await discardReservation(grant.resource.id);
-            throw Object.assign(new Error(`${file.name}: upload failed (${response.status})`), { uploaded: done });
+            throw Object.assign(new Error(`${file.name}: ${actionErrorMessage(err)}`, { cause: err }), {
+              uploaded: done,
+            });
           }
 
           const resource = await completeUpload(grant.resource.id);
