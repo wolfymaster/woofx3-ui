@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { MAX_CHAT_MESSAGE_LENGTH } from "@shared/twitch-chat";
 import { missingTwitchScopeMessage } from "@shared/twitch-link-refusal";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -31,7 +32,7 @@ import {
   freshTwitchCredentials,
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
-import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
+import { sendChatMessage } from "./lib/twitchChat";
 import { twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 

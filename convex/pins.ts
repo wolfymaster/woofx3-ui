@@ -1,6 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { SEND_MESSAGE_SCOPE } from "@shared/twitch-chat";
 import { isUnconfirmedWrite } from "@shared/twitch-helix-answer";
-import { parsePinsResponse, type TwitchPin } from "@shared/twitch-pins";
+import {
+  PIN_MANAGE_SCOPE,
+  PIN_READ_SCOPE,
+  pinnedMessageProblem,
+  readCurrentPinAnswer,
+  readUnpinAnswer,
+  type TwitchPin,
+} from "@shared/twitch-pins";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -16,7 +24,7 @@ import {
 import { planRepin, type RepinPlan } from "./lib/pinStrategy";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
-import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
+import { sendChatMessage } from "./lib/twitchChat";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 
 // Twitch chat pinning, and the local history it is driven from.
@@ -37,10 +45,6 @@ import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/tw
 // does (convex/lib/twitchEngineHelix.ts).
 
 const TWITCH_PINS_URL = "https://api.twitch.tv/helix/chat/pins";
-
-const PIN_MANAGE_SCOPE = "moderator:manage:chat_messages";
-const PIN_READ_SCOPE = "moderator:read:chat_messages";
-const SEND_SCOPE = "user:write:chat";
 
 const MAX_HISTORY_READ = 100;
 
@@ -193,10 +197,7 @@ export async function fetchCurrentPin(
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),
   });
-  if (!response.ok) {
-    throw new Error(`Twitch pin lookup failed: ${response.status} ${await response.text()}`);
-  }
-  return parsePinsResponse(await response.json());
+  return readCurrentPinAnswer(response);
 }
 
 /**
@@ -348,11 +349,9 @@ export const pinNewMessage = action({
   args: { instanceId: v.id("instances"), text: v.string() },
   handler: async (ctx, args): Promise<{ messageId: string }> => {
     const text = args.text.trim();
-    if (!text) {
-      throw new Error("A pinned message needs some text");
-    }
-    if (text.length > MAX_CHAT_MESSAGE_LENGTH) {
-      throw new Error(`Chat messages are limited to ${MAX_CHAT_MESSAGE_LENGTH} characters`);
+    const problem = pinnedMessageProblem(text);
+    if (problem) {
+      throw new Error(problem);
     }
 
     const userId = await getAuthUserId(ctx);
@@ -360,7 +359,7 @@ export const pinNewMessage = action({
       throw new Error("Not authenticated");
     }
     // Both scopes are needed: one to post the message, one to pin it.
-    const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
+    const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_MESSAGE_SCOPE);
     await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
 
     const messageId = await sendChatMessage(
@@ -422,7 +421,7 @@ export const repinFromHistory = action({
       plan,
       entry.content,
       async () => {
-        await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
+        await authorizeTwitch(ctx, args.instanceId, SEND_MESSAGE_SCOPE);
       }
     );
 
@@ -464,7 +463,5 @@ export async function unpinOnTwitch(
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),
   });
-  if (!response.ok) {
-    throw new Error(`Twitch unpin failed: ${response.status} ${await response.text()}`);
-  }
+  await readUnpinAnswer(response);
 }
