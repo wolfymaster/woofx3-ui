@@ -1,5 +1,5 @@
 import { authTables } from "@convex-dev/auth/server";
-import { pageContentValidator } from "@shared/user-pages";
+import { bindableResourceKindValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
@@ -345,6 +345,9 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_account", ["accountId"])
     .index("by_maintenance_engine", ["maintenanceEngineId"])
+    // A public page is found by its engine's slug. Released slugs stay on their
+    // rows, so a slug can match more than one; see lib/userPages.ts holdsSlug.
+    .index("by_slug", ["slug"])
     .index("by_status", ["status"]),
 
   // maintenanceEvents: delivered maintenance-API callback ids. The endpoint is
@@ -2108,4 +2111,21 @@ export default defineSchema({
     savedBy: v.id("users"),
     savedAt: v.number(),
   }),
+
+  // userPageState: the values published pages show, one row per resource the
+  // instance's published revision binds, and nothing else. It is what the
+  // public page read serves values from, so a value no published page binds
+  // can never reach a visitor. Rebuilt on publish; refreshed from the same
+  // writes that keep resourceValues and moduleResourceInstances current. See
+  // convex/lib/userPageState.ts.
+  userPageState: defineTable({
+    instanceId: v.id("instances"),
+    canonicalId: v.string(),
+    kind: bindableResourceKindValidator,
+    // As resourceValues holds it; null before the resource is first written.
+    value: v.any(),
+    // Only the settings a visitor needs to read `value`.
+    settings: v.record(v.string(), v.any()),
+    updatedAt: v.number(),
+  }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
 });

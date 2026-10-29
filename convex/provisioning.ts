@@ -4,13 +4,13 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, query } from "./_generated/server";
 import {
-  checkSlugAvailability,
   createEngine,
   currentRelease,
   getEngine,
   isMaintenanceConfigured,
   MAINTENANCE_OWNER_TYPE,
-  MaintenanceApiError,
+  normalizeSlug,
+  slugAvailability,
 } from "./lib/maintenanceClient";
 import {
   deleteManagedEngineRow,
@@ -176,14 +176,7 @@ export const checkSlug = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    try {
-      return await checkSlugAvailability(slug.trim().toLowerCase());
-    } catch (error) {
-      if (error instanceof MaintenanceApiError && error.status === 400) {
-        return { available: false, reason: error.message };
-      }
-      throw error;
-    }
+    return slugAvailability(slug);
   },
 });
 
@@ -207,7 +200,7 @@ export const startManagedEngine = action({
       throw new Error("CONVEX_SITE_URL is not configured");
     }
 
-    const normalizedSlug = slug.trim().toLowerCase();
+    const normalizedSlug = normalizeSlug(slug);
     const registrationToken = generateRegistrationToken();
     const reserved = await ctx.runMutation(internal.provisioningInternal.reserveManagedInstance, {
       accountId,

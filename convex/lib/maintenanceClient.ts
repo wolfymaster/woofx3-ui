@@ -162,6 +162,27 @@ export function checkSlugAvailability(slug: string): Promise<SlugAvailability> {
   return request<SlugAvailability>(`/v1/slugs/${encodeURIComponent(slug)}?kind=customer`, { method: "GET" });
 }
 
+/** Slugs are stored and compared lowercase, so what a person types is normalized the same way everywhere. */
+export function normalizeSlug(slug: string): string {
+  return slug.trim().toLowerCase();
+}
+
+/**
+ * Whether a customer engine could be created under `slug`: its format, the
+ * reserved names and whether an engine holds it, all as the maintenance API
+ * decides. A slug it refuses as malformed is unavailable, with its reason.
+ */
+export async function slugAvailability(slug: string): Promise<SlugAvailability> {
+  try {
+    return await checkSlugAvailability(normalizeSlug(slug));
+  } catch (error) {
+    if (error instanceof MaintenanceApiError && error.status === 400) {
+      return { available: false, reason: error.message };
+    }
+    throw error;
+  }
+}
+
 /**
  * The engine as the maintenance API sees it now.
  *
