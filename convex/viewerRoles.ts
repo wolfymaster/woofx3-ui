@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { refreshOutcomeApplies } from "./lib/twitchRefresh";
+import { instanceForPageSlug } from "./lib/userPages";
 import {
   type SubscriberTier,
   subscriberTierValidator,
@@ -32,6 +33,7 @@ export type RefreshRolesResult =
       ok: false;
       error:
         | "not_signed_in"
+        | "page_not_found"
         | "broadcaster_not_linked"
         | "platform_mismatch"
         | "reauth_required"
@@ -50,6 +52,7 @@ const refreshRolesResultValidator = v.union(
     ok: v.literal(false),
     error: v.union(
       v.literal("not_signed_in"),
+      v.literal("page_not_found"),
       v.literal("broadcaster_not_linked"),
       v.literal("platform_mismatch"),
       v.literal("reauth_required"),
@@ -83,22 +86,30 @@ async function outageRow(
     .unique();
 }
 
+type RefreshContextLookup =
+  | { ok: true; context: RefreshContext }
+  | { ok: false; error: "not_signed_in" | "page_not_found" };
+
 /** Internal: the result carries the viewer's sealed tokens. */
 export const refreshContext = internalQuery({
-  args: { sessionTokenHash: v.string(), instanceId: v.id("instances") },
-  handler: async (ctx, { sessionTokenHash, instanceId }): Promise<RefreshContext | null> => {
+  args: { sessionTokenHash: v.string(), slug: v.string() },
+  handler: async (ctx, { sessionTokenHash, slug }): Promise<RefreshContextLookup> => {
     const session = await ctx.db
       .query("viewerSessions")
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", sessionTokenHash))
       .unique();
     if (!session) {
-      return null;
+      return { ok: false, error: "not_signed_in" };
+    }
+    const page = await instanceForPageSlug(ctx, slug);
+    if (!page) {
+      return { ok: false, error: "page_not_found" };
     }
     const viewer = await ctx.db.get(session.viewerId);
     if (!viewer) {
       throw new Error(`viewer session ${session._id} names a viewer that does not exist`);
     }
-    const broadcaster = await broadcasterForInstance(ctx, instanceId);
+    const broadcaster = await broadcasterForInstance(ctx, page.instanceId);
     const cached = broadcaster ? await viewerRolesFor(ctx, viewer._id, broadcaster.platformUserId) : null;
     const outage = broadcaster ? await outageRow(ctx, viewer._id, viewer.platform, broadcaster.platformUserId) : null;
     const tokens = await ctx.db
@@ -106,12 +117,15 @@ export const refreshContext = internalQuery({
       .withIndex("by_viewer", (q) => q.eq("viewerId", viewer._id))
       .unique();
     return {
-      session: { expiresAt: session.expiresAt },
-      viewer: { _id: viewer._id, platform: viewer.platform, platformUserId: viewer.platformUserId },
-      broadcaster,
-      cached,
-      outage: outage ? { failedAt: outage.failedAt } : null,
-      tokens,
+      ok: true,
+      context: {
+        session: { expiresAt: session.expiresAt },
+        viewer: { _id: viewer._id, platform: viewer.platform, platformUserId: viewer.platformUserId },
+        broadcaster,
+        cached,
+        outage: outage ? { failedAt: outage.failedAt } : null,
+        tokens,
+      },
     };
   },
 });
@@ -255,22 +269,28 @@ export const recordRefresh = internalMutation({
 });
 
 /**
- * The signed-in viewer's roles on the channel `instanceId` streams on, from
- * the cache while it is fresh and from the platform otherwise.
+ * The signed-in viewer's roles on the channel of the page at `/u/<slug>`,
+ * from the cache while it is fresh and from the platform otherwise. Takes the
+ * slug because that is all a page knows: the public read never names an
+ * instance.
  */
 export const refresh = action({
-  args: { sessionToken: v.string(), instanceId: v.id("instances") },
+  args: { sessionToken: v.string(), slug: v.string() },
   returns: refreshRolesResultValidator,
-  handler: async (ctx, { sessionToken, instanceId }): Promise<RefreshRolesResult> => {
+  handler: async (ctx, { sessionToken, slug }): Promise<RefreshRolesResult> => {
     if (!isOpaqueToken(sessionToken)) {
       return { ok: false, error: "not_signed_in" };
     }
     const now = Date.now();
-    const context: RefreshContext | null = await ctx.runQuery(internal.viewerRoles.refreshContext, {
+    const lookup: RefreshContextLookup = await ctx.runQuery(internal.viewerRoles.refreshContext, {
       sessionTokenHash: await hashOpaqueToken(sessionToken),
-      instanceId,
+      slug,
     });
-    if (context === null || !viewerSessionLive(context.session, now)) {
+    if (!lookup.ok) {
+      return lookup;
+    }
+    const { context } = lookup;
+    if (!viewerSessionLive(context.session, now)) {
       return { ok: false, error: "not_signed_in" };
     }
     const { viewer, broadcaster, cached, outage, tokens } = context;
