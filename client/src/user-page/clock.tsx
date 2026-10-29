@@ -17,6 +17,10 @@ export const systemClock: Clock = {
 
 const ClockContext = createContext<Clock>(systemClock);
 
+export function useClock(): Clock {
+  return useContext(ClockContext);
+}
+
 export function ClockProvider({ clock, children }: { clock: Clock; children: ReactNode }) {
   return <ClockContext.Provider value={clock}>{children}</ClockContext.Provider>;
 }

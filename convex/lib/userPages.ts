@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { accountEntitlements } from "./entitlementAccess";
+import { normalizeSlug } from "./maintenanceClient";
 import { parseKindRef } from "./resourceKinds";
 import { rebuildPageState } from "./userPageState";
 
@@ -48,6 +49,26 @@ export async function instanceHoldingSlug(ctx: QueryCtx, slug: string): Promise<
     throw new Error(`Slug "${slug}" is held by ${holders.length} engines`);
   }
   return holders[0]?.instanceId ?? null;
+}
+
+/** Longer than any slug the maintenance API issues, so a longer one is answered without a read. */
+const MAX_SLUG_LENGTH = 63;
+
+/**
+ * The instance whose page a visitor names at `/u/<slug>`, in any case and
+ * with stray whitespace, together with the slug as stored. Null when no
+ * engine holds it.
+ */
+export async function instanceForPageSlug(
+  ctx: QueryCtx,
+  requested: string
+): Promise<{ slug: string; instanceId: Id<"instances"> } | null> {
+  const slug = normalizeSlug(requested);
+  if (slug === "" || slug.length > MAX_SLUG_LENGTH) {
+    return null;
+  }
+  const instanceId = await instanceHoldingSlug(ctx, slug);
+  return instanceId === null ? null : { slug, instanceId };
 }
 
 /**

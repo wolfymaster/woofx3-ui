@@ -4,6 +4,9 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { type Clock, ClockProvider } from "./clock";
 import { documentTitle, type PublishedPage, UserPageView } from "./page-view";
+import { lockedSectionCopy, requirementLabel } from "./viewer/locked-section";
+import { type PageViewer, PageViewerProvider } from "./viewer/page-viewer";
+import { ViewerActions } from "./viewer/viewer-actions";
 import PageMarkdown from "./widgets/markdown";
 import { PageWidgetView } from "./widgets/page-widget";
 
@@ -21,13 +24,15 @@ function page(overrides: Partial<PublishedPage> = {}): PublishedPage {
     layout: "single",
     theme: { accent: "teal" },
     sections: [],
+    rolesStale: false,
+    rolesRenewAt: null,
     publishedAt: NOW,
     ...overrides,
   };
 }
 
 function section(id: string, region: PublicPageSection["region"], widgets: PublicPageWidget[] = []): PublicPageSection {
-  return { id, region, title: `Section ${id}`, widgets };
+  return { kind: "open", id, region, title: `Section ${id}`, widgets };
 }
 
 const COUNTER_KIND = "woofx3:counter";
@@ -364,4 +369,213 @@ describe("documentTitle", () => {
       expect(documentTitle(lookup)).toBe(title);
     });
   }
+});
+
+const SIGNED_OUT: PageViewer = {
+  session: { status: "signed_out" },
+  canSignIn: true,
+  canonicalUrl: "https://woofx3.tv/u/wolfy",
+  roleCheck: "idle",
+  signIn: () => {},
+};
+
+function renderAs(viewer: PageViewer, element: ReactElement): string {
+  return render(<PageViewerProvider viewer={viewer}>{element}</PageViewerProvider>);
+}
+
+const LOCKED_FOLLOWERS: PublicPageSection = {
+  kind: "locked",
+  region: "main",
+  requirement: { kind: "follower" },
+  reason: "sign_in",
+};
+
+describe("locked sections", () => {
+  test("keep their place among open sections and show only their requirement", () => {
+    const html = renderAs(
+      SIGNED_OUT,
+      <UserPageView
+        lookup={page({ sections: [section("a", "main"), LOCKED_FOLLOWERS, section("b", "main")] })}
+        claimable={false}
+      />
+    );
+    const order = [html.indexOf("Section a"), html.indexOf("Followers only"), html.indexOf("Section b")];
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(html).toContain("locked-slate");
+    expect(html).toContain('aria-label="Followers only: locked"');
+  });
+
+  test("offer an anonymous visitor sign-in", () => {
+    const html = renderAs(
+      SIGNED_OUT,
+      <UserPageView lookup={page({ sections: [LOCKED_FOLLOWERS] })} claimable={false} />
+    );
+    expect(html).toContain("Sign in with Twitch to see whether you can view this.");
+    expect(html).toContain("<button");
+  });
+
+  test("off the user-pages origin, link to the page there instead of signing in", () => {
+    const html = renderAs(
+      { ...SIGNED_OUT, canSignIn: false },
+      <UserPageView lookup={page({ sections: [LOCKED_FOLLOWERS] })} claimable={false} />
+    );
+    expect(html).toContain('href="https://woofx3.tv/u/wolfy"');
+    expect(html).not.toContain("<button");
+  });
+
+  test("blink the plate's tab while roles are being checked", () => {
+    const html = renderAs(
+      {
+        ...SIGNED_OUT,
+        session: { status: "signed_in", sessionToken: "t", profile: undefined },
+        roleCheck: "checking",
+      },
+      <UserPageView
+        lookup={page({ sections: [{ ...LOCKED_FOLLOWERS, reason: "roles_unknown" }], rolesStale: true })}
+        claimable={false}
+      />
+    );
+    expect(html).toContain("Checking your Twitch account");
+    expect(html).toContain("motion-safe:animate-pulse");
+  });
+});
+
+describe("requirementLabel", () => {
+  const cases: Array<[Parameters<typeof requirementLabel>[0], string]> = [
+    [{ kind: "signed_in" }, "Signed-in viewers"],
+    [{ kind: "follower" }, "Followers only"],
+    [{ kind: "subscriber" }, "Subscribers only"],
+    [{ kind: "tier", level: 1 }, "Tier 1 subscribers and up"],
+    [{ kind: "tier", level: 2 }, "Tier 2 subscribers and up"],
+    [{ kind: "tier", level: 3 }, "Tier 3 subscribers"],
+  ];
+  for (const [requirement, label] of cases) {
+    test(`${JSON.stringify(requirement)} reads "${label}"`, () => {
+      expect(requirementLabel(requirement)).toBe(label);
+    });
+  }
+});
+
+describe("lockedSectionCopy", () => {
+  const signedIn = { status: "signed_in", sessionToken: "t", profile: undefined } as const;
+  const cases: Array<{
+    name: string;
+    reason: Parameters<typeof lockedSectionCopy>[1];
+    viewer: Parameters<typeof lockedSectionCopy>[2];
+    action: ReturnType<typeof lockedSectionCopy>["action"];
+    pending: boolean;
+    says: string;
+  }> = [
+    {
+      name: "anonymous",
+      reason: "sign_in",
+      viewer: { session: { status: "signed_out" }, canSignIn: true, roleCheck: "idle" },
+      action: "sign_in",
+      pending: false,
+      says: "Sign in with Twitch",
+    },
+    {
+      name: "anonymous off-origin",
+      reason: "sign_in",
+      viewer: { session: { status: "signed_out" }, canSignIn: false, roleCheck: "idle" },
+      action: "open_canonical",
+      pending: false,
+      says: "Open this page on woofx3",
+    },
+    {
+      name: "signing in",
+      reason: "sign_in",
+      viewer: { session: { status: "signing_in" }, canSignIn: true, roleCheck: "idle" },
+      action: null,
+      pending: true,
+      says: "Signing you in",
+    },
+    {
+      name: "roles being checked",
+      reason: "roles_unknown",
+      viewer: { session: signedIn, canSignIn: true, roleCheck: "checking" },
+      action: null,
+      pending: true,
+      says: "Checking",
+    },
+    {
+      name: "Twitch not answering",
+      reason: "roles_unknown",
+      viewer: { session: signedIn, canSignIn: true, roleCheck: "retrying" },
+      action: null,
+      pending: true,
+      says: "keep trying",
+    },
+    {
+      name: "grant revoked",
+      reason: "roles_unknown",
+      viewer: { session: signedIn, canSignIn: true, roleCheck: "reauth" },
+      action: "sign_in_again",
+      pending: false,
+      says: "Sign in again",
+    },
+    {
+      name: "refresh stopped",
+      reason: "roles_unknown",
+      viewer: { session: signedIn, canSignIn: true, roleCheck: "stopped" },
+      action: null,
+      pending: false,
+      says: "can't be unlocked",
+    },
+    {
+      name: "not a follower",
+      reason: "not_eligible",
+      viewer: { session: signedIn, canSignIn: true, roleCheck: "idle" },
+      action: null,
+      pending: false,
+      says: "Follow the channel",
+    },
+    {
+      name: "unverifiable",
+      reason: "unverifiable",
+      viewer: { session: signedIn, canSignIn: true, roleCheck: "idle" },
+      action: null,
+      pending: false,
+      says: "can't be unlocked",
+    },
+  ];
+  for (const { name, reason, viewer, action, pending, says } of cases) {
+    test(`a followers-only section for ${name}`, () => {
+      const copy = lockedSectionCopy({ kind: "follower" }, reason, viewer);
+      expect(copy.action).toBe(action);
+      expect(copy.pending).toBe(pending);
+      expect(copy.message).toContain(says);
+    });
+  }
+
+  test("names the tier a viewer needs", () => {
+    const viewer = { session: signedIn, canSignIn: true, roleCheck: "idle" } as const;
+    expect(lockedSectionCopy({ kind: "tier", level: 2 }, "not_eligible", viewer).message).toContain("tier 2 or higher");
+    expect(lockedSectionCopy({ kind: "tier", level: 3 }, "not_eligible", viewer).message).not.toContain("or higher");
+  });
+});
+
+describe("ViewerActions", () => {
+  test("offers sign-in to a signed-out viewer on the user-pages origin, and nothing elsewhere", () => {
+    expect(renderAs(SIGNED_OUT, <ViewerActions onSignOut={() => {}} />)).toContain("Sign in with Twitch");
+    expect(renderAs({ ...SIGNED_OUT, canSignIn: false }, <ViewerActions onSignOut={() => {}} />)).toBe("");
+  });
+
+  test("shows the signed-in viewer and a way to sign out", () => {
+    const html = renderAs(
+      {
+        ...SIGNED_OUT,
+        session: {
+          status: "signed_in",
+          sessionToken: "t",
+          profile: { displayName: "Howler", avatarUrl: "https://static-cdn.example/a.png" },
+        },
+      },
+      <ViewerActions onSignOut={() => {}} />
+    );
+    expect(html).toContain("Howler");
+    expect(html).toContain("Sign out");
+    expect(html).toContain('src="https://static-cdn.example/a.png"');
+  });
 });

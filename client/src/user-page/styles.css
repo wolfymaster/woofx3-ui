@@ -47,3 +47,15 @@ body {
     transparent 4px
   );
 }
+
+/* A section the viewer may not see: the fallback banner's scanlines, faint, over the panel. */
+.locked-slate {
+  background-color: rgb(var(--surface));
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgb(var(--accent) / 0.07) 0,
+    rgb(var(--accent) / 0.07) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
