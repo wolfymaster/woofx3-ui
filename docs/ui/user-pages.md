@@ -60,13 +60,15 @@ A section the viewer may not see comes back as `{ kind: "locked", region, requir
 
 A query can't read the time, and it can't call Twitch. Roles are cached in `viewerRoles` (see [Viewer sign-in](/ui/viewer-sign-in#roles)), and a row exists only while it's fresh: storing a check schedules the row's deletion `VIEWER_ROLES_TTL_MS` (ten minutes) later. So `bySlug` treats any row it finds as current, and treats no row as `roles_unknown`. When any section is locked for `roles_unknown`, the page result has `rolesStale: true`.
 
-The page then calls `viewerRoles.refresh({ sessionToken, slug })`. Its write re-runs `bySlug`, which opens or keeps locked each section on the new roles. When the row expires, the query re-runs again, the section locks, and the page refreshes once more. A viewer who keeps the page open therefore sees gated sections close briefly every ten minutes while the check runs.
+The page then calls `viewerRoles.refresh({ sessionToken, slug })`. Its write re-runs `bySlug`, which opens or keeps locked each section on the new roles.
+
+So that a viewer who keeps the page open never sees an open section lock while their roles are re-checked, the page renews roles before they expire. On a page with a section gated on roles, a viewer with current roles gets `rolesRenewAt`: their check time plus the TTL, less `VIEWER_ROLES_RENEW_LEAD_MS` (two minutes, so at four fifths of the TTL). At that moment the page calls `viewerRoles.refresh`. From that point, refresh asks Twitch instead of answering from the cache. The new check replaces the row and moves `checkedAt` on, so the old row's scheduled deletion finds a newer check and does nothing. If the renewal can't reach Twitch, the page retries as below. If no retry lands before the row expires, the row is deleted and its sections lock: an outage never keeps a section open on expired roles.
 
 How the page handles each refresh answer:
 
 | Answer | Page |
 | --- | --- |
-| roles stored | Nothing more: the query re-runs. |
+| roles stored | Nothing more: the query re-runs, with a later `rolesRenewAt`. |
 | `unavailable`, `rate_limited`, or no answer | Keeps "checking" and retries after 30 seconds, doubling up to 5 minutes, with jitter (`ROLE_REFRESH_RETRY` in `client/src/user-page/viewer/role-refresh.ts`). |
 | `reauth_required` | Asks the viewer to sign in again. |
 | `not_signed_in` | Forgets the session token. |
@@ -79,6 +81,7 @@ The flow is the one in [Viewer sign-in](/ui/viewer-sign-in#the-sign-in-flow); th
 - **Start.** "Sign in with Twitch" sits in the page's top-right corner. It stores a fresh nonce in `sessionStorage` and sends the browser to `<user-pages origin>/u/_/viewer-auth/twitch/start` with `return_to` set to the page's own URL. The origin is `VITE_USER_PAGES_BASE_URL`, `https://woofx3.tv` when unset, and must match Convex's `USER_PAGES_BASE_URL`. A sign-in can only return to that origin, so the page offers it only there. Opened anywhere else (the dashboard's host, a preview), locked sections link to the page on that origin instead.
 - **Return.** Before rendering, `main.tsx` reads `viewer_code` or `viewer_auth_error` off the URL and removes them with `history.replaceState`. A code is exchanged with `viewerSession.exchangeHandoff` and the nonce, which is used once and then removed. The session token goes into `localStorage`, which the browser keeps per origin. A code with no nonce in this tab is refused without asking Convex.
 - **Errors.** Each callback error (`access_denied`, `missing_params`, `token_exchange_failed`, `profile_fetch_failed`, `rate_limited`) and exchange refusal has its own message, shown above the sections until dismissed.
+- **Reloading.** Signing in changes `bySlug`'s arguments. The page keeps the anonymous answer on screen until the signed-in one arrives (`useLookupWhileLoading`), so it doesn't drop back to its loading skeleton. It never keeps an answer for another slug, nor one read for a session that has since ended or changed hands.
 - **Signed in.** The corner shows the viewer's avatar and name from `viewerSession.me`, and "Sign out", which forgets the token and calls `viewerSession.signOut`. If `me` answers null, the session has ended and the token is forgotten.
 
 Where browser storage is blocked, the page behaves as signed out.
