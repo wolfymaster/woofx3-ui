@@ -1,5 +1,14 @@
 "use node";
 
+import { type LocalEndpointSummary, localEndpointSummaries } from "@shared/local-endpoints";
+import {
+  installedFunctionSummaries,
+  type ModuleFunctionSummary,
+  marketplaceFunctionSummaries,
+  type RegisteredFunction,
+} from "@shared/module-function-summary";
+import { moduleOAuthIntegrationIds } from "@shared/module-oauth";
+import { parseManifestPermissions } from "@shared/module-permissions";
 import { type ManifestResourceKind, parseManifestResourceKinds } from "@shared/resource-kinds";
 import { type ConfigField, LIST_ITEM_FIELD_TYPES, parseFieldList } from "@woofx3/api/ui-schema";
 import { v } from "convex/values";
@@ -7,18 +16,9 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
 import type { MarketplaceAccess } from "./lib/marketplaceAccess";
 import { buyerRefFor } from "./lib/marketplaceEntitlement";
 import { installedListing } from "./lib/marketplaceInstallIdentity";
-import {
-  installedFunctionSummaries,
-  type ModuleFunctionSummary,
-  marketplaceFunctionSummaries,
-  type RegisteredFunction,
-} from "./lib/moduleFunctionSummary";
-import { moduleOAuthIntegrationIds } from "./lib/moduleOAuth";
-import { parseManifestPermissions } from "./lib/modulePermissions";
 import { logger } from "./logger";
 import {
   fetchMarketplaceArchiveManifest,

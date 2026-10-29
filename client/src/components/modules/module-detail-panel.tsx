@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
-import { functionLocation, type ModuleFunctionSummary } from "@convex/lib/moduleFunctionSummary";
+import type { LocalEndpointSummary } from "@shared/local-endpoints";
+import { functionLocation, type ModuleFunctionSummary } from "@shared/module-function-summary";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {

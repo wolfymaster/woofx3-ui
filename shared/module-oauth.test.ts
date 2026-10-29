@@ -5,7 +5,7 @@ import {
   moduleOAuthIntegrationIds,
   moduleOAuthStateIntegration,
   readModuleOAuthIntegration,
-} from "./moduleOAuth";
+} from "./module-oauth";
 
 const MANIFEST = {
   id: "spotify",
