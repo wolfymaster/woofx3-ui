@@ -1,4 +1,5 @@
 import { authTables } from "@convex-dev/auth/server";
+import { bindableResourceKindValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
@@ -345,6 +346,9 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_account", ["accountId"])
     .index("by_maintenance_engine", ["maintenanceEngineId"])
+    // A public page is found by its engine's slug. Released slugs stay on their
+    // rows, so a slug can match more than one; see lib/userPages.ts holdsSlug.
+    .index("by_slug", ["slug"])
     .index("by_status", ["status"]),
 
   // maintenanceEvents: delivered maintenance-API callback ids. The endpoint is
@@ -2165,4 +2169,49 @@ export default defineSchema({
     broadcasterPlatformUserId: v.string(),
     failedAt: v.number(),
   }).index("by_viewer_and_platform_and_broadcaster", ["viewerId", "platform", "broadcasterPlatformUserId"]),
+
+  // userPages: an instance's public page at /u/<engine slug>, at most one per
+  // instance. Content lives in revisions, so the draft can change while the
+  // published copy is what visitors see; publishing swaps publishedRevisionId
+  // in one mutation. No published revision means the page is offline.
+  userPages: defineTable({
+    instanceId: v.id("instances"),
+    draftRevisionId: v.id("userPageRevisions"),
+    publishedRevisionId: v.optional(v.id("userPageRevisions")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+  }).index("by_instance", ["instanceId"]),
+
+  // userPageRevisions: one page's content, held whole in one document because
+  // it is bounded (USER_PAGE_LIMITS in shared/user-pages/limits.ts keeps the
+  // worst case under the document limit) and always read and written whole.
+  // A page has two at most: its draft, rewritten on each save, and its
+  // published copy, which is never edited and is replaced on the next publish.
+  // `revision` counts the draft's saves; a published copy keeps the number of
+  // the draft it was copied from, so equal numbers mean nothing is unpublished.
+  userPageRevisions: defineTable({
+    instanceId: v.id("instances"),
+    revision: v.number(),
+    content: pageContentValidator,
+    savedBy: v.id("users"),
+    savedAt: v.number(),
+  }),
+
+  // userPageState: the values published pages show, one row per resource the
+  // instance's published revision binds, and nothing else. It is what the
+  // public page read serves values from, so a value no published page binds
+  // can never reach a visitor. Rebuilt on publish; refreshed from the same
+  // writes that keep resourceValues and moduleResourceInstances current. See
+  // convex/lib/userPageState.ts.
+  userPageState: defineTable({
+    instanceId: v.id("instances"),
+    canonicalId: v.string(),
+    kind: bindableResourceKindValidator,
+    // As resourceValues holds it; null before the resource is first written.
+    value: v.any(),
+    // Only the settings a visitor needs to read `value`.
+    settings: v.record(v.string(), v.any()),
+    updatedAt: v.number(),
+  }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
 });

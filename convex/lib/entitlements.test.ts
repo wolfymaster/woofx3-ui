@@ -9,7 +9,7 @@ import {
   validatePlanKey,
 } from "./entitlements";
 
-// The real catalog is empty until code checks a feature; these stand in for it.
+// These stand in for the real catalog, so the tests do not change as it grows.
 const catalog: EntitlementCatalog = {
   features: {
     "reports.advanced": { description: "Advanced reports" },
