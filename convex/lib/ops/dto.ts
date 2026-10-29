@@ -263,6 +263,8 @@ export const FORBIDDEN_RESPONSE_KEYS: ReadonlySet<string> = new Set([
   "token",
   "accessToken",
   "refreshToken",
+  "sealedAccessToken",
+  "sealedRefreshToken",
   "secret",
   "emailVerified",
   "sessionId",
