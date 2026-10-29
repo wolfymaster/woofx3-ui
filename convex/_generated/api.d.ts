@@ -131,7 +131,6 @@ import type * as lib_marketplaceEntitlement from "../lib/marketplaceEntitlement.
 import type * as lib_marketplaceImages from "../lib/marketplaceImages.js";
 import type * as lib_marketplaceInstallIdentity from "../lib/marketplaceInstallIdentity.js";
 import type * as lib_marketplaceInstallRecords from "../lib/marketplaceInstallRecords.js";
-import type * as lib_migrationRuns from "../lib/migrationRuns.js";
 import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_moduleArchiveFiles from "../lib/moduleArchiveFiles.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
@@ -235,7 +234,6 @@ import type * as migrations_backfillSharedMacros from "../migrations/backfillSha
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
 import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
-import type * as migrations_sealPlatformLinkTokens from "../migrations/sealPlatformLinkTokens.js";
 import type * as moderation from "../moderation.js";
 import type * as moduleAssets from "../moduleAssets.js";
 import type * as moduleDetail from "../moduleDetail.js";
@@ -444,7 +442,6 @@ declare const fullApi: ApiFromModules<{
   "lib/marketplaceImages": typeof lib_marketplaceImages;
   "lib/marketplaceInstallIdentity": typeof lib_marketplaceInstallIdentity;
   "lib/marketplaceInstallRecords": typeof lib_marketplaceInstallRecords;
-  "lib/migrationRuns": typeof lib_migrationRuns;
   "lib/moderation": typeof lib_moderation;
   "lib/moduleArchiveFiles": typeof lib_moduleArchiveFiles;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
@@ -548,7 +545,6 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
   "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
-  "migrations/sealPlatformLinkTokens": typeof migrations_sealPlatformLinkTokens;
   moderation: typeof moderation;
   moduleAssets: typeof moduleAssets;
   moduleDetail: typeof moduleDetail;
