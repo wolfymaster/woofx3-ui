@@ -16,12 +16,21 @@ import type {
   StreamEventSubscriber,
   StreamSession,
   StreamStatus,
+  TriggerWorkflowOptions,
+  TriggerWorkflowResponse,
   ViewerTotals,
   ViewerTotalsQuery,
   Woofx3EngineApi,
   Workflow,
+  WorkflowCatalog,
+  WorkflowHealth,
+  WorkflowMutationResult,
+  WorkflowRunDetail,
+  WorkflowRunSnapshot,
+  WorkflowRunSnapshotsQuery,
   WorkflowsQuery,
 } from "@woofx3/api";
+import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngine";
 
 /** The engine methods the direct gateway's tests serve beyond every session's. */
@@ -49,6 +58,15 @@ type DirectFakeSurface = Pick<
   | "getAvailableWidgets"
   | "listEngineModules"
   | "getWorkflows"
+  | "getWorkflow"
+  | "getWorkflowCatalog"
+  | "createWorkflow"
+  | "updateWorkflow"
+  | "setWorkflowEnabled"
+  | "triggerWorkflowByName"
+  | "getWorkflowRun"
+  | "getWorkflowHealth"
+  | "listWorkflowRunSnapshots"
 >;
 
 export type AvailableWidget = Awaited<ReturnType<Woofx3EngineApi["getAvailableWidgets"]>>["widgets"][number];
@@ -79,6 +97,13 @@ export class FakeEngineState {
   widgets: AvailableWidget[] = [];
   modules: EngineModuleSummary[] = [];
   workflows: Workflow[] = [];
+  workflowCatalog: WorkflowCatalog = { triggers: [], actions: [], functions: [] };
+  /** Recorded runs by execution id; an id not here answers null. */
+  workflowRuns: Record<string, WorkflowRunDetail> = {};
+  /** Every recorded run, newest first, as `listWorkflowRunSnapshots` lists them. */
+  runSnapshots: WorkflowRunSnapshot[] = [];
+  /** What `getWorkflowHealth` answers, or the error it throws. */
+  workflowHealth: WorkflowHealth[] | Error = [];
   /** Every call the fake served, by method, with its arguments. */
   readonly calls: Array<{ method: keyof DirectFakeSurface; args: unknown[] }> = [];
   /** The latest stream subscription of each session, in the order they were made. */
@@ -266,6 +291,94 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     const pageSize = query?.pageSize ?? 20;
     const workflows = this.state.workflows.slice((page - 1) * pageSize, page * pageSize);
     return { workflows, total: this.state.workflows.length, page, pageSize };
+  }
+
+  async getWorkflow(id: string): Promise<Workflow | null> {
+    this.state.record("getWorkflow", id);
+    return this.state.workflows.find((workflow) => workflow.id === id) ?? null;
+  }
+
+  async getWorkflowCatalog(): Promise<WorkflowCatalog> {
+    this.state.record("getWorkflowCatalog");
+    return this.state.workflowCatalog;
+  }
+
+  async createWorkflow(data: { definition: Omit<WorkflowDefinition, "id"> }): Promise<WorkflowMutationResult> {
+    this.state.record("createWorkflow", data);
+    const id = `workflow-${this.state.workflows.length + 1}`;
+    const definition: WorkflowDefinition = { ...data.definition, id };
+    this.state.workflows = [
+      ...this.state.workflows,
+      {
+        id,
+        name: definition.name,
+        description: "",
+        isEnabled: true,
+        definition,
+        stats: { runsToday: 0, successRate: 0 },
+        createdAt: "2026-10-28T10:00:00Z",
+        updatedAt: "2026-10-28T10:00:00Z",
+      },
+    ];
+    return { id, definition, isEnabled: true };
+  }
+
+  async updateWorkflow(id: string, data: { definition: WorkflowDefinition }): Promise<WorkflowMutationResult | null> {
+    this.state.record("updateWorkflow", id, data);
+    const found = this.state.workflows.find((workflow) => workflow.id === id);
+    if (found === undefined) {
+      return null;
+    }
+    found.definition = data.definition;
+    return { id, definition: data.definition, isEnabled: found.isEnabled };
+  }
+
+  async setWorkflowEnabled(id: string, isEnabled: boolean): Promise<{ id: string; isEnabled: boolean }> {
+    this.state.record("setWorkflowEnabled", id, isEnabled);
+    return { id, isEnabled };
+  }
+
+  /** Starts a run of a workflow the fake holds; any other name is refused as the engine refuses it. */
+  async triggerWorkflowByName(
+    workflowNameOrId: string,
+    parameters?: Record<string, string>,
+    userId?: string,
+    triggerId?: string,
+    triggeredBy?: string,
+    options?: TriggerWorkflowOptions
+  ): Promise<TriggerWorkflowResponse> {
+    this.state.record("triggerWorkflowByName", workflowNameOrId, parameters, userId, triggerId, triggeredBy, options);
+    const found = this.state.workflows.find((w) => w.id === workflowNameOrId || w.name === workflowNameOrId);
+    if (found === undefined) {
+      throw new Error(`Workflow ${JSON.stringify(workflowNameOrId)} not found`);
+    }
+    return {
+      executionId: `exec-${found.id}`,
+      triggerId: triggerId ?? "",
+      status: "started",
+      message: "",
+      dryRun: options?.dryRun === true,
+    };
+  }
+
+  async getWorkflowRun(executionId: string): Promise<WorkflowRunDetail | null> {
+    this.state.record("getWorkflowRun", executionId);
+    return this.state.workflowRuns[executionId] ?? null;
+  }
+
+  async listWorkflowRunSnapshots(query: WorkflowRunSnapshotsQuery): Promise<WorkflowRunSnapshot[]> {
+    this.state.record("listWorkflowRunSnapshots", query);
+    return this.state.runSnapshots
+      .filter((run) => query.workflowId === undefined || run.workflowId === query.workflowId)
+      .slice(0, query.limit);
+  }
+
+  async getWorkflowHealth(): Promise<WorkflowHealth[]> {
+    this.state.record("getWorkflowHealth");
+    if (this.state.workflowHealth instanceof Error) {
+      throw this.state.workflowHealth;
+    }
+    return this.state.workflowHealth;
   }
 
   private mint(sceneId: string): OverlayToken {
