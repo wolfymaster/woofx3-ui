@@ -1177,9 +1177,7 @@ export const reconcileModules = internalMutation({
       if (existing) {
         await ctx.db.patch(existing._id, fields);
       } else {
-        // archiveKey stays empty: the engine holds the archive, and nothing
-        // reads this field for a module the dashboard did not upload.
-        await ctx.db.insert("moduleRepository", { ...fields, archiveKey: "" });
+        await ctx.db.insert("moduleRepository", fields);
       }
       processed++;
     }

@@ -1,32 +1,8 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireInstanceRole } from "./lib/instanceAccess";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
 import { installedModulesRevision } from "./lib/widgetThemes";
-
-/**
- * Convex storage upload URL for staging a module bundle before
- * `uploadAndDeliver` ships it to the engine.
- *
- * This lived in convex/assets.ts until user assets moved to engine-backed
- * storage. It never had anything to do with the assets table — it is raw
- * Convex storage, and module bundles are the only thing that still uses it —
- * so it moved here, next to its one caller, rather than being deleted with
- * the rest of that file.
- */
-export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-    return ctx.storage.generateUploadUrl();
-  },
-});
 
 export const list = query({
   args: {
@@ -44,7 +20,7 @@ export const list = query({
       .collect();
 
     if (args.tags && args.tags.length > 0) {
-      results = results.filter((m) => args.tags!.some((tag) => m.tags.includes(tag)));
+      results = results.filter((m) => args.tags?.some((tag) => m.tags.includes(tag)));
     }
 
     if (args.search) {
@@ -173,108 +149,6 @@ function collisions(groups: ModuleGroups): ModuleCollision[] {
 }
 
 /**
- * Upload the zip to storage and deliver it to the engine.
- * Creates (or refreshes) a moduleRepository record in "pending" status so the
- * manifest we already parsed client-side is persisted immediately — the engine's
- * module.installed webhook carries no manifest, so this is the only point where
- * settings/resource declarations are captured. processModuleInstalled flips the
- * status to "installed" without touching the manifest field. Errors are
- * communicated via transientEvents.
- */
-export const uploadAndDeliver = mutation({
-  args: {
-    instanceId: v.id("instances"),
-    moduleKey: v.string(),
-    name: v.string(),
-    description: v.string(),
-    version: v.string(),
-    tags: v.array(v.string()),
-    manifest: v.any(),
-    archiveKey: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await requireInstanceRole(ctx, args.instanceId);
-
-    // Scoped to the instance: an unscoped match would patch another tenant's
-    // row — including its instanceId — and hand this module's identity over to
-    // the uploader.
-    const existing = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_name_version", (q) =>
-        q.eq("instanceId", args.instanceId).eq("name", args.name).eq("version", args.version)
-      )
-      .first();
-
-    const fields = {
-      instanceId: args.instanceId,
-      moduleKey: args.moduleKey,
-      name: args.name,
-      description: args.description,
-      version: args.version,
-      tags: args.tags,
-      manifest: args.manifest,
-      archiveKey: args.archiveKey,
-      status: "pending" as const,
-      statusMessage: undefined,
-    };
-    if (existing) {
-      await ctx.db.patch(existing._id, fields);
-    } else {
-      await ctx.db.insert("moduleRepository", fields);
-    }
-
-    await ctx.scheduler.runAfter(0, internal.moduleEngine.deliverZipToInstance, {
-      instanceId: args.instanceId,
-      moduleKey: args.moduleKey,
-      archiveKey: args.archiveKey,
-      fileName: `${args.name}-${args.version}.zip`,
-      moduleMeta: {
-        name: args.name,
-        description: args.description,
-        version: args.version,
-        tags: args.tags,
-        manifest: args.manifest,
-      },
-    });
-    return { delivered: true };
-  },
-});
-
-/**
- * Re-deliver an existing module record's archive to the engine.
- */
-export const enqueueEngineInstall = mutation({
-  args: {
-    instanceId: v.id("instances"),
-    moduleId: v.id("moduleRepository"),
-  },
-  handler: async (ctx, args) => {
-    await requireInstanceRole(ctx, args.instanceId);
-    const module = await ctx.db.get(args.moduleId);
-    if (!module || module.instanceId !== args.instanceId) {
-      throw new Error("Module not found");
-    }
-    if (!module.archiveKey) {
-      throw new Error("Module has no archiveKey");
-    }
-    await ctx.scheduler.runAfter(0, internal.moduleEngine.deliverZipToInstance, {
-      instanceId: args.instanceId,
-      moduleKey: module.moduleKey ?? `${module.name}:${module.version}:unknown`,
-      archiveKey: module.archiveKey,
-      fileName: `${module.name}-${module.version}.zip`,
-      moduleMeta: {
-        name: module.name,
-        description: module.description,
-        version: module.version,
-        tags: module.tags,
-        manifest: module.manifest,
-      },
-    });
-    return { enqueued: true };
-  },
-});
-
-/**
  * Internal-only: overwrite a moduleRepository record's cached manifest.
  * Called after install confirmation once the engine's authoritative manifest
  * (fetched via getModuleManifest) is available — see moduleManifestSync.ts.
@@ -286,29 +160,6 @@ export const setManifest = internalMutation({
   },
   handler: async (ctx, { moduleId, manifest }) => {
     await ctx.db.patch(moduleId, { manifest });
-  },
-});
-
-export const getDeliveryData = internalQuery({
-  args: {
-    instanceId: v.id("instances"),
-    archiveKey: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const instance = await ctx.db.get(args.instanceId);
-    if (!instance) {
-      throw new Error("Instance not found");
-    }
-    const archiveUrl = await ctx.storage.getUrl(args.archiveKey as Id<"_storage">);
-    if (!archiveUrl) {
-      throw new Error("Module archive not found in storage");
-    }
-    return {
-      instanceUrl: instance.url,
-      clientId: instance.clientId ?? null,
-      clientSecret: instance.clientSecret ?? null,
-      archiveUrl,
-    };
   },
 });
 

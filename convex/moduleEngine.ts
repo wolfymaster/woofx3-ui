@@ -3,7 +3,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { api, internal } from "./_generated/api";
-import { action, internalAction } from "./_generated/server";
+import { action } from "./_generated/server";
 import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi, engineApiUrl } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
@@ -293,73 +293,5 @@ export const listWorkflows = action({
     const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const result = await rpc.getWorkflows();
     return (result?.workflows ?? []).map((w) => ({ id: w.id, name: w.name }));
-  },
-});
-
-export const deliverZipToInstance = internalAction({
-  args: {
-    instanceId: v.id("instances"),
-    moduleKey: v.string(),
-    archiveKey: v.string(),
-    fileName: v.string(),
-    moduleMeta: v.object({
-      name: v.string(),
-      description: v.string(),
-      version: v.string(),
-      tags: v.array(v.string()),
-      manifest: v.any(),
-    }),
-  },
-  handler: async (ctx, args) => {
-    try {
-      const delivery = await ctx.runQuery(internal.moduleRepository.getDeliveryData, {
-        instanceId: args.instanceId,
-        archiveKey: args.archiveKey,
-      });
-      const archiveRes = await fetch(delivery.archiveUrl);
-      if (!archiveRes.ok) {
-        throw new Error(`Failed to fetch module archive: ${archiveRes.status} ${archiveRes.statusText}`);
-      }
-      const archiveBuffer = await archiveRes.arrayBuffer();
-      const zipBase64 = Buffer.from(archiveBuffer).toString("base64");
-
-      // Log hash components for comparison with client-side and engine-side hashes
-      const { createHash } = await import("crypto");
-      const serverHashHex = createHash("sha256").update(Buffer.from(archiveBuffer)).digest("hex");
-      const serverShortHash = serverHashHex.slice(0, 7);
-      console.log("[deliverZip] hash components", {
-        moduleKey: args.moduleKey,
-        zipSize: archiveBuffer.byteLength,
-        fullHash: serverHashHex,
-        shortHash: serverShortHash,
-        fileName: args.fileName,
-      });
-
-      if (!delivery.clientId || !delivery.clientSecret) {
-        throw new Error("Instance is not registered with the engine");
-      }
-      const rpc = createEngineRpcSession<LocalEngineApi>(
-        delivery.instanceUrl,
-        delivery.clientId,
-        delivery.clientSecret
-      );
-
-      // Pass moduleKey in context so the engine echoes it back in the webhook
-      await rpc.installModuleZip(args.fileName, zipBase64, { moduleKey: args.moduleKey });
-
-      return { delivered: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      // Emit a transient error so the UI picks it up immediately
-      await ctx.runMutation(internal.transientEvents.emit, {
-        instanceId: args.instanceId,
-        correlationKey: args.moduleKey,
-        type: "module.install",
-        status: "error",
-        message: `Delivery failed: ${message}`,
-        data: { moduleName: args.moduleMeta.name, moduleVersion: args.moduleMeta.version },
-      });
-      throw err;
-    }
   },
 });
