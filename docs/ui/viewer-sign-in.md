@@ -1,6 +1,6 @@
 # Viewer sign-in for user pages
 
-**Backend:** `convex/viewerAuthHttp.ts` (routes), `convex/viewerLogin.ts`, `convex/viewerSession.ts`, `convex/viewerRoles.ts`, `convex/lib/viewerAuth.ts` (rules and lifetimes), `convex/lib/viewerSessionAuth.ts` (helpers for page functions), `convex/lib/viewerPlatforms.ts` (platform clients), `convex/lib/viewerRoleRefresh.ts`, `convex/lib/viewerTokenCipher.ts`, `convex/lib/viewerRateLimits.ts`, `convex/lib/viewerEdgeGate.ts`
+**Backend:** `convex/viewerAuthHttp.ts` (routes), `convex/viewerLogin.ts`, `convex/viewerSession.ts`, `convex/viewerRoles.ts`, `convex/lib/viewerAuth.ts` (rules and lifetimes), `convex/lib/viewerSessionAuth.ts` (helpers for page functions), `convex/lib/viewerPlatforms.ts` (platform clients), `convex/lib/viewerRoleRefresh.ts`, `convex/lib/tokenCipher.ts`, `convex/lib/viewerRateLimits.ts`, `convex/lib/viewerEdgeGate.ts`
 
 A streamer's public user page can show sections and actions only to viewers who are signed in, follow the channel, or subscribe to it (optionally at a minimum tier). Viewers sign in with their own Twitch account. This page covers how that sign-in works and how a page finds out a viewer's roles.
 
@@ -58,7 +58,7 @@ Behind it, the Convex buckets in `convex/lib/viewerRateLimits.ts` are a deployme
 
 ## Secrets at rest
 
-Viewer access and refresh tokens are encrypted with AES-256-GCM under `VIEWER_TOKEN_ENCRYPTION_KEY` before they're stored (`convex/lib/viewerTokenCipher.ts`). They live in `viewerPlatformTokens`, apart from the profile, so reading a profile never loads a token. Login states, handoff codes, nonces and session tokens are stored only as SHA-256 hashes.
+Viewer access and refresh tokens are encrypted with AES-256-GCM under `VIEWER_TOKEN_ENCRYPTION_KEY` before they're stored (`convex/lib/tokenCipher.ts`). They live in `viewerPlatformTokens`, apart from the profile, so reading a profile never loads a token. Login states, handoff codes, nonces and session tokens are stored only as SHA-256 hashes.
 
 ## Configuration
 
