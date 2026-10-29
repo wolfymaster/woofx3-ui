@@ -5,7 +5,7 @@
 /// - the host passes the names to `generate_handler!`
 ///   (companion/src-tauri/src/lib.rs);
 /// - its build script turns them into the `allow-<name>` permissions that
-///   companion/src-tauri/capabilities/main.json grants, since a handler
+///   companion/src-tauri/capabilities/companion.json grants, since a handler
 ///   missing a permission would be denied at runtime;
 /// - the window's generated bindings name each command, its arguments and
 ///   its result from it.
@@ -41,7 +41,9 @@ macro_rules! with_command_names {
             remove_shoutout(RemoveShoutoutArgs) -> (),
             reorder_shoutouts(ReorderShoutoutsArgs) -> (),
             stream_start_marker(()) -> StreamStartMarker,
-            request_stream_start_marker(()) -> MarkerRequestOutcome
+            request_stream_start_marker(()) -> MarkerRequestOutcome,
+            host_mode(()) -> HostModeView,
+            choose_host_mode(ChooseHostModeArgs) -> ()
         }
     };
 }

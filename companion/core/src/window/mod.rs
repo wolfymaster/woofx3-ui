@@ -13,13 +13,14 @@ mod wire_tests;
 
 use serde::Serialize;
 
-use crate::host::{EnginePhase, LocalSession, StopCause};
+use crate::host::{EnginePhase, HostModeKind, LocalSession, StopCause};
 
 #[cfg(feature = "ts")]
 pub use bindings::{window_bindings, BINDINGS_FILE};
 pub use command_args::{
-    ConfirmAddressArgs, EnqueueShoutoutArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs,
-    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
+    ChooseHostModeArgs, ConfirmAddressArgs, EnqueueShoutoutArgs, RemoveShoutoutArgs,
+    ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
+    UseDiscoveredArgs,
 };
 
 /// The largest integer a JavaScript number holds exactly, 2^53 - 1
@@ -34,8 +35,32 @@ macro_rules! command_name_list {
     };
 }
 
-/// Every command the window may call, in the order the host registers them.
+/// Every command a window may call, in the order the host registers them.
 pub const COMMAND_NAMES: &[&str] = crate::with_command_names!(command_name_list);
+
+/// The commands the dashboard window may call: running the app's local mode.
+/// The companion window may call every other command. Each window's
+/// capability grants exactly its set (companion/src-tauri/capabilities).
+pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
+    "local_engine_session",
+    "shoutout_queue",
+    "enqueue_shoutout",
+    "remove_shoutout",
+    "reorder_shoutouts",
+    "stream_start_marker",
+    "request_stream_start_marker",
+    "host_mode",
+    "choose_host_mode",
+];
+
+/// The mode this app runs in, and whether the streamer chose it. Until they
+/// have, it runs its build's default and the dashboard asks.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct HostModeView {
+    pub mode: HostModeKind,
+    pub chosen: bool,
+}
 
 /// Where pairing stands.
 #[derive(Clone, Debug, PartialEq, Serialize)]

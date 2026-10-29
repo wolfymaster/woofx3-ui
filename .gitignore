@@ -25,3 +25,6 @@ docs/superpowers/
 
 # scripts/check.sh output
 logs/
+
+# The engine release the desktop installer bundles (companion/scripts/fetch-engine.ts).
+companion/src-tauri/engine/
