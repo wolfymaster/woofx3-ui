@@ -1,10 +1,4 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { TwitchHelixResult } from "@woofx3/api";
-import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action, query } from "./_generated/server";
-import type { EngineApi } from "./lib/engineInstanceUrl";
 import {
   CAPABILITY_RULES,
   type CapabilityStatus,
@@ -21,7 +15,13 @@ import {
   validateBanReason,
   validateBlockedTerm,
   validateTimeoutSeconds,
-} from "./lib/moderation";
+} from "@shared/moderation";
+import type { TwitchHelixResult } from "@woofx3/api";
+import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, query } from "./_generated/server";
+import type { EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
@@ -32,7 +32,7 @@ import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/tw
 // shape as convex/twitchBroadcast.ts, or through an engine that advertises
 // twitch.moderation (convex/lib/twitchEngineHelix.ts).
 //
-// Who may do what is decided by CAPABILITY_RULES in convex/lib/moderation.ts;
+// Who may do what is decided by CAPABILITY_RULES in shared/moderation.ts;
 // every action enforces it here, and the widget reads the same rules through
 // `access` only to disable and explain.
 //

@@ -20,7 +20,7 @@ import {
   titleProblem,
   toHelixPatch,
   unappliedFields,
-} from "./streamInfo";
+} from "./stream-info";
 
 const JUST_CHATTING = { id: "509658", name: "Just Chatting" };
 const VALORANT = { id: "516575", name: "VALORANT" };

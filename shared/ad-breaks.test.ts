@@ -8,7 +8,7 @@ import {
   parseHelixBody,
   parseHelixSnoozeResult,
   toLocalTime,
-} from "./adBreaks";
+} from "./ad-breaks";
 
 const SERVER_NOW = "2026-09-28T20:00:00.000Z";
 

@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { parsePinsResponse, type TwitchPin } from "@shared/twitch-pins";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -16,7 +17,6 @@ import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
 import { helixResponse, isUnconfirmedWrite, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { parsePinsResponse, type TwitchPin } from "./lib/twitchPins";
 
 // Twitch chat pinning, and the local history it is driven from.
 //

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parsePinsResponse } from "./twitchPins";
+import { parsePinsResponse } from "./twitch-pins";
 
 const pinned = {
   data: [

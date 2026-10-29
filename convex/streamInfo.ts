@@ -1,7 +1,4 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import { action, type MutationCtx, mutation, query } from "./_generated/server";
 import {
   BOX_ART_URL_PREFIX,
   categoriesFromHelix,
@@ -20,7 +17,10 @@ import {
   titleProblem,
   toHelixPatch,
   unappliedFields,
-} from "./lib/streamInfo";
+} from "@shared/stream-info";
+import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, type MutationCtx, mutation, query } from "./_generated/server";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";

@@ -6,7 +6,7 @@ import {
   MAX_PRESET_NAME_LENGTH,
   STREAM_INFO_SCOPE,
   titleCounter,
-} from "@convex/lib/streamInfo";
+} from "@shared/stream-info";
 import { Bookmark, Check, Flag, Loader2, Radio, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
