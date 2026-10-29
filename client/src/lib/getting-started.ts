@@ -3,6 +3,7 @@ import { platformSettingsItemId } from "@convex/lib/gettingStarted";
 import type { OverlayFacts } from "@convex/lib/goLiveFacts";
 import type { SetupStatus } from "@convex/setup";
 import type { CheckFix } from "@/lib/go-live-checks";
+import { installedModulePath } from "@/lib/marketplace-route";
 import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
 
 // The dashboard's getting started checklist: a short first-session list, from
@@ -104,7 +105,7 @@ function platformsItem(setup: GettingStartedFacts["setup"]): GettingStartedItem 
         fixes: needsApproval.map((platform) => ({
           kind: "route" as const,
           label: `Review ${nameOf(platform.marketplaceModuleId)}`,
-          href: `/modules/${platform.marketplaceModuleId}`,
+          href: installedModulePath(platform.marketplaceModuleId),
         })),
       }
     );
@@ -156,7 +157,7 @@ function platformSettingsItems(
       return item(id, `Set up ${name}`, "done", `${name} is set up`);
     }
     return item(id, `Set up ${name}`, "todo", `${name} needs a few settings before it works, such as your account`, {
-      fixes: [{ kind: "route", label: `Open ${name}`, href: `/modules/${marketplaceModuleId}` }],
+      fixes: [{ kind: "route", label: `Open ${name}`, href: installedModulePath(marketplaceModuleId) }],
       actions: [{ kind: "mark-platform-settings-done", label: "Done", marketplaceModuleId }],
     });
   });
@@ -169,7 +170,7 @@ function obsSettingsItem(id: GettingStartedItemId, name: string, status: ObsStat
     return item(id, `Set up ${name}`, "done", description.text);
   }
   return item(id, `Set up ${name}`, description.tone === "problem" ? "problem" : "todo", description.text, {
-    fixes: [{ kind: "route", label: `Open ${name}`, href: `/modules/${OBS_MODULE_ID}` }],
+    fixes: [{ kind: "route", label: `Open ${name}`, href: installedModulePath(OBS_MODULE_ID) }],
   });
 }
 

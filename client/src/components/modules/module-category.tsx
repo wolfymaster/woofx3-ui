@@ -1,5 +1,4 @@
 import { Bell, MessageSquare, Music, Puzzle, Video, Zap } from "lucide-react";
-import type { MarketplaceListItem } from "@/hooks/use-marketplace-catalog";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   Chat: <MessageSquare className="h-3.5 w-3.5" />,
@@ -47,22 +46,4 @@ export function getCategoryBannerStyle(category: string | undefined): React.CSSP
   return {
     backgroundImage: `repeating-linear-gradient(135deg, ${light} 0px, ${light} 14px, ${dark} 14px, ${dark} 28px)`,
   };
-}
-
-export interface CategoryCount {
-  category: string;
-  count: number;
-}
-
-export function getCategoryCounts(modules: MarketplaceListItem[]): CategoryCount[] {
-  const counts = new Map<string, number>();
-  for (const m of modules) {
-    if (!m.category) {
-      continue;
-    }
-    counts.set(m.category, (counts.get(m.category) ?? 0) + 1);
-  }
-  return Array.from(counts.entries())
-    .map(([category, count]) => ({ category, count }))
-    .sort((a, b) => a.category.localeCompare(b.category));
 }

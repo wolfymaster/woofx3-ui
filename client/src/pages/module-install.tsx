@@ -32,6 +32,7 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
+import { MARKETPLACE_INSTALLED_PATH } from "@/lib/marketplace-route";
 import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } from "@/lib/module-archive";
 import { getLanguageFromPath } from "@/lib/module-files";
 import { bareModuleKey } from "@/lib/module-key";
@@ -379,7 +380,7 @@ export default function ModuleInstall() {
       return;
     }
     if (installEvent.status === "success") {
-      const timer = setTimeout(() => navigate("/modules"), 1500);
+      const timer = setTimeout(() => navigate(MARKETPLACE_INSTALLED_PATH), 1500);
       return () => clearTimeout(timer);
     }
     if (installEvent.status === "error") {

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  installedModulePath,
+  legacyModulesRedirect,
   MARKETPLACE_AUTHOR_ROUTE,
+  MARKETPLACE_INSTALLED_MODULE_ROUTE,
+  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_LISTING_ROUTE,
   MARKETPLACE_PATH,
   marketplaceAuthorPath,
@@ -17,6 +21,8 @@ describe("marketplace paths", () => {
     expect(MARKETPLACE_AUTHOR_ROUTE).toBe(`${MARKETPLACE_PATH}/author/:slug`);
     expect(marketplaceListingPath("counter")).toBe("/marketplace/listing/counter");
     expect(marketplaceAuthorPath("wolfy-master")).toBe("/marketplace/author/wolfy-master");
+    expect(MARKETPLACE_INSTALLED_MODULE_ROUTE).toBe(`${MARKETPLACE_INSTALLED_PATH}/:moduleId`);
+    expect(installedModulePath("woofx3_obs")).toBe("/marketplace/installed/woofx3_obs");
   });
 
   test("encodes an id so a slug with unusual characters still resolves", () => {
@@ -36,18 +42,34 @@ describe("marketplace paths", () => {
 });
 
 describe("modulesIndexRedirect", () => {
-  test("an integration's OAuth return reaches the modules page, code and all", () => {
-    // Only the modules page can redeem the one-time code or show the error.
+  test("an integration's OAuth return reaches the installed modules page, code and all", () => {
+    // Only the installed modules page can redeem the one-time code or show the error.
     expect(modulesIndexRedirect("integration=spotify&oauth_code=abc")).toBe(
-      "/modules/installed?integration=spotify&oauth_code=abc"
+      "/marketplace/installed?integration=spotify&oauth_code=abc"
     );
     expect(modulesIndexRedirect("?integration=spotify&status=error&error=denied")).toBe(
-      "/modules/installed?integration=spotify&status=error&error=denied"
+      "/marketplace/installed?integration=spotify&status=error&error=denied"
     );
   });
 
   test("an old storefront link reaches the marketplace with its filters", () => {
     expect(modulesIndexRedirect("")).toBe(MARKETPLACE_PATH);
     expect(modulesIndexRedirect("category=Media")).toBe(`${MARKETPLACE_PATH}?category=Media`);
+  });
+});
+
+describe("legacyModulesRedirect", () => {
+  test.each([
+    ["the upload page", "install", "", "/marketplace/upload"],
+    [
+      "the installed list, keeping an OAuth return's query",
+      "installed",
+      "?integration=spotify&oauth_code=abc",
+      "/marketplace/installed?integration=spotify&oauth_code=abc",
+    ],
+    ["a module's page", "woofx3_obs", "", "/marketplace/installed/woofx3_obs"],
+    ["a module's page with an encoded id", "a%20b", "", "/marketplace/installed/a%20b"],
+  ])("%s", (_case, rest, search, target) => {
+    expect(legacyModulesRedirect(rest, search)).toBe(target);
   });
 });

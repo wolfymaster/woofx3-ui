@@ -3,7 +3,7 @@
 **Routes:** `/marketplace`, `/marketplace/listing/:listingId`, `/marketplace/author/:slug`
 **Primary files:** `client/src/pages/marketplace.tsx`, `client/src/pages/marketplace-listing.tsx`, `client/src/pages/marketplace-author.tsx`, `client/src/components/marketplace/`, `client/src/hooks/use-marketplace.ts`, `convex/marketplaceCatalog.ts`, `convex/lib/marketplaceCatalog.ts`
 
-The storefront. [Modules](./modules.md) covers the install surface it leads to.
+The storefront. [Modules](./modules.md) covers the installed modules and uploads beside it in the same tab.
 
 ## Where the catalog lives
 
@@ -58,10 +58,10 @@ it. Under the header it has tabs (`ListingModuleTabs`, with the tab in
 - **Files**: the module's file browser.
 - **Settings** and **Resources**, once it is installed: the same settings,
   webhook endpoints, local endpoint routing and resource instances as
-  `/modules/:id`.
+  an installed module's page (`/marketplace/installed/:id`).
 
 These come from `moduleDetail.getModuleDetail` for the listing, the action
-`/modules/:id` uses, and the tabs reuse that page's components
+an installed module's page uses, and the tabs reuse that page's components
 (`module-detail-panel.tsx`). The page reads the detail again whenever the
 installed version changes, so installing turns on the settings tab. An
 integration's connect button returns to the page, which finishes the connect
@@ -259,7 +259,7 @@ this person make" is the question the page answers.
 
 `hooks/use-module-install.ts` is the one implementation of a marketplace module
 install: the permission approval gate, the engine's progress events, and the
-timeout. Both this page and [`/modules`](./modules.md) drive it. Those three
+timeout. Both this page and the [installed modules page](./modules.md) drive it. Those three
 parts only work as a set, and a second copy would have drifted from the first.
 
 ## Environment
