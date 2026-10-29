@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { PublicPageLookup } from "@shared/user-pages";
 import { useAction, useQuery } from "convex/react";
 import { type ReactNode, useEffect, useState } from "react";
+import { useLookupWhileLoading } from "./lookup-while-loading";
 import { documentTitle, UserPageView } from "./page-view";
 import { PageViewerProvider } from "./viewer/page-viewer";
 import { canonicalPageUrl } from "./viewer/sign-in";
@@ -21,12 +22,14 @@ function UserPageRoute({ slug, viewerEnv }: { slug: string; viewerEnv: ViewerEnv
   const viewer = useViewerSession(viewerEnv);
   const sessionToken = viewer.session.status === "signed_in" ? viewer.session.sessionToken : null;
   const lookup = useQuery(api.userPagesPublic.bySlug, sessionToken === null ? { slug } : { slug, sessionToken });
+  const shown = useLookupWhileLoading({ slug, sessionToken }, lookup);
+  // Roles are read from this session's own answer, never from one standing in.
   const roles =
     lookup?.kind === "page"
       ? { rolesStale: lookup.rolesStale, rolesRenewAt: lookup.rolesRenewAt }
       : { rolesStale: false, rolesRenewAt: null };
   const roleCheck = useRoleCheck(viewerEnv, slug, sessionToken, roles, viewer.forgetSession);
-  const claimable = useClaimable(slug, lookup?.kind === "unclaimed");
+  const claimable = useClaimable(slug, shown?.kind === "unclaimed");
   return (
     <PageViewerProvider
       viewer={{
@@ -38,7 +41,7 @@ function UserPageRoute({ slug, viewerEnv }: { slug: string; viewerEnv: ViewerEnv
       }}
     >
       <UserPageScreen
-        lookup={lookup}
+        lookup={shown}
         claimable={claimable}
         actions={<ViewerActions onSignOut={viewer.signOut} />}
         notice={
