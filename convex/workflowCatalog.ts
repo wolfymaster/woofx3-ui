@@ -1,11 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, type QueryCtx, query } from "./_generated/server";
 import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
+import { resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 import { bareModuleKey } from "./lib/moduleKey";
 import { isWebhookTrigger } from "./lib/webhookEndpointKey";
 import type { CatalogBundle } from "./workflowCatalogContext";

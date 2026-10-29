@@ -106,6 +106,45 @@ export interface AlertTargetUse {
   name: string;
 }
 
+/** What runs Alert steps: a workflow's tasks, or a chat command's actions. */
+export interface AlertStepSource {
+  kind: AlertTargetUse["kind"];
+  /** The workflow's name, or the command as typed in chat ("!hype"). */
+  name: string;
+  steps: readonly unknown[];
+}
+
+/** Every Alert step's target among `sources`, in order. */
+export function alertTargetUses(sources: Iterable<AlertStepSource>): AlertTargetUse[] {
+  const uses: AlertTargetUse[] = [];
+  for (const source of sources) {
+    for (const target of alertStepTargets(source.steps)) {
+      uses.push({ target, kind: source.kind, name: source.name });
+    }
+  }
+  return uses;
+}
+
+/**
+ * The names the alert widgets of every scene answer to, for the Alert
+ * action's target picker: the default first when some scene has it, then the
+ * rest by name. Each scene is given by its stored placements.
+ */
+export function alertWidgetNamesAcross(
+  scenes: Iterable<readonly unknown[]>,
+  alertWidgetIds: ReadonlySet<string>
+): string[] {
+  const names = new Set<string>();
+  for (const widgets of scenes) {
+    for (const name of alertWidgetNamesOf(placedWidgetsOf(widgets), alertWidgetIds)) {
+      names.add(name);
+    }
+  }
+  const hasDefault = names.delete(DEFAULT_ALERT_WIDGET_NAME);
+  const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
+  return hasDefault ? [DEFAULT_ALERT_WIDGET_NAME, ...sorted] : sorted;
+}
+
 export interface OrphanedAlertTarget {
   target: string;
   uses: AlertTargetUse[];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { stableWidgetId, widgetCanonicalKey } from "./widgetKey";
+import { stableWidgetId, widgetCanonicalKey } from "./widget-key";
 
 describe("stableWidgetId", () => {
   it("returns the simple form unchanged", () => {

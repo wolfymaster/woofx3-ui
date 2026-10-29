@@ -1,5 +1,5 @@
 import type { QueryKey } from "@tanstack/react-query";
-import { type CallbackEnvelope, type CallbackEventByType, EngineEventType } from "@woofx3/api";
+import { type CallbackEnvelope, type CallbackEventByType, type CompositionKind, EngineEventType } from "@woofx3/api";
 import { directKeys as k } from "./keys";
 
 type Invalidation<T extends EngineEventType> = (event: CallbackEventByType[T]) => readonly QueryKey[];
@@ -9,7 +9,21 @@ const NONE = (): readonly QueryKey[] => [];
 
 const ALERT = (): readonly QueryKey[] => [k.alertQueue.all];
 const LIVE_STATE = (): readonly QueryKey[] => [k.status.liveState()];
-const COMMANDS = (): readonly QueryKey[] => [k.commands.list()];
+// Alert Steps live in commands and workflows, so a change to either can
+// leave a scene's alert widgets unused, or used again.
+const COMMANDS = (): readonly QueryKey[] => [k.commands.list(), k.scenes.allAlertTargetUsage];
+const WORKFLOWS = (): readonly QueryKey[] => [k.scenes.allAlertTargetUsage];
+/** Which widgets are installed decides the catalog and which placements host alerts. */
+const WIDGETS = (): readonly QueryKey[] => [
+  k.scenes.widgetCatalog(),
+  k.scenes.alertWidgetNames(),
+  k.scenes.allAlertTargetUsage,
+];
+
+/** The engine keeps scenes and library alerts in one table and reports both as `scene.*`, told apart by kind. */
+function compositionKeys(kind: CompositionKind): readonly QueryKey[] {
+  return kind === "alert" ? [k.alertLibrary.all] : [k.scenes.all];
+}
 
 /**
  * The cached reads each engine event may have made stale. Keyed by every
@@ -19,18 +33,18 @@ const COMMANDS = (): readonly QueryKey[] => [k.commands.list()];
  * nothing.
  */
 export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> } = {
-  [EngineEventType.MODULE_INSTALLED]: NONE,
+  [EngineEventType.MODULE_INSTALLED]: WIDGETS,
   [EngineEventType.MODULE_INSTALL_FAILED]: NONE,
-  [EngineEventType.MODULE_DELETED]: NONE,
+  [EngineEventType.MODULE_DELETED]: WIDGETS,
   [EngineEventType.MODULE_DELETE_FAILED]: NONE,
   [EngineEventType.MODULE_TRIGGER_REGISTERED]: NONE,
   [EngineEventType.MODULE_ACTION_REGISTERED]: NONE,
   [EngineEventType.MODULE_FUNCTION_REGISTERED]: NONE,
-  [EngineEventType.MODULE_WIDGET_REGISTERED]: NONE,
+  [EngineEventType.MODULE_WIDGET_REGISTERED]: WIDGETS,
   [EngineEventType.MODULE_TRIGGER_DEREGISTERED]: NONE,
   [EngineEventType.MODULE_ACTION_DEREGISTERED]: NONE,
   [EngineEventType.MODULE_FUNCTION_DEREGISTERED]: NONE,
-  [EngineEventType.MODULE_WIDGET_DEREGISTERED]: NONE,
+  [EngineEventType.MODULE_WIDGET_DEREGISTERED]: WIDGETS,
   [EngineEventType.MODULE_ASSET_REGISTERED]: NONE,
   [EngineEventType.MODULE_ASSET_DEREGISTERED]: NONE,
   [EngineEventType.MODULE_RESOURCE_INSTANCE_CREATED]: NONE,
@@ -38,9 +52,9 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED]: NONE,
   [EngineEventType.MODULE_STORAGE_CHANGED]: NONE,
   [EngineEventType.ENGINE_RESPONSE_RECEIVED]: NONE,
-  [EngineEventType.WORKFLOW_CREATED]: NONE,
-  [EngineEventType.WORKFLOW_UPDATED]: NONE,
-  [EngineEventType.WORKFLOW_DELETED]: NONE,
+  [EngineEventType.WORKFLOW_CREATED]: WORKFLOWS,
+  [EngineEventType.WORKFLOW_UPDATED]: WORKFLOWS,
+  [EngineEventType.WORKFLOW_DELETED]: WORKFLOWS,
   [EngineEventType.WORKFLOW_RUN_STARTED]: NONE,
   [EngineEventType.WORKFLOW_RUN_COMPLETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_FAILED]: NONE,
@@ -50,9 +64,9 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.WORKFLOW_RUN_RECORDED]: NONE,
   [EngineEventType.WORKFLOW_RUN_UPDATED]: NONE,
   [EngineEventType.WORKFLOW_RUN_STEP_RECORDED]: NONE,
-  [EngineEventType.SCENE_CREATED]: NONE,
-  [EngineEventType.SCENE_UPDATED]: NONE,
-  [EngineEventType.SCENE_DELETED]: NONE,
+  [EngineEventType.SCENE_CREATED]: (event) => compositionKeys(event.scene.kind),
+  [EngineEventType.SCENE_UPDATED]: (event) => compositionKeys(event.scene.kind),
+  [EngineEventType.SCENE_DELETED]: (event) => compositionKeys(event.kind),
   [EngineEventType.ALERT_RECORDED]: ALERT,
   [EngineEventType.ALERT_PLAYING]: ALERT,
   [EngineEventType.ALERT_REPLAYED]: ALERT,

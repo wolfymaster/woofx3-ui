@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { EngineCapability } from "@woofx3/api";
-import { EngineDisconnectedError, EngineTimeoutError } from "@/engine/errors";
+import { EngineDisconnectedError, EngineTimeoutError, GatewayUnsupportedError } from "@/engine/errors";
 import type { Clock, Logger } from "@/lib/engine-session/deps";
 import type { DirectGatewayConfig } from "./config";
 import {
@@ -61,8 +61,12 @@ export function createDirectRuntime(deps: DirectRuntimeDeps): DirectRuntime {
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         // A dropped session is not the read's failure: the read runs again
-        // once the next session resyncs.
-        retry: (failures, error) => !(error instanceof EngineDisconnectedError) && failures < config.queryAttempts - 1,
+        // once the next session resyncs. A read the engine cannot serve
+        // fails the same way however often it is tried.
+        retry: (failures, error) =>
+          !(error instanceof EngineDisconnectedError) &&
+          !(error instanceof GatewayUnsupportedError) &&
+          failures < config.queryAttempts - 1,
       },
     },
   });

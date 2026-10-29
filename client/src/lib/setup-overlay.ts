@@ -1,4 +1,4 @@
-import { DEFAULT_ALERT_WIDGET_NAME } from "@convex/lib/alertWidgets";
+import { DEFAULT_ALERT_WIDGET_NAME } from "@shared/alert-widgets";
 import type { Widget } from "@/types";
 
 // The overlay setup creates for a streamer who has no scene yet: one

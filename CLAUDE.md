@@ -252,8 +252,8 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - Alert system: the engine queues and plays alerts in its own overlay; the `/browser-source/{key}` route sends OBS there, and the engine reports each alert's lifecycle as `alert.*` callbacks mirrored into `engineAlerts`
 - Storage adapters in `convex/lib/storage/` — Convex native, R2, or local file storage per instance config
 
-### Shared (`shared/api.ts`)
-- Type definitions for the legacy RPC API contract (pagination, stream status, workflows, assets, scenes, modules, etc.)
+### Shared (`shared/`)
+- Pure code both `convex/` and `client/` import as `@shared/*`: parsers and mappers of engine data (scene JSON, widget keys, recap and supporter figures) and the rules built on them (alert widget names). The engine gateway's adapters may not import Convex modules, so a helper the direct gateway needs as well as Convex lives here, not in `convex/lib/`. Nothing here imports Convex or React.
 
 ### Companion (`companion/`)
 - A Tauri tray app for the streamer's PC that pairs with an instance through `/companion/pair` and authenticates to Convex with a companion token (only its hash is stored; the `companions` row is the credential). It is not a UI for managing woofx3: the browser is the only management surface. See `docs/ui/companion.md`.

@@ -1,4 +1,4 @@
-import type { RecapTimelineEvents } from "@convex/lib/streamRecap";
+import type { RecapTimelineEvents } from "@shared/stream-recap";
 import { useEffect, useState } from "react";
 import { useEngineScope } from "@/engine/context";
 import { useRecapTimelineEventsRequest } from "@/engine/hooks/use-stream-recap";

@@ -17,6 +17,10 @@ export interface DirectGatewayConfig {
    * registers once.
    */
   streamRegistrationDelayMs: number;
+  /** Workflows asked for per page when every workflow is read; the engine pages its list. */
+  workflowPageSize: number;
+  /** Most pages one read of every workflow goes through before it gives up, so a misbehaving engine cannot loop it. */
+  workflowMaxPages: number;
 }
 
 export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
@@ -28,6 +32,8 @@ export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
   seenEnvelopeIds: 512,
   queryAttempts: 3,
   streamRegistrationDelayMs: 100,
+  workflowPageSize: 100,
+  workflowMaxPages: 1000,
 };
 
 export function validateDirectGatewayConfig(config: DirectGatewayConfig): void {
@@ -36,4 +42,6 @@ export function validateDirectGatewayConfig(config: DirectGatewayConfig): void {
   requirePositiveInteger("DirectGateway", "seenEnvelopeIds", config.seenEnvelopeIds);
   requirePositiveInteger("DirectGateway", "queryAttempts", config.queryAttempts);
   requirePositiveInteger("DirectGateway", "streamRegistrationDelayMs", config.streamRegistrationDelayMs);
+  requirePositiveInteger("DirectGateway", "workflowPageSize", config.workflowPageSize);
+  requirePositiveInteger("DirectGateway", "workflowMaxPages", config.workflowMaxPages);
 }

@@ -12,7 +12,7 @@ import { normalizeUsername, toChatCommand, toChatCommandGroup, toCommandInput } 
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 
-function commandsRead(runtime: DirectRuntime): EngineRead<ChatCommand[]> {
+export function commandsRead(runtime: DirectRuntime): EngineRead<ChatCommand[]> {
   return {
     queryKey: k.commands.list(),
     queryFn: async () => (await runtime.call("listCommands", (api) => api.listCommands())).map(toChatCommand),
@@ -48,7 +48,7 @@ export function directCommandsGateway(runtime: DirectRuntime): CommandsGateway {
     const created = await runtime.call("createCommand", (api) =>
       api.createCommand({ ...toCommandInput(command), correlationKey: correlationKey() })
     );
-    await invalidate(k.commands.list());
+    await invalidate(k.commands.list(), k.scenes.allAlertTargetUsage);
     return { engineCommandId: created.id };
   };
 
@@ -60,13 +60,13 @@ export function directCommandsGateway(runtime: DirectRuntime): CommandsGateway {
         correlationKey: correlationKey(),
       })
     );
-    await invalidate(k.commands.list());
+    await invalidate(k.commands.list(), k.scenes.allAlertTargetUsage);
     return { engineCommandId: updated.id };
   };
 
   const deleteCommand = async (engineCommandId: string) => {
     const result = await runtime.call("deleteCommand", (api) => api.deleteCommand(engineCommandId, correlationKey()));
-    await invalidate(k.commands.list());
+    await invalidate(k.commands.list(), k.scenes.allAlertTargetUsage);
     return { deleted: result.deleted };
   };
 

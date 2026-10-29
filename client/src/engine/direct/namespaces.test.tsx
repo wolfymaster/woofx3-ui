@@ -1,14 +1,29 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { type CommandSnapshot, EngineEventType, makeCallbackEnvelope, type StreamEventFrame } from "@woofx3/api";
+import {
+  type AlertComposition,
+  type CommandSnapshot,
+  ENGINE_CAPABILITIES,
+  EngineEventType,
+  makeCallbackEnvelope,
+  type SceneSnapshot,
+  type StreamEventFrame,
+  type Workflow,
+} from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
+import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directCommandsGateway } from "./commands";
 import { directEventLogGateway } from "./event-log";
+import { toSceneId } from "./ids";
 import { directKeys } from "./keys";
+import { directOverlaysGateway } from "./overlays";
 import { directRequestsGateway } from "./requests";
+import { directScenesGateway } from "./scenes";
 import { directStatusGateway } from "./status";
+import { directStreamOpsGateway } from "./stream-ops";
+import type { AvailableWidget } from "./testing/DirectFakeApi";
 import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
 
 // The namespaces against a fake engine over real capnweb: reads load through
@@ -229,5 +244,343 @@ describe("requests", () => {
     const answered = await correlated.until((value) => value.event != null, "the answer");
     expect(answered.event).toMatchObject({ correlationKey: key, type: "engine.response", data: { n: 1 } });
     correlated.unmount();
+  });
+});
+
+function libraryAlert(id: string, name: string): AlertComposition {
+  return {
+    id,
+    name,
+    description: "",
+    widgetsJson: '[{"widgetCanonicalId":"woofx3:widget:text","settings":{"text":{"$input":"who"}}}]',
+    layoutJson: '{"width":800}',
+    behaviorsJson: "{}",
+    inputsJson: '[{"id":"who","label":"Who","type":"text"}]',
+    hasDraft: false,
+    createdByType: "USER",
+    createdByRef: "",
+  };
+}
+
+function compositionSnapshot(id: string, kind: "scene" | "alert"): SceneSnapshot {
+  return {
+    id,
+    kind,
+    name: id,
+    description: "",
+    widgetsJson: "[]",
+    layoutJson: "{}",
+    behaviorsJson: "{}",
+    inputsJson: "[]",
+    createdByType: "USER",
+    createdByRef: "",
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+describe("alertLibrary", () => {
+  test("lists the library by name, with the inputs' `$` keys escaped as every gateway serves them", async () => {
+    const { runtime, state } = await connected();
+    state.alertCompositions = [libraryAlert("a-2", "Raid"), libraryAlert("a-1", "Follow")];
+    const read = renderDirect(() => directAlertLibraryGateway(runtime).useAlerts());
+    const alerts = await read.until((value) => value !== undefined, "the library");
+    expect(alerts?.map((alert) => alert.name)).toEqual(["Follow", "Raid"]);
+    expect(alerts?.[0]).toMatchObject({
+      engineCompositionId: "a-1",
+      description: undefined,
+      widgets: [{ widgetCanonicalId: "woofx3:widget:text", settings: { text: { __$input: "who" } } }],
+      layout: { width: 800 },
+      inputs: [{ id: "who", label: "Who", type: "text" }],
+    });
+    read.unmount();
+  });
+
+  test("a library alert's event reads the library again, and a scene's does not", async () => {
+    const { runtime, state, engine } = await connected();
+    const read = renderDirect(() => directAlertLibraryGateway(runtime).useAlerts());
+    await read.until((value) => value !== undefined, "the library");
+
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.SCENE_UPDATED, scene: compositionSnapshot("s-1", "scene") },
+        "engine",
+        "e-4"
+      )
+    );
+    state.alertCompositions = [libraryAlert("a-1", "Follow")];
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.SCENE_CREATED, scene: compositionSnapshot("a-1", "alert") },
+        "engine",
+        "e-5"
+      )
+    );
+    await read.until((value) => value?.length === 1, "the new alert");
+    expect(state.callsOf("listAlertCompositions")).toHaveLength(2);
+    read.unmount();
+  });
+
+  test("an engine with no library reads as empty and refuses a new alert", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    harness.engine.capabilities = harness.engine.capabilities.filter(
+      (id) => id !== ENGINE_CAPABILITIES.compositionsAlerts
+    );
+    await harness.connect();
+    const library = directAlertLibraryGateway(harness.runtime);
+    const read = renderDirect(() => library.useAlerts());
+    expect(await read.until((value) => value !== undefined, "the library")).toEqual([]);
+    const create = renderDirect(() => library.useCreateRequest()).current();
+    await expect(create({ name: "Follow", widgetsJson: "[]", layoutJson: "{}", behaviorsJson: "{}" })).rejects.toThrow(
+      "doesn't keep an alert library"
+    );
+    expect(harness.state.callsOf("listAlertCompositions")).toEqual([]);
+    read.unmount();
+  });
+
+  test("a preview URL expires when the engine said, counted from before it was asked", async () => {
+    const { runtime, state, clock } = await connected();
+    state.compositionPreview = { url: "http://scenes.test/preview/composition?token=t", expiresInSeconds: 300 };
+    const preview = renderDirect(() => directAlertLibraryGateway(runtime).usePreviewUrlRequest()).current();
+    expect(await preview()).toEqual({
+      url: "http://scenes.test/preview/composition?token=t",
+      expiresAt: clock.now() + 300_000,
+    });
+  });
+});
+
+describe("streamOps", () => {
+  const entry = (platformUserId: string, total: number) => ({
+    platform: "twitch",
+    platformUserId,
+    userName: platformUserId,
+    total,
+    events: 1,
+  });
+
+  test("a leaderboard ranks named viewers only, and refuses a stream the engine no longer has", async () => {
+    const { runtime, state } = await connected();
+    state.leaderboards.bits = [entry("u-1", 500), entry("", 300)];
+    state.unknownSessions = ["gone"];
+    const leaderboard = renderDirect(() => directStreamOpsGateway(runtime).useSupporterLeaderboardRequest()).current();
+
+    expect(await leaderboard({ metric: "bits", minTotal: 1 })).toEqual([
+      { platformUserId: "u-1", userName: "u-1", total: 500, events: 1 },
+    ]);
+    const gone = await leaderboard({ metric: "bits", minTotal: 1, sessionId: "gone" }).catch((e: Error) => e);
+    expect(String(gone)).toContain("no longer exists");
+    await expect(leaderboard({ metric: "bits", minTotal: 0 })).rejects.toThrow("at least 1");
+    expect(state.callsOf("getLeaderboard")).toHaveLength(2);
+  });
+
+  test("a viewer's totals cover their lifetime and the recent streams that went live", async () => {
+    const { runtime, state } = await connected();
+    const totals = (bits: number, sessionId: string | null) => ({
+      platform: "twitch",
+      platformUserId: "u-1",
+      userName: "Viewer",
+      sessionId,
+      bits,
+      cheers: 1,
+      giftedSubs: 0,
+      gifts: 0,
+    });
+    const segment = [{ startedAt: "2026-10-27T10:00:00Z", endedAt: "2026-10-27T11:00:00Z" }];
+    state.sessions = [
+      { id: "s-2", status: "closed", startedAt: "2026-10-27T10:00:00Z", endedAt: null, segments: segment },
+      { id: "s-1", status: "closed", startedAt: "2026-10-26T10:00:00Z", endedAt: null, segments: [] },
+    ];
+    state.viewerTotals = { "u-1": totals(900, null), "u-1:s-2": totals(100, "s-2") };
+    const lookUp = renderDirect(() => directStreamOpsGateway(runtime).useViewerSupportTotalsRequest()).current();
+
+    const answer = await lookUp("u-1");
+    expect(answer.userName).toBe("Viewer");
+    expect(answer.lifetime).toEqual({ bits: 900, cheers: 1, giftedSubs: 0, gifts: 0 });
+    expect(answer.recent.map((row) => [row.stream.id, row.totals.bits])).toEqual([["s-2", 100]]);
+  });
+
+  test("a recap of a stream the engine no longer has says so rather than rejecting", async () => {
+    const { runtime, state } = await connected();
+    state.unknownSessions = ["gone"];
+    const detail = renderDirect(() => directStreamOpsGateway(runtime).useRecapEngineDetailRequest()).current();
+    expect(await detail("gone")).toEqual({ status: "unknown_session" });
+  });
+
+  test("the stored recap summary is a dashboard's record, which this gateway has none of", async () => {
+    const { runtime } = await connected();
+    const refresh = renderDirect(() => directStreamOpsGateway(runtime).useOpenSessionRefreshRequest()).current();
+    await expect(refresh()).rejects.toBeInstanceOf(GatewayUnsupportedError);
+  });
+});
+
+describe("overlays", () => {
+  test("a scene's browser-source URL is made on first ask and the same after that until rotated", async () => {
+    const { runtime, state } = await connected();
+    const overlays = directOverlaysGateway(runtime);
+    const urlOf = renderDirect(() => overlays.useBrowserSourceUrlRequest()).current();
+    const rotate = renderDirect(() => overlays.useRotateBrowserSourceUrlRequest()).current();
+    const scene = toSceneId("s-1");
+
+    const first = await urlOf(scene);
+    expect(await urlOf(scene)).toBe(first);
+    expect(state.callsOf("mintOverlayToken")).toHaveLength(1);
+
+    const rotated = await rotate(scene);
+    expect(rotated).not.toBe(first);
+    expect(await urlOf(scene)).toBe(rotated);
+    expect(state.overlayTokens.map((token) => token.status)).toEqual(["revoked", "active"]);
+  });
+});
+
+const ALERT_WIDGET = "woofx3:widget:alert";
+
+function scene(id: string, widgets: unknown[] = []): SceneSnapshot {
+  return {
+    ...compositionSnapshot(id, "scene"),
+    widgetsJson: JSON.stringify(widgets),
+    layoutJson: '{"width":1280}',
+    createdAt: "2026-10-28T10:00:00Z",
+    updatedAt: "2026-10-28T11:00:00Z",
+  };
+}
+
+const alertPlacement = (name: string) => ({ widgetCanonicalId: ALERT_WIDGET, settings: { name } });
+
+function widget(manifestId: string, createdByType: string, createdByRef: string, hostsSurface = ""): AvailableWidget {
+  return {
+    id: `w-${manifestId}`,
+    manifestId,
+    name: manifestId,
+    description: "",
+    directory: manifestId,
+    alertTypes: [],
+    settingsSchema: "[]",
+    surfaces: ["scene"],
+    hostsSurface,
+    taxonomy: [],
+    behaviorKinds: { transitions: [], effects: [] },
+    createdByType,
+    createdByRef,
+  };
+}
+
+function alertWorkflow(id: string, name: string, target: string): Workflow {
+  return {
+    id,
+    name,
+    description: "",
+    isEnabled: true,
+    definition: {
+      id,
+      name,
+      trigger: { type: "event", event: "channel.follow" },
+      tasks: [{ id: "t-1", type: "action", action: "alert", parameters: { target } }],
+    },
+    stats: { runsToday: 0, successRate: 0 },
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+describe("scenes", () => {
+  test("reads whole scenes, sized from their layout, and reads them again when one changes", async () => {
+    const { runtime, state, engine } = await connected();
+    state.scenes = [scene("s-1")];
+    const read = renderDirect(() => directScenesGateway(runtime).useScenes());
+    const scenes = await read.until((value) => value !== undefined, "the scenes");
+    expect(scenes?.[0]).toMatchObject({
+      id: toSceneId("s-1"),
+      engineSceneId: "s-1",
+      width: 1280,
+      height: 1080,
+      backgroundColor: "transparent",
+      updatedAt: Date.parse("2026-10-28T11:00:00Z"),
+    });
+
+    state.scenes = [scene("s-1"), scene("s-2")];
+    await engine.pushEvent(
+      makeCallbackEnvelope({ type: EngineEventType.SCENE_CREATED, scene: state.scenes[1] }, "engine", "e-6")
+    );
+    await read.until((value) => value?.length === 2, "the new scene");
+    read.unmount();
+  });
+
+  test("an engine that cannot hand over whole scenes has none to show", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    harness.engine.capabilities = harness.engine.capabilities.filter(
+      (id) => id !== ENGINE_CAPABILITIES.scenesSnapshots
+    );
+    await harness.connect();
+    const read = renderDirect(() => directScenesGateway(harness.runtime).useScenes());
+    await waitFor(() => read.error() !== undefined, "the read to fail");
+    expect(read.error()).toBeInstanceOf(GatewayUnsupportedError);
+    expect(harness.state.callsOf("listSceneSnapshots")).toEqual([]);
+  });
+
+  test("the widget catalog groups a module's widgets under its name and the engine's own as built in", async () => {
+    const { runtime, state } = await connected();
+    state.widgets = [
+      widget("now_playing", "MODULE", "spotify:1.0.0:abc1234"),
+      widget("alert", "SYSTEM", "woofx3", "alert"),
+    ];
+    state.modules = [
+      {
+        name: "Spotify",
+        version: "1.0.0",
+        state: "active",
+        createdByType: "USER",
+        moduleId: "spotify",
+        moduleKey: "spotify:1.0.0:abc1234",
+        manifest: null,
+      },
+    ];
+    const read = renderDirect(() => directScenesGateway(runtime).useWidgetCatalog());
+    const catalog = await read.until((value) => value !== undefined, "the catalog");
+    expect(catalog?.map((row) => [row.widgetId, row.moduleName, row.moduleId])).toEqual([
+      ["spotify:widget:now_playing", "Spotify", "spotify"],
+      ["woofx3:widget:alert", "Built-in", undefined],
+    ]);
+    read.unmount();
+  });
+
+  test("alert widget names and target usage come from the scenes, commands and every page of workflows", async () => {
+    const harness = createDirectHarness({ workflowPageSize: 1 });
+    harnesses.push(harness);
+    await harness.connect();
+    const { runtime, state } = harness;
+    state.widgets = [widget("alert", "SYSTEM", "woofx3", "alert")];
+    state.scenes = [scene("s-1", [alertPlacement("side")]), scene("s-2", [alertPlacement("default")])];
+    state.commands = [
+      { ...command("c-1", "hype"), actions: [{ action: "alert", parameters: { target: "side" } }] },
+    ] as CommandSnapshot[];
+    state.workflows = [alertWorkflow("w-1", "Follow", "default"), alertWorkflow("w-2", "Raid", "side")];
+    const scenes = directScenesGateway(runtime);
+
+    const names = renderDirect(() => scenes.useAlertWidgetNames());
+    expect(await names.until((value) => value !== undefined, "the names")).toEqual(["default", "side"]);
+
+    const usage = renderDirect(() => scenes.useAlertTargetUsage("s-1"));
+    const answer = await usage.until((value) => value !== undefined, "the usage");
+    expect(answer).toEqual({
+      alertWidgetIds: [ALERT_WIDGET],
+      elsewhere: ["default"],
+      uses: [
+        { target: "default", kind: "workflow", name: "Follow" },
+        { target: "side", kind: "workflow", name: "Raid" },
+        { target: "side", kind: "command", name: "!hype" },
+      ],
+    });
+    expect(state.callsOf("getWorkflows")).toHaveLength(3);
+    names.unmount();
+    usage.unmount();
+  });
+
+  test("a preview of a scene the engine does not have is null, and mints nothing", async () => {
+    const { runtime, state } = await connected();
+    const preview = renderDirect(() => directOverlaysGateway(runtime).usePreviewUrlRequest()).current();
+    expect(await preview(toSceneId("missing"))).toBeNull();
+    expect(state.callsOf("mintOverlayToken")).toEqual([]);
   });
 });

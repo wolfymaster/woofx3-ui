@@ -37,7 +37,8 @@ export interface DirectHarness {
   connect(): Promise<void>;
 }
 
-export function createDirectHarness(): DirectHarness {
+/** `overrides` replace parts of the test config, e.g. a page size small enough to page through. */
+export function createDirectHarness(overrides: Partial<DirectGatewayConfig> = {}): DirectHarness {
   const state = new FakeEngineState();
   const engine = new FakeEngine((fake) => new DirectFakeApi(fake, state));
   const clock = new FakeClock();
@@ -49,7 +50,7 @@ export function createDirectHarness(): DirectHarness {
     clock,
     random: () => 0.5,
     logger,
-    config: TEST_CONFIG,
+    config: { ...TEST_CONFIG, ...overrides },
     ping: async (url) => {
       pings.push(url);
     },

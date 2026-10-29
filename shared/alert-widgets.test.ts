@@ -2,13 +2,15 @@ import { describe, expect, it } from "bun:test";
 import {
   type AlertTargetUse,
   alertStepTargets,
+  alertTargetUses,
   alertWidgetName,
+  alertWidgetNamesAcross,
   alertWidgetNamesOf,
   DEFAULT_ALERT_WIDGET_NAME,
   nextAlertWidgetName,
   orphanedAlertTargets,
   placedWidgetsOf,
-} from "./alertWidgets";
+} from "./alert-widgets";
 
 describe("alertWidgetName", () => {
   it("answers to its name setting, trimmed", () => {
@@ -116,5 +118,53 @@ describe("placedWidgetsOf", () => {
       { widgetId: "woofx3:widget:alert", settings: { name: "main" } },
       { widgetId: "woofx3:widget:text", settings: undefined },
     ]);
+  });
+});
+
+describe("alertTargetUses", () => {
+  it("names each Alert step's target with what runs it, in order", () => {
+    const uses = alertTargetUses([
+      {
+        kind: "workflow",
+        name: "Raid hype",
+        steps: [{ action: "alert", parameters: { target: "sidebar" } }, { action: "chat" }],
+      },
+      { kind: "command", name: "!hype", steps: [{ action: "alert", parameters: {} }] },
+    ]);
+    expect(uses).toEqual([
+      { target: "sidebar", kind: "workflow", name: "Raid hype" },
+      { target: DEFAULT_ALERT_WIDGET_NAME, kind: "command", name: "!hype" },
+    ]);
+  });
+
+  it("finds nothing in steps that play no alerts", () => {
+    expect(alertTargetUses([{ kind: "command", name: "!hi", steps: [{ action: "chat" }] }])).toEqual([]);
+  });
+});
+
+describe("alertWidgetNamesAcross", () => {
+  const alertIds = new Set(["woofx3:widget:alert"]);
+  const alertWidget = (name?: string) => ({
+    widgetCanonicalId: "woofx3:widget:alert",
+    settings: name === undefined ? {} : { name },
+  });
+
+  it("puts the default first and sorts the rest, once each across scenes", () => {
+    const names = alertWidgetNamesAcross(
+      [
+        [alertWidget("zebra"), alertWidget()],
+        [alertWidget("apple"), alertWidget("zebra")],
+      ],
+      alertIds
+    );
+    expect(names).toEqual([DEFAULT_ALERT_WIDGET_NAME, "apple", "zebra"]);
+  });
+
+  it("leaves the default out when no scene has it, and ignores other widgets", () => {
+    const names = alertWidgetNamesAcross(
+      [[alertWidget("side"), { widgetCanonicalId: "woofx3:widget:text", settings: { name: "default" } }]],
+      alertIds
+    );
+    expect(names).toEqual(["side"]);
   });
 });

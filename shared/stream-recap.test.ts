@@ -6,7 +6,7 @@ import {
   RECAP_LEADERBOARD_LIMIT,
   toRecapEngineDetail,
   toRecapTimelineEvents,
-} from "./streamRecap";
+} from "./stream-recap";
 
 function leaderboard(metric: Leaderboard["metric"], count: number): Leaderboard {
   return {

@@ -1,7 +1,7 @@
+import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { useMemo } from "react";
 import { useRawWorkflowCatalog } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
-import { BUILTIN_MODULE_LABEL } from "@/lib/action-objects";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";

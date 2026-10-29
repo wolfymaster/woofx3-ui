@@ -76,7 +76,7 @@ The stored summary is what makes the page load instantly and survive an engine
 that is down or has lost its database. The engine detail is fetched once per
 visit by a Convex action that checks instance membership and runs the three
 engine calls concurrently, each on its own capnweb batch session. The action
-copies only the fields the page shows (`convex/lib/streamRecap.ts`). A null
+copies only the fields the page shows (`shared/stream-recap.ts`). A null
 answer from the engine means it no longer knows the session (a later split or
 merge retired its id), and the page says so. A failed call is sorted by
 `classifyEngineCallError`: the gateway refusing this instance's client

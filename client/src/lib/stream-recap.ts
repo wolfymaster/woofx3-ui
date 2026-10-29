@@ -1,4 +1,4 @@
-import type { RecapSupporter, RecapViewerSample } from "@convex/lib/streamRecap";
+import type { RecapSupporter, RecapViewerSample } from "@shared/stream-recap";
 
 const MINUTE_MS = 60_000;
 

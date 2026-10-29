@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { BEHAVIOR_KIND_LABEL_MAX_LENGTH, MAX_DECLARED_KINDS, readWidgetBehaviorKinds } from "./widgetBehaviorKinds";
+import { BEHAVIOR_KIND_LABEL_MAX_LENGTH, MAX_DECLARED_KINDS, readWidgetBehaviorKinds } from "./widget-behavior-kinds";
 
 describe("readWidgetBehaviorKinds", () => {
   it("reads the kinds a widget declares", () => {

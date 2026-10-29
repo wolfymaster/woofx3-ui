@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { RecapSupporter } from "@convex/lib/streamRecap";
+import type { RecapSupporter } from "@shared/stream-recap";
 import { buildThankYouMessage, buildViewerSeries, segmentTimeline } from "./stream-recap";
 import { sessionIdFromParam, streamRecapPath } from "./stream-recap-route";
 
