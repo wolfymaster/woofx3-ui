@@ -1,3 +1,4 @@
+import { canonicalIdForStorageKey } from "@shared/resource-values";
 import type { QueryKey } from "@tanstack/react-query";
 import { type CallbackEnvelope, type CallbackEventByType, type CompositionKind, EngineEventType } from "@woofx3/api";
 import { directKeys as k } from "./keys";
@@ -31,7 +32,9 @@ const WIDGETS = (): readonly QueryKey[] => [
   k.scenes.alertWidgetNames(),
   k.scenes.allAlertTargetUsage,
 ];
-const MODULES = (): readonly QueryKey[] => [...WIDGETS(), ...CATALOG()];
+/** A module's manifest declares its resource kinds, so what is installed decides them too. */
+const MODULES = (): readonly QueryKey[] => [...WIDGETS(), ...CATALOG(), k.moduleResources.all];
+const RESOURCE_INSTANCES = (): readonly QueryKey[] => [k.moduleResources.all];
 
 /** The engine keeps scenes and library alerts in one table and reports both as `scene.*`, told apart by kind. */
 function compositionKeys(kind: CompositionKind): readonly QueryKey[] {
@@ -60,10 +63,12 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.MODULE_WIDGET_DEREGISTERED]: WIDGETS,
   [EngineEventType.MODULE_ASSET_REGISTERED]: NONE,
   [EngineEventType.MODULE_ASSET_DEREGISTERED]: NONE,
-  [EngineEventType.MODULE_RESOURCE_INSTANCE_CREATED]: NONE,
-  [EngineEventType.MODULE_RESOURCE_INSTANCE_UPDATED]: NONE,
-  [EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED]: NONE,
-  [EngineEventType.MODULE_STORAGE_CHANGED]: NONE,
+  [EngineEventType.MODULE_RESOURCE_INSTANCE_CREATED]: RESOURCE_INSTANCES,
+  [EngineEventType.MODULE_RESOURCE_INSTANCE_UPDATED]: RESOURCE_INSTANCES,
+  [EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED]: RESOURCE_INSTANCES,
+  // Only a write under a resource value's key changes a value anything here reads.
+  [EngineEventType.MODULE_STORAGE_CHANGED]: (event) =>
+    canonicalIdForStorageKey(event.key) === null ? [] : [k.moduleResources.values()],
   [EngineEventType.ENGINE_RESPONSE_RECEIVED]: NONE,
   [EngineEventType.WORKFLOW_CREATED]: (event) => workflowKeys(event.workflow.id),
   [EngineEventType.WORKFLOW_UPDATED]: (event) => workflowKeys(event.workflow.id),

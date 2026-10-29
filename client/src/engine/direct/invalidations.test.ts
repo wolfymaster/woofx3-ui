@@ -103,6 +103,28 @@ describe("INVALIDATIONS", () => {
       [k.workflows.catalog()],
     ],
     [
+      "a write under a resource value's storage key refreshes the values",
+      makeCallbackEnvelope({
+        type: EngineEventType.MODULE_STORAGE_CHANGED,
+        moduleId: "counter",
+        key: "state:counter:counter:deaths",
+        value: 1,
+        occurredAt: "",
+      }),
+      [k.moduleResources.values()],
+    ],
+    [
+      "a write under any other storage key caches nothing",
+      makeCallbackEnvelope({
+        type: EngineEventType.MODULE_STORAGE_CHANGED,
+        moduleId: "counter",
+        key: "settings:theme",
+        value: 1,
+        occurredAt: "",
+      }),
+      [],
+    ],
+    [
       "an engine response feeds a transient event and caches nothing",
       makeCallbackEnvelope({
         type: EngineEventType.ENGINE_RESPONSE_RECEIVED,

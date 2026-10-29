@@ -20,6 +20,7 @@ import { directCommandsGateway } from "./commands";
 import { directEventLogGateway } from "./event-log";
 import { toSceneId } from "./ids";
 import { directKeys } from "./keys";
+import { directModuleResourcesGateway } from "./module-resources";
 import { directOverlaysGateway } from "./overlays";
 import { directRequestsGateway } from "./requests";
 import { directScenesGateway } from "./scenes";
@@ -724,5 +725,96 @@ describe("workflows", () => {
     ]);
     unsubscribe();
     list.unmount();
+  });
+});
+
+describe("moduleResources", () => {
+  const resource = (moduleName: string, kind: string, instanceId: string) => ({
+    id: `row-${moduleName}-${instanceId}`,
+    moduleId: "uuid",
+    moduleName,
+    kind,
+    instanceId,
+    displayName: instanceId,
+    canonicalId: `${moduleName}:${kind}:${instanceId}`,
+    moduleKey: `${moduleName}:1.0.0:abc`,
+    settings: {},
+  });
+  const declaring = (moduleId: string, kinds: string[]) => ({
+    name: moduleId,
+    version: "1.0.0",
+    state: "active",
+    createdByType: "USER",
+    moduleId,
+    moduleKey: `${moduleId}:1.0.0:abc`,
+    manifest: { id: moduleId, resources: kinds.map((kind) => ({ kind, name: kind, description: "", schema: [] })) },
+  });
+
+  test("a bare kind means the one module declaring it; a qualified kind names its module", async () => {
+    const { runtime, state } = await connected();
+    state.modules = [declaring("counter", ["counter"]), declaring("other", ["timer"])];
+    state.resourceInstances = [
+      resource("counter", "counter", "deaths"),
+      resource("other", "counter", "stray"),
+      resource("other", "timer", "break"),
+    ];
+    const resources = directModuleResourcesGateway(runtime);
+    const bare = renderDirect(() => resources.useKindInstances("counter"));
+    const several = renderDirect(() => resources.useKindsInstances(["other:timer", "counter", "counter"]));
+    const ids = (value: { canonicalId: string }[] | undefined) => value?.map((row) => row.canonicalId);
+    expect(ids(await bare.until((value) => value !== undefined, "one kind"))).toEqual(["counter:counter:deaths"]);
+    expect(ids(await several.until((value) => value !== undefined, "several kinds"))).toEqual([
+      "counter:counter:deaths",
+      "other:timer:break",
+    ]);
+    expect(state.callsOf("listAllResourceInstances")).toHaveLength(1);
+    bare.unmount();
+    several.unmount();
+  });
+
+  test("a value written under its storage key is read again, and any other key is ignored", async () => {
+    const { runtime, state, engine } = await connected();
+    state.resourceInstances = [resource("counter", "counter", "deaths")];
+    state.resourceValues = { "counter:counter:deaths": { value: 1 } };
+    const read = renderDirect(() => directModuleResourcesGateway(runtime).useValues());
+    expect(await read.until((value) => value !== undefined, "the values")).toEqual({
+      "counter:counter:deaths": { value: 1 },
+    });
+
+    const storage = (key: string, id: string) =>
+      makeCallbackEnvelope(
+        { type: EngineEventType.MODULE_STORAGE_CHANGED, moduleId: "counter", key, value: 2, occurredAt: "" },
+        "engine",
+        id
+      );
+    await engine.pushEvent(storage("settings:theme", "e-10"));
+    state.resourceValues = { "counter:counter:deaths": { value: 2 } };
+    await engine.pushEvent(storage("state:counter:counter:deaths", "e-11"));
+    await read.until((value) => (value?.["counter:counter:deaths"] as { value: number })?.value === 2, "the new value");
+    expect(state.callsOf("getResourceValues")).toHaveLength(2);
+    read.unmount();
+  });
+
+  test("actions run on the engine with their `$` keys unescaped, as a dashboard's own run", async () => {
+    const { runtime, state } = await connected();
+    const run = renderDirect(() => directModuleResourcesGateway(runtime).useRunActionsRequest()).current();
+    await run("+1", [{ action: "counter.increment", parameters: { by: { __$expr: "1" } } }]);
+    expect(state.callsOf("runActions")[0][0]).toEqual({
+      label: "+1",
+      actions: [{ action: "counter.increment", parameters: { by: { $expr: "1" } } }],
+      event: { type: "dashboard.action", source: "dashboard", data: {} },
+    });
+    await expect(run("nothing", [])).rejects.toThrow("no actions");
+  });
+
+  test("a module's instances are read by the key it is installed under", async () => {
+    const { runtime, state } = await connected();
+    state.modules = [declaring("counter", ["counter"])];
+    state.resourceInstances = [resource("counter", "counter", "deaths")];
+    const sync = renderDirect(() => directModuleResourcesGateway(runtime).useSyncModuleRequest()).current();
+    expect(await sync("counter" as never)).toEqual({ itemsProcessed: 1 });
+    expect(state.callsOf("listResourceInstancesForModule")).toEqual([["counter:1.0.0:abc", "counter"]]);
+    const missing = await sync("missing" as never).catch((error: Error) => error);
+    expect(String(missing)).toContain("No installed module");
   });
 });
