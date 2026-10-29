@@ -1,3 +1,5 @@
+import { bareModuleKey } from "./module-key";
+
 // Stable, cross-path identity for a widget. The engine's two ingest paths supply
 // different fields — the MODULE_WIDGET_REGISTERED webhook sends `projectionKey`
 // but omits `id` for built-ins; `getAvailableWidgets()` sends `id` + `manifestId`
@@ -21,7 +23,7 @@ export function widgetCanonicalKey(input: {
     return stableWidgetId(input.projectionKey) ?? input.projectionKey;
   }
   if (input.createdByRef && input.manifestId) {
-    return `${baseModuleKey(input.createdByRef)}:widget:${input.manifestId}`;
+    return `${bareModuleKey(input.createdByRef) ?? input.createdByRef}:widget:${input.manifestId}`;
   }
   if (input.canonicalId) {
     return stableWidgetId(input.canonicalId) ?? input.canonicalId;
@@ -46,11 +48,5 @@ export function stableWidgetId(rawId: string): string | undefined {
   if (!manifestId) {
     return undefined;
   }
-  return `${baseModuleKey(rawModuleKey)}:widget:${manifestId}`;
-}
-
-/** Take the first colon-delimited segment of a module key, stripping version/hash. */
-function baseModuleKey(key: string): string {
-  const idx = key.indexOf(":");
-  return idx === -1 ? key : key.slice(0, idx);
+  return `${bareModuleKey(rawModuleKey) ?? rawModuleKey}:widget:${manifestId}`;
 }

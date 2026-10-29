@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bareModuleKey, findModuleRow, type ModuleRowIdentity } from "./moduleKey";
+import { findModuleRow, type ModuleRowIdentity } from "./moduleKey";
 
 function row(id: string, moduleKey: string | undefined, name: string, version: string): ModuleRowIdentity {
   return { _id: id, moduleKey, name, version };
@@ -8,17 +8,6 @@ function row(id: string, moduleKey: string | undefined, name: string, version: s
 function snap(name: string, version: string, moduleKey: string, moduleId = "") {
   return { name, version, moduleKey, moduleId };
 }
-
-describe("bareModuleKey", () => {
-  test("drops the version and content hash", () => {
-    expect(bareModuleKey("woofx3_twitch:0.1.1:eb5e20f")).toBe("woofx3_twitch");
-  });
-
-  test("is undefined for a key that carries nothing", () => {
-    expect(bareModuleKey(undefined)).toBeUndefined();
-    expect(bareModuleKey("")).toBeUndefined();
-  });
-});
 
 describe("findModuleRow", () => {
   const none = new Set<string>();

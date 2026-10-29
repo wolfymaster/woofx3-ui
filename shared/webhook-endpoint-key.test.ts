@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isWebhookTrigger, webhookEndpointKey, webhookEndpointKeys } from "./webhookEndpointKey";
+import { isWebhookTrigger, webhookEndpointKey, webhookEndpointKeys } from "./webhook-endpoint-key";
 
 const KEY = {
   triggerKey: "example_store:trigger:orders",

@@ -1,4 +1,5 @@
 import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
+import { bareModuleKey } from "@shared/module-key";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
@@ -8,7 +9,7 @@ import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { resolveProvenance } from "./lib/marketplaceInstallIdentity";
 import { recordedProvenance } from "./lib/marketplaceInstallRecords";
-import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
+import { findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
 

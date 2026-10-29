@@ -1,4 +1,6 @@
 import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
+import { bareModuleKey } from "@shared/module-key";
+import { webhookEndpointKey } from "@shared/webhook-endpoint-key";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -13,9 +15,6 @@ import {
 } from "./lib/definitionCatalog";
 import { resolveProvenance } from "./lib/marketplaceInstallIdentity";
 import { recordedProvenance } from "./lib/marketplaceInstallRecords";
-import { bareModuleKey } from "./lib/moduleKey";
-
-import { webhookEndpointKey } from "./lib/webhookEndpointKey";
 import {
   moduleDeleteFailedTransient,
   moduleInstalledTransient,

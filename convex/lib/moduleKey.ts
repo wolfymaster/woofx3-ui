@@ -1,17 +1,6 @@
+import { bareModuleKey } from "@shared/module-key";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-
-/**
- * The bare module key — the first segment of an installed module's versioned key.
- *
- * `moduleRepository.moduleKey` records the key a module was installed under, version
- * and content hash included (`woofx3_twitch:0.1.1:eb5e20f`). Engine records that
- * belong to a module name it by its bare key instead (`createdByRef: "woofx3_twitch"`),
- * because a trigger keeps working across module upgrades.
- */
-export function bareModuleKey(moduleKey: string | undefined): string | undefined {
-  return moduleKey?.split(":")[0] || undefined;
-}
 
 /**
  * Bare module key → installed module, for resolving an engine record's `createdByRef`.

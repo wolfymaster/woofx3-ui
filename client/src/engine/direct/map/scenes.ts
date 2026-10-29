@@ -1,3 +1,4 @@
+import { bareModuleKey } from "@shared/module-key";
 import { parseSceneLayout, parseSceneWidgets } from "@shared/scene-serialization";
 import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
 import { widgetCanonicalKey } from "@shared/widget-key";
@@ -40,11 +41,7 @@ export function toSceneRecord(snapshot: SceneSnapshot): SceneRecord {
 
 /** The module a widget came from, by its manifest id; none for the engine's own widgets. */
 function moduleKeyOf(widget: AvailableWidget): string | undefined {
-  if (widget.createdByType !== "MODULE") {
-    return undefined;
-  }
-  const bare = widget.createdByRef.split(":")[0];
-  return bare === "" ? undefined : bare;
+  return widget.createdByType === "MODULE" ? bareModuleKey(widget.createdByRef) : undefined;
 }
 
 /**
