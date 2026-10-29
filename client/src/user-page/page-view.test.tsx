@@ -25,6 +25,7 @@ function page(overrides: Partial<PublishedPage> = {}): PublishedPage {
     theme: { accent: "teal" },
     sections: [],
     rolesStale: false,
+    rolesRenewAt: null,
     publishedAt: NOW,
     ...overrides,
   };

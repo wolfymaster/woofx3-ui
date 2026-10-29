@@ -3,7 +3,7 @@ import type { RefreshRolesResult } from "@convex/viewerRoles";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useClock } from "../clock";
-import { ROLE_REFRESH_RETRY, roleRefreshRetryDelay, roleRefreshStep } from "./role-refresh";
+import { ROLE_REFRESH_RETRY, roleRefreshRetryDelay, roleRefreshStep, roleRenewalDelay } from "./role-refresh";
 import { type SignInFailure, type SignInOutcome, signInStartUrl, type ViewerStorage } from "./sign-in";
 
 /** What the viewer hooks need from outside React, built once by main.tsx. */
@@ -127,27 +127,43 @@ export function useViewerSession(env: ViewerEnvironment): ViewerSessionControls 
 export type RoleCheck = "idle" | "checking" | "retrying" | "reauth" | "stopped";
 
 /**
- * Asks `viewerRoles.refresh` whenever the page read reports `rolesStale` for
- * a signed-in viewer. A stored answer re-runs the page read, which clears
- * `rolesStale` and ends the loop; anything else retries with backoff or stops.
+ * Asks `viewerRoles.refresh` for a signed-in viewer whenever the page read
+ * reports `rolesStale`, and at `rolesRenewAt` while their roles are still
+ * current, so the new check replaces the cached roles before they expire and
+ * no open section locks meanwhile. A stored answer re-runs the page read,
+ * which clears `rolesStale` or moves `rolesRenewAt` on and ends the loop;
+ * anything else retries with backoff or stops. A renewal that keeps failing
+ * leaves the roles to expire, and the read locks their sections as it would
+ * without one.
  */
 export function useRoleCheck(
   env: ViewerEnvironment,
   slug: string,
   sessionToken: string | null,
-  rolesStale: boolean,
+  roles: { rolesStale: boolean; rolesRenewAt: number | null },
   onSignedOut: () => void
 ): RoleCheck {
   const refresh = useAction(api.viewerRoles.refresh);
   const clock = useClock();
   const [check, setCheck] = useState<RoleCheck>("idle");
   const [retryTick, setRetryTick] = useState(0);
+  const [renewalDueAt, setRenewalDueAt] = useState<number | null>(null);
   const attempts = useRef(0);
   const halted = useRef<{ sessionToken: string; check: "reauth" | "stopped" } | null>(null);
+  const { rolesStale, rolesRenewAt } = roles;
+
+  useEffect(() => {
+    if (rolesRenewAt === null || sessionToken === null) {
+      return;
+    }
+    return clock.after(roleRenewalDelay(rolesRenewAt, clock.now()), () => setRenewalDueAt(rolesRenewAt));
+  }, [clock, rolesRenewAt, sessionToken]);
+  const renewalDue = rolesRenewAt !== null && renewalDueAt === rolesRenewAt;
+  const wanted = rolesStale || renewalDue;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryTick only re-runs the effect for the next attempt.
   useEffect(() => {
-    if (!rolesStale || sessionToken === null) {
+    if (!wanted || sessionToken === null) {
       attempts.current = 0;
       setCheck("idle");
       return;
@@ -175,8 +191,9 @@ export function useRoleCheck(
         }
         switch (roleRefreshStep(result)) {
           case "settled":
-            // The page read re-runs and clears rolesStale, which cancels
-            // this; the retry only matters if it somehow does not.
+            // The page read re-runs and clears rolesStale or moves
+            // rolesRenewAt on, which cancels this; the retry only matters if
+            // it somehow does not.
             attempts.current = 0;
             retryLater();
             return;
@@ -201,7 +218,7 @@ export function useRoleCheck(
       current = false;
       cancelRetry();
     };
-  }, [clock, env.random, onSignedOut, refresh, retryTick, rolesStale, sessionToken, slug]);
+  }, [clock, env.random, onSignedOut, refresh, retryTick, wanted, sessionToken, slug]);
 
   return check;
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { generateOpaqueToken, isOpaqueToken } from "@convex/lib/oauthHandoff";
 import type { ExchangeHandoffResult } from "@convex/viewerSession";
 import { DEFAULT_USER_PAGES_ORIGIN, userPagesOrigin } from "./config";
-import { ROLE_REFRESH_RETRY, roleRefreshRetryDelay, roleRefreshStep } from "./role-refresh";
+import { ROLE_REFRESH_RETRY, roleRefreshRetryDelay, roleRefreshStep, roleRenewalDelay } from "./role-refresh";
 import {
   browserViewerStorage,
   canonicalPageUrl,
@@ -326,5 +326,13 @@ describe("roleRefreshRetryDelay", () => {
   test("the page's retries start at thirty seconds and stop growing at five minutes", () => {
     expect(roleRefreshRetryDelay(0, ROLE_REFRESH_RETRY, () => 0)).toBe(30_000);
     expect(roleRefreshRetryDelay(20, ROLE_REFRESH_RETRY, () => 0)).toBe(300_000);
+  });
+});
+
+describe("roleRenewalDelay", () => {
+  test("waits until the renewal time, and not at all once it has passed", () => {
+    expect(roleRenewalDelay(1000, 400)).toBe(600);
+    expect(roleRenewalDelay(1000, 1000)).toBe(0);
+    expect(roleRenewalDelay(1000, 5000)).toBe(0);
   });
 });

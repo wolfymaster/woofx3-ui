@@ -35,6 +35,15 @@ export function roleRefreshStep(result: RefreshRolesResult | "error"): RoleRefre
   }
 }
 
+/**
+ * How long until roles due for renewal at `renewAt` should be refreshed; 0
+ * when that moment has passed. The page clock may disagree with Convex's by
+ * a little, which the server's renewal lead time absorbs.
+ */
+export function roleRenewalDelay(renewAt: number, now: number): number {
+  return Math.max(0, renewAt - now);
+}
+
 export interface RoleRefreshRetryConfig {
   /** The first retry's delay before jitter. */
   baseMs: number;
