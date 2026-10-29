@@ -34,6 +34,8 @@ export interface HostedStorageLimits {
   totalBytes: number | null;
   /** Null is unlimited. */
   fileBytes: number | null;
+  /** The largest module archive one upload may hold, in place of `fileBytes`. Null is unlimited. */
+  moduleArchiveBytes: number | null;
   /** What modules may keep in module storage before their owner is warned. Null is unlimited. */
   moduleStorageBytes: number | null;
 }
@@ -47,12 +49,14 @@ export interface HostedStorageLimits {
 export interface HostedStorageOverride {
   totalBytes?: number | null;
   fileBytes?: number | null;
+  moduleArchiveBytes?: number | null;
   moduleStorageBytes?: number | null;
 }
 
 export const hostedStorageOverrideValidator = v.object({
   totalBytes: v.optional(v.union(v.number(), v.null())),
   fileBytes: v.optional(v.union(v.number(), v.null())),
+  moduleArchiveBytes: v.optional(v.union(v.number(), v.null())),
   moduleStorageBytes: v.optional(v.union(v.number(), v.null())),
 });
 
@@ -60,6 +64,7 @@ export const hostedStorageOverrideValidator = v.object({
 export const HOSTED_STORAGE_LIMIT_FIELDS = [
   "totalBytes",
   "fileBytes",
+  "moduleArchiveBytes",
   "moduleStorageBytes",
 ] as const satisfies ReadonlyArray<keyof HostedStorageOverride>;
 
@@ -70,13 +75,20 @@ export function hostedStorageLimits(
 ): HostedStorageLimits {
   const totalBytes = entitlements.limits["storage.hostedAssetBytes"];
   const fileBytes = entitlements.limits["storage.hostedFileBytes"];
+  const moduleArchiveBytes = entitlements.limits["storage.hostedModuleArchiveBytes"];
   const moduleStorageBytes = entitlements.limits["storage.moduleStorageBytes"];
-  if (totalBytes === undefined || fileBytes === undefined || moduleStorageBytes === undefined) {
+  if (
+    totalBytes === undefined ||
+    fileBytes === undefined ||
+    moduleArchiveBytes === undefined ||
+    moduleStorageBytes === undefined
+  ) {
     throw new Error("Hosted storage limits were not resolved");
   }
   return {
     totalBytes: override.totalBytes === undefined ? totalBytes : override.totalBytes,
     fileBytes: override.fileBytes === undefined ? fileBytes : override.fileBytes,
+    moduleArchiveBytes: override.moduleArchiveBytes === undefined ? moduleArchiveBytes : override.moduleArchiveBytes,
     moduleStorageBytes: override.moduleStorageBytes === undefined ? moduleStorageBytes : override.moduleStorageBytes,
   };
 }
@@ -86,13 +98,28 @@ export function isByteLimit(value: unknown): value is number | null {
   return value === null || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
 }
 
+/** What an upload holds: a media file, or a module archive someone uploaded to install. */
+export type HostedUploadKind = "media" | "custom_module";
+
+export const hostedUploadKind = v.union(v.literal("media"), v.literal("custom_module"));
+
 /**
  * Why an upload of `size` bytes is refused, or null when it fits. `usedBytes`
  * is everything already stored or promised: the engine's own total plus the
- * reservations it may not include yet.
+ * reservations it may not include yet. A module archive has its own per-file
+ * limit and shares the total with every other upload.
  */
-export function hostedUploadRefusal(limits: HostedStorageLimits, usedBytes: number, size: number): string | null {
-  if (limits.fileBytes !== null && size > limits.fileBytes) {
+export function hostedUploadRefusal(
+  limits: HostedStorageLimits,
+  usedBytes: number,
+  size: number,
+  kind: HostedUploadKind
+): string | null {
+  if (kind === "custom_module") {
+    if (limits.moduleArchiveBytes !== null && size > limits.moduleArchiveBytes) {
+      return `This module is ${formatStorageBytes(size)}; this engine allows uploaded modules of up to ${formatStorageBytes(limits.moduleArchiveBytes)} each.`;
+    }
+  } else if (limits.fileBytes !== null && size > limits.fileBytes) {
     return `This file is ${formatStorageBytes(size)}; this engine allows uploads of up to ${formatStorageBytes(limits.fileBytes)} each.`;
   }
   if (limits.totalBytes !== null && usedBytes + size > limits.totalBytes) {

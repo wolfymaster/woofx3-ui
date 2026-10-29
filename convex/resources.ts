@@ -115,6 +115,10 @@ export const list = action({
  *
  * On hosted storage the upload must also fit the plan's limits, held by a
  * reservation while the grant is issued (see convex/hostedStorage.ts).
+ *
+ * `kind: "custom_module"` uploads a module archive to install: the engine keeps
+ * it out of the media library and never serves it, and its per-file limit is
+ * the module archive one.
  */
 export const requestUpload = action({
   args: {
@@ -123,6 +127,7 @@ export const requestUpload = action({
     contentType: v.string(),
     parentId: v.optional(v.union(v.string(), v.null())),
     size: v.number(),
+    kind: v.optional(v.literal("custom_module")),
   },
   handler: async (ctx, args): Promise<UploadGrant> => {
     if (!Number.isSafeInteger(args.size) || args.size <= 0) {
@@ -135,6 +140,7 @@ export const requestUpload = action({
         contentType: args.contentType,
         parentId: args.parentId ?? null,
         size: args.size,
+        ...(args.kind ? { kind: args.kind } : {}),
       });
 
     const usage = await readHostedUsage(ctx, args.instanceId, bundle);
@@ -149,6 +155,7 @@ export const requestUpload = action({
       engineBytes: usage.engineBytes,
       readAt: usage.readAt,
       size: args.size,
+      kind: args.kind ?? "media",
     });
     if ("refusal" in reserved) {
       throw new ConvexError<string>(reserved.refusal);
