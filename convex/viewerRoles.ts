@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { tokenCipherFromEnv, VIEWER_TOKEN_KEY } from "./lib/tokenCipher";
 import { refreshOutcomeApplies } from "./lib/twitchRefresh";
 import { instanceForPageSlug } from "./lib/userPages";
 import {
@@ -18,7 +19,6 @@ import { type ViewerTokenGrant, viewerPlatformClient } from "./lib/viewerPlatfor
 import { viewerRateLimiter } from "./lib/viewerRateLimits";
 import { refreshViewerRoles } from "./lib/viewerRoleRefresh";
 import { broadcasterForInstance, viewerRolesFor } from "./lib/viewerSessionAuth";
-import { openViewerToken, sealViewerToken, viewerTokenKeyFromEnv } from "./lib/viewerTokenCipher";
 import { logger } from "./logger";
 
 // Keeps a viewer's follower and subscriber status on one broadcaster's channel
@@ -176,7 +176,7 @@ export async function recordViewerRoleRefresh(ctx: MutationCtx, record: RefreshR
       .query("viewerPlatformTokens")
       .withIndex("by_viewer", (q) => q.eq("viewerId", viewerId))
       .unique();
-    if (row && refreshOutcomeApplies({ refreshToken: row.sealedRefreshToken }, tokens.usedSealedRefreshToken)) {
+    if (row && refreshOutcomeApplies(row.sealedRefreshToken, tokens.usedSealedRefreshToken)) {
       if (tokens.renewed) {
         await ctx.db.patch(row._id, tokens.renewed);
       } else {
@@ -301,12 +301,12 @@ export const refresh = action({
       return { ok: false, error: "platform_mismatch" };
     }
 
-    const key = await viewerTokenKeyFromEnv();
+    const viewerTokens = await tokenCipherFromEnv(VIEWER_TOKEN_KEY);
     const grant: ViewerTokenGrant | null =
       tokens && tokens.authFailedAt === undefined
         ? {
-            accessToken: await openViewerToken(key, tokens.sealedAccessToken),
-            refreshToken: await openViewerToken(key, tokens.sealedRefreshToken),
+            accessToken: await viewerTokens.open(tokens.sealedAccessToken),
+            refreshToken: await viewerTokens.open(tokens.sealedRefreshToken),
             expiresAt: tokens.expiresAt,
             scopes: tokens.scopes,
           }
@@ -337,8 +337,8 @@ export const refresh = action({
       return {
         usedSealedRefreshToken: tokens.sealedRefreshToken,
         renewed: {
-          sealedAccessToken: await sealViewerToken(key, renewed.accessToken),
-          sealedRefreshToken: await sealViewerToken(key, renewed.refreshToken),
+          sealedAccessToken: await viewerTokens.seal(renewed.accessToken),
+          sealedRefreshToken: await viewerTokens.seal(renewed.refreshToken),
           expiresAt: renewed.expiresAt,
           scopes: renewed.scopes,
         },

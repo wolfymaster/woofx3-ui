@@ -26,8 +26,8 @@ export const store = internalMutation({
         platformUserId: v.string(),
         platformUsername: v.string(),
         profileImageUrl: v.optional(v.string()),
-        accessToken: v.string(),
-        refreshToken: v.string(),
+        sealedAccessToken: v.string(),
+        sealedRefreshToken: v.string(),
         expiresAt: v.number(),
         scopes: v.array(v.string()),
       })

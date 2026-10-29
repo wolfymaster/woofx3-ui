@@ -4,6 +4,7 @@ import { httpAction } from "./_generated/server";
 import { OAUTH_CALLBACK_PATHS, type OAuthCallbackProvider, oauthCallbackUrl } from "./lib/oauthCallback";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken, sha256Hex } from "./lib/oauthHandoff";
 import { forwardedCallbackUrl, mintOAuthState, oauthStateConfigFromEnv, routeOAuthState } from "./lib/oauthState";
+import { tokenCipherFromEnv, VIEWER_TOKEN_KEY } from "./lib/tokenCipher";
 import {
   allowedReturnOrigins,
   VIEWER_PLATFORMS,
@@ -16,7 +17,6 @@ import {
 import { checkEdgeGate } from "./lib/viewerEdgeGate";
 import { viewerPlatformClient } from "./lib/viewerPlatforms";
 import { viewerRateLimiter } from "./lib/viewerRateLimits";
-import { sealViewerToken, viewerTokenKeyFromEnv } from "./lib/viewerTokenCipher";
 import { logger } from "./logger";
 
 // The redirect half of viewer sign-in (lib/viewerAuth.ts has the whole flow):
@@ -138,14 +138,14 @@ function callbackHandler(platform: ViewerPlatform) {
       return failBack(target, "profile_fetch_failed", { platform });
     }
 
-    const key = await viewerTokenKeyFromEnv();
+    const viewerTokens = await tokenCipherFromEnv(VIEWER_TOKEN_KEY);
     const handoffCode = generateOpaqueToken();
     await ctx.runMutation(internal.viewerLogin.completeLogin, {
       platform,
       profile: profile.value,
       grant: {
-        sealedAccessToken: await sealViewerToken(key, grant.value.accessToken),
-        sealedRefreshToken: await sealViewerToken(key, grant.value.refreshToken),
+        sealedAccessToken: await viewerTokens.seal(grant.value.accessToken),
+        sealedRefreshToken: await viewerTokens.seal(grant.value.refreshToken),
         expiresAt: grant.value.expiresAt,
         scopes: grant.value.scopes,
       },

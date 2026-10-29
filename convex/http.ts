@@ -38,6 +38,7 @@ import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { forwardedCallbackUrl, mintOAuthState, oauthStateConfigFromEnv, routeOAuthState } from "./lib/oauthState";
 import { OPS_PATH_PREFIX } from "./lib/ops/routes";
+import { platformTokenCipher, sealPlatformLinkTokens } from "./lib/platformLinkTokens";
 import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
@@ -285,6 +286,10 @@ http.route({
       // The result is held for the user who started the connect, not written
       // here: this request runs in whichever browser Twitch redirected, which
       // is not necessarily theirs.
+      const sealed = await sealPlatformLinkTokens(await platformTokenCipher(), {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+      });
       const handoffCode = generateOpaqueToken();
       await ctx.runMutation(internal.oauthConnectHandoff.store, {
         codeHash: await hashOpaqueToken(handoffCode),
@@ -296,8 +301,7 @@ http.route({
           platformUserId: twitchUser.id,
           platformUsername: twitchUser.display_name || twitchUser.login,
           profileImageUrl: twitchUser.profile_image_url ?? undefined,
-          accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token,
+          ...sealed,
           expiresAt: Date.now() + tokenData.expires_in * 1000,
           scopes,
         },
