@@ -5,9 +5,12 @@
 
 ## What it is
 
-The woofx3 companion is a small tray app (Tauri 2) for the streamer's PC. It holds outbound connections from that PC to woofx3, so that later it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC.
+The woofx3 desktop app (Tauri 2) runs on the streamer's PC and lives in the tray. It has two windows:
 
-It is **not** a desktop UI for woofx3. The browser is the only place woofx3 is managed. The companion's own window shows its state and little else: a Status tab and an [Integrations](#integrations) tab, with Engine and Configuration tabs laid out but disabled until they have something to show.
+- **The dashboard** (`main`): the same dashboard as the web app, built for the desktop (`bun run build:desktop`). It opens at launch and from the tray's **Open woofx3**.
+- **The companion window** (`companion`): pairing and local connections. It opens from the tray's **Local connections…**, and by itself when pairing needs the streamer (a code to approve, a pairing to confirm, an error).
+
+The companion part holds outbound connections from that PC to woofx3, so it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC. Its window shows its state and little else: a Status tab and an [Integrations](#integrations) tab, with Engine and Configuration tabs laid out but disabled until they have something to show.
 
 It pairs with one instance, shows that it is paired and connected, survives restarts, and [updates itself](#updates). Once paired and confirmed, it serves the [local endpoints](#integrations) of modules installed on its instance, such as OBS's WebSocket server, to a cloud engine through the relay. It does not carry a local engine's traffic yet.
 
@@ -15,8 +18,10 @@ It pairs with one instance, shows that it is paired and connected, survives rest
 
 ```
 companion/
-  package.json        window app (Vite + React), plus the Tauri CLI
-  ui/                 the window: renders CompanionState, calls Rust commands
+  package.json        companion window app (Vite + React), plus the Tauri CLI;
+                      its build also builds the dashboard
+  ui/                 the companion window: renders CompanionState, calls
+                      Rust commands; served under /companion/
   src-tauri/          the Rust process: Convex client, credential store, tray,
                       integrations (integrations.rs, integration_store.rs)
   core/               woofx3-companion-core: relay frames, the relay client,
@@ -24,7 +29,17 @@ companion/
                       supervision of a local engine (core/src/host). No Tauri.
 ```
 
-The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Unpairing, or a pairing that fails or is cancelled, closes it again once the calls that release the pairing on the server have finished. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
+The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Unpairing, or a pairing that fails or is cancelled, closes it again once the calls that release the pairing on the server have finished. Closing a window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one's dashboard (`tauri-plugin-single-instance`).
+
+### The desktop dashboard
+
+The repo-root `vite.config.ts` has a `desktop` mode. It writes the dashboard into `companion/dist/`, the app's `frontendDist`, and the companion window's build writes into `companion/dist/companion/` beside it. It sets `__WOOFX3_DESKTOP__` (`IS_DESKTOP` in `client/src/lib/desktop.ts`), which is false in the web build, so desktop-only code is dropped from it. And it points the dashboard at the Convex deployment the Rust side compiles in, `WOOFX3_CONVEX_URL` (plus `WOOFX3_CONVEX_SITE_URL` when the deployment's HTTP origin is not derived from it), so one variable configures both; the build fails without it.
+
+Twitch sign-in leaves for twitch.tv and returns to the web app's origin, which the desktop window cannot follow, so the desktop dashboard offers password sign-in only.
+
+In dev, `bun run dev` in `companion/` starts both dev servers: the dashboard on port 1421 (the app's `devUrl`), which proxies `/companion` to the companion window's server on 1420.
+
+The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin, and frames only from Twitch's player and clips.
 
 The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails, and so does any build whose URL is not an `http` or `https` URL with a host; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
 
@@ -154,7 +169,7 @@ The client secret stays in the Rust process and the credential store. The window
 
 ### Window permissions
 
-The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the window's capability (`capabilities/main.json`), and the window's generated bindings name each command from it. The capability grants the window only those commands plus listening for events, and nothing from Tauri's core or its plugins. A test keeps the capability and the list in step.
+The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window has no capability, so it can call nothing. A test keeps the capability and the list in step.
 
 ## Updates
 

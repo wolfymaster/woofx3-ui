@@ -4,7 +4,7 @@
   "identifier": "tv.woofx3.companion",
   "build": {
     "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1421",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
@@ -12,7 +12,18 @@
     "windows": [
       {
         "label": "main",
+        "title": "woofx3",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "visible": true
+      },
+      {
+        "label": "companion",
         "title": "woofx3 companion",
+        "url": "companion/index.html",
         "width": 480,
         "height": 560,
         "resizable": false,
@@ -20,8 +31,26 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'",
-      "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost ws://localhost:1420; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https:",
+        "font-src": "'self' data:",
+        "media-src": "'self' blob: https:",
+        "frame-src": "https://player.twitch.tv https://clips.twitch.tv",
+        "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https:",
+        "font-src": "'self' data:",
+        "media-src": "'self' blob: https:",
+        "frame-src": "https://player.twitch.tv https://clips.twitch.tv",
+        "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
+      }
     }
   },
   "bundle": {

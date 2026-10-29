@@ -1,0 +1,36 @@
+name: Dashboard build dependencies
+description: >-
+  Installs what building the dashboard needs in a job that checked this repo
+  out at the workspace root: this repo's packages, and the engine's shared
+  TypeScript packages cloned next to it, where the `@woofx3/api` and
+  `@woofx3/scene` path aliases expect them (`../woofx3`). actions/checkout
+  cannot write outside the workspace, so the clone is a plain git one.
+inputs:
+  engine-repository:
+    description: The engine repository, owner/name.
+    required: true
+  engine-ref:
+    description: The engine branch whose shared packages to build against.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Clone the engine's shared packages
+      shell: bash
+      env:
+        ENGINE_REPOSITORY: ${{ inputs.engine-repository }}
+        ENGINE_REF: ${{ inputs.engine-ref }}
+      run: |
+        set -euo pipefail
+        git clone --depth 1 --branch "$ENGINE_REF" --filter=blob:none --sparse \
+          "https://github.com/${ENGINE_REPOSITORY}.git" ../woofx3
+        git -C ../woofx3 sparse-checkout set shared/clients/typescript/api shared/clients/typescript/scene
+
+    - name: Install dashboard dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Install engine shared-types dependencies
+      shell: bash
+      working-directory: ../woofx3/shared/clients/typescript/api
+      run: bun install --frozen-lockfile

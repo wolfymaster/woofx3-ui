@@ -5,7 +5,7 @@
 /// - the host passes the names to `generate_handler!`
 ///   (companion/src-tauri/src/lib.rs);
 /// - its build script turns them into the `allow-<name>` permissions that
-///   companion/src-tauri/capabilities/main.json grants, since a handler
+///   companion/src-tauri/capabilities/companion.json grants, since a handler
 ///   missing a permission would be denied at runtime;
 /// - the window's generated bindings name each command, its arguments and
 ///   its result from it.
