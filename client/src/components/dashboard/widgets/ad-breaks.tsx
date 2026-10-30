@@ -1,5 +1,5 @@
-import { AD_BREAK_EVENTS, AD_MANAGE_SCOPE, AD_READ_SCOPE } from "@convex/lib/adBreaks";
 import { useStore } from "@nanostores/react";
+import { AD_BREAK_EVENTS, AD_MANAGE_SCOPE, AD_READ_SCOPE } from "@shared/ad-breaks";
 import { AlarmClockOff, Loader2, Megaphone } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";

@@ -1,4 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { CHATTERS_PAGE_SIZE, CHATTERS_SCOPE, type Chatter, readChattersAnswer } from "@shared/twitch-chat";
+import { normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -25,18 +27,16 @@ import {
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch, authorizeTwitchUnattended } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
+import { fetchTwitchUser } from "./lib/twitchUsers";
 
 const TWITCH_CHATTERS_URL = "https://api.twitch.tv/helix/chat/chatters";
 const TWITCH_SHOUTOUTS_URL = "https://api.twitch.tv/helix/chat/shoutouts";
 
-const CHATTERS_SCOPE = "moderator:read:chatters";
 export const SHOUTOUT_SCOPE = "moderator:manage:shoutouts";
 
 // Helix caps a chatters page at 1000. A channel with more concurrent chatters
 // than that does not need an autocomplete built on a full roster, so this reads
 // one page rather than paginating.
-const CHATTERS_PAGE_SIZE = 1000;
 
 const MAX_QUEUE_READ = 200;
 
@@ -103,7 +103,7 @@ export const listQueue = query({
  */
 export const listChatters = action({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<Array<{ userId: string; login: string; displayName: string }>> => {
+  handler: async (ctx, args): Promise<Chatter[]> => {
     const call = await authorizeTwitch(ctx, args.instanceId, CHATTERS_SCOPE);
     return fetchChatters(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"));
   },
@@ -112,7 +112,7 @@ export const listChatters = action({
 export async function fetchChatters(
   { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
   route: TwitchHelixRoute
-): Promise<Array<{ userId: string; login: string; displayName: string }>> {
+): Promise<Chatter[]> {
   const url = `${TWITCH_CHATTERS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}&first=${CHATTERS_PAGE_SIZE}`;
   const response = await helixResponse(route, {
     operation: "getChatters",
@@ -123,18 +123,7 @@ export async function fetchChatters(
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),
   });
-  if (!response.ok) {
-    throw new Error(`Twitch chatters lookup failed: ${response.status} ${await response.text()}`);
-  }
-
-  const body = (await response.json()) as {
-    data: Array<{ user_id: string; user_login: string; user_name: string }>;
-  };
-  return body.data.map((chatter) => ({
-    userId: chatter.user_id,
-    login: chatter.user_login,
-    displayName: chatter.user_name,
-  }));
+  return readChattersAnswer(response);
 }
 
 /**

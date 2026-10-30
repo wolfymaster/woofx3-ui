@@ -21,6 +21,8 @@ export interface DirectGatewayConfig {
   workflowPageSize: number;
   /** Most pages one read of every workflow goes through before it gives up, so a misbehaving engine cannot loop it. */
   workflowMaxPages: number;
+  /** How often a Twitch device login is asked where it stands while the streamer approves it, in ms. */
+  deviceLoginPollMs: number;
 }
 
 export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
@@ -34,6 +36,9 @@ export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
   streamRegistrationDelayMs: 100,
   workflowPageSize: 100,
   workflowMaxPages: 1000,
+  // The engine polls Twitch itself; this only paces how soon the screen
+  // learns the outcome.
+  deviceLoginPollMs: 2000,
 };
 
 export function validateDirectGatewayConfig(config: DirectGatewayConfig): void {
@@ -44,4 +49,5 @@ export function validateDirectGatewayConfig(config: DirectGatewayConfig): void {
   requirePositiveInteger("DirectGateway", "streamRegistrationDelayMs", config.streamRegistrationDelayMs);
   requirePositiveInteger("DirectGateway", "workflowPageSize", config.workflowPageSize);
   requirePositiveInteger("DirectGateway", "workflowMaxPages", config.workflowMaxPages);
+  requirePositiveInteger("DirectGateway", "deviceLoginPollMs", config.deviceLoginPollMs);
 }

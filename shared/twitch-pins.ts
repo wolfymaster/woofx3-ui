@@ -1,3 +1,5 @@
+import { MAX_CHAT_MESSAGE_LENGTH } from "./twitch-chat";
+
 /** The current pin as `GET /helix/chat/pins` describes it, narrowed to what the dashboard uses. */
 export interface TwitchPin {
   messageId: string;
@@ -42,4 +44,32 @@ export function parsePinsResponse(body: unknown): TwitchPin | null {
     pinnedAtMs: pinnedAtMs !== null && Number.isFinite(pinnedAtMs) ? pinnedAtMs : null,
     endsAt: stringOrNull(fields.ends_at),
   };
+}
+
+export const PIN_MANAGE_SCOPE = "moderator:manage:chat_messages";
+export const PIN_READ_SCOPE = "moderator:read:chat_messages";
+
+/** Why a trimmed message cannot be posted and pinned, or null. */
+export function pinnedMessageProblem(text: string): string | null {
+  if (!text) {
+    return "A pinned message needs some text";
+  }
+  if (text.length > MAX_CHAT_MESSAGE_LENGTH) {
+    return `Chat messages are limited to ${MAX_CHAT_MESSAGE_LENGTH} characters`;
+  }
+  return null;
+}
+
+/** The pin a Get Chat Pins answer holds, or null when nothing is pinned. */
+export async function readCurrentPinAnswer(response: Response): Promise<TwitchPin | null> {
+  if (!response.ok) {
+    throw new Error(`Twitch pin lookup failed: ${response.status} ${await response.text()}`);
+  }
+  return parsePinsResponse(await response.json());
+}
+
+export async function readUnpinAnswer(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw new Error(`Twitch unpin failed: ${response.status} ${await response.text()}`);
+  }
 }

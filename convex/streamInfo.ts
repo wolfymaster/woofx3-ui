@@ -1,26 +1,31 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import { action, type MutationCtx, mutation, query } from "./_generated/server";
 import {
-  BOX_ART_URL_PREFIX,
-  categoriesFromHelix,
-  categoryProblem,
-  channelInfoFromHelix,
+  categorySearchProblem,
   characterCount,
   isEmptyChanges,
   MAX_PRESET_NAME_LENGTH,
   markerDescriptionProblem,
+  NOTHING_TO_UPDATE_MESSAGE,
+  readCategoryAnswer,
+  readChannelInfoAnswer,
+  readMarkerAnswer,
+  readModifyChannelAnswer,
+  readSearchCategoriesAnswer,
+  SEARCH_RESULT_LIMIT,
   STREAM_INFO_SCOPE,
   type StreamCategory,
   type StreamInfo,
   type StreamInfoChanges,
   type StreamInfoField,
-  tagsProblem,
-  titleProblem,
+  type StreamMarker,
+  streamInfoChangesProblem,
   toHelixPatch,
   unappliedFields,
-} from "./lib/streamInfo";
+  withBoxArt,
+} from "@shared/stream-info";
+import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, type MutationCtx, mutation, query } from "./_generated/server";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
@@ -43,9 +48,6 @@ const TWITCH_GAMES_URL = "https://api.twitch.tv/helix/games";
 const TWITCH_SEARCH_CATEGORIES_URL = "https://api.twitch.tv/helix/search/categories";
 const TWITCH_MARKERS_URL = "https://api.twitch.tv/helix/streams/markers";
 
-const SEARCH_RESULT_LIMIT = 10;
-/** Search Categories rejects an empty query; a very long one is never a real category name. */
-const MAX_SEARCH_QUERY_LENGTH = 100;
 const MAX_PRESETS = 50;
 
 const categoryValidator = v.union(
@@ -55,31 +57,6 @@ const categoryValidator = v.union(
 
 function helixHeaders(call: AuthorizedTwitchCall): Record<string, string> {
   return { Authorization: `Bearer ${call.accessToken}`, "Client-Id": call.clientId };
-}
-
-/**
- * An Error carrying Twitch's own reason when it gave one. Helix error bodies
- * are `{ error, status, message }`, and the message ("The tag contains an
- * invalid character") is the part a person can act on.
- */
-async function helixFailure(what: string, response: Response): Promise<Error> {
-  const text = await response.text();
-  let reason = text;
-  try {
-    const body = JSON.parse(text) as { message?: unknown };
-    if (typeof body.message === "string" && body.message !== "") {
-      reason = body.message;
-    }
-  } catch {
-    // Not JSON: the raw text is the best reason available.
-  }
-  if (response.status === 401) {
-    return new Error(`${what}: Twitch rejected the connection. Reconnect Twitch in Settings → Integrations.`);
-  }
-  if (response.status === 429) {
-    return new Error(`${what}: Twitch is rate-limiting this. Try again in a moment.`);
-  }
-  return new Error(`${what}: ${reason || `Twitch answered ${response.status}`}`);
 }
 
 export async function fetchChannelInfo(call: AuthorizedTwitchCall, route: TwitchHelixRoute): Promise<StreamInfo> {
@@ -92,14 +69,7 @@ export async function fetchChannelInfo(call: AuthorizedTwitchCall, route: Twitch
         headers: helixHeaders(call),
       }),
   });
-  if (!response.ok) {
-    throw await helixFailure("Couldn't read your stream info", response);
-  }
-  const info = channelInfoFromHelix(await response.json());
-  if (!info) {
-    throw new Error("Twitch returned no channel for this account");
-  }
-  return info;
+  return readChannelInfoAnswer(response);
 }
 
 /** Box art for a category, which Get Channel Information does not return. */
@@ -117,32 +87,16 @@ export async function fetchCategory(
         headers: helixHeaders(call),
       }),
   });
-  if (!response.ok) {
-    // The art is decoration; the channel's info is still worth showing without it.
-    return null;
-  }
-  return categoriesFromHelix(await response.json())[0] ?? null;
+  return readCategoryAnswer(response);
 }
 
-/**
- * The channel with its category's box art. `known` is art the caller already
- * has, reused when the category has not changed so a poll costs one Helix
- * call instead of two.
- */
+/** The channel with its category's box art; see `withBoxArt`. */
 async function readChannel(
   call: AuthorizedTwitchCall,
   route: TwitchHelixRoute,
   known?: { categoryId: string; boxArtUrl: string }
 ): Promise<StreamInfo> {
-  const info = await fetchChannelInfo(call, route);
-  if (!info.category) {
-    return info;
-  }
-  if (known && known.categoryId === info.category.id && known.boxArtUrl.startsWith(BOX_ART_URL_PREFIX)) {
-    return { ...info, category: { ...info.category, boxArtUrl: known.boxArtUrl } };
-  }
-  const category = await fetchCategory(call, route, info.category.id);
-  return { ...info, category: category ?? info.category };
+  return withBoxArt(await fetchChannelInfo(call, route), known, (categoryId) => fetchCategory(call, route, categoryId));
 }
 
 export const getChannelInfo = action({
@@ -163,8 +117,9 @@ export const searchCategories = action({
     if (!text) {
       return [];
     }
-    if (text.length > MAX_SEARCH_QUERY_LENGTH) {
-      throw new Error(`Category searches are limited to ${MAX_SEARCH_QUERY_LENGTH} characters`);
+    const problem = categorySearchProblem(text);
+    if (problem) {
+      throw new Error(problem);
     }
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
     return searchCategoriesOnTwitch(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo"), text);
@@ -183,17 +138,11 @@ export async function searchCategoriesOnTwitch(
     viaEngine: (engine) => engine.twitchSearchCategories({ query: text, first: SEARCH_RESULT_LIMIT }),
     direct: () => fetch(url, { headers: helixHeaders(call) }),
   });
-  if (!response.ok) {
-    throw await helixFailure("Category search failed", response);
-  }
-  return categoriesFromHelix(await response.json());
+  return readSearchCategoriesAnswer(response);
 }
 
 function assertValidChanges(changes: StreamInfoChanges): void {
-  const problem =
-    (changes.title !== undefined ? titleProblem(changes.title) : null) ??
-    (changes.tags !== undefined ? tagsProblem(changes.tags) : null) ??
-    (changes.category ? categoryProblem(changes.category) : null);
+  const problem = streamInfoChangesProblem(changes);
   if (problem) {
     throw new Error(problem);
   }
@@ -228,7 +177,7 @@ export const updateChannelInfo = action({
       changes.tags = args.tags;
     }
     if (isEmptyChanges(changes)) {
-      throw new Error("Nothing to update");
+      throw new Error(NOTHING_TO_UPDATE_MESSAGE);
     }
     assertValidChanges(changes);
 
@@ -258,9 +207,7 @@ export async function modifyChannelInformation(
         body: JSON.stringify(patch),
       }),
   });
-  if (!response.ok) {
-    throw await helixFailure("Couldn't update your stream info", response);
-  }
+  await readModifyChannelAnswer(response);
 }
 
 export const createMarker = action({
@@ -281,7 +228,7 @@ export async function createMarkerOnTwitch(
   call: AuthorizedTwitchCall,
   route: TwitchHelixRoute,
   description: string
-): Promise<{ positionSeconds: number | null; createdAt: string | null }> {
+): Promise<StreamMarker> {
   const response = await helixResponse(route, {
     operation: "createStreamMarker",
     kind: "write",
@@ -296,26 +243,7 @@ export async function createMarkerOnTwitch(
       }),
   });
 
-  // Helix answers 404 both when the channel is not live and when it has no
-  // VOD to mark (past broadcasts are off), and does not say which. The user
-  // id is the token's own, so the third documented 404, an unknown user, is
-  // not a case here. A 403 (token user is not the owner or an editor) is
-  // left to helixFailure, which carries Twitch's message.
-  if (response.status === 404) {
-    throw new Error(
-      "Not live, or past broadcasts are off (Twitch VOD settings); reruns and premieres can't be marked."
-    );
-  }
-  if (!response.ok) {
-    throw await helixFailure("Couldn't add a marker", response);
-  }
-
-  const body = (await response.json()) as { data?: Array<{ position_seconds?: unknown; created_at?: unknown }> };
-  const marker = body.data?.[0];
-  return {
-    positionSeconds: typeof marker?.position_seconds === "number" ? marker.position_seconds : null,
-    createdAt: typeof marker?.created_at === "string" ? marker.created_at : null,
-  };
+  return readMarkerAnswer(response);
 }
 
 // ---------------------------------------------------------------------------

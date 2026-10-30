@@ -1,4 +1,5 @@
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
+import { isEndpointHost, isEndpointPort, localSettingKeys } from "@shared/local-endpoints";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
@@ -14,7 +15,6 @@ import {
   scheduleRelaySync,
 } from "./lib/companionEndpoints";
 import { companionMayProvideSecret } from "./lib/knownDiscoverers";
-import { isEndpointHost, isEndpointPort, localSettingKeys } from "./lib/localEndpoints";
 import { isInstanceMember } from "./lib/teamAccess";
 
 /**

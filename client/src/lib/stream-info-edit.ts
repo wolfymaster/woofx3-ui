@@ -1,4 +1,4 @@
-import { changedFields, diffStreamInfo, isEmptyChanges, tagsProblem, titleProblem } from "@convex/lib/streamInfo";
+import { changedFields, diffStreamInfo, isEmptyChanges, tagsProblem, titleProblem } from "@shared/stream-info";
 import type { StreamInfo } from "@/engine/types";
 
 // Editing state for the Stream info widget. Twitch pushes nothing when a title
