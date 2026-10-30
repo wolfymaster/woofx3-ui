@@ -141,6 +141,12 @@ jobs:
         working-directory: companion
         run: bun install --frozen-lockfile
 
+      # The companion build builds the dashboard the app shows.
+      - uses: ./.github/actions/dashboard-deps
+        with:
+          engine-repository: ${{ env.ENGINE_REPOSITORY }}
+          engine-ref: ${{ env.ENGINE_REF }}
+
       - name: Typecheck window
         working-directory: companion
         run: bunx tsc -p ui
@@ -149,8 +155,9 @@ jobs:
         working-directory: companion
         run: bunx tsc -p scripts && bun test scripts
 
-      # Also produces the frontendDist that tauri's build script expects.
-      - name: Build window
+      # Builds the dashboard and the companion window into the frontendDist that
+      # tauri's build script expects.
+      - name: Build windows
         working-directory: companion
         run: bun run build
 
@@ -245,6 +252,12 @@ jobs:
         working-directory: companion
         run: bun install --frozen-lockfile
 
+      # The companion build builds the dashboard the app shows.
+      - uses: ./.github/actions/dashboard-deps
+        with:
+          engine-repository: ${{ env.ENGINE_REPOSITORY }}
+          engine-ref: ${{ env.ENGINE_REF }}
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
@@ -306,6 +319,12 @@ jobs:
       - name: Install companion dependencies
         working-directory: companion
         run: bun install --frozen-lockfile
+
+      # The companion build builds the dashboard the app shows.
+      - uses: ./.github/actions/dashboard-deps
+        with:
+          engine-repository: ${{ env.ENGINE_REPOSITORY }}
+          engine-ref: ${{ env.ENGINE_REF }}
 
       # Fails when the pinned release lacks what the shell relies on, so an
       # installer whose engine could never start is never built.

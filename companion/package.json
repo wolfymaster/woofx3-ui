@@ -3,13 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --config ui/vite.config.ts",
-    "build": "vite build --config ui/vite.config.ts",
+    "dev": "bun scripts/dev.ts",
+    "build": "bun run --cwd .. build:desktop && vite build --config ui/vite.config.ts",
     "check": "tsc -p ui",
     "tauri": "tauri",
     "check:scripts": "tsc -p scripts",
     "test:scripts": "bun test scripts",
-    "fetch-engine": "bun scripts/fetch-engine.ts"
+    "fetch-engine": "bun scripts/fetch-engine.ts",
+    "dev:window": "vite --config ui/vite.config.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

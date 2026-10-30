@@ -178,8 +178,10 @@ impl Companion {
         *lock(&self.device_code) = device_code;
     }
 
+    /// Shows the companion window: pairing, its confirmation and errors need
+    /// the streamer there.
     pub fn show_window(&self) {
-        show_main_window(&self.app);
+        show_window(&self.app, COMPANION_WINDOW);
     }
 
     /// Picks up where the last run left off, from the stored token. Only a
@@ -187,9 +189,10 @@ impl Companion {
     /// stays off the cloud until a pairing starts.
     async fn resume(self: Arc<Self>) {
         match credentials::load().await {
+            // The dashboard window is already open; pairing waits until the
+            // streamer asks for it.
             Ok(None) => {
                 self.set_state(CompanionState::Unpaired);
-                self.show_window();
             }
             Ok(Some(stored)) => {
                 if !stored.confirmed {
@@ -228,8 +231,15 @@ impl Companion {
     }
 }
 
-pub fn show_main_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window("main") else {
+/// The window that shows the dashboard. Must match tauri.conf.json.
+pub const DASHBOARD_WINDOW: &str = "main";
+/// The window that shows pairing and local connections. Must match
+/// tauri.conf.json and capabilities/companion.json, which grants the
+/// companion's commands to it alone.
+pub const COMPANION_WINDOW: &str = "companion";
+
+pub fn show_window(app: &AppHandle, label: &str) {
+    let Some(window) = app.get_webview_window(label) else {
         return;
     };
     let _ = window.unminimize();
@@ -359,7 +369,7 @@ async fn test_endpoint(
 }
 
 /// What the window needs to open a capnweb session with the local engine.
-/// Only this host's own window can call it (capabilities/main.json).
+/// Only the companion window can call it (capabilities/companion.json).
 #[tauri::command]
 async fn local_engine_session(
     companion: State<'_, Arc<Companion>>,
@@ -476,7 +486,7 @@ pub fn run() {
         // First, so a second launch hands over to this one before it opens a
         // second Convex connection.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+            show_window(app, DASHBOARD_WINDOW);
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -524,15 +534,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing the window leaves the companion running in the tray;
-            // Quit in the tray menu is the only way out.
+            // Closing a window leaves the app running in the tray; Quit in the
+            // tray menu is the only way out.
             match event {
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window.hide();
                 }
-                // Someone looking at the window may just have started OBS.
-                WindowEvent::Focused(true) => {
+                // Someone looking at the local connections may just have
+                // started OBS.
+                WindowEvent::Focused(true) if window.label() == COMPANION_WINDOW => {
                     if let Some(companion) = window.try_state::<Arc<Companion>>() {
                         companion.integrations.rediscover();
                     }
@@ -605,7 +616,8 @@ mod tests {
     #[test]
     fn test_capabilities_grant_exactly_the_declared_commands() {
         let capability: serde_json::Value =
-            serde_json::from_str(include_str!("../capabilities/main.json")).expect("valid JSON");
+            serde_json::from_str(include_str!("../capabilities/companion.json"))
+                .expect("valid JSON");
         let granted: Vec<&str> = capability["permissions"]
             .as_array()
             .expect("a permission list")
@@ -618,7 +630,10 @@ mod tests {
             .map(|name| format!("allow-{}", name.replace('_', "-")))
             .collect();
         assert_eq!(granted, declared);
-        assert_eq!(capability["windows"], serde_json::json!(["main"]));
+        assert_eq!(
+            capability["windows"],
+            serde_json::json!([super::COMPANION_WINDOW])
+        );
     }
 
     #[test]
