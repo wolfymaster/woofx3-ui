@@ -179,7 +179,13 @@ export const deleteMacro = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireMember(ctx, args.instanceId);
-    await requireMacro(ctx, args.instanceId, args.macroId);
+    const macro = await ctx.db.get(args.macroId);
+    if (!macro) {
+      return;
+    }
+    if (macro.instanceId !== args.instanceId) {
+      throw new Error("Macro not found");
+    }
     await requireManagerIfTriggered(ctx, args.instanceId, args.macroId, userId, "delete it");
     await deleteTriggerForMacro(ctx, args.macroId);
     await ctx.db.delete(args.macroId);

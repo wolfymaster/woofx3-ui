@@ -39,6 +39,11 @@ import { directWorkflowsGateway } from "./workflows";
 // reaches one fails with the member it used rather than an empty answer.
 
 const macros: MacrosGateway = {
+  useMacros: unsupportedRead("macros.useMacros"),
+  useAddRequest: unsupportedRequest("macros.useAddRequest"),
+  useUpdateRequest: unsupportedRequest("macros.useUpdateRequest"),
+  useDeleteRequest: unsupportedRequest("macros.useDeleteRequest"),
+  useReorderRequest: unsupportedRequest("macros.useReorderRequest"),
   useRunRequest: unsupportedRequest("macros.useRunRequest"),
 };
 

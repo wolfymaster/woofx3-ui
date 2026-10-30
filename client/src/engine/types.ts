@@ -2,6 +2,7 @@
 // UI uses it, whoever serves it: a gateway maps its own storage or wire shapes
 // into these at its edge, so nothing here may name a gateway's backend.
 
+import type { MacroFields } from "@shared/macro-pad";
 import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
@@ -52,7 +53,7 @@ export type InstanceId = GatewayId<"instance">;
 /** An installed module, as the gateway that lists installed modules knows it. */
 export type ModuleId = GatewayId<"module">;
 
-/** A dashboard macro. Macros are kept by the dashboard; only running one reaches the engine. */
+/** A macro pad button, issued by the gateway that keeps the pad. */
 export type MacroId = GatewayId<"macro">;
 
 /** A callback recorded from the engine, kept for debugging. */
@@ -1027,6 +1028,17 @@ export type WorkflowHealthResyncTrigger = "mount" | "reconnect";
 export type WorkflowHealthResyncResult = "ok" | "skipped" | "failed" | "unsupported" | "loading";
 
 // ==================== Macros ====================
+
+/**
+ * A macro pad button. A "run-action" button's step carries its settings'
+ * `$` keys escaped (shared/dollar-keys), as Convex stores them.
+ */
+export interface Macro extends MacroFields {
+  id: MacroId;
+}
+
+/** A macro's editable fields: everything but the id the gateway issues. */
+export type MacroInput = MacroFields;
 
 /** The value given for one of a macro's variables. */
 export interface MacroVariableValue {
