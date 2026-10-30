@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
-import type { CatalogListing, ListingType } from "@convex/lib/marketplaceCatalog";
-import { LISTING_TYPES } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListing, ListingType } from "@shared/marketplace-catalog";
+import { LISTING_TYPES } from "@shared/marketplace-catalog";
 import { useQuery } from "convex/react";
 import { PackageCheck, Store, Upload } from "lucide-react";
 import { useLocation } from "wouter";

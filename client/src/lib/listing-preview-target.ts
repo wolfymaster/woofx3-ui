@@ -1,4 +1,4 @@
-import type { CatalogListingDetail, ListingPreview } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListingDetail, ListingPreview } from "@shared/marketplace-catalog";
 
 /**
  * What a listing can honestly show before it is installed.

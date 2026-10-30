@@ -1,4 +1,4 @@
-import type { CatalogListing, ListingType } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListing, ListingType } from "@shared/marketplace-catalog";
 import { ModuleBannerImage } from "@/components/modules/module-image";
 import { listingTypeHue, listingTypeIcon } from "@/lib/listing-type";
 import { cn } from "@/lib/utils";

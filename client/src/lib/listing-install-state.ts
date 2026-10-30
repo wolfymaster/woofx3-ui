@@ -1,4 +1,4 @@
-import type { CatalogListingDetail, ListingQuote } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListingDetail, ListingQuote } from "@shared/marketplace-catalog";
 import type { ListingInstallState } from "@/components/marketplace/listing-install-button";
 import { isNewerVersion } from "@/lib/utils";
 

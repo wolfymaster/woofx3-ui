@@ -1,4 +1,4 @@
-import type { CatalogListing } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListing } from "@shared/marketplace-catalog";
 
 // The social proof on a card: how many people installed a listing, how it is
 // rated, and which one-word badge it has earned.

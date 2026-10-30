@@ -1,12 +1,12 @@
 import { api } from "@convex/_generated/api";
-import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
-import { isBundleListing, isModuleListing } from "@convex/lib/marketplaceCatalog";
 import {
   installedListing,
   installedVersionsByListing,
   laterEditionInstalled,
   moduleInstalled,
 } from "@convex/lib/marketplaceInstallIdentity";
+import type { CatalogListingDetail } from "@shared/marketplace-catalog";
+import { isBundleListing, isModuleListing } from "@shared/marketplace-catalog";
 import { useQuery } from "convex/react";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

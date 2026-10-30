@@ -7,7 +7,7 @@ import type {
   CatalogPage,
   ListingQuote,
   ListingType,
-} from "@convex/lib/marketplaceCatalog";
+} from "@shared/marketplace-catalog";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actionErrorMessage } from "@/lib/action-error";

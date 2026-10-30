@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
-import { isBundleListing } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListingDetail } from "@shared/marketplace-catalog";
+import { isBundleListing } from "@shared/marketplace-catalog";
 import { useAction } from "convex/react";
 import { AlertCircle, Check, CreditCard, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";

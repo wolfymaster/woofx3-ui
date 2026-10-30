@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { unapprovedLocalEndpointIds } from "@shared/local-endpoints";
+import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "@shared/marketplace-images";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "@shared/module-permissions";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -27,7 +28,6 @@ import {
   contentRefusal,
   fetchListingContent,
 } from "./lib/marketplaceEntitlement";
-import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { listingManifestId, marketplaceInstallKey } from "./lib/marketplaceInstallIdentity";
 import type { LocalEngineApi } from "./moduleEngine";
 

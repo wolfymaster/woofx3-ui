@@ -1,7 +1,7 @@
 # Marketplace
 
 **Routes:** `/marketplace`, `/marketplace/listing/:listingId`, `/marketplace/author/:slug`
-**Primary files:** `client/src/pages/marketplace.tsx`, `client/src/pages/marketplace-listing.tsx`, `client/src/pages/marketplace-author.tsx`, `client/src/components/marketplace/`, `client/src/hooks/use-marketplace.ts`, `convex/marketplaceCatalog.ts`, `convex/lib/marketplaceCatalog.ts`
+**Primary files:** `client/src/pages/marketplace.tsx`, `client/src/pages/marketplace-listing.tsx`, `client/src/pages/marketplace-author.tsx`, `client/src/components/marketplace/`, `client/src/hooks/use-marketplace.ts`, `convex/marketplaceCatalog.ts`, `shared/marketplace-catalog.ts`
 
 The storefront. [Modules](./modules.md) covers the installed modules and uploads beside it in the same tab.
 
@@ -20,7 +20,7 @@ fetched for, and a result belonging to a different instance, query or listing is
 never rendered. A stale render here is a streamer installing something they were
 not looking at.
 
-Nothing trusts the marketplace's shape. `convex/lib/marketplaceCatalog.ts`
+Nothing trusts the marketplace's shape. `shared/marketplace-catalog.ts`
 checks every field and drops an entry it cannot parse rather than rendering it
 half-formed, the way module listings have always been treated. `total` still
 comes from the marketplace, so a dropped entry cannot make "48 of 312" lie.

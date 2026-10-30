@@ -1,4 +1,4 @@
-import type { ListingPricing, ListingType } from "@convex/lib/marketplaceCatalog";
+import type { ListingPricing, ListingType } from "@shared/marketplace-catalog";
 import { Bell, Image, Layers, Palette, Puzzle } from "lucide-react";
 
 /**

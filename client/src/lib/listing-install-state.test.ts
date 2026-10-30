@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogListingDetail, ListingPricing, ListingQuote } from "@convex/lib/marketplaceCatalog";
 import { installedVersionsByListing, laterEditionInstalled } from "@convex/lib/marketplaceInstallIdentity";
+import type { CatalogListingDetail, ListingPricing, ListingQuote } from "@shared/marketplace-catalog";
 import { type InstallStateInput, listingInstallState } from "./listing-install-state";
 
 const FREE: ListingPricing = { mode: "free" };

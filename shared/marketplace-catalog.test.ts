@@ -9,7 +9,7 @@ import {
   parseCatalogListing,
   parseCatalogPage,
   parseQuote,
-} from "./marketplaceCatalog";
+} from "./marketplace-catalog";
 
 // The marketplace API is a separate service on its own release cycle, so these
 // parsers exist to keep a shape we do not understand from reaching the UI

@@ -1,5 +1,5 @@
-import type { CatalogListing, ListingType } from "@convex/lib/marketplaceCatalog";
-import { LISTING_TYPES } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListing, ListingType } from "@shared/marketplace-catalog";
+import { LISTING_TYPES } from "@shared/marketplace-catalog";
 import { AlertCircle, ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation, useParams } from "wouter";

@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { MarketplaceImages } from "@convex/lib/marketplaceImages";
+import type { MarketplaceImages } from "@shared/marketplace-images";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 

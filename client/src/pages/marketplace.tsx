@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
-import { type CatalogListing, LISTING_TYPES, type ListingType } from "@convex/lib/marketplaceCatalog";
-import { featuredInOrder } from "@convex/lib/marketplaceImages";
 import { installedVersionsByListing } from "@convex/lib/marketplaceInstallIdentity";
+import { type CatalogListing, LISTING_TYPES, type ListingType } from "@shared/marketplace-catalog";
+import { featuredInOrder } from "@shared/marketplace-images";
 import { useQuery } from "convex/react";
 import { Loader2, Moon, RefreshCw, Search, Sun } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
