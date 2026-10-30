@@ -29,6 +29,7 @@ import type {
   StreamStatus,
   TriggerWorkflowOptions,
   TriggerWorkflowResponse,
+  TwitchLinkInfo,
   UninstallModuleResponse,
   ViewerTotals,
   ViewerTotalsQuery,
@@ -42,6 +43,11 @@ import type {
   WorkflowRunSnapshotsQuery,
   WorkflowsQuery,
 } from "@woofx3/api";
+import type {
+  TwitchDeviceLoginStartResult,
+  TwitchDeviceLoginState,
+  TwitchDeviceLoginStateResult,
+} from "@woofx3/api/twitch-device-login";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngine";
 
@@ -95,6 +101,11 @@ type DirectFakeSurface = Pick<
   | "listModuleFiles"
   | "getModuleFile"
   | "uninstallModule"
+  | "getTwitchLink"
+  | "deleteTwitchToken"
+  | "startTwitchDeviceLogin"
+  | "getTwitchDeviceLogin"
+  | "cancelTwitchDeviceLogin"
 >;
 
 export type AvailableWidget = Awaited<ReturnType<Woofx3EngineApi["getAvailableWidgets"]>>["widgets"][number];
@@ -149,6 +160,19 @@ export class FakeEngineState {
   /** Stored settings by manifest id; the manifests come from `modules`. */
   moduleSettings: Record<string, ModuleSetting[]> = {};
   moduleFiles: Record<string, ModuleFileList> = {};
+  twitchLink: TwitchLinkInfo = { linked: false, revision: 0 };
+  /** What `startTwitchDeviceLogin` answers. */
+  deviceLoginStart: TwitchDeviceLoginStartResult = {
+    ok: true,
+    login: {
+      loginId: "login-1",
+      userCode: "WOOF-1234",
+      verificationUri: "https://www.twitch.tv/activate",
+      expiresAt: "2026-10-29T12:00:00.000Z",
+    },
+  };
+  /** Device logins by id; an id not here answers `not_found`. */
+  deviceLogins: Record<string, TwitchDeviceLoginState> = {};
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
   /** Every call the fake served, by method, with its arguments. */
@@ -534,6 +558,43 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async uninstallModule(moduleKey: string): Promise<UninstallModuleResponse> {
     this.state.record("uninstallModule", moduleKey);
     return { requested: true };
+  }
+
+  async getTwitchLink(): Promise<TwitchLinkInfo> {
+    this.state.record("getTwitchLink");
+    return this.state.twitchLink;
+  }
+
+  async deleteTwitchToken(): Promise<{ ok: true }> {
+    this.state.record("deleteTwitchToken");
+    this.state.twitchLink = { linked: false, revision: this.state.twitchLink.revision + 1 };
+    return { ok: true };
+  }
+
+  async startTwitchDeviceLogin(scopes?: string[]): Promise<TwitchDeviceLoginStartResult> {
+    this.state.record("startTwitchDeviceLogin", scopes);
+    const start = this.state.deviceLoginStart;
+    if (start.ok) {
+      this.state.deviceLogins[start.login.loginId] = {
+        loginId: start.login.loginId,
+        status: "pending",
+        expiresAt: start.login.expiresAt,
+      };
+    }
+    return start;
+  }
+
+  async getTwitchDeviceLogin(loginId: string): Promise<TwitchDeviceLoginStateResult> {
+    this.state.record("getTwitchDeviceLogin", loginId);
+    const state = this.state.deviceLogins[loginId];
+    return state === undefined ? { ok: false, code: "not_found", error: "no such login" } : { ok: true, state };
+  }
+
+  async cancelTwitchDeviceLogin(loginId: string): Promise<{ cancelled: boolean }> {
+    this.state.record("cancelTwitchDeviceLogin", loginId);
+    const cancelled = this.state.deviceLogins[loginId]?.status === "pending";
+    delete this.state.deviceLogins[loginId];
+    return { cancelled };
   }
 
   async getWorkflowHealth(): Promise<WorkflowHealth[]> {

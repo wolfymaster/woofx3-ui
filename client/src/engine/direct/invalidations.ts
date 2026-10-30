@@ -108,7 +108,7 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.GROUP_MEMBER_ADDED]: (event) => [k.commands.members(event.groupId)],
   [EngineEventType.GROUP_MEMBER_REMOVED]: (event) => [k.commands.members(event.groupId)],
   [EngineEventType.UI_SETTING_CHANGED]: NONE,
-  [EngineEventType.TWITCH_LINK_CHANGED]: NONE,
+  [EngineEventType.TWITCH_LINK_CHANGED]: () => [k.twitchLink.link()],
 };
 
 /**
