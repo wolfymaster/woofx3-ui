@@ -1,11 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { macroFieldsProblem, macroOrderChanges, nextMacroSortOrder } from "@shared/macro-pad";
-import { CHAT_COMMAND_RUN_RESTRICTION, planMacroRun } from "@shared/macro-run";
+import { CHAT_COMMAND_RUN_RESTRICTION, planMacroRun, valuesFromPairs } from "@shared/macro-run";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalQuery, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
-import { executeMacroPlan, loadMacroEngineContext, valuesFromPairs } from "./lib/macroExecution";
+import { executeMacroPlan, loadMacroEngineContext } from "./lib/macroExecution";
 import { canTriggerRemotely, macroBehaviorFingerprint } from "./lib/macroTrigger";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { deleteTriggerForMacro, findTriggerForMacro, isInstanceManager } from "./macroTriggers";

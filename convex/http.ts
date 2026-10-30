@@ -1,4 +1,5 @@
 import { escapeDollarKeys } from "@shared/dollar-keys";
+import { valuesToPairs } from "@shared/macro-run";
 import { integrationOfModuleOAuthState } from "@shared/module-oauth";
 import { canonicalIdForStorageKey } from "@shared/resource-values";
 import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
@@ -25,7 +26,7 @@ import {
   toHttpResponse,
   withEngineTimeout,
 } from "./lib/inboundWebhookRelay";
-import { executeMacroPlan, MacroRunRefused, valuesToPairs } from "./lib/macroExecution";
+import { executeMacroPlan, MacroRunRefused } from "./lib/macroExecution";
 import {
   hashTriggerToken,
   isBrowserRequest,

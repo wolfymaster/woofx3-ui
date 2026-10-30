@@ -100,16 +100,3 @@ export async function loadMacroEngineContext(
     broadcasterLogin: twitch?.platformUsername ?? null,
   };
 }
-
-/** Variable values as they cross a Convex boundary: pairs, because a record key may not start with `_`. */
-export function valuesFromPairs(pairs: ReadonlyArray<{ name: string; value: string }>): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const { name, value } of pairs) {
-    values[name] = value;
-  }
-  return values;
-}
-
-export function valuesToPairs(values: Readonly<Record<string, string>>): { name: string; value: string }[] {
-  return Object.entries(values).map(([name, value]) => ({ name, value }));
-}

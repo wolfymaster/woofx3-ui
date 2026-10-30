@@ -173,3 +173,16 @@ export function macroRunActionsInput(step: MacroActionStep, triggeredBy: string)
 export function macroCommandRefusal(commandName: string, engineMessage: string): string {
   return engineMessage || `the engine refused "!${commandName}"`;
 }
+
+/** Variable values as they cross a Convex or gateway boundary: pairs, because a Convex record key may not start with `_`. */
+export function valuesFromPairs(pairs: ReadonlyArray<{ name: string; value: string }>): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const { name, value } of pairs) {
+    values[name] = value;
+  }
+  return values;
+}
+
+export function valuesToPairs(values: Readonly<Record<string, string>>): { name: string; value: string }[] {
+  return Object.entries(values).map(([name, value]) => ({ name, value }));
+}

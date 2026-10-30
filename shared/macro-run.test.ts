@@ -9,6 +9,8 @@ import {
   type PlanResult,
   parseChatCommand,
   planMacroRun,
+  valuesFromPairs,
+  valuesToPairs,
 } from "./macro-run";
 import type { MacroActionType, MacroConfig } from "./macro-variables";
 
@@ -252,4 +254,20 @@ describe("macroCommandRefusal", () => {
       expect(macroCommandRefusal("so", message)).toBe(expected);
     });
   }
+});
+
+describe("variable value pairs", () => {
+  test("round trip, including a name starting with _", () => {
+    const values = { _user: "wolfy", channel: "bob" };
+    expect(valuesFromPairs(valuesToPairs(values))).toEqual(values);
+  });
+
+  test("a later pair of the same name wins", () => {
+    expect(
+      valuesFromPairs([
+        { name: "a", value: "1" },
+        { name: "a", value: "2" },
+      ])
+    ).toEqual({ a: "2" });
+  });
 });
