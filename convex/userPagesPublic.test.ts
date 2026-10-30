@@ -365,8 +365,8 @@ async function linkChannel(f: Fixture, platform = "twitch"): Promise<void> {
       platformUserId: BROADCASTER,
       platformUsername: "wolfy",
       channelId: BROADCASTER,
-      accessToken: "streamer-access",
-      refreshToken: "streamer-refresh",
+      sealedAccessToken: "p1.unused.streamer-access",
+      sealedRefreshToken: "p1.unused.streamer-refresh",
       expiresAt: 1,
       scopes: [],
     });
