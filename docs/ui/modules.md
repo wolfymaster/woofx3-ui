@@ -1,21 +1,26 @@
 # Modules
 
-**Routes:** `/modules/installed`, `/modules/install`, `/modules/:id`
+**Routes:** `/marketplace/installed`, `/marketplace/installed/:id`, `/marketplace/upload`
 **Primary files:** `client/src/pages/modules.tsx`, `client/src/pages/module-install.tsx`, `client/src/pages/module-detail.tsx`, `client/src/components/modules/uninstall-module-dialog.tsx`
 
-The storefront moved to [Marketplace](./marketplace.md) — `/marketplace`. These
-routes are the **install surface** it leads to, and are linked from elsewhere in
-the app and from an install's own success redirect, so they stay. Bare
-`/modules` redirects to `/marketplace`.
+Installed modules live in the [Marketplace](./marketplace.md) tab beside the
+storefront: its rail has an **Installed** entry and an **Upload a module**
+button. The `/modules` paths that came before still answer and redirect here
+(`legacyModulesRedirect` in `client/src/lib/marketplace-route.ts`): bare
+`/modules` goes to the storefront, or to the installed list for an
+integration's OAuth return, `/modules/install` to the upload page and
+`/modules/:id` to that module's page.
 
-## Catalog (`/modules/installed`)
+## Installed modules (`/marketplace/installed`)
 
 - **Convex** holds the repository of **engine-confirmed** modules: a `moduleRepository` row is only written after the engine sends a `module.installed` webhook. A module that is mid-install or whose delivery failed does **not** appear in the catalog — its state is communicated through transient events instead (see below).
 - The page reads `api.moduleRepository.list` (local Convex rows) and merges in live engine state via the **Convex action** `api.moduleEngine.listEngineModules`. The browser does **not** call the engine directly for module browsing — `WoofxTransport` is reserved for realtime channels (chat, stream status).
-- Tabs / filters support browsing by category, search, and grid vs list views.
-- Each row exposes a **Details** action that navigates to `/modules/:id`, plus an **Uninstall** button that opens `UninstallModuleDialog`.
+- The sidebar (`components/modules/module-sidebar.tsx`) lists the installed modules, each marked **Marketplace** when it records the listing it came from, or **Uploaded** when it was installed from an uploaded archive. Choosing one opens its page. With nothing chosen, the page offers to upload a module or browse the marketplace.
 
-## Module detail (`/modules/:id`)
+## Module detail (`/marketplace/installed/:id`)
+
+The id is an installed module's bare key or a marketplace id. A module that is not installed yet shows its marketplace detail with an install button, which is how a getting-started item opens a platform to install.
+
 
 - Reads `api.moduleRepository.get` plus `api.triggerDefinitions.listByModule` and `api.actionDefinitions.listByModule` to show metadata and every trigger / action the module registered with the UI.
 - Offers the same uninstall entry point as the listing page.
@@ -24,7 +29,7 @@ the app and from an install's own success redirect, so they stay. Bare
 - A setting button with `action: { kind: "integration", integration: "<id>" }` connects an account. When the manifest declares that id under `oauth[]`, it is the module's own integration, connected through the engine (`convex/moduleOAuth.ts`, engine capability `modules.oauth`): `moduleOAuth.start` sends the member to the provider with the module's client id (or, on a managed instance, the app woofx3 provides for that provider when the declaration fits it; see [Auth and onboarding](./auth-onboarding.md)) and PKCE; the callback (`/api/integrations/oauth/callback`, signed state forwarded like every OAuth callback) stores the authorization as a one-time handoff and returns to the module page with `?integration=<id>&oauth_code=…`; `moduleOAuth.finish` lets only the member who started it hand the code to the engine (`completeModuleOAuth`), which exchanges it and keeps the tokens where neither the dashboard nor module code can read them. A button naming an integration the manifest does not declare is shown disabled.
 - Settings declared `type: "url"` render as URL inputs. The engine lets the module's code reach the origin of the URL entered there, and only the streamer can set it.
 
-## Custom upload (`/modules/install`)
+## Custom upload (`/marketplace/upload`)
 
 Installs are **asynchronous** and correlated via a `moduleKey` echoed by the engine in its webhook callback.
 

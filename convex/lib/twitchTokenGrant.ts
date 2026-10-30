@@ -51,16 +51,17 @@ export function twitchTokenGrant(input: {
  * (`asksForTokens` false), which still refreshes with it.
  */
 export function twitchTokenForEngine(input: {
-  link: { platformUserId: string; accessToken: string; refreshToken: string; expiresAt: number; scopes: string[] };
+  link: { platformUserId: string; expiresAt: number; scopes: string[] };
+  tokens: { accessToken: string; refreshToken: string };
   asksForTokens: boolean;
   clientId: string;
   now: number;
 }) {
-  const { link } = input;
+  const { link, tokens } = input;
   return {
     userId: link.platformUserId,
-    accessToken: link.accessToken,
-    ...(input.asksForTokens ? {} : { refreshToken: link.refreshToken }),
+    accessToken: tokens.accessToken,
+    ...(input.asksForTokens ? {} : { refreshToken: tokens.refreshToken }),
     expiresIn: Math.max(0, Math.floor((link.expiresAt - input.now) / 1000)),
     obtainmentTimestamp: input.now,
     scope: link.scopes,

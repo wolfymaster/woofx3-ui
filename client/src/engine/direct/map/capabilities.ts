@@ -37,7 +37,6 @@ const GATED: { readonly [C in EngineCapability]: true } = {
   "workflow.dryRun": true,
   "workflow.health": true,
   "workflow.realCancel": true,
-  "workflow.reservedSubjects": true,
   "workflow.testRunOptions": true,
   "workflow.viewerFacts": true,
 };

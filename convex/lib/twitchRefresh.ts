@@ -26,8 +26,13 @@ export function isRevokedRefreshResponse(status: number, body: string): boolean 
  * Whether a refresh outcome may still be written to the link. The exchange
  * runs outside any transaction; a relink that lands meanwhile replaces the
  * refresh token, and the outcome of the old one (new tokens, or a refusal)
- * must not overwrite the newer grant.
+ * must not overwrite the newer grant. Both values are the refresh token as
+ * stored, sealed: a fresh seal of the same token never matches, so any
+ * rewrite of the row counts as a change.
  */
-export function refreshOutcomeApplies(row: { refreshToken: string } | null, usedRefreshToken: string): boolean {
-  return row !== null && row.refreshToken === usedRefreshToken;
+export function refreshOutcomeApplies(
+  currentStoredRefreshToken: string | null,
+  usedStoredRefreshToken: string
+): boolean {
+  return currentStoredRefreshToken !== null && currentStoredRefreshToken === usedStoredRefreshToken;
 }

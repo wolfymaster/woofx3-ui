@@ -2,12 +2,7 @@ import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { parseViewerFacts } from "@shared/viewer-facts";
 import { isStillLoadingError, parseWorkflowHealthList, shouldResync } from "@shared/workflow-health";
-import {
-  buildTriggerOptions,
-  classifyOptionsProbe,
-  OPTIONS_PROBE_WORKFLOW,
-  optionsWereIgnored,
-} from "@shared/workflow-test-run";
+import { buildTriggerOptions } from "@shared/workflow-test-run";
 import {
   type CallbackEnvelope,
   ENGINE_CAPABILITIES,
@@ -22,7 +17,6 @@ import { NoInstanceSelectedError, useEngineScope } from "@/engine/scope";
 import type {
   NotRunningWorkflow,
   RecordedWorkflowRun,
-  TestRunCapabilities,
   Workflow,
   WorkflowCancelResult,
   WorkflowCatalog,
@@ -262,21 +256,8 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
       executionId: response.executionId || null,
       unmetConditions: response.unmetConditions ?? [],
       dryRun: response.dryRun === true,
-      optionsIgnored: optionsWereIgnored(built.options, response),
     };
     return result;
-  };
-
-  // The probe names a workflow nobody can have, so no engine starts a run for it.
-  const testRunCapabilities = async (): Promise<TestRunCapabilities> => {
-    try {
-      await runtime.call("triggerWorkflowByName", (api) =>
-        api.triggerWorkflowByName(OPTIONS_PROBE_WORKFLOW, {}, undefined, undefined, undefined, { platform: "probe" })
-      );
-    } catch (error) {
-      return { options: classifyOptionsProbe(error) };
-    }
-    return { options: "unknown" };
   };
 
   const viewerFacts = async () =>
@@ -335,7 +316,6 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
     useRemoveRequest: () => useEngineRequest(remove),
     useSetEnabledRequest: () => useEngineRequest(setEnabled),
     useTriggerRequest: () => useEngineRequest(trigger),
-    useTestRunCapabilitiesRequest: () => useEngineRequest(testRunCapabilities),
     useViewerFactsRequest: () => useEngineRequest(viewerFacts),
     useReplayRequest: () => useEngineRequest(replay),
     useCancelRunRequest: () => useEngineRequest(cancelRun),

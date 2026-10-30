@@ -2,16 +2,15 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
 import { useQuery } from "convex/react";
-import { Loader2, XCircle } from "lucide-react";
+import { Loader2, Store, Upload, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useLocation } from "wouter";
 import { PageIntro } from "@/components/common/page-intro";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { ModuleSidebar } from "@/components/modules/module-sidebar";
 import { ModuleStorageOverLimitAlert } from "@/components/modules/module-storage-usage";
-import { ModuleStore } from "@/components/modules/module-store";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,9 +20,14 @@ import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import type { ModuleDetail } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
-import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { useModuleOAuthReturn } from "@/hooks/use-module-oauth-return";
+import {
+  installedModulePath,
+  MARKETPLACE_INSTALLED_PATH,
+  MARKETPLACE_PATH,
+  MARKETPLACE_UPLOAD_PATH,
+} from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
 
 interface ModuleListItem {
@@ -43,28 +47,17 @@ type SelectedModule =
   | { source: "installed"; module: ModuleListItem }
   | { source: "marketplace"; marketplaceId: string };
 
-// Marketplace category of platform modules, such as Twitch and OBS.
-const PLATFORM_CATEGORY = "platform";
-
 export default function Modules() {
   const { instance } = useInstance();
   const { instanceId: engineInstanceId } = useEngineScope();
   const [location, navigate] = useLocation();
+  // `/marketplace/installed/:moduleId`: the module's id is an installed module's
+  // bare key, or a marketplace id for one not installed yet.
   const segments = location.split("/").filter(Boolean);
   const routeModuleId =
-    segments[0] === "modules" && segments.length >= 2 && segments[1] !== "install" && segments[1] !== "installed"
-      ? segments[1]
+    segments[0] === "marketplace" && segments[1] === "installed" && segments.length >= 3
+      ? decodeURIComponent(segments[2])
       : undefined;
-
-  const searchString = useSearch();
-  const selectedCategory = new URLSearchParams(searchString).get("category") || "all";
-  const handleSelectCategory = useCallback(
-    (category: string) => {
-      navigate(category === "all" ? "/modules" : `/modules?category=${encodeURIComponent(category)}`);
-    },
-    [navigate]
-  );
-  const catalog = useMarketplaceCatalog(instance?._id ?? null);
 
   const [oauthResult, dismissOauthResult] = useModuleOAuthReturn();
 
@@ -107,7 +100,7 @@ export default function Modules() {
   const handleSelectInstalled = useCallback(
     (moduleId: Id<"moduleRepository">) => {
       const target = (repoModules || []).find((m) => m._id === moduleId);
-      navigate(`/modules/${bareModuleKey(target?.moduleKey) ?? moduleId}`);
+      navigate(installedModulePath(bareModuleKey(target?.moduleKey) ?? moduleId));
     },
     [navigate, repoModules]
   );
@@ -148,7 +141,7 @@ export default function Modules() {
     setSelectedModule({ source: "marketplace", marketplaceId: routeModuleId });
   }, [routeModuleId, repoModules]);
 
-  // An update started from the Installed list can be sitting on a `/modules/{convexId}` route (a
+  // An update started from the Installed list can be sitting on a route by Convex id (a
   // module with no moduleKey is addressed by _id), so land on the marketplace-id route the upgraded
   // module now answers to. Only ever re-routes a detail view onto itself: a route that already
   // matches would just churn the detail fetch below, and someone who has browsed back to the store
@@ -159,7 +152,7 @@ export default function Modules() {
     }
     const marketplaceId = bareModuleKey(install.pendingModuleKey);
     if (marketplaceId && marketplaceId !== routeModuleId) {
-      navigate(`/modules/${marketplaceId}`);
+      navigate(installedModulePath(marketplaceId));
     }
   }, [install.succeeded, install.pendingModuleKey, routeModuleId, navigate]);
 
@@ -269,7 +262,7 @@ export default function Modules() {
 
   const handleUninstallSuccess = () => {
     setUninstallTarget(null);
-    navigate("/modules");
+    navigate(MARKETPLACE_INSTALLED_PATH);
   };
 
   const detailProps = useMemo(() => {
@@ -331,9 +324,6 @@ export default function Modules() {
   return (
     <div className="flex h-full overflow-hidden max-w-[1600px] w-full">
       <ModuleSidebar
-        catalog={catalog.list}
-        selectedCategory={selectedCategory}
-        onSelectCategory={handleSelectCategory}
         selectedId={selectedModule?.source === "installed" ? selectedModule.module._id : null}
         onSelectModule={handleSelectInstalled}
       />
@@ -351,7 +341,7 @@ export default function Modules() {
                       <span className="font-medium">Failed to load module</span>
                     </div>
                     <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
-                    <Button variant="outline" size="sm" onClick={() => navigate("/modules")}>
+                    <Button variant="outline" size="sm" onClick={() => navigate(MARKETPLACE_INSTALLED_PATH)}>
                       Back
                     </Button>
                   </CardContent>
@@ -371,7 +361,7 @@ export default function Modules() {
                     widgets={detailProps?.widgets}
                     workflows={detailProps?.workflows}
                     loading={moduleDetailLoading || !detailProps}
-                    onBack={() => navigate("/modules")}
+                    onBack={() => navigate(MARKETPLACE_INSTALLED_PATH)}
                     instanceId={instance?._id}
                     moduleDbId={detailProps?.moduleDbId}
                     manifestSettings={detailProps?.manifestSettings}
@@ -409,12 +399,28 @@ export default function Modules() {
             )}
           </>
         ) : (
-          <ModuleStore
-            catalog={catalog}
-            selectedCategory={selectedCategory}
-            onSelectCategory={handleSelectCategory}
-            header={<PageIntro introId="modules" onTry={() => handleSelectCategory(PLATFORM_CATEGORY)} />}
-          />
+          <div className="flex-1 overflow-auto p-6 space-y-4">
+            <PageIntro introId="modules" onTry={() => navigate(MARKETPLACE_PATH)} />
+            <Card className="max-w-xl">
+              <CardContent className="pt-6 space-y-3">
+                <p className="font-medium">Your modules</p>
+                <p className="text-sm text-muted-foreground">
+                  Pick a module on the left to see what it adds and change its settings, or add one: from the
+                  marketplace, or a module you made yourself.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}>
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />
+                    Upload a module
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => navigate(MARKETPLACE_PATH)}>
+                    <Store className="h-3.5 w-3.5 mr-1.5" />
+                    Browse the marketplace
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
 

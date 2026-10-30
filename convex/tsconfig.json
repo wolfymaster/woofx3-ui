@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@convex/*": ["./*"],
       "@shared/*": ["../shared/*"],
       "@woofx3/api": ["../../woofx3/shared/clients/typescript/api/index.ts"],
       "@woofx3/api/*": ["../../woofx3/shared/clients/typescript/api/*.ts"]

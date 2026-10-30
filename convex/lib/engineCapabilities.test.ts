@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import {
   ENGINE_CAPABILITY_IDS,
   hasEngineCapability,
@@ -54,5 +55,13 @@ describe("isLegacyCapabilitiesError", () => {
     expect(isLegacyCapabilitiesError(new TypeError("fetch failed"))).toBe(false);
     expect(isLegacyCapabilitiesError(new TypeError("'listObsScenes' is not a function."))).toBe(false);
     expect(isLegacyCapabilitiesError(undefined)).toBe(false);
+  });
+});
+
+describe("ENGINE_CAPABILITY_IDS", () => {
+  test("lists only ids the engine declares, so no gate runs ahead of the engine", () => {
+    const declared = new Set<string>(Object.values(ENGINE_CAPABILITIES));
+    const undeclared = ENGINE_CAPABILITY_IDS.filter((id) => !declared.has(id));
+    expect(undeclared).toEqual([]);
   });
 });

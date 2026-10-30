@@ -3,10 +3,6 @@ import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import {
   buildTriggerOptions,
   type CancelWorkflowResult,
-  classifyOptionsProbe,
-  OPTIONS_PROBE_WORKFLOW,
-  type OptionsSupport,
-  optionsWereIgnored,
   type TriggerWorkflowOptions,
   type TriggerWorkflowResponse,
   type UnmetTriggerCondition,
@@ -228,9 +224,7 @@ export const trigger = action({
     workflowNameOrId: v.string(),
     parameters: v.optional(v.record(v.string(), v.string())),
     origin: v.optional(manualRunOrigin),
-    // Test-run options; see lib/engineTestRun.ts. An engine without them
-    // ignores them and runs the workflow as if none were given, which
-    // `optionsIgnored` reports.
+    // Test-run options; see shared/workflow-test-run.ts. Sent only to engines that advertise workflow.testRunOptions.
     options: v.optional(
       v.object({
         triggerData: v.optional(v.record(v.string(), v.any())),
@@ -268,47 +262,19 @@ export const trigger = action({
       executionId: response.executionId || null,
       unmetConditions: response.unmetConditions ?? [],
       dryRun: response.dryRun === true,
-      optionsIgnored: optionsWereIgnored(built.options, response),
     };
   },
 });
 
 interface TriggerResult {
   triggerId: string;
-  /** `requested`, `started` or `conditions_not_met`; see lib/engineTestRun.ts. */
+  /** `requested`, `started` or `conditions_not_met`; see shared/workflow-test-run.ts. */
   status: string;
   /** Set when the engine answered with the run it started. */
   executionId: string | null;
   unmetConditions: UnmetTriggerCondition[];
   dryRun: boolean;
-  /** True when options were sent and the engine, predating them, ran without them. */
-  optionsIgnored: boolean;
 }
-
-/**
- * Whether the instance's engine takes test-run options (sample trigger data,
- * skip conditions, dry run). The probe can start no run on any engine; see
- * `classifyOptionsProbe`.
- */
-export const testRunCapabilities = action({
-  args: {
-    instanceId: v.id("instances"),
-  },
-  handler: async (ctx, { instanceId }): Promise<{ options: OptionsSupport }> => {
-    const bundle = await requireInstanceContext(ctx, instanceId);
-    const rpc = createEngineRpcSession<TestRunEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    try {
-      await rpc.triggerWorkflowByName(OPTIONS_PROBE_WORKFLOW, {}, undefined, undefined, undefined, {
-        platform: "probe",
-      });
-    } catch (err) {
-      return { options: classifyOptionsProbe(err) };
-    }
-    // Only an engine that ignored the options and still found a workflow
-    // could answer; neither engine can, so this is not an answer to trust.
-    return { options: "unknown" };
-  },
-});
 
 /**
  * Run a recorded workflow run again, whole or from one of its steps.
