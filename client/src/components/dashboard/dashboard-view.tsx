@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import type { DashboardPanelWidget, DashboardRailWidget } from "@shared/dashboard-layout";
-import { useMutation } from "convex/react";
 import { Trash2 } from "lucide-react";
 import { type ComponentProps, useCallback, useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
@@ -25,8 +23,15 @@ import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NotRunningNotice } from "@/components/workflows/not-running-notice";
 import { useEngineScope } from "@/engine/context";
-import { useInstance } from "@/hooks/use-instance";
-import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
+import {
+  useAddDashboardPanelRequest,
+  useDashboardPanels,
+  useDashboardRailWidgets,
+  useRemoveDashboardPanelRequest,
+  useRenameDashboardPanelRequest,
+  useSetDashboardPanelWidgetsRequest,
+  useSetDashboardRailWidgetsRequest,
+} from "@/engine/hooks/use-dashboard";
 import { useToast } from "@/hooks/use-toast";
 import {
   assignWidget,
@@ -61,19 +66,19 @@ type PickerTarget = { kind: "zone"; panelId: string; zoneId: string } | { kind: 
  */
 export function DashboardView() {
   const { Notice } = useDashboardCatalog();
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading } = useEngineScope();
   const commandBarHidden = useStore($commandBarHidden);
 
   const layoutHint = useStore($dashboardLayoutHint);
-  // Starts with the cached instance id, alongside the membership list; the
-  // result is only rendered once `instance` confirms that id.
-  const panels = useOptimisticInstanceQuery(api.dashboardLayouts.getPanels);
-  const savedRail = useOptimisticInstanceQuery(api.dashboardLayouts.getRailWidgets);
-  const addPanel = useMutation(api.dashboardLayouts.addPanel);
-  const removePanel = useMutation(api.dashboardLayouts.removePanel);
-  const renamePanel = useMutation(api.dashboardLayouts.renamePanel);
-  const setPanelWidgets = useMutation(api.dashboardLayouts.setPanelWidgets);
-  const setRailWidgets = useMutation(api.dashboardLayouts.setRailWidgets);
+  // A gateway may load the layout before the scope confirms its instance;
+  // it is only rendered once the scope has one.
+  const panels = useDashboardPanels();
+  const savedRail = useDashboardRailWidgets();
+  const addPanel = useAddDashboardPanelRequest();
+  const removePanel = useRemoveDashboardPanelRequest();
+  const renamePanel = useRenameDashboardPanelRequest();
+  const setPanelWidgets = useSetDashboardPanelWidgetsRequest();
+  const setRailWidgets = useSetDashboardRailWidgetsRequest();
   const { toast } = useToast();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -87,9 +92,7 @@ export function DashboardView() {
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
   const wheelCooldownRef = useRef(false);
 
-  const instanceId = instance?._id;
-  const { instanceId: engineInstanceId } = useEngineScope();
-  // Read by the stable handlers below. Convex hands back a new panels array on
+  // Read by the stable handlers below. A read hands back a new panels array on
   // every change, and depending on it would give every canvas new handlers too.
   const panelsRef = useRef(panels);
   panelsRef.current = panels;
@@ -187,7 +190,7 @@ export function DashboardView() {
       if (!instanceId) {
         return;
       }
-      void renamePanel({ instanceId, panelId, name });
+      void renamePanel(panelId, name);
     },
     [instanceId, renamePanel]
   );
@@ -271,7 +274,7 @@ export function DashboardView() {
       if (!instanceId) {
         return;
       }
-      void setRailWidgets({ instanceId, widgets: configureRailWidget(railRef.current, slotId, config) });
+      void setRailWidgets(configureRailWidget(railRef.current, slotId, config));
     },
     [isEditing, instanceId, setRailWidgets]
   );
@@ -298,39 +301,35 @@ export function DashboardView() {
       }
       // Outside edit mode there is no draft anyone will later Save, so a widget's
       // own settings (a macro added to the pad, a reordered button) have to reach
-      // Convex now or they are lost on the next load.
+      // the gateway now or they are lost on the next load.
       const panel = panelsRef.current?.find((candidate) => candidate.id === panelId);
       if (!instanceId || !panel) {
         return;
       }
-      void setPanelWidgets({
-        instanceId,
-        panelId,
-        widgets: configureWidget(panel.widgets, zoneId, slotId, type, config),
-      });
+      void setPanelWidgets(panelId, configureWidget(panel.widgets, zoneId, slotId, type, config));
     },
     [isEditing, editDraft, instanceId, setPanelWidgets]
   );
 
-  const firstLayoutId = instance && panels && panels.length > 0 ? panels[0].layoutId : null;
+  const firstLayoutId = instanceId && panels && panels.length > 0 ? panels[0].layoutId : null;
   useEffect(() => {
     if (firstLayoutId) {
       $dashboardLayoutHint.set(firstLayoutId);
     }
   }, [firstLayoutId]);
 
-  const isLoading = instanceLoading || (!!instance && panels === undefined);
+  const isLoading = isInstanceLoading || (!!instanceId && panels === undefined);
 
   if (isLoading) {
     return <DashboardSkeleton layoutId={layoutHint} />;
   }
 
-  if (!instance || !panels || panels.length === 0) {
+  if (!instanceId || !panels || panels.length === 0) {
     return (
       <DashboardLayoutPicker
         onSelect={(layoutId) => {
-          if (instance) {
-            void addPanel({ instanceId: instance._id, layoutId });
+          if (instanceId) {
+            void addPanel(layoutId);
           }
         }}
       />
@@ -339,7 +338,7 @@ export function DashboardView() {
 
   const handleAddPanel = async (layoutId: string) => {
     const panelCountBeforeAdd = panels.length;
-    await addPanel({ instanceId: instance._id, layoutId });
+    await addPanel(layoutId);
     setAddPanelOpen(false);
     requestAnimationFrame(() => carouselApi?.scrollTo(panelCountBeforeAdd));
   };
@@ -348,7 +347,7 @@ export function DashboardView() {
     if (!removeTarget) {
       return;
     }
-    await removePanel({ instanceId: instance._id, panelId: removeTarget.id });
+    await removePanel(removeTarget.id);
     setRemoveTarget(null);
   };
 
@@ -365,9 +364,9 @@ export function DashboardView() {
         const saved = panels.find((panel) => panel.id === panelId)?.widgets;
         return currentPanelIds.has(panelId) && widgets !== saved;
       })
-      .map(([panelId, widgets]) => setPanelWidgets({ instanceId: instance._id, panelId, widgets }));
+      .map(([panelId, widgets]) => setPanelWidgets(panelId, widgets));
     if (draftRail && draftRail !== railWidgets) {
-      writes.push(setRailWidgets({ instanceId: instance._id, widgets: draftRail }));
+      writes.push(setRailWidgets(draftRail));
     }
 
     setIsSaving(true);
@@ -410,7 +409,7 @@ export function DashboardView() {
         <NotRunningNotice />
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
-        {engineInstanceId && Notice && <Notice />}
+        {instanceId && Notice && <Notice />}
 
         {/* Swiping between panels is off while editing, so dragging a widget
             does not also drag the carousel. */}
