@@ -44,6 +44,43 @@ function manifestStrings(manifest: Record<string, unknown> | null, field: string
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+/** Catalog declarations name themselves by `id`; the module detail readers key them by `slug`. */
+function slugged(items: unknown): Record<string, unknown>[] {
+  return Array.isArray(items) ? items.map((item) => ({ ...record(item), slug: record(item).id })) : [];
+}
+
+/**
+ * The marketplace module record the shared detail readers take
+ * (`marketplaceDetail`, `marketplaceMetadataOf`), from the engine's
+ * `marketplaceGetListing` answer. That answer is the catalog's
+ * `{listing}`, which keeps the listing's own fields at its top and what the
+ * module declares under `listing.module`; the readers want both in one record.
+ */
+export function catalogModuleRecord(payload: unknown): { module: Record<string, unknown> } {
+  const listing = record(record(payload).listing);
+  const declared = record(listing.module);
+  return {
+    module: {
+      id: listing.id,
+      name: listing.name,
+      description: listing.description,
+      version: listing.version,
+      author: listing.author,
+      category: listing.category,
+      tags: listing.tags,
+      readme: declared.readme,
+      triggers: slugged(declared.triggers),
+      actions: slugged(declared.actions),
+      functions: declared.functions,
+      widgets: slugged(declared.widgets),
+    },
+  };
+}
+
 /** The engine's value of `createdByType` for a module that ships with it. */
 const BUILT_IN_CREATOR = "SYSTEM";
 

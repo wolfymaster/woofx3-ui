@@ -24,6 +24,7 @@ import { fromModuleId } from "./ids";
 import { MODULE_INVALIDATIONS } from "./invalidations";
 import { directKeys as k } from "./keys";
 import {
+  catalogModuleRecord,
   inspectionLocalEndpoints,
   isModuleNamed,
   toInstalledModule,
@@ -90,7 +91,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
   const listingMetadata = async (listingId: string): Promise<MarketplaceMergeData | null> => {
     try {
       return marketplaceMetadataOf(
-        await runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(listingId))
+        catalogModuleRecord(await runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(listingId)))
       );
     } catch {
       return null;
@@ -105,7 +106,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
         inspectListing(moduleId),
       ]);
       return toModuleDetail({
-        ...marketplaceDetail(moduleId, listing, null),
+        ...marketplaceDetail(moduleId, catalogModuleRecord(listing), null),
         permissions: inspection?.permissions ?? null,
         localEndpoints: inspection ? inspectionLocalEndpoints(inspection) : null,
       });

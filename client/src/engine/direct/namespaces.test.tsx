@@ -962,7 +962,9 @@ describe("modules", () => {
       actions: [],
       functions: [],
     } as never;
-    state.listings = { "cozy-listing": { module: { readme: "# Cozy", version: "2.0.0" } } };
+    state.listings = {
+      "cozy-listing": { listing: { id: "cozy-listing", version: "2.0.0", module: { readme: "# Cozy" } } },
+    };
     state.inspections = { "cozy-listing": inspection("cozy-listing", ["chat.read", "chat.write"]) };
     const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("cozy");
     expect(detail).toMatchObject({
@@ -982,15 +984,27 @@ describe("modules", () => {
 
   test("a listing's detail says its permissions are unknown when the engine cannot inspect it", async () => {
     const { runtime, state } = await connected();
-    state.listings = { paid: { module: { id: "paid", name: "Paid", version: "1.0.0" } } };
+    state.listings = {
+      paid: {
+        listing: {
+          id: "paid",
+          name: "Paid",
+          version: "1.0.0",
+          module: { readme: "# Paid", triggers: [{ id: "paid.tipped", name: "Tipped", description: "" }] },
+        },
+      },
+    };
     const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("paid");
     expect(detail).toMatchObject({
       id: "paid",
       name: "Paid",
+      version: "1.0.0",
+      readme: "# Paid",
       isInstalled: false,
       permissions: null,
       localEndpoints: null,
     });
+    expect(detail.triggers).toMatchObject([{ key: "paid.tipped", name: "Tipped" }]);
   });
 
   test("only declared settings are read, and only declared settings are written", async () => {
