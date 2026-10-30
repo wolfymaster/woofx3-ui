@@ -1,7 +1,7 @@
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { useMemo } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useRawWorkflowCatalog } from "@/engine/hooks/use-workflows";
-import { useInstance } from "@/hooks/use-instance";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
@@ -113,7 +113,7 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
 }
 
 export function useWorkflowCatalog() {
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading } = useEngineScope();
   const raw = useRawWorkflowCatalog();
 
   const triggers = (raw?.triggers ?? []) as CatalogTriggerRow[];
@@ -123,12 +123,10 @@ export function useWorkflowCatalog() {
   const actionPresets = useMemo(() => actions.map(toActionPreset), [actions]);
 
   return {
-    instance,
-    instanceLoading,
     triggerPresets,
     actionPresets,
     catalogTriggers: triggers,
     catalogActions: actions,
-    loading: instanceLoading || (!!instance && raw === undefined),
+    loading: isInstanceLoading || (instanceId !== null && raw === undefined),
   };
 }

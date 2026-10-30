@@ -189,3 +189,21 @@ export function findActiveSection(location: string): NavSection | null {
   const sections = [...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS];
   return sections.find((section) => isSectionActive(section, location)) ?? null;
 }
+
+/**
+ * The entries of `items` whose page `has` reports, keeping an entry whose own
+ * page is missing only while one nested under it remains (it then leads to
+ * that one). For a build that serves a subset of the app's pages.
+ */
+export function navItemsServed(items: NavItem[], has: (href: string) => boolean): NavItem[] {
+  return items.flatMap((item): NavItem[] => {
+    const children = item.children ? navItemsServed(item.children, has) : undefined;
+    if (has(item.href)) {
+      return [children ? { ...item, children } : item];
+    }
+    if (children && children.length > 0) {
+      return [{ ...item, href: children[0].href, children }];
+    }
+    return [];
+  });
+}
