@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
+import { userPageDevPort } from "./client/src/user-page/build/dev-server";
 
 export default defineConfig({
   plugins: [
@@ -20,6 +21,7 @@ export default defineConfig({
       { find: /^@\/(.*)$/, replacement: path.resolve(import.meta.dirname, "client", "src") + "/$1" },
       { find: /^@assets\/(.*)$/, replacement: path.resolve(import.meta.dirname, "attached_assets") + "/$1" },
       { find: /^@convex\/(.*)$/, replacement: path.resolve(import.meta.dirname, "convex") + "/$1" },
+      { find: /^@shared\/(.*)$/, replacement: path.resolve(import.meta.dirname, "shared") + "/$1" },
       // `@woofx3/api` → index.ts; `@woofx3/api/<sub>` → <sub>.ts
       {
         find: /^@woofx3\/api\/(.+)$/,
@@ -43,6 +45,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    // The public user page is its own app (vite.user-page.config.ts); forwarding
+    // its path to `bun run dev:user-page` keeps the dashboard from answering it.
+    proxy: { "/u/": { target: `http://localhost:${userPageDevPort(process.env)}`, ws: true } },
     allowedHosts: ["ui.dev.woofx3.tv"],
     host: true,
     fs: {

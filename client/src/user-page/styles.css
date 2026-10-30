@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Served from /u/assets/ with the page, never from the site root. */
+@font-face {
+  font-family: "InterVariable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../public/fonts/inter-latin-wght.woff2") format("woff2");
+}
+
+/* RGB channels, so Tailwind can apply opacity to each. */
+:root {
+  color-scheme: light dark;
+  --paper: 238 240 245;
+  --surface: 255 255 255;
+  --ink: 23 26 43;
+  --muted: 90 95 120;
+  --line: 217 220 231;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: 16 18 26;
+    --surface: 25 28 39;
+    --ink: 237 238 245;
+    --muted: 155 160 184;
+    --line: 42 46 62;
+  }
+}
+
+body {
+  @apply bg-paper font-sans text-ink antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* The banner a page without one shows: its accent with faint scanlines. */
+.banner-fallback {
+  background-color: rgb(var(--accent));
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.09) 0,
+    rgb(255 255 255 / 0.09) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+
+/* A section the viewer may not see: the fallback banner's scanlines, faint, over the panel. */
+.locked-slate {
+  background-color: rgb(var(--surface));
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgb(var(--accent) / 0.07) 0,
+    rgb(var(--accent) / 0.07) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
