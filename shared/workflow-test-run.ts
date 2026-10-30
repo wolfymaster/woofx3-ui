@@ -62,46 +62,6 @@ export interface CancelWorkflowResult {
   message: string;
 }
 
-/**
- * A workflow name no workflow can have, for probing whether the engine takes
- * options. Control characters cannot be typed into a workflow name.
- */
-export const OPTIONS_PROBE_WORKFLOW = "\u0000woofx3-options-probe";
-
-/**
- * The refusal an engine with options gives `platform` without `triggerData`,
- * and the error any engine gives a workflow it cannot find. Must match the
- * messages thrown by `triggerWorkflowByName` in woofx3
- * `api/src/routes/workflows-execution.ts`.
- */
-const OPTIONS_REFUSAL_FRAGMENT = "only apply with options.triggerData";
-const WORKFLOW_NOT_FOUND_FRAGMENT = "not found";
-
-export type OptionsSupport = "supported" | "unsupported" | "unknown";
-
-/**
- * Whether the engine takes test-run options, from the error it answered a
- * probe with (null when it answered without one).
- *
- * The probe names no real workflow and passes `platform` without
- * `triggerData`, so it can never start a run on either kind of engine: an
- * engine with options refuses the combination before looking the workflow
- * up, and an older one ignores the options and fails to find the workflow.
- * Probing with a real call instead would, on an older engine, run the
- * workflow for real -- dry run requested or not. Anything else (the engine
- * unreachable, say) is `unknown`, so a caller can ask again later.
- */
-export function classifyOptionsProbe(probeError: unknown): OptionsSupport {
-  const message = probeError instanceof Error ? probeError.message : typeof probeError === "string" ? probeError : "";
-  if (message.includes(OPTIONS_REFUSAL_FRAGMENT)) {
-    return "supported";
-  }
-  if (message.includes(WORKFLOW_NOT_FOUND_FRAGMENT)) {
-    return "unsupported";
-  }
-  return "unknown";
-}
-
 /** UTF-8 bytes `value` encodes to as JSON. */
 export function jsonByteLength(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -140,15 +100,6 @@ export function buildTriggerOptions(input: {
     options.dryRun = true;
   }
   return { ok: true, options };
-}
-
-/**
- * Whether an engine ignored the options it was sent: it answered the old
- * `requested`, which an engine with options never does once it has any.
- */
-export function optionsWereIgnored(options: TriggerWorkflowOptions, response: TriggerWorkflowResponse): boolean {
-  const asked = options.triggerData !== undefined || options.dryRun === true;
-  return asked && response.status === "requested";
 }
 
 /** The outputs a side-effect step records in a dry run instead of executing. */

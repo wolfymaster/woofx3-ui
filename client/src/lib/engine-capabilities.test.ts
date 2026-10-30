@@ -44,30 +44,29 @@ describe("capabilitySupport", () => {
 
 describe("testRunSupport", () => {
   test("reads each feature from its own id", () => {
-    expect(testRunSupport(ready("workflow.testRunOptions", "workflow.realCancel"), "checking")).toEqual({
+    expect(testRunSupport(ready("workflow.testRunOptions", "workflow.realCancel"))).toEqual({
       options: "supported",
       dryRun: "unsupported",
       realCancel: "supported",
     });
-    expect(testRunSupport(ready("workflow.dryRun"), "checking")).toEqual({
+    expect(testRunSupport(ready("workflow.dryRun"))).toEqual({
       options: "unsupported",
       dryRun: "unsupported",
       realCancel: "unsupported",
     });
   });
 
-  test("a legacy engine answers through the probe for all three", () => {
-    expect(testRunSupport(LEGACY, "supported")).toEqual({
-      options: "supported",
-      dryRun: "supported",
-      realCancel: "supported",
+  test("a legacy engine supports none of them", () => {
+    expect(testRunSupport(LEGACY)).toEqual({
+      options: "unsupported",
+      dryRun: "unsupported",
+      realCancel: "unsupported",
     });
-    expect(testRunSupport(LEGACY, "checking").options).toBe("checking");
   });
 
   test("follows the capabilities request while it is out or failed", () => {
-    expect(testRunSupport(LOADING, "unsupported").options).toBe("checking");
-    expect(testRunSupport(FAILED, "unsupported").realCancel).toBe("unknown");
+    expect(testRunSupport(LOADING).options).toBe("checking");
+    expect(testRunSupport(FAILED).realCancel).toBe("unknown");
   });
 });
 

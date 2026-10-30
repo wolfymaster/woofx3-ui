@@ -1,4 +1,3 @@
-import type { OptionsSupport } from "@shared/workflow-test-run";
 import type { EngineCapability, EngineCapabilityReport } from "@/engine/types";
 
 /** What the browser knows about an instance's engine features; see useEngineCapabilities. */
@@ -53,28 +52,17 @@ export const RECAP_EVENT_CAPABILITIES: readonly EngineCapability[] = ["analytics
  */
 export const EVENT_LOG_CAPABILITIES: readonly EngineCapability[] = ["events.log"];
 
-type TestRunState = OptionsSupport | "checking";
-
 export interface TestRunSupport {
   /** Sample trigger data and skipping conditions for one workflow. */
-  options: TestRunState;
+  options: CapabilitySupport;
   /** Steps with side effects describe what they would do. Sent as a test-run option. */
-  dryRun: TestRunState;
+  dryRun: CapabilitySupport;
   /** Stop halts the run instead of only marking it stopped. */
-  realCancel: TestRunState;
+  realCancel: CapabilitySupport;
 }
 
-/**
- * Test-run features from the engine's capabilities. An engine that predates
- * capabilities may still have them, having shipped between the two, so for
- * that engine the answer comes from `legacyProbe` (see
- * `workflowActions.testRunCapabilities`); the three arrived in one engine
- * update, so one probe answers all of them.
- */
-export function testRunSupport(state: EngineCapabilitiesState, legacyProbe: TestRunState): TestRunSupport {
-  if (state.status === "ready" && state.report.legacy) {
-    return { options: legacyProbe, dryRun: legacyProbe, realCancel: legacyProbe };
-  }
+/** Test-run features from the engine's capabilities. */
+export function testRunSupport(state: EngineCapabilitiesState): TestRunSupport {
   const options = capabilitySupport(state, ["workflow.testRunOptions"]);
   return {
     options,

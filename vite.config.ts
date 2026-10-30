@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
+import { userPageDevPort } from "./client/src/user-page/build/dev-server";
 
 /**
  * `--mode desktop` builds the dashboard the woofx3 desktop app shows: desktop
@@ -79,8 +80,13 @@ export default defineConfig(async ({ mode }) => {
       emptyOutDir: true,
     },
     server: {
-      // Must match the companion window's dev port and base (companion/ui/vite.config.ts).
-      proxy: desktop ? { "/companion": { target: "http://localhost:1420", ws: true } } : undefined,
+      // Desktop: must match the companion window's dev port and base
+      // (companion/ui/vite.config.ts). Web: the public user page is its own app
+      // (vite.user-page.config.ts); forwarding its path to `bun run dev:user-page`
+      // keeps the dashboard from answering it.
+      proxy: desktop
+        ? { "/companion": { target: "http://localhost:1420", ws: true } }
+        : { "/u/": { target: `http://localhost:${userPageDevPort(process.env)}`, ws: true } },
       allowedHosts: ["ui.dev.woofx3.tv"],
       host: true,
       fs: {

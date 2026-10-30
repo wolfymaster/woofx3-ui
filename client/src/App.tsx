@@ -6,6 +6,7 @@ import { Route, Switch, useLocation, useSearch } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AdminOnly } from "@/components/layout/admin-only";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
+import { USER_PAGE_PATH } from "@/components/layout/nav-config";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,9 +23,13 @@ import {
 } from "@/lib/command-editor-route";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
 import {
+  legacyModulesRedirect,
   MARKETPLACE_AUTHOR_ROUTE,
+  MARKETPLACE_INSTALLED_MODULE_ROUTE,
+  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_LISTING_ROUTE,
   MARKETPLACE_PATH,
+  MARKETPLACE_UPLOAD_PATH,
   modulesIndexRedirect,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
@@ -73,6 +78,7 @@ const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
+const UserPage = lazy(() => import("@/pages/user-page"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -124,6 +130,31 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * `/u/<slug>` is the public user page, a separate app the server answers
+ * (deploy/Caddyfile), so an in-app link there reloads to fetch it. A dashboard
+ * that was itself loaded at `/u/` was served there by mistake; it shows
+ * not-found instead of reloading forever.
+ */
+const USER_PAGE_PREFIX = "/u/";
+const LOADED_AT_USER_PAGE = window.location.pathname.startsWith(USER_PAGE_PREFIX);
+
+function UserPageHandoff() {
+  useEffect(() => {
+    if (!LOADED_AT_USER_PAGE) {
+      window.location.reload();
+    }
+  }, []);
+  if (!LOADED_AT_USER_PAGE) {
+    return null;
+  }
+  return (
+    <Suspense fallback={null}>
+      <NotFound />
+    </Suspense>
+  );
+}
+
 /** Legacy `/settings/:tab` values that still map onto an Admin screen. */
 const ADMIN_PATHS = new Set(["engine", "integrations", "storage", "appearance"]);
 
@@ -141,6 +172,11 @@ function Redirect({ to }: { to: string }) {
 /** Bare `/modules`, forwarded with its query string (see `modulesIndexRedirect`). */
 function ModulesIndexRedirect() {
   return <Redirect to={modulesIndexRedirect(useSearch())} />;
+}
+
+/** An old `/modules/…` path, forwarded into the Marketplace tab (see `legacyModulesRedirect`). */
+function LegacyModulesRedirect({ params }: { params: { rest: string } }) {
+  return <Redirect to={legacyModulesRedirect(params.rest, useSearch())} />;
 }
 
 function AppRoutes() {
@@ -171,6 +207,8 @@ function AppRoutes() {
           <CompanionPair />
         </AuthGuard>
       </Route>
+
+      <Route path={`${USER_PAGE_PREFIX}*`} component={UserPageHandoff} />
 
       {/* Protected app routes */}
       <Route>
@@ -216,6 +254,7 @@ function AppRoutes() {
                     <Route path="/stream/scenes" component={Scenes} />
                     <Route path="/stream/scenes/:id" component={Scenes} />
                     <Route path="/stream/supporters" component={Supporters} />
+                    <Route path={USER_PAGE_PATH} component={UserPage} />
                     <Route path="/stream/assets" component={Assets} />
                     <Route path="/stream/starter-packs" component={StarterPacks} />
                     <Route path="/stream/workflows" component={Workflows} />
@@ -229,13 +268,12 @@ function AppRoutes() {
                     <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
                     <Route path={MARKETPLACE_PATH} component={Marketplace} />
 
-                    {/* The install surface. /modules/install and /modules/installed are
-                      linked from elsewhere in the app and from an install's own redirect,
-                      so they stay; the two storefront routes under /modules forward to
-                      their /marketplace equivalents for old bookmarks. */}
-                    <Route path="/modules/install" component={ModuleInstall} />
-                    <Route path="/modules/installed" component={Modules} />
-                    <Route path="/modules/:moduleId" component={Modules} />
+                    <Route path={MARKETPLACE_UPLOAD_PATH} component={ModuleInstall} />
+                    <Route path={MARKETPLACE_INSTALLED_PATH} component={Modules} />
+                    <Route path={MARKETPLACE_INSTALLED_MODULE_ROUTE} component={Modules} />
+
+                    {/* Where installed modules used to live; old links forward into the Marketplace tab. */}
+                    <Route path="/modules/:rest" component={LegacyModulesRedirect} />
                     <Route path="/modules" component={ModulesIndexRedirect} />
 
                     {/* Help section */}

@@ -52,6 +52,7 @@ import { commandEditorPath, commandGroupEditorPath } from "@/lib/command-editor-
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { groupLabel } from "@/lib/group-display";
 import { applyMacroVariables, hasMacroVariables } from "@/lib/macro-pad";
+import { installedModulePath } from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
 import { resourceActions } from "@/lib/resource-actions";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
@@ -493,7 +494,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
       keywords: ["module", ...(mod.tags ?? [])],
       meta: mod.status && mod.status !== "installed" ? mod.status : `v${mod.version}`,
       icon: Puzzle,
-      action: { type: "navigate", href: `/modules/${key}` },
+      action: { type: "navigate", href: installedModulePath(key) },
     });
   }
 

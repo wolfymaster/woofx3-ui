@@ -10,6 +10,7 @@ import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
+import { openPlatformLinkTokens, platformTokenCipher } from "./lib/platformLinkTokens";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
@@ -112,8 +113,8 @@ export const completeConnect = internalMutation({
       platformUsername: twitch.platformUsername,
       profileImageUrl: twitch.profileImageUrl,
       channelId: twitch.platformUserId,
-      accessToken: twitch.accessToken,
-      refreshToken: twitch.refreshToken,
+      sealedAccessToken: twitch.sealedAccessToken,
+      sealedRefreshToken: twitch.sealedRefreshToken,
       expiresAt: twitch.expiresAt,
       scopes: twitch.scopes,
       connectedByUserId: userId,
@@ -213,6 +214,7 @@ export const syncToEngine = internalAction({
     });
     const token = twitchTokenForEngine({
       link,
+      tokens: await openPlatformLinkTokens(await platformTokenCipher(), link),
       asksForTokens: hasEngineCapability(capabilities, "twitch.dashboardTokens"),
       clientId: twitchClientId,
       now: Date.now(),

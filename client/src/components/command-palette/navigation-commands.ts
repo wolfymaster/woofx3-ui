@@ -11,6 +11,7 @@ import {
   withAlertsChildren,
 } from "@/components/layout/nav-config";
 import { COMMAND_GROUP_NEW_ROUTE, COMMAND_GROUPS_PATH, COMMAND_NEW_ROUTE } from "@/lib/command-editor-route";
+import { MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
 import type { PaletteCommand } from "./types";
 
 export const GO_TO_GROUP = "Go to";
@@ -125,12 +126,12 @@ export function navigationCommands(
     },
     {
       id: "create:module",
-      title: "Install module from file",
+      title: "Upload a module",
       kind: "action",
       group: CREATE_GROUP,
       keywords: ["upload", "zip", "plugin", "add"],
       icon: PackageOpen,
-      action: { type: "navigate", href: "/modules/install" },
+      action: { type: "navigate", href: MARKETPLACE_UPLOAD_PATH },
     },
     {
       id: "create:asset",

@@ -36,16 +36,11 @@ describe("twitchTokenGrant", () => {
 });
 
 describe("twitchTokenForEngine", () => {
-  const link = {
-    platformUserId: "42",
-    accessToken: "a",
-    refreshToken: "r",
-    expiresAt: 10_000_000,
-    scopes: ["chat:read"],
-  };
+  const link = { platformUserId: "42", expiresAt: 10_000_000, scopes: ["chat:read"] };
+  const tokens = { accessToken: "a", refreshToken: "r" };
 
   test("gives an engine that asks for tokens no refresh token", () => {
-    const token = twitchTokenForEngine({ link, asksForTokens: true, clientId: "app", now: 7_000_000 });
+    const token = twitchTokenForEngine({ link, tokens, asksForTokens: true, clientId: "app", now: 7_000_000 });
     expect(token).toEqual({
       userId: "42",
       accessToken: "a",
@@ -58,8 +53,8 @@ describe("twitchTokenForEngine", () => {
   });
 
   test("still gives an engine that refreshes itself the refresh token", () => {
-    expect(twitchTokenForEngine({ link, asksForTokens: false, clientId: "app", now: 7_000_000 }).refreshToken).toBe(
-      "r"
-    );
+    expect(
+      twitchTokenForEngine({ link, tokens, asksForTokens: false, clientId: "app", now: 7_000_000 }).refreshToken
+    ).toBe("r");
   });
 });

@@ -205,11 +205,6 @@ function useTriggerRequest() {
   return useCallback((run: WorkflowTrigger) => trigger(run), [trigger]);
 }
 
-function useTestRunCapabilitiesRequest() {
-  const testRunCapabilities = useInstanceAction(api.workflowActions.testRunCapabilities);
-  return useCallback(() => testRunCapabilities({}), [testRunCapabilities]);
-}
-
 function useViewerFactsRequest() {
   const listViewerFacts = useInstanceAction(api.viewerFacts.list);
   return useCallback(() => listViewerFacts({}), [listViewerFacts]);
@@ -288,7 +283,6 @@ export const convexWorkflowsGateway: WorkflowsGateway = {
   useRemoveRequest,
   useSetEnabledRequest,
   useTriggerRequest,
-  useTestRunCapabilitiesRequest,
   useViewerFactsRequest,
   useReplayRequest,
   useCancelRunRequest,

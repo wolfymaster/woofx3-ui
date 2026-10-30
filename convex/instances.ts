@@ -11,6 +11,7 @@ import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { deleteUserPage } from "./lib/userPages";
 
 /**
  * An instance row as members may see it. `webhookSecret` authenticates the
@@ -264,6 +265,8 @@ export const deleteInstanceData = internalMutation({
       }
     }
 
+    await deleteUserPage(ctx, instanceId);
+
     const instance = await ctx.db.get(instanceId);
     if (instance?.companionHostname) {
       await ctx.scheduler.runAfter(0, internal.companionRelayActions.removeRoute, { instanceId });
@@ -273,10 +276,9 @@ export const deleteInstanceData = internalMutation({
   },
 });
 
-// Public — deliberately omits accessToken/refreshToken. Only
-// convex/platformRealtime.ts's internal-only getTwitchLink reads those, for
-// server-side EventSub subscription calls that never send the token to the
-// browser.
+// Public. Returns named fields only, so no token field, sealed or not, can
+// reach the browser; actions that need a token open it server-side through
+// lib/platformLinkTokens.ts.
 export const getPlatformLinks = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args) => {
@@ -303,10 +305,19 @@ export const getPlatformLinks = query({
     // one subscription.
     const viewerCanRelink = membership.role === "owner" || membership.role === "admin";
 
-    // Tokens never leave the backend — every caller that needs one goes
-    // through platformRealtime.ensureFreshTwitchToken instead.
-    return links.map(({ accessToken: _accessToken, refreshToken: _refreshToken, ...rest }) => ({
-      ...rest,
+    return links.map((link) => ({
+      _id: link._id,
+      _creationTime: link._creationTime,
+      instanceId: link.instanceId,
+      platform: link.platform,
+      platformUserId: link.platformUserId,
+      platformUsername: link.platformUsername,
+      profileImageUrl: link.profileImageUrl,
+      channelId: link.channelId,
+      expiresAt: link.expiresAt,
+      scopes: link.scopes,
+      connectedByUserId: link.connectedByUserId,
+      authFailedAt: link.authFailedAt,
       viewerCanRelink,
     }));
   },

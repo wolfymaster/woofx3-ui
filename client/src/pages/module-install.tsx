@@ -32,7 +32,8 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
-import { buildModuleArchive, computeModuleKey, readModuleArchive } from "@/lib/module-archive";
+import { MARKETPLACE_INSTALLED_PATH } from "@/lib/marketplace-route";
+import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } from "@/lib/module-archive";
 import { getLanguageFromPath } from "@/lib/module-files";
 import { bareModuleKey } from "@/lib/module-key";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
@@ -41,7 +42,6 @@ import { cn } from "@/lib/utils";
 interface FileNode {
   name: string;
   path: string;
-  content?: string;
   isDirectory: boolean;
   children?: FileNode[];
 }
@@ -53,11 +53,11 @@ interface CheckResult {
   message: string;
 }
 
-function buildFileTree(files: Record<string, string>): FileNode[] {
+function buildFileTree(paths: string[]): FileNode[] {
   const tree: FileNode[] = [];
   const pathMap = new Map<string, FileNode>();
 
-  for (const [path, content] of Object.entries(files)) {
+  for (const path of paths) {
     const parts = path.split("/");
     let currentPath = "";
 
@@ -71,7 +71,6 @@ function buildFileTree(files: Record<string, string>): FileNode[] {
           name: part,
           path: currentPath,
           isDirectory: !isLast,
-          content: isLast ? content : undefined,
           children: [],
         };
 
@@ -290,7 +289,9 @@ export default function ModuleInstall() {
   const [, navigate] = useLocation();
   const { mode } = useTheme();
   const { instance } = useInstance();
-  const [files, setFiles] = useState<Record<string, string>>({});
+  // The archive's files as their bytes; edits replace a text file's bytes, and
+  // binary files pass through untouched.
+  const [files, setFiles] = useState<Record<string, Uint8Array>>({});
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [checkResults, setCheckResults] = useState<CheckResult[]>([]);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
@@ -306,10 +307,11 @@ export default function ModuleInstall() {
   // Subscribe to transient events — Convex realtime pushes the moment the webhook emits one
   const installEvent = useTransientEvent(pendingModuleKey || null);
 
-  const fileTree = useMemo(() => buildFileTree(files), [files]);
+  const textFiles = useMemo(() => textFilesOf(files), [files]);
+  const fileTree = useMemo(() => buildFileTree(Object.keys(files)), [files]);
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
-  const editedManifest = useMemo(() => parseEditedManifest(files), [files]);
+  const editedManifest = useMemo(() => parseEditedManifest(textFiles), [textFiles]);
   const declaredPermissions = useMemo(
     () => (editedManifest === null ? null : parseManifestPermissions(editedManifest)),
     [editedManifest]
@@ -365,12 +367,12 @@ export default function ModuleInstall() {
   useEffect(() => {
     if (Object.keys(files).length > 0) {
       setIsRunningChecks(true);
-      runChecks(files).then((results) => {
+      runChecks(textFiles).then((results) => {
         setCheckResults(results);
         setIsRunningChecks(false);
       });
     }
-  }, [files]);
+  }, [files, textFiles]);
 
   // React to transient events from the engine webhook
   useEffect(() => {
@@ -378,7 +380,7 @@ export default function ModuleInstall() {
       return;
     }
     if (installEvent.status === "success") {
-      const timer = setTimeout(() => navigate("/modules"), 1500);
+      const timer = setTimeout(() => navigate(MARKETPLACE_INSTALLED_PATH), 1500);
       return () => clearTimeout(timer);
     }
     if (installEvent.status === "error") {
@@ -480,7 +482,7 @@ export default function ModuleInstall() {
   const handleFileChange = useCallback((path: string, content: string) => {
     setFiles((prev) => ({
       ...prev,
-      [path]: content,
+      [path]: new TextEncoder().encode(content),
     }));
   }, []);
 
@@ -536,7 +538,10 @@ export default function ModuleInstall() {
   }, [permissionsNeedingApproval, localEndpointsNeedingApproval, handleInstall]);
 
   const allChecksPassed = checkResults.length > 0 && checkResults.every((r) => r.status === "pass");
-  const selectedContent = selectedPath ? files[selectedPath] : null;
+  const selectedBytes = selectedPath ? files[selectedPath] : undefined;
+  // A binary file is shown as such rather than opened in the editor, where
+  // saving its decoded text back would corrupt it.
+  const selectedContent = selectedPath ? (textFiles[selectedPath] ?? null) : null;
   const selectedLanguage = selectedPath ? getLanguageFromPath(selectedPath) : "plaintext";
 
   if (Object.keys(files).length === 0) {
@@ -623,7 +628,11 @@ export default function ModuleInstall() {
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
                 <File className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Select a file to edit</p>
+                <p>
+                  {selectedBytes !== undefined
+                    ? `${selectedPath} is a binary file (${selectedBytes.byteLength.toLocaleString()} bytes) and is installed as it is.`
+                    : "Select a file to edit"}
+                </p>
               </div>
             </div>
           )}

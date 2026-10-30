@@ -5,6 +5,8 @@
  * secret and names the operator it acts for.
  */
 
+import { secretsEqual } from "../secretCompare";
+
 export const OPS_SECRET_ENV = "OPS_API_SECRET";
 /** A second accepted secret, so the secret can rotate without downtime. */
 export const OPS_SECRET_NEXT_ENV = "OPS_API_SECRET_NEXT";
@@ -36,7 +38,7 @@ export async function authenticateOps(
   let matched = false;
   for (const secret of secrets) {
     // Every configured secret is compared, so timing does not say which one matched.
-    if (presented !== null && (await constantTimeEqual(presented, secret))) {
+    if (presented !== null && (await secretsEqual(presented, secret))) {
       matched = true;
     }
   }
@@ -73,20 +75,4 @@ export async function authenticateOps(
 function bearerToken(header: string | null): string | null {
   const match = header?.match(/^Bearer (\S+)$/);
   return match ? (match[1] ?? null) : null;
-}
-
-/** Compares SHA-256 digests, so neither the length nor the contents of the secret leak through timing. */
-async function constantTimeEqual(a: string, b: string): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const [left, right] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(a)),
-    crypto.subtle.digest("SHA-256", encoder.encode(b)),
-  ]);
-  const x = new Uint8Array(left);
-  const y = new Uint8Array(right);
-  let difference = 0;
-  for (let i = 0; i < x.length; i++) {
-    difference |= (x[i] ?? 0) ^ (y[i] ?? 0);
-  }
-  return difference === 0;
 }

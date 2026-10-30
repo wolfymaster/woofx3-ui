@@ -6,6 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineGatewaySession } from "./lib/engineInstanceUrl";
 import { previewEngineRegistrationToken } from "./lib/previewEngine";
+import { registrationFailureMessage } from "./lib/registrationError";
 import { logger } from "./logger";
 
 /**
@@ -86,7 +87,7 @@ export async function performRegistration(
 
     return { ok: true, clientId: result.clientId };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = registrationFailureMessage(err);
     logger.error("registration: handshake failed", { instanceId, error: message });
     return { ok: false, error: message };
   }

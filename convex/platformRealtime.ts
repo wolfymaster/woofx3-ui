@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { openPlatformLinkTokens, platformTokenCipher, sealPlatformLinkTokens } from "./lib/platformLinkTokens";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { isRevokedRefreshResponse, refreshOutcomeApplies } from "./lib/twitchRefresh";
 
@@ -27,8 +28,8 @@ export const checkMembership = internalQuery({
   },
 });
 
-// Internal-only: returns the raw token row. Never exposed to a public query —
-// only `ensureFreshTwitchToken` (also internal) reads it.
+// Internal-only: returns the row with its sealed tokens, for actions that
+// open them through lib/platformLinkTokens.ts. Never exposed to a public query.
 export const getTwitchLink = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
@@ -43,24 +44,29 @@ export const getTwitchLink = internalQuery({
 export const patchTwitchToken = internalMutation({
   args: {
     linkId: v.id("platformLinks"),
-    usedRefreshToken: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
+    usedStoredRefreshToken: v.string(),
+    sealedAccessToken: v.string(),
+    sealedRefreshToken: v.string(),
     expiresAt: v.number(),
   },
-  handler: async (ctx, { linkId, usedRefreshToken, ...patch }): Promise<boolean> => {
-    if (!refreshOutcomeApplies(await ctx.db.get(linkId), usedRefreshToken)) {
+  handler: async (
+    ctx,
+    { linkId, usedStoredRefreshToken, sealedAccessToken, sealedRefreshToken, expiresAt }
+  ): Promise<boolean> => {
+    const row = await ctx.db.get(linkId);
+    if (!refreshOutcomeApplies(row?.sealedRefreshToken ?? null, usedStoredRefreshToken)) {
       return false;
     }
-    await ctx.db.patch(linkId, { ...patch, authFailedAt: undefined });
+    await ctx.db.patch(linkId, { sealedAccessToken, sealedRefreshToken, expiresAt, authFailedAt: undefined });
     return true;
   },
 });
 
 export const markTwitchAuthFailed = internalMutation({
-  args: { linkId: v.id("platformLinks"), usedRefreshToken: v.string() },
-  handler: async (ctx, { linkId, usedRefreshToken }) => {
-    if (!refreshOutcomeApplies(await ctx.db.get(linkId), usedRefreshToken)) {
+  args: { linkId: v.id("platformLinks"), usedStoredRefreshToken: v.string() },
+  handler: async (ctx, { linkId, usedStoredRefreshToken }) => {
+    const row = await ctx.db.get(linkId);
+    if (!refreshOutcomeApplies(row?.sealedRefreshToken ?? null, usedStoredRefreshToken)) {
       return;
     }
     await ctx.db.patch(linkId, { authFailedAt: Date.now() });
@@ -97,9 +103,12 @@ export interface FreshTwitchToken {
  * Twitch call, which is all of them while the token is still fresh.
  */
 export async function freshTwitchToken(ctx: ActionCtx, link: Doc<"platformLinks">): Promise<FreshTwitchToken> {
+  const cipher = await platformTokenCipher();
+  const tokens = await openPlatformLinkTokens(cipher, link);
   if (link.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
-    return { accessToken: link.accessToken, broadcasterUserId: link.platformUserId, expiresAt: link.expiresAt };
+    return { accessToken: tokens.accessToken, broadcasterUserId: link.platformUserId, expiresAt: link.expiresAt };
   }
+  const usedStoredRefreshToken = link.sealedRefreshToken;
 
   const clientId = process.env.AUTH_TWITCH_ID;
   const clientSecret = process.env.AUTH_TWITCH_SECRET;
@@ -112,7 +121,7 @@ export async function freshTwitchToken(ctx: ActionCtx, link: Doc<"platformLinks"
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: link.refreshToken,
+      refresh_token: tokens.refreshToken,
       client_id: clientId,
       client_secret: clientSecret,
     }),
@@ -123,7 +132,7 @@ export async function freshTwitchToken(ctx: ActionCtx, link: Doc<"platformLinks"
     if (isRevokedRefreshResponse(response.status, body)) {
       await ctx.runMutation(internal.platformRealtime.markTwitchAuthFailed, {
         linkId: link._id,
-        usedRefreshToken: link.refreshToken,
+        usedStoredRefreshToken,
       });
     }
     throw new Error(`Twitch token refresh failed: ${response.status} ${body}`);
@@ -136,9 +145,8 @@ export async function freshTwitchToken(ctx: ActionCtx, link: Doc<"platformLinks"
   const expiresAt = Date.now() + data.expires_in * 1000;
   await ctx.runMutation(internal.platformRealtime.patchTwitchToken, {
     linkId: link._id,
-    usedRefreshToken: link.refreshToken,
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
+    usedStoredRefreshToken,
+    ...(await sealPlatformLinkTokens(cipher, { accessToken: data.access_token, refreshToken: data.refresh_token })),
     expiresAt,
   });
 

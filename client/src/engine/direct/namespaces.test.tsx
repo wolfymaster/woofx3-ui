@@ -682,14 +682,7 @@ describe("workflows", () => {
     const result = await trigger({ workflowNameOrId: "w-1", options: { dryRun: true } });
     const [name, , , triggerId, origin, options] = state.callsOf("triggerWorkflowByName")[0];
     expect([name, triggerId, origin, options]).toEqual(["w-1", result.triggerId, "dashboard", { dryRun: true }]);
-    expect(result).toMatchObject({ status: "started", executionId: "exec-w-1", dryRun: true, optionsIgnored: false });
-  });
-
-  test("the options probe names a workflow nobody has, and an engine that cannot find it takes no options", async () => {
-    const { runtime, state } = await connected();
-    const probe = renderDirect(() => directWorkflowsGateway(runtime).useTestRunCapabilitiesRequest()).current();
-    expect(await probe()).toEqual({ options: "unsupported" });
-    expect(state.workflows).toEqual([]);
+    expect(result).toMatchObject({ status: "started", executionId: "exec-w-1", dryRun: true });
   });
 
   test("a workflow's run history is newest first, its limit clamped into the engine's range", async () => {

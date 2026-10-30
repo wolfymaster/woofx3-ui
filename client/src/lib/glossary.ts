@@ -1,3 +1,5 @@
+import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
+
 // One explanation per term, so a term reads the same in every HelpTip and on
 // the Learning page. Written for a streamer, not a developer: say what the
 // thing does for their stream, not how it is built.
@@ -49,14 +51,14 @@ const ENTRIES = {
     category: "setup",
     definition:
       "An add-on that gives woofx3 new triggers, actions and widgets. Install modules from the marketplace; platforms like Twitch and OBS are modules too.",
-    href: "/modules",
+    href: MARKETPLACE_PATH,
   },
   platform: {
     term: "Platform",
     category: "setup",
     definition:
       "An outside service woofx3 connects to, such as Twitch, OBS or Spotify. Each platform is a module that you install and then connect to your account.",
-    href: "/modules",
+    href: MARKETPLACE_PATH,
   },
   scene: {
     term: "Scene",
