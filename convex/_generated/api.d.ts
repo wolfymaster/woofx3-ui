@@ -109,7 +109,6 @@ import type * as lib_invitationTarget from "../lib/invitationTarget.js";
 import type * as lib_knownDiscoverers from "../lib/knownDiscoverers.js";
 import type * as lib_macroExecution from "../lib/macroExecution.js";
 import type * as lib_macroTrigger from "../lib/macroTrigger.js";
-import type * as lib_macroVariables from "../lib/macroVariables.js";
 import type * as lib_maintenanceClient from "../lib/maintenanceClient.js";
 import type * as lib_maintenanceSignature from "../lib/maintenanceSignature.js";
 import type * as lib_maintenanceUpgrade from "../lib/maintenanceUpgrade.js";
@@ -399,7 +398,6 @@ declare const fullApi: ApiFromModules<{
   "lib/knownDiscoverers": typeof lib_knownDiscoverers;
   "lib/macroExecution": typeof lib_macroExecution;
   "lib/macroTrigger": typeof lib_macroTrigger;
-  "lib/macroVariables": typeof lib_macroVariables;
   "lib/maintenanceClient": typeof lib_maintenanceClient;
   "lib/maintenanceSignature": typeof lib_maintenanceSignature;
   "lib/maintenanceUpgrade": typeof lib_maintenanceUpgrade;
