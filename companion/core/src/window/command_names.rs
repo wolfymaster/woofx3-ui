@@ -41,7 +41,9 @@ macro_rules! with_command_names {
             remove_shoutout(RemoveShoutoutArgs) -> (),
             reorder_shoutouts(ReorderShoutoutsArgs) -> (),
             stream_start_marker(()) -> StreamStartMarker,
-            request_stream_start_marker(()) -> MarkerRequestOutcome
+            request_stream_start_marker(()) -> MarkerRequestOutcome,
+            host_mode(()) -> HostModeView,
+            choose_host_mode(ChooseHostModeArgs) -> ()
         }
     };
 }

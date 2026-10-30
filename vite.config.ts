@@ -48,6 +48,11 @@ export default defineConfig(async ({ mode }) => {
         { find: /^@\/(.*)$/, replacement: path.resolve(import.meta.dirname, "client", "src") + "/$1" },
         { find: /^@assets\/(.*)$/, replacement: path.resolve(import.meta.dirname, "attached_assets") + "/$1" },
         { find: /^@convex\/(.*)$/, replacement: path.resolve(import.meta.dirname, "convex") + "/$1" },
+        // The desktop app's window types, generated from its Rust host.
+        {
+          find: /^@desktop-host\/(.*)$/,
+          replacement: path.resolve(import.meta.dirname, "companion", "ui", "src", "generated") + "/$1.ts",
+        },
         { find: /^@shared\/(.*)$/, replacement: path.resolve(import.meta.dirname, "shared") + "/$1" },
         // `@woofx3/api` → index.ts; `@woofx3/api/<sub>` → <sub>.ts
         {

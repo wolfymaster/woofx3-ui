@@ -33,8 +33,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use woofx3_companion_core::host::{
-    HostMode, LocalEngineSettings, MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView,
-    StreamStartMarker, HOST_CONFIG_FILE,
+    choose_host_mode as write_host_mode, HostConfig, HostMode, HostModeKind, LocalEngineSettings,
+    MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView, StreamStartMarker, HOST_CONFIG_FILE,
 };
 
 use cloud::CloudLink;
@@ -43,10 +43,10 @@ use integrations::Integrations;
 use tray::Tray;
 use update::Downloaded;
 use woofx3_companion_core::window::{
-    CompanionState, ConfirmAddressArgs, EnqueueShoutoutArgs, IntegrationsView, LocalEngineSession,
-    ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs,
-    SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs, WindowState,
-    STATE_EVENT,
+    ChooseHostModeArgs, CompanionState, ConfirmAddressArgs, EnqueueShoutoutArgs, HostModeView,
+    IntegrationsView, LocalEngineSession, ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs,
+    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs,
+    WindowState, STATE_EVENT,
 };
 
 /// Shared by the commands, the tray and the running flow.
@@ -54,6 +54,10 @@ pub struct Companion {
     app: AppHandle,
     cloud_link: CloudLink,
     engine: LocalEngine,
+    /// The mode this run started in, and whether the streamer chose it.
+    host: HostModeView,
+    /// Where the mode is chosen; written once, by `choose_host_mode`.
+    host_config_path: std::path::PathBuf,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
     integrations: Arc<Integrations>,
@@ -427,6 +431,27 @@ async fn request_stream_start_marker(
     companion.engine.request_stream_start_marker().await
 }
 
+/// The mode this run started in, and whether the streamer chose it.
+#[tauri::command]
+async fn host_mode(companion: State<'_, Arc<Companion>>) -> Result<HostModeView, String> {
+    Ok(companion.host.clone())
+}
+
+/// Records the streamer's first choice of mode and restarts into it. The
+/// engine is stopped first: a restart skips the exit hook that otherwise
+/// stops it, and the next run may not start one at all. Refused once a mode
+/// is chosen, so hand-written settings are never replaced.
+#[tauri::command]
+async fn choose_host_mode(
+    companion: State<'_, Arc<Companion>>,
+    args: ChooseHostModeArgs,
+) -> Result<(), String> {
+    write_host_mode(&companion.host_config_path, args.mode).map_err(|err| format!("{err:#}"))?;
+    companion.engine.stop().await;
+    companion.app.request_restart();
+    Ok(())
+}
+
 /// Connects to the relay again after another connection displaced this one
 /// or woofx3 refused a credential.
 #[tauri::command]
@@ -493,8 +518,12 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let app_data_dir = app.path().app_data_dir()?;
-            let engine = match start_local_engine(app) {
-                Ok(engine) => engine,
+            let started = load_host_config(app).and_then(|(path, config)| {
+                let engine = start_local_engine(app, &config)?;
+                Ok((path, config, engine))
+            });
+            let (host_config_path, host_config, engine) = match started {
+                Ok(started) => started,
                 Err(err) => {
                     startup_failure::report(
                         app.path().app_log_dir().ok().as_deref(),
@@ -513,6 +542,11 @@ pub fn run() {
                 app: handle.clone(),
                 cloud_link: CloudLink::dormant(),
                 engine,
+                host: HostModeView {
+                    mode: HostModeKind::of(&host_config.mode),
+                    chosen: host_config.chosen,
+                },
+                host_config_path,
                 installation_id,
                 integrations,
                 view: Mutex::new(WindowState {
@@ -564,17 +598,23 @@ pub fn run() {
 /// The local engine the host configuration asks for, started. An invalid
 /// configuration, or a release with no orchestrator, is an error the caller
 /// shows before exiting.
-fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
-    let config = app.path().app_config_dir()?.join(HOST_CONFIG_FILE);
-    match HostMode::load(&config, default_host_mode())? {
+fn start_local_engine(app: &tauri::App, config: &HostConfig) -> anyhow::Result<LocalEngine> {
+    match &config.mode {
         HostMode::Companion => Ok(LocalEngine::Off),
         HostMode::Local(settings) => Ok(LocalEngine::start(
-            &settings,
+            settings,
             &app.path().resource_dir()?,
             &app.path().app_local_data_dir()?,
             Arc::new(app.handle().clone()),
         )?),
     }
+}
+
+/// The host configuration file's path, and what it chooses.
+fn load_host_config(app: &tauri::App) -> anyhow::Result<(std::path::PathBuf, HostConfig)> {
+    let path = app.path().app_config_dir()?.join(HOST_CONFIG_FILE);
+    let config = HostConfig::load(&path, default_host_mode())?;
+    Ok((path, config))
 }
 
 /// The mode without a host configuration file: a build that bundles an engine
@@ -609,29 +649,54 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
 
 #[cfg(test)]
 mod tests {
-    use woofx3_companion_core::window::COMMAND_NAMES;
+    use woofx3_companion_core::window::{COMMAND_NAMES, DASHBOARD_COMMAND_NAMES};
 
     use super::convex_url::check_convex_url;
 
-    #[test]
-    fn test_capabilities_grant_exactly_the_declared_commands() {
-        let capability: serde_json::Value =
-            serde_json::from_str(include_str!("../capabilities/companion.json"))
-                .expect("valid JSON");
-        let granted: Vec<&str> = capability["permissions"]
+    /// The `allow-` permissions a capability file grants, and its windows.
+    fn granted(capability: &str) -> (Vec<String>, serde_json::Value) {
+        let capability: serde_json::Value = serde_json::from_str(capability).expect("valid JSON");
+        let permissions = capability["permissions"]
             .as_array()
             .expect("a permission list")
             .iter()
             .map(|permission| permission.as_str().expect("a permission id"))
             .filter(|permission| permission.starts_with("allow-"))
+            .map(str::to_string)
             .collect();
-        let declared: Vec<String> = COMMAND_NAMES
+        (permissions, capability["windows"].clone())
+    }
+
+    fn permission(name: &str) -> String {
+        format!("allow-{}", name.replace('_', "-"))
+    }
+
+    #[test]
+    fn test_capabilities_split_the_declared_commands_between_the_windows() {
+        let (dashboard, dashboard_windows) =
+            granted(include_str!("../capabilities/dashboard.json"));
+        let (companion, companion_windows) =
+            granted(include_str!("../capabilities/companion.json"));
+        assert!(DASHBOARD_COMMAND_NAMES
             .iter()
-            .map(|name| format!("allow-{}", name.replace('_', "-")))
+            .all(|name| COMMAND_NAMES.contains(name)));
+        let expected_dashboard: Vec<String> = DASHBOARD_COMMAND_NAMES
+            .iter()
+            .map(|name| permission(name))
             .collect();
-        assert_eq!(granted, declared);
+        let expected_companion: Vec<String> = COMMAND_NAMES
+            .iter()
+            .filter(|name| !DASHBOARD_COMMAND_NAMES.contains(name))
+            .map(|name| permission(name))
+            .collect();
+        assert_eq!(dashboard, expected_dashboard);
+        assert_eq!(companion, expected_companion);
         assert_eq!(
-            capability["windows"],
+            dashboard_windows,
+            serde_json::json!([super::DASHBOARD_WINDOW])
+        );
+        assert_eq!(
+            companion_windows,
             serde_json::json!([super::COMPANION_WINDOW])
         );
     }

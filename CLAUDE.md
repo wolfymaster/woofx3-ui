@@ -192,6 +192,7 @@ kernel browsers delete <id-or-name>                                     # always
 @shared/     → shared/
 @convex/     → convex/
 @assets/     → attached_assets/
+@desktop-host/*  → companion/ui/src/generated/*  (the desktop app's window types, generated from its Rust host)
 @woofx3/api  → ../woofx3/shared/clients/typescript/api/api.ts
 @woofx3/scene/*  → ../woofx3/shared/clients/typescript/scene/*/index.ts  (model, editor)
 @woofx3/cloudevents/*  → ../woofx3/shared/common/typescript/cloudevents/*  (tsconfig.json only; tests)
