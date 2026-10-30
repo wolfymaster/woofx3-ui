@@ -69,6 +69,8 @@ In the desktop build `client/src/main.tsx` starts at `client/src/desktop/Desktop
 
 Local mode has no Convex client, so it serves only pages that reach the engine through its gateway: `client/src/desktop/local-routes.tsx` lists them, and `local-routes.test.ts` walks every import from `LocalApp.tsx` and fails on any that reaches Convex (its client or hooks, the generated API, `useInstance`, or the hosted gateway). `LocalShell.tsx` frames them with the app's sections cut down to those pages (`navItemsServed`), and a status bar fed by the engine alone. A path local mode does not serve leads to its home, the alerts page. A page joins local mode once nothing it loads reaches Convex.
 
+The dashboard's own data that Convex keeps per user or instance, such as which page intros were closed, local mode keeps in the engine's local UI settings (`client/src/engine/direct/ui-settings.ts`): one namespace per kind of data, read whole, cached, and refreshed by `ui.setting.changed`. The name an editor shows to others editing the same scene comes from the app root (`ViewerNameProvider`): the account's name when signed in, "This computer" in local mode.
+
 ## Integrations
 
 A module that controls something on the streamer's network declares it in `local[]` (an endpoint with a protocol, the settings holding its host, port and password, and optionally how to discover it). The Integrations tab is generated from those entries for the modules installed on the companion's instance; nothing in it is written per integration. The Rust side (`companion/src-tauri/src/integrations.rs`) runs while the pairing is paired and confirmed, and stops with it.
