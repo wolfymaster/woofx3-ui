@@ -203,7 +203,6 @@ export class FakeEngineState {
   /** Stored settings by manifest id; the manifests come from `modules`. */
   moduleSettings: Record<string, ModuleSetting[]> = {};
   moduleFiles: Record<string, ModuleFileList> = {};
-  twitchLink: TwitchLinkInfo = { linked: false, revision: 0 };
   /** What `startTwitchDeviceLogin` answers. */
   deviceLoginStart: TwitchDeviceLoginStartResult = {
     ok: true,
@@ -218,6 +217,7 @@ export class FakeEngineState {
   deviceLogins: Record<string, TwitchDeviceLoginState> = {};
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
+  twitchLink: TwitchLinkInfo = { linked: false, revision: 1 };
   /** What each Twitch method answers, given its arguments; no answer configured fails the call. */
   twitchAnswer: (method: TwitchFakeMethod, params: unknown) => TwitchHelixResult = (method) => ({
     ok: false,
@@ -609,11 +609,6 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return { requested: true };
   }
 
-  async getTwitchLink(): Promise<TwitchLinkInfo> {
-    this.state.record("getTwitchLink");
-    return this.state.twitchLink;
-  }
-
   async deleteTwitchToken(): Promise<{ ok: true }> {
     this.state.record("deleteTwitchToken");
     this.state.twitchLink = { linked: false, revision: this.state.twitchLink.revision + 1 };
@@ -675,6 +670,11 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   ): Promise<{ dispatched: boolean }> {
     this.state.record("dispatchFieldOptionsRequest", reference, correlationKey);
     return { dispatched: true };
+  }
+
+  async getTwitchLink(): Promise<TwitchLinkInfo> {
+    this.state.record("getTwitchLink");
+    return this.state.twitchLink;
   }
 
   private twitch(method: TwitchFakeMethod, params?: unknown): TwitchHelixResult {

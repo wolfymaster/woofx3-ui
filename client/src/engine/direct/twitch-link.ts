@@ -1,12 +1,12 @@
 import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { useEffect, useState } from "react";
 import type { TwitchLinkGateway } from "@/engine/gateway";
-import type { TwitchLink, TwitchLinkFlow, TwitchLinking } from "@/engine/types";
+import type { TwitchLinkFlow, TwitchLinking } from "@/engine/types";
 import type { Cancel } from "@/lib/engine-session/deps";
-import { directKeys as k } from "./keys";
 import { type DeviceLinkingEvent, IDLE_LINKING, nextDeviceLinking, toTwitchLink } from "./map/twitch-link";
-import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
+import { useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
+import { directTwitch } from "./twitch";
 
 // The engine links Twitch itself with Twitch's device code grant: it starts
 // the login and polls Twitch, and the screen shows the streamer the code and
@@ -14,13 +14,6 @@ import type { DirectRuntime } from "./runtime";
 
 const UPDATE_ENGINE_MESSAGE = "This engine can't link Twitch. Update the engine to link it.";
 const NOT_CONFIGURED_MESSAGE = "This engine has no Twitch app to link with.";
-
-function linkRead(runtime: DirectRuntime): EngineRead<TwitchLink | null> {
-  return {
-    queryKey: k.twitchLink.link(),
-    queryFn: async () => toTwitchLink(await runtime.call("getTwitchLink", (api) => api.getTwitchLink())),
-  };
-}
 
 /**
  * Follows one screen's device login attempts: starts the engine's login,
@@ -140,7 +133,8 @@ class DeviceLoginFollower {
 }
 
 export function directTwitchLinkGateway(runtime: DirectRuntime): TwitchLinkGateway {
-  const invalidateLink = () => runtime.queryClient.invalidateQueries({ queryKey: k.twitchLink.link() });
+  const twitch = directTwitch(runtime);
+  const invalidateLink = () => runtime.queryClient.invalidateQueries({ queryKey: twitch.linkRead.queryKey });
 
   const unlink = async (): Promise<void> => {
     await runtime.call("deleteTwitchToken", (api) => api.deleteTwitchToken());
@@ -162,7 +156,7 @@ export function directTwitchLinkGateway(runtime: DirectRuntime): TwitchLinkGatew
   }
 
   return {
-    useLink: () => useEngineQuery(runtime, linkRead(runtime)),
+    useLink: () => useEngineQuery(runtime, twitch.linkRead, { select: toTwitchLink }),
     useLinkFlow,
     useUnlinkRequest: () => useEngineRequest(unlink),
   };
