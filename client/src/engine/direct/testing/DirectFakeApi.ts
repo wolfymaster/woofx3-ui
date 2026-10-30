@@ -97,7 +97,9 @@ type DirectFakeSurface = Pick<
   | "getAvailableWidgets"
   | "listWidgetThemes"
   | "listUISettings"
+  | "getUISetting"
   | "setUISetting"
+  | "deleteUISetting"
   | "listEngineModules"
   | "getWorkflows"
   | "getWorkflow"
@@ -184,9 +186,15 @@ export class FakeEngineState {
   overlayTokens: OverlayToken[] = [];
   scenes: SceneSnapshot[] = [];
   widgets: AvailableWidget[] = [];
-  /** Live UI settings by namespace, then key. */
+  /** UI settings by namespace, then key, tombstones (`deleted`) included. */
   uiSettings: Record<string, Record<string, UISetting>> = {};
   uiSettingRevision = 0;
+  /**
+   * Runs before a set or delete checks its expected revision, as another
+   * writer landing first would: a test changes `uiSettings` here to make the
+   * write conflict.
+   */
+  beforeUISettingWrite: ((namespace: string, key: string) => void) | null = null;
   /** Themes by widget canonical id; a widget not here is refused. */
   widgetThemes: Record<string, WidgetThemes["themes"]> = {};
   modules: EngineModuleSummary[] = [];
@@ -414,11 +422,53 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
 
   async listUISettings(namespace: string): Promise<UISetting[]> {
     this.state.record("listUISettings", namespace);
-    return Object.values(this.state.uiSettings[namespace] ?? {});
+    return Object.values(this.state.uiSettings[namespace] ?? {}).filter((setting) => !setting.deleted);
   }
 
-  async setUISetting(namespace: string, key: string, value: UISettingValue): Promise<UISettingWriteResult> {
-    this.state.record("setUISetting", namespace, key, value);
+  async getUISetting(namespace: string, key: string): Promise<UISetting | null> {
+    this.state.record("getUISetting", namespace, key);
+    const setting = this.state.uiSettings[namespace]?.[key];
+    return setting && !setting.deleted ? setting : null;
+  }
+
+  async setUISetting(
+    namespace: string,
+    key: string,
+    value: UISettingValue,
+    expectedRevision?: number
+  ): Promise<UISettingWriteResult> {
+    this.state.record(
+      "setUISetting",
+      namespace,
+      key,
+      value,
+      ...(expectedRevision === undefined ? [] : [expectedRevision])
+    );
+    return this.writeUISetting(namespace, key, value, false, expectedRevision);
+  }
+
+  async deleteUISetting(namespace: string, key: string, expectedRevision?: number): Promise<UISettingWriteResult> {
+    this.state.record("deleteUISetting", namespace, key, ...(expectedRevision === undefined ? [] : [expectedRevision]));
+    return this.writeUISetting(namespace, key, null, true, expectedRevision);
+  }
+
+  /** The engine's check and write: 0 expects no live value, any other revision the stored one. */
+  private writeUISetting(
+    namespace: string,
+    key: string,
+    value: UISettingValue,
+    deleted: boolean,
+    expectedRevision: number | undefined
+  ): UISettingWriteResult {
+    this.state.beforeUISettingWrite?.(namespace, key);
+    const stored = this.state.uiSettings[namespace]?.[key] ?? null;
+    if (expectedRevision !== undefined) {
+      const matches =
+        expectedRevision === 0 ? stored === null || stored.deleted : stored?.revision === expectedRevision;
+      if (!matches) {
+        return { ok: false, reason: "conflict", current: stored };
+      }
+    }
     this.state.uiSettingRevision += 1;
     const setting: UISetting = {
       namespace,
@@ -426,7 +476,7 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
       value,
       revision: this.state.uiSettingRevision,
       updatedAt: "2026-10-30T10:00:00Z",
-      deleted: false,
+      deleted,
     };
     this.state.uiSettings[namespace] = { ...(this.state.uiSettings[namespace] ?? {}), [key]: setting };
     return { ok: true, setting };
