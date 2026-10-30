@@ -110,7 +110,8 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.GROUP_MEMBER_ADDED]: (event) => [k.commands.members(event.groupId)],
   [EngineEventType.GROUP_MEMBER_REMOVED]: (event) => [k.commands.members(event.groupId)],
   [EngineEventType.UI_SETTING_CHANGED]: NONE,
-  [EngineEventType.TWITCH_LINK_CHANGED]: () => [k.twitchLink.link()],
+  // Two reads of the link, each with its own shape: the Twitch namespaces' raw one and twitchLink's mapped one.
+  [EngineEventType.TWITCH_LINK_CHANGED]: () => [k.twitch.link(), k.twitchLink.link()],
 };
 
 /**

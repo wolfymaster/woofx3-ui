@@ -1,7 +1,9 @@
+import { normalizeTwitchLogin, type TwitchUser } from "./twitch-users";
+
 // Pure rules for the Moderation dashboard widget: what Twitch will accept, who
 // in the instance may do what, and how a Helix refusal reads to a streamer.
-// Shared by the Convex actions (which enforce) and the widget (which disables
-// and explains), so the two cannot disagree about a limit.
+// Shared by the gateways (which enforce) and the widget (which disables and
+// explains), so they cannot disagree about a limit.
 
 export type InstanceRole = "owner" | "admin" | "member";
 
@@ -349,3 +351,107 @@ export function describeModerationError(operation: ModerationOperation, status: 
   const label = OPERATION_LABELS[operation];
   return message ? `${label} failed: ${message}` : `${label} failed (Twitch ${status}).`;
 }
+
+/**
+ * A Helix moderation answer's body: null for a 204. A refusal throws the
+ * sentence `describeModerationError` makes of it.
+ */
+export async function readModerationAnswer(operation: ModerationOperation, response: Response): Promise<unknown> {
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(describeModerationError(operation, response.status, helixErrorMessage(text)));
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  return response.json();
+}
+
+// ---------------------------------------------------------------------------
+// Blocked terms
+// ---------------------------------------------------------------------------
+
+export const BLOCKED_TERMS_PAGE_SIZE = 100;
+/** A bound on the pagination loop. A channel past this many terms sees the first 2000. */
+export const BLOCKED_TERMS_MAX_PAGES = 20;
+
+export interface BlockedTerm {
+  id: string;
+  text: string;
+  createdAt: string | null;
+  expiresAt: string | null;
+}
+
+interface HelixBlockedTermsPage {
+  data?: Array<{ id: string; text: string; created_at?: string | null; expires_at?: string | null }>;
+  pagination?: { cursor?: string };
+}
+
+function blockedTermsFromHelix(body: unknown): BlockedTerm[] {
+  return ((body as HelixBlockedTermsPage | null)?.data ?? []).map((term) => ({
+    id: term.id,
+    text: term.text,
+    createdAt: term.created_at ?? null,
+    expiresAt: term.expires_at ?? null,
+  }));
+}
+
+/**
+ * Every blocked term, page by page, up to `BLOCKED_TERMS_MAX_PAGES`.
+ * `readPage` answers one Get Blocked Terms page after `cursor`.
+ */
+export async function collectBlockedTerms(
+  readPage: (cursor: string | undefined) => Promise<unknown>
+): Promise<{ terms: BlockedTerm[]; truncated: boolean }> {
+  const terms: BlockedTerm[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < BLOCKED_TERMS_MAX_PAGES; page++) {
+    const body = await readPage(cursor);
+    terms.push(...blockedTermsFromHelix(body));
+    cursor = (body as HelixBlockedTermsPage | null)?.pagination?.cursor || undefined;
+    if (!cursor) {
+      return { terms, truncated: false };
+    }
+  }
+  return { terms, truncated: true };
+}
+
+/** The term an Add Blocked Term answer holds, or null when it holds none. */
+export function addedBlockedTerm(body: unknown): BlockedTerm | null {
+  return blockedTermsFromHelix(body)[0] ?? null;
+}
+
+export const ADDED_TERM_MISSING_MESSAGE = "Twitch accepted the term but returned nothing";
+
+export const NO_BLOCKED_TERM_MESSAGE = "No blocked term to remove";
+
+// ---------------------------------------------------------------------------
+// Timeouts and bans
+// ---------------------------------------------------------------------------
+
+/**
+ * The viewer a typed login names, refused before any Helix write when it is
+ * not a login, names nobody, or names the broadcaster. `lookup` answers the
+ * user a normalized login names.
+ */
+export async function resolveModerationTarget(
+  input: string,
+  broadcasterUserId: string,
+  lookup: (login: string) => Promise<TwitchUser | null>
+): Promise<TwitchUser> {
+  const login = normalizeTwitchLogin(input);
+  if (!login) {
+    throw new Error(`"${input.trim()}" is not a Twitch username`);
+  }
+  const user = await lookup(login);
+  if (!user) {
+    throw new Error(`No Twitch user called "${login}"`);
+  }
+  if (user.twitchUserId === broadcasterUserId) {
+    throw new Error("You can't moderate your own account");
+  }
+  return user;
+}
+
+export const CHAT_SETTINGS_MISSING_MESSAGE = "Twitch returned no chat settings for this channel";
+export const CHAT_SETTINGS_UPDATE_MISSING_MESSAGE = "Twitch changed chat settings but returned none";

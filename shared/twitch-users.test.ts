@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canReadChannelRole, normalizeTwitchLogin, twitchUserFromHelix } from "./twitchUsers";
+import { canReadChannelRole, normalizeTwitchLogin, twitchUserFromHelix } from "./twitch-users";
 
 describe("normalizeTwitchLogin", () => {
   test("strips a leading @ and lowercases", () => {

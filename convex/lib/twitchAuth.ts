@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { TWITCH_NOT_CONNECTED_MESSAGE, twitchLinkRefusal } from "@shared/twitch-link-refusal";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -7,9 +8,10 @@ import { freshTwitchToken } from "../platformRealtime";
 import { getInstanceMembership } from "./teamAccess";
 
 // Shared authorization for Convex actions that call Twitch Helix on the
-// broadcaster's behalf. One copy deliberately: the scope check below is the
-// only thing that turns a silent 401 into something actionable, and a second
-// copy is how that protection drifts out of sync.
+// broadcaster's behalf. One copy deliberately: the scope check is the only
+// thing that turns a silent 401 into something actionable, and a second copy
+// is how that protection drifts out of sync. Its rule is `twitchLinkRefusal`,
+// which the direct gateway applies to the engine's link the same way.
 
 export interface AuthorizedTwitchCall {
   accessToken: string;
@@ -52,10 +54,7 @@ export const twitchAuthContext = internalQuery({
 
 /**
  * Authenticates the caller, confirms the instance's Twitch link carries the
- * scope this call needs, and returns a fresh token. The scope check is what
- * turns "Twitch silently 401s" into an actionable "reconnect Twitch" message:
- * a link created before a scope was added to TWITCH_INTEGRATION_SCOPES keeps
- * working for everything else, so the gap is invisible until it isn't.
+ * scope this call needs, and returns a fresh token.
  */
 export async function authorizeTwitch(
   ctx: ActionCtx,
@@ -77,10 +76,6 @@ export async function authorizeTwitchUnscoped(
   instanceId: Id<"instances">
 ): Promise<AuthorizedTwitchCall> {
   return credentialsFromLink(ctx, await linkForCaller(ctx, instanceId));
-}
-
-export function missingTwitchScopeMessage(scope: string): string {
-  return `Your Twitch connection is missing the "${scope}" permission. Reconnect Twitch in Settings → Integrations to grant it.`;
 }
 
 /**
@@ -123,14 +118,15 @@ async function linkForCaller(ctx: ActionCtx, instanceId: Id<"instances">): Promi
 }
 
 function assertScope(link: Doc<"platformLinks"> | null, requiredScope: string): void {
-  if (!(link?.scopes ?? []).includes(requiredScope)) {
-    throw new Error(missingTwitchScopeMessage(requiredScope));
+  const refusal = twitchLinkRefusal(link, requiredScope);
+  if (refusal !== null) {
+    throw new Error(refusal);
   }
 }
 
 async function credentialsFromLink(ctx: ActionCtx, link: Doc<"platformLinks"> | null): Promise<AuthorizedTwitchCall> {
   if (!link) {
-    throw new Error("Twitch is not connected for this instance");
+    throw new Error(TWITCH_NOT_CONNECTED_MESSAGE);
   }
 
   const clientId = process.env.AUTH_TWITCH_ID;

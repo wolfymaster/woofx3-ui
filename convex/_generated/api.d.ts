@@ -56,7 +56,6 @@ import type * as instanceLiveState from "../instanceLiveState.js";
 import type * as instances from "../instances.js";
 import type * as integrationCredentials from "../integrationCredentials.js";
 import type * as invitations from "../invitations.js";
-import type * as lib_adBreaks from "../lib/adBreaks.js";
 import type * as lib_alertQueueResults from "../lib/alertQueueResults.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
 import type * as lib_commandWorkflow from "../lib/commandWorkflow.js";
@@ -126,7 +125,6 @@ import type * as lib_marketplaceEntitlement from "../lib/marketplaceEntitlement.
 import type * as lib_marketplaceImages from "../lib/marketplaceImages.js";
 import type * as lib_marketplaceInstallIdentity from "../lib/marketplaceInstallIdentity.js";
 import type * as lib_marketplaceInstallRecords from "../lib/marketplaceInstallRecords.js";
-import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_moduleArchiveFiles from "../lib/moduleArchiveFiles.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
@@ -176,7 +174,6 @@ import type * as lib_shoutoutEngineRequest from "../lib/shoutoutEngineRequest.js
 import type * as lib_shoutoutSchedule from "../lib/shoutoutSchedule.js";
 import type * as lib_starterPackLedger from "../lib/starterPackLedger.js";
 import type * as lib_starterPacks from "../lib/starterPacks.js";
-import type * as lib_streamInfo from "../lib/streamInfo.js";
 import type * as lib_teamAccess from "../lib/teamAccess.js";
 import type * as lib_twitchAuth from "../lib/twitchAuth.js";
 import type * as lib_twitchChannels from "../lib/twitchChannels.js";
@@ -184,7 +181,6 @@ import type * as lib_twitchChat from "../lib/twitchChat.js";
 import type * as lib_twitchEngineHelix from "../lib/twitchEngineHelix.js";
 import type * as lib_twitchIntegrationScopes from "../lib/twitchIntegrationScopes.js";
 import type * as lib_twitchLinkPolicy from "../lib/twitchLinkPolicy.js";
-import type * as lib_twitchPins from "../lib/twitchPins.js";
 import type * as lib_twitchRefresh from "../lib/twitchRefresh.js";
 import type * as lib_twitchScopeHealth from "../lib/twitchScopeHealth.js";
 import type * as lib_twitchTokenGrant from "../lib/twitchTokenGrant.js";
@@ -331,7 +327,6 @@ declare const fullApi: ApiFromModules<{
   instances: typeof instances;
   integrationCredentials: typeof integrationCredentials;
   invitations: typeof invitations;
-  "lib/adBreaks": typeof lib_adBreaks;
   "lib/alertQueueResults": typeof lib_alertQueueResults;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
   "lib/commandWorkflow": typeof lib_commandWorkflow;
@@ -401,7 +396,6 @@ declare const fullApi: ApiFromModules<{
   "lib/marketplaceImages": typeof lib_marketplaceImages;
   "lib/marketplaceInstallIdentity": typeof lib_marketplaceInstallIdentity;
   "lib/marketplaceInstallRecords": typeof lib_marketplaceInstallRecords;
-  "lib/moderation": typeof lib_moderation;
   "lib/moduleArchiveFiles": typeof lib_moduleArchiveFiles;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
   "lib/moduleKey": typeof lib_moduleKey;
@@ -451,7 +445,6 @@ declare const fullApi: ApiFromModules<{
   "lib/shoutoutSchedule": typeof lib_shoutoutSchedule;
   "lib/starterPackLedger": typeof lib_starterPackLedger;
   "lib/starterPacks": typeof lib_starterPacks;
-  "lib/streamInfo": typeof lib_streamInfo;
   "lib/teamAccess": typeof lib_teamAccess;
   "lib/twitchAuth": typeof lib_twitchAuth;
   "lib/twitchChannels": typeof lib_twitchChannels;
@@ -459,7 +452,6 @@ declare const fullApi: ApiFromModules<{
   "lib/twitchEngineHelix": typeof lib_twitchEngineHelix;
   "lib/twitchIntegrationScopes": typeof lib_twitchIntegrationScopes;
   "lib/twitchLinkPolicy": typeof lib_twitchLinkPolicy;
-  "lib/twitchPins": typeof lib_twitchPins;
   "lib/twitchRefresh": typeof lib_twitchRefresh;
   "lib/twitchScopeHealth": typeof lib_twitchScopeHealth;
   "lib/twitchTokenGrant": typeof lib_twitchTokenGrant;

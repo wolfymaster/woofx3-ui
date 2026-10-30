@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { isUnconfirmedWrite } from "@shared/twitch-helix-answer";
 import type { TwitchHelixResult } from "@woofx3/api";
 import { type FunctionReference, getFunctionName } from "convex/server";
 import type { ActionCtx } from "../_generated/server";
@@ -11,7 +12,6 @@ import {
   directHelixRoute,
   type HelixRequest,
   helixResponse,
-  isUnconfirmedWrite,
   type TwitchHelixRoute,
   twitchHelixRoute,
 } from "./twitchEngineHelix";

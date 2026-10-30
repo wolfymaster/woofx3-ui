@@ -18,13 +18,14 @@ import {
   VIEWER_STREAM_SCAN,
   type ViewerStreamTotals,
 } from "@shared/supporters";
+import { normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalQuery, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
-import { fetchTwitchAppCredentials, fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
+import { fetchTwitchAppCredentials, fetchTwitchUser } from "./lib/twitchUsers";
 import { SHOUTOUT_SCOPE } from "./shoutouts";
 
 // Every function here reads per-viewer figures from the engine and hands them

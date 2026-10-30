@@ -1,3 +1,4 @@
+import { readHelixResult, type UnconfirmedReason, unconfirmedResponse } from "@shared/twitch-helix-answer";
 import type { TwitchHelixResult } from "@woofx3/api";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -103,25 +104,6 @@ export interface HelixRequest {
 }
 
 /**
- * The status a write reports when Twitch may or may not have applied it.
- * Every caller already turns a Twitch 5xx into its failure sentence.
- */
-export const UNCONFIRMED_WRITE_STATUS = { failed: 502, timeout: 504 } as const;
-
-const UNCONFIRMED_HEADER = "X-Woofx3-Unconfirmed";
-
-/**
- * Whether a failed write's response stands for an engine that could not say
- * whether Twitch applied it, rather than for Twitch's own refusal. A caller
- * that answers a refusal with a different write (pins re-post the message)
- * must not do so here, or a write Twitch applied would be followed by a
- * second one.
- */
-export function isUnconfirmedWrite(response: Response): boolean {
-  return response.headers.has(UNCONFIRMED_HEADER);
-}
-
-/**
  * One Helix call, through the engine when the route has one. When the engine
  * has no answer from Twitch, or cannot be reached, the call goes to Helix
  * directly, except a write that may already have reached Twitch.
@@ -141,43 +123,30 @@ export async function helixResponse(route: TwitchHelixRoute, request: HelixReque
     // the RPC itself failing: the engine never ran the call.
     return fallBack(route, request, "unreachable", errorText(error));
   }
-  if (!isHelixResult(result)) {
-    return unconfirmed(route, request, "failed", `unreadable answer ${JSON.stringify(result) ?? String(result)}`);
+  const answer = readHelixResult(result);
+  switch (answer.kind) {
+    case "answer":
+      return answer.response;
+    case "unconfirmed":
+      return unconfirmed(route, request, answer.reason, answer.error);
+    case "refused":
+      if (answer.code === "invalid_arguments") {
+        // This dashboard sent arguments its engine contract refuses: a bug here, not an engine state.
+        logger.error("twitch helix: engine refused the arguments, calling Helix directly", {
+          instanceId: route.instanceId,
+          operation: request.operation,
+          error: answer.error,
+        });
+        return request.direct();
+      }
+      return fallBack(route, request, answer.code, answer.error);
   }
-  if (result.ok) {
-    return okResponse(result.body);
-  }
-  switch (result.code) {
-    case "helix":
-      return new Response(result.body === "" ? null : result.body, { status: result.status });
-    case "timeout":
-    case "failed":
-      return unconfirmed(route, request, result.code, result.error);
-    case "invalid_arguments":
-      // This dashboard sent arguments its engine contract refuses: a bug here, not an engine state.
-      logger.error("twitch helix: engine refused the arguments, calling Helix directly", {
-        instanceId: route.instanceId,
-        operation: request.operation,
-        error: result.error,
-      });
-      return request.direct();
-    case "not_linked":
-    case "unavailable":
-      return fallBack(route, request, result.code, result.error);
-  }
-}
-
-function okResponse(body: unknown): Response {
-  if (body === null || body === undefined) {
-    return new Response(null, { status: 204 });
-  }
-  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
 function unconfirmed(
   route: TwitchHelixRoute,
   request: HelixRequest,
-  reason: "timeout" | "failed",
+  reason: UnconfirmedReason,
   error: string
 ): Promise<Response> | Response {
   if (request.kind === "read") {
@@ -189,7 +158,7 @@ function unconfirmed(
     reason,
     error,
   });
-  return new Response(null, { status: UNCONFIRMED_WRITE_STATUS[reason], headers: { [UNCONFIRMED_HEADER]: reason } });
+  return unconfirmedResponse(reason);
 }
 
 function fallBack(route: TwitchHelixRoute, request: HelixRequest, reason: string, error: string): Promise<Response> {
@@ -200,30 +169,6 @@ function fallBack(route: TwitchHelixRoute, request: HelixRequest, reason: string
     error,
   });
   return request.direct();
-}
-
-function isHelixResult(value: unknown): value is TwitchHelixResult {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const result = value as { ok?: unknown; code?: unknown; status?: unknown; body?: unknown };
-  if (result.ok === true) {
-    return true;
-  }
-  if (result.ok !== false || typeof result.code !== "string") {
-    return false;
-  }
-  if (result.code !== "helix") {
-    return true;
-  }
-  // A Response refuses a status outside 200-599, and an error result below 400 would be a 2xx read as a failure.
-  return (
-    typeof result.status === "number" &&
-    Number.isInteger(result.status) &&
-    result.status >= 400 &&
-    result.status <= 599 &&
-    typeof result.body === "string"
-  );
 }
 
 function errorText(error: unknown): string {
