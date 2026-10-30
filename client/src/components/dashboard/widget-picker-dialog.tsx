@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { dashboardWidgetsByCategory } from "@/lib/dashboard-widgets/registry";
+import { dashboardWidgetsByCategory, useDashboardCatalog } from "@/lib/dashboard-widgets/catalog";
 
 interface WidgetPickerDialogProps {
   open: boolean;
@@ -18,13 +18,14 @@ function matches(query: string, label: string, description: string): boolean {
 }
 
 /**
- * Every dashboard widget as a card with its description, so choosing one does
+ * Every widget in this mode's catalog as a card with its description, so choosing one does
  * not mean knowing it by name. Picking a card closes the dialog.
  */
 export function WidgetPickerDialog({ open, onOpenChange, title, onSelect }: WidgetPickerDialogProps) {
   const [query, setQuery] = useState("");
 
-  const groups = dashboardWidgetsByCategory()
+  const catalog = useDashboardCatalog();
+  const groups = dashboardWidgetsByCategory(catalog)
     .map((group) => ({
       ...group,
       widgets: group.widgets.filter((widget) => matches(query, widget.label, widget.description)),

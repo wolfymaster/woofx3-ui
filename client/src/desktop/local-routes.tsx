@@ -29,6 +29,7 @@ const Assets = lazy(() => import("@/pages/assets"));
 const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
+const Dashboard = lazy(() => import("./LocalDashboard"));
 const Learning = lazy(() => import("@/pages/learning"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
@@ -55,6 +56,7 @@ function resourceKindRoutes(): LocalRoute[] {
 
 /** In the hosted app's order: fixed segments before the parameters that would otherwise match them. */
 export const LOCAL_ROUTES: readonly LocalRoute[] = [
+  { path: "/", render: () => <Dashboard /> },
   { path: "/stream/alerts", render: () => <Alerts /> },
   { path: "/stream/alerts/*", render: () => <Alerts /> },
   { path: ALERT_LIBRARY_EDITOR_ROUTE, render: () => <LibraryAlertEditor /> },
@@ -78,7 +80,7 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
 ];
 
 /** Where local mode opens, and where a path it does not serve leads back to. */
-export const LOCAL_HOME_PATH = "/stream/alerts";
+export const LOCAL_HOME_PATH = "/";
 
 /** Whether local mode serves a page at `href`, a path without parameters. */
 export function servesLocally(href: string): boolean {

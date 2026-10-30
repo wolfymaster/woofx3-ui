@@ -8,7 +8,7 @@ import { createDirectRuntime, type DirectRuntime } from "@/engine/direct/runtime
 import type { EngineGateway } from "@/engine/gateway";
 import { EngineScopeProvider } from "@/engine/scope";
 import type { EngineScope, InstanceId } from "@/engine/types";
-import { consoleLogger, systemClock, systemRandom } from "@/lib/engine-session/system";
+import { consoleLogger, systemClock, systemIds, systemRandom } from "@/lib/engine-session/system";
 import type { EngineTargetSource } from "@/lib/engine-session/target";
 
 /**
@@ -29,7 +29,7 @@ interface LocalEngine {
   gateway: EngineGateway;
 }
 
-/** The direct gateway over the engine `targets` names, on the browser's own clock, randomness and console. */
+/** The direct gateway over the engine `targets` names, on the browser's own clock, randomness, ids and console. */
 function createLocalEngine(targets: EngineTargetSource): LocalEngine {
   const runtime = createDirectRuntime({
     targets,
@@ -39,6 +39,7 @@ function createLocalEngine(targets: EngineTargetSource): LocalEngine {
     },
     clock: systemClock,
     random: systemRandom,
+    newId: systemIds,
     logger: consoleLogger("engine"),
     config: DEFAULT_DIRECT_GATEWAY_CONFIG,
   });

@@ -11,6 +11,7 @@ import {
   type SceneSnapshot,
   type StreamEventFrame,
   type TwitchHelixResult,
+  type UISettingValue,
   type Workflow,
 } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
@@ -22,6 +23,7 @@ import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
+import { directDashboardGateway } from "./dashboard";
 import { directEventLogGateway } from "./event-log";
 import { toModuleId, toSceneId } from "./ids";
 import { directKeys } from "./keys";
@@ -37,7 +39,7 @@ import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
 import type { AvailableWidget, FakeEngineState, TwitchFakeMethod } from "./testing/DirectFakeApi";
-import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
+import { createDirectHarness, type DirectHarness, type RenderedHook, renderDirect } from "./testing/direct-harness";
 import { directTwitchChatGateway } from "./twitch-chat";
 import { directWorkflowsGateway } from "./workflows";
 
@@ -1480,5 +1482,198 @@ describe("pageIntros", () => {
     );
     await read.until((value) => value?.includes("scenes") === true, "the other writer's dismissal");
     read.unmount();
+  });
+});
+
+/** Stores `value` under `namespace`/`key` as another window or device would, at the next revision. */
+function storeSetting(state: FakeEngineState, namespace: string, key: string, value: UISettingValue): void {
+  state.uiSettingRevision += 1;
+  state.uiSettings[namespace] = {
+    ...(state.uiSettings[namespace] ?? {}),
+    [key]: {
+      namespace,
+      key,
+      value,
+      revision: state.uiSettingRevision,
+      updatedAt: "2026-10-30T10:05:00Z",
+      deleted: false,
+    },
+  };
+}
+
+/** Resolves once `read` renders a value deeply equal to `expected`. */
+function untilEqual<T>(read: RenderedHook<T>, expected: T): Promise<T> {
+  return read.until((value) => Bun.deepEquals(value, expected), JSON.stringify(expected));
+}
+
+describe("dashboard", () => {
+  test("panels are added, renamed, filled and removed in the engine's layout", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const panels = renderDirect(() => dashboard.usePanels());
+    expect(await panels.until((value) => value !== undefined, "the panels")).toEqual([]);
+
+    const panelId = await renderDirect(() => dashboard.useAddPanelRequest()).current()("quad");
+    expect(panelId).toBe("id-1");
+    await untilEqual(panels, [{ id: "id-1", name: "Panel 1", layoutId: "quad", widgets: [] }]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["dashboardLayouts", "panels", [{ id: "id-1", name: "Panel 1", layoutId: "quad", widgets: [] }], 0],
+    ]);
+
+    await renderDirect(() => dashboard.useRenamePanelRequest()).current()("id-1", " Raids ");
+    const widgets = [{ zoneId: "0-0", slotId: "s1", type: "notes", config: { pinned: true } }];
+    await renderDirect(() => dashboard.useSetPanelWidgetsRequest()).current()("id-1", widgets);
+    await untilEqual(panels, [{ id: "id-1", name: "Raids", layoutId: "quad", widgets }]);
+
+    const refused = await renderDirect(() => dashboard.useRenamePanelRequest())
+      .current()("id-1", "  ")
+      .catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("Name cannot be empty");
+
+    await renderDirect(() => dashboard.useRemovePanelRequest()).current()("id-1");
+    await untilEqual(panels, []);
+    panels.unmount();
+  });
+
+  test("a panel added elsewhere while one is added here keeps both", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const elsewhere = { id: "other", name: "Other", layoutId: "single", widgets: [] };
+    let raced = false;
+    state.beforeUISettingWrite = () => {
+      if (!raced) {
+        raced = true;
+        storeSetting(state, "dashboardLayouts", "panels", [elsewhere]);
+      }
+    };
+
+    await renderDirect(() => dashboard.useAddPanelRequest()).current()("quad");
+    expect(state.uiSettings.dashboardLayouts?.panels?.value).toEqual([
+      elsewhere,
+      { id: "id-1", name: "Panel 2", layoutId: "quad", widgets: [] },
+    ]);
+    expect(state.callsOf("setUISetting")).toHaveLength(2);
+  });
+
+  test("an unreadable stored layout reads as empty and is logged, without breaking the read", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "dashboardLayouts", "panels", [{ id: 7, widgets: "nope" }]);
+    storeSetting(state, "dashboardLayouts", "rail", "not a rail");
+    const dashboard = directDashboardGateway(runtime);
+    const panels = renderDirect(() => dashboard.usePanels());
+    const rail = renderDirect(() => dashboard.useRailWidgets());
+
+    expect(await panels.until((value) => value !== undefined, "the panels")).toEqual([]);
+    expect(await rail.until((value) => value !== undefined, "the rail")).toBeNull();
+    expect(panels.error()).toBeUndefined();
+    const warned = logger.entries.filter((entry) => entry.level === "warn").map((entry) => entry.fields?.key);
+    expect(warned).toContain("panels");
+    expect(warned).toContain("rail");
+    panels.unmount();
+    rail.unmount();
+  });
+
+  test("the rail is null until saved, and one over the limit is refused before any write", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const rail = renderDirect(() => dashboard.useRailWidgets());
+    expect(await rail.until((value) => value !== undefined, "the rail")).toBeNull();
+
+    const saved = [{ slotId: "notes", type: "notes" }];
+    await renderDirect(() => dashboard.useSetRailWidgetsRequest()).current()(saved);
+    await untilEqual(rail, saved);
+
+    const tooMany = Array.from({ length: 13 }, (_, index) => ({ slotId: `s${index}`, type: "notes" }));
+    const refused = await renderDirect(() => dashboard.useSetRailWidgetsRequest())
+      .current()(tooMany)
+      .catch((error: unknown) => error);
+    expect((refused as Error).message).toContain("at most 12 widgets");
+    expect(state.callsOf("setUISetting")).toHaveLength(1);
+    rail.unmount();
+  });
+
+  test("the note is saved, and another window's save shows up", async () => {
+    const { runtime, state, engine } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const note = renderDirect(() => dashboard.useNote());
+    expect(await note.until((value) => value !== undefined, "the note")).toBeNull();
+
+    await renderDirect(() => dashboard.useSaveNoteRequest()).current()("raid at 9");
+    await untilEqual(note, {
+      content: "raid at 9",
+      updatedAt: Date.parse("2026-10-30T10:00:00Z"),
+      updatedByName: null,
+      updatedByMe: true,
+    });
+
+    storeSetting(state, "dashboardNotes", "notes", { content: "raid at 10" });
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.UI_SETTING_CHANGED,
+          namespace: "dashboardNotes",
+          key: "notes",
+          revision: state.uiSettingRevision,
+          deleted: false,
+          value: { content: "raid at 10" },
+        },
+        "engine",
+        "e-note"
+      )
+    );
+    await note.until((value) => value?.content === "raid at 10", "the other window's note");
+    note.unmount();
+  });
+
+  test("counters are pinned in order, pinning one twice keeps its place, and unpinning drops it", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "dashboardCounters", "broken", "not a pin");
+    const dashboard = directDashboardGateway(runtime);
+    const pinned = renderDirect(() => dashboard.usePinnedCounters());
+    expect(await pinned.until((value) => value !== undefined, "the pinned counters")).toEqual([]);
+
+    const pin = renderDirect(() => dashboard.usePinCounterRequest()).current();
+    await pin("woofx3:counter:deaths");
+    await pin("woofx3:counter:wins");
+    await pin("woofx3:counter:deaths");
+    await untilEqual(pinned, ["woofx3:counter:deaths", "woofx3:counter:wins"]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["dashboardCounters", "woofx3:counter:deaths", { sortOrder: 0 }, 0],
+      ["dashboardCounters", "woofx3:counter:wins", { sortOrder: 1 }, 0],
+    ]);
+
+    await renderDirect(() => dashboard.useUnpinCounterRequest()).current()("woofx3:counter:deaths");
+    await untilEqual(pinned, ["woofx3:counter:wins"]);
+    expect(state.callsOf("deleteUISetting")).toEqual([["dashboardCounters", "woofx3:counter:deaths"]]);
+    pinned.unmount();
+  });
+
+  test("highlights are listed newest first and removed by id", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const highlights = renderDirect(() => dashboard.useHighlights());
+    expect(await highlights.until((value) => value !== undefined, "the highlights")).toEqual([]);
+
+    const save = renderDirect(() => dashboard.useSaveHighlightRequest()).current();
+    const first = await save({ kind: "follow", userName: " viewer ", detail: " ", occurredAt: 1000 });
+    const second = await save({
+      kind: "cheer",
+      userName: "cheerer",
+      detail: "100 bits",
+      amount: 100,
+      occurredAt: 2000,
+    });
+    await untilEqual(highlights, [
+      { id: second, kind: "cheer", userName: "cheerer", detail: "100 bits", amount: 100, occurredAt: 2000 },
+      { id: first, kind: "follow", userName: "viewer", detail: null, amount: null, occurredAt: 1000 },
+    ]);
+
+    const refused = await save({ kind: "follow", userName: "  ", occurredAt: 3000 }).catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("A highlight needs a name");
+
+    await renderDirect(() => dashboard.useRemoveHighlightRequest()).current()(first);
+    await highlights.until((value) => value?.length === 1 && value[0].id === second, "the highlight removed");
+    expect(state.uiSettings.dashboardHighlights?.[first]?.deleted).toBe(true);
+    highlights.unmount();
   });
 });

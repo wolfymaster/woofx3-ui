@@ -1,21 +1,32 @@
 # Dashboard
 
 **Route:** `/`  
-**Primary files:** `client/src/pages/dashboard.tsx`, widgets under `client/src/components/dashboard/`
+**Primary files:** `client/src/components/dashboard/dashboard-view.tsx` (mounted by `client/src/pages/dashboard.tsx` in the hosted app and `client/src/desktop/LocalDashboard.tsx` in local mode), widgets under `client/src/components/dashboard/`
 
 ## Purpose
 
 A **configurable workspace** of resizable panels. Users add, remove, resize, and
-configure dashboard widgets. Layout is persisted per user per instance via Convex
-(`dashboardLayouts`).
+configure dashboard widgets. The dashboard keeps its own state (layout, notes,
+pinned counters, highlights) behind the engine gateway's `dashboard` namespace:
+with an account Convex stores it, the layout per user per instance
+(`dashboardLayouts`); in the desktop app's local mode the engine's local UI
+settings do (see [Data sources](#data-sources)).
 
 ## Behavior
 
-- **Widget registry** (`client/src/lib/dashboard-widgets/registry.ts`) is an explicit
-  hand-written list mapping a stable `type` key to a React component, grouped into
-  `stream` / `automation` / `utility` categories. Unknown types render an "Unknown
-  widget type" fallback rather than crashing, so renaming a `type` orphans existing
-  placements.
+- **Widget catalog.** The dashboard reads its widgets from the `DashboardCatalog`
+  of the mode it runs in (`client/src/lib/dashboard-widgets/catalog.tsx`): an
+  explicit hand-written list mapping a stable `type` key to a React component,
+  grouped into `stream` / `automation` / `utility` categories, plus the rail's
+  pinned entry and the notice above the panels. The hosted app's catalog
+  (`hosted-catalog.tsx`) has every widget; local mode's (`local-catalog.ts`) has
+  those in `gateway-widgets.ts`, which any gateway serves. A saved type the
+  catalog lacks renders a "not available here" placeholder
+  (`unavailable-widget.tsx`) and keeps its place in the layout, so renaming a
+  `type` orphans existing placements and a hosted-only widget comes back when the
+  layout is opened with an account. See
+  [Dashboard widgets keep a fixed height](/patterns/dashboard-widgets) for how a
+  mode's catalog is chosen.
 - **Layout** is chosen per panel from `client/src/lib/dashboard-layouts.ts`. Zone ids
   are positional (`${rowIndex}-${columnIndex}`); a zone can hold several stacked,
   resizable widgets, each identified by `slotId`.
@@ -30,19 +41,20 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
   line shows where it will land. Swiping between panels is turned off while
   editing so a drag does not move the carousel.
 - **Adding a widget** opens `WidgetPickerDialog`
-  (`client/src/components/dashboard/widget-picker-dialog.tsx`): every registry
+  (`client/src/components/dashboard/widget-picker-dialog.tsx`): every catalog
   entry as a card with its description, grouped by category, with a search box.
 - **Widgets keep a fixed height.** Secondary content opens in an overlay rather
   than expanding inside the widget. See
   [Dashboard widgets keep a fixed height](/patterns/dashboard-widgets).
 - **Rail.** The icon column on the right opens rail widgets as flyouts. The
   [getting started checklist](#getting-started-checklist) is pinned first while it
-  has anything left to do. The user's own rail widgets start
+  has anything left to do (the hosted catalog's pinned entry; local mode has none). The user's own rail widgets start
   as Notes and Stream Stats (`DEFAULT_RAIL_WIDGETS` in
   `client/src/lib/dashboard-rail.ts`). In edit mode any widget can be added to it
-  through the same picker, removed, or dragged to reorder, up to 12. The rail is
-  stored on the user's `dashboardLayouts` row as `railWidgets`, unset until first
-  edited, and saved with the panels on Save.
+  through the same picker, removed, or dragged to reorder, up to 12
+  (`MAX_RAIL_WIDGETS` in `shared/dashboard-layout.ts`). The rail is unset until
+  first edited and saved with the panels on Save: on the user's `dashboardLayouts`
+  row as `railWidgets` with an account, under the `rail` key locally.
 - **Persistence** has two paths. Placement edits (add, remove, move, resize) are held in
   local draft state while edit mode is on and written by `setPanelWidgets` on Save,
   so Cancel needs no server round-trip. A widget changing **its own config** outside
@@ -76,7 +88,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `notes` | utility | Scratch pad shared by everyone on the instance — see below |
 
 Saved panels can hold two retired types, `live-events` and `alert-log`. Both
-render the Events widget (`REPLACED_WIDGET_TYPES` in the registry) and keep their
+render the Events widget (`REPLACED_WIDGET_TYPES` in the catalog) and keep their
 saved type and config; the picker offers only `events`.
 
 ## Events
@@ -131,8 +143,8 @@ built by `mergeActivity` in `client/src/lib/activity-feed.ts`:
   counts, the alert queue controls (skip, clear) and the filter.
 
 The Activity panel's Events tab is the same feed with a star on each row that
-saves it to Highlights (`activityPanel.saveHighlight`), storing the row's summary
-as it read then.
+saves it to Highlights (`dashboard.useSaveHighlightRequest`; `activityPanel.saveHighlight`
+with an account), storing the row's summary as it read then.
 
 ### One stream subscription per page
 
@@ -199,7 +211,7 @@ against: Twitch keeps no history of either.
 
 ## Getting started checklist
 
-The getting started checklist (`client/src/components/dashboard/getting-started-checklist.tsx`) is pinned as the first rail item, above the user's own rail widgets. Its flyout lists the items in one column. While anything is left to do, the rail icon carries a dot, red when an item needs attention (a failed install, say). The rail item cannot be moved or removed in edit mode. `useGettingStarted` is called once by the dashboard and feeds both the icon and the flyout. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
+The getting started checklist (`client/src/components/dashboard/getting-started-checklist.tsx`) is pinned as the first rail item, above the user's own rail widgets. Its flyout lists the items in one column. While anything is left to do, the rail icon carries a dot, red when an item needs attention (a failed install, say). The rail item cannot be moved or removed in edit mode. `useGettingStarted` is called once, by the hosted catalog's pinned rail entry, and feeds both the icon and the flyout. Local mode has no account setup to finish, so its catalog pins nothing. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
 
 | Item | Done when | Offers |
 |---|---|---|
@@ -266,8 +278,8 @@ goals from the counter's `moduleResourceInstances` row, through the same
 `counterValue` / `counterGoals` / `goalProgress` helpers in
 `client/src/lib/resource-values.ts` that the Counters page uses — so a card can
 never disagree with the counter's own page, and changing a goal is done in one
-place. `dashboardCounters` (`convex/dashboardCounters.ts`) holds only which
-counters are on the bar and in what order; a row whose counter has since been
+place. The gateway's pinned counters (`dashboardCounters`, `convex/dashboardCounters.ts`
+with an account) hold only which counters are on the bar and in what order; a row whose counter has since been
 deleted resolves to nothing and is skipped.
 
 A card shows `{value} / {goal}` for the goal being worked toward — the smallest
@@ -766,7 +778,26 @@ page lists them as not granted, and the widget offers a reconnect.
 
 | Concern | Mechanism |
 |---------|-----------|
-| Layout and widget config | Convex (`dashboardLayouts`) |
-| Per-widget data | Each widget owns its own Convex query/action — see the widget file |
+| Layout and widget config, notes, pinned counters, highlights | The gateway's `dashboard` namespace: Convex (`dashboardLayouts`, `instanceNotes`, `dashboardCounters`, `streamHighlights`) with an account, the engine's local UI settings in local mode |
+| Per-widget data | Each widget reads the engine through the gateway, or its own Convex query/action for hosted-only widgets — see the widget file |
+
+Panel and rail edits go through the operations in `shared/dashboard-layout.ts`
+(add with a given id, remove, rename, replace a panel's widgets, check a rail),
+which the Convex mutations and the direct gateway both use. Locally each kind of
+data has its own UI settings namespace (`client/src/engine/direct/dashboard.ts`):
+
+| Namespace | Keys | Value |
+|---|---|---|
+| `dashboardLayouts` | `panels`, `rail` | The panel list; the rail's widgets (absent until first edited) |
+| `dashboardNotes` | `notes` | `{ content }`; the setting's own timestamp is the last save |
+| `dashboardCounters` | One per counter's canonical id | `{ sortOrder }` |
+| `dashboardHighlights` | One per highlight id | The saved row: kind, name, detail, amount, time |
+
+A layout edit is a read-modify-write that writes only if no other write landed
+since the read (`updateUISetting` with the engine's `expectedRevision`), so a
+second window's edit is merged, not lost; it retries on a conflict up to
+`uiSettingWriteAttempts` times and then fails. Values read back are checked with a
+schema, and one that does not fit reads as empty and is logged rather than
+breaking the dashboard.
 
 Use this area when you need a **live operations** view without leaving the main shell.
