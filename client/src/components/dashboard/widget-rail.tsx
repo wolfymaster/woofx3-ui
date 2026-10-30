@@ -1,11 +1,11 @@
 import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { type DashboardRailWidget, MAX_RAIL_WIDGETS } from "@shared/dashboard-layout";
 import { HelpCircle, Plus, X } from "lucide-react";
 import { type ComponentType, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { type DashboardRailWidget, MAX_RAIL_WIDGETS } from "@/lib/dashboard-rail";
 import { getDashboardWidget } from "@/lib/dashboard-widgets/registry";
 import { cn } from "@/lib/utils";
 

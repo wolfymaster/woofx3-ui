@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
+import type { DashboardPanelWidget, DashboardRailWidget } from "@shared/dashboard-layout";
 import { useMutation } from "convex/react";
 import { ListChecks, Trash2 } from "lucide-react";
 import { type ComponentProps, useCallback, useEffect, useRef, useState } from "react";
@@ -33,7 +34,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   assignWidget,
   configureWidget,
-  type DashboardPanelWidget,
   isPanelMounted,
   moveWidget,
   removeWidget,
@@ -42,7 +42,6 @@ import {
 import {
   addRailWidget,
   configureRailWidget,
-  type DashboardRailWidget,
   moveRailWidget,
   removeRailWidget,
   resolveRailWidgets,

@@ -13,6 +13,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import type { DashboardPanelWidget } from "@shared/dashboard-layout";
 import { GripVertical, LayoutTemplate, Plus, X } from "lucide-react";
 import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import { HelpTip } from "@/components/common/help-tip";
@@ -25,7 +26,6 @@ import {
   getDashboardLayout,
   rowWeight,
 } from "@/lib/dashboard-layouts";
-import type { DashboardPanelWidget } from "@/lib/dashboard-panels";
 import { getDashboardWidget } from "@/lib/dashboard-widgets/registry";
 import { type DashboardWidgetDefinition, widgetSlotId } from "@/lib/dashboard-widgets/types";
 import { cn } from "@/lib/utils";
