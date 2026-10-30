@@ -6,8 +6,8 @@
 // token itself is shown once, when it is minted. Everything here is pure so
 // the HTTP route, the dashboard action and the tests share one decision.
 
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import type { ActionStep } from "@woofx3/api";
-import { unescapeDollarKeys } from "./dollarKeys";
 import {
   applyMacroVariables,
   extractMacroVariables,

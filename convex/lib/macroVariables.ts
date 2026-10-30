@@ -21,7 +21,7 @@ export type MacroHttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 /**
  * The catalog action a "run-action" button runs: the engine's ActionStep, with
  * `$ref` stored as `ref` because Convex rejects field names starting with `$`.
- * `parameters` is stored with its own `$` keys escaped (see dollarKeys.ts).
+ * `parameters` is stored with its own `$` keys escaped (see shared/dollar-keys.ts).
  */
 export interface MacroActionStep {
   /** The engine handler, e.g. `function` or `alert`. */
@@ -54,7 +54,7 @@ export interface MacroConfig {
 
 // Names are restricted to word characters partly for readability and partly
 // because a macro's filled-in values ride along in the widget's Convex config
-// blob, and Convex rejects object keys beginning with `$` (see dollar-keys.ts).
+// blob, and Convex rejects object keys beginning with `$` (see shared/dollar-keys.ts).
 const VARIABLE_PATTERN = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 const VARIABLE_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 

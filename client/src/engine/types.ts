@@ -423,7 +423,7 @@ export interface CompositionPreviewUrl {
 
 // ==================== Chat commands ====================
 
-/** A chat command. `actions` and `steps` carry their `$` keys escaped (lib/dollar-keys). */
+/** A chat command. `actions` and `steps` carry their `$` keys escaped (shared/dollar-keys). */
 export interface ChatCommand {
   engineCommandId: string;
   /** Without the `!` prefix. */
@@ -464,9 +464,9 @@ interface ChatCommandDefinition {
   enabled: boolean;
   cooldown: number;
   visibility: "public" | "restricted";
-  /** `$` keys escaped (lib/dollar-keys). */
+  /** `$` keys escaped (shared/dollar-keys). */
   actions?: unknown[];
-  /** `$` keys escaped (lib/dollar-keys). */
+  /** `$` keys escaped (shared/dollar-keys). */
   steps?: unknown[];
   argumentPattern?: string;
   groupIds?: string[];
@@ -809,7 +809,7 @@ export interface AlertTargetUsage {
 
 // ==================== Workflows ====================
 
-/** A workflow on the engine. `definition` and `nodes` carry their `$` keys escaped (lib/dollar-keys). */
+/** A workflow on the engine. `definition` and `nodes` carry their `$` keys escaped (shared/dollar-keys). */
 export interface Workflow {
   engineWorkflowId: string;
   definition: unknown;

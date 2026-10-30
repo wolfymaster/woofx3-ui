@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isInsideActionPicker } from "@/components/flow/object-action-picker";
@@ -18,7 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import {
   chatCommandParts,
   extractMacroVariables,

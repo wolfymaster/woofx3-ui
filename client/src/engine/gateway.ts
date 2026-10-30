@@ -416,7 +416,7 @@ export interface ModuleResourcesGateway {
   useRefreshValuesRequest(): (kind: string) => Promise<null>;
   /**
    * Runs action steps on the engine now. `actions` carry their `$` keys escaped
-   * (lib/dollar-keys); the result arrives through the values they change.
+   * (shared/dollar-keys); the result arrives through the values they change.
    */
   useRunActionsRequest(): (label: string, actions: unknown[]) => Promise<null>;
 }
@@ -543,7 +543,7 @@ export interface WorkflowsGateway {
   useCatalog(): Live<WorkflowCatalog | null>;
   /**
    * Creates a workflow from a definition with its `$` keys escaped
-   * (lib/dollar-keys), and resolves once its webhook echo has landed, with
+   * (shared/dollar-keys), and resolves once its webhook echo has landed, with
    * the id the engine gave it.
    */
   useCreateRequest(): (definition: unknown) => Promise<{ engineWorkflowId: string }>;
