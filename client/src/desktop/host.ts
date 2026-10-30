@@ -1,6 +1,7 @@
-import { listen } from "@tauri-apps/api/event";
 import {
   COMMANDS,
+  type HostModeKind,
+  type HostModeView,
   type LocalEngineSession,
   type MarkerRequestOutcome,
   SHOUTOUT_QUEUE_EVENT,
@@ -10,10 +11,13 @@ import {
   type ShoutoutQueueView,
   STREAM_START_MARKER_EVENT,
   type StreamStartMarker,
-} from "./generated/window";
+} from "@desktop-host/window";
+import { listen } from "@tauri-apps/api/event";
 import { call } from "./invoke";
 
 export type {
+  HostModeKind,
+  HostModeView,
   LocalEngineSession,
   MarkerRequestOutcome,
   ShoutoutChannel,
@@ -22,7 +26,24 @@ export type {
   ShoutoutEntryId,
   ShoutoutQueueView,
   StreamStartMarker,
-} from "./generated/window";
+} from "@desktop-host/window";
+
+// Calls into the desktop app's Rust host, for the dashboard window. The
+// dashboard's capability grants exactly these commands
+// (companion/src-tauri/capabilities/dashboard.json).
+
+/** The mode this run of the app started in, and whether the streamer chose it. */
+export async function hostMode(): Promise<HostModeView> {
+  return call(COMMANDS.host_mode);
+}
+
+/**
+ * Records the streamer's first choice of mode and restarts the app into it,
+ * so this resolves only if the host refuses (a mode is already chosen).
+ */
+export async function chooseHostMode(mode: HostModeKind): Promise<void> {
+  return call(COMMANDS.choose_host_mode, { mode });
+}
 
 /** What the webview needs to open its own capnweb session with the local engine. */
 export async function localEngineSession(): Promise<LocalEngineSession> {
