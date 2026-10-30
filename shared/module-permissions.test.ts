@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { strToU8, zipSync } from "fflate";
-import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./modulePermissions";
+import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./module-permissions";
 
 function archive(files: Record<string, string>): Uint8Array {
   const entries: Record<string, Uint8Array> = {};

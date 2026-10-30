@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { LocalEndpoint } from "@shared/local-endpoints";
 import { companionMayProvideSecret, KNOWN_DISCOVERER_SECRET_MODULES } from "./knownDiscoverers";
-import type { LocalEndpoint } from "./localEndpoints";
 
 const OBS: LocalEndpoint = {
   id: "obs",

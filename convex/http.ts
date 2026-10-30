@@ -1,3 +1,4 @@
+import { integrationOfModuleOAuthState } from "@shared/module-oauth";
 import { canonicalIdForStorageKey } from "@shared/resource-values";
 import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
 import { widgetCanonicalKey } from "@shared/widget-key";
@@ -36,7 +37,6 @@ import {
   triggerRefusalResponse,
 } from "./lib/macroTrigger";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
-import { integrationOfModuleOAuthState } from "./lib/moduleOAuth";
 import { OAUTH_CALLBACK_PATHS, oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";

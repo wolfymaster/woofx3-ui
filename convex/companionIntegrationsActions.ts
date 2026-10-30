@@ -1,10 +1,10 @@
 "use node";
 
+import { type CompanionWrite, planCompanionWrites } from "@shared/local-endpoints";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { type CompanionWrite, planCompanionWrites } from "./lib/localEndpoints";
 import { requireEngineInstance } from "./moduleSettingsActions";
 
 async function mayStillWrite(

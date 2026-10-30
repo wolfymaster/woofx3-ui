@@ -18,9 +18,10 @@ import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directCommandsGateway } from "./commands";
 import { directEventLogGateway } from "./event-log";
-import { toSceneId } from "./ids";
+import { toModuleId, toSceneId } from "./ids";
 import { directKeys } from "./keys";
 import { directModuleResourcesGateway } from "./module-resources";
+import { directModulesGateway } from "./modules";
 import { directOverlaysGateway } from "./overlays";
 import { directRequestsGateway } from "./requests";
 import { directScenesGateway } from "./scenes";
@@ -816,5 +817,183 @@ describe("moduleResources", () => {
     expect(state.callsOf("listResourceInstancesForModule")).toEqual([["counter:1.0.0:abc", "counter"]]);
     const missing = await sync("missing" as never).catch((error: Error) => error);
     expect(String(missing)).toContain("No installed module");
+  });
+});
+
+describe("modules", () => {
+  const installed = (moduleId: string, manifest: Record<string, unknown>, listingId?: string) => ({
+    name: `${moduleId} module`,
+    version: "1.0.0",
+    state: "active",
+    createdByType: "USER",
+    moduleId,
+    moduleKey: `${moduleId}:1.0.0:abc1234`,
+    manifest,
+    ...(listingId ? { marketplaceListingId: listingId } : {}),
+  });
+  const inspection = (listingId: string, permissions: string[]) => ({
+    listingId,
+    moduleId: listingId,
+    edition: 1,
+    type: "module" as const,
+    name: listingId,
+    version: "2.0.0",
+    moduleKey: `${listingId}:2.0.0:def5678`,
+    sha256: "",
+    sizeBytes: 1,
+    manifest: { id: listingId, name: listingId, version: "2.0.0", description: "" },
+    permissions,
+    localEndpoints: [
+      { id: "obs", name: "OBS", protocol: "websocket" },
+      { id: "pigeon", name: "Pigeon", protocol: "carrier-pigeon" },
+    ],
+    files: [{ path: "manifest.json", size: 10, kind: "text" as const }],
+  });
+
+  test("an installed module's detail is what it registered, with its listing's readme and newer build", async () => {
+    const { runtime, state } = await connected();
+    state.modules = [
+      installed("cozy", { id: "cozy", description: "Warm", author: "Ana", permissions: ["chat.read"] }, "cozy-listing"),
+    ];
+    state.workflowCatalog = {
+      triggers: [
+        {
+          id: "t-1",
+          name: "Cozied",
+          description: "",
+          event: "cozy.cozied",
+          createdByType: "MODULE",
+          createdByRef: "cozy:1.0.0:abc1234",
+        },
+        {
+          id: "t-2",
+          name: "Other",
+          description: "",
+          event: "x",
+          createdByType: "MODULE",
+          createdByRef: "other:1.0.0:abc",
+        },
+      ],
+      actions: [],
+      functions: [],
+    } as never;
+    state.listings = { "cozy-listing": { module: { readme: "# Cozy", version: "2.0.0" } } };
+    state.inspections = { "cozy-listing": inspection("cozy-listing", ["chat.read", "chat.write"]) };
+    const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("cozy");
+    expect(detail).toMatchObject({
+      id: "cozy-listing",
+      moduleDbId: "cozy",
+      description: "Warm",
+      author: "Ana",
+      isInstalled: true,
+      readme: "# Cozy",
+      latestVersion: "2.0.0",
+      permissions: ["chat.read"],
+      latestPermissions: ["chat.read", "chat.write"],
+      latestLocalEndpoints: [{ id: "obs", name: "OBS", protocol: "websocket" }],
+    });
+    expect(detail.triggers.map((t) => t.name)).toEqual(["Cozied"]);
+  });
+
+  test("a listing's detail says its permissions are unknown when the engine cannot inspect it", async () => {
+    const { runtime, state } = await connected();
+    state.listings = { paid: { module: { id: "paid", name: "Paid", version: "1.0.0" } } };
+    const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("paid");
+    expect(detail).toMatchObject({
+      id: "paid",
+      name: "Paid",
+      isInstalled: false,
+      permissions: null,
+      localEndpoints: null,
+    });
+  });
+
+  test("only declared settings are read, and only declared settings are written", async () => {
+    const { runtime, state } = await connected();
+    state.modules = [installed("cozy", { id: "cozy", settings: [{ id: "color", label: "Color", type: "string" }] })];
+    state.moduleSettings = {
+      cozy: [
+        { id: "1", moduleId: "cozy", key: "color", value: "red", valueType: "string" },
+        { id: "2", moduleId: "cozy", key: "oauth:twitch:access_token", value: "secret", valueType: "string" },
+      ],
+    };
+    const modules = directModulesGateway(runtime);
+    const settings = await renderDirect(() => modules.useSettingsRequest()).current()("cozy");
+    expect(settings.map((s) => s.key)).toEqual(["color"]);
+    const update = renderDirect(() => modules.useUpdateSettingRequest()).current();
+    expect((await update("cozy", "color", "blue")).value).toBe("blue");
+    const refused = await update("cozy", "oauth:twitch:access_token", "x").catch((error: Error) => error);
+    expect(String(refused)).toContain('no setting "oauth:twitch:access_token"');
+    expect(state.callsOf("updateModuleSetting")).toEqual([["cozy", "color", "blue"]]);
+  });
+
+  test("an installed module's files come from the engine, a listing's from its inspection", async () => {
+    const { runtime, state } = await connected();
+    state.modules = [installed("cozy", { id: "cozy" })];
+    state.moduleFiles = { cozy: { available: true, files: [{ path: "main.lua", size: 3 }] } };
+    state.inspections = { fresh: inspection("fresh", []) };
+    const modules = directModulesGateway(runtime);
+    const files = renderDirect(() => modules.useFilesRequest()).current();
+    expect(await files("cozy")).toEqual({ available: true, files: [{ path: "main.lua", size: 3 }] });
+    expect(await files("fresh")).toEqual({ available: true, files: [{ path: "manifest.json", size: 10 }] });
+    const read = renderDirect(() => modules.useFileRequest()).current();
+    expect(await read("cozy", "main.lua")).toMatchObject({ kind: "text", content: "cozy/main.lua" });
+    expect(String(await read("fresh", "manifest.json").catch((error: Error) => error))).toContain("Install the module");
+  });
+
+  test("uninstall asks by install key, and reconciling clears what a finished uninstall left cached", async () => {
+    const { runtime, state } = await connected();
+    state.modules = [installed("cozy", { id: "cozy" })];
+    const modules = directModulesGateway(runtime);
+    const uninstall = renderDirect(() => modules.useUninstallRequest()).current();
+    expect(await uninstall(toModuleId("cozy"))).toEqual({ moduleKey: "cozy:1.0.0:abc1234" });
+    expect(state.callsOf("uninstallModule")).toEqual([["cozy:1.0.0:abc1234"]]);
+
+    const reconcile = renderDirect(() => modules.useReconcileUninstallRequest()).current();
+    expect(await reconcile(toModuleId("cozy"), "cozy:1.0.0:abc1234")).toEqual({ stillInstalled: true });
+    state.modules = [];
+    runtime.queryClient.setQueryData(directKeys.moduleResources.instances(), []);
+    expect(await reconcile(toModuleId("cozy"), "cozy:1.0.0:abc1234")).toEqual({ stillInstalled: false });
+    expect(runtime.queryClient.getQueryState(directKeys.moduleResources.instances())?.isInvalidated).toBe(true);
+  });
+
+  test("a marketplace install sends the approvals and explains a refusal", async () => {
+    const { runtime, state } = await connected();
+    const install = renderDirect(() => directModulesGateway(runtime).useMarketplaceInstallRequest()).current();
+    expect(await install("listing", ["chat.read"], ["obs"])).toEqual({ moduleKey: "listing:1.0.0:abc1234" });
+    expect(state.callsOf("installMarketplaceListing")).toEqual([
+      ["listing", { approvedPermissions: ["chat.read"], approvedLocalEndpoints: ["obs"] }],
+    ]);
+
+    state.listingInstall = {
+      status: "needs_approval",
+      name: "Cozy",
+      version: "2.0.0",
+      unapproved: ["chat.write"],
+      unapprovedLocalEndpoints: ["obs"],
+    };
+    expect(String(await install("listing", [], []).catch((error: Error) => error))).toContain(
+      "(chat.write, local endpoint obs)"
+    );
+    state.listingInstall = { status: "payment_required", name: "Cozy", version: "2.0.0" };
+    expect(String(await install("listing", [], []).catch((error: Error) => error))).toContain("Sign in");
+  });
+
+  test("a bundle install answers with what it made, and a paid bundle asks for a sign-in", async () => {
+    const { runtime, state } = await connected();
+    const install = renderDirect(() => directModulesGateway(runtime).useBundleInstallRequest()).current();
+    expect(await install("bundle")).toEqual({ kind: "scene", engineId: "scene-1" });
+    state.bundleInstall = { status: "payment_required", name: "Glow", version: "1.0.0" };
+    expect(String(await install("bundle").catch((error: Error) => error))).toContain("Sign in");
+  });
+
+  test("no storage limit applies, and archive installs are not available yet", async () => {
+    const { runtime } = await connected();
+    const modules = directModulesGateway(runtime);
+    expect(await renderDirect(() => modules.useStorageUsageRequest()).current()()).toBeNull();
+    const archive = await renderDirect(() => modules.useArchiveInstallRequest())
+      .current()({} as never)
+      .catch((error: Error) => error);
+    expect(archive).toBeInstanceOf(GatewayUnsupportedError);
   });
 });

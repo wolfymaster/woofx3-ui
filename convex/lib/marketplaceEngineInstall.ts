@@ -14,6 +14,7 @@
  * Convex functions.
  */
 
+import type { LocalEndpointSummary, LocalProtocol } from "@shared/local-endpoints";
 import type {
   MarketplaceBundleInstallResult as EngineBundleInstallResult,
   MarketplaceInstallResult as EngineModuleInstallResult,
@@ -31,7 +32,6 @@ import {
   hasEngineCapability,
 } from "./engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import type { LocalEndpointSummary, LocalProtocol } from "./localEndpoints";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
 import { marketplaceGet } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";

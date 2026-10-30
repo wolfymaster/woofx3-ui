@@ -4,7 +4,7 @@ import {
   installedFunctionSummaries,
   marketplaceFunctionSummaries,
   type RegisteredFunction,
-} from "./moduleFunctionSummary";
+} from "./module-function-summary";
 
 const manifest = {
   id: "spam_battle",
