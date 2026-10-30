@@ -1,0 +1,36 @@
+{
+  "productName": "woofx3",
+  "version": "0.1.0",
+  "identifier": "tv.woofx3.app",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "woofx3",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "visible": true
+      },
+      {
+        "label": "companion",
+        "title": "woofx3 local connections",
+        "url": "companion/index.html",
+        "width": 480,
+        "height": 560,
+        "resizable": false,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "resources": ["engine/"]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/wolfymaster/woofx3-ui/releases/download/desktop-latest/latest.json"]
+    }
+  }
+}

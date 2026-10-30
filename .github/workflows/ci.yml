@@ -339,16 +339,23 @@ jobs:
           workspaces: companion/src-tauri -> target
           key: desktop-installer
 
+      # tauri.desktop.conf.json gives the build the desktop app's identity:
+      # its own identifier, product name, version and update feed.
       - name: Build installer
         working-directory: companion
         run: >-
           bunx tauri build --bundles nsis --features bundled-engine
-          --config src-tauri/tauri.bundled-engine.conf.json
+          --config src-tauri/tauri.desktop.conf.json
           --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
       # Tauri copies bundle resources next to the binary before packaging them.
       - name: Check the engine was bundled
         run: test -f companion/src-tauri/target/release/engine/orchestrator.exe
+
+      # NSIS names the installer after the product, so this fails if the
+      # build kept the companion's identity.
+      - name: Check the installer is the desktop app's
+        run: compgen -G "companion/src-tauri/target/release/bundle/nsis/woofx3_*-setup.exe"
 
       - uses: actions/upload-artifact@v7
         with:
