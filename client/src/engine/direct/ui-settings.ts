@@ -14,6 +14,10 @@ import type { DirectRuntime } from "./runtime";
 /** Names the namespaces the dashboard keeps, so no two features share one by accident. */
 export const UI_SETTING_NAMESPACES = {
   pageIntros: "pageIntros",
+  dashboardLayouts: "dashboardLayouts",
+  dashboardNotes: "dashboardNotes",
+  dashboardCounters: "dashboardCounters",
+  dashboardHighlights: "dashboardHighlights",
 } as const;
 
 export type UISettingNamespace = (typeof UI_SETTING_NAMESPACES)[keyof typeof UI_SETTING_NAMESPACES];

@@ -12,6 +12,7 @@ import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
+import { directDashboardGateway } from "./dashboard";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
 import { directModerationGateway } from "./moderation";
@@ -112,5 +113,6 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     streamInfo: directStreamInfoGateway(runtime),
     goLive,
     pageIntros: directPageIntrosGateway(runtime),
+    dashboard: directDashboardGateway(runtime),
   };
 }
