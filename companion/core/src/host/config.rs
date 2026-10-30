@@ -1,7 +1,7 @@
 //! Which mode the desktop host runs in, read from a JSON file in the app's
-//! config directory. Without the file the host is the tray companion it has
-//! always been. Local mode, which runs an engine under the host, is selected
-//! only by this file:
+//! config directory. Without the file the host runs in the mode its build
+//! defaults to: the tray companion, or local mode for a build that bundles an
+//! engine. The file selects either mode explicitly:
 //!
 //! ```json
 //! { "mode": "local", "engineDir": "C:\\woofx3\\engine", "apiPort": 5050 }
@@ -30,7 +30,7 @@ pub enum HostMode {
     Local(LocalEngineSettings),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LocalEngineSettings {
     /// Absolute when set; checked when the file is read.
     pub engine_dir: Option<PathBuf>,
@@ -74,13 +74,13 @@ enum ConfigFile {
 }
 
 impl HostMode {
-    /// Reads the mode from `path`. A missing file means [`HostMode::Companion`];
-    /// a file that is there but unreadable or invalid is an error, so a typo
-    /// never quietly turns local mode off.
-    pub fn load(path: &Path) -> Result<Self, HostError> {
+    /// Reads the mode from `path`. A missing file means `when_missing`, the
+    /// build's default; a file that is there but unreadable or invalid is an
+    /// error, so a typo never quietly switches modes.
+    pub fn load(path: &Path, when_missing: HostMode) -> Result<Self, HostError> {
         match std::fs::read_to_string(path) {
             Ok(raw) => HostMode::parse(&raw, path),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(HostMode::Companion),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(when_missing),
             Err(source) => Err(HostError::ConfigUnreadable {
                 path: path.to_path_buf(),
                 source,
@@ -223,15 +223,20 @@ mod tests {
     }
 
     #[test]
-    fn test_host_mode_load_treats_a_missing_file_as_companion() {
+    fn test_host_mode_load_treats_a_missing_file_as_the_build_default() {
         let path = absolute(&format!("woofx3-host-config-{}.json", std::process::id()));
         assert_eq!(
-            HostMode::load(&path).expect("missing is fine"),
+            HostMode::load(&path, HostMode::Companion).expect("missing is fine"),
             HostMode::Companion
+        );
+        assert_eq!(
+            HostMode::load(&path, HostMode::Local(LocalEngineSettings::default()))
+                .expect("missing is fine"),
+            HostMode::Local(LocalEngineSettings::default())
         );
         std::fs::write(&path, r#"{"mode":"local"}"#).expect("write");
         assert_eq!(
-            HostMode::load(&path).expect("reads"),
+            HostMode::load(&path, HostMode::Companion).expect("reads"),
             HostMode::Local(LocalEngineSettings {
                 engine_dir: None,
                 api_port: None
@@ -245,7 +250,7 @@ mod tests {
         let dir = absolute(&format!("woofx3-host-config-dir-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("mkdir");
         assert!(matches!(
-            HostMode::load(&dir),
+            HostMode::load(&dir, HostMode::Companion),
             Err(HostError::ConfigUnreadable { .. })
         ));
         std::fs::remove_dir(&dir).expect("cleanup");

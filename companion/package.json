@@ -6,7 +6,10 @@
     "dev": "vite --config ui/vite.config.ts",
     "build": "vite build --config ui/vite.config.ts",
     "check": "tsc -p ui",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check:scripts": "tsc -p scripts",
+    "test:scripts": "bun test scripts",
+    "fetch-engine": "bun scripts/fetch-engine.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -15,10 +18,12 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1",
+    "@types/bun": "^1.4.4",
     "@types/node": "20.19.27",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.7.0",
+    "fflate": "^0.8.3",
     "typescript": "5.6.3",
     "vite": "^7.3.0"
   }

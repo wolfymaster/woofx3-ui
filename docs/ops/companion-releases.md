@@ -69,6 +69,12 @@ CI's **Companion installer** job builds an unsigned NSIS installer on `windows-l
 - It has no updater artifacts, because those need the signing key, which only the release workflow holds. A test installer still checks for updates against `companion-latest` like any release build, so uninstall it before installing a real release.
 - Windows shows the SmartScreen warning on first run; choose **More info → Run anyway**.
 
+### Desktop installer
+
+CI's **Desktop installer** job builds the same app with an engine bundled, under the same conditions as the companion installer. It downloads the engine release pinned in `companion/bundled-engine.json` (a release tag and the sha256 of its `woofx3-<tag>-windows-amd64.zip`), checks the checksum, unpacks it into `companion/src-tauri/engine/`, and builds with the `bundled-engine` feature and `src-tauri/tauri.bundled-engine.conf.json`, which add the engine to the bundle and make local mode the default. Its artifact is `woofx3-desktop-installer-*`.
+
+The job refuses an engine release that the app could not start: one without `orchestrator.exe`, or whose `services.json` has no run-once `migrate` step. To bundle a newer engine, change the tag and checksum in `companion/bundled-engine.json` (`sha256sum` of the downloaded zip); `bun run fetch-engine` in `companion/` runs the same download and checks locally.
+
 ## Limits
 
 - **No Windows code signing yet.** The installer has no Authenticode signature, so SmartScreen warns on download and on first run ("Windows protected your PC") until enough people have run it. The updater's signature is a separate thing and works regardless; an update the companion downloads itself does not normally get the warning, since it does not come through a browser.
