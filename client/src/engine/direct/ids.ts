@@ -1,4 +1,4 @@
-import type { ModuleId, SceneId } from "@/engine/types";
+import type { ModuleId, SceneId, StreamHighlightId } from "@/engine/types";
 
 // The direct gateway's ids are the engine's own: a scene is its engine scene
 // id, a module its manifest id. These convert between the two at the edge,
@@ -18,5 +18,14 @@ export function toModuleId(moduleId: string): ModuleId {
 }
 
 export function fromModuleId(id: ModuleId): string {
+  return id as string;
+}
+
+/** A highlight is the key the gateway stored it under in the engine's local UI settings. */
+export function toStreamHighlightId(key: string): StreamHighlightId {
+  return key as StreamHighlightId;
+}
+
+export function fromStreamHighlightId(id: StreamHighlightId): string {
   return id as string;
 }

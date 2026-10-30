@@ -84,15 +84,16 @@ export interface GettingStarted {
  * The first-session checklist: finish setup, get the platforms installed and
  * the overlay into OBS, and see woofx3 react to a test follow. Null while
  * loading, once every item is done, or once someone dismissed it; both are
- * per instance, so the whole team sees the same list.
+ * per instance, so the whole team sees the same list. Null too while no
+ * instance is selected.
  *
  * Called once by the dashboard and handed to both the rail icon and its
  * flyout, so the OBS status poll behind it runs once.
  */
-export function useGettingStarted(instanceId: Id<"instances">): GettingStarted | null {
-  const setup = useQuery(api.setup.status, { instanceId });
+export function useGettingStarted(instanceId: Id<"instances"> | null): GettingStarted | null {
+  const setup = useQuery(api.setup.status, instanceId ? { instanceId } : "skip");
   const overlays = useGoLiveOverlayFacts();
-  const state = useQuery(api.gettingStarted.state, { instanceId });
+  const state = useQuery(api.gettingStarted.state, instanceId ? { instanceId } : "skip");
   const markDone = useMutation(api.gettingStarted.markDone);
   const dismissMutation = useMutation(api.gettingStarted.dismiss);
   const retryApply = useMutation(api.setup.retryApply);
@@ -106,9 +107,11 @@ export function useGettingStarted(instanceId: Id<"instances">): GettingStarted |
 
   const followPreset = useMemo(() => triggerPresets.find((preset) => preset.event === FOLLOW_EVENT), [triggerPresets]);
 
-  if (!setup || !overlays || !state || state.dismissed) {
+  if (!instanceId || !setup || !overlays || !state || state.dismissed) {
     return null;
   }
+  // Narrowed once here, so the actions below keep it non-null.
+  const selectedInstanceId = instanceId;
 
   const items = gettingStartedItems({
     setup,
@@ -126,11 +129,11 @@ export function useGettingStarted(instanceId: Id<"instances">): GettingStarted |
     setBusyAction(action.kind);
     try {
       if (action.kind === "retry-installs") {
-        await retryApply({ instanceId });
+        await retryApply({ instanceId: selectedInstanceId });
       } else if (action.kind === "mark-command-done") {
-        await markDone({ instanceId, itemId: "chat-command" });
+        await markDone({ instanceId: selectedInstanceId, itemId: "chat-command" });
       } else if (action.kind === "mark-platform-settings-done") {
-        await markDone({ instanceId, itemId: platformSettingsItemId(action.marketplaceModuleId) });
+        await markDone({ instanceId: selectedInstanceId, itemId: platformSettingsItemId(action.marketplaceModuleId) });
       } else {
         if (!followPreset) {
           return;
@@ -138,7 +141,7 @@ export function useGettingStarted(instanceId: Id<"instances">): GettingStarted |
         const fields = testEventFields(followPreset);
         const key = await fireTestEvent(followPreset, payloadFromValues(fields, initialValues(fields)));
         if (key !== null) {
-          await markDone({ instanceId, itemId: "test-follow" });
+          await markDone({ instanceId: selectedInstanceId, itemId: "test-follow" });
           toast({ title: "Test follow sent", description: "Watch your chat and overlay for woofx3's reaction." });
         }
       }
@@ -170,7 +173,7 @@ export function useGettingStarted(instanceId: Id<"instances">): GettingStarted |
     busyAction,
     runAction,
     actionUnavailable,
-    dismiss: () => void dismissMutation({ instanceId }),
+    dismiss: () => void dismissMutation({ instanceId: selectedInstanceId }),
   };
 }
 

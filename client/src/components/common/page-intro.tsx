@@ -1,10 +1,9 @@
-import { api } from "@convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
 import { Lightbulb, X } from "lucide-react";
 import { HelpTip } from "@/components/common/help-tip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDismissedPageIntros, useDismissPageIntroRequest } from "@/engine/hooks/use-page-intros";
 import { PAGE_INTROS, type PageIntroId } from "@/lib/page-intros";
 
 interface PageIntroProps {
@@ -19,13 +18,12 @@ interface PageIntroProps {
  * flashes for someone who already closed it.
  */
 export function PageIntro({ introId, onTry }: PageIntroProps) {
-  const dismissed = useQuery(api.pageIntros.listDismissed);
-  const dismiss = useMutation(api.pageIntros.dismiss).withOptimisticUpdate((store, { introId: closed }) => {
-    const current = store.getQuery(api.pageIntros.listDismissed, {});
-    if (current !== undefined && !current.includes(closed)) {
-      store.setQuery(api.pageIntros.listDismissed, {}, [...current, closed]);
-    }
-  });
+  const dismissed = useDismissedPageIntros();
+  const dismissIntro = useDismissPageIntroRequest();
+  const dismiss = ({ introId: closed }: { introId: PageIntroId }) =>
+    dismissIntro(closed).catch((error: unknown) => {
+      console.error("dismissing a page intro failed:", error);
+    });
 
   if (dismissed === undefined || dismissed.includes(introId)) {
     return null;

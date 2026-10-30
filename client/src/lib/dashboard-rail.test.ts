@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { type DashboardRailWidget, MAX_RAIL_WIDGETS } from "@shared/dashboard-layout";
 import {
   addRailWidget,
   configureRailWidget,
-  type DashboardRailWidget,
   DEFAULT_RAIL_WIDGETS,
-  MAX_RAIL_WIDGETS,
   moveRailWidget,
   removeRailWidget,
   resolveRailWidgets,

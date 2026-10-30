@@ -1,8 +1,6 @@
-import { api } from "@convex/_generated/api";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { PROFILES } from "@woofx3/scene/model";
-import { useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertEditorFrame, useAlertEditorView } from "@/components/alert-editor/alert-layout-editor";
@@ -28,6 +26,7 @@ import { compositionOfLibraryAlert, inputVariableOptions, libraryPreviewInputs }
 import { draftSaveStatus } from "@/lib/draft-save-status";
 import { catalogOfRows } from "@/lib/scene-composition";
 import { repairResultToast } from "@/lib/scene-unread";
+import { useViewerName } from "@/lib/viewer-name";
 
 interface LibraryAlertEditorProps {
   instanceId: InstanceId;
@@ -50,8 +49,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   const catalogRows = useSceneWidgetCatalog();
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
-  const me = useQuery(api.users.getMe);
-  const myName = me === undefined ? undefined : (me?.name ?? me?.email ?? "");
+  const myName = useViewerName();
   const getEngineInfo = useEngineInfoRequest();
   const repairScene = useRepairSceneRequest();
   const capabilities = useEngineCapabilities();
