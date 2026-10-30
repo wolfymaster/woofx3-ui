@@ -2,13 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, internalAction, internalMutation, internalQuery } from "./_generated/server";
-import {
-  openPlatformLinkTokens,
-  platformTokenCipher,
-  sealPlatformLinkTokens,
-  storedRefreshToken,
-  storedTokensPatch,
-} from "./lib/platformLinkTokens";
+import { openPlatformLinkTokens, platformTokenCipher, sealPlatformLinkTokens } from "./lib/platformLinkTokens";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { isRevokedRefreshResponse, refreshOutcomeApplies } from "./lib/twitchRefresh";
 
@@ -60,14 +54,10 @@ export const patchTwitchToken = internalMutation({
     { linkId, usedStoredRefreshToken, sealedAccessToken, sealedRefreshToken, expiresAt }
   ): Promise<boolean> => {
     const row = await ctx.db.get(linkId);
-    if (!refreshOutcomeApplies(row ? storedRefreshToken(row) : null, usedStoredRefreshToken)) {
+    if (!refreshOutcomeApplies(row?.sealedRefreshToken ?? null, usedStoredRefreshToken)) {
       return false;
     }
-    await ctx.db.patch(linkId, {
-      ...storedTokensPatch({ sealedAccessToken, sealedRefreshToken }),
-      expiresAt,
-      authFailedAt: undefined,
-    });
+    await ctx.db.patch(linkId, { sealedAccessToken, sealedRefreshToken, expiresAt, authFailedAt: undefined });
     return true;
   },
 });
@@ -76,7 +66,7 @@ export const markTwitchAuthFailed = internalMutation({
   args: { linkId: v.id("platformLinks"), usedStoredRefreshToken: v.string() },
   handler: async (ctx, { linkId, usedStoredRefreshToken }) => {
     const row = await ctx.db.get(linkId);
-    if (!refreshOutcomeApplies(row ? storedRefreshToken(row) : null, usedStoredRefreshToken)) {
+    if (!refreshOutcomeApplies(row?.sealedRefreshToken ?? null, usedStoredRefreshToken)) {
       return;
     }
     await ctx.db.patch(linkId, { authFailedAt: Date.now() });
@@ -118,7 +108,7 @@ export async function freshTwitchToken(ctx: ActionCtx, link: Doc<"platformLinks"
   if (link.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
     return { accessToken: tokens.accessToken, broadcasterUserId: link.platformUserId, expiresAt: link.expiresAt };
   }
-  const usedStoredRefreshToken = storedRefreshToken(link);
+  const usedStoredRefreshToken = link.sealedRefreshToken;
 
   const clientId = process.env.AUTH_TWITCH_ID;
   const clientSecret = process.env.AUTH_TWITCH_SECRET;

@@ -7,7 +7,6 @@ import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
-import { migrationNameValidator } from "./lib/migrationRuns";
 import { notificationAudienceValidator } from "./lib/notifications";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -465,10 +464,7 @@ export default defineSchema({
   // platformLinks: OAuth grants for streaming platforms (Twitch, etc.) per
   // instance. The tokens are stored sealed with PLATFORM_TOKEN_ENCRYPTION_KEY
   // (lib/tokenCipher.ts) and read and written only through
-  // lib/platformLinkTokens.ts. Rows linked before sealing still hold
-  // accessToken/refreshToken in the clear until
-  // migrations/sealPlatformLinkTokens converts them; every write stores the
-  // sealed pair and clears the plaintext one.
+  // lib/platformLinkTokens.ts.
   platformLinks: defineTable({
     instanceId: v.id("instances"),
     platform: v.string(),
@@ -476,10 +472,8 @@ export default defineSchema({
     platformUsername: v.string(),
     profileImageUrl: v.optional(v.string()),
     channelId: v.string(),
-    sealedAccessToken: v.optional(v.string()),
-    sealedRefreshToken: v.optional(v.string()),
-    accessToken: v.optional(v.string()),
-    refreshToken: v.optional(v.string()),
+    sealedAccessToken: v.string(),
+    sealedRefreshToken: v.string(),
     expiresAt: v.number(),
     scopes: v.array(v.string()),
     connectedByUserId: v.optional(v.string()),
@@ -1329,13 +1323,9 @@ export default defineSchema({
         platformUserId: v.string(),
         platformUsername: v.string(),
         profileImageUrl: v.optional(v.string()),
-        // Sealed like platformLinks, which they are copied into. A handoff
-        // stored before sealing carries plaintext instead and is refused when
-        // claimed; it expires within HANDOFF_TTL_MS either way.
-        sealedAccessToken: v.optional(v.string()),
-        sealedRefreshToken: v.optional(v.string()),
-        accessToken: v.optional(v.string()),
-        refreshToken: v.optional(v.string()),
+        // Sealed like platformLinks, which they are copied into.
+        sealedAccessToken: v.string(),
+        sealedRefreshToken: v.string(),
         expiresAt: v.number(),
         scopes: v.array(v.string()),
       })
@@ -2229,27 +2219,4 @@ export default defineSchema({
     settings: v.record(v.string(), v.any()),
     updatedAt: v.number(),
   }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
-
-  // migrationRuns: one row per run of a tracked data migration
-  // (convex/migrations), with what it did. A migration converges when run
-  // again, so a run left "running" by an action that died is superseded by
-  // the next run rather than resumed.
-  migrationRuns: defineTable({
-    migration: migrationNameValidator,
-    status: v.union(v.literal("running"), v.literal("completed")),
-    startedAt: v.number(),
-    finishedAt: v.optional(v.number()),
-    scanned: v.number(),
-    converted: v.number(),
-    skipped: v.number(),
-    failed: v.number(),
-  }).index("by_migration", ["migration"]),
-
-  // migrationRowFailures: a row a migration run could not convert, and why.
-  // The row itself is left as it was; the next run tries it again.
-  migrationRowFailures: defineTable({
-    runId: v.id("migrationRuns"),
-    documentId: v.string(),
-    reason: v.string(),
-  }).index("by_run", ["runId"]),
 });
