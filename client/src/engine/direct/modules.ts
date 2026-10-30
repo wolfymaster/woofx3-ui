@@ -1,3 +1,4 @@
+import { assetsOfKinds, manifestAssets } from "@shared/module-assets";
 import {
   applyMarketplaceMetadata,
   type MarketplaceMergeData,
@@ -10,6 +11,7 @@ import type { ModulesGateway } from "@/engine/gateway";
 import type {
   EngineWorkflowOption,
   MarketplaceBundleInstall,
+  ModuleAsset,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
@@ -19,6 +21,7 @@ import type {
 } from "@/engine/types";
 import { fromModuleId } from "./ids";
 import { MODULE_INVALIDATIONS } from "./invalidations";
+import { directKeys as k } from "./keys";
 import {
   inspectionLocalEndpoints,
   isModuleNamed,
@@ -26,7 +29,7 @@ import {
   toModuleDetail,
   toModuleSettingValue,
 } from "./map/modules";
-import { useEngineRequest } from "./query";
+import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { unsupportedRequest } from "./unsupported";
 
@@ -36,6 +39,22 @@ import { unsupportedRequest } from "./unsupported";
  */
 function paidListingMessage(name: string): string {
   return `${name} is a paid module. Sign in to your woofx3 account to buy and install it.`;
+}
+
+/**
+ * The engine sends a module's assets only as it installs them, so the list is
+ * read from the installed manifest's `assets[]`, the same declarations the
+ * engine registers them from.
+ */
+function assetsRead(runtime: DirectRuntime, moduleId: string, kinds: readonly string[]): EngineRead<ModuleAsset[]> {
+  return {
+    queryKey: k.modules.assets(moduleId, kinds),
+    queryFn: async () => {
+      const modules = await runtime.call("listEngineModules", (api) => api.listEngineModules());
+      const module = modules.find((summary) => summary.moduleId === moduleId);
+      return module === undefined ? [] : assetsOfKinds(manifestAssets(module.manifest, moduleId), kinds);
+    },
+  };
 }
 
 export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
@@ -215,5 +234,6 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     useBundleInstallRequest: () => useEngineRequest(bundleInstall),
     useStorageUsageRequest: () => useEngineRequest(storageUsage),
     useArchiveInstallRequest: unsupportedRequest("modules.useArchiveInstallRequest"),
+    useAssets: (moduleId, kinds) => useEngineQuery(runtime, assetsRead(runtime, fromModuleId(moduleId), kinds ?? [])),
   };
 }

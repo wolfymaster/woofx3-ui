@@ -120,7 +120,7 @@ An action declaring no sentence reads as its name and the settings it has: "Incr
 
 A cleared setting is removed from the step's parameters rather than stored empty (`withSetting`), so the action sees it unset. Field types the step renders its own way:
 
-- `asset` lists the files the action's own module ships, narrowed to the field's `kinds` (`moduleAssets.listForModule`), and stores the asset's canonical id. Everywhere else an `asset` still opens the streamer's asset library.
+- `asset` lists the files the action's own module ships, narrowed to the field's `kinds` (the gateway's `modules.useAssets`: `moduleAssets.listForModule` through Convex, the installed manifest's `assets[]` on the direct gateway), and stores the asset's canonical id. Everywhere else an `asset` still opens the streamer's asset library.
 - `layout` reads `surface`: an `alert` layout opens the alert editor; a surface nothing edits per step is shown and kept as it is.
 - `button` fires its `action` (`ConfigButtonField`, shared by every form): an `internal` request through `fieldOptions.dispatch`, addressed by the field's declaration (`withFieldOptionsOwner` gives the action its reference), or an `integration`'s account connection through `moduleOAuth.start`.
 

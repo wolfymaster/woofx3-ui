@@ -80,7 +80,9 @@ function LocalPages({ session }: { session: ReadySession }) {
           <Suspense fallback={<PageLoading />}>
             <Switch>
               {LOCAL_ROUTES.map((route) => (
-                <Route key={route.path} path={route.path} component={route.page} />
+                <Route key={route.path} path={route.path}>
+                  {(params) => route.render(params)}
+                </Route>
               ))}
               <Route component={ToLocalHome} />
             </Switch>

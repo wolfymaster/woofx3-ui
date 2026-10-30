@@ -1,4 +1,5 @@
 import { useEngineGateway } from "@/engine/context";
+import type { ModuleId } from "@/engine/types";
 
 /** Fetches a module's detail, merged with its marketplace listing when it has one. */
 export function useModuleDetailRequest() {
@@ -48,4 +49,9 @@ export function useMarketplaceBundleInstallRequest() {
 /** Installs a module from an archive built in the browser; resolves with the key its outcome is reported under. */
 export function useModuleArchiveInstallRequest() {
   return useEngineGateway().modules.useArchiveInstallRequest();
+}
+
+/** The files an installed module ships for its actions' `asset` fields, of `kinds` (all when none). */
+export function useModuleAssets(moduleId: ModuleId, kinds: readonly string[] | undefined) {
+  return useEngineGateway().modules.useAssets(moduleId, kinds);
 }

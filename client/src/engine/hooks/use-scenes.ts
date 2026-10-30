@@ -38,9 +38,9 @@ export function useDeleteSceneRequest() {
   return useEngineGateway().scenes.useRemoveRequest();
 }
 
-/** Lists the installed themes made for one widget. */
-export function useWidgetThemesRequest() {
-  return useEngineGateway().scenes.useWidgetThemesRequest();
+/** The installed themes made for one widget. */
+export function useWidgetThemes(widgetCanonicalId: string) {
+  return useEngineGateway().scenes.useWidgetThemes(widgetCanonicalId);
 }
 
 /** Asks the engine to repair a scene or alert it cannot read. */

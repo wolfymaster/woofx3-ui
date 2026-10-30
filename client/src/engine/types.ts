@@ -2,7 +2,7 @@
 // UI uses it, whoever serves it: a gateway maps its own storage or wire shapes
 // into these at its edge, so nothing here may name a gateway's backend.
 
-import type { SceneEditorSession } from "@woofx3/api";
+import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
 export type {
@@ -24,6 +24,15 @@ export type {
   ViewerFact,
   WidgetThemes,
 } from "@woofx3/api";
+
+/**
+ * The installed themes made for one widget, or `unavailable` when they could
+ * not be read. A theme picker shows that rather than failing the form around it.
+ */
+export type WidgetThemesRead = { status: "loaded"; themes: WidgetThemes["themes"] } | { status: "unavailable" };
+
+/** One file a module ships, as an action's `asset` field offers it. */
+export type { ModuleAssetOption as ModuleAsset } from "@shared/module-assets";
 
 /** A grant to open sceneManager's editor socket for one scene. */
 export type SceneEditorGrant = SceneEditorSession;

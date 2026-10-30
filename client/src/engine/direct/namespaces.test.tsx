@@ -498,6 +498,46 @@ function alertWorkflow(id: string, name: string, target: string): Workflow {
 }
 
 describe("scenes", () => {
+  test("a widget's themes are read once, again after a module install, and a failure reads as unavailable", async () => {
+    const { runtime, state, engine } = await connected();
+    const theme = {
+      id: "cozy:theme:warm",
+      name: "Warm",
+      description: "",
+      moduleId: "cozy",
+      moduleVersion: "1.0.0",
+      contractVersion: 1,
+      compatible: true,
+      previewUrl: null,
+    };
+    state.widgetThemes = { "woofx3:widget:alert": [] };
+    const scenes = directScenesGateway(runtime);
+    const read = renderDirect(() => scenes.useWidgetThemes("woofx3:widget:alert"));
+    expect(await read.until((value) => value !== undefined, "the themes")).toEqual({ status: "loaded", themes: [] });
+
+    state.widgetThemes = { "woofx3:widget:alert": [theme] };
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.MODULE_INSTALLED,
+          modulePrefix: "cozy",
+          moduleName: "Cozy",
+          version: "1.0.0",
+          moduleKey: "cozy:1.0.0:abc1234",
+        },
+        "engine",
+        "e-themes"
+      )
+    );
+    await read.until((value) => value?.status === "loaded" && value.themes.length === 1, "the new theme");
+    expect(state.callsOf("listWidgetThemes")).toHaveLength(2);
+    read.unmount();
+
+    const missing = renderDirect(() => scenes.useWidgetThemes("nope"));
+    expect(await missing.until((value) => value !== undefined, "the refusal")).toEqual({ status: "unavailable" });
+    missing.unmount();
+  });
+
   test("reads whole scenes, sized from their layout, and reads them again when one changes", async () => {
     const { runtime, state, engine } = await connected();
     state.scenes = [scene("s-1")];

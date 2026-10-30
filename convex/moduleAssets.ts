@@ -1,3 +1,4 @@
+import { assetsOfKinds } from "@shared/module-assets";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
@@ -66,11 +67,15 @@ export const listForModule = query({
       .query("moduleAssets")
       .withIndex("by_module", (q) => q.eq("moduleId", moduleId))
       .take(MAX_ASSETS_PER_MODULE);
-    const wanted = kinds && kinds.length > 0 ? new Set(kinds) : null;
-    return rows
-      .filter((row) => wanted === null || (row.kind !== undefined && wanted.has(row.kind)))
-      .map((row) => ({ canonicalId: row.canonicalId, name: row.name, kind: row.kind, description: row.description }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return assetsOfKinds(
+      rows.map((row) => ({
+        canonicalId: row.canonicalId,
+        name: row.name,
+        kind: row.kind,
+        description: row.description,
+      })),
+      kinds
+    );
   },
 });
 
