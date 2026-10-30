@@ -11,12 +11,14 @@ mod budget;
 pub mod clock;
 pub mod frame;
 pub mod host;
+pub mod identity;
 pub mod obs_config;
 pub mod relay;
 pub mod window;
 
 pub use address::{AddressOrigin, ConfirmedAddress};
 pub use bridge::{probe, EndpointResolver, ProbeOutcome};
+pub use identity::{AppIdentity, IdentityError};
 pub use relay::{
     run_relay, run_relay_with, CredentialSource, RelayGrant, RelayOptions, RelayStatus, Stopped,
 };
