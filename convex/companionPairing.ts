@@ -11,14 +11,12 @@ import {
   isInstallationId,
   isSha256Hex,
   isValidCompanionVersion,
-  MAX_COMPANION_ROWS_PER_INSTANCE,
   MAX_COMPANION_VERSION_LENGTH,
   MAX_DEVICE_NAME_LENGTH,
   normalizeUserCode,
   PAIRING_TTL_MS,
 } from "./lib/companionCodes";
-import { resyncRelayIfBridging } from "./lib/companionEndpoints";
-import { deleteCompanion, deleteCompanionPresence } from "./lib/companionRecords";
+import { companionsOf, describeReplacedCompanion, writeCompanionCredential } from "./lib/companionRecords";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
@@ -386,14 +384,6 @@ async function findPendingByUserCode(ctx: QueryCtx, rawUserCode: string, now: nu
   return { ok: true, row };
 }
 
-/** The instance's companion rows; at most one is expected, see MAX_COMPANION_ROWS_PER_INSTANCE. */
-async function companionsOf(ctx: QueryCtx, instanceId: Id<"instances">) {
-  return ctx.db
-    .query("companions")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .take(MAX_COMPANION_ROWS_PER_INSTANCE);
-}
-
 /**
  * The companion an approval of this code for this instance would replace, for
  * the approval page's warning. An instance has at most one companion, so
@@ -431,15 +421,7 @@ export const replacementForApproval = query({
     if (!replaced) {
       return null;
     }
-    const presence = await ctx.db
-      .query("companionPresence")
-      .withIndex("by_companion", (q) => q.eq("companionId", replaced._id))
-      .first();
-    return {
-      deviceName: replaced.deviceName,
-      pairedAt: replaced.pairedAt,
-      lastSeenAt: presence?.lastSeenAt ?? null,
-    };
+    return describeReplacedCompanion(ctx, replaced);
   },
 });
 
@@ -461,40 +443,18 @@ export const approve = mutation({
       throw new ConvexError(pending.message);
     }
     const row = pending.row;
-
-    const tokenHolder = await ctx.db
-      .query("companions")
-      .withIndex("by_token_hash", (q) => q.eq("tokenHash", row.tokenHash))
-      .first();
-    const existing = await ctx.db
-      .query("companions")
-      .withIndex("by_instance_installation", (q) =>
-        q.eq("instanceId", instanceId).eq("installationId", row.installationId)
-      )
-      .first();
-    if (tokenHolder && tokenHolder._id !== existing?._id) {
-      throw new ConvexError("This companion's token is already in use. Start pairing again from the companion.");
-    }
-    for (const replaced of companionsReplacedBy(await companionsOf(ctx, instanceId), row.installationId)) {
-      await deleteCompanion(ctx, replaced._id);
-    }
-
-    const credential = {
+    // A code shown on stream could be approved by anyone who saw it, so the
+    // token is unconfirmed until the person at the PC confirms it.
+    await writeCompanionCredential(ctx, {
+      instanceId,
+      installationId: row.installationId,
       tokenHash: row.tokenHash,
       deviceName: row.deviceName,
       companionVersion: row.companionVersion,
       pairedBy: userId,
       pairedAt: now,
-    };
-    if (existing) {
-      // A new token is unconfirmed until the person at the PC confirms it.
-      await ctx.db.patch(existing._id, { ...credential, confirmedAt: undefined });
-      await deleteCompanionPresence(ctx, existing._id);
-      // Unconfirmed, it bridges nothing until the person at the PC confirms.
-      await resyncRelayIfBridging(ctx, instanceId);
-    } else {
-      await ctx.db.insert("companions", { instanceId, installationId: row.installationId, ...credential });
-    }
+      confirmedAt: undefined,
+    });
     await ctx.db.patch(row._id, { status: "approved", instanceId, approvedBy: userId });
     return null;
   },
