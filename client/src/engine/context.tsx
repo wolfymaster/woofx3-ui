@@ -1,46 +1,28 @@
-import { createContext, type ReactNode, useContext, useMemo } from "react";
-import { convexEngineGateway } from "@/engine/convex/gateway";
-import { toInstanceId } from "@/engine/convex/ids";
+import { createContext, type ReactNode, useContext } from "react";
 import type { EngineGateway } from "@/engine/gateway";
-import { EngineScopeProvider } from "@/engine/scope";
-import type { EngineScope } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 
 export { useEngineScope } from "@/engine/scope";
 
-/**
- * The gateway this app runs with, fixed at boot. Swapping it while mounted
- * would change which hooks components call between renders.
- */
-const bootGateway: EngineGateway = convexEngineGateway;
+// Which gateway the app talks to is chosen once, at boot, by the wiring in
+// client/src/engine/boot. Nothing here names an adapter, so the engine hooks
+// and screens work the same over either.
 
-// The gateway is the context's default as well as the provider's value, so
-// an engine call that needs no current instance works outside the provider.
-const EngineGatewayContext = createContext<EngineGateway>(bootGateway);
+const EngineGatewayContext = createContext<EngineGateway | null>(null);
 
 /**
- * Holds the current instance for the engine hooks and the gateway below it,
- * so no call carries an instance id. Mounted around the app shell and the
- * setup wizard.
+ * Makes `gateway` the one every engine hook below uses. Mounted once at the
+ * root and never given another gateway: swapping it while mounted would
+ * change which hooks components call between renders.
  */
-export function EngineGatewayProvider({ children }: { children: ReactNode }) {
-  const { instance, optimisticInstanceId, isLoading } = useInstance();
-  const instanceId = toInstanceId(instance?._id) ?? null;
-  const scope = useMemo(
-    (): EngineScope => ({
-      instanceId,
-      optimisticInstanceId: toInstanceId(optimisticInstanceId),
-      isInstanceLoading: isLoading,
-    }),
-    [instanceId, optimisticInstanceId, isLoading]
-  );
-  return (
-    <EngineGatewayContext.Provider value={bootGateway}>
-      <EngineScopeProvider scope={scope}>{children}</EngineScopeProvider>
-    </EngineGatewayContext.Provider>
-  );
+export function EngineGatewayProvider({ gateway, children }: { gateway: EngineGateway; children: ReactNode }) {
+  return <EngineGatewayContext.Provider value={gateway}>{children}</EngineGatewayContext.Provider>;
 }
 
+/** The gateway the app booted with. Throws outside `EngineGatewayProvider`. */
 export function useEngineGateway(): EngineGateway {
-  return useContext(EngineGatewayContext);
+  const gateway = useContext(EngineGatewayContext);
+  if (!gateway) {
+    throw new Error("useEngineGateway: no EngineGatewayProvider above this component");
+  }
+  return gateway;
 }

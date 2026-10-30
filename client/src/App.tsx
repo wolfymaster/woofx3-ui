@@ -9,6 +9,7 @@ import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { hostedEngineGateway, InstanceEngineScope } from "@/engine/boot/hosted";
 import { EngineGatewayProvider } from "@/engine/context";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
@@ -159,9 +160,9 @@ function AppRoutes() {
       </Route>
       <Route path="/setup/:step?">
         <AuthGuard>
-          <EngineGatewayProvider>
+          <InstanceEngineScope>
             <Setup />
-          </EngineGatewayProvider>
+          </InstanceEngineScope>
         </AuthGuard>
       </Route>
       {/* Outside OnboardingGuard: pairing the companion comes before a local engine has an instance. */}
@@ -174,7 +175,7 @@ function AppRoutes() {
       {/* Protected app routes */}
       <Route>
         <AuthGuard>
-          <EngineGatewayProvider>
+          <InstanceEngineScope>
             <BroadcastShell>
               <OnboardingGuard>
                 <PageBoundary resetKey={location}>
@@ -326,7 +327,7 @@ function AppRoutes() {
                 </PageBoundary>
               </OnboardingGuard>
             </BroadcastShell>
-          </EngineGatewayProvider>
+          </InstanceEngineScope>
         </AuthGuard>
       </Route>
     </Switch>
@@ -344,12 +345,14 @@ function App() {
         (pages/auth/twitch-callback.tsx), so the handling is off.
       */}
       <ConvexAuthProvider client={convex} shouldHandleCode={false}>
-        <TooltipProvider>
-          <Suspense fallback={<SplashScreen />}>
-            <AppRoutes />
-          </Suspense>
-          <Toaster />
-        </TooltipProvider>
+        <EngineGatewayProvider gateway={hostedEngineGateway}>
+          <TooltipProvider>
+            <Suspense fallback={<SplashScreen />}>
+              <AppRoutes />
+            </Suspense>
+            <Toaster />
+          </TooltipProvider>
+        </EngineGatewayProvider>
       </ConvexAuthProvider>
     </ErrorBoundary>
   );

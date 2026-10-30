@@ -23,11 +23,11 @@ export function EngineScopeProvider({ scope, children }: { scope: EngineScope; c
   return <EngineScopeContext.Provider value={scope}>{children}</EngineScopeContext.Provider>;
 }
 
-/** The current instance as the provider sees it. Throws outside `EngineGatewayProvider`. */
+/** The current instance as the provider sees it. Throws outside `EngineScopeProvider`. */
 export function useEngineScope(): EngineScope {
   const scope = useContext(EngineScopeContext);
   if (!scope) {
-    throw new Error("useEngineScope: no EngineGatewayProvider above this component");
+    throw new Error("useEngineScope: no EngineScopeProvider above this component");
   }
   return scope;
 }
