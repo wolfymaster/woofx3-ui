@@ -6,7 +6,9 @@ use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use woofx3_companion_core::host::{ClientCredentials, EngineGateway, HttpEngineGateway};
+use woofx3_companion_core::host::{
+    ClientCredentials, EngineGateway, GatewayTimeouts, HttpEngineGateway,
+};
 
 /// The `/api` URL of an engine stand-in that accepts one request and
 /// answers it with `body`, and the task that ends once it has.
@@ -68,7 +70,11 @@ async fn test_http_engine_gateway_ignores_proxies_from_the_environment() {
     std::env::set_var("ALL_PROXY", &proxy);
 
     let (url, answered) = stand_in("[\"resolve\",2,{\"version\":\"dev\"}]").await;
-    let verified = HttpEngineGateway::new(url, Duration::from_secs(5))
+    let timeouts = GatewayTimeouts {
+        request: Duration::from_secs(5),
+        twitch_call: Duration::from_secs(5),
+    };
+    let verified = HttpEngineGateway::new(url, timeouts)
         .expect("a client")
         .verify(&credentials())
         .await;

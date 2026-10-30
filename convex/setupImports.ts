@@ -1,3 +1,4 @@
+import { COUNTER_KIND } from "@shared/resource-kinds";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -16,7 +17,6 @@ import { addGroupMemberInEngine, createCommandInEngine, createGroupInEngine } fr
 import { escapeDollarKeys, unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRole, requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { COUNTER_KIND } from "./lib/resourceKinds";
 import { flattenSteps } from "./lib/setupImport/build";
 import { compileCommandActions, compileWorkflow, missingRequirementMessage } from "./lib/setupImport/compile";
 import { convertFirebot } from "./lib/setupImport/firebot";

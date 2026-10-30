@@ -1,4 +1,4 @@
-import type { LocalEndpoint } from "./localEndpoints";
+import type { LocalEndpoint } from "@shared/local-endpoints";
 
 /**
  * The discoverers built into the companion (`discover.known`), and the modules

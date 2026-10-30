@@ -1,12 +1,13 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
   MarketplaceBundleInstall,
   ModuleArchiveInstall,
+  ModuleAsset,
   ModuleDetail,
   ModuleId,
   ModuleStorageUsage,
@@ -116,6 +117,13 @@ function useMarketplaceInstallRequest() {
   );
 }
 
+function useAssets(moduleId: ModuleId, kinds: readonly string[] | undefined): ModuleAsset[] | undefined {
+  return useQuery(api.moduleAssets.listForModule, {
+    moduleId: fromModuleId(moduleId),
+    kinds: kinds ? [...kinds] : undefined,
+  });
+}
+
 function toModuleStorageUsage(result: FunctionReturnType<typeof api.moduleStorage.usage>): ModuleStorageUsage | null {
   if (result === null) {
     return null;
@@ -168,4 +176,5 @@ export const convexModulesGateway: ModulesGateway = {
   useBundleInstallRequest,
   useStorageUsageRequest,
   useArchiveInstallRequest,
+  useAssets,
 };

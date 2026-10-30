@@ -1,4 +1,4 @@
-import { type AdSchedule, type AdSnoozeResult, toLocalTime } from "@convex/lib/adBreaks";
+import { type AdSchedule, type AdSnoozeResult, toLocalTime } from "@shared/ad-breaks";
 
 /**
  * What the Ad breaks widget shows, decided from everything it knows. Pure, so

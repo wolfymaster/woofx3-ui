@@ -1,4 +1,4 @@
-import type { StreamRecapEngineDetail } from "@convex/lib/streamRecap";
+import type { StreamRecapEngineDetail } from "@shared/stream-recap";
 import { useCallback, useEffect, useState } from "react";
 import { useEngineScope } from "@/engine/context";
 import { useRecapEngineDetailRequest } from "@/engine/hooks/use-stream-recap";

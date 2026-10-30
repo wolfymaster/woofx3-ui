@@ -1,4 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  type ModuleOAuthIntegration,
+  moduleOAuthAuthorizeUrl,
+  moduleOAuthStateIntegration,
+  readModuleOAuthIntegration,
+} from "@shared/module-oauth";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -7,12 +13,6 @@ import { readMemberRole } from "./instances";
 import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { chooseIntegrationClientId, type IntegrationClientId } from "./lib/integrationClientId";
-import {
-  type ModuleOAuthIntegration,
-  moduleOAuthAuthorizeUrl,
-  moduleOAuthStateIntegration,
-  readModuleOAuthIntegration,
-} from "./lib/moduleOAuth";
 import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";

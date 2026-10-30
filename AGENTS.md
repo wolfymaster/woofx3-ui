@@ -86,7 +86,7 @@ Summary (see `CLAUDE.md` for the full list): `internal*` for private APIs; valid
 
 - **Frontend:** `client/src/` — AuthGuard → BroadcastShell → OnboardingGuard; ReactFlow workflow builder; scene editor.
 - **Backend:** `convex/` — `http.ts` (Twitch OAuth, webhooks, browser source, OBS); `lib/storage/` adapters.
-- **Shared types:** `shared/api.ts` (legacy RPC-shaped types).
+- **Shared code:** `shared/` (`@shared/*`) holds pure helpers both `convex/` and `client/` use; it imports neither Convex nor React.
 - **Companion:** `companion/` — tray app (Tauri) that pairs with an instance through `/companion/pair` and authenticates to Convex with a companion token; not a UI for managing woofx3. See `docs/ui/companion.md`.
 
 ## Task management

@@ -1,5 +1,5 @@
-import { dryRunWouldDo } from "@convex/lib/engineTestRun";
-import { TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { TEST_RUN_ORIGIN } from "@shared/manual-run-origin";
+import { dryRunWouldDo } from "@shared/workflow-test-run";
 import { AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, Loader2, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";

@@ -2,12 +2,6 @@ import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 
 /**
- * The group a definition belongs to when it names no module: the widgets and
- * actions the engine itself provides.
- */
-export const BUILTIN_MODULE_LABEL = "Built-in";
-
-/**
  * Each distinct moduleId's `moduleRepository.name` — the human display name, e.g.
  * "Counter" — for catalogs that group what they offer by the module providing it.
  *

@@ -1,4 +1,4 @@
-import { type ManualRunOrigin, TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { type ManualRunOrigin, TEST_RUN_ORIGIN } from "@shared/manual-run-origin";
 import { useEngineScope } from "@/engine/context";
 import { usePublishTestEventRequest, useSimulateTwitchEventRequest } from "@/engine/hooks/use-test-events";
 import { useToast } from "@/hooks/use-toast";

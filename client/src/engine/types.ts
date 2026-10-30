@@ -2,7 +2,7 @@
 // UI uses it, whoever serves it: a gateway maps its own storage or wire shapes
 // into these at its edge, so nothing here may name a gateway's backend.
 
-import type { SceneEditorSession } from "@woofx3/api";
+import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
 export type {
@@ -24,6 +24,15 @@ export type {
   ViewerFact,
   WidgetThemes,
 } from "@woofx3/api";
+
+/**
+ * The installed themes made for one widget, or `unavailable` when they could
+ * not be read. A theme picker shows that rather than failing the form around it.
+ */
+export type WidgetThemesRead = { status: "loaded"; themes: WidgetThemes["themes"] } | { status: "unavailable" };
+
+/** One file a module ships, as an action's `asset` field offers it. */
+export type { ModuleAssetOption as ModuleAsset } from "@shared/module-assets";
 
 /** A grant to open sceneManager's editor socket for one scene. */
 export type SceneEditorGrant = SceneEditorSession;
@@ -105,7 +114,7 @@ export interface ReadOptions {
   enabled?: boolean;
 }
 
-/** Which instance the gateway and the engine hooks act on, owned by `EngineGatewayProvider`. */
+/** Which instance the gateway and the engine hooks act on, set by `EngineScopeProvider`. */
 export interface EngineScope {
   /** The confirmed current instance, or null while the membership list loads or when there is none. */
   instanceId: InstanceId | null;
@@ -390,9 +399,6 @@ export interface AlertComposition {
   inputs: unknown[];
   createdByType?: string;
   createdByRef?: string;
-  /** Epoch ms. */
-  createdAt: number;
-  updatedAt: number;
 }
 
 /** A new library alert: the composition in the engine's stored JSON shapes. */
@@ -437,9 +443,6 @@ export interface ChatCommand {
   groupIds: string[];
   /** Lowercased usernames granted direct access. */
   usernames: string[];
-  /** Epoch ms. */
-  createdAt: number;
-  updatedAt: number;
 }
 
 /** A group of users a chat command can be limited to. */
@@ -451,9 +454,6 @@ export interface ChatCommandGroup {
   isBuiltIn?: boolean;
   /** ISO time, as the engine reports it. */
   engineCreatedAt: string;
-  /** Epoch ms. */
-  createdAt: number;
-  updatedAt: number;
 }
 
 interface ChatCommandDefinition {
@@ -781,8 +781,6 @@ export interface SceneWidgetCatalogRow {
     transitions: { id: string; label: string }[];
     effects: { id: string; label: string }[];
   };
-  /** Epoch ms. */
-  createdAt: number;
 }
 
 /** One Alert step, in a workflow or a chat command, and the alert widget name it plays on. */
@@ -958,7 +956,6 @@ export interface WorkflowRunRecord {
   completedAt?: string;
   engineCreatedAt: string;
   engineUpdatedAt: string;
-  createdAt: number;
 }
 
 /** One recorded attempt at a step of a run. Engine times are ISO strings; `createdAt` is epoch ms. */
@@ -979,7 +976,6 @@ export interface WorkflowRunStep {
   completedAt?: string;
   engineCreatedAt: string;
   engineUpdatedAt: string;
-  createdAt: number;
 }
 
 /** An alert a recorded run played. */
@@ -1184,9 +1180,11 @@ export type ConfigImportReasonCode =
   | "unknown_action"
   | "unknown_group"
   | "unknown_workflow"
+  | "dependency_blocked"
   | "invalid"
   | "rename_exhausted"
   | "grants_access"
+  | "members_not_applied"
   | "privileged_action";
 
 export interface ConfigImportReason {

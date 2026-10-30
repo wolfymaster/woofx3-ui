@@ -18,8 +18,6 @@ function toAlertComposition(row: Doc<"alertCompositions">): AlertComposition {
     inputs: row.inputs,
     createdByType: row.createdByType,
     createdByRef: row.createdByRef,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
   };
 }
 

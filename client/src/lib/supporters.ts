@@ -1,4 +1,4 @@
-import type { Supporter, SupporterMetric, SupporterStream } from "@convex/lib/supporters";
+import type { Supporter, SupporterMetric, SupporterStream } from "@shared/supporters";
 import { ConvexError } from "convex/values";
 import { formatLiveDuration, liveDurationMs } from "@/lib/session-summary";
 

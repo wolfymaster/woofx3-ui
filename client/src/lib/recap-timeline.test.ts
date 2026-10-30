@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { RecapClip } from "@convex/lib/recapClips";
-import type { RecapEvent } from "@convex/lib/streamRecap";
+import type { RecapEvent } from "@shared/stream-recap";
 import {
   buildLanePoints,
   clipLayerStatus,

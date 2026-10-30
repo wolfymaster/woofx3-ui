@@ -1,4 +1,4 @@
-import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { REPLAY_ORIGIN } from "@shared/manual-run-origin";
 import { Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { ReplayControls } from "@/components/alert-run/replay-controls";

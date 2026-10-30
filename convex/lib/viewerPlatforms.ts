@@ -8,9 +8,10 @@
  * streamer's token nor their engine, and keep working while the engine is
  * offline.
  */
+
+import { twitchUserFromHelix } from "@shared/twitch-users";
 import { logger } from "../logger";
 import { isRevokedRefreshResponse } from "./twitchRefresh";
-import { twitchUserFromHelix } from "./twitchUsers";
 import type { SubscriberTier, ViewerPlatform } from "./viewerAuth";
 
 export type PlatformResult<T, E extends string> = { ok: true; value: T } | { ok: false; error: E };

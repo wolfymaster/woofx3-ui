@@ -1,4 +1,4 @@
-import type { ViewerFact } from "@convex/lib/engineViewerFacts";
+import type { ViewerFact } from "@shared/viewer-facts";
 
 export type { ViewerFact };
 

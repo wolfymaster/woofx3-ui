@@ -1,10 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { type WebhookEndpointKey, webhookEndpointKeys } from "@shared/webhook-endpoint-key";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
 import { shouldRecordDelivery } from "./lib/inboundWebhookDelivery";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { type WebhookEndpointKey, webhookEndpointKeys } from "./lib/webhookEndpointKey";
 import { logger } from "./logger";
 
 type EndpointKey = { instanceId: Id<"instances">; triggerKey: string };

@@ -60,6 +60,7 @@ import type {
   ModeratedUser,
   ModerationAccess,
   ModuleArchiveInstall,
+  ModuleAsset,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
@@ -130,7 +131,7 @@ import type {
   ViewerSupportTotals,
   WebhookEventId,
   WebhookEventSummary,
-  WidgetThemes,
+  WidgetThemesRead,
   Workflow,
   WorkflowCancelResult,
   WorkflowCatalog,
@@ -408,6 +409,11 @@ export interface ModulesGateway {
    * under `moduleKey` (`transientEvents`).
    */
   useArchiveInstallRequest(): (install: ModuleArchiveInstall) => Promise<{ moduleKey: string }>;
+  /**
+   * The files an installed module ships for its actions' `asset` fields, of
+   * the given kinds (all when none), by name.
+   */
+  useAssets(moduleId: ModuleId, kinds: readonly string[] | undefined): Live<ModuleAsset[]>;
   /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
   useStorageUsageRequest(): () => Promise<ModuleStorageUsage | null>;
 }
@@ -442,8 +448,11 @@ export interface ScenesGateway {
   useCreateRequest(): (scene: NewScene) => Promise<{ engineSceneId: string }>;
   useUpdateRequest(): (engineSceneId: string, changes: SceneChanges) => Promise<{ success: boolean }>;
   useRemoveRequest(): (engineSceneId: string) => Promise<{ success: boolean }>;
-  /** The installed themes made for one widget. */
-  useWidgetThemesRequest(): (widgetCanonicalId: string) => Promise<WidgetThemes>;
+  /**
+   * The installed themes made for one widget, read again whenever the set
+   * of installed modules changes, since themes come with modules.
+   */
+  useWidgetThemes(widgetCanonicalId: string): Live<WidgetThemesRead>;
   /**
    * A short-lived token for sceneManager's editor socket for one scene, and
    * the socket's path. Null when the engine does not know the scene or cannot

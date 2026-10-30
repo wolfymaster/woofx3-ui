@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "dashboard",
+  "description": "The dashboard window runs the app's local mode: it reads the host mode and chooses it on first launch, opens its session with the local engine, and uses the local shoutout queue and stream start marker. Beyond listening for their events, nothing from Tauri's core or its plugins.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-local-engine-session",
+    "allow-shoutout-queue",
+    "allow-enqueue-shoutout",
+    "allow-remove-shoutout",
+    "allow-reorder-shoutouts",
+    "allow-stream-start-marker",
+    "allow-request-stream-start-marker",
+    "allow-host-mode",
+    "allow-choose-host-mode"
+  ]
+}

@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
+import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { useQuery } from "convex/react";
 import {
   Bell,

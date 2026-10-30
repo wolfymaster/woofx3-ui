@@ -13,7 +13,7 @@ The page is not part of the dashboard. It is its own Vite entry, `client/src/use
 
 ### Import boundary
 
-The page is downloaded by anyone, so the build refuses to bundle anything it does not need. `userPageBoundary` (`client/src/user-page/build/boundary.ts`) is a Vite plugin that checks every module Rollup bundled against `USER_PAGE_LOCAL_MODULES` (the page's own code, `shared/user-pages`, `client/src/lib/resource-values.ts` and the few Convex files they reach, among them `convex/lib/oauthHandoff.ts` for the sign-in nonce's format) and refuses packages that exist for signing in, the engine connection or the desktop app. A refused import fails `bun run build`, naming what imported it. It checks the bundled graph, so type-only imports, which ship nothing, are not counted.
+The page is downloaded by anyone, so the build refuses to bundle anything it does not need. `userPageBoundary` (`client/src/user-page/build/boundary.ts`) is a Vite plugin that checks every module Rollup bundled against `USER_PAGE_LOCAL_MODULES` (the page's own code, `shared/user-pages`, `shared/resource-kinds.ts`, `client/src/lib/resource-values.ts` and the few Convex files they reach, among them `convex/lib/oauthHandoff.ts` for the sign-in nonce's format) and refuses packages that exist for signing in, the engine connection or the desktop app. A refused import fails `bun run build`, naming what imported it. It checks the bundled graph, so type-only imports, which ship nothing, are not counted.
 
 ### The dashboard and `/u/`
 

@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ScenesGateway } from "@/engine/gateway";
 import type {
   AlertTargetUsage,
@@ -11,6 +11,7 @@ import type {
   SceneChanges,
   SceneRecord,
   SceneWidgetCatalogRow,
+  WidgetThemesRead,
 } from "@/engine/types";
 import { toModuleId, toSceneId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
@@ -55,7 +56,6 @@ function toSceneWidgetCatalogRow(row: WidgetCatalogRow): SceneWidgetCatalogRow {
     createdByType: row.createdByType,
     createdByRef: row.createdByRef,
     behaviorKinds: row.behaviorKinds,
-    createdAt: row.createdAt,
   };
 }
 
@@ -118,9 +118,39 @@ function useRemoveRequest() {
   return useCallback((engineSceneId: string) => deleteScene({ engineSceneId }), [deleteScene]);
 }
 
-function useWidgetThemesRequest() {
+/**
+ * Lists the themes through the engine once, and again whenever the
+ * instance's installed module set changes (its install revision), rather
+ * than polling: themes only come and go with modules.
+ */
+function useWidgetThemes(widgetCanonicalId: string): WidgetThemesRead | undefined {
+  const instanceId = useScopeInstanceId();
   const listWidgetThemes = useInstanceAction(api.sceneActions.listWidgetThemes);
-  return useCallback((widgetCanonicalId: string) => listWidgetThemes({ widgetCanonicalId }), [listWidgetThemes]);
+  const revision = useQuery(api.moduleRepository.installedRevision, instanceId ? { instanceId } : "skip");
+  const [read, setRead] = useState<{ widget: string; result: WidgetThemesRead } | undefined>(undefined);
+
+  useEffect(() => {
+    if (revision === undefined) {
+      return;
+    }
+    let cancelled = false;
+    listWidgetThemes({ widgetCanonicalId })
+      .then((result): WidgetThemesRead => ({ status: "loaded", themes: result.themes }))
+      .catch((error: unknown): WidgetThemesRead => {
+        console.error("listWidgetThemes failed:", error);
+        return { status: "unavailable" };
+      })
+      .then((result) => {
+        if (!cancelled) {
+          setRead({ widget: widgetCanonicalId, result });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [widgetCanonicalId, revision, listWidgetThemes]);
+
+  return read?.widget === widgetCanonicalId ? read.result : undefined;
 }
 
 function useEditorSessionRequest() {
@@ -142,7 +172,7 @@ export const convexScenesGateway: ScenesGateway = {
   useCreateRequest,
   useUpdateRequest,
   useRemoveRequest,
-  useWidgetThemesRequest,
+  useWidgetThemes,
   useEditorSessionRequest,
   useRepairRequest,
 };

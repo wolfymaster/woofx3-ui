@@ -1,9 +1,4 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalQuery, query } from "./_generated/server";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import {
   attributedSupporters,
   engineFailureMessage,
@@ -22,13 +17,19 @@ import {
   VIEWER_RECENT_STREAMS,
   VIEWER_STREAM_SCAN,
   type ViewerStreamTotals,
-} from "./lib/supporters";
+} from "@shared/supporters";
+import { normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
+import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalQuery, query } from "./_generated/server";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
-import { fetchTwitchAppCredentials, fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
+import { fetchTwitchAppCredentials, fetchTwitchUser } from "./lib/twitchUsers";
 import { SHOUTOUT_SCOPE } from "./shoutouts";
 
 // Every function here reads per-viewer figures from the engine and hands them
-// straight back. None of them writes: see convex/lib/supporters.ts for why
+// straight back. None of them writes: see shared/supporters.ts for why
 // per-viewer detail never lands in a Convex table.
 
 interface SupporterEngineApi extends EngineApi, SupporterEngineMethods {}

@@ -1,4 +1,6 @@
-import { parseDataShape, parseFieldList } from "@woofx3/api/ui-schema";
+import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
+import { bareModuleKey } from "@shared/module-key";
+import { webhookEndpointKey } from "@shared/webhook-endpoint-key";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -13,9 +15,6 @@ import {
 } from "./lib/definitionCatalog";
 import { resolveProvenance } from "./lib/marketplaceInstallIdentity";
 import { recordedProvenance } from "./lib/marketplaceInstallRecords";
-import { bareModuleKey } from "./lib/moduleKey";
-import { triggerDefinitionRow } from "./lib/triggerDefinitionRow";
-import { webhookEndpointKey } from "./lib/webhookEndpointKey";
 import {
   moduleDeleteFailedTransient,
   moduleInstalledTransient,
@@ -148,70 +147,6 @@ const actionValidator = v.object({
   taxonomy: v.optional(v.array(v.string())),
   sentence: v.optional(v.string()),
 });
-
-/*
- * Presentation fields the UI needs to render an action. The engine
- * doesn't model these — it forwards an opaque paramsSchema string. Whatever the module author put in that string is parsed best-
- * effort here; anything the parser can't extract falls back to the defaults
- * below so the workflow builder always has something to render.
- */
-const DEFAULT_UI_COLOR = "#888888";
-const DEFAULT_ACTION_ICON = "ArrowRight";
-const DEFAULT_ACTION_CATEGORY = "General";
-
-type ActionUiFields = {
-  color: string;
-  icon: string;
-  configFields?: unknown[];
-  returns?: unknown[];
-};
-
-function actionUi(paramsSchema: string | undefined, returns: string | undefined): ActionUiFields {
-  const fields = parseFieldList(paramsSchema);
-  // `returns` is a DataShape, not a field list: it names values that exist at
-  // runtime rather than controls to render, so it parses differently.
-  const shape = parseDataShape(returns);
-  return {
-    color: DEFAULT_UI_COLOR,
-    icon: DEFAULT_ACTION_ICON,
-    configFields: fields.length > 0 ? fields : undefined,
-    returns: shape ? shape.fields : undefined,
-  };
-}
-
-type EngineAction = {
-  id: string;
-  name?: string;
-  description?: string;
-  call?: string;
-  type?: string;
-  paramsSchema?: string;
-  returns?: string;
-  projectionKey?: string;
-  taxonomy?: string[];
-  sentence?: string;
-};
-
-function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | undefined) {
-  const ui = actionUi(a.paramsSchema, a.returns);
-  const handlerType = a.type?.trim() || (a.call?.trim() ? "function" : undefined);
-  return {
-    slug: a.id,
-    name: a.name ?? a.id,
-    description: a.description ?? "",
-    category: DEFAULT_ACTION_CATEGORY,
-    color: ui.color,
-    icon: ui.icon,
-    configFields: ui.configFields,
-    returns: ui.returns,
-    projectionKey: a.projectionKey,
-    taxonomy: a.taxonomy,
-    sentence: a.sentence?.trim() || undefined,
-    handlerType,
-    functionCall: a.call?.trim() || undefined,
-    moduleId,
-  };
-}
 
 /**
  * The row an incoming install replaces: this instance's record for the same
@@ -349,7 +284,7 @@ export const processModuleInstalled = internalMutation({
     }
 
     for (const action of actions) {
-      const row = translateAction(action, moduleId);
+      const row = actionDefinitionRow(action, moduleId);
       const existing = await ctx.db
         .query("actionDefinitions")
         .withIndex("by_slug", (q) => q.eq("slug", row.slug))
@@ -452,7 +387,7 @@ export const processRegisteredDefinitions = internalMutation({
     }
 
     for (const action of actions) {
-      const row = translateAction(action, moduleId);
+      const row = actionDefinitionRow(action, moduleId);
       const existing = await ctx.db
         .query("actionDefinitions")
         .withIndex("by_slug", (q) => q.eq("slug", row.slug))

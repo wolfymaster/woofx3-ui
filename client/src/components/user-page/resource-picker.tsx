@@ -1,4 +1,4 @@
-import { parseKindRef } from "@convex/lib/resourceKinds";
+import { parseKindRef } from "@shared/resource-kinds";
 import type { BindableResourceKind } from "@shared/user-pages";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

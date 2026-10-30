@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { alertWidgetNamesOf, orphanedAlertTargets } from "@convex/lib/alertWidgets";
+import { alertWidgetNamesOf, orphanedAlertTargets } from "@shared/alert-widgets";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";

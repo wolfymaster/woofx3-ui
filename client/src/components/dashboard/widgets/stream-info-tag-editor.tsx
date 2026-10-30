@@ -1,4 +1,4 @@
-import { addTagProblem, MAX_TAGS, tagWarning } from "@convex/lib/streamInfo";
+import { addTagProblem, MAX_TAGS, tagWarning } from "@shared/stream-info";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";

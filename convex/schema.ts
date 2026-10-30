@@ -1214,7 +1214,7 @@ export default defineSchema({
 
   // workflowHealth: whether the engine runs each stored workflow on its own,
   // from the workflow.health.* webhooks and the getWorkflowHealth() resync
-  // (convex/lib/workflowHealth.ts). Its own table rather than fields on
+  // (shared/workflow-health.ts). Its own table rather than fields on
   // `workflows` because a report can arrive before that row is mirrored, and
   // because a health change should not rewrite a row carrying the definition.
   // Ok rows are kept: their `sinceMs` is what makes a late error redelivery stale.

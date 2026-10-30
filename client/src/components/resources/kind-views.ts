@@ -1,4 +1,4 @@
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
+import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";

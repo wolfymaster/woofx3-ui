@@ -24,7 +24,12 @@
 //! exponential backoff. A run that stayed ready for
 //! [`SidecarOptions::stable_after`] starts the backoff over. When it exits
 //! cleanly without being asked to (no enabled services, or a stop request
-//! from outside the host), the sidecar stops for good and says why.
+//! from outside the host), the sidecar stops for good and says why. So it
+//! does when the database migration fails: the run-once step every service
+//! that opens the database waits for. Running it again would fail the same
+//! way, and the engine must not start on a half-migrated database. A
+//! migration that could not even start migrated nothing, so it keeps the
+//! restart policy.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::OsString;
@@ -48,6 +53,11 @@ use crate::backoff::Backoff;
 const STATUS_MODE_ENV: &str = "WOOFX3_SUPERVISOR_STATUS";
 const STATUS_MODE_STDOUT_JSONL: &str = "stdout-jsonl";
 const EXIT_ON_STDIN_EOF_FLAG: &str = "--exit-on-stdin-eof";
+
+/// The orchestrator's run-once step that migrates the database, before
+/// anything that opens it starts. Must match the `migrate` entry in the
+/// engine's build/config/services.json.
+const MIGRATE_STEP: &str = "migrate";
 
 /// How many of the orchestrator's last stderr lines a restart reason quotes.
 /// It writes to stderr only when it fails before its logger is up.
@@ -132,6 +142,10 @@ pub enum EnginePhase {
     /// The orchestrator is starting its services. `attempt` counts the
     /// restarts since the last stable run.
     Starting { attempt: u32 },
+    /// The orchestrator is migrating the database: the run-once step every
+    /// service that opens the database waits for. Services that do not use
+    /// the database may be starting meanwhile.
+    Migrating { attempt: u32 },
     /// Every service passed its health check. The orchestrator says so once
     /// per run, so a service that fails later shows only in `services`.
     Ready,
@@ -156,6 +170,9 @@ pub enum StopCause {
     /// The orchestrator exited cleanly without the host asking. Starting it
     /// again would only repeat that.
     ExitedOnItsOwn { reason: String },
+    /// The database migration failed, so the orchestrator stopped. Running
+    /// it again would fail the same way.
+    MigrationFailed { reason: String },
 }
 
 pub async fn run_sidecar(
@@ -190,6 +207,13 @@ pub async fn run_sidecar_with(
                 });
                 return;
             }
+            RunEnd::MigrationFailed { reason } => {
+                status.send_modify(|current| {
+                    current.phase = EnginePhase::Stopped(StopCause::MigrationFailed { reason });
+                    current.services.clear();
+                });
+                return;
+            }
             RunEnd::Failed { reason, ready_for } => (reason, ready_for),
         };
         if ready_for.is_some_and(|ready_for| ready_for >= options.stable_after) {
@@ -220,6 +244,8 @@ enum RunEnd {
     Stopped,
     /// The orchestrator exited with success without being asked to.
     ExitedCleanly { reason: String },
+    /// The orchestrator stopped because the database migration failed.
+    MigrationFailed { reason: String },
     /// The orchestrator failed, or never started. `ready_for` is how long it
     /// had been ready when it exited.
     Failed {
@@ -259,6 +285,11 @@ async fn run_once(
     if exit.as_ref().is_ok_and(ExitStatus::success) {
         return RunEnd::ExitedCleanly { reason };
     }
+    if let Some(failure) = run.migration_failure.take() {
+        return RunEnd::MigrationFailed {
+            reason: format!("the database migration failed ({failure}); {reason}"),
+        };
+    }
     RunEnd::Failed {
         reason,
         ready_for: run.ready_at.map(|ready_at| ready_at.elapsed()),
@@ -271,6 +302,11 @@ struct RunState {
     ready_at: Option<Instant>,
     /// The orchestrator's own last error, which explains its exit.
     fatal: Option<String>,
+    /// The migration step's process started in this run. Only then can its
+    /// failure have left the database half-migrated.
+    migration_ran: bool,
+    /// What the migration step's failure said, once it ran and failed.
+    migration_failure: Option<String>,
     /// Lines that did not parse, counted rather than kept: they are not the
     /// orchestrator's, and could be anything.
     unreadable_lines: usize,
@@ -290,7 +326,25 @@ impl RunState {
             StatusEvent::Service {
                 name, status: next, ..
             } => {
+                let migrating = name == MIGRATE_STEP;
+                // The orchestrator reports a step `starting` once its process
+                // is running; a step that could not start reports only an
+                // error.
+                if migrating && next == ServiceStatus::Starting {
+                    self.migration_ran = true;
+                }
                 status.send_modify(|current| {
+                    if migrating {
+                        current.phase = match (&current.phase, next) {
+                            (EnginePhase::Starting { attempt }, ServiceStatus::Starting) => {
+                                EnginePhase::Migrating { attempt: *attempt }
+                            }
+                            (EnginePhase::Migrating { attempt }, _) => {
+                                EnginePhase::Starting { attempt: *attempt }
+                            }
+                            (phase, _) => phase.clone(),
+                        };
+                    }
                     current.services.insert(name, next);
                 });
             }
@@ -306,6 +360,12 @@ impl RunState {
                 service: None,
                 message,
             } => self.fatal = Some(message),
+            StatusEvent::Error {
+                service: Some(service),
+                message,
+            } if service == MIGRATE_STEP && self.migration_ran => {
+                self.migration_failure = Some(message)
+            }
             StatusEvent::Error {
                 service: Some(_), ..
             }

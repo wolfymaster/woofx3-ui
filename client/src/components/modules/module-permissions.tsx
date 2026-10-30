@@ -1,4 +1,4 @@
-import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
+import type { LocalEndpointSummary } from "@shared/local-endpoints";
 import { AlertTriangle, Network, ShieldCheck } from "lucide-react";
 import {
   AlertDialog,

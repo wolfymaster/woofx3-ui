@@ -1,4 +1,4 @@
-import { COUNTER_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
+import { COUNTER_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { type Infer, type Validator, v } from "convex/values";
 import { checkId, checkImage, checkLinkUrl, checkUniqueIds, pageImageValidator } from "./fields";
 import { USER_PAGE_LIMITS } from "./limits";

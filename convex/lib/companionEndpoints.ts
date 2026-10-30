@@ -1,11 +1,11 @@
+import { type LocalEndpoint, readLocalEndpoints } from "@shared/local-endpoints";
+import { bareModuleKey } from "@shared/module-key";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { approvalStands } from "./companionAuth";
 import { MAX_COMPANION_ROWS_PER_INSTANCE } from "./companionCodes";
-import { type LocalEndpoint, readLocalEndpoints } from "./localEndpoints";
 import { isMaintenanceConfigured } from "./maintenanceClient";
-import { bareModuleKey } from "./moduleKey";
 import { isRelayConfigured } from "./relayCredential";
 
 /** The bound on module rows read per instance; one row per installed module. */

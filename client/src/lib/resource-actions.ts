@@ -1,4 +1,4 @@
-import { resourceKindMatches } from "@convex/lib/resourceKinds";
+import { resourceKindMatches } from "@shared/resource-kinds";
 import type { ActionStep, WorkflowDefinition } from "@woofx3/api";
 import type { WorkflowRecord } from "@/engine/types";
 import { stepsAimAt } from "@/lib/alert-triggers";

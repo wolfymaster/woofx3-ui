@@ -1,3 +1,4 @@
+import { readSentMessageIdAnswer } from "@shared/twitch-chat";
 import type { AuthorizedTwitchCall } from "./twitchAuth";
 import { helixResponse, type TwitchHelixRoute } from "./twitchEngineHelix";
 
@@ -6,9 +7,6 @@ import { helixResponse, type TwitchHelixRoute } from "./twitchEngineHelix";
 // already checked membership and the user:write:chat scope via authorizeTwitch.
 
 const TWITCH_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
-
-/** Twitch rejects a chat message longer than this, so refuse before spending a call. */
-export const MAX_CHAT_MESSAGE_LENGTH = 500;
 
 /**
  * Posts `text` to chat, pinning it in the same request when asked, and
@@ -41,21 +39,5 @@ export async function sendChatMessage(
         }),
       }),
   });
-  if (!response.ok) {
-    throw new Error(`Twitch chat send failed: ${response.status} ${await response.text()}`);
-  }
-
-  const body = (await response.json()) as {
-    data?: Array<{ message_id?: string; is_sent?: boolean; drop_reason?: { code?: string; message?: string } }>;
-  };
-  const result = body.data?.[0];
-  // Twitch answers 200 and still drops the message — automod, a duplicate, a
-  // banned term. Treating that as success would record an id nobody ever saw.
-  if (!result?.is_sent) {
-    throw new Error(result?.drop_reason?.message ?? "Twitch accepted the message but did not send it");
-  }
-  if (!result.message_id) {
-    throw new Error("Twitch sent the message but returned no id");
-  }
-  return result.message_id;
+  return readSentMessageIdAnswer(response);
 }

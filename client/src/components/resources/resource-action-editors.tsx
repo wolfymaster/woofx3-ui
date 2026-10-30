@@ -1,4 +1,4 @@
-import { bareKind } from "@convex/lib/resourceKinds";
+import { bareKind } from "@shared/resource-kinds";
 import { Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {

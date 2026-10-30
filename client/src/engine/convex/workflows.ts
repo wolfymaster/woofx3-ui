@@ -108,7 +108,6 @@ function toWorkflowRunRecord(row: RunDetailRow["run"]): WorkflowRunRecord {
     completedAt: row.completedAt,
     engineCreatedAt: row.engineCreatedAt,
     engineUpdatedAt: row.engineUpdatedAt,
-    createdAt: row.createdAt,
   };
 }
 
@@ -129,7 +128,6 @@ function toWorkflowRunStep(row: Doc<"workflowRunSteps">): WorkflowRunStep {
     completedAt: row.completedAt,
     engineCreatedAt: row.engineCreatedAt,
     engineUpdatedAt: row.engineUpdatedAt,
-    createdAt: row.createdAt,
   };
 }
 

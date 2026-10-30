@@ -1,10 +1,10 @@
+import { parseKindRef } from "@shared/resource-kinds";
 import { type PageContent, type PageProblem, type ResourceBinding, widgetBindings } from "@shared/user-pages";
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { accountEntitlements } from "./entitlementAccess";
 import { normalizeSlug } from "./maintenanceClient";
-import { parseKindRef } from "./resourceKinds";
 import { rebuildPageState } from "./userPageState";
 
 /** Provisioning states in which the maintenance API no longer holds the engine's slug for it. */

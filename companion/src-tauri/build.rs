@@ -5,10 +5,14 @@
 /// crate needs no deployment.
 const DEBUG_CONVEX_URL: &str = "http://127.0.0.1:3210";
 
-include!("src/command_names.rs");
+// The command list, read as source rather than through the core crate: a
+// build script can use another crate only as a build-dependency, which would
+// compile core and all of its runtime dependencies for the build machine
+// just to read these names.
+include!("../core/src/window/command_names.rs");
 
 macro_rules! command_name_list {
-    ($($name:ident),* $(,)?) => {
+    ($($name:ident($args:ty) -> $result:ty),* $(,)?) => {
         &[$(stringify!($name)),*]
     };
 }
@@ -18,6 +22,7 @@ include!("src/convex_url.rs");
 
 fn main() {
     println!("cargo:rerun-if-env-changed=WOOFX3_CONVEX_URL");
+    println!("cargo:rerun-if-changed=../core/src/window/command_names.rs");
     let configured = std::env::var("WOOFX3_CONVEX_URL")
         .ok()
         .filter(|url| !url.trim().is_empty());

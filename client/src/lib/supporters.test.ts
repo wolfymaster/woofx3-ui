@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { SupporterStream } from "@convex/lib/supporters";
+import type { SupporterStream } from "@shared/supporters";
 import { ConvexError } from "convex/values";
 import {
   formatMetricEvents,

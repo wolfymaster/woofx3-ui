@@ -1,4 +1,19 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  classifyEngineCallError,
+  type EngineCallFailure,
+  type Leaderboard,
+  type LeaderboardQuery,
+  RECAP_EVENT_LIMIT,
+  RECAP_LEADERBOARD_LIMIT,
+  type RecapTimelineEvents,
+  type StreamGaugeSample,
+  type StreamRecapEngineDetail,
+  type StreamSessionEvents,
+  type StreamSessionEventsQuery,
+  toRecapEngineDetail,
+  toRecapTimelineEvents,
+} from "@shared/stream-recap";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -26,19 +41,14 @@ import {
   videosInWindow,
 } from "./lib/recapMarkers";
 import { sessionSnapshotPayload } from "./lib/sessionSummary";
-import {
-  classifyEngineCallError,
-  type EngineCallFailure,
-  RECAP_EVENT_LIMIT,
-  RECAP_LEADERBOARD_LIMIT,
-  type RecapTimelineEvents,
-  type StreamRecapEngineApi,
-  type StreamRecapEngineDetail,
-  toRecapEngineDetail,
-  toRecapTimelineEvents,
-} from "./lib/streamRecap";
 import { type AuthorizedTwitchCall, freshTwitchCredentials } from "./lib/twitchAuth";
 import { logger } from "./logger";
+
+interface StreamRecapEngineApi extends EngineApi {
+  getLeaderboard(query: LeaderboardQuery): Promise<Leaderboard | null>;
+  getStreamSessionGauges(sessionId: string): Promise<StreamGaugeSample[] | null>;
+  getStreamSessionEvents(query: StreamSessionEventsQuery): Promise<StreamSessionEvents | null>;
+}
 
 /**
  * The parts of a stream recap only the engine holds: per-minute viewer samples

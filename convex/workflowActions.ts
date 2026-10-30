@@ -1,5 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
+import {
+  buildTriggerOptions,
+  type CancelWorkflowResult,
+  type TriggerWorkflowOptions,
+  type TriggerWorkflowResponse,
+  type UnmetTriggerCondition,
+} from "@shared/workflow-test-run";
 import type { WorkflowDefinition } from "@woofx3/api";
+import type { RpcTarget } from "@woofx3/api/client";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -7,14 +16,26 @@ import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { CORRELATION_TIMEOUT_MS, nextPollDelayMs } from "./lib/completionPolling";
 import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import {
-  buildTriggerOptions,
-  type CancelWorkflowResult,
-  type TestRunEngineApi,
-  type UnmetTriggerCondition,
-} from "./lib/engineTestRun";
-import { manualRunOrigin, UNRECORDED_ORIGIN } from "./lib/manualRunOrigin";
+import { manualRunOrigin } from "./lib/manualRunOrigin";
 import { logger } from "./logger";
+
+/**
+ * The slice of the engine API test runs use, typed to the engine that has
+ * the options. Calls against an older engine still succeed: capnweb passes
+ * the extra argument, which the older method ignores.
+ */
+interface TestRunEngineApi extends RpcTarget {
+  triggerWorkflowByName(
+    workflowNameOrId: string,
+    parameters?: Record<string, string>,
+    userId?: string,
+    triggerId?: string,
+    triggeredBy?: string,
+    options?: TriggerWorkflowOptions
+  ): Promise<TriggerWorkflowResponse>;
+  /** Returns nothing on an engine whose cancel only marks the history row. */
+  cancelWorkflow(executionId: string, reason?: string): Promise<CancelWorkflowResult | undefined | null>;
+}
 
 /**
  * The engine accepted a change but its webhook echo did not arrive in time.
@@ -203,7 +224,7 @@ export const trigger = action({
     workflowNameOrId: v.string(),
     parameters: v.optional(v.record(v.string(), v.string())),
     origin: v.optional(manualRunOrigin),
-    // Test-run options; see lib/engineTestRun.ts. Sent only to engines that advertise workflow.testRunOptions.
+    // Test-run options; see shared/workflow-test-run.ts. Sent only to engines that advertise workflow.testRunOptions.
     options: v.optional(
       v.object({
         triggerData: v.optional(v.record(v.string(), v.any())),
@@ -247,7 +268,7 @@ export const trigger = action({
 
 interface TriggerResult {
   triggerId: string;
-  /** `requested`, `started` or `conditions_not_met`; see lib/engineTestRun.ts. */
+  /** `requested`, `started` or `conditions_not_met`; see shared/workflow-test-run.ts. */
   status: string;
   /** Set when the engine answered with the run it started. */
   executionId: string | null;

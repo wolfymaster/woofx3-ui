@@ -1,4 +1,4 @@
-import type { ModuleOAuthIntegration } from "./moduleOAuth";
+import type { ModuleOAuthIntegration } from "@shared/module-oauth";
 
 /**
  * The providers woofx3 has its own OAuth app with, and the endpoints that app

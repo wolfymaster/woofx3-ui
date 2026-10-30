@@ -67,6 +67,7 @@ fn spec(scratch: &Scratch, script: &str) -> SidecarSpec {
                 scratch.path("record").into(),
             ),
             ("FAKE_ORCHESTRATOR_RUNS".into(), scratch.path("runs").into()),
+            ("FAKE_ORCHESTRATOR_GATE".into(), scratch.path("gate").into()),
             ("FAKE_ENGINE_SETTING".into(), "on".into()),
         ],
     }
@@ -457,4 +458,111 @@ async fn test_sidecar_dropped_without_a_stop_kills_the_tree() {
     let _aborted = running.task.await;
     wait_until_gone(service).await;
     wait_until_gone(orchestrator).await;
+}
+
+#[tokio::test]
+async fn test_sidecar_shows_the_migration_then_starts() {
+    let scratch = Scratch::new("migrate");
+    let mut running = start(spec(&scratch, "migrate-then-ready"), options());
+    running
+        .wait_for("migrating", |status| {
+            status.phase == EnginePhase::Migrating { attempt: 0 }
+                && status.services.get("migrate") == Some(&ServiceStatus::Starting)
+        })
+        .await;
+    std::fs::write(scratch.path("gate"), b"").expect("open the gate");
+    running
+        .wait_for("ready", |status| status.phase == EnginePhase::Ready)
+        .await;
+    assert_eq!(
+        running.status.borrow().services.get("migrate"),
+        Some(&ServiceStatus::Completed)
+    );
+    running.cancel.cancel();
+    timeout(WITHIN, running.task)
+        .await
+        .expect("stops in time")
+        .expect("no panic");
+}
+
+/// A failed migration is final: running it again would fail the same way,
+/// and the engine must not start on a half-migrated database.
+#[tokio::test]
+async fn test_sidecar_stops_for_good_when_the_migration_fails() {
+    let scratch = Scratch::new("migrate-fails");
+    let mut running = start(spec(&scratch, "step-fails:migrate"), options());
+    running
+        .wait_for("stopped", |status| {
+            matches!(status.phase, EnginePhase::Stopped(_))
+        })
+        .await;
+    let phase = running.status.borrow().phase.clone();
+    let EnginePhase::Stopped(StopCause::MigrationFailed { reason }) = phase else {
+        panic!("expected a failed migration, got {phase:?}");
+    };
+    assert!(
+        reason.contains("the database migration failed (run-once step failed: exit status 1)"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("Stopped because a run-once step failed: migrate: exit status 1"),
+        "{reason}"
+    );
+    let phases = running.phases();
+    assert!(
+        !phases
+            .iter()
+            .any(|phase| matches!(phase, EnginePhase::Restarting { .. })),
+        "{phases:?}"
+    );
+    timeout(WITHIN, running.task)
+        .await
+        .expect("the supervisor ends on its own")
+        .expect("no panic");
+    assert_eq!(scratch.recorded("pid").len(), 1, "never started again");
+}
+
+/// Only the migration is final: any other failed step is a crash like any
+/// other, restarted with backoff.
+#[tokio::test]
+async fn test_sidecar_restarts_after_another_step_fails() {
+    let scratch = Scratch::new("step-fails");
+    let mut running = start(spec(&scratch, "step-fails:seed"), options());
+    running
+        .wait_for("a restart", |status| {
+            matches!(status.phase, EnginePhase::Restarting { .. })
+        })
+        .await;
+    running.cancel.cancel();
+    timeout(WITHIN, running.task)
+        .await
+        .expect("stops in time")
+        .expect("no panic");
+}
+
+/// A migration that could not start migrated nothing, so it is a failure
+/// like any other: restarted with backoff, as a passing spawn failure
+/// would succeed on a later run.
+#[tokio::test]
+async fn test_sidecar_restarts_when_the_migration_cannot_start() {
+    let scratch = Scratch::new("migrate-cannot-start");
+    let mut running = start(spec(&scratch, "step-cannot-start:migrate"), options());
+    running
+        .wait_for("a second restart", |status| {
+            matches!(status.phase, EnginePhase::Restarting { attempt: 2, .. })
+        })
+        .await;
+    assert!(
+        !running.phases().iter().any(|phase| matches!(
+            phase,
+            EnginePhase::Stopped(StopCause::MigrationFailed { .. })
+        )),
+        "{:?}",
+        running.phases()
+    );
+    running.cancel.cancel();
+    timeout(WITHIN, running.task)
+        .await
+        .expect("stops in time")
+        .expect("no panic");
 }

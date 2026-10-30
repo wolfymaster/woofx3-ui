@@ -192,6 +192,7 @@ kernel browsers delete <id-or-name>                                     # always
 @shared/     → shared/
 @convex/     → convex/
 @assets/     → attached_assets/
+@desktop-host/*  → companion/ui/src/generated/*  (the desktop app's window types, generated from its Rust host)
 @woofx3/api  → ../woofx3/shared/clients/typescript/api/api.ts
 @woofx3/scene/*  → ../woofx3/shared/clients/typescript/scene/*/index.ts  (model, editor)
 @woofx3/cloudevents/*  → ../woofx3/shared/common/typescript/cloudevents/*  (tsconfig.json only; tests)
@@ -252,11 +253,11 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - Alert system: the engine queues and plays alerts in its own overlay; the `/browser-source/{key}` route sends OBS there, and the engine reports each alert's lifecycle as `alert.*` callbacks mirrored into `engineAlerts`
 - Storage adapters in `convex/lib/storage/` — Convex native, R2, or local file storage per instance config
 
-### Shared (`shared/api.ts`)
-- Type definitions for the legacy RPC API contract (pagination, stream status, workflows, assets, scenes, modules, etc.)
+### Shared (`shared/`)
+- Pure code both `convex/` and `client/` import as `@shared/*`: parsers and mappers of engine data (scene JSON, widget keys, recap and supporter figures) and the rules built on them (alert widget names). The engine gateway's adapters may not import Convex modules, so a helper the direct gateway needs as well as Convex lives here, not in `convex/lib/`. Nothing here imports Convex or React.
 
 ### Companion (`companion/`)
-- A Tauri tray app for the streamer's PC that pairs with an instance through `/companion/pair` and authenticates to Convex with a companion token (only its hash is stored; the `companions` row is the credential). It is not a UI for managing woofx3: the browser is the only management surface. See `docs/ui/companion.md`.
+- The woofx3 desktop app (Tauri), which lives in the tray on the streamer's PC. Its main window shows the dashboard, built with `bun run build:desktop` (`IS_DESKTOP` in `client/src/lib/desktop.ts` gates desktop-only code). Its companion window pairs with an instance through `/companion/pair` and authenticates to Convex with a companion token (only its hash is stored; the `companions` row is the credential). See `docs/ui/companion.md`.
 
 ## Task Management
 

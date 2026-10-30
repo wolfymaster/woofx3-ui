@@ -1,0 +1,75 @@
+import { lazy, type ReactNode } from "react";
+import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
+import {
+  COMMAND_EDITOR_ROUTE,
+  COMMAND_GROUP_EDITOR_ROUTE,
+  COMMAND_GROUP_NEW_ROUTE,
+  COMMAND_GROUPS_PATH,
+  COMMAND_LIST_PATH,
+  COMMAND_NEW_ROUTE,
+} from "@/lib/command-editor-route";
+import { builtInKindRoutes } from "@/lib/resource-kind-route";
+import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
+
+// The pages local mode serves: those that reach the engine only through its
+// gateway. Local mode runs with no Convex client, so a page that loads a
+// Convex hook would throw; local-routes.test.ts walks every import from here
+// and fails on any that reaches Convex. A page joins this table once nothing
+// it loads does.
+
+export interface LocalRoute {
+  path: string;
+  render: (params: Record<string, string | undefined>) => ReactNode;
+}
+
+const Alerts = lazy(() => import("@/pages/alerts"));
+const AlertRun = lazy(() => import("@/pages/alert-run"));
+const Assets = lazy(() => import("@/pages/assets"));
+const CommandEditor = lazy(() => import("@/pages/command-editor"));
+const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
+const Commands = lazy(() => import("@/pages/commands"));
+const Learning = lazy(() => import("@/pages/learning"));
+const ResourceKind = lazy(() => import("@/pages/resource-kind"));
+const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
+
+/** A kind's page and its instances' pages below it. */
+function resourceKindRoutes(): LocalRoute[] {
+  const builtIn = builtInKindRoutes().flatMap(({ moduleName, kind, path }) =>
+    [path, `${path}/*`].map((pattern) => ({
+      path: pattern,
+      render: () => <ResourceKind moduleName={moduleName} kind={kind} />,
+    }))
+  );
+  const byName = ["/stream/resources/:module/:kind", "/stream/resources/:module/:kind/*"].map((pattern) => ({
+    path: pattern,
+    render: (params: Record<string, string | undefined>) => (
+      <ResourceKind moduleName={params.module ?? ""} kind={params.kind ?? ""} />
+    ),
+  }));
+  return [...builtIn, ...byName];
+}
+
+/** In the hosted app's order: fixed segments before the parameters that would otherwise match them. */
+export const LOCAL_ROUTES: readonly LocalRoute[] = [
+  { path: "/stream/alerts", render: () => <Alerts /> },
+  { path: "/stream/alerts/*", render: () => <Alerts /> },
+  { path: ALERT_RUN_ROUTE, render: () => <AlertRun /> },
+  { path: COMMAND_GROUP_NEW_ROUTE, render: () => <CommandGroupEditor /> },
+  { path: COMMAND_GROUP_EDITOR_ROUTE, render: () => <CommandGroupEditor /> },
+  { path: COMMAND_GROUPS_PATH, render: () => <Commands /> },
+  { path: COMMAND_NEW_ROUTE, render: () => <CommandEditor /> },
+  { path: COMMAND_EDITOR_ROUTE, render: () => <CommandEditor /> },
+  { path: COMMAND_LIST_PATH, render: () => <Commands /> },
+  ...resourceKindRoutes(),
+  { path: WORKFLOW_RUN_ROUTE, render: () => <WorkflowRun /> },
+  { path: "/stream/assets", render: () => <Assets /> },
+  { path: "/help/learning", render: () => <Learning /> },
+];
+
+/** Where local mode opens, and where a path it does not serve leads back to. */
+export const LOCAL_HOME_PATH = "/stream/alerts";
+
+/** Whether local mode serves a page at `href`, a path without parameters. */
+export function servesLocally(href: string): boolean {
+  return LOCAL_ROUTES.some((route) => route.path === href);
+}

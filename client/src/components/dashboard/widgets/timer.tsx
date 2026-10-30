@@ -1,4 +1,4 @@
-import { TIMER_KIND } from "@convex/lib/resourceKinds";
+import { TIMER_KIND } from "@shared/resource-kinds";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "wouter";

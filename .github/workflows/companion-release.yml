@@ -21,6 +21,9 @@ env:
   # The rolling prerelease whose latest.json installed companions read. Must
   # match `plugins.updater.endpoints` in companion/src-tauri/tauri.conf.json.
   LATEST_TAG: companion-latest
+  # The engine's shared TypeScript packages the dashboard builds against.
+  ENGINE_REPOSITORY: wolfymaster/woofx3
+  ENGINE_REF: master
 
 jobs:
   check-version:
@@ -103,6 +106,12 @@ jobs:
         working-directory: companion
         run: bun install --frozen-lockfile
 
+      # The companion build builds the dashboard the app shows.
+      - uses: ./.github/actions/dashboard-deps
+        with:
+          engine-repository: ${{ env.ENGINE_REPOSITORY }}
+          engine-ref: ${{ env.ENGINE_REF }}
+
       # Signs the installer with the version from tauri.conf.json bound into the
       # signature (the companion requires that), uploads it with its .sig, and
       # writes latest.json into the release.
@@ -111,6 +120,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WOOFX3_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+          # The deployment's HTTP origin, which the dashboard builds browser
+          # source and sign-in URLs from; the same variable the web build uses.
+          WOOFX3_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:

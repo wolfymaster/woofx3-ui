@@ -1,38 +1,47 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  ADDED_TERM_MISSING_MESSAGE,
+  addedBlockedTerm,
+  BLOCKED_TERMS_PAGE_SIZE,
+  type BlockedTerm,
+  CAPABILITY_RULES,
+  type CapabilityStatus,
+  CHAT_SETTINGS_MISSING_MESSAGE,
+  CHAT_SETTINGS_UPDATE_MISSING_MESSAGE,
+  type ChatSettings,
+  chatSettingsFromHelix,
+  chatSettingsToHelix,
+  collectBlockedTerms,
+  type HelixChatSettingsPatch,
+  MODERATION_SCOPES,
+  type ModerationCapability,
+  type ModerationOperation,
+  moderationAccess,
+  NO_BLOCKED_TERM_MESSAGE,
+  readModerationAnswer,
+  resolveModerationTarget,
+  validateBanReason,
+  validateBlockedTerm,
+  validateTimeoutSeconds,
+} from "@shared/moderation";
+import type { TwitchUser } from "@shared/twitch-users";
 import type { TwitchHelixResult } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, query } from "./_generated/server";
 import type { EngineApi } from "./lib/engineInstanceUrl";
-import {
-  CAPABILITY_RULES,
-  type CapabilityStatus,
-  type ChatSettings,
-  chatSettingsFromHelix,
-  chatSettingsToHelix,
-  describeModerationError,
-  type HelixChatSettingsPatch,
-  helixErrorMessage,
-  MODERATION_SCOPES,
-  type ModerationCapability,
-  type ModerationOperation,
-  moderationAccess,
-  validateBanReason,
-  validateBlockedTerm,
-  validateTimeoutSeconds,
-} from "./lib/moderation";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
+import { fetchTwitchUser } from "./lib/twitchUsers";
 
 // Moderation for the dashboard widget: blocked terms, timeouts and bans, and
 // chat lockdown modes. Straight to Helix with the broadcaster's token, the same
 // shape as convex/twitchBroadcast.ts, or through an engine that advertises
 // twitch.moderation (convex/lib/twitchEngineHelix.ts).
 //
-// Who may do what is decided by CAPABILITY_RULES in convex/lib/moderation.ts;
+// Who may do what is decided by CAPABILITY_RULES in shared/moderation.ts;
 // every action enforces it here, and the widget reads the same rules through
 // `access` only to disable and explain.
 //
@@ -46,10 +55,6 @@ const HELIX = "https://api.twitch.tv/helix";
 const BLOCKED_TERMS_URL = `${HELIX}/moderation/blocked_terms`;
 const BANS_URL = `${HELIX}/moderation/bans`;
 const CHAT_SETTINGS_URL = `${HELIX}/chat/settings`;
-
-const BLOCKED_TERMS_PAGE_SIZE = 100;
-/** A bound on the pagination loop. A channel past this many terms sees the first 2000. */
-const BLOCKED_TERMS_MAX_PAGES = 20;
 
 const ROLE_REFUSALS: Record<ModerationCapability, string> = {
   addBlockedTerm: "You don't have permission to block terms on this instance",
@@ -197,14 +202,7 @@ export async function helix(
         }),
     })
   );
-  if (!response.ok) {
-    const text = await response.text();
-    throw new ConvexError(describeModerationError(operation, response.status, helixErrorMessage(text)));
-  }
-  if (response.status === 204) {
-    return null;
-  }
-  return readable(response.json());
+  return readable(readModerationAnswer(operation, response));
 }
 
 export async function resolveTarget(
@@ -212,18 +210,9 @@ export async function resolveTarget(
   route: TwitchHelixRoute,
   input: string
 ): Promise<TwitchUser> {
-  const login = normalizeTwitchLogin(input);
-  if (!login) {
-    throw new ConvexError(`"${input.trim()}" is not a Twitch username`);
-  }
-  const user = await readable(fetchTwitchUser(auth, { login }, route));
-  if (!user) {
-    throw new ConvexError(`No Twitch user called "${login}"`);
-  }
-  if (user.twitchUserId === auth.broadcasterUserId) {
-    throw new ConvexError("You can't moderate your own account");
-  }
-  return user;
+  return readable(
+    resolveModerationTarget(input, auth.broadcasterUserId, (login) => fetchTwitchUser(auth, { login }, route))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,18 +247,6 @@ export const access = query({
 // Blocked terms
 // ---------------------------------------------------------------------------
 
-interface BlockedTerm {
-  id: string;
-  text: string;
-  createdAt: string | null;
-  expiresAt: string | null;
-}
-
-interface HelixBlockedTermsPage {
-  data?: Array<{ id: string; text: string; created_at?: string | null; expires_at?: string | null }>;
-  pagination?: { cursor?: string };
-}
-
 export const listBlockedTerms = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<{ terms: BlockedTerm[]; truncated: boolean }> => {
@@ -277,24 +254,7 @@ export const listBlockedTerms = action({
     const auth = await authorizeModeration(ctx, args.instanceId, "addBlockedTerm");
     const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
 
-    const terms: BlockedTerm[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < BLOCKED_TERMS_MAX_PAGES; page++) {
-      const body = (await helix(auth, route, moderationRequests.listTerms(auth, cursor))) as HelixBlockedTermsPage;
-      for (const term of body.data ?? []) {
-        terms.push({
-          id: term.id,
-          text: term.text,
-          createdAt: term.created_at ?? null,
-          expiresAt: term.expires_at ?? null,
-        });
-      }
-      cursor = body.pagination?.cursor || undefined;
-      if (!cursor) {
-        return { terms, truncated: false };
-      }
-    }
-    return { terms, truncated: true };
+    return collectBlockedTerms((cursor) => helix(auth, route, moderationRequests.listTerms(auth, cursor)));
   },
 });
 
@@ -307,12 +267,12 @@ export const addBlockedTerm = action({
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "addBlockedTerm");
     const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
-    const body = (await helix(auth, route, moderationRequests.addTerm(auth, validated.value))) as HelixBlockedTermsPage;
-    const term = body.data?.[0];
+    const body = await helix(auth, route, moderationRequests.addTerm(auth, validated.value));
+    const term = addedBlockedTerm(body);
     if (!term) {
-      throw new ConvexError("Twitch accepted the term but returned nothing");
+      throw new ConvexError(ADDED_TERM_MISSING_MESSAGE);
     }
-    return { id: term.id, text: term.text, createdAt: term.created_at ?? null, expiresAt: term.expires_at ?? null };
+    return term;
   },
 });
 
@@ -320,7 +280,7 @@ export const removeBlockedTerm = action({
   args: { instanceId: v.id("instances"), termId: v.string() },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     if (!args.termId) {
-      throw new ConvexError("No blocked term to remove");
+      throw new ConvexError(NO_BLOCKED_TERM_MESSAGE);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "removeBlockedTerm");
     const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
@@ -401,7 +361,7 @@ export const getChatSettings = action({
     const body = await helix(auth, route, moderationRequests.readSettings(auth));
     const settings = chatSettingsFromHelix(body);
     if (!settings) {
-      throw new ConvexError("Twitch returned no chat settings for this channel");
+      throw new ConvexError(CHAT_SETTINGS_MISSING_MESSAGE);
     }
     return settings;
   },
@@ -429,7 +389,7 @@ export const updateChatSettings = action({
     const response = await helix(auth, route, moderationRequests.updateSettings(auth, body.value));
     const settings = chatSettingsFromHelix(response);
     if (!settings) {
-      throw new ConvexError("Twitch changed chat settings but returned none");
+      throw new ConvexError(CHAT_SETTINGS_UPDATE_MISSING_MESSAGE);
     }
     return settings;
   },

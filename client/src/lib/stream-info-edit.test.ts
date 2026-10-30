@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { StreamInfo } from "@convex/lib/streamInfo";
+import type { StreamInfo } from "@shared/stream-info";
 import { comparePreset, draftProblem, formatStreamPosition, isDirty, rebaseDraft } from "./stream-info-edit";
 
 const JUST_CHATTING = { id: "509658", name: "Just Chatting" };

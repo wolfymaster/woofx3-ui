@@ -1,16 +1,16 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  parseCompositionKind,
+  parseSceneLayout,
+  parseSceneWidgets,
+  tablesForDeletedComposition,
+} from "@shared/scene-serialization";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
 import { deleteAlertCompositionRow, upsertAlertComposition } from "./alertCompositions";
 import { deleteSceneAndChildren, purgeSceneChildren } from "./lib/sceneCascade";
-import {
-  parseCompositionKind,
-  parseSceneLayout,
-  parseSceneWidgets,
-  tablesForDeletedComposition,
-} from "./lib/sceneSerialization";
 
 // Scenes are engine-authoritative. The engine is the source of truth; this table
 // is a read cache populated exclusively by webhook callbacks (upsertFromWebhook /

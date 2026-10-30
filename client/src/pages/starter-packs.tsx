@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstallStarterPackRequest, useStarterPackStatus } from "@/engine/hooks/use-starter-packs";
 import type { StarterPackInstallOutcome } from "@/engine/types";
@@ -72,7 +73,8 @@ const PACK_ICONS: Record<string, LucideIcon> = {
 type PackViews = { pack: StarterPack; views: StarterItemView[]; summary: StarterPackSummary };
 
 export default function StarterPacks() {
-  const { instance, catalogTriggers, catalogActions, loading: catalogLoading } = useWorkflowCatalog();
+  const { instanceId } = useEngineScope();
+  const { catalogTriggers, catalogActions, loading: catalogLoading } = useWorkflowCatalog();
   const states = useStarterPackStatus();
   const [openPackId, setOpenPackId] = useState<string | null>(null);
 
@@ -84,7 +86,7 @@ export default function StarterPacks() {
     });
   }, [catalogTriggers, catalogActions, states]);
 
-  const loading = catalogLoading || (!!instance && states === undefined);
+  const loading = catalogLoading || (instanceId !== null && states === undefined);
   const open = packs.find((entry) => entry.pack.id === openPackId) ?? null;
 
   return (
@@ -108,7 +110,9 @@ export default function StarterPacks() {
         </div>
       )}
 
-      {open && instance && <InstallDialog key={open.pack.id} entry={open} onClose={() => setOpenPackId(null)} />}
+      {open && instanceId !== null && (
+        <InstallDialog key={open.pack.id} entry={open} onClose={() => setOpenPackId(null)} />
+      )}
     </div>
   );
 }

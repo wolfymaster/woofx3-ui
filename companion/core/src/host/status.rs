@@ -59,6 +59,8 @@ pub enum ServiceStatus {
     Stopped,
     /// Not run, because its prebuilt binary is not installed.
     Skipped,
+    /// A run-once step (the database migration) that exited with status 0.
+    Completed,
 }
 
 /// A service status this host does not know.
@@ -75,6 +77,7 @@ impl FromStr for ServiceStatus {
             "unhealthy" => Ok(ServiceStatus::Unhealthy),
             "stopped" => Ok(ServiceStatus::Stopped),
             "skipped" => Ok(ServiceStatus::Skipped),
+            "completed" => Ok(ServiceStatus::Completed),
             other => Err(UnknownServiceStatus(other.to_string())),
         }
     }
@@ -88,6 +91,7 @@ impl fmt::Display for ServiceStatus {
             ServiceStatus::Unhealthy => "unhealthy",
             ServiceStatus::Stopped => "stopped",
             ServiceStatus::Skipped => "skipped",
+            ServiceStatus::Completed => "completed",
         })
     }
 }
@@ -200,6 +204,16 @@ mod tests {
                     ServiceStatus::Skipped,
                     None,
                     Some("prebuilt binary not installed"),
+                ),
+            ),
+            (
+                "completed run-once step",
+                r#"{"event":"service","time":"t","name":"migrate","status":"completed","pid":9,"message":"exit status 0"}"#,
+                service(
+                    "migrate",
+                    ServiceStatus::Completed,
+                    Some(9),
+                    Some("exit status 0"),
                 ),
             ),
             (
@@ -325,6 +339,7 @@ mod tests {
             ServiceStatus::Unhealthy,
             ServiceStatus::Stopped,
             ServiceStatus::Skipped,
+            ServiceStatus::Completed,
         ] {
             assert_eq!(status.to_string().parse::<ServiceStatus>(), Ok(status));
         }

@@ -1,3 +1,9 @@
+import { integrationOfModuleOAuthState } from "@shared/module-oauth";
+import { canonicalIdForStorageKey } from "@shared/resource-values";
+import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
+import { widgetCanonicalKey } from "@shared/widget-key";
+import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "@shared/workflow-health";
+import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "@shared/workflow-test-run";
 import type { InboundWebhookResponse } from "@woofx3/api";
 import type { CallbackEnvelope, CallbackEvent, WorkflowRunCancelledEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
@@ -11,7 +17,6 @@ import { ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLi
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { engineActivityPatch } from "./lib/engineSync/activity";
-import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "./lib/engineTestRun";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
   buildForwardedRequest,
@@ -32,7 +37,6 @@ import {
   triggerRefusalResponse,
 } from "./lib/macroTrigger";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
-import { integrationOfModuleOAuthState } from "./lib/moduleOAuth";
 import { OAUTH_CALLBACK_PATHS, oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
@@ -51,12 +55,8 @@ import {
   storageChangedTransient,
   widgetStatusTransient,
 } from "./lib/webhookTransients";
-import { readWidgetBehaviorKinds } from "./lib/widgetBehaviorKinds";
-import { widgetCanonicalKey } from "./lib/widgetKey";
-import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
-import { canonicalIdForStorageKey } from "./resourceValues";
 import { registerViewerAuthRoutes } from "./viewerAuthHttp";
 import "./browserSource";
 import "./moduleWebhook";

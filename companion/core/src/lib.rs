@@ -8,10 +8,12 @@ pub mod address;
 pub mod backoff;
 pub mod bridge;
 mod budget;
+pub mod clock;
 pub mod frame;
 pub mod host;
 pub mod obs_config;
 pub mod relay;
+pub mod window;
 
 pub use address::{AddressOrigin, ConfirmedAddress};
 pub use bridge::{probe, EndpointResolver, ProbeOutcome};

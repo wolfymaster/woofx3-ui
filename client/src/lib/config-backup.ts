@@ -71,9 +71,11 @@ export const IMPORT_REASON_LABELS: Record<ConfigImportReasonCode, string> = {
   unknown_action: "Unknown action",
   unknown_group: "Unknown group",
   unknown_workflow: "Unknown workflow",
+  dependency_blocked: "Needs a skipped item",
   invalid: "Invalid",
   rename_exhausted: "No free name",
   grants_access: "Grants access",
+  members_not_applied: "Members left out",
   privileged_action: "Privileged actions",
 };
 
