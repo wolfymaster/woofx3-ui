@@ -159,6 +159,16 @@ import type {
  * the scope's instance changes, so it is safe in effect dependencies and an
  * effect using it runs again for a newly selected instance.
  */
+/**
+ * Which page intros the viewer has closed. Kept per user with an account, and
+ * by the engine on a lone computer; an intro id is one of the app's own
+ * (`PAGE_INTROS`).
+ */
+export interface PageIntrosGateway {
+  useDismissed(): Live<readonly string[]>;
+  useDismissRequest(): (introId: string) => Promise<void>;
+}
+
 export interface EngineGateway {
   readonly status: StatusGateway;
   readonly resources: ResourcesGateway;
@@ -188,6 +198,7 @@ export interface EngineGateway {
   readonly clips: ClipsGateway;
   readonly streamInfo: StreamInfoGateway;
   readonly goLive: GoLiveGateway;
+  readonly pageIntros: PageIntrosGateway;
 }
 
 /** Engine reachability, version, features and stream state. */

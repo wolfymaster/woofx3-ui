@@ -47,6 +47,9 @@ import type {
   TwitchSendShoutoutParams,
   TwitchUnbanUserParams,
   TwitchUpdateChatSettingsParams,
+  UISetting,
+  UISettingValue,
+  UISettingWriteResult,
   UninstallModuleResponse,
   ViewerTotals,
   ViewerTotalsQuery,
@@ -93,6 +96,8 @@ type DirectFakeSurface = Pick<
   | "getSceneSnapshot"
   | "getAvailableWidgets"
   | "listWidgetThemes"
+  | "listUISettings"
+  | "setUISetting"
   | "listEngineModules"
   | "getWorkflows"
   | "getWorkflow"
@@ -179,6 +184,9 @@ export class FakeEngineState {
   overlayTokens: OverlayToken[] = [];
   scenes: SceneSnapshot[] = [];
   widgets: AvailableWidget[] = [];
+  /** Live UI settings by namespace, then key. */
+  uiSettings: Record<string, Record<string, UISetting>> = {};
+  uiSettingRevision = 0;
   /** Themes by widget canonical id; a widget not here is refused. */
   widgetThemes: Record<string, WidgetThemes["themes"]> = {};
   modules: EngineModuleSummary[] = [];
@@ -402,6 +410,26 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async getAvailableWidgets(): Promise<{ widgets: AvailableWidget[] }> {
     this.state.record("getAvailableWidgets");
     return { widgets: this.state.widgets };
+  }
+
+  async listUISettings(namespace: string): Promise<UISetting[]> {
+    this.state.record("listUISettings", namespace);
+    return Object.values(this.state.uiSettings[namespace] ?? {});
+  }
+
+  async setUISetting(namespace: string, key: string, value: UISettingValue): Promise<UISettingWriteResult> {
+    this.state.record("setUISetting", namespace, key, value);
+    this.state.uiSettingRevision += 1;
+    const setting: UISetting = {
+      namespace,
+      key,
+      value,
+      revision: this.state.uiSettingRevision,
+      updatedAt: "2026-10-30T10:00:00Z",
+      deleted: false,
+    };
+    this.state.uiSettings[namespace] = { ...(this.state.uiSettings[namespace] ?? {}), [key]: setting };
+    return { ok: true, setting };
   }
 
   async listWidgetThemes(widgetCanonicalId: string): Promise<WidgetThemes> {

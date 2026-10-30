@@ -29,6 +29,7 @@ import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
 import { directOverlaysGateway } from "./overlays";
+import { directPageIntrosGateway } from "./page-intros";
 import { directPinsGateway } from "./pins";
 import { directRequestsGateway } from "./requests";
 import { directScenesGateway } from "./scenes";
@@ -1437,5 +1438,47 @@ describe("pins", () => {
         GatewayUnsupportedError
       );
     }
+  });
+});
+
+describe("pageIntros", () => {
+  test("dismissing an intro stores it in the engine, and another writer's dismissal shows up", async () => {
+    const { runtime, state, engine } = await connected();
+    const intros = directPageIntrosGateway(runtime);
+    const read = renderDirect(() => intros.useDismissed());
+    expect(await read.until((value) => value !== undefined, "the dismissals")).toEqual([]);
+
+    await renderDirect(() => intros.useDismissRequest()).current()("workflows");
+    expect(state.callsOf("setUISetting")).toEqual([["pageIntros", "workflows", true]]);
+    await read.until((value) => value?.includes("workflows") === true, "the dismissal");
+
+    state.uiSettingRevision += 1;
+    state.uiSettings.pageIntros = {
+      ...state.uiSettings.pageIntros,
+      scenes: {
+        namespace: "pageIntros",
+        key: "scenes",
+        value: true,
+        revision: state.uiSettingRevision,
+        updatedAt: "2026-10-30T10:01:00Z",
+        deleted: false,
+      },
+    };
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.UI_SETTING_CHANGED,
+          namespace: "pageIntros",
+          key: "scenes",
+          revision: state.uiSettingRevision,
+          deleted: false,
+          value: true,
+        },
+        "engine",
+        "e-intro"
+      )
+    );
+    await read.until((value) => value?.includes("scenes") === true, "the other writer's dismissal");
+    read.unmount();
   });
 });
