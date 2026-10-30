@@ -105,6 +105,8 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.SESSION_SUMMARY]: LIVE_STATE,
   [EngineEventType.OVERLAY_TOKEN_MINTED]: NONE,
   [EngineEventType.OVERLAY_TOKEN_REVOKED]: NONE,
+  // A notification for approvers; nothing here caches pending pairings.
+  [EngineEventType.CLIENT_PAIRING_STARTED]: NONE,
   [EngineEventType.COMMAND_CREATED]: COMMANDS,
   [EngineEventType.COMMAND_UPDATED]: COMMANDS,
   [EngineEventType.COMMAND_DELETED]: COMMANDS,
