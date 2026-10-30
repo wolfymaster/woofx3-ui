@@ -3,12 +3,21 @@ import type {
   AlertListPage,
   AlertListQuery,
   AlertSnapshot,
+  AvailableFunction,
   CommandSnapshot,
   CreateCommandInput,
   EngineModuleSummary,
   FieldOptionsReference,
   Leaderboard,
   LeaderboardQuery,
+  MarketplaceBundleInstallResult,
+  MarketplaceInstallRequest,
+  MarketplaceInstallResult,
+  MarketplaceListingInspection,
+  ModuleFileContent,
+  ModuleFileList,
+  ModuleSetting,
+  ModuleSettingsResponse,
   PaginatedStreamSessions,
   PaginatedWorkflows,
   ResourceInstanceDefinition,
@@ -20,6 +29,8 @@ import type {
   StreamStatus,
   TriggerWorkflowOptions,
   TriggerWorkflowResponse,
+  TwitchLinkInfo,
+  UninstallModuleResponse,
   ViewerTotals,
   ViewerTotalsQuery,
   Woofx3EngineApi,
@@ -32,6 +43,11 @@ import type {
   WorkflowRunSnapshotsQuery,
   WorkflowsQuery,
 } from "@woofx3/api";
+import type {
+  TwitchDeviceLoginStartResult,
+  TwitchDeviceLoginState,
+  TwitchDeviceLoginStateResult,
+} from "@woofx3/api/twitch-device-login";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngine";
 
@@ -74,6 +90,22 @@ type DirectFakeSurface = Pick<
   | "getResourceValues"
   | "createResourceInstance"
   | "runActions"
+  | "listAvailableFunctions"
+  | "marketplaceGetListing"
+  | "inspectMarketplaceListing"
+  | "installMarketplaceListing"
+  | "installMarketplaceBundle"
+  | "getModuleManifest"
+  | "getModuleSettings"
+  | "updateModuleSetting"
+  | "listModuleFiles"
+  | "getModuleFile"
+  | "uninstallModule"
+  | "getTwitchLink"
+  | "deleteTwitchToken"
+  | "startTwitchDeviceLogin"
+  | "getTwitchDeviceLogin"
+  | "cancelTwitchDeviceLogin"
 >;
 
 export type AvailableWidget = Awaited<ReturnType<Woofx3EngineApi["getAvailableWidgets"]>>["widgets"][number];
@@ -112,6 +144,35 @@ export class FakeEngineState {
   resourceInstances: ResourceInstanceDefinition[] = [];
   /** Resource values by canonical id; an instance not here holds nothing yet. */
   resourceValues: Record<string, unknown> = {};
+  functions: AvailableFunction[] = [];
+  /** Marketplace listings by id; an id not here is refused, as the marketplace answers 404. */
+  listings: Record<string, unknown> = {};
+  /** Listing inspections by id; an id not here is refused, as a paid listing is without a buyer token. */
+  inspections: Record<string, MarketplaceListingInspection> = {};
+  /** What `installMarketplaceListing` and `installMarketplaceBundle` answer. */
+  listingInstall: MarketplaceInstallResult = { status: "installed", moduleKey: "listing:1.0.0:abc1234" };
+  bundleInstall: MarketplaceBundleInstallResult = {
+    status: "installed",
+    listingId: "bundle",
+    engineId: "scene-1",
+    kind: "scene",
+  };
+  /** Stored settings by manifest id; the manifests come from `modules`. */
+  moduleSettings: Record<string, ModuleSetting[]> = {};
+  moduleFiles: Record<string, ModuleFileList> = {};
+  twitchLink: TwitchLinkInfo = { linked: false, revision: 0 };
+  /** What `startTwitchDeviceLogin` answers. */
+  deviceLoginStart: TwitchDeviceLoginStartResult = {
+    ok: true,
+    login: {
+      loginId: "login-1",
+      userCode: "WOOF-1234",
+      verificationUri: "https://www.twitch.tv/activate",
+      expiresAt: "2026-10-29T12:00:00.000Z",
+    },
+  };
+  /** Device logins by id; an id not here answers `not_found`. */
+  deviceLogins: Record<string, TwitchDeviceLoginState> = {};
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
   /** Every call the fake served, by method, with its arguments. */
@@ -424,6 +485,116 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async runActions(input: RunActionsInput): Promise<{ requested: true; triggerId: string }> {
     this.state.record("runActions", input);
     return { requested: true, triggerId: "trigger-1" };
+  }
+
+  async listAvailableFunctions(): Promise<AvailableFunction[]> {
+    this.state.record("listAvailableFunctions");
+    return this.state.functions;
+  }
+
+  async marketplaceGetListing(listingId: string, buyerToken?: string): Promise<unknown> {
+    this.state.record("marketplaceGetListing", listingId, buyerToken);
+    const listing = this.state.listings[listingId];
+    if (listing === undefined) {
+      throw new Error(`Marketplace request failed (404)`);
+    }
+    return listing;
+  }
+
+  async inspectMarketplaceListing(listingId: string, buyerToken?: string): Promise<MarketplaceListingInspection> {
+    this.state.record("inspectMarketplaceListing", listingId, buyerToken);
+    const inspection = this.state.inspections[listingId];
+    if (inspection === undefined) {
+      throw new Error("Payment required");
+    }
+    return inspection;
+  }
+
+  async installMarketplaceListing(
+    listingId: string,
+    request: MarketplaceInstallRequest
+  ): Promise<MarketplaceInstallResult> {
+    this.state.record("installMarketplaceListing", listingId, request);
+    return this.state.listingInstall;
+  }
+
+  async installMarketplaceBundle(listingId: string, buyerToken?: string): Promise<MarketplaceBundleInstallResult> {
+    this.state.record("installMarketplaceBundle", listingId, buyerToken);
+    return this.state.bundleInstall;
+  }
+
+  private moduleNamed(moduleId: string): EngineModuleSummary | undefined {
+    return this.state.modules.find((module) => module.moduleId === moduleId);
+  }
+
+  async getModuleManifest(moduleId: string): Promise<Record<string, unknown> | null> {
+    this.state.record("getModuleManifest", moduleId);
+    return this.moduleNamed(moduleId)?.manifest ?? null;
+  }
+
+  async getModuleSettings(moduleId: string): Promise<ModuleSettingsResponse> {
+    this.state.record("getModuleSettings", moduleId);
+    return { settings: this.state.moduleSettings[moduleId] ?? [] };
+  }
+
+  async updateModuleSetting(moduleId: string, key: string, value: string): Promise<ModuleSetting> {
+    this.state.record("updateModuleSetting", moduleId, key, value);
+    const setting = { id: `${moduleId}-${key}`, moduleId, key, value, valueType: "string", isSet: true };
+    const others = (this.state.moduleSettings[moduleId] ?? []).filter((stored) => stored.key !== key);
+    this.state.moduleSettings[moduleId] = [...others, setting];
+    return setting;
+  }
+
+  async listModuleFiles(moduleId: string): Promise<ModuleFileList> {
+    this.state.record("listModuleFiles", moduleId);
+    return this.state.moduleFiles[moduleId] ?? { available: false, files: [] };
+  }
+
+  async getModuleFile(moduleId: string, path: string): Promise<ModuleFileContent> {
+    this.state.record("getModuleFile", moduleId, path);
+    return { path, size: 1, kind: "text", content: `${moduleId}/${path}` };
+  }
+
+  async uninstallModule(moduleKey: string): Promise<UninstallModuleResponse> {
+    this.state.record("uninstallModule", moduleKey);
+    return { requested: true };
+  }
+
+  async getTwitchLink(): Promise<TwitchLinkInfo> {
+    this.state.record("getTwitchLink");
+    return this.state.twitchLink;
+  }
+
+  async deleteTwitchToken(): Promise<{ ok: true }> {
+    this.state.record("deleteTwitchToken");
+    this.state.twitchLink = { linked: false, revision: this.state.twitchLink.revision + 1 };
+    return { ok: true };
+  }
+
+  async startTwitchDeviceLogin(scopes?: string[]): Promise<TwitchDeviceLoginStartResult> {
+    this.state.record("startTwitchDeviceLogin", scopes);
+    const start = this.state.deviceLoginStart;
+    if (start.ok) {
+      this.state.deviceLogins[start.login.loginId] = {
+        loginId: start.login.loginId,
+        status: "pending",
+        expiresAt: start.login.expiresAt,
+      };
+    }
+    return start;
+  }
+
+  async getTwitchDeviceLogin(loginId: string): Promise<TwitchDeviceLoginStateResult> {
+    this.state.record("getTwitchDeviceLogin", loginId);
+    const state = this.state.deviceLogins[loginId];
+    return state === undefined ? { ok: false, code: "not_found", error: "no such login" } : { ok: true, state };
+  }
+
+  async cancelTwitchDeviceLogin(loginId: string): Promise<{ cancelled: boolean }> {
+    this.state.record("cancelTwitchDeviceLogin", loginId);
+    const cancelled = this.state.deviceLogins[loginId]?.status === "pending";
+    delete this.state.deviceLogins[loginId];
+    return { cancelled };
   }
 
   async getWorkflowHealth(): Promise<WorkflowHealth[]> {

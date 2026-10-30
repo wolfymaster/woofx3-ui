@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { declaredSettingsOnly } from "./moduleSettingsVisibility";
+import { declaredSettingsOnly } from "./module-settings-visibility";
 
 const stored = [
   { key: "clientId", value: "abc" },

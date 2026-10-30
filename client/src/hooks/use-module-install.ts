@@ -1,4 +1,4 @@
-import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
+import type { LocalEndpointSummary } from "@shared/local-endpoints";
 import { useCallback, useEffect, useState } from "react";
 import type { PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { useEngineScope } from "@/engine/context";

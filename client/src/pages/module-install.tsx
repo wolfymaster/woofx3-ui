@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
-import { localEndpointSummaries } from "@convex/lib/localEndpoints";
-import { parseManifestPermissions } from "@convex/lib/modulePermissions";
 import Editor from "@monaco-editor/react";
+import { localEndpointSummaries } from "@shared/local-endpoints";
+import { parseManifestPermissions } from "@shared/module-permissions";
 import { useQuery } from "convex/react";
 import {
   AlertCircle,
