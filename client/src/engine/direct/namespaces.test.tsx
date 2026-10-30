@@ -25,6 +25,7 @@ import { directCommandsGateway } from "./commands";
 import { directEventLogGateway } from "./event-log";
 import { toModuleId, toSceneId } from "./ids";
 import { directKeys } from "./keys";
+import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
@@ -1079,6 +1080,106 @@ describe("modules", () => {
       .current()({} as never)
       .catch((error: Error) => error);
     expect(archive).toBeInstanceOf(GatewayUnsupportedError);
+  });
+});
+
+describe("marketplace", () => {
+  const listing = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    type: "module",
+    name: `${id} listing`,
+    description: "",
+    version: "1.0.0",
+    author: "Ana",
+    authorSlug: "ana",
+    category: "Utilities",
+    tags: [],
+    images: {},
+    tier: "public",
+    pricing: { mode: "free", currency: "usd" },
+    edition: 1,
+    credits: [],
+    ...overrides,
+  });
+
+  test("a search is sent as the marketplace names it, unbought, and parsed as the marketplace's own answer", async () => {
+    const { runtime, state } = await connected();
+    state.catalogSearch = () => ({ listings: [listing("cozy"), { id: "broken" }], total: 2 });
+    const search = renderDirect(() => directMarketplaceGateway(runtime).useSearchRequest()).current();
+    const page = await search({ query: "co", types: ["module", "theme"], featured: false, sort: "newest", limit: 24 });
+    expect(page.listings.map((l) => l.id)).toEqual(["cozy"]);
+    expect(page.total).toBe(2);
+    expect(state.callsOf("marketplaceSearch")).toEqual([
+      [
+        {
+          q: "co",
+          type: ["module", "theme"],
+          category: undefined,
+          featured: undefined,
+          sort: "newest",
+          limit: 24,
+          offset: undefined,
+        },
+        undefined,
+      ],
+    ]);
+  });
+
+  test("a listing the marketplace does not have reads as null, and any other refusal says why", async () => {
+    const { runtime, state } = await connected();
+    state.listings = { cozy: { listing: listing("cozy", { module: { readme: "# Cozy" } }) } };
+    const read = renderDirect(() => directMarketplaceGateway(runtime).useListingRequest()).current();
+    expect(await read("cozy")).toMatchObject({ id: "cozy", name: "cozy listing", module: { readme: "# Cozy" } });
+    expect(await read("gone")).toBeNull();
+    expect(state.callsOf("marketplaceGetListing")).toEqual([
+      ["cozy", undefined],
+      ["gone", undefined],
+    ]);
+
+    state.catalogCounts = { refusedWith: 503 };
+    const counts = renderDirect(() => directMarketplaceGateway(runtime).useCountsRequest()).current();
+    expect(String(await counts().catch((error: Error) => error))).toBe("Error: Refused with 503");
+  });
+
+  test("counts read as null from a marketplace that cannot count", async () => {
+    const { runtime, state } = await connected();
+    const counts = renderDirect(() => directMarketplaceGateway(runtime).useCountsRequest()).current();
+    state.catalogCounts = { counts: { module: 3, theme: 1 }, total: 4 };
+    expect(await counts()).toEqual({ module: 3, theme: 1, emote: 0, overlay: 0, alert: 0 });
+    state.catalogCounts = { refusedWith: 404 };
+    expect(await counts()).toBeNull();
+  });
+
+  test("an author's page is read a page at a time, and an unknown author reads as null", async () => {
+    const { runtime, state } = await connected();
+    state.authors = {
+      ana: (query) => ({ author: { slug: "ana", claimed: false }, listings: [listing("cozy")], total: 3, ...query }),
+    };
+    const read = renderDirect(() => directMarketplaceGateway(runtime).useAuthorRequest()).current();
+    const page = await read("ana", { limit: 1, offset: 2 });
+    expect(page?.author.slug).toBe("ana");
+    expect(page?.listings.map((l) => l.id)).toEqual(["cozy"]);
+    expect(state.callsOf("marketplaceGetAuthor")).toEqual([["ana", { limit: 1, offset: 2 }, undefined]]);
+    expect(await read("nobody", { limit: 1, offset: 0 })).toBeNull();
+  });
+
+  test("quotes, entitlements and checkout need an account", async () => {
+    const { runtime } = await connected();
+    const marketplace = directMarketplaceGateway(runtime);
+    const refusals = await Promise.all([
+      renderDirect(() => marketplace.useQuoteRequest())
+        .current()("cozy")
+        .catch((error: Error) => error),
+      renderDirect(() => marketplace.useEntitlementsRequest())
+        .current()()
+        .catch((error: Error) => error),
+      renderDirect(() => marketplace.useCheckoutRequest())
+        .current()("cozy", "/")
+        .catch((error: Error) => error),
+    ]);
+    for (const refusal of refusals) {
+      expect(refusal).toBeInstanceOf(GatewayUnsupportedError);
+    }
   });
 });
 

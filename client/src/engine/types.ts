@@ -2,6 +2,7 @@
 // UI uses it, whoever serves it: a gateway maps its own storage or wire shapes
 // into these at its edge, so nothing here may name a gateway's backend.
 
+import type { ListingType } from "@shared/marketplace-catalog";
 import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
@@ -1400,6 +1401,51 @@ export interface SetupImportAnalysis {
   source: SetupImportSource;
   documentChunks: string[];
 }
+
+// ==================== Marketplace catalog ====================
+
+/** The catalog as the marketplace serves it, parsed in shared code by every gateway. */
+export type {
+  AuthorPage,
+  CatalogCounts,
+  CatalogListing,
+  CatalogListingDetail,
+  CatalogPage,
+  ListingQuote,
+  ListingType,
+} from "@shared/marketplace-catalog";
+
+/** The orders the marketplace can return a page in. */
+export type MarketplaceSort = "relevance" | "newest" | "name" | "popular" | "trending";
+
+/** One search of the catalog. An empty `query` or `types` narrows nothing. */
+export interface MarketplaceSearchQuery {
+  query: string;
+  types: ListingType[];
+  category?: string;
+  /** Only curated listings, in `featuredRank` order. */
+  featured?: boolean;
+  sort: MarketplaceSort;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of a list the marketplace pages itself. */
+export interface MarketplacePageRequest {
+  limit: number;
+  offset: number;
+}
+
+/** What starting a purchase came to. */
+export type MarketplaceCheckout =
+  /** Pay on the marketplace's payment page at `url`. */
+  | { status: "redirect"; url: string }
+  /** The account already holds the listing. */
+  | { status: "already_entitled" }
+  /** Nothing to pay, such as a free upgrade. */
+  | { status: "no_payment_needed" }
+  /** Nothing can be bought here; `message` says why. */
+  | { status: "unavailable"; message: string };
 
 // ==================== Marketplace installs and starter packs ====================
 
