@@ -40,6 +40,10 @@ export const directKeys = {
     runs: (engineWorkflowId: string, limit: number) => ["workflows", "runs", engineWorkflowId, limit] as const,
     health: () => ["workflows", "health"] as const,
   },
+  uiSettings: {
+    all: ["uiSettings"] as const,
+    namespace: (namespace: string) => ["uiSettings", namespace] as const,
+  },
   modules: {
     all: ["modules"] as const,
     assets: (moduleId: string, kinds: readonly string[]) => ["modules", "assets", moduleId, ...kinds] as const,

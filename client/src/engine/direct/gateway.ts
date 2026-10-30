@@ -18,6 +18,7 @@ import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
 import { directOverlaysGateway } from "./overlays";
+import { directPageIntrosGateway } from "./page-intros";
 import { directPinsGateway } from "./pins";
 import { directRequestsGateway } from "./requests";
 import { directResourcesGateway } from "./resources";
@@ -110,5 +111,6 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     clips: directClipsGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
     goLive,
+    pageIntros: directPageIntrosGateway(runtime),
   };
 }

@@ -1,10 +1,8 @@
-import { api } from "@convex/_generated/api";
 import { alertWidgetNamesOf, orphanedAlertTargets } from "@shared/alert-widgets";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
-import { useQuery } from "convex/react";
 import { ArrowLeft, ChevronDown, Link, MoreVertical, RefreshCw, Save, Settings, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -48,6 +46,7 @@ import {
   storedSceneJson,
 } from "@/lib/scene-composition";
 import { endedUnreadable, repairResultToast } from "@/lib/scene-unread";
+import { useViewerName } from "@/lib/viewer-name";
 import type { Scene, Widget } from "@/types";
 import { type DraftCommand, DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -125,8 +124,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const uiVersion: Version = live ? "published" : "draft";
   const sceneId = fetchedScene?.id;
 
-  const me = useQuery(api.users.getMe);
-  const myName = me === undefined ? undefined : (me?.name ?? me?.email ?? "");
+  const myName = useViewerName();
   const session = useSceneEditorSession({
     instanceId,
     engineSceneId,

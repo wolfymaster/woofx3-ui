@@ -30,3 +30,7 @@ export const PAGE_INTROS = {
 } as const satisfies Record<string, PageIntroContent>;
 
 export type PageIntroId = keyof typeof PAGE_INTROS;
+
+export function isPageIntroId(value: string): value is PageIntroId {
+  return Object.hasOwn(PAGE_INTROS, value);
+}

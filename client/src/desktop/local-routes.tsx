@@ -1,4 +1,5 @@
 import { lazy, type ReactNode } from "react";
+import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import {
   COMMAND_EDITOR_ROUTE,
@@ -29,8 +30,11 @@ const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
 const Learning = lazy(() => import("@/pages/learning"));
+const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
+const Scenes = lazy(() => import("@/pages/scenes"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
+const Workflows = lazy(() => import("@/pages/workflows"));
 
 /** A kind's page and its instances' pages below it. */
 function resourceKindRoutes(): LocalRoute[] {
@@ -53,6 +57,7 @@ function resourceKindRoutes(): LocalRoute[] {
 export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/alerts", render: () => <Alerts /> },
   { path: "/stream/alerts/*", render: () => <Alerts /> },
+  { path: ALERT_LIBRARY_EDITOR_ROUTE, render: () => <LibraryAlertEditor /> },
   { path: ALERT_RUN_ROUTE, render: () => <AlertRun /> },
   { path: COMMAND_GROUP_NEW_ROUTE, render: () => <CommandGroupEditor /> },
   { path: COMMAND_GROUP_EDITOR_ROUTE, render: () => <CommandGroupEditor /> },
@@ -61,7 +66,13 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: COMMAND_EDITOR_ROUTE, render: () => <CommandEditor /> },
   { path: COMMAND_LIST_PATH, render: () => <Commands /> },
   ...resourceKindRoutes(),
+  { path: "/stream/scenes", render: () => <Scenes /> },
+  { path: "/stream/scenes/:id", render: () => <Scenes /> },
+  { path: "/stream/workflows", render: () => <Workflows /> },
+  { path: "/stream/workflows/new", render: () => <Workflows /> },
   { path: WORKFLOW_RUN_ROUTE, render: () => <WorkflowRun /> },
+  { path: "/stream/workflows/:id", render: () => <Workflows /> },
+  { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
   { path: "/help/learning", render: () => <Learning /> },
 ];
