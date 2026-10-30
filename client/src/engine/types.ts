@@ -594,6 +594,38 @@ export interface LocalEndpointSummary {
   protocol: "websocket" | "http";
 }
 
+/**
+ * Where an installed module came from: shipped with the engine, installed
+ * from a marketplace listing, or from an archive someone uploaded.
+ */
+export type ModuleProvenance = "builtIn" | "marketplace" | "uploaded";
+
+/**
+ * How far an installed module has got. Only an engine-confirmed module is
+ * `installed`; the others are uploads the dashboard is still handing over, or
+ * one that failed.
+ */
+export type InstalledModuleStatus = "pending" | "delivering" | "installed" | "failed";
+
+/** A module installed on the engine, as the Installed list and the storefront read it. */
+export interface InstalledModule {
+  id: ModuleId;
+  name: string;
+  description: string;
+  version: string;
+  tags: string[];
+  author?: string;
+  category?: string;
+  /** `{manifest id}:{version}:{sha7}`, the key it was installed under; absent until the engine has hashed it. */
+  moduleKey?: string;
+  status: InstalledModuleStatus;
+  /** Null when nothing recorded where it came from. */
+  provenance: ModuleProvenance | null;
+  /** The marketplace listing and edition it was installed from, when it was. */
+  marketplaceListingId?: string;
+  marketplaceEdition?: number;
+}
+
 /** A module's manifest-derived detail, merged with its marketplace listing when it has one. */
 export interface ModuleDetail {
   id: string;

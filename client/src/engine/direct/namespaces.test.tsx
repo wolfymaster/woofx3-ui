@@ -893,6 +893,47 @@ describe("modules", () => {
     files: [{ path: "manifest.json", size: 10, kind: "text" as const }],
   });
 
+  test("the installed list says where each module came from, and follows installs", async () => {
+    const { runtime, state, engine } = await connected();
+    state.modules = [
+      { ...installed("woofx3", { id: "woofx3" }), createdByType: "SYSTEM" },
+      installed("cozy", { id: "cozy", description: "Warm", tags: ["chat"], author: "Ana" }, "cozy-v2"),
+      { ...installed("mine", { id: "mine" }), uploadResourceId: "res-1" },
+    ];
+    const read = renderDirect(() => directModulesGateway(runtime).useInstalled());
+    const modules = await read.until((value) => value !== undefined, "the installed modules");
+    expect(modules?.map((module) => [module.id, module.provenance, module.status])).toEqual([
+      ["woofx3", "builtIn", "installed"],
+      ["cozy", "marketplace", "installed"],
+      ["mine", "uploaded", "installed"],
+    ]);
+    expect(modules?.[1]).toMatchObject({
+      name: "cozy module",
+      description: "Warm",
+      tags: ["chat"],
+      author: "Ana",
+      moduleKey: "cozy:1.0.0:abc1234",
+      marketplaceListingId: "cozy-v2",
+    });
+
+    state.modules = [...state.modules, installed("fresh", { id: "fresh" })];
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.MODULE_INSTALLED,
+          modulePrefix: "fresh",
+          moduleName: "fresh module",
+          version: "1.0.0",
+          moduleKey: "fresh:1.0.0:abc1234",
+        },
+        "engine",
+        "e-installed"
+      )
+    );
+    await read.until((value) => value?.length === 4, "the newly installed module");
+    read.unmount();
+  });
+
   test("an installed module's detail is what it registered, with its listing's readme and newer build", async () => {
     const { runtime, state } = await connected();
     state.modules = [

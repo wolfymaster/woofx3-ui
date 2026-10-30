@@ -50,6 +50,7 @@ import type {
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
   HostedStorageUsage,
+  InstalledModule,
   InstanceLiveState,
   KnownBoxArt,
   Live,
@@ -381,6 +382,8 @@ export interface ModuleResourcesGateway {
  * with (an installed module's key or a marketplace id) unless typed `ModuleId`.
  */
 export interface ModulesGateway {
+  /** Every module on the engine, built-in ones included. Empty when the caller cannot see the instance. */
+  useInstalled(): Live<InstalledModule[]>;
   /** The module's manifest-derived detail, merged with its marketplace listing when it has one. */
   useDetailRequest(): (moduleId: string) => Promise<ModuleDetail>;
   /** The declared settings' current values; a secret's value never comes back, only whether one is set. */

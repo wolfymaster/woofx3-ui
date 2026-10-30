@@ -10,6 +10,7 @@ import type { EngineModuleSummary, MarketplaceListingInspection } from "@woofx3/
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
   EngineWorkflowOption,
+  InstalledModule,
   MarketplaceBundleInstall,
   ModuleAsset,
   ModuleDetail,
@@ -25,6 +26,7 @@ import { directKeys as k } from "./keys";
 import {
   inspectionLocalEndpoints,
   isModuleNamed,
+  toInstalledModule,
   toInstalledModuleDetail,
   toModuleDetail,
   toModuleSettingValue,
@@ -54,6 +56,14 @@ function assetsRead(runtime: DirectRuntime, moduleId: string, kinds: readonly st
       const module = modules.find((summary) => summary.moduleId === moduleId);
       return module === undefined ? [] : assetsOfKinds(manifestAssets(module.manifest, moduleId), kinds);
     },
+  };
+}
+
+function installedRead(runtime: DirectRuntime): EngineRead<InstalledModule[]> {
+  return {
+    queryKey: k.modules.installed(),
+    queryFn: async () =>
+      (await runtime.call("listEngineModules", (api) => api.listEngineModules())).map(toInstalledModule),
   };
 }
 
@@ -222,6 +232,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
   const storageUsage = async (): Promise<ModuleStorageUsage | null> => null;
 
   return {
+    useInstalled: () => useEngineQuery(runtime, installedRead(runtime)),
     useDetailRequest: () => useEngineRequest(detail),
     useSettingsRequest: () => useEngineRequest(settings),
     useUpdateSettingRequest: () => useEngineRequest(updateSetting),

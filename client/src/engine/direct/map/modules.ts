@@ -9,7 +9,7 @@ import type {
   ModuleSetting,
   Woofx3EngineApi,
 } from "@woofx3/api";
-import type { ModuleDetail, ModuleId, ModuleSettingValue } from "@/engine/types";
+import type { InstalledModule, ModuleDetail, ModuleId, ModuleProvenance, ModuleSettingValue } from "@/engine/types";
 import { toModuleId } from "../ids";
 
 type WorkflowCatalogAnswer = Awaited<ReturnType<Woofx3EngineApi["getWorkflowCatalog"]>>;
@@ -42,6 +42,38 @@ function manifestString(manifest: Record<string, unknown> | null, field: string)
 function manifestStrings(manifest: Record<string, unknown> | null, field: string): string[] {
   const value = manifestField(manifest, field);
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** The engine's value of `createdByType` for a module that ships with it. */
+const BUILT_IN_CREATOR = "SYSTEM";
+
+function summaryProvenance(summary: EngineModuleSummary): ModuleProvenance | null {
+  if (summary.createdByType === BUILT_IN_CREATOR) {
+    return "builtIn";
+  }
+  if (summary.marketplaceListingId) {
+    return "marketplace";
+  }
+  return summary.uploadResourceId ? "uploaded" : null;
+}
+
+/** Every module the engine lists is one it has installed; it lists nothing mid-install. */
+export function toInstalledModule(summary: EngineModuleSummary): InstalledModule {
+  const manifest = summary.manifest;
+  return {
+    id: toModuleId(summary.moduleId),
+    name: summary.name,
+    description: manifestString(manifest, "description") ?? "",
+    version: summary.version,
+    tags: manifestStrings(manifest, "tags"),
+    author: manifestString(manifest, "author"),
+    category: manifestString(manifest, "category"),
+    moduleKey: summary.moduleKey,
+    status: "installed",
+    provenance: summaryProvenance(summary),
+    marketplaceListingId: summary.marketplaceListingId,
+    marketplaceEdition: summary.marketplaceEdition,
+  };
 }
 
 /**
