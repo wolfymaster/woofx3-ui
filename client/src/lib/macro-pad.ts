@@ -5,6 +5,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { MacroActionStep, MacroActionType, MacroConfig } from "@shared/macro-variables";
 import type { ActionNode } from "@/lib/workflow-tree";
 
+export { isHexColor } from "@shared/macro-pad";
 export {
   applyMacroVariables,
   extractMacroVariables,
@@ -47,18 +48,6 @@ export const MACRO_COLOR_PRESETS: ReadonlyArray<{ value: string; label: string }
   { value: "#ec4899", label: "Pink" },
   { value: "#64748b", label: "Slate" },
 ];
-
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-/**
- * Exactly `#rrggbb`. The tile's background wash is built by appending an alpha
- * pair to the stored value, which only produces a valid color for the six-digit
- * form — so anything else is refused at the input rather than rendering as a
- * broken style.
- */
-export function isHexColor(value: string | undefined): value is string {
-  return typeof value === "string" && HEX_COLOR_PATTERN.test(value);
-}
 
 /**
  * A chat-command button's command word and the text after it. `command` is
