@@ -5,7 +5,7 @@
 
 use serde::Deserialize;
 
-use crate::host::{ShoutoutChannel, ShoutoutEntryId};
+use crate::host::{HostModeKind, ShoutoutChannel, ShoutoutEntryId};
 
 /// Turns an integration endpoint on or off. On needs an address,
 /// discovered or confirmed.
@@ -74,4 +74,11 @@ pub struct RemoveShoutoutArgs {
 #[serde(rename_all = "camelCase")]
 pub struct ReorderShoutoutsArgs {
     pub entry_ids: Vec<ShoutoutEntryId>,
+}
+
+/// The mode the streamer chose the first time the app ran.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ChooseHostModeArgs {
+    pub mode: HostModeKind,
 }

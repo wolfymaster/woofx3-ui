@@ -17,7 +17,9 @@ pub mod sidecar;
 pub mod status;
 pub mod stream_marker;
 
-pub use config::{HostMode, LocalEngineSettings, HOST_CONFIG_FILE};
+pub use config::{
+    choose_host_mode, HostConfig, HostMode, HostModeKind, LocalEngineSettings, HOST_CONFIG_FILE,
+};
 pub use engine::{orchestrator_spec, LocalEngineLayout, DEFAULT_API_PORT};
 pub use error::HostError;
 pub use gateway::{

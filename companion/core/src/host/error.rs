@@ -21,6 +21,16 @@ pub enum HostError {
         #[source]
         source: serde_json::Error,
     },
+    /// Choosing a mode only writes a configuration that is not there yet, so
+    /// it never replaces settings someone wrote by hand.
+    #[error("the host configuration at {0} already chooses a mode")]
+    ConfigAlreadyChosen(PathBuf),
+    #[error("could not write the host configuration at {path}: {source}")]
+    ConfigUnwritable {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("`engineDir` in the host configuration must be an absolute path, not {0}")]
     EngineDirNotAbsolute(PathBuf),
     #[error("`apiPort` in the host configuration cannot be 0")]

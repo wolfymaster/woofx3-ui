@@ -158,6 +158,18 @@ export type StreamStartMarker = { "kind": "idle" } | { "kind": "pending", reques
 export type MarkerRequestOutcome = { "status": "done" } | { "status": "queued", reason: string, } | { "status": "failed", message: string, };
 
 /**
+ * A mode the streamer can choose, without the settings only a hand-written
+ * configuration sets.
+ */
+export type HostModeKind = "local" | "companion";
+
+/**
+ * The mode this app runs in, and whether the streamer chose it. Until they
+ * have, it runs its build's default and the dashboard asks.
+ */
+export type HostModeView = { mode: HostModeKind, chosen: boolean, };
+
+/**
  * Turns an integration endpoint on or off. On needs an address,
  * discovered or confirmed.
  */
@@ -183,6 +195,11 @@ export type RemoveShoutoutArgs = { entryId: ShoutoutEntryId, };
  * out keep their order after the ones named.
  */
 export type ReorderShoutoutsArgs = { entryIds: Array<ShoutoutEntryId>, };
+
+/**
+ * The mode the streamer chose the first time the app ran.
+ */
+export type ChooseHostModeArgs = { mode: HostModeKind, };
 
 export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
@@ -213,6 +230,8 @@ export const COMMANDS = {
   reorder_shoutouts: "reorder_shoutouts",
   stream_start_marker: "stream_start_marker",
   request_stream_start_marker: "request_stream_start_marker",
+  host_mode: "host_mode",
+  choose_host_mode: "choose_host_mode",
 } as const;
 
 export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
@@ -241,6 +260,8 @@ export type CommandArgs = {
   reorder_shoutouts: ReorderShoutoutsArgs;
   stream_start_marker: null;
   request_stream_start_marker: null;
+  host_mode: null;
+  choose_host_mode: ChooseHostModeArgs;
 };
 
 /** What each command resolves to. */
@@ -267,4 +288,6 @@ export type CommandResults = {
   reorder_shoutouts: void;
   stream_start_marker: StreamStartMarker;
   request_stream_start_marker: MarkerRequestOutcome;
+  host_mode: HostModeView;
+  choose_host_mode: void;
 };
