@@ -1,4 +1,4 @@
-import { FOLLOWER_MODE_OPTIONS, SLOW_MODE_OPTIONS } from "@convex/lib/moderation";
+import { FOLLOWER_MODE_OPTIONS, SLOW_MODE_OPTIONS } from "@shared/moderation";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";

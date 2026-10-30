@@ -1,5 +1,5 @@
-import { type LocalEndpointSummary, unapprovedLocalEndpoints } from "@convex/lib/localEndpoints";
-import { unapprovedPermissions } from "@convex/lib/modulePermissions";
+import { type LocalEndpointSummary, unapprovedLocalEndpoints } from "@shared/local-endpoints";
+import { unapprovedPermissions } from "@shared/module-permissions";
 
 /**
  * Plain-language wording for the permission ids a module manifest may declare.

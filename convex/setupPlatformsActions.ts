@@ -1,10 +1,11 @@
 "use node";
 
+import { type LocalEndpointSummary, localEndpointSummaries } from "@shared/local-endpoints";
+import { parseManifestPermissions } from "@shared/module-permissions";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
 import {
   inspectThroughEngine,
   marketplaceEngineFor,
@@ -13,7 +14,6 @@ import {
   setupReviewFromInspection,
 } from "./lib/marketplaceEngineInstall";
 import { buyerRefFor, buyerTokenFor } from "./lib/marketplaceEntitlement";
-import { parseManifestPermissions } from "./lib/modulePermissions";
 import { NO_SETUP_PLATFORMS_MESSAGE, type ResolvedSetupPlatforms, resolveSetupPlatforms } from "./lib/setupPlatforms";
 import { logger } from "./logger";
 import {

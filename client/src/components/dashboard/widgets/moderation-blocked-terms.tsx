@@ -1,4 +1,4 @@
-import { BLOCKED_TERM_MAX_LENGTH, validateBlockedTerm } from "@convex/lib/moderation";
+import { BLOCKED_TERM_MAX_LENGTH, validateBlockedTerm } from "@shared/moderation";
 import { Ban, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";

@@ -4,7 +4,7 @@
  * can be tested without a Convex runtime or a marketplace.
  */
 
-import type { LocalEndpointSummary } from "./localEndpoints";
+import type { LocalEndpointSummary } from "@shared/local-endpoints";
 import type { MarketplaceImages } from "./marketplaceImages";
 
 export interface CuratedSetupPlatform {

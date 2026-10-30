@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { ModuleOAuthIntegration } from "@shared/module-oauth";
 import { chooseIntegrationClientId, platformAppFits } from "./integrationClientId";
-import type { ModuleOAuthIntegration } from "./moduleOAuth";
 
 const SPOTIFY: ModuleOAuthIntegration = {
   id: "spotify",

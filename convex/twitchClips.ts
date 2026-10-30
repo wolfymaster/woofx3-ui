@@ -1,4 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { type CreatedClip, readCreatedClipAnswer } from "@shared/twitch-clips";
+import { TWITCH_NOT_CONNECTED_MESSAGE } from "@shared/twitch-link-refusal";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
@@ -16,15 +18,9 @@ import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/tw
 
 const TWITCH_CLIPS_URL = "https://api.twitch.tv/helix/clips";
 
-export interface CreateClipResult {
-  clipId: string;
-  /** Twitch's clip editor URL — the clip is a draft until trimmed and published there. */
-  editUrl: string;
-}
-
 export const createClip = action({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<CreateClipResult> => {
+  handler: async (ctx, args): Promise<CreatedClip> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
@@ -41,7 +37,7 @@ export const createClip = action({
       instanceId: args.instanceId,
     });
     if (!token) {
-      throw new Error("Twitch is not connected for this instance");
+      throw new Error(TWITCH_NOT_CONNECTED_MESSAGE);
     }
 
     const clientId = process.env.AUTH_TWITCH_ID;
@@ -59,7 +55,7 @@ export const createClip = action({
 export async function createClipOnTwitch(
   { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
   route: TwitchHelixRoute
-): Promise<CreateClipResult> {
+): Promise<CreatedClip> {
   const response = await helixResponse(route, {
     operation: "createClip",
     kind: "write",
@@ -74,23 +70,5 @@ export async function createClipOnTwitch(
       }),
   });
 
-  // Twitch answers 404 when the channel isn't live and 403 when clipping is
-  // disabled for the channel — both are ordinary states worth naming rather
-  // than surfacing as a raw status code.
-  if (response.status === 404) {
-    throw new Error("Twitch has nothing to clip — the channel has to be live.");
-  }
-  if (response.status === 403) {
-    throw new Error("Twitch refused the clip. Clipping may be disabled for this channel.");
-  }
-  if (!response.ok) {
-    throw new Error(`Twitch clip creation failed: ${response.status} ${await response.text()}`);
-  }
-
-  const data = (await response.json()) as { data: Array<{ id: string; edit_url: string }> };
-  const clip = data.data[0];
-  if (!clip) {
-    throw new Error("Twitch accepted the request but returned no clip");
-  }
-  return { clipId: clip.id, editUrl: clip.edit_url };
+  return readCreatedClipAnswer(response);
 }

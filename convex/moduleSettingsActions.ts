@@ -1,13 +1,13 @@
 "use node";
 
+import { localEndpointOwningSetting } from "@shared/local-endpoints";
+import { declaredSettingsOnly } from "@shared/module-settings-visibility";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { localEndpointOwningSetting } from "./lib/localEndpoints";
-import { declaredSettingsOnly } from "./lib/moduleSettingsVisibility";
 
 export interface ModuleSettingValue {
   id: string;

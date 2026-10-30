@@ -7,7 +7,7 @@ import {
   planCompanionWrites,
   readLocalEndpoints,
   unapprovedLocalEndpointIds,
-} from "./localEndpoints";
+} from "./local-endpoints";
 
 describe("isEndpointHost and isEndpointPort", () => {
   test("accept IP literals and DNS names", () => {

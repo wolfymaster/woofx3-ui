@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AdSchedule } from "@convex/lib/adBreaks";
+import type { AdSchedule } from "@shared/ad-breaks";
 import {
   type AdBreakInputs,
   type AdBreakView,

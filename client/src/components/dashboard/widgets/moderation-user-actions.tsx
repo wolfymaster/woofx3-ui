@@ -4,7 +4,7 @@ import {
   parseDuration,
   TIMEOUT_PRESETS,
   validateTimeoutSeconds,
-} from "@convex/lib/moderation";
+} from "@shared/moderation";
 import { Clock, Gavel, Loader2, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";

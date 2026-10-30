@@ -340,3 +340,137 @@ export function categoriesFromHelix(body: unknown): StreamCategory[] {
   }
   return categories;
 }
+
+// ---------------------------------------------------------------------------
+// Helix answers
+// ---------------------------------------------------------------------------
+
+/** Search Categories' page size, and so the most a search shows. */
+export const SEARCH_RESULT_LIMIT = 10;
+/** Search Categories rejects an empty query; a very long one is never a real category name. */
+export const MAX_SEARCH_QUERY_LENGTH = 100;
+
+export const NOTHING_TO_UPDATE_MESSAGE = "Nothing to update";
+
+/** Why a category search cannot be sent, or null. A blank query is not a problem: it finds nothing. */
+export function categorySearchProblem(text: string): string | null {
+  if (text.length > MAX_SEARCH_QUERY_LENGTH) {
+    return `Category searches are limited to ${MAX_SEARCH_QUERY_LENGTH} characters`;
+  }
+  return null;
+}
+
+/** The first problem with the fields a change sets, for the backend to refuse on. */
+export function streamInfoChangesProblem(changes: StreamInfoChanges): string | null {
+  return (
+    (changes.title !== undefined ? titleProblem(changes.title) : null) ??
+    (changes.tags !== undefined ? tagsProblem(changes.tags) : null) ??
+    (changes.category ? categoryProblem(changes.category) : null)
+  );
+}
+
+/**
+ * An Error carrying Twitch's own reason when it gave one. Helix error bodies
+ * are `{ error, status, message }`, and the message ("The tag contains an
+ * invalid character") is the part a person can act on.
+ */
+export async function streamInfoFailure(what: string, response: Response): Promise<Error> {
+  const text = await response.text();
+  let reason = text;
+  try {
+    const body = JSON.parse(text) as { message?: unknown };
+    if (typeof body.message === "string" && body.message !== "") {
+      reason = body.message;
+    }
+  } catch {
+    // Not JSON: the raw text is the best reason available.
+  }
+  if (response.status === 401) {
+    return new Error(`${what}: Twitch rejected the connection. Reconnect Twitch in Settings → Integrations.`);
+  }
+  if (response.status === 429) {
+    return new Error(`${what}: Twitch is rate-limiting this. Try again in a moment.`);
+  }
+  return new Error(`${what}: ${reason || `Twitch answered ${response.status}`}`);
+}
+
+/** The channel a Get Channel Information answer holds, without box art. */
+export async function readChannelInfoAnswer(response: Response): Promise<StreamInfo> {
+  if (!response.ok) {
+    throw await streamInfoFailure("Couldn't read your stream info", response);
+  }
+  const info = channelInfoFromHelix(await response.json());
+  if (!info) {
+    throw new Error("Twitch returned no channel for this account");
+  }
+  return info;
+}
+
+/** The category a Get Games answer holds; null when it failed, since the art is decoration. */
+export async function readCategoryAnswer(response: Response): Promise<StreamCategory | null> {
+  if (!response.ok) {
+    return null;
+  }
+  return categoriesFromHelix(await response.json())[0] ?? null;
+}
+
+export async function readSearchCategoriesAnswer(response: Response): Promise<StreamCategory[]> {
+  if (!response.ok) {
+    throw await streamInfoFailure("Category search failed", response);
+  }
+  return categoriesFromHelix(await response.json());
+}
+
+export async function readModifyChannelAnswer(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw await streamInfoFailure("Couldn't update your stream info", response);
+  }
+}
+
+/**
+ * `info` with its category's box art, which Get Channel Information does not
+ * return. `known` is art the caller already has, reused when the category has
+ * not changed so a poll costs one Helix call instead of two.
+ */
+export async function withBoxArt(
+  info: StreamInfo,
+  known: { categoryId: string; boxArtUrl: string } | undefined,
+  fetchCategory: (categoryId: string) => Promise<StreamCategory | null>
+): Promise<StreamInfo> {
+  if (!info.category) {
+    return info;
+  }
+  if (known && known.categoryId === info.category.id && known.boxArtUrl.startsWith(BOX_ART_URL_PREFIX)) {
+    return { ...info, category: { ...info.category, boxArtUrl: known.boxArtUrl } };
+  }
+  const category = await fetchCategory(info.category.id);
+  return { ...info, category: category ?? info.category };
+}
+
+export interface StreamMarker {
+  positionSeconds: number | null;
+  createdAt: string | null;
+}
+
+/** The marker a Create Stream Marker answer holds. */
+export async function readMarkerAnswer(response: Response): Promise<StreamMarker> {
+  // Helix answers 404 both when the channel is not live and when it has no
+  // VOD to mark (past broadcasts are off), and does not say which. The user
+  // id is the token's own, so the third documented 404, an unknown user, is
+  // not a case here. A 403 (token user is not the owner or an editor) is
+  // left to streamInfoFailure, which carries Twitch's message.
+  if (response.status === 404) {
+    throw new Error(
+      "Not live, or past broadcasts are off (Twitch VOD settings); reruns and premieres can't be marked."
+    );
+  }
+  if (!response.ok) {
+    throw await streamInfoFailure("Couldn't add a marker", response);
+  }
+  const body = (await response.json()) as { data?: Array<{ position_seconds?: unknown; created_at?: unknown }> };
+  const marker = body.data?.[0];
+  return {
+    positionSeconds: typeof marker?.position_seconds === "number" ? marker.position_seconds : null,
+    createdAt: typeof marker?.created_at === "string" ? marker.created_at : null,
+  };
+}

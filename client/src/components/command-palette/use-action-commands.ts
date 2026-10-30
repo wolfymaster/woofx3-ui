@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
-import { formatDuration, parseDuration, validateTimeoutSeconds } from "@convex/lib/moderation";
 import { useStore } from "@nanostores/react";
+import { formatDuration, parseDuration, validateTimeoutSeconds } from "@shared/moderation";
 import { useMutation } from "convex/react";
 import {
   Ban,

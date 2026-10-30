@@ -308,7 +308,7 @@ The widget is three stacked sections, ordered by how fast each has to happen:
   subscriber-only, which silences most of a small channel at once, offers an
   Undo toast.
 
-**Who may do what.** `CAPABILITY_RULES` in `convex/lib/moderation.ts` is the one
+**Who may do what.** `CAPABILITY_RULES` in `shared/moderation.ts` is the one
 table; every action enforces it and the widget reads it through
 `moderation.access` only to disable and explain.
 
@@ -612,7 +612,7 @@ instead of a card that shows data and refuses every button.
   an empty `game_id`.
 - **Tags**: at most 10, each at most 25 characters, no spaces, no duplicates
   ignoring case — checked in both the editor and the action by
-  `convex/lib/streamInfo.ts`. A refused tag stays in the input with the reason
+  `shared/stream-info.ts`. A refused tag stays in the input with the reason
   under it. Twitch's rule on characters ("no special characters") is only
   warned about, for anything outside letters, combining marks and digits of any
   script; Twitch's own 400 message is the authority. Changes are detected
@@ -646,7 +646,7 @@ means **it posts a visible chat message** from the connected account. Twitch pin
 messages; there is no free-floating pinned text.
 
 Reading the current pin (`GET /helix/chat/pins`, parsed by
-`convex/lib/twitchPins.ts`) returns the message's text, its sender, when it was
+`shared/twitch-pins.ts`) returns the message's text, its sender, when it was
 pinned (`starts_at`) and when the pin expires (`ends_at`, null when it lasts
 until the stream ends). The widget shows the text and sender as Twitch reports
 them. A pin made outside this app, from Twitch's own chat or by a moderator, is
@@ -737,7 +737,7 @@ another snooze. `authorizeTwitch` checks membership and the scope.
 Any member may snooze: a snooze only pushes the next ad back, and it is a call
 a moderator running the stream makes on the spot. Helix documents its ad
 times as RFC3339 but also answers with epoch seconds (a number or a numeric
-string), 0 or `""` for none; `convex/lib/adBreaks.ts` normalizes all of them
+string), 0 or `""` for none; `shared/ad-breaks.ts` normalizes all of them
 to ISO or null and refuses a malformed answer whole. A 401 asks for a Twitch
 reconnect, a 403 or a missing scope says to reconnect Twitch to allow ad
 controls, a 400 on a snooze (no snoozes left, channel not live) shows Twitch's
