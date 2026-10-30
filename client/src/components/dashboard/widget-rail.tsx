@@ -3,25 +3,12 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { type DashboardRailWidget, MAX_RAIL_WIDGETS } from "@shared/dashboard-layout";
 import { HelpCircle, Plus, X } from "lucide-react";
-import { type ComponentType, type ReactNode, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { UnavailableWidget, unavailableWidgetLabel } from "@/components/dashboard/unavailable-widget";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getDashboardWidget } from "@/lib/dashboard-widgets/registry";
+import { findDashboardWidget, type RailPinnedItem, useDashboardCatalog } from "@/lib/dashboard-widgets/catalog";
 import { cn } from "@/lib/utils";
-
-/**
- * A rail entry the dashboard supplies itself rather than the user placing it:
- * always first, never moved or removed in edit mode, and gone when the
- * dashboard stops passing it.
- */
-export interface RailPinnedItem {
-  id: string;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-  /** Draws a dot on the icon: "attention" for something to do, "problem" for something wrong. */
-  dot: "attention" | "problem" | null;
-  content: ReactNode;
-}
 
 interface WidgetRailProps {
   pinned: RailPinnedItem | null;
@@ -52,9 +39,10 @@ function RailButton({
     id: widget.slotId,
     disabled: !isEditing,
   });
-  const entry = getDashboardWidget(widget.type);
+  const catalog = useDashboardCatalog();
+  const entry = findDashboardWidget(catalog, widget.type);
   const Icon = entry?.icon ?? HelpCircle;
-  const label = entry?.label ?? `Unknown widget: ${widget.type}`;
+  const label = entry?.label ?? unavailableWidgetLabel(widget.type);
 
   return (
     <div
@@ -102,7 +90,7 @@ function RailButton({
  * Right-edge dock of icon buttons, one per rail widget, each opening a
  * floating "peek" flyout over a dimming scrim. Only one flyout is open at a
  * time; the icon, the flyout's ✕, the scrim, and Escape all close it. Rail
- * widgets are ordinary registry entries, so any widget that can go on a panel
+ * widgets are ordinary catalog entries, so any widget that can go on a panel
  * can be docked here instead.
  *
  * The rail is a column of the dashboard page rather than a `position: fixed`
@@ -168,7 +156,8 @@ export function WidgetRail({
 
   const openPinned = pinned && pinned.id === openSlotId ? pinned : null;
   const openWidget = widgets.find((widget) => widget.slotId === openSlotId);
-  const openEntry = openWidget ? getDashboardWidget(openWidget.type) : undefined;
+  const catalog = useDashboardCatalog();
+  const openEntry = openWidget ? findDashboardWidget(catalog, openWidget.type) : undefined;
   const OpenComponent = openEntry?.component;
 
   const handleOpenConfigChange = useCallback(
@@ -275,9 +264,7 @@ export function WidgetRail({
               ) : OpenComponent ? (
                 <OpenComponent config={openWidget?.config} onConfigChange={handleOpenConfigChange} />
               ) : (
-                <div className="h-full flex items-center justify-center p-3 text-center text-sm text-muted-foreground">
-                  Unknown widget type: {openWidget?.type}
-                </div>
+                <UnavailableWidget type={openWidget?.type ?? ""} />
               )}
             </div>
           </Card>
