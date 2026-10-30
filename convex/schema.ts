@@ -62,7 +62,7 @@ export const macroActionTypeValidator = v.union(
   v.literal("run-action")
 );
 
-// Mirrors MacroConfig in convex/lib/macroVariables.ts. Free-text fields may
+// Mirrors MacroConfig in shared/macro-variables.ts. Free-text fields may
 // carry `{{name}}` variables, resolved each time the macro runs.
 export const macroConfigValidator = v.object({
   message: v.optional(v.string()),

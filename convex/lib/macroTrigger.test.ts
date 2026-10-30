@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { MacroActionType, MacroConfig } from "@shared/macro-variables";
 import {
   canTriggerRemotely,
   decideTrigger,
   engineRefusalReason,
   fullRateBucket,
   generateTriggerToken,
-  hasControlCharacter,
   hashTriggerToken,
   isBrowserRequest,
   isEngineTransportFailure,
@@ -14,20 +14,15 @@ import {
   MACRO_TRIGGER_PATH_PREFIX,
   MACRO_TRIGGER_RATE_LIMIT,
   MAX_VARIABLE_VALUE_LENGTH,
-  macroActionToEngineStep,
   macroBehaviorFingerprint,
   macroTriggerUrl,
-  missingMacroVariables,
-  parseChatCommand,
   parseMacroTriggerPath,
   parseTriggerValues,
-  planMacroRun,
   type RateBucket,
   resolveTriggerToken,
   takeRateToken,
   triggerRefusalResponse,
 } from "./macroTrigger";
-import type { MacroActionType, MacroConfig } from "./macroVariables";
 
 describe("generateTriggerToken", () => {
   test("is well formed", () => {
@@ -192,127 +187,6 @@ describe("parseTriggerValues", () => {
   test("refuses an overlong value", () => {
     const body = JSON.stringify({ a: "x".repeat(MAX_VARIABLE_VALUE_LENGTH + 1) });
     expect(parseTriggerValues({ contentType: null, body, query: none }).ok).toBe(false);
-  });
-});
-
-describe("parseChatCommand", () => {
-  test("splits the command word from the text", () => {
-    expect(parseChatCommand("!so bob")).toEqual({ commandName: "so", text: "bob" });
-    expect(parseChatCommand("  !hype  ")).toEqual({ commandName: "hype", text: "" });
-    expect(parseChatCommand("!raid a b  c")).toEqual({ commandName: "raid", text: "a b  c" });
-  });
-
-  test("refuses a plain message or a bare !", () => {
-    expect(parseChatCommand("hello chat")).toBeNull();
-    expect(parseChatCommand("!")).toBeNull();
-    expect(parseChatCommand("! so")).toBeNull();
-    expect(parseChatCommand("")).toBeNull();
-  });
-});
-
-describe("missingMacroVariables", () => {
-  test("lists absent and blank values, in authored order", () => {
-    expect(missingMacroVariables({ command: "!so {{channel}} {{reason}}" }, { reason: "  " })).toEqual([
-      "channel",
-      "reason",
-    ]);
-    expect(missingMacroVariables({ command: "!so {{channel}}" }, { channel: "bob" })).toEqual([]);
-  });
-});
-
-describe("planMacroRun", () => {
-  test("refuses a control character in a used variable, as the dashboard path must too", () => {
-    const result = planMacroRun("chat-command", { command: "!so {{channel}}" }, { channel: "bob\r\n!ban x" });
-    expect(result).toEqual({ ok: false, status: 400, error: "control characters are not allowed in: channel" });
-  });
-
-  test("plans a workflow run", () => {
-    expect(planMacroRun("trigger-workflow", { workflowId: "wf-1" }, {})).toEqual({
-      ok: true,
-      plan: { kind: "trigger-workflow", workflowNameOrId: "wf-1" },
-    });
-  });
-
-  test("refuses a workflow macro with nothing selected", () => {
-    expect(planMacroRun("trigger-workflow", {}, {})).toMatchObject({ ok: false, status: 422 });
-  });
-
-  test("plans an action with variables filled in through nested settings", () => {
-    const config = {
-      actionStep: {
-        action: "function",
-        function: "obs.setScene",
-        ref: "obs:action:setScene",
-        parameters: { scene: "{{scene}}", options: { tags: ["{{scene}}-live"] }, delay: 3 },
-      },
-    };
-    expect(planMacroRun("run-action", config, { scene: "Gaming" })).toEqual({
-      ok: true,
-      plan: {
-        kind: "run-action",
-        step: {
-          action: "function",
-          function: "obs.setScene",
-          ref: "obs:action:setScene",
-          parameters: { scene: "Gaming", options: { tags: ["Gaming-live"] }, delay: 3 },
-        },
-      },
-    });
-  });
-
-  test("asks for an action's variables before running it", () => {
-    const config = { actionStep: { action: "print", parameters: { text: "hi {{name}}" } } };
-    expect(planMacroRun("run-action", config, {})).toMatchObject({ ok: false, status: 400 });
-  });
-
-  test("refuses an action macro with nothing selected", () => {
-    expect(planMacroRun("run-action", {}, {})).toMatchObject({ ok: false, status: 422 });
-  });
-
-  test("plans a chat command with its variables filled in", () => {
-    expect(planMacroRun("chat-command", { command: "!so {{channel}}" }, { channel: "bob" })).toEqual({
-      ok: true,
-      plan: { kind: "chat-command", commandName: "so", text: "bob" },
-    });
-  });
-
-  test("answers 400 naming every missing variable", () => {
-    const result = planMacroRun("chat-command", { command: "!so {{channel}} {{reason}}" }, {});
-    expect(result).toEqual({ ok: false, status: 400, error: "missing variables: channel, reason" });
-  });
-
-  test("refuses a chat command that is not a !command", () => {
-    expect(planMacroRun("chat-command", { command: "hello chat" }, {})).toMatchObject({ ok: false, status: 422 });
-  });
-
-  test("plans a picked command word with its arguments in commandText", () => {
-    expect(planMacroRun("chat-command", { command: "so", commandText: " {{channel}} " }, { channel: "bob" })).toEqual({
-      ok: true,
-      plan: { kind: "chat-command", commandName: "so", text: "bob" },
-    });
-  });
-
-  test("refuses a picked command that is empty or more than one word", () => {
-    expect(planMacroRun("chat-command", { command: "", commandText: "" }, {})).toMatchObject({
-      ok: false,
-      status: 422,
-    });
-    expect(planMacroRun("chat-command", { command: "so bob", commandText: "" }, {})).toMatchObject({
-      ok: false,
-      status: 422,
-    });
-  });
-
-  test("refuses send-message macros", () => {
-    expect(planMacroRun("send-message", { message: "hi" }, {})).toMatchObject({ ok: false, status: 422 });
-  });
-
-  test("refuses HTTP request macros before looking at their variables", () => {
-    const result = planMacroRun("http-request", { url: "https://example.com/{{x}}", headers: { a: "secret" } }, {});
-    expect(result).toMatchObject({ ok: false, status: 422 });
-    if (!result.ok) {
-      expect(result.error).not.toContain("secret");
-    }
   });
 });
 
@@ -482,15 +356,6 @@ describe("isBrowserRequest", () => {
   });
 });
 
-describe("hasControlCharacter", () => {
-  test("flags C0 controls and DEL, not ordinary text", () => {
-    expect(hasControlCharacter("a\nb")).toBe(true);
-    expect(hasControlCharacter("a\u0000")).toBe(true);
-    expect(hasControlCharacter("a\u007f")).toBe(true);
-    expect(hasControlCharacter("bob ross é 🙂")).toBe(false);
-  });
-});
-
 describe("engine errors", () => {
   test("transport failures are told apart from the engine's refusals", () => {
     expect(isEngineTransportFailure(new TypeError("fetch failed"))).toBe(true);
@@ -536,27 +401,5 @@ describe("canTriggerRemotely", () => {
     expect(canTriggerRemotely("run-action")).toBe(true);
     expect(canTriggerRemotely("http-request")).toBe(false);
     expect(canTriggerRemotely("send-message")).toBe(false);
-  });
-});
-
-describe("macroActionToEngineStep", () => {
-  test("restores the catalog ref and escaped setting keys for the engine", () => {
-    expect(
-      macroActionToEngineStep({
-        action: "function",
-        function: "obs.setScene",
-        ref: "obs:action:setScene",
-        parameters: { layout: { __$schema: "v1" } },
-      })
-    ).toEqual({
-      action: "function",
-      function: "obs.setScene",
-      $ref: "obs:action:setScene",
-      parameters: { layout: { $schema: "v1" } },
-    });
-  });
-
-  test("leaves out what the stored step does not name", () => {
-    expect(macroActionToEngineStep({ action: "print" })).toEqual({ action: "print", parameters: {} });
   });
 });

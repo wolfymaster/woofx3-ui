@@ -10,9 +10,9 @@
 // must not read as an engine path that the engine would then try to resolve
 // against trigger data that does not exist.
 //
-// Lives under convex/ because both sides resolve variables: Convex for a remote
-// trigger and for macros it runs against the engine, the browser for an HTTP
-// request button.
+// Shared because every side resolves variables: Convex for a remote trigger
+// and for macros it runs against the engine, the browser for an HTTP request
+// button and for macros the desktop app runs against its own engine.
 
 export type MacroActionType = "send-message" | "chat-command" | "trigger-workflow" | "http-request" | "run-action";
 

@@ -1,9 +1,9 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { CHAT_COMMAND_RUN_RESTRICTION } from "@convex/lib/macroTrigger";
 import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { CHAT_COMMAND_RUN_RESTRICTION } from "@shared/macro-run";
 import { useMutation, useQuery } from "convex/react";
 import { Check, GripVertical, Loader2, Pencil, Plus, Radio, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

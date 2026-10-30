@@ -419,7 +419,7 @@ foreground so any choice stays readable.
 Buttons support **variables**: any <code v-pre>{{name}}</code> written into the command,
 URL, body, a header value, or any text setting of an action is collected from the user in a prompt before the macro runs.
 The <code v-pre>{{…}}</code> delimiter is deliberately distinct from the workflow engine's `${…}`
-and the shared TS resolver's `{…}` (see `convex/lib/macroVariables.ts` for why) —
+and the shared TS resolver's `{…}` (see `shared/macro-variables.ts` for why) —
 variable names are restricted to `[A-Za-z0-9_]`.
 
 `chat-command`, `trigger-workflow` and `run-action` macros run in Convex through `macros.run`,

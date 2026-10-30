@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { MacroRunPlan } from "@shared/macro-run";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -10,7 +11,6 @@ import {
   fullRateBucket,
   generateTriggerToken,
   hashTriggerToken,
-  type MacroRunPlan,
   macroBehaviorFingerprint,
 } from "./lib/macroTrigger";
 import { getInstanceMembership } from "./lib/teamAccess";

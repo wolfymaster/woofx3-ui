@@ -1,8 +1,8 @@
 // A macro pad button. Its `{{name}}` variables live in
-// convex/lib/macroVariables.ts, shared with the remote trigger route.
+// shared/macro-variables.ts, shared with the remote trigger route.
 
 import type { Id } from "@convex/_generated/dataModel";
-import type { MacroActionStep, MacroActionType, MacroConfig } from "@convex/lib/macroVariables";
+import type { MacroActionStep, MacroActionType, MacroConfig } from "@shared/macro-variables";
 import type { ActionNode } from "@/lib/workflow-tree";
 
 export {
@@ -13,7 +13,7 @@ export {
   type MacroActionType,
   type MacroConfig,
   type MacroHttpMethod,
-} from "@convex/lib/macroVariables";
+} from "@shared/macro-variables";
 
 /** A macro's editable fields — everything except its server-assigned id. */
 export type MacroInput = Omit<MacroButton, "id">;
