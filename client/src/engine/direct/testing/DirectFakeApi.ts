@@ -60,6 +60,11 @@ import type {
   WorkflowRunSnapshotsQuery,
   WorkflowsQuery,
 } from "@woofx3/api";
+import type {
+  TwitchDeviceLoginStartResult,
+  TwitchDeviceLoginState,
+  TwitchDeviceLoginStateResult,
+} from "@woofx3/api/twitch-device-login";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngine";
 
@@ -115,6 +120,10 @@ type DirectFakeSurface = Pick<
   | "uninstallModule"
   | "getTwitchLink"
   | TwitchFakeMethod
+  | "deleteTwitchToken"
+  | "startTwitchDeviceLogin"
+  | "getTwitchDeviceLogin"
+  | "cancelTwitchDeviceLogin"
 >;
 
 /** The engine Twitch methods the fake answers, each with `FakeEngineState.twitchAnswer`. */
@@ -194,9 +203,21 @@ export class FakeEngineState {
   /** Stored settings by manifest id; the manifests come from `modules`. */
   moduleSettings: Record<string, ModuleSetting[]> = {};
   moduleFiles: Record<string, ModuleFileList> = {};
+  twitchLink: TwitchLinkInfo = { linked: false, revision: 0 };
+  /** What `startTwitchDeviceLogin` answers. */
+  deviceLoginStart: TwitchDeviceLoginStartResult = {
+    ok: true,
+    login: {
+      loginId: "login-1",
+      userCode: "WOOF-1234",
+      verificationUri: "https://www.twitch.tv/activate",
+      expiresAt: "2026-10-29T12:00:00.000Z",
+    },
+  };
+  /** Device logins by id; an id not here answers `not_found`. */
+  deviceLogins: Record<string, TwitchDeviceLoginState> = {};
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
-  twitchLink: TwitchLinkInfo = { linked: false, revision: 1 };
   /** What each Twitch method answers, given its arguments; no answer configured fails the call. */
   twitchAnswer: (method: TwitchFakeMethod, params: unknown) => TwitchHelixResult = (method) => ({
     ok: false,
@@ -588,6 +609,43 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return { requested: true };
   }
 
+  async getTwitchLink(): Promise<TwitchLinkInfo> {
+    this.state.record("getTwitchLink");
+    return this.state.twitchLink;
+  }
+
+  async deleteTwitchToken(): Promise<{ ok: true }> {
+    this.state.record("deleteTwitchToken");
+    this.state.twitchLink = { linked: false, revision: this.state.twitchLink.revision + 1 };
+    return { ok: true };
+  }
+
+  async startTwitchDeviceLogin(scopes?: string[]): Promise<TwitchDeviceLoginStartResult> {
+    this.state.record("startTwitchDeviceLogin", scopes);
+    const start = this.state.deviceLoginStart;
+    if (start.ok) {
+      this.state.deviceLogins[start.login.loginId] = {
+        loginId: start.login.loginId,
+        status: "pending",
+        expiresAt: start.login.expiresAt,
+      };
+    }
+    return start;
+  }
+
+  async getTwitchDeviceLogin(loginId: string): Promise<TwitchDeviceLoginStateResult> {
+    this.state.record("getTwitchDeviceLogin", loginId);
+    const state = this.state.deviceLogins[loginId];
+    return state === undefined ? { ok: false, code: "not_found", error: "no such login" } : { ok: true, state };
+  }
+
+  async cancelTwitchDeviceLogin(loginId: string): Promise<{ cancelled: boolean }> {
+    this.state.record("cancelTwitchDeviceLogin", loginId);
+    const cancelled = this.state.deviceLogins[loginId]?.status === "pending";
+    delete this.state.deviceLogins[loginId];
+    return { cancelled };
+  }
+
   async getWorkflowHealth(): Promise<WorkflowHealth[]> {
     this.state.record("getWorkflowHealth");
     if (this.state.workflowHealth instanceof Error) {
@@ -617,11 +675,6 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   ): Promise<{ dispatched: boolean }> {
     this.state.record("dispatchFieldOptionsRequest", reference, correlationKey);
     return { dispatched: true };
-  }
-
-  async getTwitchLink(): Promise<TwitchLinkInfo> {
-    this.state.record("getTwitchLink");
-    return this.state.twitchLink;
   }
 
   private twitch(method: TwitchFakeMethod, params?: unknown): TwitchHelixResult {

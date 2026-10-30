@@ -38,6 +38,9 @@ export const directKeys = {
     runs: (engineWorkflowId: string, limit: number) => ["workflows", "runs", engineWorkflowId, limit] as const,
     health: () => ["workflows", "health"] as const,
   },
+  twitchLink: {
+    link: () => ["twitchLink", "link"] as const,
+  },
   moduleResources: {
     all: ["moduleResources"] as const,
     instances: () => ["moduleResources", "instances"] as const,
