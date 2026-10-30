@@ -44,6 +44,16 @@ export const VIEWER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const VIEWER_ROLES_TTL_MS = 10 * 60 * 1000;
 
 /**
+ * How long before cached roles expire a refresh asks the platform again
+ * instead of answering from the cache. A page open past this point renews
+ * the roles, and the new check replaces the row before its scheduled
+ * deletion, so a viewer who stays on the page never sees a gated section
+ * lock while roles are re-checked. A fifth of the TTL leaves room for a
+ * slow platform call and a page clock a little behind Convex's.
+ */
+export const VIEWER_ROLES_RENEW_LEAD_MS = 2 * 60 * 1000;
+
+/**
  * How long a role check the platform could not answer is remembered, so an
  * outage costs one platform call per viewer and channel per window rather than
  * one per page view.
@@ -181,9 +191,14 @@ export function viewerSessionLive(row: { expiresAt: number } | null, now: number
   return row !== null && now < row.expiresAt;
 }
 
-/** Whether cached roles are recent enough to use without asking the platform again. */
-export function viewerRolesFresh(roles: { checkedAt: number } | null, now: number): boolean {
-  return roles !== null && now - roles.checkedAt < VIEWER_ROLES_TTL_MS;
+/** When cached roles checked at `checkedAt` are due for renewal: VIEWER_ROLES_RENEW_LEAD_MS before they expire. */
+export function viewerRolesRenewAt(checkedAt: number): number {
+  return checkedAt + VIEWER_ROLES_TTL_MS - VIEWER_ROLES_RENEW_LEAD_MS;
+}
+
+/** Whether a refresh should ask the platform rather than answer from `roles`: none cached, or renewal is due. */
+export function viewerRolesDueForRenewal(roles: { checkedAt: number } | null, now: number): boolean {
+  return roles === null || now >= viewerRolesRenewAt(roles.checkedAt);
 }
 
 /** Whether a recent failed role check still stands in for asking the platform again. */

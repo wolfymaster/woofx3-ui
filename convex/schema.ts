@@ -2152,8 +2152,9 @@ export default defineSchema({
     .index("by_viewer", ["viewerId"]),
 
   // viewerRoles: what the platform last said about a viewer on one
-  // broadcaster's channel, cached for VIEWER_ROLES_TTL_MS. subscriberTier is
-  // null when the viewer is not subscribed.
+  // broadcaster's channel. A row exists only while it is fresh: a scheduled
+  // job deletes it VIEWER_ROLES_TTL_MS after checkedAt, so page queries need
+  // no clock. subscriberTier is null when the viewer is not subscribed.
   viewerRoles: defineTable({
     viewerId: v.id("viewers"),
     platform: viewerPlatformValidator,

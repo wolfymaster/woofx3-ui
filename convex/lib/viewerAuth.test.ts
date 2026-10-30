@@ -3,12 +3,14 @@ import {
   allowedReturnOrigins,
   VIEWER_HANDOFF_TTL_MS,
   VIEWER_LOGIN_STATE_TTL_MS,
+  VIEWER_ROLES_RENEW_LEAD_MS,
   VIEWER_ROLES_TTL_MS,
   viewerHandoffRefusal,
   viewerLoginStateUsable,
   viewerReturnTarget,
   viewerReturnUrl,
-  viewerRolesFresh,
+  viewerRolesDueForRenewal,
+  viewerRolesRenewAt,
   viewerSessionLive,
 } from "./viewerAuth";
 
@@ -118,10 +120,17 @@ describe("viewerSessionLive", () => {
   });
 });
 
-describe("viewerRolesFresh", () => {
-  test("trusts roles checked within the TTL and not after", () => {
-    expect(viewerRolesFresh({ checkedAt: NOW - VIEWER_ROLES_TTL_MS + 1 }, NOW)).toBe(true);
-    expect(viewerRolesFresh({ checkedAt: NOW - VIEWER_ROLES_TTL_MS }, NOW)).toBe(false);
-    expect(viewerRolesFresh(null, NOW)).toBe(false);
+describe("viewerRolesDueForRenewal", () => {
+  test("renews roles the lead time before they expire, and always when none are cached", () => {
+    const renewAt = viewerRolesRenewAt(NOW);
+    expect(renewAt).toBe(NOW + VIEWER_ROLES_TTL_MS - VIEWER_ROLES_RENEW_LEAD_MS);
+    expect(viewerRolesDueForRenewal({ checkedAt: NOW }, renewAt - 1)).toBe(false);
+    expect(viewerRolesDueForRenewal({ checkedAt: NOW }, renewAt)).toBe(true);
+    expect(viewerRolesDueForRenewal({ checkedAt: NOW }, NOW + VIEWER_ROLES_TTL_MS)).toBe(true);
+    expect(viewerRolesDueForRenewal(null, NOW)).toBe(true);
+  });
+
+  test("renewal comes at about four fifths of the lifetime", () => {
+    expect((VIEWER_ROLES_TTL_MS - VIEWER_ROLES_RENEW_LEAD_MS) / VIEWER_ROLES_TTL_MS).toBe(0.8);
   });
 });

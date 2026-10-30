@@ -94,10 +94,6 @@ export function defaultPageContent(): PageContent {
   return { layout: "single", theme: { accent: "violet" }, sections: [] };
 }
 
-export function isPublicSection(section: PageSection): boolean {
-  return section.visibility.kind === "public";
-}
-
 /**
  * Everything wrong with `content` that its shape does not already rule out.
  * Convex refuses a save that has any problem, and the editor shows the same

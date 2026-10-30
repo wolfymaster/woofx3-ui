@@ -18,7 +18,8 @@ Deploys queue behind each other and are never cancelled partway. A manual run (*
 The UI is a static Vite build served by Caddy (`deploy/Caddyfile`):
 
 - Any path that is not a file serves `index.html`, because Wouter routes on the client. Deep links and refreshes work.
-- Files under `/assets/` are content-hashed and cached for a year. A missing asset is a 404, not `index.html`.
+- `/u/<slug>` is the public user page, a separate build in `dist/u` (see [User pages](/ui/user-pages)). Every `/u/` path that is not under `/u/assets/` serves `/u/index.html`, so the dashboard never answers one; bare `/u` and `/u/` redirect to `/`.
+- Files under `/assets/` and `/u/assets/` are content-hashed and cached for a year. A missing asset is a 404, not `index.html`.
 - Everything else, including `index.html`, is served `no-cache`, so a new deploy is picked up on the next load.
 - Caddy listens on `$PORT`, which Railway sets (8080 when unset).
 
@@ -28,15 +29,14 @@ To build and run it locally, from the `woofx3-ui` checkout with the engine check
 
 ```bash
 docker build \
-  --build-context engine-api=../woofx3/shared/clients/typescript/api \
-  --build-context engine-scene=../woofx3/shared/clients/typescript/scene \
+  --build-context engine=../woofx3 \
   --build-arg VITE_CONVEX_URL=https://<deployment>.convex.cloud \
   --build-arg VITE_CONVEX_SITE_URL=https://<deployment>.convex.site \
   -t woofx3-ui .
 docker run --rm -p 8080:8080 woofx3-ui
 ```
 
-The `engine-api` and `engine-scene` build contexts supply the engine's shared type package (`@woofx3/api`) and its composition package (`@woofx3/scene`, the scene editor's model and headless editor). Both live outside this repository.
+The `engine` build context is the engine checkout. It supplies the engine's shared type package (`@woofx3/api`) and its composition package (`@woofx3/scene`, the scene editor's model and headless editor), which live outside this repository. Their dependencies are installed from the engine's workspace lockfile (`bun.lock` at its root), filtered to those two packages, so the context needs the root `package.json`, `bun.lock` and every workspace member's `package.json` as well as the two packages' sources. The deploy workflows check out exactly that subset of the engine.
 
 ## Secrets and variables
 

@@ -6,6 +6,7 @@ import { Route, Switch, useLocation, useSearch } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AdminOnly } from "@/components/layout/admin-only";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
+import { USER_PAGE_PATH } from "@/components/layout/nav-config";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -76,6 +77,7 @@ const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
+const UserPage = lazy(() => import("@/pages/user-page"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -125,6 +127,31 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   if (isLoading) return <SplashScreen />;
   if (!isAuthenticated) return null;
   return <>{children}</>;
+}
+
+/**
+ * `/u/<slug>` is the public user page, a separate app the server answers
+ * (deploy/Caddyfile), so an in-app link there reloads to fetch it. A dashboard
+ * that was itself loaded at `/u/` was served there by mistake; it shows
+ * not-found instead of reloading forever.
+ */
+const USER_PAGE_PREFIX = "/u/";
+const LOADED_AT_USER_PAGE = window.location.pathname.startsWith(USER_PAGE_PREFIX);
+
+function UserPageHandoff() {
+  useEffect(() => {
+    if (!LOADED_AT_USER_PAGE) {
+      window.location.reload();
+    }
+  }, []);
+  if (!LOADED_AT_USER_PAGE) {
+    return null;
+  }
+  return (
+    <Suspense fallback={null}>
+      <NotFound />
+    </Suspense>
+  );
 }
 
 /** Legacy `/settings/:tab` values that still map onto an Admin screen. */
@@ -180,6 +207,8 @@ function AppRoutes() {
         </AuthGuard>
       </Route>
 
+      <Route path={`${USER_PAGE_PREFIX}*`} component={UserPageHandoff} />
+
       {/* Protected app routes */}
       <Route>
         <AuthGuard>
@@ -224,6 +253,7 @@ function AppRoutes() {
                     <Route path="/stream/scenes" component={Scenes} />
                     <Route path="/stream/scenes/:id" component={Scenes} />
                     <Route path="/stream/supporters" component={Supporters} />
+                    <Route path={USER_PAGE_PATH} component={UserPage} />
                     <Route path="/stream/assets" component={Assets} />
                     <Route path="/stream/starter-packs" component={StarterPacks} />
                     <Route path="/stream/workflows" component={Workflows} />
