@@ -31,8 +31,6 @@ use crate::integrations;
 use crate::Companion;
 use woofx3_companion_core::window::CompanionState;
 
-const COMPANION_VERSION: &str = env!("CARGO_PKG_VERSION");
-
 /// Must stay at or under MAX_DEVICE_NAME_LENGTH in convex/lib/companionCodes.ts.
 const MAX_DEVICE_NAME_CHARS: usize = 64;
 
@@ -106,7 +104,7 @@ pub async fn forget_and_unpair(
     token: Option<String>,
     device_code: Option<String>,
 ) {
-    if let Err(err) = credentials::clear().await {
+    if let Err(err) = companion.credentials.clear().await {
         eprintln!("[companion] could not clear the stored token: {err:#}");
     }
     companion.integrations.forget().await;
@@ -123,7 +121,7 @@ async fn fail(
     device_code: Option<String>,
     message: impl Into<String>,
 ) {
-    if let Err(err) = credentials::clear().await {
+    if let Err(err) = companion.credentials.clear().await {
         eprintln!("[companion] could not clear the pairing token: {err:#}");
     }
     release_on_server(companion, token, device_code).await;
@@ -154,7 +152,7 @@ pub async fn pair(companion: Arc<Companion>) {
 
     // A token left over from an earlier pairing is given up before a new one
     // replaces it, so its row (if any) does not linger.
-    match credentials::load().await {
+    match companion.credentials.load().await {
         Ok(Some(previous)) => release_on_server(&companion, Some(previous.token), None).await,
         Ok(None) => {}
         Err(err) => eprintln!("[companion] could not read the previous token: {err:#}"),
@@ -172,7 +170,7 @@ pub async fn pair(companion: Arc<Companion>) {
         confirmed: false,
         instance_name: None,
     };
-    if let Err(err) = credentials::store(stored).await {
+    if let Err(err) = companion.credentials.store(stored).await {
         fail(&companion, None, None, format!("{err:#}")).await;
         return;
     }
@@ -181,7 +179,7 @@ pub async fn pair(companion: Arc<Companion>) {
     let token_hash = credentials::hash_token(&token);
     let request = StartRequest {
         device_name: &device_name,
-        companion_version: COMPANION_VERSION,
+        companion_version: &companion.version,
         installation_id: &companion.installation_id,
         token_hash: &token_hash,
     };
@@ -395,7 +393,7 @@ pub async fn run_session(
                         instance_name = Some(info.instance_name.clone());
                         if confirmed {
                             if newly_confirmed || renamed {
-                                remember(&token, &info.instance_name).await;
+                                remember(&companion, &token, &info.instance_name).await;
                             }
                             if integrations.is_none() {
                                 let session = CloudSession {
@@ -436,7 +434,7 @@ pub async fn run_session(
                 }
             }
             _ = heartbeat.tick(), if confirmed => {
-                match cloud.heartbeat(&token, COMPANION_VERSION).await {
+                match cloud.heartbeat(&token, &companion.version).await {
                     Ok(beat) if !beat.paired => {
                         drop(integrations.take());
                         forget_and_unpair(&companion, Some(token), None).await;
@@ -452,13 +450,13 @@ pub async fn run_session(
 
 /// Stores the token as confirmed with the instance's current name, for the
 /// window after a restart.
-async fn remember(token: &str, instance_name: &str) {
+async fn remember(companion: &Companion, token: &str, instance_name: &str) {
     let stored = StoredToken {
         token: token.to_string(),
         confirmed: true,
         instance_name: Some(instance_name.to_string()),
     };
-    if let Err(err) = credentials::store(stored).await {
+    if let Err(err) = companion.credentials.store(stored).await {
         eprintln!("[companion] could not update the stored token: {err:#}");
     }
 }
@@ -467,7 +465,9 @@ async fn remember(token: &str, instance_name: &str) {
 /// first, so the confirmation is not lost if this PC crashes before the
 /// local store is written.
 pub async fn confirm(companion: Arc<Companion>, instance_name: String) -> Result<(), String> {
-    let stored = credentials::load()
+    let stored = companion
+        .credentials
+        .load()
         .await
         .map_err(|err| format!("{err:#}"))?
         .ok_or_else(|| "The pairing token is missing. Pair again.".to_string())?;
@@ -484,7 +484,7 @@ pub async fn confirm(companion: Arc<Companion>, instance_name: String) -> Result
         forget_and_unpair(&companion, Some(stored.token), None).await;
         return Err("This pairing is no longer approved. Pair again.".to_string());
     }
-    remember(&stored.token, &instance_name).await;
+    remember(&companion, &stored.token, &instance_name).await;
     let session = tauri::async_runtime::spawn(run_session(
         Arc::clone(&companion),
         stored.token,

@@ -8,6 +8,12 @@
 //! it quits. There it also keeps the shoutout queue and the stream start
 //! marker for the window, which reaches them through the local-mode commands.
 //!
+//! The same crate builds two products: the companion, and the desktop app
+//! (the `bundled-engine` feature with `tauri.desktop.conf.json`). Whatever
+//! names the product or files its state on the PC comes from the running
+//! app's Tauri config (`AppIdentity`), so the two install side by side and
+//! never share credentials or data.
+//!
 //! Commands are async so none of them runs on the main thread: tray updates
 //! (`MenuItem::set_text`) dispatch to the main thread and wait for it, so a
 //! command blocking the main thread on a lock that a state update holds
@@ -38,6 +44,7 @@ use woofx3_companion_core::host::{
 };
 
 use cloud::CloudLink;
+use credentials::Credentials;
 use engine_host::LocalEngine;
 use integrations::Integrations;
 use tray::Tray;
@@ -48,10 +55,17 @@ use woofx3_companion_core::window::{
     SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs,
     WindowState, STATE_EVENT,
 };
+use woofx3_companion_core::AppIdentity;
 
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
+    /// Which product this is: the companion or the desktop app.
+    identity: AppIdentity,
+    credentials: Credentials,
+    /// The version Convex is told this app runs: the Tauri config's, which
+    /// the updater compares and each product sets for itself.
+    version: String,
     cloud_link: CloudLink,
     engine: LocalEngine,
     /// The mode this run started in, and whether the streamer chose it.
@@ -130,6 +144,7 @@ impl Companion {
     /// window and the tray. A newer download replaces an older one.
     fn set_ready_update(&self, downloaded: Downloaded) {
         let ready = ReadyUpdate {
+            product_name: self.identity.product_name().to_string(),
             version: downloaded.version().to_string(),
         };
         *lock(&self.ready_update) = Some(Arc::new(downloaded));
@@ -192,7 +207,7 @@ impl Companion {
     /// stored token opens the Convex connection; without one the companion
     /// stays off the cloud until a pairing starts.
     async fn resume(self: Arc<Self>) {
-        match credentials::load().await {
+        match self.credentials.load().await {
             // The dashboard window is already open; pairing waits until the
             // streamer asks for it.
             Ok(None) => {
@@ -226,7 +241,9 @@ impl Companion {
         self.end_start();
         self.set_verification_url(None);
         let device_code = lock(&self.device_code).take();
-        let token = credentials::load()
+        let token = self
+            .credentials
+            .load()
             .await
             .map_err(|err| format!("{err:#}"))?
             .map(|stored| stored.token);
@@ -517,9 +534,14 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
+            let identity = AppIdentity::new(
+                &app.config().identifier,
+                app.config().product_name.as_deref().unwrap_or_default(),
+            )?;
+            let credentials = Credentials::new(&identity);
             let app_data_dir = app.path().app_data_dir()?;
             let started = load_host_config(app).and_then(|(path, config)| {
-                let engine = start_local_engine(app, &config)?;
+                let engine = start_local_engine(app, &config, &credentials)?;
                 Ok((path, config, engine))
             });
             let (host_config_path, host_config, engine) = match started {
@@ -527,6 +549,7 @@ pub fn run() {
                 Err(err) => {
                     startup_failure::report(
                         app.path().app_log_dir().ok().as_deref(),
+                        &identity.startup_failure_title(),
                         &format!("{err:#}"),
                     );
                     std::process::exit(1);
@@ -540,6 +563,9 @@ pub fn run() {
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
+                version: app.package_info().version.to_string(),
+                identity,
+                credentials,
                 cloud_link: CloudLink::dormant(),
                 engine,
                 host: HostModeView {
@@ -587,7 +613,7 @@ pub fn run() {
         })
         .invoke_handler(woofx3_companion_core::with_command_names!(command_handler))
         .build(tauri::generate_context!())
-        .expect("error while building the woofx3 companion")
+        .expect("error while building the Tauri app")
         .run(|app, event| {
             if let RunEvent::ExitRequested { api, code, .. } = event {
                 stop_engine_before_exit(app, &api, code);
@@ -598,13 +624,18 @@ pub fn run() {
 /// The local engine the host configuration asks for, started. An invalid
 /// configuration, or a release with no orchestrator, is an error the caller
 /// shows before exiting.
-fn start_local_engine(app: &tauri::App, config: &HostConfig) -> anyhow::Result<LocalEngine> {
+fn start_local_engine(
+    app: &tauri::App,
+    config: &HostConfig,
+    credentials: &Credentials,
+) -> anyhow::Result<LocalEngine> {
     match &config.mode {
         HostMode::Companion => Ok(LocalEngine::Off),
         HostMode::Local(settings) => Ok(LocalEngine::start(
             settings,
             &app.path().resource_dir()?,
             &app.path().app_local_data_dir()?,
+            Arc::new(credentials.engine_client_store()),
             Arc::new(app.handle().clone()),
         )?),
     }
