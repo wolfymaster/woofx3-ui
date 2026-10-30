@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation, useSearch } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { AccountViewerName } from "@/components/layout/account-viewer-name";
 import { AdminOnly } from "@/components/layout/admin-only";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { USER_PAGE_PATH } from "@/components/layout/nav-config";
@@ -384,12 +385,14 @@ function App() {
       */}
       <ConvexAuthProvider client={convex} shouldHandleCode={false}>
         <EngineGatewayProvider gateway={hostedEngineGateway}>
-          <TooltipProvider>
-            <Suspense fallback={<SplashScreen />}>
-              <AppRoutes />
-            </Suspense>
-            <Toaster />
-          </TooltipProvider>
+          <AccountViewerName>
+            <TooltipProvider>
+              <Suspense fallback={<SplashScreen />}>
+                <AppRoutes />
+              </Suspense>
+              <Toaster />
+            </TooltipProvider>
+          </AccountViewerName>
         </EngineGatewayProvider>
       </ConvexAuthProvider>
     </ErrorBoundary>
