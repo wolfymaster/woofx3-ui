@@ -84,6 +84,7 @@ function useSetSelectionRequest() {
 }
 
 export const convexEventLogGateway: EventLogGateway = {
+  canRetrigger: true,
   useWebhookEvents,
   useWebhookPayload,
   useRetriggerRequest,

@@ -308,6 +308,8 @@ export interface ResourcesGateway {
  * its live push and type selection.
  */
 export interface EventLogGateway {
+  /** Whether a logged event can be fired at the engine again; false hides the control rather than failing it. */
+  readonly canRetrigger: boolean;
   /** Newest first, optionally of one type. */
   useWebhookEvents(eventType: string | null, initialNumItems: number): Paginated<WebhookEventSummary>;
   /** The raw payload JSON; null when the entry is gone or not the caller's. */
@@ -740,6 +742,8 @@ export interface TwitchLinkGateway {
   useLink(): Live<TwitchLink | null>;
   /** Starts and follows linking for the calling component. */
   useLinkFlow(): TwitchLinkFlow;
+  /** Whether the viewer may link or replace the link; undefined while that is unknown. */
+  useCanManageLink(): Live<boolean>;
   /** Removes the link. Rejects for a caller who is not an owner or admin. */
   useUnlinkRequest(): () => Promise<void>;
 }

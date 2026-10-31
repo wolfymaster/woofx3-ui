@@ -235,7 +235,52 @@ describe("eventLog", () => {
     expect(state.streamSubscriptions[1].types).toEqual(["channel.raid"]);
   });
 
-  test("the webhook log is a dashboard's record, which this gateway has none of", async () => {
+  test("the log screen reads the engine's event log, newest first, a page at a time", async () => {
+    const { runtime, state } = await connected();
+    state.events = [3, 2, 1].map((n) => ({
+      id: `ev-${n}`,
+      type: n === 2 ? "channel.raid" : "channel.follow",
+      source: "twitch",
+      time: `2026-10-31T10:0${n}:00Z`,
+      data: { n },
+    }));
+    const gateway = directEventLogGateway(runtime);
+    expect(gateway.canRetrigger).toBe(false);
+
+    const read = renderDirect(() => gateway.useWebhookEvents(null, 2));
+    await read.until((value) => value.status === "CanLoadMore", "the first page");
+    expect(read.current().results.map((event) => event.id)).toEqual(["ev-3", "ev-2"]);
+    expect(read.current().results[0]).toMatchObject({
+      eventType: "channel.follow",
+      source: "webhook",
+      receivedAt: Date.parse("2026-10-31T10:03:00Z"),
+      payloadLength: JSON.stringify({ n: 3 }).length,
+    });
+
+    read.current().loadMore(2);
+    await read.until((value) => value.status === "Exhausted", "the last page");
+    expect(read.current().results.map((event) => event.id)).toEqual(["ev-3", "ev-2", "ev-1"]);
+
+    const payload = renderDirect(() => gateway.useWebhookPayload("ev-2" as never));
+    expect(await payload.until((value) => value !== undefined, "the payload")).toBe(JSON.stringify({ n: 2 }));
+    read.unmount();
+    payload.unmount();
+  });
+
+  test("an engine that keeps no event log reads as an empty log", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    const { runtime, state, engine } = harness;
+    engine.capabilities = engine.capabilities.filter((capability) => capability !== ENGINE_CAPABILITIES.eventsLog);
+    state.events = [{ id: "ev-1", type: "channel.follow", source: "twitch", time: "", data: {} }];
+    await harness.connect();
+    const read = renderDirect(() => directEventLogGateway(runtime).useWebhookEvents(null, 10));
+    await read.until((value) => value.status === "Exhausted", "an empty log");
+    expect(read.current().results).toEqual([]);
+    read.unmount();
+  });
+
+  test("a logged event cannot be fired again", async () => {
     const { runtime } = await connected();
     const retrigger = renderDirect(() => directEventLogGateway(runtime).useRetriggerRequest()).current();
     await expect(retrigger("log-1" as never)).rejects.toBeInstanceOf(GatewayUnsupportedError);

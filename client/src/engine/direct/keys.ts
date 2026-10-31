@@ -8,6 +8,12 @@ export const directKeys = {
     all: ["status"] as const,
     liveState: () => ["status", "liveState"] as const,
   },
+  eventLog: {
+    all: ["eventLog"] as const,
+    allPages: ["eventLog", "pages"] as const,
+    payload: (logId: string) => ["eventLog", "payload", logId] as const,
+    pages: (eventType: string | null) => ["eventLog", "pages", eventType] as const,
+  },
   alertQueue: {
     all: ["alertQueue"] as const,
     alerts: (limit: number) => ["alertQueue", "alerts", limit] as const,
