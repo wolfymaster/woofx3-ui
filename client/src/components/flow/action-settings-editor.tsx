@@ -1,11 +1,12 @@
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { Info } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { ModuleAssetFieldRenderer, withAssetModule } from "@/components/flow/module-asset-field";
 import { StepIdField } from "@/components/flow/step-id-field";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
@@ -101,9 +102,21 @@ export function ActionSettingsEditor({
         </p>
       )}
       {onRename && (
-        <div className="border-t pt-4">
-          <StepIdField id={step.id} existingStepIds={existingStepIds} onUpdateActionId={onRename} />
-        </div>
+        <Collapsible className="border-t pt-4">
+          <CollapsibleTrigger
+            className="group inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            data-testid="button-step-advanced"
+          >
+            <ChevronRight
+              className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-90"
+              aria-hidden="true"
+            />
+            Advanced
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <StepIdField id={step.id} existingStepIds={existingStepIds} onUpdateActionId={onRename} />
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   );

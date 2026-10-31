@@ -133,7 +133,7 @@ A cleared setting is removed from the step's parameters rather than stored empty
 - `layout` reads `surface`: an `alert` layout opens the alert editor; a surface nothing edits per step is shown and kept as it is.
 - `button` fires its `action` (`ConfigButtonField`, shared by every form): an `internal` request through `fieldOptions.dispatch`, addressed by the field's declaration (`withFieldOptionsOwner` gives the action its reference), or an `integration`'s account connection through `moduleOAuth.start`.
 
-The step's id stays editable below the settings, as later steps refer to its outputs by it.
+The step's id is generated, so it stays out of the way: it is editable under **Advanced** below the settings, closed by default, as later steps refer to its outputs by it.
 
 ### Test run
 
