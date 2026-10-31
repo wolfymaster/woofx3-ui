@@ -1,7 +1,6 @@
 import type {
   EngineGateway,
   GoLiveGateway,
-  MacrosGateway,
   ModuleOAuthGateway,
   SetupImportsGateway,
   ShoutoutsGateway,
@@ -12,12 +11,15 @@ import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
+import { directDashboardGateway } from "./dashboard";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
+import { directMacrosGateway } from "./macros";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
 import { directOverlaysGateway } from "./overlays";
+import { directPageIntrosGateway } from "./page-intros";
 import { directPinsGateway } from "./pins";
 import { directRequestsGateway } from "./requests";
 import { directResourcesGateway } from "./resources";
@@ -35,10 +37,6 @@ import { directWorkflowsGateway } from "./workflows";
 // Namespaces whose data the Convex gateway keeps in its own tables, and that
 // have no home on a lone engine yet. Every member is named, so a screen that
 // reaches one fails with the member it used rather than an empty answer.
-
-const macros: MacrosGateway = {
-  useRunRequest: unsupportedRequest("macros.useRunRequest"),
-};
 
 const moduleOAuth: ModuleOAuthGateway = {
   useConnectRequest: unsupportedRequest("moduleOAuth.useConnectRequest"),
@@ -93,7 +91,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     scenes: directScenesGateway(runtime),
     workflows: directWorkflowsGateway(runtime),
     requests: directRequestsGateway(runtime),
-    macros,
+    macros: directMacrosGateway(runtime),
     streamOps: directStreamOpsGateway(runtime),
     config: directConfigGateway(runtime),
     session: directSessionGateway(runtime),
@@ -110,5 +108,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     clips: directClipsGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
     goLive,
+    pageIntros: directPageIntrosGateway(runtime),
+    dashboard: directDashboardGateway(runtime),
   };
 }

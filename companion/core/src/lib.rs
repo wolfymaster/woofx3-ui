@@ -14,6 +14,7 @@ pub mod host;
 pub mod identity;
 pub mod obs_config;
 pub mod relay;
+pub mod stored_token;
 pub mod window;
 
 pub use address::{AddressOrigin, ConfirmedAddress};
@@ -22,6 +23,7 @@ pub use identity::{AppIdentity, IdentityError};
 pub use relay::{
     run_relay, run_relay_with, CredentialSource, RelayGrant, RelayOptions, RelayStatus, Stopped,
 };
+pub use stored_token::StoredToken;
 
 /// Installs ring as the process's rustls crypto provider. rustls adopts it
 /// on its own only when something builds a config through rustls first, as

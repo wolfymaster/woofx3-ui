@@ -44,16 +44,17 @@ use woofx3_companion_core::host::{
 };
 
 use cloud::CloudLink;
-use credentials::Credentials;
+use credentials::{Credentials, StoredToken};
 use engine_host::LocalEngine;
 use integrations::Integrations;
 use tray::Tray;
 use update::Downloaded;
 use woofx3_companion_core::window::{
-    ChooseHostModeArgs, CompanionState, ConfirmAddressArgs, EnqueueShoutoutArgs, HostModeView,
-    IntegrationsView, LocalEngineSession, ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs,
-    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs,
-    WindowState, STATE_EVENT,
+    AppLinkStart, ChooseHostModeArgs, CompanionLinkStatus, CompanionState, ConfirmAddressArgs,
+    EnqueueShoutoutArgs, FinishAppLinkArgs, HostModeView, IntegrationsView, LocalEngineSession,
+    ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs,
+    SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs, WindowState,
+    STATE_EVENT,
 };
 use woofx3_companion_core::AppIdentity;
 
@@ -90,6 +91,10 @@ pub struct Companion {
     /// The pending pairing's device code, kept so cancelling can tell Convex.
     device_code: Mutex<Option<String>>,
     verification_url: Mutex<Option<String>>,
+    /// The token `begin_app_link` handed out the hash of, until
+    /// `finish_app_link` stores it. Only in memory: a link that never
+    /// finishes leaves nothing behind on this PC.
+    pending_link: Mutex<Option<String>>,
     tray: Mutex<Option<Tray>>,
 }
 
@@ -197,6 +202,19 @@ impl Companion {
         *lock(&self.device_code) = device_code;
     }
 
+    fn pending_link(&self) -> Option<String> {
+        lock(&self.pending_link).clone()
+    }
+
+    /// Drops the pending token once it is stored, unless a newer
+    /// `begin_app_link` has replaced it meanwhile.
+    fn clear_pending_link(&self, stored: &str) {
+        let mut pending = lock(&self.pending_link);
+        if pending.as_deref() == Some(stored) {
+            *pending = None;
+        }
+    }
+
     /// Shows the companion window: pairing, its confirmation and errors need
     /// the streamer there.
     pub fn show_window(&self) {
@@ -217,12 +235,8 @@ impl Companion {
                 if !stored.confirmed {
                     self.show_window();
                 }
-                let session = tauri::async_runtime::spawn(pairing::run_session(
-                    Arc::clone(&self),
-                    stored.token,
-                    stored.confirmed,
-                    stored.instance_name,
-                ));
+                let session =
+                    tauri::async_runtime::spawn(pairing::run_session(Arc::clone(&self), stored));
                 self.replace_flow(Some(session));
             }
             Err(err) => {
@@ -469,6 +483,55 @@ async fn choose_host_mode(
     Ok(())
 }
 
+/// Whether this computer is already a companion, and of which instance, with
+/// what the dashboard sends Convex to link it.
+#[tauri::command]
+async fn companion_link_status(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<CompanionLinkStatus, String> {
+    let stored = companion
+        .credentials
+        .load()
+        .await
+        .map_err(|err| format!("{err:#}"))?;
+    Ok(CompanionLinkStatus {
+        linked: stored.as_ref().and_then(StoredToken::linked_instance),
+        installation_id: companion.installation_id.clone(),
+        device_name: pairing::device_name(),
+        companion_version: companion.version.clone(),
+    })
+}
+
+/// Starts making this computer the signed-in instance's companion: a fresh
+/// token, kept here, whose hash the dashboard gives Convex. Starting again
+/// replaces a token that never finished. Companion mode only, since local
+/// mode has no account to link to.
+#[tauri::command]
+async fn begin_app_link(companion: State<'_, Arc<Companion>>) -> Result<AppLinkStart, String> {
+    if companion.host.mode != HostModeKind::Companion {
+        return Err("Linking to an account needs the app signed in to one.".to_string());
+    }
+    let token = credentials::generate_token().map_err(|err| format!("{err:#}"))?;
+    let token_hash = credentials::hash_token(&token);
+    *lock(&companion.pending_link) = Some(token);
+    Ok(AppLinkStart {
+        token_hash,
+        installation_id: companion.installation_id.clone(),
+        device_name: pairing::device_name(),
+        companion_version: companion.version.clone(),
+    })
+}
+
+/// Convex recorded this computer as the instance's companion: stores the
+/// pending token as the confirmed pairing and starts the paired session.
+#[tauri::command]
+async fn finish_app_link(
+    companion: State<'_, Arc<Companion>>,
+    args: FinishAppLinkArgs,
+) -> Result<(), String> {
+    pairing::finish_app_link(Arc::clone(&companion), args).await
+}
+
 /// Connects to the relay again after another connection displaced this one
 /// or woofx3 refused a credential.
 #[tauri::command]
@@ -584,6 +647,7 @@ pub fn run() {
                 starting: AtomicBool::new(false),
                 device_code: Mutex::new(None),
                 verification_url: Mutex::new(None),
+                pending_link: Mutex::new(None),
                 tray: Mutex::new(None),
             });
             let tray = tray::build(&handle, &companion.state().tray_label())?;

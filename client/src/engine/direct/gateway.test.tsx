@@ -27,8 +27,8 @@ test("a namespace with no engine home rejects, naming the member", async () => {
   harnesses.push(harness);
   await harness.connect();
   const gateway = createDirectEngineGateway(harness.runtime);
-  const run = renderDirect(() => gateway.macros.useRunRequest()).current();
-  const error = await run("macro" as never, []).catch((caught: unknown) => caught);
+  const start = renderDirect(() => gateway.setupImports.useStartRequest()).current();
+  const error = await start("import" as never).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(GatewayUnsupportedError);
-  expect(String(error)).toContain("macros.useRunRequest");
+  expect(String(error)).toContain("setupImports.useStartRequest");
 });

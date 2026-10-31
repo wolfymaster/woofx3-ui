@@ -1,7 +1,7 @@
 # Companion app
 
 **Routes:** `/companion/pair` (approval page), the Companion card on `/admin/engine`
-**Primary files:** `companion/` (the app; `companion/core/` holds the relay client, bridge and discovery), `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
+**Primary files:** `companion/` (the app; `companion/core/` holds the relay client, bridge and discovery), `client/src/pages/companion-pair.tsx`, `client/src/desktop/AppLink.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
 
 ## What it is
 
@@ -85,7 +85,11 @@ In the desktop build `client/src/main.tsx` starts at `client/src/desktop/Desktop
 - **Signed in** (`companion` mode): the hosted app, `client/src/App.tsx`, as on the web.
 - **On this computer** (`local` mode): `LocalApp.tsx`. It asks the host for `local_engine_session` every second until the engine is ready and registered, showing how startup is going (starting, updating its data, or why it stopped), then boots the direct engine gateway on those credentials (`LocalEngineGatewayProvider` in `client/src/engine/boot/local.tsx`). The engine session reconnects by itself if the engine restarts, under the same credentials.
 
-Local mode has no Convex client, so it serves only pages that reach the engine through its gateway: `client/src/desktop/local-routes.tsx` lists them, and `local-routes.test.ts` walks every import from `LocalApp.tsx` and fails on any that reaches Convex (its client or hooks, the generated API, `useInstance`, or the hosted gateway). `LocalShell.tsx` frames them with the app's sections cut down to those pages (`navItemsServed`), and a status bar fed by the engine alone. A path local mode does not serve leads to its home, the alerts page. A page joins local mode once nothing it loads reaches Convex.
+Local mode has no Convex client, so it serves only pages that reach the engine through its gateway: `client/src/desktop/local-routes.tsx` lists them, and `local-routes.test.ts` walks every import from `LocalApp.tsx` and fails on any that reaches Convex (its client or hooks, the generated API, `useInstance`, or the hosted gateway). `LocalShell.tsx` frames them with the app's sections cut down to those pages (`navItemsServed`), and a status bar fed by the engine alone. A path local mode does not serve leads to its home, the dashboard. A page joins local mode once nothing it loads reaches Convex.
+
+Local mode's dashboard (`LocalDashboard.tsx`) is the hosted one with local mode's widget catalog (`client/src/lib/dashboard-widgets/local-catalog.ts`). It leaves out the widgets whose data only Convex keeps: the go-live checklist, stream info (its presets), pinned messages (their history), shoutouts (the queue) and recent streams (stream recaps). Its macro pad keeps its buttons on the engine and runs them there, but has no remote trigger URLs, which Convex serves. It has no getting started checklist or starter packs nudge either, which belong to an account's setup. A layout that names one of them shows it as not available here.
+
+The dashboard's own data that Convex keeps per user or instance (which page intros were closed, the dashboard's layout, notes, pinned counters, highlights and the macro pad) local mode keeps in the engine's local UI settings (`client/src/engine/direct/ui-settings.ts`): one namespace per kind of data, read whole, cached, and refreshed by `ui.setting.changed`. An edit that must not lose another window's change is a read-modify-write against the revision it read, retried on a conflict; [the dashboard page](./dashboard.md#data-sources) lists its namespaces. The name an editor shows to others editing the same scene comes from the app root (`ViewerNameProvider`): the account's name when signed in, "This computer" in local mode.
 
 ## Integrations
 
@@ -200,7 +204,7 @@ The client secret stays in the Rust process and the credential store. The dashbo
 
 ### Window permissions
 
-The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue and the stream start marker. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
+The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue and the stream start marker, and in companion mode the three commands that [link the app](#linking-the-desktop-app) as the instance's companion. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
 
 ## Updates
 
@@ -214,7 +218,7 @@ The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/s
 
 ## Pairing
 
-Pairing follows the OAuth device authorization shape (RFC 8628): the companion shows a short code, and a signed-in person approves it in the browser.
+There are two ways to pair. Signed in to an account inside the desktop app, the app [links itself](#linking-the-desktop-app) to the instance it shows. Otherwise, from the companion window's **Pair**, pairing follows the OAuth device authorization shape (RFC 8628): the companion shows a short code, and a signed-in person approves it in the browser.
 
 1. The companion generates its own token: 32 bytes from the OS RNG, base64url, prefixed `wfxc_`. It stores it in the OS credential store (Credential Manager on Windows) marked unconfirmed.
 2. It calls the action `companionPairing.start` with its device name, version, installation id and the token's SHA-256 hash. Convex draws a device code and an 8-character user code (`XXXX-XXXX`, from an alphabet with no vowels or look-alike characters), and returns them with the verification URL `<SITE_URL>/companion/pair?code=…` and how long the code is good for (10 minutes).
@@ -228,13 +232,32 @@ Because the companion makes its own token and sends only its hash, no secret eve
 
 The **installation id** is a UUID the companion generates once and keeps in its app data directory. Approving a pairing from an installation that already has a row on that instance replaces that row's token, keeping its id, so pairing the same PC again does not leave a duplicate.
 
+The stored pairing (`core/src/stored_token.rs`) holds the token, whether it is confirmed, and the instance's name and id. A pairing stored before the id was kept has none until `companions.self` next names the instance.
+
+### Linking the desktop app
+
+When an admin or owner of the selected instance is signed in to the dashboard in the desktop app (companion mode), the app makes its computer that instance's companion by itself, with no code to approve and nothing to confirm. `client/src/desktop/AppLink.tsx` runs it; it is mounted in the hosted root only in the desktop build, so the web build and local mode never load it.
+
+1. The dashboard asks the host `companion_link_status`: the instance this computer is the confirmed companion of (its id and name), plus its installation id, device name and version. If that is the selected instance, nothing happens. A stored pairing that names no instance id is left alone too, since which instance it belongs to cannot be told.
+2. `begin_app_link` generates a fresh token in the Rust process and keeps it in memory, not yet in the credential store. It returns only the token's hash, with the installation id, device name and version. Starting again replaces a token that never finished.
+3. The dashboard calls `companionPairing.linkSignedInApp` with the instance and those values. It requires the admin role on the instance, checks the hash, installation id, device name and version as `start` does, and is rate limited per user. It writes the `companions` row already confirmed, approved by the caller, through the same `writeCompanionCredential` (`convex/lib/companionRecords.ts`) an approval uses, so this installation's existing row keeps its id and gets the new token. Calling it again with the same installation and hash changes nothing.
+4. `finish_app_link` gives up any previous pairing as **Unpair** does, stores the token as confirmed with the instance's name and id, and starts the paired session.
+
+If another installation is the instance's companion, `linkSignedInApp` writes nothing and answers with that computer's name and last-seen time. The dashboard asks "Use this computer for local connections?" in a small prompt the person can dismiss. Choosing this computer calls the mutation again with `replaceOtherComputer`, which replaces the other companion as an approval does (see [One companion per instance](#one-companion-per-instance)); the other PC drops to Unpaired.
+
+The dashboard tries once per instance per run of the app. Anyone below admin is skipped without a word. A failure is shown with **Try again**, and never retried on its own.
+
+Why no confirmation: the device-code flow asks the person at the PC to confirm because a code shown on stream could be approved by anyone who saw it. Here the approval is the sign-in itself, made inside the app on that PC, so the person who approves is the person at the PC. The token never leaves the Rust process: the webview and Convex see only its hash, as in the device-code flow.
+
 ### One companion per instance
 
 An instance has at most one companion. Approving a pairing from a different installation **replaces** the current companion: `approve` deletes its row and presence row in the same transaction, and the old companion's `companions.self` subscription turns null, so it drops to Unpaired at once. Pairing the same installation again updates the row in place and keeps its id, with no warning.
 
+The desktop app's own link never replaces another computer without asking (see [Linking the desktop app](#linking-the-desktop-app)).
+
 Before Approve is enabled, the approval page asks `companionPairing.replacementForApproval` with the user code and the chosen instance. It answers with the device name and last-seen time of the companion that approving would replace, or null. It compares installation ids on the server, so they never reach the browser, and it answers only an admin of the instance, with no token data. When it names a companion, the page shows "This replaces the companion on {device}, last seen {time}" and requires a second checkbox. The confirmation is tied to that companion, so choosing another instance asks again.
 
-Because there is only one companion, holding a confirmed companion row is the privilege. A phished approval can only replace the streamer's own companion, and that is visible: the real companion drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows an approval replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
+Because there is only one companion, holding a confirmed companion row is the privilege. A phished approval can only replace the streamer's own companion, and that is visible: the real companion drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows an approval or a link replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
 
 ### The approval page
 

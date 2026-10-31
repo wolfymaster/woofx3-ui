@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { DashboardPanelWidget } from "@shared/dashboard-layout";
 import {
   assignWidget,
   configureWidget,
-  type DashboardPanelWidget,
   isPanelMounted,
   moveWidget,
   removeWidget,

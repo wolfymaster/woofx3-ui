@@ -5,6 +5,7 @@ import { convexAlertQueueGateway } from "./alert-queue";
 import { convexClipsGateway } from "./clips";
 import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
+import { convexDashboardGateway } from "./dashboard";
 import { convexEventLogGateway } from "./event-log";
 import { convexGoLiveGateway } from "./go-live";
 import { convexMacrosGateway } from "./macros";
@@ -13,6 +14,7 @@ import { convexModuleOAuthGateway } from "./module-oauth";
 import { convexModuleResourcesGateway } from "./module-resources";
 import { convexModulesGateway } from "./modules";
 import { convexOverlaysGateway } from "./overlays";
+import { convexPageIntrosGateway } from "./page-intros";
 import { convexPinsGateway } from "./pins";
 import { convexRequestsGateway } from "./requests";
 import { convexResourcesGateway } from "./resources";
@@ -63,4 +65,6 @@ export const convexEngineGateway: EngineGateway = {
   clips: convexClipsGateway,
   streamInfo: convexStreamInfoGateway,
   goLive: convexGoLiveGateway,
+  pageIntros: convexPageIntrosGateway,
+  dashboard: convexDashboardGateway,
 };

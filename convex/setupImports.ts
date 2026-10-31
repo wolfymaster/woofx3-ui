@@ -1,3 +1,4 @@
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { COUNTER_KIND } from "@shared/resource-kinds";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
@@ -14,7 +15,6 @@ import {
   query,
 } from "./_generated/server";
 import { addGroupMemberInEngine, createCommandInEngine, createGroupInEngine } from "./chatCommandActions";
-import { escapeDollarKeys, unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRole, requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { flattenSteps } from "./lib/setupImport/build";

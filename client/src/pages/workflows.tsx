@@ -1,3 +1,4 @@
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
 import {
   ArrowLeft,
@@ -63,7 +64,6 @@ import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
-import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import { cn } from "@/lib/utils";
 import {
   UNTRIGGERED_LABEL,

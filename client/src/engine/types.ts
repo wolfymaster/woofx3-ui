@@ -2,6 +2,7 @@
 // UI uses it, whoever serves it: a gateway maps its own storage or wire shapes
 // into these at its edge, so nothing here may name a gateway's backend.
 
+import type { MacroFields } from "@shared/macro-pad";
 import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
@@ -52,7 +53,7 @@ export type InstanceId = GatewayId<"instance">;
 /** An installed module, as the gateway that lists installed modules knows it. */
 export type ModuleId = GatewayId<"module">;
 
-/** A dashboard macro. Macros are kept by the dashboard; only running one reaches the engine. */
+/** A macro pad button, issued by the gateway that keeps the pad. */
 export type MacroId = GatewayId<"macro">;
 
 /** A callback recorded from the engine, kept for debugging. */
@@ -75,6 +76,9 @@ export type ShoutoutEntryId = GatewayId<"shoutoutEntry">;
 
 /** A saved stream info preset, as the gateway that keeps presets knows it. */
 export type StreamInfoPresetId = GatewayId<"streamInfoPreset">;
+
+/** A saved stream highlight, as the gateway that keeps highlights knows it. */
+export type StreamHighlightId = GatewayId<"streamHighlight">;
 
 // ==================== Read shapes ====================
 
@@ -420,7 +424,7 @@ export interface CompositionPreviewUrl {
 
 // ==================== Chat commands ====================
 
-/** A chat command. `actions` and `steps` carry their `$` keys escaped (lib/dollar-keys). */
+/** A chat command. `actions` and `steps` carry their `$` keys escaped (shared/dollar-keys). */
 export interface ChatCommand {
   engineCommandId: string;
   /** Without the `!` prefix. */
@@ -461,9 +465,9 @@ interface ChatCommandDefinition {
   enabled: boolean;
   cooldown: number;
   visibility: "public" | "restricted";
-  /** `$` keys escaped (lib/dollar-keys). */
+  /** `$` keys escaped (shared/dollar-keys). */
   actions?: unknown[];
-  /** `$` keys escaped (lib/dollar-keys). */
+  /** `$` keys escaped (shared/dollar-keys). */
   steps?: unknown[];
   argumentPattern?: string;
   groupIds?: string[];
@@ -806,7 +810,7 @@ export interface AlertTargetUsage {
 
 // ==================== Workflows ====================
 
-/** A workflow on the engine. `definition` and `nodes` carry their `$` keys escaped (lib/dollar-keys). */
+/** A workflow on the engine. `definition` and `nodes` carry their `$` keys escaped (shared/dollar-keys). */
 export interface Workflow {
   engineWorkflowId: string;
   definition: unknown;
@@ -1024,6 +1028,17 @@ export type WorkflowHealthResyncTrigger = "mount" | "reconnect";
 export type WorkflowHealthResyncResult = "ok" | "skipped" | "failed" | "unsupported" | "loading";
 
 // ==================== Macros ====================
+
+/**
+ * A macro pad button. A "run-action" button's step carries its settings'
+ * `$` keys escaped (shared/dollar-keys), as Convex stores them.
+ */
+export interface Macro extends MacroFields {
+  id: MacroId;
+}
+
+/** A macro's editable fields: everything but the id the gateway issues. */
+export type MacroInput = MacroFields;
 
 /** The value given for one of a macro's variables. */
 export interface MacroVariableValue {
@@ -1693,4 +1708,43 @@ export type GoLiveStepOutcome =
 export interface GoLiveCompletion {
   announcement: GoLiveStepOutcome;
   marker: GoLiveStepOutcome;
+}
+
+// ==================== Dashboard ====================
+
+// The layout's types are shared with Convex, which edits layouts with the
+// same operations (shared/dashboard-layout.ts).
+export type { DashboardPanel, DashboardPanelWidget, DashboardRailWidget } from "@shared/dashboard-layout";
+
+/** The dashboard's notes: one scratch pad per instance, shared by everyone on it. */
+export interface DashboardNote {
+  content: string;
+  /** Epoch ms of the last save. */
+  updatedAt: number;
+  /** Who saved last; null when that user is gone, or where there are no users to tell apart. */
+  updatedByName: string | null;
+  /** Whether the viewer saved last, so the widget can leave out "edited by you". */
+  updatedByMe: boolean;
+}
+
+/** An event row kept from the Events tab, as it read when it was saved. */
+export interface StreamHighlight {
+  id: StreamHighlightId;
+  /** The event's type, or a short platform kind such as `follow` on older highlights. */
+  kind: string;
+  userName: string;
+  detail: string | null;
+  amount: number | null;
+  /** Epoch ms the event happened. */
+  occurredAt: number;
+}
+
+export interface NewStreamHighlight {
+  kind: string;
+  /** Trimmed; a blank name is refused. */
+  userName: string;
+  detail?: string;
+  amount?: number;
+  /** Epoch ms. */
+  occurredAt: number;
 }

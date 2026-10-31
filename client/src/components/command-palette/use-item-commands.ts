@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useEngineScope } from "@/engine/context";
 import { useChatCommandGroups, useChatCommands, useUpdateChatCommandRequest } from "@/engine/hooks/use-chat-commands";
-import { useRunMacroRequest } from "@/engine/hooks/use-macros";
+import { useMacros, useRunMacroRequest } from "@/engine/hooks/use-macros";
 import {
   useResourceInstances,
   useResourceInstancesOfKind,
@@ -47,7 +47,6 @@ import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { buildAlertTree, flattenAlertTree } from "@/lib/alert-groups";
-import { toMacroId } from "@/lib/cloud-ids";
 import { commandEditorPath, commandGroupEditorPath } from "@/lib/command-editor-route";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { groupLabel } from "@/lib/group-display";
@@ -102,7 +101,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
     api.streamSessionSummaries.listRecent,
     instanceId ? { instanceId, limit: RECENT_RECAPS } : "skip"
   );
-  const macros = useQuery(api.macros.list, args);
+  const macros = useMacros();
   const presets = useStreamInfoPresets();
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
   const timers = useResourceInstancesOfKind(TIMER_KIND);
@@ -563,7 +562,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
           if (macro.type === "send-message") {
             await sendChatMessage(applyMacroVariables(macro.config, {}).message ?? "");
           } else {
-            await runMacro(toMacroId(macro.id), []);
+            await runMacro(macro.id, []);
           }
           return `Ran ${macro.label}`;
         },

@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import {
   parseCompositionInputs,
   parseSceneBehaviors,
@@ -8,7 +9,6 @@ import {
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
-import { escapeDollarKeys } from "./lib/dollarKeys";
 
 // Alert compositions are engine-authoritative, like scenes: this table is a
 // read cache written by the `scene.*` webhooks that carry `kind: "alert"`

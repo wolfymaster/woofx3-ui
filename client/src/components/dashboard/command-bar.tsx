@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import { COUNTER_KIND } from "@shared/resource-kinds";
-import { useMutation, useQuery } from "convex/react";
 import { Check, Clapperboard, Loader2, Maximize2, Plus, Radio, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -12,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEngineScope } from "@/engine/context";
 import { useCreateClipRequest } from "@/engine/hooks/use-clips";
+import { usePinCounterRequest, usePinnedCounters, useUnpinCounterRequest } from "@/engine/hooks/use-dashboard";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import {
   useRefreshResourceValuesRequest,
@@ -20,7 +19,6 @@ import {
 } from "@/engine/hooks/use-module-resources";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { ModuleResourceInstance } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import { counterGoals, counterValue, goalProgress } from "@/lib/resource-values";
@@ -253,23 +251,21 @@ interface CommandBarProps {
 
 /**
  * Full-width strip above the dashboard panels: stream preview, live pill,
- * counters, and a Clip button. Everything here reads the same
- * `instanceLiveState` row the stream-status and stream-preview widgets do —
- * Convex dedupes the subscription, so this is one data path, not a second.
+ * counters, and a Clip button. Everything here reads the same live state
+ * the stream-status and stream-preview widgets do, and the gateway shares
+ * one read between them, so this is one data path, not a second.
  */
 export function CommandBar({ onDismiss }: CommandBarProps) {
-  const { instance } = useInstance();
   const { toast } = useToast();
-  const instanceId = instance?._id;
-  const { instanceId: engineInstanceId } = useEngineScope();
+  const { instanceId } = useEngineScope();
 
   const liveState = useLiveState();
   const twitchLink = useTwitchLink();
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
   const values = useResourceValues();
-  const pinnedRows = useQuery(api.dashboardCounters.list, instanceId ? { instanceId } : "skip");
-  const pinCounter = useMutation(api.dashboardCounters.add);
-  const unpinCounter = useMutation(api.dashboardCounters.remove);
+  const pinnedIds = usePinnedCounters();
+  const pinCounter = usePinCounterRequest();
+  const unpinCounter = useUnpinCounterRequest();
   const refreshValues = useRefreshResourceValuesRequest();
   const createClip = useCreateClipRequest();
 
@@ -282,13 +278,13 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   // Counter values arrive by webhook while the dashboard is open; this fills in
   // any written before it was, or while a webhook went missing.
   useEffect(() => {
-    if (!engineInstanceId) {
+    if (!instanceId) {
       return;
     }
     refreshValues(COUNTER_KIND).catch(() => {
       // The mirror still shows the last known numbers; the next change updates it.
     });
-  }, [engineInstanceId, refreshValues]);
+  }, [instanceId, refreshValues]);
 
   const sortedCounters = useMemo(
     () => [...(counters ?? [])].sort((a, b) => resourceName(a).localeCompare(resourceName(b))),
@@ -298,20 +294,20 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   // A pin whose counter has since been deleted resolves to nothing and is dropped.
   const cards = useMemo(() => {
     const byCanonicalId = new Map((counters ?? []).map((row) => [row.canonicalId, row]));
-    return (pinnedRows ?? []).flatMap((pin) => {
-      const counter = byCanonicalId.get(pin.canonicalId);
+    return (pinnedIds ?? []).flatMap((canonicalId) => {
+      const counter = byCanonicalId.get(canonicalId);
       return counter ? [toCardData(counter, values?.[counter.canonicalId] ?? null)] : [];
     });
-  }, [counters, pinnedRows, values]);
+  }, [counters, pinnedIds, values]);
 
-  const pinnedIds = useMemo(() => new Set(cards.map((card) => card.canonicalId)), [cards]);
+  const shownIds = useMemo(() => new Set(cards.map((card) => card.canonicalId)), [cards]);
 
   const togglePinned = async (canonicalId: string, pinned: boolean) => {
     if (!instanceId) {
       return;
     }
     try {
-      await (pinned ? unpinCounter({ instanceId, canonicalId }) : pinCounter({ instanceId, canonicalId }));
+      await (pinned ? unpinCounter(canonicalId) : pinCounter(canonicalId));
     } catch (error) {
       toast({
         title: pinned ? "Couldn't take that counter off the bar" : "Couldn't put that counter on the bar",
@@ -322,7 +318,7 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   };
 
   const handleClip = async () => {
-    if (!engineInstanceId) {
+    if (!instanceId) {
       return;
     }
     setClipping(true);
@@ -361,7 +357,7 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
         {instanceId && (
           <CounterPicker
             counters={sortedCounters}
-            pinnedIds={pinnedIds}
+            pinnedIds={shownIds}
             onToggle={(canonicalId, pinned) => void togglePinned(canonicalId, pinned)}
           />
         )}
@@ -371,7 +367,7 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
         size="sm"
         className="shrink-0 gap-1.5"
         onClick={() => void handleClip()}
-        disabled={clipping || !engineInstanceId || !twitchLink}
+        disabled={clipping || !instanceId || !twitchLink}
         data-testid="button-create-clip"
       >
         {clipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}

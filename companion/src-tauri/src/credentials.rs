@@ -8,11 +8,12 @@ use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use futures::future::BoxFuture;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, OnceLock};
 use woofx3_companion_core::host::{ClientCredentials, CredentialStore};
 use woofx3_companion_core::AppIdentity;
+pub use woofx3_companion_core::StoredToken;
 
 const TOKEN_ACCOUNT: &str = "companion-token";
 const ENGINE_CLIENT_ACCOUNT: &str = "local-engine-client";
@@ -37,19 +38,6 @@ pub fn hash_token(token: &str) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
-}
-
-/// The stored token, and whether the person at this PC has confirmed the
-/// pairing it belongs to. An unconfirmed token is kept across a restart so
-/// an approval made meanwhile can still be confirmed. `instance_name` is what
-/// the window shows until Convex answers, so a restart while offline still
-/// says what this PC is paired with.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct StoredToken {
-    pub token: String,
-    pub confirmed: bool,
-    #[serde(default)]
-    pub instance_name: Option<String>,
 }
 
 fn entry(service: &str, account: &str) -> Result<keyring::Entry> {

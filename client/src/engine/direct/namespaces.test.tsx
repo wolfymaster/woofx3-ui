@@ -11,24 +11,28 @@ import {
   type SceneSnapshot,
   type StreamEventFrame,
   type TwitchHelixResult,
+  type UISettingValue,
   type Workflow,
 } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
-import type { WorkflowRun } from "@/engine/types";
+import type { MacroId, MacroInput, WorkflowRun } from "@/engine/types";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
 import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
+import { directDashboardGateway } from "./dashboard";
 import { directEventLogGateway } from "./event-log";
 import { toModuleId, toSceneId } from "./ids";
 import { directKeys } from "./keys";
+import { directMacrosGateway } from "./macros";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
 import { directOverlaysGateway } from "./overlays";
+import { directPageIntrosGateway } from "./page-intros";
 import { directPinsGateway } from "./pins";
 import { directRequestsGateway } from "./requests";
 import { directScenesGateway } from "./scenes";
@@ -36,7 +40,7 @@ import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
 import type { AvailableWidget, FakeEngineState, TwitchFakeMethod } from "./testing/DirectFakeApi";
-import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
+import { createDirectHarness, type DirectHarness, type RenderedHook, renderDirect } from "./testing/direct-harness";
 import { directTwitchChatGateway } from "./twitch-chat";
 import { directWorkflowsGateway } from "./workflows";
 
@@ -1437,5 +1441,440 @@ describe("pins", () => {
         GatewayUnsupportedError
       );
     }
+  });
+});
+
+describe("pageIntros", () => {
+  test("dismissing an intro stores it in the engine, and another writer's dismissal shows up", async () => {
+    const { runtime, state, engine } = await connected();
+    const intros = directPageIntrosGateway(runtime);
+    const read = renderDirect(() => intros.useDismissed());
+    expect(await read.until((value) => value !== undefined, "the dismissals")).toEqual([]);
+
+    await renderDirect(() => intros.useDismissRequest()).current()("workflows");
+    expect(state.callsOf("setUISetting")).toEqual([["pageIntros", "workflows", true]]);
+    await read.until((value) => value?.includes("workflows") === true, "the dismissal");
+
+    state.uiSettingRevision += 1;
+    state.uiSettings.pageIntros = {
+      ...state.uiSettings.pageIntros,
+      scenes: {
+        namespace: "pageIntros",
+        key: "scenes",
+        value: true,
+        revision: state.uiSettingRevision,
+        updatedAt: "2026-10-30T10:01:00Z",
+        deleted: false,
+      },
+    };
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.UI_SETTING_CHANGED,
+          namespace: "pageIntros",
+          key: "scenes",
+          revision: state.uiSettingRevision,
+          deleted: false,
+          value: true,
+        },
+        "engine",
+        "e-intro"
+      )
+    );
+    await read.until((value) => value?.includes("scenes") === true, "the other writer's dismissal");
+    read.unmount();
+  });
+});
+
+/** Stores `value` under `namespace`/`key` as another window or device would, at the next revision. */
+function storeSetting(state: FakeEngineState, namespace: string, key: string, value: UISettingValue): void {
+  state.uiSettingRevision += 1;
+  state.uiSettings[namespace] = {
+    ...(state.uiSettings[namespace] ?? {}),
+    [key]: {
+      namespace,
+      key,
+      value,
+      revision: state.uiSettingRevision,
+      updatedAt: "2026-10-30T10:05:00Z",
+      deleted: false,
+    },
+  };
+}
+
+/** Resolves once `read` renders a value deeply equal to `expected`. */
+function untilEqual<T>(read: RenderedHook<T>, expected: T): Promise<T> {
+  return read.until((value) => Bun.deepEquals(value, expected), JSON.stringify(expected));
+}
+
+describe("dashboard", () => {
+  test("panels are added, renamed, filled and removed in the engine's layout", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const panels = renderDirect(() => dashboard.usePanels());
+    expect(await panels.until((value) => value !== undefined, "the panels")).toEqual([]);
+
+    const panelId = await renderDirect(() => dashboard.useAddPanelRequest()).current()("quad");
+    expect(panelId).toBe("id-1");
+    await untilEqual(panels, [{ id: "id-1", name: "Panel 1", layoutId: "quad", widgets: [] }]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["dashboardLayouts", "panels", [{ id: "id-1", name: "Panel 1", layoutId: "quad", widgets: [] }], 0],
+    ]);
+
+    await renderDirect(() => dashboard.useRenamePanelRequest()).current()("id-1", " Raids ");
+    const widgets = [{ zoneId: "0-0", slotId: "s1", type: "notes", config: { pinned: true } }];
+    await renderDirect(() => dashboard.useSetPanelWidgetsRequest()).current()("id-1", widgets);
+    await untilEqual(panels, [{ id: "id-1", name: "Raids", layoutId: "quad", widgets }]);
+
+    const refused = await renderDirect(() => dashboard.useRenamePanelRequest())
+      .current()("id-1", "  ")
+      .catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("Name cannot be empty");
+
+    await renderDirect(() => dashboard.useRemovePanelRequest()).current()("id-1");
+    await untilEqual(panels, []);
+    panels.unmount();
+  });
+
+  test("a panel added elsewhere while one is added here keeps both", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const elsewhere = { id: "other", name: "Other", layoutId: "single", widgets: [] };
+    let raced = false;
+    state.beforeUISettingWrite = () => {
+      if (!raced) {
+        raced = true;
+        storeSetting(state, "dashboardLayouts", "panels", [elsewhere]);
+      }
+    };
+
+    await renderDirect(() => dashboard.useAddPanelRequest()).current()("quad");
+    expect(state.uiSettings.dashboardLayouts?.panels?.value).toEqual([
+      elsewhere,
+      { id: "id-1", name: "Panel 2", layoutId: "quad", widgets: [] },
+    ]);
+    expect(state.callsOf("setUISetting")).toHaveLength(2);
+  });
+
+  test("an unreadable stored layout reads as empty and is logged, without breaking the read", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "dashboardLayouts", "panels", [{ id: 7, widgets: "nope" }]);
+    storeSetting(state, "dashboardLayouts", "rail", "not a rail");
+    const dashboard = directDashboardGateway(runtime);
+    const panels = renderDirect(() => dashboard.usePanels());
+    const rail = renderDirect(() => dashboard.useRailWidgets());
+
+    expect(await panels.until((value) => value !== undefined, "the panels")).toEqual([]);
+    expect(await rail.until((value) => value !== undefined, "the rail")).toBeNull();
+    expect(panels.error()).toBeUndefined();
+    const warned = logger.entries.filter((entry) => entry.level === "warn").map((entry) => entry.fields?.key);
+    expect(warned).toContain("panels");
+    expect(warned).toContain("rail");
+    panels.unmount();
+    rail.unmount();
+  });
+
+  test("the rail is null until saved, and one over the limit is refused before any write", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const rail = renderDirect(() => dashboard.useRailWidgets());
+    expect(await rail.until((value) => value !== undefined, "the rail")).toBeNull();
+
+    const saved = [{ slotId: "notes", type: "notes" }];
+    await renderDirect(() => dashboard.useSetRailWidgetsRequest()).current()(saved);
+    await untilEqual(rail, saved);
+
+    const tooMany = Array.from({ length: 13 }, (_, index) => ({ slotId: `s${index}`, type: "notes" }));
+    const refused = await renderDirect(() => dashboard.useSetRailWidgetsRequest())
+      .current()(tooMany)
+      .catch((error: unknown) => error);
+    expect((refused as Error).message).toContain("at most 12 widgets");
+    expect(state.callsOf("setUISetting")).toHaveLength(1);
+    rail.unmount();
+  });
+
+  test("the note is saved, and another window's save shows up", async () => {
+    const { runtime, state, engine } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const note = renderDirect(() => dashboard.useNote());
+    expect(await note.until((value) => value !== undefined, "the note")).toBeNull();
+
+    await renderDirect(() => dashboard.useSaveNoteRequest()).current()("raid at 9");
+    await untilEqual(note, {
+      content: "raid at 9",
+      updatedAt: Date.parse("2026-10-30T10:00:00Z"),
+      updatedByName: null,
+      updatedByMe: true,
+    });
+
+    storeSetting(state, "dashboardNotes", "notes", { content: "raid at 10" });
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.UI_SETTING_CHANGED,
+          namespace: "dashboardNotes",
+          key: "notes",
+          revision: state.uiSettingRevision,
+          deleted: false,
+          value: { content: "raid at 10" },
+        },
+        "engine",
+        "e-note"
+      )
+    );
+    await note.until((value) => value?.content === "raid at 10", "the other window's note");
+    note.unmount();
+  });
+
+  test("counters are pinned in order, pinning one twice keeps its place, and unpinning drops it", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "dashboardCounters", "broken", "not a pin");
+    const dashboard = directDashboardGateway(runtime);
+    const pinned = renderDirect(() => dashboard.usePinnedCounters());
+    expect(await pinned.until((value) => value !== undefined, "the pinned counters")).toEqual([]);
+
+    const pin = renderDirect(() => dashboard.usePinCounterRequest()).current();
+    await pin("woofx3:counter:deaths");
+    await pin("woofx3:counter:wins");
+    await pin("woofx3:counter:deaths");
+    await untilEqual(pinned, ["woofx3:counter:deaths", "woofx3:counter:wins"]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["dashboardCounters", "woofx3:counter:deaths", { sortOrder: 0 }, 0],
+      ["dashboardCounters", "woofx3:counter:wins", { sortOrder: 1 }, 0],
+    ]);
+
+    await renderDirect(() => dashboard.useUnpinCounterRequest()).current()("woofx3:counter:deaths");
+    await untilEqual(pinned, ["woofx3:counter:wins"]);
+    expect(state.callsOf("deleteUISetting")).toEqual([["dashboardCounters", "woofx3:counter:deaths"]]);
+    pinned.unmount();
+  });
+
+  test("highlights are listed newest first and removed by id", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const highlights = renderDirect(() => dashboard.useHighlights());
+    expect(await highlights.until((value) => value !== undefined, "the highlights")).toEqual([]);
+
+    const save = renderDirect(() => dashboard.useSaveHighlightRequest()).current();
+    const first = await save({ kind: "follow", userName: " viewer ", detail: " ", occurredAt: 1000 });
+    const second = await save({
+      kind: "cheer",
+      userName: "cheerer",
+      detail: "100 bits",
+      amount: 100,
+      occurredAt: 2000,
+    });
+    await untilEqual(highlights, [
+      { id: second, kind: "cheer", userName: "cheerer", detail: "100 bits", amount: 100, occurredAt: 2000 },
+      { id: first, kind: "follow", userName: "viewer", detail: null, amount: null, occurredAt: 1000 },
+    ]);
+
+    const refused = await save({ kind: "follow", userName: "  ", occurredAt: 3000 }).catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("A highlight needs a name");
+
+    await renderDirect(() => dashboard.useRemoveHighlightRequest()).current()(first);
+    await highlights.until((value) => value?.length === 1 && value[0].id === second, "the highlight removed");
+    expect(state.uiSettings.dashboardHighlights?.[first]?.deleted).toBe(true);
+    highlights.unmount();
+  });
+});
+
+const hype: MacroInput = {
+  label: "Hype",
+  icon: "Zap",
+  color: "#22c55e",
+  type: "send-message",
+  config: { message: "hype!" },
+};
+const raid: MacroInput = {
+  label: "Raid",
+  type: "chat-command",
+  config: { command: "raid", commandText: "{{channel}}" },
+};
+
+/** The labels `read` renders, in pad order. */
+const labels = (macros: { label: string }[] | undefined) => macros?.map((macro) => macro.label);
+
+describe("macros", () => {
+  test("macros are added in order, edited and deleted in the engine's settings", async () => {
+    const { runtime, state } = await connected();
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+    expect(await pad.until((value) => value !== undefined, "the pad")).toEqual([]);
+
+    const add = renderDirect(() => macros.useAddRequest()).current();
+    const hypeId = await add(hype);
+    const raidId = await add(raid);
+    await untilEqual(pad, [
+      { id: hypeId, ...hype },
+      { id: raidId, ...raid },
+    ]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["macros", hypeId, { ...hype, sortOrder: 0 }, 0],
+      ["macros", raidId, { ...raid, sortOrder: 1 }, 0],
+    ]);
+
+    await renderDirect(() => macros.useUpdateRequest()).current()(hypeId, {
+      ...hype,
+      label: "Hype!",
+      color: undefined,
+    });
+    await pad.until((value) => labels(value)?.[0] === "Hype!", "the edit");
+    expect(state.uiSettings.macros?.[hypeId]?.value).toEqual({
+      label: "Hype!",
+      icon: "Zap",
+      type: "send-message",
+      config: { message: "hype!" },
+      sortOrder: 0,
+    });
+
+    await renderDirect(() => macros.useDeleteRequest()).current()(hypeId);
+    await pad.until((value) => value?.length === 1, "the delete");
+    expect(state.uiSettings.macros?.[hypeId]?.deleted).toBe(true);
+    pad.unmount();
+  });
+
+  test("a blank label, a bad color and a missing macro are refused before any write", async () => {
+    const { runtime, state } = await connected();
+    const macros = directMacrosGateway(runtime);
+    const add = renderDirect(() => macros.useAddRequest()).current();
+    const update = renderDirect(() => macros.useUpdateRequest()).current();
+
+    const blank = await add({ ...hype, label: " " }).catch((error: unknown) => error);
+    const color = await add({ ...hype, color: "red" }).catch((error: unknown) => error);
+    const missing = await update("gone" as MacroId, hype).catch((error: unknown) => error);
+    expect((blank as Error).message).toBe("A macro needs a label");
+    expect((color as Error).message).toContain("six-digit hex");
+    expect((missing as Error).message).toBe("Macro not found");
+    expect(state.callsOf("setUISetting")).toEqual([]);
+  });
+
+  test("a reorder writes only the macros that moved", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "a", { ...hype, label: "A", sortOrder: 0 });
+    storeSetting(state, "macros", "b", { ...hype, label: "B", sortOrder: 1 });
+    storeSetting(state, "macros", "c", { ...hype, label: "C", sortOrder: 2 });
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+    expect(labels(await pad.until((value) => value?.length === 3, "the pad"))).toEqual(["A", "B", "C"]);
+
+    await renderDirect(() => macros.useReorderRequest()).current()(["b", "a", "c", "gone"] as MacroId[]);
+    await pad.until((value) => labels(value)?.join() === "B,A,C", "the new order");
+    expect(
+      state.callsOf("setUISetting").map((call) => [call[1], (call[2] as { sortOrder: number }).sortOrder])
+    ).toEqual([
+      ["b", 0],
+      ["a", 1],
+    ]);
+    expect(state.uiSettings.macros?.c?.value).toMatchObject({ sortOrder: 2 });
+    pad.unmount();
+  });
+
+  test("an edit made elsewhere while one is written here is retried on what was written there", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "a", { ...hype, sortOrder: 0 });
+    storeSetting(state, "macros", "b", { ...hype, label: "B", sortOrder: 1 });
+    const macros = directMacrosGateway(runtime);
+    let raced = false;
+    state.beforeUISettingWrite = (_namespace, key) => {
+      if (!raced && key === "a") {
+        raced = true;
+        storeSetting(state, "macros", "a", { ...hype, label: "Renamed elsewhere", sortOrder: 5 });
+      }
+    };
+
+    await renderDirect(() => macros.useReorderRequest()).current()(["b", "a"] as MacroId[]);
+    expect(state.uiSettings.macros?.a?.value).toMatchObject({ label: "Renamed elsewhere", sortOrder: 1 });
+    expect(state.callsOf("setUISetting").filter((call) => call[1] === "a")).toHaveLength(2);
+  });
+
+  test("an unreadable stored macro is left off the pad and logged", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "macros", "broken", { label: 7 });
+    storeSetting(state, "macros", "ok", { ...hype, sortOrder: 0 });
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+
+    expect(labels(await pad.until((value) => value !== undefined, "the pad"))).toEqual(["Hype"]);
+    expect(pad.error()).toBeUndefined();
+    const warned = logger.entries.filter((entry) => entry.level === "warn").map((entry) => entry.fields?.key);
+    expect(warned).toContain("broken");
+    pad.unmount();
+  });
+
+  test("a workflow macro triggers its workflow, unrecorded, with a trigger id to watch", async () => {
+    const { runtime, state } = await connected();
+    state.workflows = [alertWorkflow("wf-1", "Raid train", "alert")];
+    storeSetting(state, "macros", "m", {
+      label: "Go",
+      type: "trigger-workflow",
+      config: { workflowId: "wf-1" },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const result = await run("m" as MacroId, []);
+    expect(result.triggerId).not.toBeNull();
+    expect(state.callsOf("triggerWorkflowByName")).toEqual([
+      ["wf-1", {}, undefined, result.triggerId, "dashboard", undefined],
+    ]);
+  });
+
+  test("an action macro runs its one step with its variables filled in", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", {
+      label: "Scene",
+      type: "run-action",
+      config: { actionStep: { action: "function", ref: "obs:action:setScene", parameters: { scene: "{{scene}}" } } },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    expect(await run("m" as MacroId, [{ name: "scene", value: "Gaming" }])).toEqual({ triggerId: null });
+    expect(state.callsOf("runActions")).toEqual([
+      [
+        {
+          label: "macro:dashboard",
+          actions: [{ action: "function", $ref: "obs:action:setScene", parameters: { scene: "Gaming" } }],
+          event: { type: "macro.run", source: "dashboard", data: {} },
+        },
+      ],
+    ]);
+    const missing = await run("m" as MacroId, []).catch((error: unknown) => error);
+    expect((missing as Error).message).toBe("missing variables: scene");
+  });
+
+  test("a chat-command macro runs as the linked broadcaster, and the engine's refusal is passed on", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", { ...raid, sortOrder: 0 });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const unlinked = await run("m" as MacroId, [{ name: "channel", value: "bob" }]).catch((error: unknown) => error);
+    expect((unlinked as Error).message).toBe("link a Twitch account before running chat-command macros");
+    expect(state.callsOf("executeCommand")).toEqual([]);
+
+    linkTwitch(state, []);
+    await runtime.queryClient.invalidateQueries({ queryKey: directKeys.twitch.link() });
+    await run("m" as MacroId, [{ name: "channel", value: "bob" }]);
+    expect(state.callsOf("executeCommand")).toEqual([["raid", "streamer", "bob"]]);
+
+    state.commandAnswer = { success: false, message: "Command is disabled" };
+    const refused = await run("m" as MacroId, [{ name: "channel", value: "bob" }]).catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("Command is disabled");
+  });
+
+  test("an HTTP-request macro is not run on the engine", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", {
+      label: "Ping",
+      type: "http-request",
+      config: { url: "https://x.test" },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const refused = await run("m" as MacroId, []).catch((error: unknown) => error);
+    expect((refused as Error).message).toContain("run in the browser");
+    expect(state.calls.map((call) => call.method)).not.toContain("runActions");
   });
 });

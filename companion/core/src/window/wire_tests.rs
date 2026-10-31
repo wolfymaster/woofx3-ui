@@ -168,3 +168,56 @@ fn test_window_wire_reads_command_arguments() {
         "the window's names are camelCase"
     );
 }
+
+/// What the dashboard reads before making this computer its instance's
+/// companion, and what it sends to finish.
+#[test]
+fn test_window_wire_app_link_shapes() {
+    assert_eq!(
+        wire(&CompanionLinkStatus {
+            linked: Some(LinkedInstance {
+                instance_id: None,
+                instance_name: "Main".into(),
+            }),
+            installation_id: "8f6c0b4e-0000-4000-8000-000000000000".into(),
+            device_name: "STREAM-PC".into(),
+            companion_version: "0.1.0".into(),
+        }),
+        json!({
+            "linked": { "instanceId": null, "instanceName": "Main" },
+            "installationId": "8f6c0b4e-0000-4000-8000-000000000000",
+            "deviceName": "STREAM-PC",
+            "companionVersion": "0.1.0",
+        })
+    );
+    assert_eq!(
+        wire(&AppLinkStart {
+            token_hash: "ab".repeat(32),
+            installation_id: "id".into(),
+            device_name: "STREAM-PC".into(),
+            companion_version: "0.1.0".into(),
+        }),
+        json!({
+            "tokenHash": "ab".repeat(32),
+            "installationId": "id",
+            "deviceName": "STREAM-PC",
+            "companionVersion": "0.1.0",
+        })
+    );
+    let read: FinishAppLinkArgs = serde_json::from_value(json!({
+        "instanceId": "i1",
+        "instanceName": "Main",
+    }))
+    .expect("reads");
+    assert_eq!(
+        read,
+        FinishAppLinkArgs {
+            instance_id: "i1".into(),
+            instance_name: "Main".into(),
+        }
+    );
+    assert!(
+        serde_json::from_value::<FinishAppLinkArgs>(json!({ "instanceName": "Main" })).is_err(),
+        "the instance id is required"
+    );
+}
