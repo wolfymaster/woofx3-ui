@@ -1,15 +1,19 @@
 import {
   Activity,
   AlarmClock,
+  Clapperboard,
   Grid3x3,
+  History,
   ListOrdered,
   Megaphone,
   MessagesSquare,
   NotebookPen,
   Radio,
+  Rocket,
   Shield,
   Timer,
   Tv,
+  Volume2,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -17,10 +21,14 @@ import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-pan
 import { AdBreaksWidget } from "@/components/dashboard/widgets/ad-breaks";
 import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement";
 import { EventsWidget } from "@/components/dashboard/widgets/events";
+import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
 import { MacroPadWidget } from "@/components/dashboard/widgets/macro-pad";
 import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
+import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
+import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
+import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
@@ -44,6 +52,15 @@ export const streamStatusWidget: DashboardWidgetDefinition = {
   component: StreamStatusWidget,
 };
 
+export const goLiveWidget: DashboardWidgetDefinition = {
+  type: "go-live",
+  label: "Go Live Checklist",
+  description: "Pre-flight checks before you go live: engine, Twitch, overlays, OBS, stream info and workflows.",
+  icon: Rocket,
+  category: "stream",
+  component: GoLiveWidget,
+};
+
 export const eventsWidget: DashboardWidgetDefinition = {
   type: "events",
   label: "Events",
@@ -60,6 +77,15 @@ export const activityWidget: DashboardWidgetDefinition = {
   icon: MessagesSquare,
   category: "stream",
   component: ActivityPanelWidget,
+};
+
+export const streamInfoWidget: DashboardWidgetDefinition = {
+  type: "stream-info",
+  label: "Stream Info",
+  description: "Edit your title, category and tags, switch between saved presets, and drop stream markers.",
+  icon: Clapperboard,
+  category: "stream",
+  component: StreamInfoWidget,
 };
 
 export const streamPreviewWidget: DashboardWidgetDefinition = {
@@ -141,6 +167,24 @@ export const notesWidget: DashboardWidgetDefinition = {
   icon: NotebookPen,
   category: "utility",
   component: NotesWidget,
+};
+
+export const recentStreamsWidget: DashboardWidgetDefinition = {
+  type: "recent-streams",
+  label: "Recent Streams",
+  description: "Viewers, follows, subs and bits for each of your last finished streams.",
+  icon: History,
+  category: "utility",
+  component: RecentStreamsWidget,
+};
+
+export const shoutoutWidget: DashboardWidgetDefinition = {
+  type: "shoutout",
+  label: "Shoutout",
+  description: "Queue shoutouts for people in chat — sent one at a time, two minutes apart.",
+  icon: Volume2,
+  category: "stream",
+  component: ShoutoutWidget,
 };
 
 /** The pad alone; the hosted catalog's adds its macros' remote trigger URLs. */

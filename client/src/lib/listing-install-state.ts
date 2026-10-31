@@ -1,9 +1,11 @@
-import type { CatalogListingDetail, ListingQuote } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListingDetail, ListingQuote } from "@shared/marketplace-catalog";
 import type { ListingInstallState } from "@/components/marketplace/listing-install-button";
 import { isNewerVersion } from "@/lib/utils";
 
 export interface InstallStateInput {
   listing: CatalogListingDetail;
+  /** Whether listings can be bought here; without it there is no account to quote for. */
+  purchases: boolean;
   /** What the marketplace says this account must do to hold the listing. */
   quote: ListingQuote | null;
   /** The quote has not come back yet. */
@@ -35,13 +37,17 @@ export interface InstallStateInput {
  *    installing this one would replace it with an older edition.
  * 4. A free, current listing installs without waiting for a quote; the
  *    install claims it.
- * 5. Everything else is the marketplace's quote, which alone knows what this
+ * 5. With no purchases there is no account and no quote, so the public
+ *    pricing decides: a retired or unpriced listing is unavailable, and
+ *    anything else costs money and needs an account.
+ * 6. Everything else is the marketplace's quote, which alone knows what this
  *    account holds — an earlier edition that earns an upgrade, say. Until it
  *    arrives the button waits, and a quote that cannot be read is "unknown"
  *    rather than a guess: the server refuses an install it cannot verify.
  */
 export function listingInstallState({
   listing,
+  purchases,
   quote,
   quoteLoading,
   quoteError,
@@ -64,6 +70,15 @@ export function listingInstallState({
   }
   if (listing.pricing?.mode === "free" && listing.supersededBy === undefined) {
     return { kind: "installable" };
+  }
+  if (!purchases) {
+    if (listing.supersededBy !== undefined) {
+      return { kind: "unavailable", reason: "superseded", supersededBy: listing.supersededBy };
+    }
+    if (listing.pricing === null) {
+      return { kind: "unavailable", reason: "unpriced" };
+    }
+    return { kind: "sign_in_to_buy" };
   }
   if (quoteError !== null) {
     return { kind: "unknown" };

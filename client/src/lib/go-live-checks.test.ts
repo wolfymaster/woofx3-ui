@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { LastGoLive, OverlayFacts, StreamInfoFacts } from "@convex/lib/goLiveFacts";
+import type { LastGoLive, StreamInfoFacts } from "@convex/lib/goLiveFacts";
+import type { GoLiveOverlayFacts } from "@/engine/types";
 import {
   applicablePresets,
   type CheckResult,
@@ -45,8 +46,16 @@ function lastGoLive(overrides: Partial<LastGoLive> = {}): LastGoLive {
   };
 }
 
-function overlays(overrides: Partial<OverlayFacts> = {}): OverlayFacts {
-  return { hasScene: true, browserSourceKeyCount: 1, featuredKey: "abc", lastLoadedAt: NOW - 60_000, ...overrides };
+const FEATURED_URL = "https://site.example/browser-source/abc";
+
+function overlays(overrides: Partial<GoLiveOverlayFacts> = {}): GoLiveOverlayFacts {
+  return {
+    hasScene: true,
+    browserSourceKeyCount: 1,
+    featuredUrl: FEATURED_URL,
+    lastLoadedAt: NOW - 60_000,
+    ...overrides,
+  };
 }
 
 describe("engineCheck", () => {
@@ -107,28 +116,30 @@ describe("twitchCheck", () => {
 
 describe("overlaysCheck", () => {
   test("fails without any scene", () => {
-    expect(overlaysCheck(overlays({ hasScene: false, browserSourceKeyCount: 0 }), null, NOW).status).toBe("fail");
+    expect(overlaysCheck(overlays({ hasScene: false, browserSourceKeyCount: 0, featuredUrl: null }), NOW).status).toBe(
+      "fail"
+    );
   });
 
   test("fails when scenes exist but none has a browser-source URL", () => {
-    const check = overlaysCheck(overlays({ browserSourceKeyCount: 0, featuredKey: null }), null, NOW);
+    const check = overlaysCheck(overlays({ browserSourceKeyCount: 0, featuredUrl: null }), NOW);
     expect(check.status).toBe("fail");
     expect(check.fixes[0]).toMatchObject({ kind: "route", href: "/stream/scenes" });
   });
 
   test("can only warn that the live connection is unverifiable, offering the URL to copy", () => {
-    const check = overlaysCheck(overlays(), "https://site.example/browser-source/abc", NOW);
+    const check = overlaysCheck(overlays(), NOW);
     expect(check.status).toBe("warn");
     expect(check.fixes[0]).toEqual({
       kind: "copy",
       label: "Copy browser-source URL",
-      text: "https://site.example/browser-source/abc",
+      text: FEATURED_URL,
     });
     expect(check.details[0]).toContain("1m ago");
   });
 
   test("says so when no browser source has ever loaded a URL", () => {
-    const check = overlaysCheck(overlays({ lastLoadedAt: null }), "https://site.example/browser-source/abc", NOW);
+    const check = overlaysCheck(overlays({ lastLoadedAt: null }), NOW);
     expect(check.details[0]).toContain("No browser source has loaded");
   });
 });

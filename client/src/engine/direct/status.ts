@@ -9,7 +9,7 @@ import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { unsupportedRead, unsupportedRequest } from "./unsupported";
 
-function liveStateRead(runtime: DirectRuntime): EngineRead<InstanceLiveState> {
+export function liveStateRead(runtime: DirectRuntime): EngineRead<InstanceLiveState> {
   return {
     queryKey: k.status.liveState(),
     queryFn: async () => {

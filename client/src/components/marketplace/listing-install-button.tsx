@@ -1,11 +1,10 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
-import { isBundleListing } from "@convex/lib/marketplaceCatalog";
-import { useAction } from "convex/react";
-import { AlertCircle, Check, CreditCard, Download, ExternalLink, Loader2 } from "lucide-react";
+import type { CatalogListingDetail } from "@shared/marketplace-catalog";
+import { isBundleListing } from "@shared/marketplace-catalog";
+import { AlertCircle, Check, CreditCard, Download, ExternalLink, Loader2, LogIn } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useEngineScope } from "@/engine/context";
+import { useMarketplaceCheckoutRequest } from "@/engine/hooks/use-marketplace";
 import { useMarketplaceBundleInstallRequest } from "@/engine/hooks/use-modules";
 import { actionErrorMessage } from "@/lib/action-error";
 import { formatAmount } from "@/lib/listing-type";
@@ -29,6 +28,8 @@ export type ListingInstallState =
   | { kind: "installable"; owned?: boolean; upgradeFrom?: string }
   /** Costs this account the quoted amount; `upgradeFrom` when it is an upgrade price. */
   | { kind: "purchasable"; amountCents: number; currency: string; upgradeFrom?: string }
+  /** Costs money, and nothing can be bought without an account. */
+  | { kind: "sign_in_to_buy" }
   /** Nobody can acquire it now; `reason` is the marketplace's. */
   | { kind: "unavailable"; reason: string; supersededBy?: string }
   /** The quote has not come back yet. */
@@ -45,7 +46,6 @@ export type ListingInstallState =
   | { kind: "not_installable" };
 
 interface ListingInstallButtonProps {
-  instanceId: Id<"instances"> | undefined;
   listing: CatalogListingDetail;
   state: ListingInstallState;
   /** Installs a module or theme. Bundles install through this component. */
@@ -63,7 +63,6 @@ interface ListingInstallButtonProps {
 }
 
 export function ListingInstallButton({
-  instanceId,
   listing,
   state,
   onInstallModule,
@@ -74,7 +73,8 @@ export function ListingInstallButton({
   isInstalling,
   className,
 }: ListingInstallButtonProps) {
-  const createCheckout = useAction(api.marketplaceCatalog.createCheckout);
+  const { instanceId } = useEngineScope();
+  const createCheckout = useMarketplaceCheckoutRequest();
   const installBundle = useMarketplaceBundleInstallRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,13 +86,9 @@ export function ListingInstallButton({
     setBusy(true);
     setError(null);
     try {
-      const result = await createCheckout({
-        instanceId,
-        listingId: listing.id,
-        // A path, not a URL. The server joins it onto the configured app
-        // origin, so a checkout can only ever return the buyer to woofx3.
-        returnPath: `/marketplace/listing/${encodeURIComponent(listing.id)}`,
-      });
+      // A path, not a URL. The server joins it onto the configured app
+      // origin, so a checkout can only ever return the buyer to woofx3.
+      const result = await createCheckout(listing.id, `/marketplace/listing/${encodeURIComponent(listing.id)}`);
       if (result.status === "redirect") {
         window.location.assign(result.url);
         return;
@@ -237,6 +233,18 @@ function PrimaryAction({
             See the new edition
           </Button>
         )}
+      </>
+    );
+  }
+
+  if (state.kind === "sign_in_to_buy") {
+    return (
+      <>
+        <Button disabled className="gap-2">
+          <LogIn className="h-4 w-4" />
+          Sign in to buy
+        </Button>
+        <p className="text-xs text-muted-foreground">Buying a listing needs a woofx3 account.</p>
       </>
     );
   }

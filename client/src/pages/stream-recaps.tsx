@@ -1,18 +1,17 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { ChevronRight, History, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Card } from "@/components/ui/card";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
+import { useRecentRecaps } from "@/engine/hooks/use-stream-recap";
+import type { StreamRecap } from "@/engine/types";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import {
   formatLiveDuration,
   formatSubsBreakdown,
   formatViewerFigure,
   liveDurationMs,
-  type SessionSummaryRow,
   summarySegments,
 } from "@/lib/session-summary";
 import { streamRecapPath } from "@/lib/stream-recap-route";
@@ -22,16 +21,19 @@ const RECAP_LIST_LIMIT = 50;
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric", year: "numeric" };
 
-function RecapRow({ row }: { row: SessionSummaryRow }) {
-  const { session, totals } = row;
-  const heading = session
-    ? new Date(session.startedAt).toLocaleDateString(undefined, DATE_FORMAT)
-    : "Unreadable summary";
-  const subheading = session
-    ? session.segments.length === 0
-      ? "Never went live"
-      : `Live ${formatLiveDuration(liveDurationMs(summarySegments(row)))}`
-    : `Schema ${row.schemaVersion}`;
+function RecapRow({ row }: { row: StreamRecap }) {
+  const { summary } = row;
+  const totals = summary.kind === "read" ? summary.totals : null;
+  const heading =
+    summary.kind === "read"
+      ? new Date(summary.session.startedAt).toLocaleDateString(undefined, DATE_FORMAT)
+      : "Unreadable summary";
+  const subheading =
+    summary.kind === "read"
+      ? summary.session.segments.length === 0
+        ? "Never went live"
+        : `Live ${formatLiveDuration(liveDurationMs(summarySegments(row)))}`
+      : `Schema ${summary.schemaVersion}`;
 
   return (
     <Link
@@ -60,15 +62,12 @@ function RecapRow({ row }: { row: SessionSummaryRow }) {
 }
 
 export default function StreamRecaps() {
-  const { instance, isLoading } = useInstance();
+  const { instanceId, isInstanceLoading } = useEngineScope();
   useOpenSessionRefresh();
-  const rows = useQuery(
-    api.streamSessionSummaries.listRecent,
-    instance ? { instanceId: instance._id, limit: RECAP_LIST_LIMIT } : "skip"
-  );
+  const rows = useRecentRecaps(RECAP_LIST_LIMIT);
 
   let content: React.ReactNode;
-  if (!isLoading && !instance) {
+  if (!isInstanceLoading && !instanceId) {
     content = <p className="py-16 text-center text-sm text-muted-foreground">No instance connected.</p>;
   } else if (rows === undefined) {
     content = (
@@ -89,7 +88,7 @@ export default function StreamRecaps() {
     content = (
       <Card className="divide-y divide-border overflow-hidden">
         {rows.map((row) => (
-          <RecapRow key={row._id} row={row} />
+          <RecapRow key={row.sessionId} row={row} />
         ))}
       </Card>
     );

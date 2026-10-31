@@ -6,7 +6,7 @@ import { useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 
 /** The engine's status of an overlay token that still opens its scene. */
-const ACTIVE_TOKEN = "active";
+export const ACTIVE_TOKEN = "active";
 
 /**
  * A scene's overlay URLs, straight from the engine's overlay tokens. The

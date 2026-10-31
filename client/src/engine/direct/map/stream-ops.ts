@@ -1,6 +1,8 @@
-import { type EngineCallFailure, shortEngineMessage } from "@shared/stream-recap";
+import { type EngineCallFailure, isSummaryInProgress, shortEngineMessage } from "@shared/stream-recap";
 import { engineFailureMessage } from "@shared/supporters";
+import type { StreamSession, StreamSessionTotals } from "@woofx3/api";
 import { EngineDisconnectedError, EngineTimeoutError } from "@/engine/errors";
+import type { InstanceLiveState, StreamRecap, StreamRecapSession, StreamRecapTotals } from "@/engine/types";
 import type { SessionState } from "@/lib/engine-session/EngineSession";
 
 function messageOf(error: unknown): string {
@@ -33,4 +35,53 @@ export function toSupporterReadError(what: string, error: unknown): Error {
     return error;
   }
   return new Error(engineFailureMessage(what, error), { cause: error });
+}
+
+function toStreamRecapSession(session: StreamSession): StreamRecapSession {
+  return {
+    status: session.status,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    segments: session.segments.map((segment) => ({
+      id: segment.id,
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt,
+    })),
+  };
+}
+
+function toStreamRecapTotals(totals: StreamSessionTotals): StreamRecapTotals {
+  return {
+    bits: totals.bits,
+    cheers: totals.cheers,
+    subs: totals.subs,
+    giftedSubs: totals.giftedSubs,
+    follows: totals.follows,
+    raids: totals.raids,
+    raiders: totals.raiders,
+    peakViewers: totals.peakViewers,
+    averageViewers: totals.averageViewers,
+    viewerSampleMinutes: totals.viewerSampleMinutes,
+  };
+}
+
+/**
+ * A session's recap from the engine's own reads, taken at `readAtMs`. The
+ * engine answers with its live figures, so there is no stored summary and no
+ * schema to outgrow, and the moment the figures describe is the read.
+ */
+export function toStreamRecap(
+  session: StreamSession,
+  totals: StreamSessionTotals,
+  live: InstanceLiveState,
+  readAtMs: number
+): StreamRecap {
+  const recapSession = toStreamRecapSession(session);
+  return {
+    sessionId: session.id,
+    generatedAt: new Date(readAtMs).toISOString(),
+    generatedAtMs: readAtMs,
+    inProgress: isSummaryInProgress({ sessionId: session.id, session: recapSession }, live),
+    summary: { kind: "read", session: recapSession, totals: toStreamRecapTotals(totals) },
+  };
 }

@@ -1,4 +1,4 @@
-import type { ListingEmote } from "@convex/lib/marketplaceCatalog";
+import type { ListingEmote } from "@shared/marketplace-catalog";
 import { Zap } from "lucide-react";
 
 interface EmoteGridProps {

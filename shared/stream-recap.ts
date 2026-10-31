@@ -77,6 +77,9 @@ export const RECAP_EVENT_LIMIT = 1000;
 /** Supporters shown per leaderboard on a recap. */
 export const RECAP_LEADERBOARD_LIMIT = 5;
 
+/** The most recaps one list read returns. */
+export const MAX_RECENT_RECAPS = 50;
+
 export interface RecapSupporter {
   platformUserId: string;
   userName: string | null;
@@ -216,4 +219,31 @@ export function toRecapTimelineEvents(answer: StreamSessionEvents | null): Recap
     });
   }
   return { status: "ok", events, total: Math.max(answer.total, answer.events.length) };
+}
+
+/**
+ * Whether a recapped session is a stream that is live right now.
+ *
+ * The engine keeps a session open after its stream goes offline, until the next
+ * broadcast either continues it (a dropout inside its grace window) or replaces
+ * it, so `status: "open"` says only that the engine has not closed it yet. A
+ * session is in progress only while the instance is live, and, when the engine
+ * has announced which session it is in, only if it is that one: an older row
+ * still stored as open (its closing summary never arrived) is not live just
+ * because a later stream is.
+ */
+export function isSummaryInProgress(
+  row: { sessionId: string; session?: { status: "open" | "closed" } },
+  liveState: { isLive: boolean; sessionId?: string } | null
+): boolean {
+  if (row.session?.status !== "open") {
+    return false;
+  }
+  if (liveState === null || !liveState.isLive) {
+    return false;
+  }
+  if (liveState.sessionId === undefined) {
+    return true;
+  }
+  return liveState.sessionId === row.sessionId;
 }

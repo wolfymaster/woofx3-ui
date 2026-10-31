@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { featuredInOrder, parseFeaturedRank, parseMarketplaceImages } from "./marketplaceImages";
+import { featuredInOrder, parseFeaturedRank, parseMarketplaceImages } from "./marketplace-images";
 
 const icon = {
   sm: "https://m.example/modules/a/images/icon/h/sm.webp",

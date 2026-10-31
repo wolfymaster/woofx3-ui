@@ -8,7 +8,7 @@ import {
   type StarterCatalog,
   type StarterWorkflowItem,
   starterPackDefaults,
-} from "@convex/lib/starterPacks";
+} from "@shared/starter-packs";
 import type { TaskDefinition, WorkflowDefinition } from "@woofx3/api";
 import {
   definitionToTree,

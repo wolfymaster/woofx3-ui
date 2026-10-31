@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
-import { useQuery } from "convex/react";
 import {
   Bell,
   Boxes,
@@ -38,8 +36,10 @@ import {
   useResourceKinds,
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
+import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
+import { useRecentRecaps } from "@/engine/hooks/use-stream-recap";
 import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import { useSetWorkflowEnabledRequest, useWorkflows } from "@/engine/hooks/use-workflows";
 import type { ModuleResourceInstance } from "@/engine/types";
@@ -90,17 +90,13 @@ const RECENT_RECAPS = 10;
 export function useItemCommands(instance: Doc<"instances"> | null): PaletteCommand[] {
   const instanceId = instance?._id;
   const { instanceId: engineInstanceId } = useEngineScope();
-  const args = instanceId ? { instanceId } : "skip";
 
   const workflows = useWorkflows();
   const commands = useChatCommands();
   const commandGroups = useChatCommandGroups();
   const scenes = useScenes();
-  const modules = useQuery(api.moduleRepository.list, args);
-  const recaps = useQuery(
-    api.streamSessionSummaries.listRecent,
-    instanceId ? { instanceId, limit: RECENT_RECAPS } : "skip"
-  );
+  const modules = useInstalledModules();
+  const recaps = useRecentRecaps(RECENT_RECAPS);
   const macros = useMacros();
   const presets = useStreamInfoPresets();
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
@@ -483,7 +479,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   }
 
   for (const mod of modules ?? []) {
-    const key = bareModuleKey(mod.moduleKey) ?? mod._id;
+    const key = bareModuleKey(mod.moduleKey) ?? mod.id;
     result.push({
       id: `module:${key}`,
       title: mod.name,
@@ -491,19 +487,19 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
       group: "Modules",
       subtitle: mod.description,
       keywords: ["module", ...(mod.tags ?? [])],
-      meta: mod.status && mod.status !== "installed" ? mod.status : `v${mod.version}`,
+      meta: mod.status !== "installed" ? mod.status : `v${mod.version}`,
       icon: Puzzle,
       action: { type: "navigate", href: installedModulePath(key) },
     });
   }
 
   for (const row of recaps ?? []) {
-    if (!row.session) {
+    if (row.summary.kind !== "read") {
       continue;
     }
     result.push({
       id: `recap:${row.sessionId}`,
-      title: new Date(row.session.startedAt).toLocaleDateString(undefined, RECAP_DATE),
+      title: new Date(row.summary.session.startedAt).toLocaleDateString(undefined, RECAP_DATE),
       kind: "item",
       group: "Stream recaps",
       keywords: ["recap", "stream", "session"],

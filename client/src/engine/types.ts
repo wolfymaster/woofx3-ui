@@ -3,6 +3,7 @@
 // into these at its edge, so nothing here may name a gateway's backend.
 
 import type { MacroFields } from "@shared/macro-pad";
+import type { ListingType } from "@shared/marketplace-catalog";
 import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
@@ -598,6 +599,40 @@ export interface LocalEndpointSummary {
   protocol: "websocket" | "http";
 }
 
+/**
+ * Where an installed module came from: shipped with the engine, installed
+ * from a marketplace listing, or from an archive someone uploaded.
+ */
+export type ModuleProvenance = "builtIn" | "marketplace" | "uploaded";
+
+/**
+ * How far an installed module has got. Only an engine-confirmed module is
+ * `installed`; the others are uploads the dashboard is still handing over, or
+ * one that failed.
+ */
+export type InstalledModuleStatus = "pending" | "delivering" | "installed" | "failed";
+
+/** A module installed on the engine, as the Installed list and the storefront read it. */
+export interface InstalledModule {
+  id: ModuleId;
+  name: string;
+  description: string;
+  version: string;
+  tags: string[];
+  author?: string;
+  category?: string;
+  /** `{manifest id}:{version}:{sha7}`, the key it was installed under; absent until the engine has hashed it. */
+  moduleKey?: string;
+  status: InstalledModuleStatus;
+  /** Null when nothing recorded where it came from. */
+  provenance: ModuleProvenance | null;
+  /** The marketplace listing and edition it was installed from, when it was. */
+  marketplaceListingId?: string;
+  marketplaceEdition?: number;
+  /** The installed manifest, parsed; null when none is recorded. */
+  manifest: Record<string, unknown> | null;
+}
+
 /** A module's manifest-derived detail, merged with its marketplace listing when it has one. */
 export interface ModuleDetail {
   id: string;
@@ -1094,6 +1129,96 @@ export type RecapTimelineEvents =
   | { status: "unknown_session" }
   | EngineCallFailure;
 
+export interface StreamRecapSegment {
+  id: string;
+  /** ISO time the stream went live. */
+  startedAt: string;
+  /** ISO time the stream went down; null while it was still live when the figures were taken. */
+  endedAt: string | null;
+}
+
+export interface StreamRecapSession {
+  /** `open` until the engine closes the session, which outlasts a brief offline gap; not the same as live. */
+  status: "open" | "closed";
+  /** ISO time. */
+  startedAt: string;
+  /** ISO time a later session replaced this one; null while open. */
+  endedAt: string | null;
+  /** Oldest first; empty for a session that never went live. */
+  segments: StreamRecapSegment[];
+}
+
+/**
+ * A session's channel totals. `subs` leaves out gifted subs, which are only
+ * in `giftedSubs`, so the two add up. A null viewer figure means no minute
+ * was sampled, not zero viewers.
+ */
+export interface StreamRecapTotals {
+  bits: number;
+  cheers: number;
+  subs: number;
+  giftedSubs: number;
+  follows: number;
+  raids: number;
+  raiders: number;
+  peakViewers: number | null;
+  averageViewers: number | null;
+  viewerSampleMinutes: number;
+}
+
+/** A recap's session and totals, or the schema version of a summary from an engine newer than this dashboard. */
+export type StreamRecapSummary =
+  | { kind: "read"; session: StreamRecapSession; totals: StreamRecapTotals }
+  | { kind: "unreadable"; schemaVersion: number };
+
+/** How one stream session went, as of `generatedAt`: the moment its figures describe. */
+export interface StreamRecap {
+  sessionId: string;
+  /** ISO time. */
+  generatedAt: string;
+  generatedAtMs: number;
+  /** True only while the session's stream is live now. */
+  inProgress: boolean;
+  summary: StreamRecapSummary;
+}
+
+/** A Twitch clip made while a recapped session was live. */
+export interface RecapClip {
+  id: string;
+  url: string;
+  title: string;
+  creatorName: string;
+  viewCount: number;
+  /** ISO time. */
+  createdAt: string;
+  thumbnailUrl: string;
+  durationSeconds: number;
+  /** Milliseconds into the stream; never negative. */
+  offsetMs: number;
+}
+
+/** A recap's clips, most viewed first. */
+export type RecapClips = { status: "ok"; clips: RecapClip[] } | { status: "never_live" };
+
+/** A stream marker placed while a recapped session was live. */
+export interface RecapMarker {
+  id: string;
+  /** ISO time. */
+  createdAt: string;
+  description: string;
+}
+
+/**
+ * A recap's markers. Twitch keeps markers on a broadcast's VOD, so a stream
+ * with none (`no_vod`) has no markers to read, and a Twitch link without a
+ * marker scope (`missing_scope`) cannot read them.
+ */
+export type RecapMarkers =
+  | { status: "ok"; markers: RecapMarker[] }
+  | { status: "never_live" }
+  | { status: "missing_scope" }
+  | { status: "no_vod" };
+
 /** Whether the open session's summary was stored, was fresh already, or could not be. */
 export type OpenSessionRefresh =
   | { status: "stored" }
@@ -1384,6 +1509,51 @@ export interface SetupImportAnalysis {
   documentChunks: string[];
 }
 
+// ==================== Marketplace catalog ====================
+
+/** The catalog as the marketplace serves it, parsed in shared code by every gateway. */
+export type {
+  AuthorPage,
+  CatalogCounts,
+  CatalogListing,
+  CatalogListingDetail,
+  CatalogPage,
+  ListingQuote,
+  ListingType,
+} from "@shared/marketplace-catalog";
+
+/** The orders the marketplace can return a page in. */
+export type MarketplaceSort = "relevance" | "newest" | "name" | "popular" | "trending";
+
+/** One search of the catalog. An empty `query` or `types` narrows nothing. */
+export interface MarketplaceSearchQuery {
+  query: string;
+  types: ListingType[];
+  category?: string;
+  /** Only curated listings, in `featuredRank` order. */
+  featured?: boolean;
+  sort: MarketplaceSort;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of a list the marketplace pages itself. */
+export interface MarketplacePageRequest {
+  limit: number;
+  offset: number;
+}
+
+/** What starting a purchase came to. */
+export type MarketplaceCheckout =
+  /** Pay on the marketplace's payment page at `url`. */
+  | { status: "redirect"; url: string }
+  /** The account already holds the listing. */
+  | { status: "already_entitled" }
+  /** Nothing to pay, such as a free upgrade. */
+  | { status: "no_payment_needed" }
+  /** Nothing can be bought here; `message` says why. */
+  | { status: "unavailable"; message: string };
+
 // ==================== Marketplace installs and starter packs ====================
 
 /** What installing a marketplace bundle (a scene or an alert) made on the engine. */
@@ -1547,6 +1717,9 @@ export interface TwitchChannel {
   broadcasterType: string | null;
 }
 
+/** Whom to look up on Twitch: by login as a person types it (`@SomeOne`), or by user id. */
+export type TwitchViewerLookup = { login: string } | { twitchUserId: string };
+
 /** A channel waiting to be shouted out; the queue paces shoutouts within Twitch's limits. Times are epoch ms. */
 export interface ShoutoutEntry {
   id: ShoutoutEntryId;
@@ -1662,8 +1835,8 @@ export interface GoLiveOverlayFacts {
   hasScene: boolean;
   /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
   browserSourceKeyCount: number;
-  /** The key most recently loaded by a browser source, else the newest one. */
-  featuredKey: string | null;
+  /** The browser-source URL to offer for OBS: the one a browser source loaded most recently, else the newest. */
+  featuredUrl: string | null;
   /** When any browser source last loaded one of those keys, in epoch ms. */
   lastLoadedAt: number | null;
 }

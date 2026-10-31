@@ -1,12 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { canonicalRefFromProjectionKey } from "@shared/canonical-ref";
-import type { WorkflowDefinition } from "@woofx3/api";
-import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
-import { createCommandInEngine } from "./chatCommandActions";
-import { fetchEngineCapabilities } from "./lib/engineCapabilities";
 import {
   buildStarterCommand,
   buildStarterWorkflow,
@@ -21,7 +14,14 @@ import {
   starterFeaturesFrom,
   starterItemKey,
   validateStarterValues,
-} from "./lib/starterPacks";
+} from "@shared/starter-packs";
+import type { WorkflowDefinition } from "@woofx3/api";
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
+import { createCommandInEngine } from "./chatCommandActions";
+import { fetchEngineCapabilities } from "./lib/engineCapabilities";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { createWorkflowInEngine, EngineConfirmationTimeout } from "./workflowActions";
 import type { CatalogBundle } from "./workflowCatalogContext";

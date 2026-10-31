@@ -14,3 +14,8 @@ export function useTwitchLinkFlow() {
 export function useUnlinkTwitchRequest() {
   return useEngineGateway().twitchLink.useUnlinkRequest();
 }
+
+/** Whether the viewer may link or replace the Twitch link; undefined while that is unknown. */
+export function useCanManageTwitchLink() {
+  return useEngineGateway().twitchLink.useCanManageLink();
+}

@@ -3,16 +3,7 @@ import { useConvexAuth } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useModuleOAuthFinishRequest } from "@/engine/hooks/use-module-oauth";
-
-/**
- * A connect of a module's `oauth[]` integration (moduleOAuth.ts) the OAuth
- * callback sent the browser back with. `label` names the provider to the
- * streamer.
- */
-export type ModuleOAuthResult =
-  | { status: "finishing"; connectCode: string; label: string }
-  | { status: "connected"; label: string }
-  | { status: "error"; message: string };
+import type { ModuleOAuthResult } from "@/lib/marketplace-mode";
 
 /** The provider's name for messages: the integration id, capitalized. */
 function integrationLabel(integration: string): string {

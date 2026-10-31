@@ -8,8 +8,12 @@ import type {
   AlertSkipResult,
   AlertTargetUsage,
   Announcement,
+  AuthorPage,
   BlockedTerm,
   BlockedTermList,
+  CatalogCounts,
+  CatalogListingDetail,
+  CatalogPage,
   ChatCommand,
   ChatCommandChanges,
   ChatCommandGroup,
@@ -54,8 +58,10 @@ import type {
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
   HostedStorageUsage,
+  InstalledModule,
   InstanceLiveState,
   KnownBoxArt,
+  ListingQuote,
   Live,
   Macro,
   MacroId,
@@ -63,6 +69,9 @@ import type {
   MacroRunResult,
   MacroVariableValue,
   MarketplaceBundleInstall,
+  MarketplaceCheckout,
+  MarketplacePageRequest,
+  MarketplaceSearchQuery,
   ModeratedUser,
   ModerationAccess,
   ModuleArchiveInstall,
@@ -93,6 +102,8 @@ import type {
   PinnedMessage,
   PublishedTestEvent,
   ReadOptions,
+  RecapClips,
+  RecapMarkers,
   RecapTimelineEvents,
   RecordedWorkflowRun,
   RepinnedMessage,
@@ -126,6 +137,7 @@ import type {
   StreamInfoPresetId,
   StreamInfoUpdate,
   StreamMarker,
+  StreamRecap,
   StreamRecapEngineDetail,
   Supporter,
   SupporterLeaderboardQuery,
@@ -134,6 +146,7 @@ import type {
   TwitchChannel,
   TwitchLink,
   TwitchLinkFlow,
+  TwitchViewerLookup,
   UploadGrant,
   UploadRequest,
   ViewerFact,
@@ -225,6 +238,7 @@ export interface EngineGateway {
   readonly commands: CommandsGateway;
   readonly moduleResources: ModuleResourcesGateway;
   readonly modules: ModulesGateway;
+  readonly marketplace: MarketplaceGateway;
   readonly scenes: ScenesGateway;
   readonly workflows: WorkflowsGateway;
   readonly requests: RequestsGateway;
@@ -300,6 +314,8 @@ export interface ResourcesGateway {
  * its live push and type selection.
  */
 export interface EventLogGateway {
+  /** Whether a logged event can be fired at the engine again; false hides the control rather than failing it. */
+  readonly canRetrigger: boolean;
   /** Newest first, optionally of one type. */
   useWebhookEvents(eventType: string | null, initialNumItems: number): Paginated<WebhookEventSummary>;
   /** The raw payload JSON; null when the entry is gone or not the caller's. */
@@ -429,6 +445,8 @@ export interface ModuleResourcesGateway {
  * with (an installed module's key or a marketplace id) unless typed `ModuleId`.
  */
 export interface ModulesGateway {
+  /** Every module on the engine, built-in ones included. Empty when the caller cannot see the instance. */
+  useInstalled(): Live<InstalledModule[]>;
   /** The module's manifest-derived detail, merged with its marketplace listing when it has one. */
   useDetailRequest(): (moduleId: string) => Promise<ModuleDetail>;
   /** The declared settings' current values; a secret's value never comes back, only whether one is set. */
@@ -475,6 +493,31 @@ export interface ModulesGateway {
   useAssets(moduleId: ModuleId, kinds: readonly string[] | undefined): Live<ModuleAsset[]>;
   /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
   useStorageUsageRequest(): () => Promise<ModuleStorageUsage | null>;
+}
+
+/**
+ * The marketplace's catalog: searching it, a listing's page, an author's page
+ * and the counts per listing type. The catalog is a separate HTTP service, so
+ * every read is a request and nothing pushes a change.
+ *
+ * Quotes, entitlements and checkout are what one account holds and pays for.
+ * Only a gateway with an account serves them; any other rejects with
+ * `GatewayUnsupportedError`, and screens offer no purchase there.
+ */
+export interface MarketplaceGateway {
+  useSearchRequest(): (search: MarketplaceSearchQuery) => Promise<CatalogPage>;
+  /** Null when the marketplace has no such listing for this instance. */
+  useListingRequest(): (listingId: string) => Promise<CatalogListingDetail | null>;
+  /** One page of an author's listings with their profile; null for an author the marketplace does not know. */
+  useAuthorRequest(): (slug: string, page: MarketplacePageRequest) => Promise<AuthorPage | null>;
+  /** Null when the marketplace cannot count listings by type. */
+  useCountsRequest(): () => Promise<CatalogCounts | null>;
+  /** What the account must do to hold the listing; null when there is no such listing. */
+  useQuoteRequest(): (listingId: string) => Promise<ListingQuote | null>;
+  /** The ids of every listing the account holds. */
+  useEntitlementsRequest(): () => Promise<string[]>;
+  /** Starts buying a listing, returning to `returnPath`, a path in this app, when done. */
+  useCheckoutRequest(): (listingId: string, returnPath: string) => Promise<MarketplaceCheckout>;
 }
 
 /**
@@ -636,13 +679,38 @@ export interface MacrosGateway {
 }
 
 /**
+ * Which of `StreamOpsGateway`'s members a gateway serves, for a screen to
+ * leave out what it cannot rather than show a failure. A member marked false
+ * rejects with `GatewayUnsupportedError`.
+ */
+export interface StreamOpsSupport {
+  /** A recap's clips, which Twitch keeps and the engine cannot list. */
+  recapClips: boolean;
+  /** A recap's stream markers, which Twitch keeps on the stream's VOD and the engine cannot list. */
+  recapMarkers: boolean;
+}
+
+/**
  * What the engine records about the channel's streams and the viewers who
- * support them, read on demand: no webhook mirrors these figures into Convex.
- * A recap's stored summary is Convex data; a recap's clips and markers, and a
- * viewer's Twitch profile, come from Twitch, not the engine. Also publishes
- * test events onto the engine's bus.
+ * support them. A recap's session and totals are subscribed to; the rest is
+ * read on demand, since no webhook mirrors those figures into Convex. A
+ * recap's clips and markers, and a viewer's Twitch profile, come from Twitch,
+ * not the engine. Also publishes test events onto the engine's bus.
  */
 export interface StreamOpsGateway {
+  readonly support: StreamOpsSupport;
+  /** The newest sessions' recaps, newest first, at most `limit` (capped at `MAX_RECENT_RECAPS`). */
+  useRecentRecaps(limit: number, options?: ReadOptions): Live<StreamRecap[]>;
+  /** Null when there is no recap of that session. */
+  useRecap(sessionId: string, options?: ReadOptions): Live<StreamRecap | null>;
+  /**
+   * The clips made while a recapped session was live, asked of Twitch on
+   * every call so view counts and deletions are current. Needs
+   * `support.recapClips`; rejects with what kept Twitch from answering.
+   */
+  useRecapClipsRequest(): (sessionId: string) => Promise<RecapClips>;
+  /** The markers placed while a recapped session was live, like clips. Needs `support.recapMarkers`. */
+  useRecapMarkersRequest(): (sessionId: string) => Promise<RecapMarkers>;
   /**
    * A recapped session's per-minute viewer samples and top cheerers and
    * gifters. An engine that is unregistered or cannot answer resolves with
@@ -655,9 +723,10 @@ export interface StreamOpsGateway {
    */
   useRecapTimelineEventsRequest(): (sessionId: string) => Promise<RecapTimelineEvents>;
   /**
-   * Stores a snapshot of the engine's open session as its summary, unless a
-   * fresh one is stored already; the summary itself arrives through the
-   * stored-summary reads.
+   * Brings the open session's recap up to date: stores a snapshot of it as
+   * its summary unless a fresh one is stored already, or, where a recap is
+   * read from the engine itself, reads it again. The recap itself arrives
+   * through the recap reads.
    */
   useOpenSessionRefreshRequest(): () => Promise<OpenSessionRefresh>;
   /** Recent streams, newest first. Rejects with the reason when the engine cannot be asked. */
@@ -666,6 +735,8 @@ export interface StreamOpsGateway {
   useSupporterLeaderboardRequest(): (query: SupporterLeaderboardQuery) => Promise<Supporter[]>;
   /** Rejects for a blank id. */
   useViewerSupportTotalsRequest(): (platformUserId: string) => Promise<ViewerSupportTotals>;
+  /** A viewer's Twitch account; null when Twitch has nobody by that login or id, or the login cannot be one. */
+  useTwitchViewerRequest(): (lookup: TwitchViewerLookup) => Promise<TwitchChannel | null>;
   /** Publishes an event as given, with no `platform` attribute. */
   usePublishEventRequest(): (event: EngineTestEvent) => Promise<PublishedTestEvent>;
   /**
@@ -718,6 +789,8 @@ export interface TwitchLinkGateway {
   useLink(): Live<TwitchLink | null>;
   /** Starts and follows linking for the calling component. */
   useLinkFlow(): TwitchLinkFlow;
+  /** Whether the viewer may link or replace the link; undefined while that is unknown. */
+  useCanManageLink(): Live<boolean>;
   /** Removes the link. Rejects for a caller who is not an owner or admin. */
   useUnlinkRequest(): () => Promise<void>;
 }
@@ -839,6 +912,8 @@ export interface PinsGateway {
  * same queue.
  */
 export interface ShoutoutsGateway {
+  /** Whether the channel's Twitch link may send shoutouts; false when the caller cannot see the instance. */
+  useCanShoutOut(options?: ReadOptions): Live<boolean>;
   /** In queue order. Empty when the caller cannot see the instance. */
   useQueue(options?: ReadOptions): Live<ShoutoutEntry[]>;
   /** The channel a login names, to confirm before queueing; null when there is none. */

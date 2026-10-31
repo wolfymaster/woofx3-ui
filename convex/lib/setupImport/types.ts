@@ -1,5 +1,5 @@
+import type { BuiltInGroupName } from "@shared/starter-packs";
 import type { ConditionConfig } from "@woofx3/api";
-import type { BuiltInGroupName } from "../starterPacks";
 
 /**
  * A streamer's setup from another tool, converted into woofx3 terms.
