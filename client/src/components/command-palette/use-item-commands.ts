@@ -41,6 +41,7 @@ import {
 import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
+import { useRecentRecaps } from "@/engine/hooks/use-stream-recap";
 import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import { useSetWorkflowEnabledRequest, useWorkflows } from "@/engine/hooks/use-workflows";
 import type { ModuleResourceInstance } from "@/engine/types";
@@ -99,10 +100,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const commandGroups = useChatCommandGroups();
   const scenes = useScenes();
   const modules = useInstalledModules();
-  const recaps = useQuery(
-    api.streamSessionSummaries.listRecent,
-    instanceId ? { instanceId, limit: RECENT_RECAPS } : "skip"
-  );
+  const recaps = useRecentRecaps(RECENT_RECAPS);
   const macros = useQuery(api.macros.list, args);
   const presets = useStreamInfoPresets();
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
@@ -500,12 +498,12 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   }
 
   for (const row of recaps ?? []) {
-    if (!row.session) {
+    if (row.summary.kind !== "read") {
       continue;
     }
     result.push({
       id: `recap:${row.sessionId}`,
-      title: new Date(row.session.startedAt).toLocaleDateString(undefined, RECAP_DATE),
+      title: new Date(row.summary.session.startedAt).toLocaleDateString(undefined, RECAP_DATE),
       kind: "item",
       group: "Stream recaps",
       keywords: ["recap", "stream", "session"],

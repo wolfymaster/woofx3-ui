@@ -55,10 +55,8 @@ export const ENGINE_NAMESPACE_MODULES = {
   workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog", "viewerFacts"],
   macros: ["macros.run"],
   streamOps: [
-    // The rest of streamRecap asks Twitch for clips and markers.
-    "streamRecap.loadEngineDetail",
-    "streamRecap.loadTimelineEvents",
-    "streamRecap.refreshOpenSession",
+    "streamRecap",
+    "streamSessionSummaries",
     // The rest of supporters asks Twitch for a viewer or reads the channel's Twitch link.
     "supporters.listStreams",
     "supporters.leaderboard",

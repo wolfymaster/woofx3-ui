@@ -1,19 +1,13 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { History, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
+import { useRecentRecaps } from "@/engine/hooks/use-stream-recap";
+import type { StreamRecap } from "@/engine/types";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
-import {
-  formatLiveDuration,
-  formatViewerFigure,
-  liveDurationMs,
-  type SessionSummaryRow,
-  summarySegments,
-} from "@/lib/session-summary";
+import { formatLiveDuration, formatViewerFigure, liveDurationMs, summarySegments } from "@/lib/session-summary";
 import { streamRecapPath } from "@/lib/stream-recap-route";
 
 const RECENT_STREAM_LIMIT = 10;
@@ -29,16 +23,16 @@ function Figure({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
-  if (!row.session || !row.totals) {
+function RecentStreamItem({ row }: { row: StreamRecap }) {
+  if (row.summary.kind === "unreadable") {
     return (
-      <div className="px-3 py-2.5 text-xs text-muted-foreground" data-testid={`recent-stream-${row._id}`}>
-        A summary from a newer engine version (schema {row.schemaVersion}) that this dashboard cannot read yet.
+      <div className="px-3 py-2.5 text-xs text-muted-foreground" data-testid={`recent-stream-${row.sessionId}`}>
+        A summary from a newer engine version (schema {row.summary.schemaVersion}) that this dashboard cannot read yet.
       </div>
     );
   }
 
-  const { session, totals } = row;
+  const { session, totals } = row.summary;
   const liveMs = liveDurationMs(summarySegments(row));
   const startedOn = new Date(session.startedAt).toLocaleDateString(undefined, DATE_FORMAT);
 
@@ -46,7 +40,7 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
     <Link
       href={streamRecapPath(row.sessionId)}
       className="block px-3 py-2.5 space-y-2 hover:bg-muted/50 transition-colors"
-      data-testid={`recent-stream-${row._id}`}
+      data-testid={`recent-stream-${row.sessionId}`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-sm font-medium">
@@ -75,13 +69,9 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
 }
 
 export function RecentStreamsWidget() {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
   useOpenSessionRefresh();
-  const rows = useQuery(
-    api.streamSessionSummaries.listRecent,
-    instanceId ? { instanceId, limit: RECENT_STREAM_LIMIT } : "skip"
-  );
+  const rows = useRecentRecaps(RECENT_STREAM_LIMIT);
 
   return (
     <div className="flex flex-col h-full">
@@ -100,13 +90,13 @@ export function RecentStreamsWidget() {
           <div className="py-8 px-3 text-center">
             <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
             <p className="text-sm text-muted-foreground">
-              {instance ? "No streams yet. A stream shows up here once you go live." : "No instance connected"}
+              {instanceId ? "No streams yet. A stream shows up here once you go live." : "No instance connected"}
             </p>
           </div>
         ) : (
           <div className="divide-y divide-border">
             {rows.map((row) => (
-              <RecentStreamItem key={row._id} row={row} />
+              <RecentStreamItem key={row.sessionId} row={row} />
             ))}
           </div>
         )}

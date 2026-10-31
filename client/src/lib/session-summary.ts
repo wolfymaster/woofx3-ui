@@ -1,7 +1,4 @@
-import type { Doc } from "@convex/_generated/dataModel";
-
-/** A stored summary as the recap queries return it; `inProgress` is true only while its stream is live. */
-export type SessionSummaryRow = Doc<"streamSessionSummaries"> & { inProgress: boolean };
+import type { StreamRecap } from "@/engine/types";
 
 export interface SummarySegment {
   id: string;
@@ -12,20 +9,18 @@ export interface SummarySegment {
 }
 
 /**
- * A summary's segments, ready to measure and draw. In a summary of an open
- * session, a segment still live when the summary was taken has no end, so it
+ * A recap's segments, ready to measure and draw. In a recap of an open
+ * session, a segment still live when the figures were taken has no end, so it
  * is cut off at that moment: the same moment its totals describe. It is marked
  * ongoing only while the stream is in fact live; a stream that has since gone
- * down keeps that cut-off as its last known end until a newer summary lands. A
- * closed session's segments come back as stored.
+ * down keeps that cut-off as its last known end until newer figures land. A
+ * closed session's segments come back as they are.
  */
-export function summarySegments(
-  row: Pick<SessionSummaryRow, "session" | "generatedAt" | "inProgress">
-): SummarySegment[] {
-  const session = row.session;
-  if (!session) {
+export function summarySegments(recap: Pick<StreamRecap, "summary" | "generatedAt" | "inProgress">): SummarySegment[] {
+  if (recap.summary.kind !== "read") {
     return [];
   }
+  const session = recap.summary.session;
   if (session.status !== "open") {
     return session.segments;
   }
@@ -33,10 +28,10 @@ export function summarySegments(
     if (segment.endedAt !== null) {
       return segment;
     }
-    if (row.inProgress) {
-      return { ...segment, endedAt: row.generatedAt, ongoing: true };
+    if (recap.inProgress) {
+      return { ...segment, endedAt: recap.generatedAt, ongoing: true };
     }
-    return { ...segment, endedAt: row.generatedAt };
+    return { ...segment, endedAt: recap.generatedAt };
   });
 }
 
