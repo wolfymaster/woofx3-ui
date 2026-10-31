@@ -5,7 +5,6 @@ import type {
   ModuleOAuthGateway,
   SetupImportsGateway,
   ShoutoutsGateway,
-  StarterPacksGateway,
 } from "@/engine/gateway";
 import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
@@ -27,6 +26,7 @@ import { directResourcesGateway } from "./resources";
 import type { DirectRuntime } from "./runtime";
 import { directScenesGateway } from "./scenes";
 import { directSessionGateway } from "./session";
+import { directStarterPacksGateway } from "./starter-packs";
 import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
@@ -54,11 +54,6 @@ const setupImports: SetupImportsGateway = {
   useStartRequest: unsupportedRequest("setupImports.useStartRequest"),
   useRetryRequest: unsupportedRequest("setupImports.useRetryRequest"),
   useDiscardRequest: unsupportedRequest("setupImports.useDiscardRequest"),
-};
-
-const starterPacks: StarterPacksGateway = {
-  useStatus: unsupportedRead("starterPacks.useStatus"),
-  useInstallRequest: unsupportedRequest("starterPacks.useInstallRequest"),
 };
 
 const shoutouts: ShoutoutsGateway = {
@@ -105,7 +100,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     overlays: directOverlaysGateway(runtime),
     moduleOAuth,
     setupImports,
-    starterPacks,
+    starterPacks: directStarterPacksGateway(runtime),
     adBreaks: directAdBreaksGateway(runtime),
     moderation: directModerationGateway(runtime),
     pins: directPinsGateway(runtime),
