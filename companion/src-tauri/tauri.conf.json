@@ -12,6 +12,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "woofx3",
         "width": 1280,
         "height": 800,
@@ -22,6 +23,7 @@
       },
       {
         "label": "companion",
+        "create": false,
         "title": "woofx3 companion",
         "url": "companion/index.html",
         "width": 480,
