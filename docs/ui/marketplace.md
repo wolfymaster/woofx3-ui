@@ -12,9 +12,11 @@ no catalog rows at all. The one thing it adds is identity — the marketplace ha
 no user model, so the buyer is an opaque `account:{accountId}` minted in
 `convex/lib/marketplaceEntitlement.ts` and never parsed on the other side.
 
-Everything the storefront reads goes through actions in
-`convex/marketplaceCatalog.ts`, which are **actions, not queries** — the catalog
-is an HTTP service, so none of it is reactive. `use-marketplace.ts` does the one
+Everything the storefront reads goes through the engine gateway's `marketplace`
+namespace: search, a listing, an author's page and the counts per type, plus the
+account's quotes, entitlements and checkout. In the hosted app those are the
+actions in `convex/marketplaceCatalog.ts`. They are requests, not subscriptions:
+the catalog is an HTTP service, so none of it is reactive. `use-marketplace.ts` does the one
 thing that follows from that: every fetched result is tied to the inputs it was
 fetched for, and a result belonging to a different instance, query or listing is
 never rendered. A stale render here is a streamer installing something they were
@@ -24,6 +26,22 @@ Nothing trusts the marketplace's shape. `shared/marketplace-catalog.ts`
 checks every field and drops an entry it cannot parse rather than rendering it
 half-formed, the way module listings have always been treated. `total` still
 comes from the marketplace, so a dropped entry cannot make "48 of 312" lie.
+
+## Local mode
+
+The desktop app's local mode has no account, so it browses the catalog
+anonymously through its own engine: the direct gateway calls the engine's
+`marketplaceSearch`, `marketplaceGetListing`, `marketplaceGetAuthor` and
+`marketplaceCounts` with no buyer token, and parses the marketplace JSON they
+pass through with the same parsers (`shared/marketplace-catalog.ts`). Free
+listings install through the engine; the engine refuses a paid one, and asks
+the streamer to sign in.
+
+Buying needs an account, so local mode's marketplace mode has no purchases.
+Nothing asks for a quote or for ownership, and the listing page's button reads
+the public pricing instead (`listingInstallState`): a free listing installs, a
+retired or unpriced one is unavailable, and one that costs money shows
+**Sign in to buy**.
 
 ## Listing types
 
@@ -65,7 +83,7 @@ an installed module's page uses, and the tabs reuse that page's components
 (`module-detail-panel.tsx`). The page reads the detail again whenever the
 installed version changes, so installing turns on the settings tab. An
 integration's connect button returns to the page, which finishes the connect
-(`useModuleOAuthReturn`) and opens the settings tab. Remove opens the same
+(the marketplace mode's `useOAuthReturn`) and opens the settings tab. Remove opens the same
 `UninstallModuleDialog` as the installed-module page.
 
 ## Search and categories

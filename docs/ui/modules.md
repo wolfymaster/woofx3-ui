@@ -14,8 +14,8 @@ integration's OAuth return, `/modules/install` to the upload page and
 ## Installed modules (`/marketplace/installed`)
 
 - **Convex** holds the repository of **engine-confirmed** modules: a `moduleRepository` row is only written after the engine sends a `module.installed` webhook. A module that is mid-install or whose delivery failed does **not** appear in the catalog — its state is communicated through transient events instead (see below).
-- The page reads `api.moduleRepository.list` (local Convex rows) and merges in live engine state via the **Convex action** `api.moduleEngine.listEngineModules`. The browser does **not** call the engine directly for module browsing — `WoofxTransport` is reserved for realtime channels (chat, stream status).
-- The sidebar (`components/modules/module-sidebar.tsx`) lists the installed modules, each marked **Marketplace** when it records the listing it came from, or **Uploaded** when it was installed from an uploaded archive. Choosing one opens its page. With nothing chosen, the page offers to upload a module or browse the marketplace.
+- The page, its sidebar, the storefront and the upload page read the installed modules through the [engine gateway](../patterns/engine-gateway.md) (`modules.useInstalled`, an `InstalledModule` per module). The Convex adapter maps the `moduleRepository` rows; the direct gateway maps the engine's `listEngineModules`, cached and read again on `module.installed` and `module.deleted`.
+- The sidebar (`components/modules/module-sidebar.tsx`) lists the installed modules, each marked **Built in** when it ships with the engine (only the direct gateway knows this), **Marketplace** when it records the listing it came from, or **Uploaded** when it was installed from an uploaded archive. Choosing one opens its page. With nothing chosen, the page offers to upload a module (where uploads are offered) or browse the marketplace. A built-in module offers no Remove: the engine cannot uninstall it.
 
 ## Module detail (`/marketplace/installed/:id`)
 
@@ -24,10 +24,20 @@ The id is an installed module's bare key or a marketplace id. A module that is n
 
 - Reads `api.moduleRepository.get` plus `api.triggerDefinitions.listByModule` and `api.actionDefinitions.listByModule` to show metadata and every trigger / action the module registered with the UI.
 - Offers the same uninstall entry point as the listing page.
+- What the Settings tab shows above a module's own settings comes from the app's marketplace mode (`MarketplaceMode` in `client/src/lib/marketplace-mode.tsx`), which each app root mounts: the hosted app's (`client/src/lib/hosted-marketplace-mode.tsx`) shows the webhook endpoints and the companion routing below; the desktop app's local mode shows neither (see [Local mode](#local-mode)).
 - For an installed module with webhook triggers, the **Settings** tab lists each trigger's public URL with its last delivery (`api.inboundWebhooks.listForInstanceModule`, rendered by `client/src/components/modules/module-webhook-endpoints.tsx`). The handler's answer is relayed from this deployment's site origin, which also serves sign-in and OAuth callbacks, so it is sent inert (`Content-Security-Policy: sandbox; default-src 'none'`, `nosniff`) and an HTML, SVG or XML answer becomes a 502 (`convex/lib/inboundWebhookRelay.ts`).
 - Settings declared `type: "secret"` render as write-only password fields: the engine never returns a secret's value, only whether one is set.
 - A setting button with `action: { kind: "integration", integration: "<id>" }` connects an account. When the manifest declares that id under `oauth[]`, it is the module's own integration, connected through the engine (`convex/moduleOAuth.ts`, engine capability `modules.oauth`): `moduleOAuth.start` sends the member to the provider with the module's client id (or, on a managed instance, the app woofx3 provides for that provider when the declaration fits it; see [Auth and onboarding](./auth-onboarding.md)) and PKCE; the callback (`/api/integrations/oauth/callback`, signed state forwarded like every OAuth callback) stores the authorization as a one-time handoff and returns to the module page with `?integration=<id>&oauth_code=…`; `moduleOAuth.finish` lets only the member who started it hand the code to the engine (`completeModuleOAuth`), which exchanges it and keeps the tokens where neither the dashboard nor module code can read them. A button naming an integration the manifest does not declare is shown disabled.
 - Settings declared `type: "url"` render as URL inputs. The engine lets the module's code reach the origin of the URL entered there, and only the streamer can set it.
+
+## Local mode
+
+The desktop app's local mode serves the Installed view and a module's page with no account, through the direct gateway (see [Companion app](./companion.md#the-dashboard-s-two-modes)). Its marketplace mode (`client/src/desktop/local-marketplace-mode.ts`) leaves out what needs the hosted site:
+
+- **Local endpoints.** The engine runs on this computer and dials a module's local endpoints itself, so there is no companion routing to explain and no setting the companion wrote.
+- **Webhook endpoints.** Inbound webhooks are relayed by the hosted site, which local mode has none of.
+- **Module OAuth.** Connecting an integration goes through an account; the direct gateway refuses it, and no connect ever returns to the page.
+- **Uploads.** The direct gateway cannot install an archive yet, so local mode offers no upload and does not serve `/marketplace/upload`.
 
 ## Custom upload (`/marketplace/upload`)
 
