@@ -86,6 +86,67 @@ The flow is the one in [Viewer sign-in](/ui/viewer-sign-in#the-sign-in-flow); th
 
 Where browser storage is blocked, the page behaves as signed out.
 
+## Forms
+
+A visitor's answers go through the edge to Convex, wait in an outbox and reach the engine from there. A submit never calls the engine, so forms keep working while it is offline.
+
+```
+page → POST woofx3.tv/u/_/forms/submit (edge: per-address limit)
+     → POST <site>/api/user-page-forms/submit (Convex: edge secret, checks, outbox)
+     → deliverUserPageSubmission on the engine (capability userPages.formSubmissions)
+```
+
+### Submitting
+
+`convex/userPageFormsHttp.ts` answers `200 { "ok": true }` or `{ "error": { "code", "message" } }`. Success means queued, so the page says the answer was sent and nothing about the streamer having seen it.
+
+| Code | Status | Meaning | The page |
+|------|--------|---------|----------|
+| `unauthorized`, `invalid_request` | 401, 400 | Not from the edge, or an unreadable body | Asks to try again |
+| `not_configured` | 503 | This deployment has no edge secret | Shows the form as closed |
+| `too_large` | 413 | Over 64 KiB, which the longest answers a form allows can exceed | Asks to shorten |
+| `page_unavailable`, `form_stale` | 404, 409 | The page is gone, or the form's id or questions changed | Asks to reload |
+| `section_locked` | 403 | The form's section isn't open to this viewer | Says so, offers a reload |
+| `session_expired` | 401 | A session token that signs nobody in | Offers sign-in |
+| `invalid_answers` | 422 | The answers break the form's rules | Asks for another look |
+| `not_accepting` | 503 | The page's queue is full | Shows the form as closed |
+| `verification_unconfigured` | 503 | Anonymous, and Convex has no Turnstile secret | Shows the form as closed |
+| `verification_failed`, `verification_unavailable` | 403, 503 | Turnstile refused, or couldn't be asked | Asks to try again with a fresh check |
+| `rate_limited` | 429 | Too many from this viewer (`viewerFormSubmit`) or address (the edge) | Asks to wait |
+
+`evaluateSubmission` (`convex/lib/userPageFormSubmit.ts`) makes every decision against the published page. The route runs it as a query, so a doomed submit spends no Turnstile token, and `acceptSubmission` runs it again in the transaction that writes the row. Answers are checked with `checkFormAnswers` in `shared/user-pages/forms.ts`, the same rules the page applies before sending. A submit carries one entry per question, so a different set of ids means the form changed.
+
+The page mints an idempotency key and keeps it until an answer changes, so resending after a lost response can't queue twice. A repeat of an accepted key answers `ok` before any other check, without a second row or Turnstile call. The viewer's identity and roles come only from the session, and the labels and viewer are copied onto the row, so a later edit doesn't change what is delivered.
+
+`toPublicWidget` gives each form `accepting`. It is false while the queue is full (`userPages.formsAtCapacity`, written only when it flips, so visitors' queries don't re-run on every queue change) and, for anonymous viewers, while Convex has no Turnstile secret. Off the user-pages origin the page has no route to post to, so a form links to the page there instead.
+
+### Delivering
+
+`pageSubmissions` holds each answer as `pending`, `delivered` or `failed`. `pageSubmissionQueues` holds, per instance, the pending count the cap checks (`USER_PAGE_LIMITS.pendingSubmissionsPerPage`) and when the engine is next worth contacting. Tunables are in `SUBMISSION_DELIVERY` (`convex/lib/userPageSubmissions.ts`).
+
+A pass (`convex/lib/userPageFormDelivery.ts`) is scheduled on insert and by a one-minute sweep. It takes the queue's lease, asks the engine whether it has the capability, sends the oldest due rows and saves each outcome as it arrives.
+
+| What happened | Row | Queue |
+|---------------|-----|-------|
+| A receipt, `recorded` or `duplicate` | `delivered` | |
+| The engine refused it as malformed (`UserPageSubmissionRefused: …`) | `failed`, with the reason | |
+| Any other error from the call | Pending, backs off alone | |
+| A timeout or failed connection during a send | Pending, backs off | Engine backs off, pass stops |
+| The capability check fails or lacks the id, or the instance has no engine credentials | Untouched | Engine backs off |
+
+Backing off the engine on the queue row means an offline engine costs one probe per interval, however many answers wait. Pending rows never expire. Delivered rows are deleted after 30 days; failed ones stay until the streamer retries them or the instance is deleted. Only managed engines have pages today, and every route to the engine is behind `SubmissionTransport`.
+
+### Setup
+
+| Where | Name | Value |
+|-------|------|-------|
+| Cloudflare | Turnstile widget | Create one for the user-pages host name, managed mode |
+| Convex | `TURNSTILE_SECRET_KEY` | The widget's secret. Read when used: without it, anonymous submits are refused and forms show as closed to anonymous visitors. Signed-in viewers aren't affected |
+| GitHub `production` environment | `VITE_TURNSTILE_SITE_KEY` | The widget's site key, baked into the page at build time. Without it the page closes forms to anonymous visitors |
+| Edge Worker + Convex | `VIEWER_SIGN_IN_EDGE_SECRET` | Already set for [viewer sign-in](./viewer-sign-in.md#configuration), and shared with this route, rotation included |
+
+Previews have no edge in front of them and are not on the user-pages origin, so a form on a preview can't be sent. The page sets no Content-Security-Policy today; one added later must allow `https://challenges.cloudflare.com` for scripts and frames.
+
 ## Safety
 
 Owner content is held to the same rules Convex applies on save, checked again before it reaches the DOM: Markdown renders without any HTML it contains; links are http or https only and open with `rel="noopener noreferrer nofollow ugc"`; images, banners and avatars load over https only.

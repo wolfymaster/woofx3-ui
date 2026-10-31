@@ -67,7 +67,7 @@ Set these Convex environment variables on production, and, except `VIEWER_SIGN_I
 | Variable | Value |
 |----------|-------|
 | `VIEWER_TOKEN_ENCRYPTION_KEY` | 32 random bytes, base64url: `openssl rand -base64 32 \| tr '+/' '-_' \| tr -d '='`. Changing it makes every stored viewer grant unreadable, so viewers have to sign in again. |
-| `VIEWER_SIGN_IN_EDGE_SECRET` | The secret the edge sends with every sign-in start, at least 43 characters: `openssl rand -base64 32 \| tr '+/' '-_' \| tr -d '='`. Set the same value as the edge Worker's secret of that name (`wrangler secret put VIEWER_SIGN_IN_EDGE_SECRET`). Without it the start route answers 500 to every request, so sign-in never runs without the per-address limit. |
+| `VIEWER_SIGN_IN_EDGE_SECRET` | The secret the edge sends with every sign-in start, at least 43 characters: `openssl rand -base64 32 \| tr '+/' '-_' \| tr -d '='`. Set the same value as the edge Worker's secret of that name (`wrangler secret put VIEWER_SIGN_IN_EDGE_SECRET`). Without it the start route answers 500 and the [form submit route](./user-pages.md#forms) 503 to every request, so neither runs without the per-address limit. |
 | `VIEWER_SIGN_IN_EDGE_SECRET_NEXT` | Optional. A second accepted secret while the secret rotates: set the new value here, then on the edge, then move it to `VIEWER_SIGN_IN_EDGE_SECRET` and clear this one. |
 | `USER_PAGES_BASE_URL` | The public origin of user pages, e.g. `https://woofx3.tv`. It must be `https` (or `http://localhost` for development). The start route fails without it. |
 

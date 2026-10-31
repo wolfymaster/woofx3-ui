@@ -32,6 +32,12 @@ everything comes from the shared registry in `shared/user-pages/`.
   it has one. Counter and timer widgets bind a resource through a picker of the
   instance's resources of the kind the registry entry binds.
 
+## Submissions
+
+The **Submissions** tab on the same screen lists what visitors sent through the page's forms, newest first: the status, when it was sent, who sent it (a viewer's name, or "Anonymous visitor"), the answers and, for a failed one, the reason with a **Retry** button. A note above the list says when answers are waiting because the engine can't be reached or needs an update, and when the page's forms have stopped accepting because too many are waiting. The editor stays mounted behind the tab, so unsaved edits survive a look at it.
+
+Each form widget's settings show its **Form ID**, with a copy button; workflows filter on it to react to one form. [User pages](./user-pages.md#forms) covers delivery.
+
 ## Validation
 
 The editor runs `checkPageContent`, the same check `userPages.saveDraft`
