@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import {
   appendToken,
+  isExpressionText,
   isWholeReference,
   MISSING_SETTING_MESSAGE,
   missingSettings,
@@ -144,5 +145,24 @@ describe("isWholeReference and appendToken", () => {
     expect(appendToken("Thanks", "${trigger.data.user}")).toBe("Thanks ${trigger.data.user}");
     expect(appendToken(undefined, "${trigger.data.user}")).toBe("${trigger.data.user}");
     expect(appendToken("Hi ", "${a.b}")).toBe("Hi ${a.b}");
+  });
+});
+
+describe("an expression left as text", () => {
+  const numberField = { id: "amount", label: "Amount", type: "number" } as ConfigField;
+
+  test("is told apart from a reference and a number", () => {
+    expect(isExpressionText("{round(divide(amount, 100))}")).toBe(true);
+    expect(isExpressionText("{round(amount")).toBe(true);
+    expect(isExpressionText("${trigger.data.amount}")).toBe(false);
+    expect(isExpressionText("5 + {amount}")).toBe(true);
+    expect(isExpressionText("{round(divide(${trigger.data.amount}, 100))}")).toBe(true);
+    expect(isExpressionText("hello")).toBe(false);
+    expect(isExpressionText(5)).toBe(false);
+  });
+
+  test("is left to the field's own note in a number setting", () => {
+    expect(settingProblem(numberField, "{round(amount)}")).toBeNull();
+    expect(settingProblem(numberField, "${round(trigger.data.amount)}")).toBeNull();
   });
 });

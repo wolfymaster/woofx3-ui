@@ -17,6 +17,11 @@ export function isWholeReference(value: unknown): value is string {
   return typeof value === "string" && WHOLE_REFERENCE.test(value.trim());
 }
 
+/** Text with an expression in it that isn't stored as one reference, such as `{round(amount)}`. */
+export function isExpressionText(value: unknown): value is string {
+  return typeof value === "string" && !isWholeReference(value) && /\{/.test(value);
+}
+
 /** Nothing entered: no value, blank text, no rows. */
 export function isEmptySetting(value: unknown): boolean {
   if (value === undefined || value === null) {
