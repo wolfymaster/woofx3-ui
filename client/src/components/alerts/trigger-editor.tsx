@@ -2,7 +2,7 @@ import { escapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { ExternalLink } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { TriggerWhenCard } from "@/components/alerts/trigger-when-card";
 import { FlowEditor } from "@/components/flow/flow-editor";
@@ -19,12 +19,13 @@ import { useFlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { type TriggerPin, triggerFieldValues, withFieldConditions } from "@/lib/alert-triggers";
+import { storedStepsGained, type TriggerPin, triggerFieldValues, withFieldConditions } from "@/lib/alert-triggers";
 import { type OptionLabels, sentenceParts, sentenceText } from "@/lib/condition-sentence";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import { incompleteConditionFields } from "@/lib/workflow-presets-json";
 import {
   countActionSteps,
+  definitionToTree,
   removeStepFromTree,
   type StepNode,
   treeToDefinition,
@@ -186,6 +187,27 @@ export function TriggerEditor({
     commit,
     !saved && countActionSteps(tree.steps) === 0 ? "Not saved yet. Add a step to save this trigger." : null
   );
+
+  const { markSaved } = save;
+  const storedDefinition = saved?.definition;
+  const previousStoredRef = useRef(storedDefinition);
+  useEffect(() => {
+    const previous = previousStoredRef.current;
+    previousStoredRef.current = storedDefinition;
+    if (!previous || !storedDefinition || previous === storedDefinition) {
+      return;
+    }
+    const held = treeToDefinition(treeRef.current).tasks;
+    if (!storedStepsGained(previous.tasks ?? [], storedDefinition.tasks ?? [], held)) {
+      return;
+    }
+    const read = definitionToTree(storedDefinition);
+    if (read.editable) {
+      setTree(read.tree);
+      markSaved(read.tree);
+      savedTriggerRef.current = JSON.stringify(read.tree.trigger);
+    }
+  }, [storedDefinition, markSaved]);
 
   const changeValue = (fieldId: string, value: unknown) => {
     const conditions = withFieldConditions(tree.trigger.conditions, conditionFields, {

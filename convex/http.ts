@@ -830,6 +830,7 @@ http.route({
         await ctx.runMutation(internal.workflowInternal.deleteFromWebhook, {
           instanceId: instance._id,
           engineWorkflowId: event.workflowId,
+          mergedInto: event.mergedInto,
         });
         if (event.correlationKey) {
           await ctx.runMutation(internal.workflowInternal.resolveCorrelationForDelete, {

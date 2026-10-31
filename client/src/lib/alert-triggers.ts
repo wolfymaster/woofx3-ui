@@ -140,6 +140,21 @@ export function unownedConditionPhrases(conditions: readonly ConditionConfig[], 
     });
 }
 
+/**
+ * Whether stored steps gained ones an open editor doesn't hold, which is how another
+ * workflow's steps arriving by a merge looks. The editor saves its whole list, so it has to
+ * pick those up or its next save removes them. A step the editor just removed is not a
+ * gain: it was already in the previous copy.
+ */
+export function storedStepsGained(
+  previous: readonly { id: string }[],
+  stored: readonly { id: string }[],
+  held: readonly { id: string }[]
+): boolean {
+  const known = new Set([...previous, ...held].map((task) => task.id));
+  return stored.some((task) => !known.has(task.id));
+}
+
 /** Byte order, as Go's strings.Compare orders ids. */
 function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
