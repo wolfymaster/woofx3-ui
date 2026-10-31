@@ -200,6 +200,11 @@ export function scheduleIntervalLabel(settings: Record<string, unknown>): string
   return interval === 1 ? "Every minute" : `Every ${interval.toLocaleString()} minutes`;
 }
 
+/** When a schedule runs, in words. Off unless its setting says otherwise, as in the module. */
+export function scheduleOfflineLabel(settings: Record<string, unknown>): string {
+  return settings.runWhileOffline === true ? "Also runs while you're offline" : "Only runs while you're live";
+}
+
 /**
  * `h:mm:ss`, or `m:ss` under an hour. Rounds up, so a timer with any time left
  * never shows 0:00 — the same rounding the timer actions report.

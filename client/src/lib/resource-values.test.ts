@@ -9,6 +9,7 @@ import {
   queueCapacity,
   queueEntries,
   scheduleIntervalLabel,
+  scheduleOfflineLabel,
   scheduleState,
   summarizeResourceValue,
   timerProgressPercent,
@@ -301,5 +302,13 @@ describe("scheduleIntervalLabel", () => {
     [{ interval: 0 }, "Every 15 minutes"],
   ])("%j reads %s", (settings, label) => {
     expect(scheduleIntervalLabel(settings)).toBe(label);
+  });
+});
+
+describe("scheduleOfflineLabel", () => {
+  test("reads as live only unless the setting is on", () => {
+    expect(scheduleOfflineLabel({})).toBe("Only runs while you're live");
+    expect(scheduleOfflineLabel({ runWhileOffline: false })).toBe("Only runs while you're live");
+    expect(scheduleOfflineLabel({ runWhileOffline: true })).toBe("Also runs while you're offline");
   });
 });

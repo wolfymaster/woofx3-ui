@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useResourceAction } from "@/hooks/use-resource-action";
 import { useNow } from "@/hooks/use-timer-state";
-import { formatDuration, type ScheduleState, scheduleIntervalLabel, scheduleState } from "@/lib/resource-values";
+import {
+  formatDuration,
+  type ScheduleState,
+  scheduleIntervalLabel,
+  scheduleOfflineLabel,
+  scheduleState,
+} from "@/lib/resource-values";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 
 /** A woofx3 schedule: when it runs next, started and stopped through the schedule's own actions. */
@@ -44,7 +50,7 @@ function SchedulePanel(props: ResourceDetailProps) {
           data-testid="text-schedule-interval"
         >
           {running ? "Until next run · " : ""}
-          {scheduleIntervalLabel(settings)}
+          {scheduleIntervalLabel(settings)} · {scheduleOfflineLabel(settings)}
         </span>
       </div>
 
