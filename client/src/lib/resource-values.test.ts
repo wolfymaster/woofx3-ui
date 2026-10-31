@@ -8,6 +8,9 @@ import {
   queueAddRefusal,
   queueCapacity,
   queueEntries,
+  scheduleIntervalLabel,
+  scheduleOfflineLabel,
+  scheduleState,
   summarizeResourceValue,
   timerProgressPercent,
   timerState,
@@ -263,5 +266,49 @@ describe("valueAtPath", () => {
 
   test("never reads what the object inherits", () => {
     expect(valueAtPath({}, "constructor")).toBeUndefined();
+  });
+});
+
+describe("scheduleState", () => {
+  const NOW = 1_000_000;
+
+  test("reads no value as stopped and never run", () => {
+    for (const value of [undefined, null, 5, []]) {
+      expect(scheduleState(value, NOW)).toEqual({ running: false, nextRunMs: 0, lastFiredAt: null });
+    }
+  });
+
+  test("works out the time to the next run, never below zero", () => {
+    const stored = { running: true, nextAt: NOW + 60_000, intervalMs: 60_000, lastFiredAt: 500 };
+    expect(scheduleState(stored, NOW)).toEqual({ running: true, nextRunMs: 60_000, lastFiredAt: 500 });
+    expect(scheduleState({ ...stored, nextAt: NOW - 1 }, NOW).nextRunMs).toBe(0);
+  });
+
+  test("keeps the last run of a stopped schedule", () => {
+    expect(scheduleState({ running: false, lastFiredAt: 500 }, NOW)).toEqual({
+      running: false,
+      nextRunMs: 0,
+      lastFiredAt: 500,
+    });
+  });
+});
+
+describe("scheduleIntervalLabel", () => {
+  test.each([
+    [{ interval: 15 }, "Every 15 minutes"],
+    [{ interval: 1 }, "Every minute"],
+    [{}, "Every 15 minutes"],
+    [{ interval: "" }, "Every 15 minutes"],
+    [{ interval: 0 }, "Every 15 minutes"],
+  ])("%j reads %s", (settings, label) => {
+    expect(scheduleIntervalLabel(settings)).toBe(label);
+  });
+});
+
+describe("scheduleOfflineLabel", () => {
+  test("reads as live only unless the setting is on", () => {
+    expect(scheduleOfflineLabel({})).toBe("Only runs while you're live");
+    expect(scheduleOfflineLabel({ runWhileOffline: false })).toBe("Only runs while you're live");
+    expect(scheduleOfflineLabel({ runWhileOffline: true })).toBe("Also runs while you're offline");
   });
 });

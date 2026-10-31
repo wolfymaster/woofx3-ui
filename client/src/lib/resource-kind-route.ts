@@ -1,4 +1,4 @@
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 
 /** Where a kind other than the built-in ones lives: `<base>/<module>/<kind>`. */
 export const RESOURCE_KINDS_BASE = "/stream/resources";
@@ -11,6 +11,7 @@ const BUILT_IN_KIND_PATHS: Readonly<Record<string, string>> = {
   [COUNTER_KIND]: "/stream/counters",
   [TIMER_KIND]: "/stream/timers",
   [QUEUE_KIND]: "/stream/queues",
+  [SCHEDULE_KIND]: "/stream/schedules",
 };
 
 /** Whether a kind is one of the built-in ones, which the menu and the palette list already. */

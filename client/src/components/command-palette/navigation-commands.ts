@@ -30,6 +30,7 @@ const PAGE_KEYWORDS: Record<string, readonly string[]> = {
   scenes: ["overlays", "browser source", "obs"],
   timers: ["countdown", "clock"],
   queues: ["line", "viewers queue"],
+  schedules: ["repeat", "interval", "every", "recurring"],
   recaps: ["history", "past streams", "sessions", "summary"],
   supporters: ["leaderboard", "top cheerers", "gifters", "bits"],
   assets: ["files", "media", "images", "sounds", "uploads", "resources"],

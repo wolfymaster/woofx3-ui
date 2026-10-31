@@ -46,6 +46,7 @@ const LABEL_OVERRIDES: Record<string, string> = {
   lifx: "LIFX",
   obs: "OBS",
   queue: "Queues",
+  schedule: "Schedules",
   subscription: "Subscriptions",
   timer: "Timers",
   watchstreak: "Watch Streak",
