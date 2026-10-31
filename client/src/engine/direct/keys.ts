@@ -67,6 +67,10 @@ export const directKeys = {
     /** Whether a "Stream start" marker waits for the stream to go live; the desktop host's answer, not the engine's. */
     marker: () => ["goLive", "marker"] as const,
   },
+  shoutouts: {
+    all: ["shoutouts"] as const,
+    queue: () => ["shoutouts", "queue"] as const,
+  },
   commands: {
     all: ["commands"] as const,
     list: () => ["commands", "list"] as const,

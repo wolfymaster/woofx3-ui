@@ -1,11 +1,5 @@
 import type { DesktopHostState } from "@/engine/desktop-host";
-import type {
-  EngineGateway,
-  ModuleOAuthGateway,
-  SetupImportsGateway,
-  ShoutoutsGateway,
-  StarterPacksGateway,
-} from "@/engine/gateway";
+import type { EngineGateway, ModuleOAuthGateway, SetupImportsGateway, StarterPacksGateway } from "@/engine/gateway";
 import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
@@ -28,6 +22,7 @@ import { directResourcesGateway } from "./resources";
 import type { DirectRuntime } from "./runtime";
 import { directScenesGateway } from "./scenes";
 import { directSessionGateway } from "./session";
+import { directShoutoutsGateway } from "./shoutouts";
 import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
@@ -58,18 +53,11 @@ const starterPacks: StarterPacksGateway = {
   useInstallRequest: unsupportedRequest("starterPacks.useInstallRequest"),
 };
 
-const shoutouts: ShoutoutsGateway = {
-  useQueue: unsupportedRead("shoutouts.useQueue"),
-  useLookupRequest: unsupportedRequest("shoutouts.useLookupRequest"),
-  useEnqueueRequest: unsupportedRequest("shoutouts.useEnqueueRequest"),
-  useRemoveRequest: unsupportedRequest("shoutouts.useRemoveRequest"),
-  useReorderRequest: unsupportedRequest("shoutouts.useReorderRequest"),
-};
-
 /**
  * The gateway that talks to one engine directly, with no Convex in between.
  * Built once at boot around `runtime`, which must be started for its reads to
  * load; the namespaces share its connection and its one query cache.
+ * `host` holds the UI state the desktop host keeps outside the engine.
  */
 export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopHostState): EngineGateway {
   return {
@@ -97,7 +85,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     adBreaks: directAdBreaksGateway(runtime),
     moderation: directModerationGateway(runtime),
     pins: directPinsGateway(runtime),
-    shoutouts,
+    shoutouts: directShoutoutsGateway(runtime, host.shoutoutQueue),
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),

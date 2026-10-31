@@ -720,7 +720,8 @@ cooldown.
 The chatter list, the confirmation lookup and each send go to Helix, or through
 an engine with `twitch.chat` (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). The queue
-itself stays in Convex. A
+itself stays in Convex; in the desktop app's local mode it is the desktop host's
+queue instead (the confirmation lookup still goes through the engine). A
 queued shoutout the engine could not confirm fails like a Twitch 5xx and is
 retried after its backoff, which cannot shout out twice: Twitch refuses a
 second shoutout to the same channel within the hour.
