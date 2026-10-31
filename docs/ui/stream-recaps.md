@@ -44,7 +44,7 @@ its summary. So a stored `status: "open"` means the engine has not closed the
 session yet, not that the stream is live.
 
 `listRecent` and `get` add `inProgress` to each row instead
-(`isSummaryInProgress` in `convex/lib/sessionSummary.ts`): true only while the
+(`isSummaryInProgress` in `shared/stream-recap.ts`): true only while the
 instance's `instanceLiveState` says it is live and, when the engine has
 announced its session, that session is this row's. It is derived on every read
 and never stored, so a session reads as finished the moment its stream goes

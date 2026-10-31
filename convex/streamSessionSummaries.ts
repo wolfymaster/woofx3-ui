@@ -1,8 +1,8 @@
+import { isSummaryInProgress } from "@shared/stream-recap";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
-  isSummaryInProgress,
   parseSessionSummary,
   planOpenSnapshotWrite,
   planSummaryWrite,
