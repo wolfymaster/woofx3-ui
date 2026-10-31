@@ -15,6 +15,7 @@ import {
   useSetWorkflowEnabledRequest,
   useUpdateWorkflowRequest,
 } from "@/engine/hooks/use-workflows";
+import { useFlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -180,6 +181,12 @@ export function TriggerEditor({
     ]
   );
 
+  const save = useFlowSave(
+    tree,
+    commit,
+    !saved && countActionSteps(tree.steps) === 0 ? "Not saved yet. Add a step to save this trigger." : null
+  );
+
   const changeValue = (fieldId: string, value: unknown) => {
     const conditions = withFieldConditions(tree.trigger.conditions, conditionFields, {
       ...values,
@@ -191,7 +198,7 @@ export function TriggerEditor({
   const settleSentence = () => {
     const current = treeRef.current;
     if (JSON.stringify(current.trigger) !== savedTriggerRef.current) {
-      void commit(current);
+      void save.commit(current);
     }
   };
 
@@ -221,7 +228,8 @@ export function TriggerEditor({
       <FlowEditor
         tree={tree}
         onChange={setTree}
-        onCommit={commit}
+        onCommit={save.commit}
+        save={save}
         catalogTriggers={catalogTriggers}
         catalogActions={catalogActions}
         catalogLoading={catalogLoading}
@@ -241,9 +249,6 @@ export function TriggerEditor({
           />
         }
       />
-      {!saved && countActionSteps(tree.steps) === 0 && (
-        <p className="px-1 text-sm text-muted-foreground">Add a step to save this trigger.</p>
-      )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
         <Button
           variant="ghost"

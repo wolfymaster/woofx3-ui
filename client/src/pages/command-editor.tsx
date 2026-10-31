@@ -40,6 +40,7 @@ import { COMMAND_LIST_PATH } from "@/lib/command-editor-route";
 import { splitCommandInput } from "@/lib/command-input";
 import { commandSteps } from "@/lib/command-steps";
 import { commandActionVariables } from "@/lib/command-variables";
+import { storedExpressionProblem } from "@/lib/variable-display";
 import type { WorkflowTree } from "@/lib/workflow-tree";
 
 /**
@@ -135,6 +136,12 @@ export default function CommandEditor() {
       return;
     }
 
+    const expressionProblem = form.flow.editable ? storedExpressionProblem(form.flow.tree.steps) : null;
+    if (expressionProblem !== null) {
+      setFormError(expressionProblem);
+      return;
+    }
+
     const fields = {
       command,
       // Steps that can't be edited here are left as they are, which an absent `steps` means.
@@ -209,6 +216,15 @@ export default function CommandEditor() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {isDirty && (
+            <span
+              className="hidden items-center gap-1.5 text-[13px] text-amber-800 dark:text-amber-200 sm:inline-flex"
+              data-testid="text-command-unsaved"
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+              Unsaved changes
+            </span>
+          )}
           <Button variant="ghost" className="hidden sm:inline-flex" onClick={leave} disabled={saving}>
             Cancel
           </Button>

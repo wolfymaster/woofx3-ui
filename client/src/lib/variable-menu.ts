@@ -41,6 +41,11 @@ export function findTypedReference(text: string, cursor: number, functions: bool
   if (functions && since.includes("(")) {
     return findTypedArgument(since, cursor);
   }
+  // A "{" among a call's arguments starts another argument, which is written without braces.
+  const outer = uptoCursor.lastIndexOf("{", brace - 1);
+  if (functions && brace > 0 && outer !== -1 && findTypedArgument(uptoCursor.slice(outer + 1, brace), brace) !== null) {
+    return { start: brace, end: cursor, query: since, argument: true };
+  }
   // Someone used to the engine's syntax types "${"; the "$" goes with the reference it opens.
   const start = brace > 0 && uptoCursor[brace - 1] === "$" ? brace - 1 : brace;
   return { start, end: cursor, query: since, argument: false };
