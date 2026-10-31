@@ -14,7 +14,7 @@ use super::{
     ModuleView, OpenTwitchSignInArgs, ReadyUpdate, RelayView, RemoveShoutoutArgs,
     ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
     TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES, INTEGRATIONS_EVENT,
-    SHOUTOUT_QUEUE_EVENT, STATE_EVENT, STREAM_START_MARKER_EVENT,
+    OPEN_LOCAL_CONNECTIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT, STREAM_START_MARKER_EVENT,
 };
 use crate::host::{
     HostModeKind, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry,
@@ -114,6 +114,7 @@ pub fn window_bindings() -> String {
     let events = [
         ("STATE_EVENT", STATE_EVENT),
         ("INTEGRATIONS_EVENT", INTEGRATIONS_EVENT),
+        ("OPEN_LOCAL_CONNECTIONS_EVENT", OPEN_LOCAL_CONNECTIONS_EVENT),
         ("SHOUTOUT_QUEUE_EVENT", SHOUTOUT_QUEUE_EVENT),
         ("STREAM_START_MARKER_EVENT", STREAM_START_MARKER_EVENT),
     ];

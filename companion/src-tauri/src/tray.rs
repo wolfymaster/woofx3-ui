@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Wry};
+use tauri::{AppHandle, Emitter, Manager, Wry};
 
 use crate::{show_window, update, Companion, COMPANION_WINDOW, DASHBOARD_WINDOW};
-use woofx3_companion_core::window::ReadyUpdate;
+use woofx3_companion_core::window::{ReadyUpdate, OPEN_LOCAL_CONNECTIONS_EVENT};
 
 const OPEN_ID: &str = "open";
 const CONNECTIONS_ID: &str = "connections";
+const CONNECTION_STATUS_ID: &str = "connection-status";
 const UPDATE_ID: &str = "update";
 const QUIT_ID: &str = "quit";
 
@@ -50,11 +51,28 @@ pub fn build(app: &AppHandle, initial_label: &str) -> tauri::Result<Tray> {
         true,
         None::<&str>,
     )?;
+    let connection_status = MenuItem::with_id(
+        app,
+        CONNECTION_STATUS_ID,
+        "Connection status…",
+        true,
+        None::<&str>,
+    )?;
     let status = MenuItem::with_id(app, "status", initial_label, false, None::<&str>)?;
     let update = MenuItem::with_id(app, UPDATE_ID, "Restart to update", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, QUIT_ID, "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &connections, &status, &separator, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &open,
+            &connections,
+            &connection_status,
+            &status,
+            &separator,
+            &quit,
+        ],
+    )?;
 
     TrayIconBuilder::with_id("main")
         .icon(tauri::include_image!("./icons/32x32.png"))
@@ -63,7 +81,13 @@ pub fn build(app: &AppHandle, initial_label: &str) -> tauri::Result<Tray> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN_ID => show_window(app, DASHBOARD_WINDOW),
-            CONNECTIONS_ID => show_window(app, COMPANION_WINDOW),
+            CONNECTIONS_ID => {
+                show_window(app, DASHBOARD_WINDOW);
+                if let Err(err) = app.emit(OPEN_LOCAL_CONNECTIONS_EVENT, ()) {
+                    eprintln!("[companion] could not open local connections: {err}");
+                }
+            }
+            CONNECTION_STATUS_ID => show_window(app, COMPANION_WINDOW),
             UPDATE_ID => install_update(app),
             QUIT_ID => app.exit(0),
             _ => {}

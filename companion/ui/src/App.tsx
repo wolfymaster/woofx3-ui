@@ -1,15 +1,14 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Integrations, useIntegrations } from "./Integrations";
 import { type CompanionState, commands, currentState, onStateChange, type RelayView, type WindowState } from "./state";
+import { useIntegrations } from "./use-integrations";
 
-type Tab = "status" | "engine" | "configuration" | "integrations";
+type Tab = "status" | "engine" | "configuration";
 
 /** Engine and Configuration are placeholders so later panels add content, not layout. */
 const TABS: { id: Tab; label: string; enabled: boolean }[] = [
   { id: "status", label: "Status", enabled: true },
   { id: "engine", label: "Engine", enabled: false },
   { id: "configuration", label: "Configuration", enabled: false },
-  { id: "integrations", label: "Integrations", enabled: true },
 ];
 
 function useWindowState(): WindowState {
@@ -258,13 +257,7 @@ function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> 
           </button>
         ))}
       </nav>
-      {tab === "integrations" ? (
-        <section className="panel">
-          <Integrations instanceName={state.instanceName} view={integrations} />
-        </section>
-      ) : (
-        <StatusPanel state={state} relay={integrations.relay} />
-      )}
+      <StatusPanel state={state} relay={integrations.relay} />
     </>
   );
 }
