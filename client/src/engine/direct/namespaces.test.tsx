@@ -16,7 +16,7 @@ import {
 } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
-import type { WorkflowRun } from "@/engine/types";
+import type { MacroId, MacroInput, WorkflowRun } from "@/engine/types";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
 import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
@@ -27,6 +27,7 @@ import { directDashboardGateway } from "./dashboard";
 import { directEventLogGateway } from "./event-log";
 import { toModuleId, toSceneId } from "./ids";
 import { directKeys } from "./keys";
+import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
@@ -1877,5 +1878,205 @@ describe("dashboard", () => {
     await highlights.until((value) => value?.length === 1 && value[0].id === second, "the highlight removed");
     expect(state.uiSettings.dashboardHighlights?.[first]?.deleted).toBe(true);
     highlights.unmount();
+  });
+});
+
+const hype: MacroInput = {
+  label: "Hype",
+  icon: "Zap",
+  color: "#22c55e",
+  type: "send-message",
+  config: { message: "hype!" },
+};
+const raid: MacroInput = {
+  label: "Raid",
+  type: "chat-command",
+  config: { command: "raid", commandText: "{{channel}}" },
+};
+
+/** The labels `read` renders, in pad order. */
+const labels = (macros: { label: string }[] | undefined) => macros?.map((macro) => macro.label);
+
+describe("macros", () => {
+  test("macros are added in order, edited and deleted in the engine's settings", async () => {
+    const { runtime, state } = await connected();
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+    expect(await pad.until((value) => value !== undefined, "the pad")).toEqual([]);
+
+    const add = renderDirect(() => macros.useAddRequest()).current();
+    const hypeId = await add(hype);
+    const raidId = await add(raid);
+    await untilEqual(pad, [
+      { id: hypeId, ...hype },
+      { id: raidId, ...raid },
+    ]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["macros", hypeId, { ...hype, sortOrder: 0 }, 0],
+      ["macros", raidId, { ...raid, sortOrder: 1 }, 0],
+    ]);
+
+    await renderDirect(() => macros.useUpdateRequest()).current()(hypeId, {
+      ...hype,
+      label: "Hype!",
+      color: undefined,
+    });
+    await pad.until((value) => labels(value)?.[0] === "Hype!", "the edit");
+    expect(state.uiSettings.macros?.[hypeId]?.value).toEqual({
+      label: "Hype!",
+      icon: "Zap",
+      type: "send-message",
+      config: { message: "hype!" },
+      sortOrder: 0,
+    });
+
+    await renderDirect(() => macros.useDeleteRequest()).current()(hypeId);
+    await pad.until((value) => value?.length === 1, "the delete");
+    expect(state.uiSettings.macros?.[hypeId]?.deleted).toBe(true);
+    pad.unmount();
+  });
+
+  test("a blank label, a bad color and a missing macro are refused before any write", async () => {
+    const { runtime, state } = await connected();
+    const macros = directMacrosGateway(runtime);
+    const add = renderDirect(() => macros.useAddRequest()).current();
+    const update = renderDirect(() => macros.useUpdateRequest()).current();
+
+    const blank = await add({ ...hype, label: " " }).catch((error: unknown) => error);
+    const color = await add({ ...hype, color: "red" }).catch((error: unknown) => error);
+    const missing = await update("gone" as MacroId, hype).catch((error: unknown) => error);
+    expect((blank as Error).message).toBe("A macro needs a label");
+    expect((color as Error).message).toContain("six-digit hex");
+    expect((missing as Error).message).toBe("Macro not found");
+    expect(state.callsOf("setUISetting")).toEqual([]);
+  });
+
+  test("a reorder writes only the macros that moved", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "a", { ...hype, label: "A", sortOrder: 0 });
+    storeSetting(state, "macros", "b", { ...hype, label: "B", sortOrder: 1 });
+    storeSetting(state, "macros", "c", { ...hype, label: "C", sortOrder: 2 });
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+    expect(labels(await pad.until((value) => value?.length === 3, "the pad"))).toEqual(["A", "B", "C"]);
+
+    await renderDirect(() => macros.useReorderRequest()).current()(["b", "a", "c", "gone"] as MacroId[]);
+    await pad.until((value) => labels(value)?.join() === "B,A,C", "the new order");
+    expect(
+      state.callsOf("setUISetting").map((call) => [call[1], (call[2] as { sortOrder: number }).sortOrder])
+    ).toEqual([
+      ["b", 0],
+      ["a", 1],
+    ]);
+    expect(state.uiSettings.macros?.c?.value).toMatchObject({ sortOrder: 2 });
+    pad.unmount();
+  });
+
+  test("an edit made elsewhere while one is written here is retried on what was written there", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "a", { ...hype, sortOrder: 0 });
+    storeSetting(state, "macros", "b", { ...hype, label: "B", sortOrder: 1 });
+    const macros = directMacrosGateway(runtime);
+    let raced = false;
+    state.beforeUISettingWrite = (_namespace, key) => {
+      if (!raced && key === "a") {
+        raced = true;
+        storeSetting(state, "macros", "a", { ...hype, label: "Renamed elsewhere", sortOrder: 5 });
+      }
+    };
+
+    await renderDirect(() => macros.useReorderRequest()).current()(["b", "a"] as MacroId[]);
+    expect(state.uiSettings.macros?.a?.value).toMatchObject({ label: "Renamed elsewhere", sortOrder: 1 });
+    expect(state.callsOf("setUISetting").filter((call) => call[1] === "a")).toHaveLength(2);
+  });
+
+  test("an unreadable stored macro is left off the pad and logged", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "macros", "broken", { label: 7 });
+    storeSetting(state, "macros", "ok", { ...hype, sortOrder: 0 });
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+
+    expect(labels(await pad.until((value) => value !== undefined, "the pad"))).toEqual(["Hype"]);
+    expect(pad.error()).toBeUndefined();
+    const warned = logger.entries.filter((entry) => entry.level === "warn").map((entry) => entry.fields?.key);
+    expect(warned).toContain("broken");
+    pad.unmount();
+  });
+
+  test("a workflow macro triggers its workflow, unrecorded, with a trigger id to watch", async () => {
+    const { runtime, state } = await connected();
+    state.workflows = [alertWorkflow("wf-1", "Raid train", "alert")];
+    storeSetting(state, "macros", "m", {
+      label: "Go",
+      type: "trigger-workflow",
+      config: { workflowId: "wf-1" },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const result = await run("m" as MacroId, []);
+    expect(result.triggerId).not.toBeNull();
+    expect(state.callsOf("triggerWorkflowByName")).toEqual([
+      ["wf-1", {}, undefined, result.triggerId, "dashboard", undefined],
+    ]);
+  });
+
+  test("an action macro runs its one step with its variables filled in", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", {
+      label: "Scene",
+      type: "run-action",
+      config: { actionStep: { action: "function", ref: "obs:action:setScene", parameters: { scene: "{{scene}}" } } },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    expect(await run("m" as MacroId, [{ name: "scene", value: "Gaming" }])).toEqual({ triggerId: null });
+    expect(state.callsOf("runActions")).toEqual([
+      [
+        {
+          label: "macro:dashboard",
+          actions: [{ action: "function", $ref: "obs:action:setScene", parameters: { scene: "Gaming" } }],
+          event: { type: "macro.run", source: "dashboard", data: {} },
+        },
+      ],
+    ]);
+    const missing = await run("m" as MacroId, []).catch((error: unknown) => error);
+    expect((missing as Error).message).toBe("missing variables: scene");
+  });
+
+  test("a chat-command macro runs as the linked broadcaster, and the engine's refusal is passed on", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", { ...raid, sortOrder: 0 });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const unlinked = await run("m" as MacroId, [{ name: "channel", value: "bob" }]).catch((error: unknown) => error);
+    expect((unlinked as Error).message).toBe("link a Twitch account before running chat-command macros");
+    expect(state.callsOf("executeCommand")).toEqual([]);
+
+    linkTwitch(state, []);
+    await runtime.queryClient.invalidateQueries({ queryKey: directKeys.twitch.link() });
+    await run("m" as MacroId, [{ name: "channel", value: "bob" }]);
+    expect(state.callsOf("executeCommand")).toEqual([["raid", "streamer", "bob"]]);
+
+    state.commandAnswer = { success: false, message: "Command is disabled" };
+    const refused = await run("m" as MacroId, [{ name: "channel", value: "bob" }]).catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("Command is disabled");
+  });
+
+  test("an HTTP-request macro is not run on the engine", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", {
+      label: "Ping",
+      type: "http-request",
+      config: { url: "https://x.test" },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const refused = await run("m" as MacroId, []).catch((error: unknown) => error);
+    expect((refused as Error).message).toContain("run in the browser");
+    expect(state.calls.map((call) => call.method)).not.toContain("runActions");
   });
 });

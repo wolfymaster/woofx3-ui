@@ -1,8 +1,8 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import { resourceKindMatches } from "@shared/resource-kinds";
 import type { ActionStep, WorkflowDefinition } from "@woofx3/api";
 import type { WorkflowRecord } from "@/engine/types";
 import { stepsAimAt } from "@/lib/alert-triggers";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import { presetToActionStep } from "@/lib/workflow-presets-json";
 import { definitionToTree } from "@/lib/workflow-tree";

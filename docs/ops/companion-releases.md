@@ -1,6 +1,6 @@
 # Companion releases
 
-The [companion app](/ui/companion) is released from this repository as a signed Windows installer. Pushing a `companion-v<version>` tag runs `.github/workflows/companion-release.yml`, which builds, signs and publishes it; installed companions find the new version on their own and offer to restart into it.
+The [companion app](/ui/companion) is released from this repository as a signed Windows installer. The woofx3 app, built from the same code with an engine bundled, is a separate product with its own tags and update feed; see [woofx3 releases](/ops/woofx3-releases). Pushing a `companion-v<version>` tag runs `.github/workflows/companion-release.yml`, which builds, signs and publishes it; installed companions find the new version on their own and offer to restart into it.
 
 | What | Where |
 |------|-------|
@@ -69,9 +69,9 @@ CI's **Companion installer** job builds an unsigned NSIS installer on `windows-l
 - It has no updater artifacts, because those need the signing key, which only the release workflow holds. A test installer still checks for updates against `companion-latest` like any release build, so uninstall it before installing a real release.
 - Windows shows the SmartScreen warning on first run; choose **More info → Run anyway**.
 
-### Desktop installer
+### woofx3 installer
 
-CI's **Desktop installer** job builds the same app with an engine bundled, under the same conditions as the companion installer. It downloads the engine release pinned in `companion/bundled-engine.json` (a release tag and the sha256 of its `woofx3-<tag>-windows-amd64.zip`), checks the checksum, unpacks it into `companion/src-tauri/engine/`, and builds with the `bundled-engine` feature and `src-tauri/tauri.bundled-engine.conf.json`, which add the engine to the bundle and make local mode the default. Its artifact is `woofx3-desktop-installer-*`.
+CI's **woofx3 installer** job builds the [woofx3 app](/ops/woofx3-releases) under the same conditions as the companion installer. It downloads the engine release pinned in `companion/bundled-engine.json` (a release tag and the sha256 of its `woofx3-<tag>-windows-amd64.zip`), checks the checksum, unpacks it into `companion/src-tauri/engine/`, and builds with the `bundled-engine` feature and `src-tauri/tauri.woofx3.conf.json`. The feature makes local mode the default; the config adds the engine to the bundle and gives the build the woofx3 app's identity, version and update feed. The job checks that the installer is named after the woofx3 product (`woofx3_<version>_x64-setup.exe`), so a build that kept the companion's identity fails. Its artifact is `woofx3-installer-*`.
 
 The job refuses an engine release that the app could not start: one without `orchestrator.exe`, or whose `services.json` has no run-once `migrate` step. To bundle a newer engine, change the tag and checksum in `companion/bundled-engine.json` (`sha256sum` of the downloaded zip); `bun run fetch-engine` in `companion/` runs the same download and checks locally.
 

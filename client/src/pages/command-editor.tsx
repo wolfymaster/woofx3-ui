@@ -1,3 +1,4 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import { Loader2, MessageSquare } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -39,7 +40,6 @@ import { COMMAND_LIST_PATH } from "@/lib/command-editor-route";
 import { splitCommandInput } from "@/lib/command-input";
 import { commandSteps } from "@/lib/command-steps";
 import { commandActionVariables } from "@/lib/command-variables";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 import type { WorkflowTree } from "@/lib/workflow-tree";
 
 /**

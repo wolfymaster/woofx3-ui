@@ -1,9 +1,9 @@
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import type { ActionStep, CommandSnapshot, CreateCommandInput, GroupSnapshot } from "@woofx3/api";
 import type { TaskDefinition } from "@woofx3/api/workflow-definition";
 import type { ChatCommand, ChatCommandGroup, NewChatCommand } from "@/engine/types";
-import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 
-// The gateway's commands carry their `$` keys escaped (lib/dollar-keys), as
+// The gateway's commands carry their `$` keys escaped (shared/dollar-keys), as
 // every gateway's do, so a screen edits one shape whichever gateway read it.
 
 export function toChatCommand(snapshot: CommandSnapshot): ChatCommand {

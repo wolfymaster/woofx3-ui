@@ -1,7 +1,6 @@
 import type {
   EngineGateway,
   GoLiveGateway,
-  MacrosGateway,
   ModuleOAuthGateway,
   SetupImportsGateway,
   ShoutoutsGateway,
@@ -14,6 +13,7 @@ import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
+import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
@@ -38,10 +38,6 @@ import { directWorkflowsGateway } from "./workflows";
 // Namespaces whose data the Convex gateway keeps in its own tables, and that
 // have no home on a lone engine yet. Every member is named, so a screen that
 // reaches one fails with the member it used rather than an empty answer.
-
-const macros: MacrosGateway = {
-  useRunRequest: unsupportedRequest("macros.useRunRequest"),
-};
 
 const moduleOAuth: ModuleOAuthGateway = {
   useConnectRequest: unsupportedRequest("moduleOAuth.useConnectRequest"),
@@ -92,7 +88,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     scenes: directScenesGateway(runtime),
     workflows: directWorkflowsGateway(runtime),
     requests: directRequestsGateway(runtime),
-    macros,
+    macros: directMacrosGateway(runtime),
     streamOps: directStreamOpsGateway(runtime),
     config: directConfigGateway(runtime),
     session: directSessionGateway(runtime),

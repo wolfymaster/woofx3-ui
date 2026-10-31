@@ -32,14 +32,14 @@ use tokio_util::sync::CancellationToken;
 use woofx3_companion_core::clock::{Clock, SystemClock};
 use woofx3_companion_core::host::{
     orchestrator_spec, run_registration, run_shoutout_pacing, run_sidecar, run_stream_marker,
-    ClientCredentials, CredentialRefusals, EngineGateway, EnginePhase, EngineStatus,
-    GatewayTimeouts, HostError, HttpEngineGateway, LocalEngineLayout, LocalEngineSettings,
-    LocalSession, MarkerRequestOutcome, Registrar, RegistrationOptions, ShoutoutChannel,
-    ShoutoutEnqueued, ShoutoutEntryId, ShoutoutOptions, ShoutoutQueue, ShoutoutQueueView,
-    ShoutoutQueueWatch, SidecarSpec, StreamMarkerOptions, StreamMarkerRequests, StreamStartMarker,
+    ClientCredentials, CredentialRefusals, CredentialStore, EngineGateway, EnginePhase,
+    EngineStatus, GatewayTimeouts, HostError, HttpEngineGateway, LocalEngineLayout,
+    LocalEngineSettings, LocalSession, MarkerRequestOutcome, Registrar, RegistrationOptions,
+    ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId, ShoutoutOptions, ShoutoutQueue,
+    ShoutoutQueueView, ShoutoutQueueWatch, SidecarSpec, StreamMarkerOptions, StreamMarkerRequests,
+    StreamStartMarker,
 };
 
-use crate::credentials::EngineClientStore;
 use crate::lock;
 use woofx3_companion_core::window::{
     LocalEngineSession, SHOUTOUT_QUEUE_EVENT, STREAM_START_MARKER_EVENT,
@@ -81,11 +81,13 @@ pub enum LocalEngine {
 impl LocalEngine {
     /// Starts the engine local mode runs, from the release `settings` name
     /// or the one bundled in `resource_dir`, keeping its state under
-    /// `app_local_data_dir`.
+    /// `app_local_data_dir` and the client credentials it issues in
+    /// `client_store`.
     pub fn start(
         settings: &LocalEngineSettings,
         resource_dir: &Path,
         app_local_data_dir: &Path,
+        client_store: Arc<dyn CredentialStore>,
         events: Arc<dyn WindowEvents>,
     ) -> Result<Self, HostError> {
         let bundled = resource_dir.join(BUNDLED_ENGINE_DIR);
@@ -97,6 +99,7 @@ impl LocalEngine {
             spec,
             layout,
             Arc::new(gateway),
+            client_store,
             options,
             Arc::new(SystemClock),
             events,
@@ -219,6 +222,7 @@ impl EngineSidecar {
         spec: SidecarSpec,
         layout: LocalEngineLayout,
         gateway: Arc<HttpEngineGateway>,
+        client_store: Arc<dyn CredentialStore>,
         options: RegistrationOptions,
         clock: Arc<dyn Clock>,
         events: Arc<dyn WindowEvents>,
@@ -235,6 +239,7 @@ impl EngineSidecar {
             spec,
             layout,
             gateway,
+            client_store,
             options,
             shoutouts,
             markers,
@@ -304,6 +309,7 @@ struct Launcher {
     spec: SidecarSpec,
     layout: LocalEngineLayout,
     gateway: Arc<HttpEngineGateway>,
+    client_store: Arc<dyn CredentialStore>,
     options: RegistrationOptions,
     /// Kept across engine restarts; only the workers stop with the engine.
     shoutouts: Arc<ShoutoutQueue>,
@@ -324,7 +330,7 @@ impl Launcher {
         let gateway = Arc::clone(&self.gateway) as Arc<dyn EngineGateway>;
         let registrar = Registrar::new(
             Arc::clone(&gateway),
-            Arc::new(EngineClientStore),
+            Arc::clone(&self.client_store),
             self.layout.registration_token_file.clone(),
         );
         let registration = tauri::async_runtime::spawn(run_registration(
@@ -485,6 +491,13 @@ mod tests {
         }
     }
 
+    /// Never read or written: an engine that never starts never registers.
+    fn unused_client_store() -> crate::credentials::EngineClientStore {
+        let identity = woofx3_companion_core::AppIdentity::new("tv.woofx3.test", "woofx3 test")
+            .expect("a valid identity");
+        crate::credentials::Credentials::new(&identity).engine_client_store()
+    }
+
     /// A sidecar whose program does not exist, so it only ever restarts.
     fn unstartable() -> LocalEngine {
         let app_data =
@@ -502,6 +515,7 @@ mod tests {
             },
             layout,
             Arc::new(gateway),
+            Arc::new(unused_client_store()),
             options,
             Arc::new(SystemClock),
             Arc::new(NoWindow),

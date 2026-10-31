@@ -19,6 +19,7 @@ export const UI_SETTING_NAMESPACES = {
   dashboardNotes: "dashboardNotes",
   dashboardCounters: "dashboardCounters",
   dashboardHighlights: "dashboardHighlights",
+  macros: "macros",
 } as const;
 
 export type UISettingNamespace = (typeof UI_SETTING_NAMESPACES)[keyof typeof UI_SETTING_NAMESPACES];

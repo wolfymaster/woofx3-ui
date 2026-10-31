@@ -4,6 +4,7 @@ import {
   adBreaksWidget,
   announcementWidget,
   eventsWidget,
+  macroPadWidget,
   moderationWidget,
   notesWidget,
   queueWidget,
@@ -16,10 +17,10 @@ import {
 
 /**
  * The desktop app's local mode: the widgets a lone engine can serve. It
- * leaves out the go-live checklist, stream info, pinned messages, shoutouts,
- * recent streams and the macro pad, whose data only Convex keeps, and has no
- * getting started checklist or starter packs, which belong to an account's
- * setup.
+ * leaves out the go-live checklist, stream info, pinned messages, shoutouts
+ * and recent streams, whose data only Convex keeps, and has no getting
+ * started checklist or starter packs, which belong to an account's setup.
+ * Its macro pad has no remote trigger URLs, which Convex serves.
  */
 export const localDashboardCatalog: DashboardCatalog = {
   widgets: [
@@ -35,6 +36,7 @@ export const localDashboardCatalog: DashboardCatalog = {
     workflowRunsWidget,
     streamStatsWidget,
     notesWidget,
+    macroPadWidget,
   ],
   usePinnedRailItem: noPinnedRailItem,
   Notice: null,
