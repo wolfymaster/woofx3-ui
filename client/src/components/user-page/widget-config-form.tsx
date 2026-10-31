@@ -442,7 +442,9 @@ function FormForm({
       <CopyableValue
         label="Form ID"
         value={formId}
-        hint="To react only to this form, paste this into the Form setting of a workflow's "User page form submitted" trigger."
+        hint={
+          'To react only to this form, paste this into the Form setting of a workflow\'s "User page form submitted" trigger.'
+        }
         testId="form-id"
       />
       <TextField
