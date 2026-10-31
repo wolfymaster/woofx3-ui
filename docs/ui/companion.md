@@ -5,7 +5,7 @@
 
 ## What it is
 
-The woofx3 desktop app (Tauri 2) runs on the streamer's PC and lives in the tray. It has two windows:
+The woofx3 app (Tauri 2), the desktop build of woofx3, runs on the streamer's PC and lives in the tray. It has two windows:
 
 - **The dashboard** (`main`): the same dashboard as the web app, built for the desktop (`bun run build:desktop`). It opens at launch and from the tray's **Open woofx3**.
 - **The companion window** (`companion`): pairing and local connections. It opens from the tray's **Local connections…**, and by itself when pairing needs the streamer (a code to approve, a pairing to confirm, an error).
@@ -18,7 +18,7 @@ It pairs with one instance, shows that it is paired and connected, survives rest
 
 The same code builds two apps, which install side by side without sharing anything:
 
-| | Companion | Desktop app |
+| | Companion | woofx3 |
 |---|---|---|
 | What it is | The tray app that pairs a PC with a cloud instance | The companion with an engine bundled, starting in [local mode](#local-mode) |
 | Identifier | `tv.woofx3.companion` | `tv.woofx3.app` |
@@ -26,11 +26,11 @@ The same code builds two apps, which install side by side without sharing anythi
 | Tauri config | `src-tauri/tauri.conf.json` | the same, with `src-tauri/tauri.woofx3.conf.json` merged over it |
 | Cargo features | none | `bundled-engine` |
 | Version | `version` in `tauri.conf.json`, equal to `Cargo.toml`'s | `version` in `tauri.woofx3.conf.json` |
-| Update feed | `companion-latest` ([Companion releases](/ops/companion-releases)) | `desktop-latest` ([Desktop releases](/ops/desktop-releases)) |
+| Update feed | `companion-latest` ([Companion releases](/ops/companion-releases)) | `woofx3-latest` ([woofx3 releases](/ops/woofx3-releases)) |
 
 The identifier decides where each keeps its state: Tauri derives the app's data, config and log directories from it, and the Rust side files its secrets in the OS credential store under it too (`AppIdentity` in `core/src/identity.rs`, read from the running app's config at startup). So the two never read each other's pairing token, engine client credentials, installation id, host configuration or engine data. The product name titles the startup failure message box and the update banner, and the Tauri config gives each its installer name, window titles and update endpoint. The app reports the version from its Tauri config to Convex, the same version the updater compares.
 
-Tauri merges `tauri.woofx3.conf.json` as a JSON merge patch, which replaces arrays whole, so it repeats the window list with its own titles. `companion/scripts/desktop-config.test.ts` checks the merged config: its own identifier, product name, version and feed, the companion's windows apart from their titles, and the companion's updater key.
+Tauri merges `tauri.woofx3.conf.json` as a JSON merge patch, which replaces arrays whole, so it repeats the window list with its own titles. `companion/scripts/product-configs.test.ts` checks the merged config: its own identifier, product name, version and feed, the companion's windows apart from their titles, and the companion's updater key.
 
 ## Layout
 
@@ -208,9 +208,9 @@ The commands are listed once, in `companion/core/src/window/command_names.rs`: `
 
 ## Updates
 
-The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases) and [Desktop releases](/ops/desktop-releases).
+The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases) and [woofx3 releases](/ops/woofx3-releases).
 
-- It checks `latest.json` on its product's feed (`companion-latest` or `desktop-latest`) 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
+- It checks `latest.json` on its product's feed (`companion-latest` or `woofx3-latest`) 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
 - Once downloaded, `WindowState.update` carries its version. The window shows "{product name} {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
 - A failed check, download or signature is logged and tried again on that backoff. It never becomes the `error` state, which is about pairing.

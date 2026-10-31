@@ -97,9 +97,9 @@ describe("the desktop app's Tauri config", () => {
     expect(String(overlay.version)).toMatch(SEMVER);
   });
 
-  test("updates from its own feed, which desktop-release.yml publishes", () => {
-    expect(feedTag(desktop)).toBe("desktop-latest");
-    expect(workflowLatestTag("desktop-release.yml")).toBe("desktop-latest");
+  test("updates from its own feed, which woofx3-release.yml publishes", () => {
+    expect(feedTag(desktop)).toBe("woofx3-latest");
+    expect(workflowLatestTag("woofx3-release.yml")).toBe("woofx3-latest");
     expect(feedTag(companion)).toBe("companion-latest");
     expect(workflowLatestTag("companion-release.yml")).toBe("companion-latest");
   });

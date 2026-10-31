@@ -30,7 +30,7 @@
   },
   "plugins": {
     "updater": {
-      "endpoints": ["https://github.com/wolfymaster/woofx3-ui/releases/download/desktop-latest/latest.json"]
+      "endpoints": ["https://github.com/wolfymaster/woofx3-ui/releases/download/woofx3-latest/latest.json"]
     }
   }
 }
