@@ -64,6 +64,7 @@ import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
+import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
 import { cn } from "@/lib/utils";
 import {
   UNTRIGGERED_LABEL,
@@ -450,6 +451,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const [tab, setTab] = useState<WorkflowEditorTab>(() => workflowEditorTab(search));
   const [testRunOpen, setTestRunOpen] = useState(false);
   const [currentDefinition, setCurrentDefinition] = useState<WorkflowDefinition | null>(null);
+  const editedRevisionRef = useRef<number | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -506,6 +508,11 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }, 0);
   };
 
+  const trackEdit = (definition: WorkflowDefinition) => {
+    editedRevisionRef.current = workflow?.revision;
+    setCurrentDefinition(definition);
+  };
+
   const saveTitle = async () => {
     if (!instanceId) {
       return;
@@ -517,8 +524,14 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     try {
       const def = unescapeDollarKeys(workflow.definition) as WorkflowDefinition;
-      await updateFromDefinition(engineWorkflowId, escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition);
-      toast({ title: "Workflow name updated" });
+      const outcome = await updateFromDefinition(
+        engineWorkflowId,
+        escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition,
+        workflow.revision
+      );
+      toast(
+        outcome.conflict ? { title: "The workflow changed, so try the name again" } : { title: "Workflow name updated" }
+      );
     } catch (err) {
       toast({
         title: "Failed to update name",
@@ -545,8 +558,12 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     setIsSaving(true);
     try {
-      await updateFromDefinition(engineWorkflowId, escapeDollarKeys(currentDefinition) as WorkflowDefinition);
-      toast({ title: "Workflow saved" });
+      const outcome = await updateFromDefinition(
+        engineWorkflowId,
+        escapeDollarKeys(currentDefinition) as WorkflowDefinition,
+        editedRevisionRef.current
+      );
+      toast(outcome.conflict ? STEPS_CHANGED_TOAST : { title: "Workflow saved" });
     } catch (err) {
       toast({
         title: "Save failed",
@@ -675,7 +692,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
         {instanceId ? (
-          <WorkflowFlowEditor engineWorkflowId={engineWorkflowId} onDefinitionChange={setCurrentDefinition} />
+          <WorkflowFlowEditor engineWorkflowId={engineWorkflowId} onDefinitionChange={trackEdit} />
         ) : (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

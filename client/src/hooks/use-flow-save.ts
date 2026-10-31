@@ -3,6 +3,9 @@ import type { FlowSavePhase } from "@/lib/flow-save";
 import { storedExpressionProblem } from "@/lib/variable-display";
 import type { WorkflowTree } from "@/lib/workflow-tree";
 
+/** The surface's save refused the edit and put what is stored in its place, so there is nothing left to save. */
+export const FLOW_REPLACED = "replaced";
+
 export interface FlowSave {
   changed: boolean;
   phase: FlowSavePhase;
@@ -20,7 +23,7 @@ export interface FlowSave {
  */
 export function useFlowSave(
   tree: WorkflowTree | null,
-  save: (next: WorkflowTree) => Promise<boolean>,
+  save: (next: WorkflowTree) => Promise<boolean | typeof FLOW_REPLACED>,
   notSavedYet: string | null = null
 ): FlowSave {
   const [savedJson, setSavedJson] = useState(() => (tree === null ? null : JSON.stringify(tree)));
@@ -44,12 +47,15 @@ export function useFlowSave(
         return false;
       }
       setPhase("saving");
-      const ok = await save(next);
-      setPhase(ok ? "idle" : "failed");
-      if (ok) {
+      const outcome = await save(next);
+      if (outcome === FLOW_REPLACED) {
+        return false;
+      }
+      setPhase(outcome ? "idle" : "failed");
+      if (outcome) {
         setSavedJson(JSON.stringify(next));
       }
-      return ok;
+      return outcome;
     },
     [save]
   );

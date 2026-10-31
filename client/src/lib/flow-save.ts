@@ -41,3 +41,10 @@ export function flowSaveView({ changed, phase, problem, notSavedYet }: FlowSaveF
   }
   return { tone: "unsaved", text: "Unsaved changes" };
 }
+
+/** Told when a save was refused because the steps had changed since they were read. */
+export const STEPS_CHANGED_TOAST = {
+  title: "These steps changed somewhere else",
+  description: "Showing the latest steps. Your last change wasn't saved, so make it again if you still need it.",
+  variant: "destructive",
+} as const;

@@ -1203,6 +1203,8 @@ export default defineSchema({
     projectionKey: v.optional(v.string()),
     definition: v.any(),
     isEnabled: v.boolean(),
+    // Counts changes to the steps and trigger on the engine; see upsertFromWebhook.
+    revision: v.optional(v.number()),
     nodes: v.optional(v.array(v.any())),
     edges: v.optional(v.array(v.any())),
     projectionUpdatedAt: v.optional(v.number()),
