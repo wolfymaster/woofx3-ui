@@ -1,8 +1,5 @@
-import type { Doc } from "@convex/_generated/dataModel";
+import type { DashboardPanelWidget } from "@shared/dashboard-layout";
 import { widgetSlotId } from "@/lib/dashboard-widgets/types";
-
-export type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
-export type DashboardPanelWidget = DashboardPanel["widgets"][number];
 
 /**
  * How far from the selected panel a carousel slide still renders its widgets.

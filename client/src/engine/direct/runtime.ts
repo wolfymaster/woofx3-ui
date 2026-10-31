@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { EngineCapability } from "@woofx3/api";
 import { EngineDisconnectedError, EngineTimeoutError, GatewayUnsupportedError } from "@/engine/errors";
-import type { Clock, Logger } from "@/lib/engine-session/deps";
+import type { Clock, IdSource, Logger } from "@/lib/engine-session/deps";
 import type { DirectGatewayConfig } from "./config";
 import {
   createDirectConnection,
@@ -18,6 +18,8 @@ export interface DirectRuntimeDeps extends DirectConnectionDeps {
    * has: what a connection test checks before any target exists.
    */
   ping(url: string): Promise<void>;
+  /** Names what the gateway creates in the engine's local UI settings, such as a dashboard panel. */
+  newId: IdSource;
 }
 
 /**
@@ -38,6 +40,7 @@ export interface DirectRuntime {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly config: DirectGatewayConfig;
+  readonly newId: IdSource;
   /** Runs one RPC on the live session; see `EngineSession.call`. */
   call<T>(name: Extract<keyof DirectEngineApi, string>, invoke: (api: DirectEngineApi) => PromiseLike<T>): Promise<T>;
   /** `DirectRuntimeDeps.ping` with the session's connect deadline. */
@@ -103,6 +106,7 @@ export function createDirectRuntime(deps: DirectRuntimeDeps): DirectRuntime {
     clock,
     logger,
     config,
+    newId: deps.newId,
     call: (name, invoke) => connection.session.call(name, invoke),
     ping: (url) => withDeadline(clock, "ping", config.session.connectTimeoutMs, deps.ping(url)),
     supports: (capability) => {

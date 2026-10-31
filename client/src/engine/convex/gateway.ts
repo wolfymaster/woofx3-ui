@@ -5,6 +5,7 @@ import { convexAlertQueueGateway } from "./alert-queue";
 import { convexClipsGateway } from "./clips";
 import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
+import { convexDashboardGateway } from "./dashboard";
 import { convexEventLogGateway } from "./event-log";
 import { convexGoLiveGateway } from "./go-live";
 import { convexMacrosGateway } from "./macros";
@@ -67,4 +68,5 @@ export const convexEngineGateway: EngineGateway = {
   streamInfo: convexStreamInfoGateway,
   goLive: convexGoLiveGateway,
   pageIntros: convexPageIntrosGateway,
+  dashboard: convexDashboardGateway,
 };

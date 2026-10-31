@@ -77,6 +77,9 @@ export type ShoutoutEntryId = GatewayId<"shoutoutEntry">;
 /** A saved stream info preset, as the gateway that keeps presets knows it. */
 export type StreamInfoPresetId = GatewayId<"streamInfoPreset">;
 
+/** A saved stream highlight, as the gateway that keeps highlights knows it. */
+export type StreamHighlightId = GatewayId<"streamHighlight">;
+
 // ==================== Read shapes ====================
 
 /**
@@ -1773,4 +1776,43 @@ export type GoLiveStepOutcome =
 export interface GoLiveCompletion {
   announcement: GoLiveStepOutcome;
   marker: GoLiveStepOutcome;
+}
+
+// ==================== Dashboard ====================
+
+// The layout's types are shared with Convex, which edits layouts with the
+// same operations (shared/dashboard-layout.ts).
+export type { DashboardPanel, DashboardPanelWidget, DashboardRailWidget } from "@shared/dashboard-layout";
+
+/** The dashboard's notes: one scratch pad per instance, shared by everyone on it. */
+export interface DashboardNote {
+  content: string;
+  /** Epoch ms of the last save. */
+  updatedAt: number;
+  /** Who saved last; null when that user is gone, or where there are no users to tell apart. */
+  updatedByName: string | null;
+  /** Whether the viewer saved last, so the widget can leave out "edited by you". */
+  updatedByMe: boolean;
+}
+
+/** An event row kept from the Events tab, as it read when it was saved. */
+export interface StreamHighlight {
+  id: StreamHighlightId;
+  /** The event's type, or a short platform kind such as `follow` on older highlights. */
+  kind: string;
+  userName: string;
+  detail: string | null;
+  amount: number | null;
+  /** Epoch ms the event happened. */
+  occurredAt: number;
+}
+
+export interface NewStreamHighlight {
+  kind: string;
+  /** Trimmed; a blank name is refused. */
+  userName: string;
+  detail?: string;
+  amount?: number;
+  /** Epoch ms. */
+  occurredAt: number;
 }

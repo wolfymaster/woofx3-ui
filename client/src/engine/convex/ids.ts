@@ -7,6 +7,7 @@ import type {
   SceneId,
   SetupImportId,
   ShoutoutEntryId,
+  StreamHighlightId,
   StreamInfoPresetId,
   WebhookEventId,
 } from "@/engine/types";
@@ -98,4 +99,12 @@ export function toStreamInfoPresetId(id: Id<"streamInfoPresets">): StreamInfoPre
 
 export function fromStreamInfoPresetId(id: StreamInfoPresetId): Id<"streamInfoPresets"> {
   return id as string as Id<"streamInfoPresets">;
+}
+
+export function toStreamHighlightId(id: Id<"streamHighlights">): StreamHighlightId {
+  return id as string as StreamHighlightId;
+}
+
+export function fromStreamHighlightId(id: StreamHighlightId): Id<"streamHighlights"> {
+  return id as string as Id<"streamHighlights">;
 }

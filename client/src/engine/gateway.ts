@@ -32,6 +32,10 @@ import type {
   CreatedClip,
   CreatedModuleResourceInstance,
   CurrentPin,
+  DashboardNote,
+  DashboardPanel,
+  DashboardPanelWidget,
+  DashboardRailWidget,
   DeclaredResourceKind,
   EngineAlert,
   EngineCapabilityReport,
@@ -85,6 +89,7 @@ import type {
   NewLibraryAlert,
   NewModuleResourceInstance,
   NewScene,
+  NewStreamHighlight,
   NewStreamInfoPreset,
   NotRunningWorkflow,
   ObsStatus,
@@ -120,6 +125,8 @@ import type {
   StorageConfig,
   StreamCategory,
   StreamEventFrame,
+  StreamHighlight,
+  StreamHighlightId,
   StreamInfo,
   StreamInfoChanges,
   StreamInfoPreset,
@@ -152,6 +159,44 @@ import type {
   WorkflowTrigger,
   WorkflowTriggerResult,
 } from "@/engine/types";
+
+/**
+ * The dashboard's own state: the viewer's panels and rail, the instance's
+ * notes, the counters pinned to the command bar, and saved highlights. Kept
+ * by Convex with an account (layouts per user and instance, the rest per
+ * instance), and by the engine's local UI settings on a lone computer.
+ */
+export interface DashboardGateway {
+  /** The viewer's panels in order; empty until the first is added. */
+  usePanels(): Live<DashboardPanel[]>;
+  /** Resolves with the new panel's id. */
+  useAddPanelRequest(): (layoutId: string, name?: string) => Promise<string>;
+  /** Removing a panel that is not there succeeds. */
+  useRemovePanelRequest(): (panelId: string) => Promise<void>;
+  /** Rejects an empty name and a panel that is not there. */
+  useRenamePanelRequest(): (panelId: string, name: string) => Promise<void>;
+  /** Replaces a panel's widgets in one write. Rejects a panel that is not there. */
+  useSetPanelWidgetsRequest(): (panelId: string, widgets: DashboardPanelWidget[]) => Promise<void>;
+  /** Null until the viewer first edits the rail, so the screen shows its defaults; empty once they removed every widget. */
+  useRailWidgets(): Live<DashboardRailWidget[] | null>;
+  /** Replaces the rail in one write. Rejects more than MAX_RAIL_WIDGETS, or a slot id used twice. */
+  useSetRailWidgetsRequest(): (widgets: DashboardRailWidget[]) => Promise<void>;
+  /** Null before anyone saved one. */
+  useNote(): Live<DashboardNote | null>;
+  /** Replaces the note; the last write wins. */
+  useSaveNoteRequest(): (content: string) => Promise<void>;
+  /** Canonical ids of the counters on the command bar, in bar order. */
+  usePinnedCounters(): Live<readonly string[]>;
+  /** Pins a counter to the end of the bar; pinning one already there does nothing. */
+  usePinCounterRequest(): (canonicalId: string) => Promise<void>;
+  /** Takes a counter off the bar; the counter itself is untouched. */
+  useUnpinCounterRequest(): (canonicalId: string) => Promise<void>;
+  /** The latest highlights, newest first. */
+  useHighlights(): Live<StreamHighlight[]>;
+  useSaveHighlightRequest(): (highlight: NewStreamHighlight) => Promise<StreamHighlightId>;
+  /** Removing one already gone succeeds. */
+  useRemoveHighlightRequest(): (highlightId: StreamHighlightId) => Promise<void>;
+}
 
 /**
  * Everything the UI asks of the instance's engine, one namespace per domain
@@ -209,6 +254,7 @@ export interface EngineGateway {
   readonly streamInfo: StreamInfoGateway;
   readonly goLive: GoLiveGateway;
   readonly pageIntros: PageIntrosGateway;
+  readonly dashboard: DashboardGateway;
 }
 
 /** Engine reachability, version, features and stream state. */

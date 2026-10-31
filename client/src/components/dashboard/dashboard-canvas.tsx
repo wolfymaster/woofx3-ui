@@ -13,9 +13,11 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import type { DashboardPanelWidget } from "@shared/dashboard-layout";
 import { GripVertical, LayoutTemplate, Plus, X } from "lucide-react";
 import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import { HelpTip } from "@/components/common/help-tip";
+import { UnavailableWidget, unavailableWidgetLabel } from "@/components/dashboard/unavailable-widget";
 import { Card } from "@/components/ui/card";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
@@ -25,8 +27,7 @@ import {
   getDashboardLayout,
   rowWeight,
 } from "@/lib/dashboard-layouts";
-import type { DashboardPanelWidget } from "@/lib/dashboard-panels";
-import { getDashboardWidget } from "@/lib/dashboard-widgets/registry";
+import { findDashboardWidget, useDashboardCatalog } from "@/lib/dashboard-widgets/catalog";
 import { type DashboardWidgetDefinition, widgetSlotId } from "@/lib/dashboard-widgets/types";
 import { cn } from "@/lib/utils";
 
@@ -229,7 +230,8 @@ const WidgetSlot = memo(function WidgetSlot({
   onRemoveWidget,
   onWidgetConfigChange,
 }: WidgetSlotProps) {
-  const entry = getDashboardWidget(widget.type);
+  const catalog = useDashboardCatalog();
+  const entry = findDashboardWidget(catalog, widget.type);
   const Component = entry?.component;
   const slotId = widgetSlotId(widget);
   const widgetType = widget.type;
@@ -254,15 +256,13 @@ const WidgetSlot = memo(function WidgetSlot({
       {Component ? (
         <Component config={widget.config} onConfigChange={onConfigChange} />
       ) : (
-        <div className="h-full flex items-center justify-center p-3 text-center text-sm text-muted-foreground">
-          Unknown widget type: {widget.type}
-        </div>
+        <UnavailableWidget type={widget.type} />
       )}
       {isEditing && (
         <EditCover
           slotId={slotId}
           zoneId={zoneId}
-          label={entry?.label ?? widget.type}
+          label={entry?.label ?? unavailableWidgetLabel(widget.type)}
           icon={entry?.icon}
           onRemove={onRemove}
         />
@@ -423,6 +423,7 @@ export const DashboardCanvas = memo(function DashboardCanvas({
   onResizeWidgets,
 }: DashboardCanvasProps) {
   const layout = getDashboardLayout(layoutId);
+  const catalog = useDashboardCatalog();
   const sensors = useWidgetDragSensors();
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
@@ -504,7 +505,7 @@ export const DashboardCanvas = memo(function DashboardCanvas({
   }
 
   const draggingEntry = draggingSlotId
-    ? getDashboardWidget(widgets.find((widget) => widgetSlotId(widget) === draggingSlotId)?.type ?? "")
+    ? findDashboardWidget(catalog, widgets.find((widget) => widgetSlotId(widget) === draggingSlotId)?.type ?? "")
     : undefined;
 
   return (
