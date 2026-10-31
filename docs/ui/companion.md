@@ -14,6 +14,24 @@ The companion part holds outbound connections from that PC to woofx3, so it can 
 
 It pairs with one instance, shows that it is paired and connected, survives restarts, and [updates itself](#updates). Once paired and confirmed, it serves the [local endpoints](#integrations) of modules installed on its instance, such as OBS's WebSocket server, to a cloud engine through the relay. It does not carry a local engine's traffic yet.
 
+## Two products
+
+The same code builds two apps, which install side by side without sharing anything:
+
+| | Companion | Desktop app |
+|---|---|---|
+| What it is | The tray app that pairs a PC with a cloud instance | The companion with an engine bundled, starting in [local mode](#local-mode) |
+| Identifier | `tv.woofx3.companion` | `tv.woofx3.app` |
+| Product name | woofx3 companion | woofx3 |
+| Tauri config | `src-tauri/tauri.conf.json` | the same, with `src-tauri/tauri.desktop.conf.json` merged over it |
+| Cargo features | none | `bundled-engine` |
+| Version | `version` in `tauri.conf.json`, equal to `Cargo.toml`'s | `version` in `tauri.desktop.conf.json` |
+| Update feed | `companion-latest` ([Companion releases](/ops/companion-releases)) | `desktop-latest` ([Desktop releases](/ops/desktop-releases)) |
+
+The identifier decides where each keeps its state: Tauri derives the app's data, config and log directories from it, and the Rust side files its secrets in the OS credential store under it too (`AppIdentity` in `core/src/identity.rs`, read from the running app's config at startup). So the two never read each other's pairing token, engine client credentials, installation id, host configuration or engine data. The product name titles the startup failure message box and the update banner, and the Tauri config gives each its installer name, window titles and update endpoint. The app reports the version from its Tauri config to Convex, the same version the updater compares.
+
+Tauri merges `tauri.desktop.conf.json` as a JSON merge patch, which replaces arrays whole, so it repeats the window list with its own titles. `companion/scripts/desktop-config.test.ts` checks the merged config: its own identifier, product name, version and feed, the companion's windows apart from their titles, and the companion's updater key.
+
 ## Layout
 
 ```
@@ -128,7 +146,7 @@ How the relay ends a connection decides what the companion does next:
 
 ## Local mode
 
-In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The desktop installer bundles an engine and starts in local mode; the companion installer starts as the tray app. The window has no switch between them; a file in the app's config directory overrides the installer's default (`%APPDATA%\tv.woofx3.companion\desktop-host.json` on Windows, `~/.config/tv.woofx3.companion/desktop-host.json` on Linux):
+In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The desktop installer bundles an engine and starts in local mode; the companion installer starts as the tray app. The window has no switch between them; a file in the app's config directory overrides the installer's default (`%APPDATA%\<identifier>\desktop-host.json` on Windows, `~/.config/<identifier>/desktop-host.json` on Linux, with the identifier of the [product](#two-products) installed: `tv.woofx3.app` or `tv.woofx3.companion`):
 
 ```json
 { "mode": "local", "engineDir": "C:\\woofx3\\engine", "apiPort": 5050 }
@@ -137,13 +155,13 @@ In local mode the companion is the desktop host for a woofx3 engine that runs on
 - Without the file the app runs in its installer's mode. With `{ "mode": "companion" }` it is the tray app described above and runs no engine.
 - `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Only the desktop installer bundles one, so local mode from the companion installer needs `engineDir`.
 - `apiPort` is the port the engine's api listens on, 5050 (an engine release's own default) unless set.
-- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup, so a typo never quietly turns local mode off. The reason appears in a message box and is appended to `startup-error.log` in the app's log directory (`%LOCALAPPDATA%\tv.woofx3.companion\logs` on Windows).
+- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup, so a typo never quietly turns local mode off. The reason appears in a message box and is appended to `startup-error.log` in the app's log directory (`%LOCALAPPDATA%\<identifier>\logs` on Windows).
 
 ### The engine sidecar
 
 In local mode the companion runs the engine's orchestrator as its one sidecar process (`engine_host.rs`, supervised by `core/src/host/sidecar.rs`). The orchestrator runs inside the engine release, from that directory, because it finds `services.json` and every service binary next to itself; that is why the companion does not use a Tauri `externalBin`, which would place a lone orchestrator beside the companion's own executable.
 
-- The engine keeps its state (databases, modules, uploads, logs) in `engine/` under the app's local data directory (`%LOCALAPPDATA%\tv.woofx3.companion` on Windows), passed as `WOOFX3_DATA_DIR`, never in the release, which may be read-only and is replaced by updates.
+- The engine keeps its state (databases, modules, uploads, logs) in `engine/` under the app's local data directory (`%LOCALAPPDATA%\<identifier>` on Windows), passed as `WOOFX3_DATA_DIR`, never in the release, which may be read-only and is replaced by updates.
 - It is started with `WOOFX3_SUPERVISOR_STATUS=stdout-jsonl` and `--exit-on-stdin-eof`. Its stdout carries only status lines, parsed into typed states (`core/src/host/status.rs`); unknown event types and statuses are ignored, as the engine's format asks.
 - The companion holds the orchestrator's stdin. Closing it is the stop request: the orchestrator stops its services in dependency order and exits. If the companion dies, the pipe closes with it and the engine stops just the same.
 - Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Installing an update stops the engine first, since Windows will not replace a running executable and the new companion needs the engine's ports; if the install fails, the engine starts again.
@@ -158,7 +176,7 @@ The engine is configured as a local engine (`core/src/host/engine.rs`), followin
 | Variable | Value |
 |---|---|
 | `WOOFX3_HOSTING` | `local`, so the engine advertises `engine.localMode` |
-| `WOOFX3_DATA_DIR` | `engine/` under the app's local data directory (`%LOCALAPPDATA%\tv.woofx3.companion` on Windows) |
+| `WOOFX3_DATA_DIR` | `engine/` under the app's local data directory (`%LOCALAPPDATA%\<identifier>` on Windows) |
 | `WOOFX3_REGISTRATION_TOKEN_FILE` | `engine-secrets/registration-token` under the same directory. The engine writes a token there on its first start, readable only by the user |
 | `WOOFX3_API_PORT` | `apiPort` |
 | `WOOFX3_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` |
@@ -186,11 +204,11 @@ The commands are listed once, in `companion/core/src/window/command_names.rs`: `
 
 ## Updates
 
-The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
+The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases) and [Desktop releases](/ops/desktop-releases).
 
-- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
+- It checks `latest.json` on its product's feed (`companion-latest` or `desktop-latest`) 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
-- Once downloaded, `WindowState.update` carries its version. The window shows "woofx3 companion {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
+- Once downloaded, `WindowState.update` carries its version. The window shows "{product name} {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
 - A failed check, download or signature is logged and tried again on that backoff. It never becomes the `error` state, which is about pairing.
 - The installer is per user, so installs and updates need no administrator prompt.
 
