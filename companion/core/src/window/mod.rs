@@ -168,10 +168,13 @@ pub struct WindowState {
 }
 
 /// A newer release, downloaded and verified, that installs on Restart to
-/// update.
+/// update. `product_name` is the running app's, which the window names the
+/// update with.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyUpdate {
+    pub product_name: String,
     pub version: String,
 }
 
@@ -524,6 +527,7 @@ mod tests {
     #[test]
     fn names_the_version_on_the_tray_item() {
         let update = ReadyUpdate {
+            product_name: "woofx3".into(),
             version: "1.2.3".into(),
         };
         assert_eq!(update.tray_label(), "Restart to update to 1.2.3");

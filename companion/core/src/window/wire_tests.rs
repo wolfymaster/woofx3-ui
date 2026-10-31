@@ -79,14 +79,15 @@ fn test_window_wire_window_state_flattens_the_pairing_state() {
                 cloud_connected: false,
             },
             update: Some(ReadyUpdate {
-                version: "1.2.3".into()
+                product_name: "woofx3 companion".into(),
+                version: "1.2.3".into(),
             }),
         }),
         json!({
             "kind": "paired",
             "instanceName": "x",
             "cloudConnected": false,
-            "update": { "version": "1.2.3" },
+            "update": { "productName": "woofx3 companion", "version": "1.2.3" },
         })
     );
     assert_eq!(

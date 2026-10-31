@@ -281,8 +281,8 @@ jobs:
 
   # The companion's relay client, bridge and discovery have no Tauri
   # dependency, so they build and test on Linux without GTK or WebKit.
-  desktop-installer:
-    name: Desktop installer
+  woofx3-installer:
+    name: woofx3 installer
     needs: companion-changes
     if: needs.companion-changes.outputs.changed == 'true'
     runs-on: windows-latest
@@ -337,22 +337,29 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: companion/src-tauri -> target
-          key: desktop-installer
+          key: woofx3-installer
 
+      # tauri.woofx3.conf.json gives the build the desktop app's identity:
+      # its own identifier, product name, version and update feed.
       - name: Build installer
         working-directory: companion
         run: >-
           bunx tauri build --bundles nsis --features bundled-engine
-          --config src-tauri/tauri.bundled-engine.conf.json
+          --config src-tauri/tauri.woofx3.conf.json
           --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
       # Tauri copies bundle resources next to the binary before packaging them.
       - name: Check the engine was bundled
         run: test -f companion/src-tauri/target/release/engine/orchestrator.exe
 
+      # NSIS names the installer after the product, so this fails if the
+      # build kept the companion's identity.
+      - name: Check the installer is the desktop app's
+        run: compgen -G "companion/src-tauri/target/release/bundle/nsis/woofx3_*-setup.exe"
+
       - uses: actions/upload-artifact@v7
         with:
-          name: woofx3-desktop-installer-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
+          name: woofx3-installer-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
           path: companion/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
           retention-days: 14

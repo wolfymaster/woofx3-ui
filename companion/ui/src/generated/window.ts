@@ -9,9 +9,10 @@ export type CompanionState = { "kind": "starting" } | { "kind": "offline" } | { 
 
 /**
  * A newer release, downloaded and verified, that installs on Restart to
- * update.
+ * update. `product_name` is the running app's, which the window names the
+ * update with.
  */
-export type ReadyUpdate = { version: string, };
+export type ReadyUpdate = { productName: string, version: string, };
 
 /**
  * What the window renders: where pairing stands, plus the update waiting to
