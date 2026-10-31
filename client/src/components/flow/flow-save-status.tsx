@@ -39,16 +39,29 @@ function SaveText({ view, testId }: { view: FlowSaveView; testId: string }) {
   );
 }
 
-/** The flow's state as a whole, held in sight as the steps scroll. */
-export function FlowSaveBar({ view, onRetry }: { view: FlowSaveView; onRetry: () => void }) {
+/**
+ * The flow's state as a whole, floating in sight as the steps scroll. An open step's footer
+ * says the same, so the chip steps aside for it but keeps its place: the steps don't jump.
+ */
+export function FlowSaveBar({ view, hidden, onRetry }: { view: FlowSaveView; hidden: boolean; onRetry: () => void }) {
   return (
     <div
-      className="sticky top-0 z-10 -mx-1 mb-1 flex min-h-9 items-center justify-between gap-3 bg-background/95 px-1 py-1"
+      className={cn(
+        "sticky top-1 z-10 mb-1 flex min-h-8 w-fit max-w-full items-center gap-3 self-end rounded-full border bg-card px-3 py-1 shadow-sm",
+        hidden && "invisible"
+      )}
       data-testid="flow-save-bar"
     >
       <SaveText view={view} testId="flow-save-status" />
       {view.tone === "failed" && (
-        <Button type="button" variant="outline" size="sm" onClick={onRetry} data-testid="button-flow-save-retry">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7"
+          onClick={onRetry}
+          data-testid="button-flow-save-retry"
+        >
           Try again
         </Button>
       )}

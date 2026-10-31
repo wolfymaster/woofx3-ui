@@ -361,8 +361,6 @@ export function FlowEditor({
     setExpandedId(null);
   }, [onChange]);
 
-  const openPart =
-    expandedId === null ? null : expandedId === triggerId ? "the trigger" : `step ${numbers.get(expandedId)}`;
   const openChanged =
     expandedId !== null &&
     (save === undefined || save.changed) &&
@@ -373,7 +371,6 @@ export function FlowEditor({
         phase: save.phase,
         problem: save.problem,
         notSavedYet: save.notSavedYet,
-        openPart,
       })
     : null;
 
@@ -467,7 +464,13 @@ export function FlowEditor({
   return (
     <FlowContext.Provider value={state}>
       <div ref={rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
-        {save && saveView && <FlowSaveBar view={saveView} onRetry={() => void commitChecked(tree)} />}
+        {save && saveView && (
+          <FlowSaveBar
+            view={saveView}
+            hidden={expandedId !== null && expandedId !== triggerId}
+            onRetry={() => void commitChecked(tree)}
+          />
+        )}
         {when ?? (
           <TriggerWhenCard
             tree={tree}

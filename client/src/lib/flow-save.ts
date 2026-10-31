@@ -11,8 +11,6 @@ export interface FlowSaveFacts {
   problem: string | null;
   /** Why nothing can be saved yet, for a flow that doesn't exist until it has a step. */
   notSavedYet: string | null;
-  /** Where the changes are, such as "step 2", while that part of the flow is open. */
-  openPart: string | null;
 }
 
 export interface FlowSaveView {
@@ -25,7 +23,7 @@ export interface FlowSaveView {
  * retrying can't succeed until it is fixed; a save in flight outranks both, since what it
  * comes to is what happens next.
  */
-export function flowSaveView({ changed, phase, problem, notSavedYet, openPart }: FlowSaveFacts): FlowSaveView {
+export function flowSaveView({ changed, phase, problem, notSavedYet }: FlowSaveFacts): FlowSaveView {
   if (phase === "saving") {
     return { tone: "saving", text: "Saving…" };
   }
@@ -41,5 +39,5 @@ export function flowSaveView({ changed, phase, problem, notSavedYet, openPart }:
   if (phase === "failed") {
     return { tone: "failed", text: "Couldn't save. Your changes are still here." };
   }
-  return { tone: "unsaved", text: openPart === null ? "Unsaved changes" : `Unsaved changes in ${openPart}` };
+  return { tone: "unsaved", text: "Unsaved changes" };
 }

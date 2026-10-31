@@ -161,8 +161,8 @@ describe("an expression left as text", () => {
     expect(isExpressionText(5)).toBe(false);
   });
 
-  test("is a problem in a number setting", () => {
-    expect(settingProblem(numberField, "{round(amount)}")?.kind).toBe("invalid");
+  test("is left to the field's own note in a number setting", () => {
+    expect(settingProblem(numberField, "{round(amount)}")).toBeNull();
     expect(settingProblem(numberField, "${round(trigger.data.amount)}")).toBeNull();
   });
 });

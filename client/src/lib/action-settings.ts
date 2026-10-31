@@ -64,9 +64,6 @@ export function settingProblem(field: ConfigField, value: unknown): SettingProbl
     return field.required && !ALWAYS_SET.has(field.type) ? { kind: "missing", message: MISSING_SETTING_MESSAGE } : null;
   }
   if (field.type === "number") {
-    if (isExpressionText(value)) {
-      return { kind: "invalid", message: "This expression isn't working yet, so the step can't use it." };
-    }
     return typeof value === "number" ? boundsProblem(field, [value]) : null;
   }
   if (field.type === "range" && typeof value === "object") {

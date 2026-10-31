@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { type FlowSaveFacts, flowSaveView } from "@/lib/flow-save";
 
-const facts: FlowSaveFacts = { changed: false, phase: "idle", problem: null, notSavedYet: null, openPart: null };
+const facts: FlowSaveFacts = { changed: false, phase: "idle", problem: null, notSavedYet: null };
 
 describe("flowSaveView", () => {
   test.each<[string, Partial<FlowSaveFacts>, string, string]>([
     ["nothing changed", {}, "saved", "All changes saved"],
-    ["a change with nothing open", { changed: true }, "unsaved", "Unsaved changes"],
-    ["a change in an open step", { changed: true, openPart: "step 2" }, "unsaved", "Unsaved changes in step 2"],
+    ["a change", { changed: true }, "unsaved", "Unsaved changes"],
     ["a save in flight", { changed: true, phase: "saving" }, "saving", "Saving…"],
     ["a failed save", { changed: true, phase: "failed" }, "failed", "Couldn't save. Your changes are still here."],
     ["a failed save since undone", { phase: "failed" }, "saved", "All changes saved"],
