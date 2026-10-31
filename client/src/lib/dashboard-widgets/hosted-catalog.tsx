@@ -1,11 +1,10 @@
-import { Clapperboard, History, ListChecks, Pin, Rocket, Volume2 } from "lucide-react";
+import { Clapperboard, History, ListChecks, Pin, Rocket } from "lucide-react";
 import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
 import { HostedMacroPadWidget } from "@/components/dashboard/widgets/hosted-macro-pad";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
-import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { useInstance } from "@/hooks/use-instance";
 import type { DashboardCatalog, RailPinnedItem } from "./catalog";
@@ -18,6 +17,7 @@ import {
   moderationWidget,
   notesWidget,
   queueWidget,
+  shoutoutWidget,
   streamPreviewWidget,
   streamStatsWidget,
   streamStatusWidget,
@@ -27,9 +27,9 @@ import {
 import type { DashboardWidgetDefinition } from "./types";
 
 // The hosted app's dashboard: every widget. Those below reach data only
-// Convex keeps (recaps, the go-live checklist, pin history, the shoutout
-// queue, stream info presets, macros' remote trigger URLs), so only the
-// hosted app may load this module.
+// Convex keeps (recaps, the go-live checklist, pin history, stream info
+// presets, macros' remote trigger URLs), so only the hosted app may load this
+// module.
 
 const goLiveWidget: DashboardWidgetDefinition = {
   type: "go-live",
@@ -56,15 +56,6 @@ const pinnedWidget: DashboardWidgetDefinition = {
   icon: Pin,
   category: "stream",
   component: PinnedWidget,
-};
-
-const shoutoutWidget: DashboardWidgetDefinition = {
-  type: "shoutout",
-  label: "Shoutout",
-  description: "Queue shoutouts for people in chat — sent one at a time, two minutes apart.",
-  icon: Volume2,
-  category: "stream",
-  component: ShoutoutWidget,
 };
 
 const recentStreamsWidget: DashboardWidgetDefinition = {

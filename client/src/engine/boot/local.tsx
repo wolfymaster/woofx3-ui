@@ -1,10 +1,18 @@
 import { createEngineBrowserSession, createEngineGatewaySession } from "@woofx3/api/client";
 import { type ReactNode, useEffect, useState } from "react";
+import {
+  enqueueShoutout,
+  onShoutoutQueueChange,
+  removeShoutout,
+  reorderShoutouts,
+  shoutoutQueue,
+} from "@/desktop/host";
 import { EngineGatewayProvider } from "@/engine/context";
 import { DEFAULT_DIRECT_GATEWAY_CONFIG } from "@/engine/direct/config";
 import type { DirectEngineApi } from "@/engine/direct/connection";
 import { createDirectEngineGateway } from "@/engine/direct/gateway";
 import { createDirectRuntime, type DirectRuntime } from "@/engine/direct/runtime";
+import type { ShoutoutQueueHost } from "@/engine/direct/shoutouts";
 import type { EngineGateway } from "@/engine/gateway";
 import { EngineScopeProvider } from "@/engine/scope";
 import type { EngineScope, InstanceId } from "@/engine/types";
@@ -22,6 +30,14 @@ const LOCAL_SCOPE: EngineScope = {
   instanceId: LOCAL_INSTANCE_ID,
   optimisticInstanceId: LOCAL_INSTANCE_ID,
   isInstanceLoading: false,
+};
+
+const SHOUTOUT_QUEUE_HOST: ShoutoutQueueHost = {
+  queue: shoutoutQueue,
+  enqueue: enqueueShoutout,
+  remove: removeShoutout,
+  reorder: reorderShoutouts,
+  onChange: onShoutoutQueueChange,
 };
 
 interface LocalEngine {
@@ -43,7 +59,7 @@ function createLocalEngine(targets: EngineTargetSource): LocalEngine {
     logger: consoleLogger("engine"),
     config: DEFAULT_DIRECT_GATEWAY_CONFIG,
   });
-  return { runtime, gateway: createDirectEngineGateway(runtime) };
+  return { runtime, gateway: createDirectEngineGateway(runtime, SHOUTOUT_QUEUE_HOST) };
 }
 
 /**

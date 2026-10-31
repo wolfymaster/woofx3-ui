@@ -3,7 +3,6 @@ import type {
   GoLiveGateway,
   ModuleOAuthGateway,
   SetupImportsGateway,
-  ShoutoutsGateway,
   StarterPacksGateway,
 } from "@/engine/gateway";
 import { directAdBreaksGateway } from "./ad-breaks";
@@ -27,6 +26,7 @@ import { directResourcesGateway } from "./resources";
 import type { DirectRuntime } from "./runtime";
 import { directScenesGateway } from "./scenes";
 import { directSessionGateway } from "./session";
+import { directShoutoutsGateway, type ShoutoutQueueHost } from "./shoutouts";
 import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
@@ -57,14 +57,6 @@ const starterPacks: StarterPacksGateway = {
   useInstallRequest: unsupportedRequest("starterPacks.useInstallRequest"),
 };
 
-const shoutouts: ShoutoutsGateway = {
-  useQueue: unsupportedRead("shoutouts.useQueue"),
-  useLookupRequest: unsupportedRequest("shoutouts.useLookupRequest"),
-  useEnqueueRequest: unsupportedRequest("shoutouts.useEnqueueRequest"),
-  useRemoveRequest: unsupportedRequest("shoutouts.useRemoveRequest"),
-  useReorderRequest: unsupportedRequest("shoutouts.useReorderRequest"),
-};
-
 const goLive: GoLiveGateway = {
   useChecklist: unsupportedRead("goLive.useChecklist"),
   useOverlays: unsupportedRead("goLive.useOverlays"),
@@ -78,8 +70,9 @@ const goLive: GoLiveGateway = {
  * The gateway that talks to one engine directly, with no Convex in between.
  * Built once at boot around `runtime`, which must be started for its reads to
  * load; the namespaces share its connection and its one query cache.
+ * `shoutoutQueue` is the desktop host's queue, which lives outside the engine.
  */
-export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway {
+export function createDirectEngineGateway(runtime: DirectRuntime, shoutoutQueue: ShoutoutQueueHost): EngineGateway {
   return {
     status: directStatusGateway(runtime),
     resources: directResourcesGateway(runtime),
@@ -105,7 +98,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     adBreaks: directAdBreaksGateway(runtime),
     moderation: directModerationGateway(runtime),
     pins: directPinsGateway(runtime),
-    shoutouts,
+    shoutouts: directShoutoutsGateway(runtime, shoutoutQueue),
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
