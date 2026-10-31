@@ -1,13 +1,11 @@
-import { api } from "@convex/_generated/api";
-import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
-import { isBundleListing, isModuleListing } from "@convex/lib/marketplaceCatalog";
 import {
   installedListing,
   installedVersionsByListing,
   laterEditionInstalled,
   moduleInstalled,
 } from "@convex/lib/marketplaceInstallIdentity";
-import { useQuery } from "convex/react";
+import type { CatalogListingDetail } from "@shared/marketplace-catalog";
+import { isBundleListing, isModuleListing } from "@shared/marketplace-catalog";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
@@ -26,14 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEngineScope } from "@/engine/context";
-import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
-import { useInstance } from "@/hooks/use-instance";
+import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
-import { useModuleOAuthReturn } from "@/hooks/use-module-oauth-return";
 import { actionErrorMessage } from "@/lib/action-error";
 import { listingInstallState } from "@/lib/listing-install-state";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
+import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from "@/lib/marketplace-route";
 
 // One listing's page, for any of the five types.
@@ -44,17 +41,17 @@ import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from 
 // the same thing for all of them.
 
 export default function MarketplaceListing() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const [, navigate] = useLocation();
   const params = useParams<{ listingId: string }>();
   const listingId = params.listingId ?? null;
   const searchString = useSearch();
 
-  const { listing, notFound, loading, error, refetch } = useMarketplaceListing(instance?._id ?? null, listingId);
-  const quote = useMarketplaceQuote(instance?._id ?? null, listingId);
+  const { listing, notFound, loading, error, refetch } = useMarketplaceListing(instanceId, listingId);
+  const quote = useMarketplaceQuote(instanceId, listingId);
   // A connect button on the settings tab returns here, so the connect
   // finishes on this page and the streamer lands back on that tab.
-  const [oauthResult, dismissOauthResult] = useModuleOAuthReturn("?tab=settings");
+  const [oauthResult, dismissOauthResult] = useMarketplaceMode().useOAuthReturn("?tab=settings");
 
   // Stripe sends the buyer back here. The webhook that grants the entitlement
   // is a separate round trip from Stripe to the marketplace, so it may not
@@ -143,34 +140,34 @@ function ListingBody({
   quote: MarketplaceQuote;
   onRefetch: () => void;
 }) {
-  const { instance } = useInstance();
   const { instanceId: engineInstanceId } = useEngineScope();
+  const { purchases } = useMarketplaceMode();
   const [, navigate] = useLocation();
   const meta = listingTypeMeta(listing.type);
 
-  const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+  const installedModules = useInstalledModules();
   // Every edition installs under one manifest id, so which listing is
   // installed comes from the module's provenance, not its key: edition 1
   // installed makes edition 2's page an upgrade, not an update.
   const installedVersion = useMemo(
-    () => installedVersionsByListing(repoModules ?? []).get(listing.id),
-    [repoModules, listing.id]
+    () => installedVersionsByListing(installedModules ?? []).get(listing.id),
+    [installedModules, listing.id]
   );
   const installedRow = useMemo(
-    () => (repoModules ?? []).find((row) => installedListing(row)?.listingId === listing.id),
-    [repoModules, listing.id]
+    () => (installedModules ?? []).find((row) => installedListing(row)?.listingId === listing.id),
+    [installedModules, listing.id]
   );
   const newerEditionInstalled = useMemo(
-    () => laterEditionInstalled(repoModules ?? [], listing),
-    [repoModules, listing]
+    () => laterEditionInstalled(installedModules ?? [], listing),
+    [installedModules, listing]
   );
 
   const baseModuleInstalled = useMemo(() => {
     if (!listing.baseModuleId) {
       return true;
     }
-    return moduleInstalled(repoModules ?? [], listing.baseModuleId);
-  }, [repoModules, listing.baseModuleId]);
+    return moduleInstalled(installedModules ?? [], listing.baseModuleId);
+  }, [installedModules, listing.baseModuleId]);
 
   // The README, settings, declarations and permissions come from the same
   // action the installed-module page uses, so the two surfaces show the same
@@ -219,6 +216,7 @@ function ListingBody({
 
   const state = listingInstallState({
     listing,
+    purchases,
     quote: quote.quote,
     quoteLoading: quote.loading,
     quoteError: quote.error,
@@ -313,7 +311,6 @@ function ListingBody({
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-56">
           <p className="text-right text-lg font-semibold">{pricingLabel(listing.pricing)}</p>
           <ListingInstallButton
-            instanceId={instance?._id}
             listing={listing}
             state={state}
             isInstalling={install.isInstalling}
@@ -327,7 +324,7 @@ function ListingBody({
             onQuoteStale={() => void quote.refetch()}
           />
           <PreviewButton listing={listing} className="w-full" />
-          {installedRow && (
+          {installedRow && installedRow.provenance !== "builtIn" && (
             <Button variant="outline" className="w-full gap-2 text-destructive" onClick={() => setRemoving(true)}>
               <Trash2 className="h-4 w-4" />
               Remove
@@ -375,11 +372,7 @@ function ListingBody({
       )}
 
       {isModuleListing(listing.type) ? (
-        <ListingModuleTabs
-          instanceId={instance?._id}
-          load={detailLoad}
-          onRetry={() => setDetailAttempt((attempt) => attempt + 1)}
-        >
+        <ListingModuleTabs load={detailLoad} onRetry={() => setDetailAttempt((attempt) => attempt + 1)}>
           <CreditsCard credits={listing.credits} listingName={listing.name} />
           {listing.type === "theme" && listing.module && <ThemeSection listing={listing} />}
           {listing.type === "module" && listing.module && (
@@ -418,16 +411,7 @@ function ListingBody({
         <UninstallModuleDialog
           open={removing && installedRow !== undefined}
           onOpenChange={setRemoving}
-          module={
-            installedRow
-              ? {
-                  _id: installedRow._id,
-                  name: installedRow.name,
-                  version: installedRow.version,
-                  moduleKey: installedRow.moduleKey,
-                }
-              : null
-          }
+          module={installedRow ?? null}
           onSuccess={() => {
             setRemoving(false);
             onRefetch();

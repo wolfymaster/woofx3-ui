@@ -1,12 +1,13 @@
+import {
+  MACRO_NEEDS_TWITCH_LINK,
+  type MacroRunPlan,
+  macroCommandRefusal,
+  macroRunActionsInput,
+} from "@shared/macro-run";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import {
-  engineRefusalReason,
-  isEngineTransportFailure,
-  type MacroRunPlan,
-  macroActionToEngineStep,
-} from "./macroTrigger";
+import { engineRefusalReason, isEngineTransportFailure } from "./macroTrigger";
 
 export interface MacroEngineContext {
   url: string;
@@ -49,18 +50,12 @@ export async function executeMacroPlan(
   }
 
   if (plan.kind === "run-action") {
-    // No triggerId comes back: the engine records no run and reports no
-    // lifecycle for actions outside a workflow, so there is no outcome to watch.
-    await rpc.runActions({
-      label: `macro:${triggeredBy}`,
-      actions: [macroActionToEngineStep(plan.step)],
-      event: { type: "macro.run", source: triggeredBy, data: {} },
-    });
+    await rpc.runActions(macroRunActionsInput(plan.step, triggeredBy));
     return {};
   }
 
   if (!engine.broadcasterLogin) {
-    throw new MacroRunRefused("link a Twitch account before running chat-command macros");
+    throw new MacroRunRefused(MACRO_NEEDS_TWITCH_LINK);
   }
   let result: { success: boolean; message: string };
   try {
@@ -74,7 +69,7 @@ export async function executeMacroPlan(
     throw err;
   }
   if (!result.success) {
-    throw new MacroRunRefused(result.message || `the engine refused "!${plan.commandName}"`);
+    throw new MacroRunRefused(macroCommandRefusal(plan.commandName, result.message));
   }
   return {};
 }
@@ -104,17 +99,4 @@ export async function loadMacroEngineContext(
     clientSecret: instance.clientSecret,
     broadcasterLogin: twitch?.platformUsername ?? null,
   };
-}
-
-/** Variable values as they cross a Convex boundary: pairs, because a record key may not start with `_`. */
-export function valuesFromPairs(pairs: ReadonlyArray<{ name: string; value: string }>): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const { name, value } of pairs) {
-    values[name] = value;
-  }
-  return values;
-}
-
-export function valuesToPairs(values: Readonly<Record<string, string>>): { name: string; value: string }[] {
-  return Object.entries(values).map(([name, value]) => ({ name, value }));
 }

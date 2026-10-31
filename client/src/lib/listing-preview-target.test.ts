@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListingDetail } from "@shared/marketplace-catalog";
 import { galleryPreviews, livePreviewTarget, previewAvailable } from "./listing-preview-target";
 
 function listing(overrides: Partial<CatalogListingDetail> = {}): CatalogListingDetail {

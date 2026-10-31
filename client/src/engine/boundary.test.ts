@@ -195,7 +195,7 @@ describe("engine adapter boundary", () => {
 
 // A Convex module a namespace owns whole is the adapter's to import, types
 // included: a screen naming its shapes would depend on how the Convex gateway
-// serves the engine. A function entry (`macros.run`) leaves its module's
+// serves the engine. A function entry (`marketplace.installModule`) leaves its module's
 // other exports to the cloud, so only whole-module entries are guarded.
 const CONVEX_DIR = join(CLIENT_SRC, "..", "..", "convex");
 const CONVEX_ALIAS = "@convex/";
@@ -264,7 +264,8 @@ describe("engine module imports", () => {
   test("whole-module entries are guarded and function entries are not", () => {
     const owned = engineOwnedModules();
     expect(owned.has("pins")).toBe(true);
-    expect(owned.has("macros")).toBe(false);
+    expect(owned.has("macros")).toBe(true);
+    expect(owned.has("marketplace")).toBe(false);
     expect(owned.has("instances")).toBe(false);
   });
 });
@@ -450,8 +451,8 @@ describe("engine boundary", () => {
   test("the pattern matches module and function entries", () => {
     const pattern = engineReferencePattern();
     expect(pattern.test("useAction(api.engineSync.syncNow)")).toBe(true);
-    expect(pattern.test("useAction(api.macros.run)")).toBe(true);
-    expect(pattern.test("useQuery(api.macros.list)")).toBe(false);
+    expect(pattern.test("useQuery(api.macros.list)")).toBe(true);
+    expect(pattern.test("useQuery(api.macroTriggers.listForInstance)")).toBe(false);
     expect(pattern.test("useAction(api.marketplace.installModule)")).toBe(true);
     expect(pattern.test("useAction(api.marketplace.listModules)")).toBe(false);
     expect(pattern.test("useQuery(api.scenesLibrary.list)")).toBe(false);

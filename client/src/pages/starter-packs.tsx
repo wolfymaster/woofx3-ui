@@ -10,7 +10,7 @@ import {
   starterFieldWarning,
   starterPackDefaults,
   validateStarterValues,
-} from "@convex/lib/starterPacks";
+} from "@shared/starter-packs";
 import {
   AlarmClock,
   Check,

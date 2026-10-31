@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { EngineCapability } from "@convex/lib/engineCapabilities";
+import { ENGINE_CAPABILITY_IDS, type EngineCapability } from "@convex/lib/engineCapabilities";
 import {
   ALERT_QUEUE_CONTROL_CAPABILITIES,
   capabilitySupport,
   createReconnectDetector,
   type EngineCapabilitiesState,
+  EXPRESSION_FUNCTION_CAPABILITIES,
   testRunSupport,
 } from "./engine-capabilities";
 
@@ -79,5 +80,14 @@ describe("createReconnectDetector", () => {
     expect(isReconnect(false)).toBe(false);
     expect(isReconnect(true)).toBe(true);
     expect(isReconnect(true)).toBe(false);
+  });
+});
+
+// Convex drops any id outside its list, so a gate on a missing id never opens.
+describe("the ids Convex lets through", () => {
+  test("include what expression functions are gated on", () => {
+    for (const id of EXPRESSION_FUNCTION_CAPABILITIES) {
+      expect(ENGINE_CAPABILITY_IDS).toContain(id);
+    }
   });
 });

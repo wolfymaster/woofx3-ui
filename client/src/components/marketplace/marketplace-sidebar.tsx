@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
-import type { CatalogListing, ListingType } from "@convex/lib/marketplaceCatalog";
-import { LISTING_TYPES } from "@convex/lib/marketplaceCatalog";
-import { useQuery } from "convex/react";
+import type { CatalogListing, ListingType } from "@shared/marketplace-catalog";
+import { LISTING_TYPES } from "@shared/marketplace-catalog";
 import { PackageCheck, Store, Upload } from "lucide-react";
 import { useLocation } from "wouter";
 import { HelpTip } from "@/components/common/help-tip";
@@ -9,8 +7,9 @@ import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { getCategoryColor } from "@/components/modules/module-category";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useInstance } from "@/hooks/use-instance";
+import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";
+import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import { MARKETPLACE_INSTALLED_PATH, MARKETPLACE_PATH, MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
 import { cn } from "@/lib/utils";
 
@@ -63,9 +62,8 @@ export function MarketplaceSidebar({
 }: MarketplaceSidebarProps) {
   const [, navigate] = useLocation();
   const nothingSelected = selectedType === null && selectedCategory === ALL_CATEGORIES;
-  const { instance } = useInstance();
-  const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
-  const installedCount = (repoModules ?? []).filter((module) => module.status === "installed").length;
+  const { uploads } = useMarketplaceMode();
+  const installedCount = (useInstalledModules() ?? []).filter((module) => module.status === "installed").length;
 
   return (
     <div className={SIDEBAR_RAIL}>
@@ -79,15 +77,17 @@ export function MarketplaceSidebar({
           <Store className="h-3.5 w-3.5" />
           Browse Marketplace
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-start gap-2"
-          onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}
-        >
-          <Upload className="h-3.5 w-3.5" />
-          Upload a module
-        </Button>
+        {uploads && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Upload a module
+          </Button>
+        )}
       </div>
 
       <ScrollArea className="flex-1">

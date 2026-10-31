@@ -82,3 +82,22 @@ pub struct ReorderShoutoutsArgs {
 pub struct ChooseHostModeArgs {
     pub mode: HostModeKind,
 }
+
+/// The hash of the nonce the dashboard keeps for a Twitch sign-in, which
+/// binds the sign-in to this app (core/src/twitch_sign_in.rs).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct OpenTwitchSignInArgs {
+    pub nonce_hash: String,
+}
+
+/// The instance the signed-in dashboard made this computer the companion
+/// of, as Convex named it when it recorded the link.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct FinishAppLinkArgs {
+    pub instance_id: String,
+    pub instance_name: String,
+}

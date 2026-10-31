@@ -1,4 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  assertRailWidgets,
+  addPanel as withPanelAdded,
+  removePanel as withPanelRemoved,
+  renamePanel as withPanelRenamed,
+  setPanelWidgets as withPanelWidgets,
+} from "@shared/dashboard-layout";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
@@ -8,9 +15,6 @@ import { dashboardPanelWidgetValidator, dashboardRailWidgetValidator } from "./s
 
 type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
 type DashboardRailWidget = NonNullable<Doc<"dashboardLayouts">["railWidgets"]>[number];
-
-/** Rail widgets beyond this are refused; the rail is a column of icon buttons, not a list. */
-const MAX_RAIL_WIDGETS = 12;
 
 // Returns the dashboard canvas panels for this instance, in order. Empty
 // array means the user hasn't created a panel yet (canvas shows the layout
@@ -49,14 +53,8 @@ export const addPanel = mutation({
       .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
       .first();
 
-    const panels = existing?.panels ?? [];
-    const newPanel: DashboardPanel = {
-      id: crypto.randomUUID(),
-      name: args.name ?? `Panel ${panels.length + 1}`,
-      layoutId: args.layoutId,
-      widgets: [],
-    };
-    const nextPanels = [...panels, newPanel];
+    const panelId = crypto.randomUUID();
+    const nextPanels = withPanelAdded(existing?.panels ?? [], panelId, args.layoutId, args.name);
 
     if (existing) {
       await ctx.db.patch(existing._id, { panels: nextPanels });
@@ -64,7 +62,7 @@ export const addPanel = mutation({
       await ctx.db.insert("dashboardLayouts", { instanceId: args.instanceId, userId, panels: nextPanels });
     }
 
-    return newPanel.id;
+    return panelId;
   },
 });
 
@@ -84,7 +82,7 @@ export const removePanel = mutation({
       return;
     }
 
-    const nextPanels = (existing.panels ?? []).filter((panel) => panel.id !== args.panelId);
+    const nextPanels = withPanelRemoved(existing.panels ?? [], args.panelId);
     await ctx.db.patch(existing._id, { panels: nextPanels });
   },
 });
@@ -98,11 +96,6 @@ export const renamePanel = mutation({
   handler: async (ctx, args) => {
     const userId = await requireInstanceRole(ctx, args.instanceId);
 
-    const trimmedName = args.name.trim();
-    if (!trimmedName) {
-      throw new Error("Name cannot be empty");
-    }
-
     const existing = await ctx.db
       .query("dashboardLayouts")
       .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
@@ -111,14 +104,7 @@ export const renamePanel = mutation({
       throw new Error("Dashboard not found");
     }
 
-    const panels = existing.panels ?? [];
-    const panelIndex = panels.findIndex((panel) => panel.id === args.panelId);
-    if (panelIndex === -1) {
-      throw new Error("Panel not found");
-    }
-
-    const nextPanels = [...panels];
-    nextPanels[panelIndex] = { ...panels[panelIndex], name: trimmedName };
+    const nextPanels = withPanelRenamed(existing.panels ?? [], args.panelId, args.name);
     await ctx.db.patch(existing._id, { panels: nextPanels });
   },
 });
@@ -146,14 +132,7 @@ export const setPanelWidgets = mutation({
       throw new Error("Dashboard not found");
     }
 
-    const panels = existing.panels ?? [];
-    const panelIndex = panels.findIndex((panel) => panel.id === args.panelId);
-    if (panelIndex === -1) {
-      throw new Error("Panel not found");
-    }
-
-    const nextPanels = [...panels];
-    nextPanels[panelIndex] = { ...panels[panelIndex], widgets: args.widgets };
+    const nextPanels = withPanelWidgets(existing.panels ?? [], args.panelId, args.widgets);
     await ctx.db.patch(existing._id, { panels: nextPanels });
   },
 });
@@ -187,13 +166,7 @@ export const setRailWidgets = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireInstanceRole(ctx, args.instanceId);
-    if (args.widgets.length > MAX_RAIL_WIDGETS) {
-      throw new Error(`The rail holds at most ${MAX_RAIL_WIDGETS} widgets`);
-    }
-    const slotIds = new Set(args.widgets.map((widget) => widget.slotId));
-    if (slotIds.size !== args.widgets.length) {
-      throw new Error("Rail widgets must have distinct slot ids");
-    }
+    assertRailWidgets(args.widgets);
 
     const existing = await ctx.db
       .query("dashboardLayouts")

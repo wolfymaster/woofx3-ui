@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LISTING_TYPES } from "@convex/lib/marketplaceCatalog";
+import { LISTING_TYPES } from "@shared/marketplace-catalog";
 import { formatAmount, listingTypeColor, listingTypeHue, listingTypeMeta, pricingLabel } from "./listing-type";
 
 describe("listing type metadata", () => {

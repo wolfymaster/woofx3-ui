@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { StarterCatalog } from "../starterPacks";
+import type { StarterCatalog } from "@shared/starter-packs";
 import { compileCommandActions, compileWorkflow, missingRequirementMessage } from "./compile";
 import type { ImportItem, ImportStep, ImportWorkflowSpec } from "./types";
 

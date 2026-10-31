@@ -1,13 +1,12 @@
-import { api } from "@convex/_generated/api";
-import type { InstanceNote } from "@convex/dashboardNotes";
-import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
+import { useDashboardNote, useSaveDashboardNoteRequest } from "@/engine/hooks/use-dashboard";
+import type { DashboardNote } from "@/engine/types";
 
 const SAVE_DEBOUNCE_MS = 800;
 
-function lastEditLabel(note: InstanceNote | null): string {
+function lastEditLabel(note: DashboardNote | null): string {
   if (!note || note.updatedByMe || !note.updatedByName) {
     return "Shared with your team · saved automatically";
   }
@@ -31,9 +30,9 @@ function lastEditLabel(note: InstanceNote | null): string {
  * whose write that was.
  */
 export function NotesWidget() {
-  const { instance } = useInstance();
-  const stored = useQuery(api.dashboardNotes.get, instance ? { instanceId: instance._id } : "skip");
-  const saveNotes = useMutation(api.dashboardNotes.save);
+  const { instanceId } = useEngineScope();
+  const stored = useDashboardNote();
+  const saveNotes = useSaveDashboardNoteRequest();
 
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -64,8 +63,6 @@ export function NotesWidget() {
     }
   }, [remoteContent]);
 
-  const instanceId = instance?._id;
-
   // Flush on unmount (and on instance switch) so closing the flyout mid-sentence
   // doesn't drop the last keystrokes. Reads pendingRef rather than `draft` so it
   // isn't re-armed on every character typed.
@@ -76,7 +73,7 @@ export function NotesWidget() {
       }
       const pending = pendingRef.current;
       if (pending !== null && instanceId) {
-        void saveRef.current({ instanceId, content: pending });
+        void saveRef.current(pending);
         pendingRef.current = null;
       }
     };
@@ -93,7 +90,7 @@ export function NotesWidget() {
     }
     timerRef.current = setTimeout(() => {
       setSaving(true);
-      void saveRef.current({ instanceId, content: value }).finally(() => {
+      void saveRef.current(value).finally(() => {
         // Only this save's text: anything typed while it was in flight is
         // still waiting for its own save, and must keep remote edits out.
         if (pendingRef.current === value) {
@@ -104,7 +101,7 @@ export function NotesWidget() {
     }, SAVE_DEBOUNCE_MS);
   };
 
-  if (!instance) {
+  if (!instanceId) {
     return (
       <div className="h-full flex items-center justify-center p-4 text-sm text-muted-foreground">
         Select an instance to take notes.

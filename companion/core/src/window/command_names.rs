@@ -43,7 +43,11 @@ macro_rules! with_command_names {
             stream_start_marker(()) -> StreamStartMarker,
             request_stream_start_marker(()) -> MarkerRequestOutcome,
             host_mode(()) -> HostModeView,
-            choose_host_mode(ChooseHostModeArgs) -> ()
+            choose_host_mode(ChooseHostModeArgs) -> (),
+            companion_link_status(()) -> CompanionLinkStatus,
+            begin_app_link(()) -> AppLinkStart,
+            finish_app_link(FinishAppLinkArgs) -> (),
+            open_twitch_sign_in(OpenTwitchSignInArgs) -> ()
         }
     };
 }

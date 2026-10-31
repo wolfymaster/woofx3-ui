@@ -19,7 +19,10 @@ export interface StageZoom {
   zoom: number;
   /** Zoom follows the area's size rather than a level the user picked. */
   fit: boolean;
-  /** The room the canvas has: the area less the bottom bar. Fit follows it. */
+  /**
+   * The room the canvas has: the area less the bottom bar. Fit follows it. Stable
+   * for as long as the same receiver is measured: the area observes again when it changes.
+   */
   onMeasure: (size: CanvasSize) => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -67,11 +70,10 @@ export function StageArea({ canvas, zoomControl, toolbar, onBackgroundPress, cla
     zoomToFit: () => setChosenZoom(null),
   };
   const control = zoomControl ?? ownZoom;
-  const { zoom } = control;
-  // The observer outlives renders, so it reaches the current control through a ref.
-  const measureRef = useRef(control.onMeasure);
-  measureRef.current = control.onMeasure;
+  const { zoom, onMeasure } = control;
 
+  // Observing reports the current size at once, so a new `onMeasure` (an editor
+  // that replaced the last one and has not been measured) learns the room it has.
   useEffect(() => {
     const area = areaRef.current;
     if (!area) {
@@ -79,11 +81,11 @@ export function StageArea({ canvas, zoomControl, toolbar, onBackgroundPress, cla
     }
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      measureRef.current({ width, height: height - BOTTOM_BAR_ROOM });
+      onMeasure({ width, height: height - BOTTOM_BAR_ROOM });
     });
     observer.observe(area);
     return () => observer.disconnect();
-  }, []);
+  }, [onMeasure]);
 
   // Only a press on the area itself or the box centering the canvas is "outside the
   // canvas"; anything inside the canvas handles its own presses.

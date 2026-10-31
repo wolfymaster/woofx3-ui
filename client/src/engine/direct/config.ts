@@ -23,6 +23,12 @@ export interface DirectGatewayConfig {
   workflowMaxPages: number;
   /** How often a Twitch device login is asked where it stands while the streamer approves it, in ms. */
   deviceLoginPollMs: number;
+  /**
+   * How many times a read-modify-write of a local UI setting is tried when
+   * another write keeps landing between its read and its write, the first
+   * try included, before it fails.
+   */
+  uiSettingWriteAttempts: number;
 }
 
 export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
@@ -39,6 +45,9 @@ export const DEFAULT_DIRECT_GATEWAY_CONFIG: DirectGatewayConfig = {
   // The engine polls Twitch itself; this only paces how soon the screen
   // learns the outcome.
   deviceLoginPollMs: 2000,
+  // A conflict needs another window or device writing the same key in the
+  // same moment; a few tries settle any real contention.
+  uiSettingWriteAttempts: 5,
 };
 
 export function validateDirectGatewayConfig(config: DirectGatewayConfig): void {
@@ -50,4 +59,5 @@ export function validateDirectGatewayConfig(config: DirectGatewayConfig): void {
   requirePositiveInteger("DirectGateway", "workflowPageSize", config.workflowPageSize);
   requirePositiveInteger("DirectGateway", "workflowMaxPages", config.workflowMaxPages);
   requirePositiveInteger("DirectGateway", "deviceLoginPollMs", config.deviceLoginPollMs);
+  requirePositiveInteger("DirectGateway", "uiSettingWriteAttempts", config.uiSettingWriteAttempts);
 }

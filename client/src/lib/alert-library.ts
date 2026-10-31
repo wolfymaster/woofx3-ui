@@ -1,3 +1,4 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import { randomNodeId } from "@woofx3/scene/editor";
 import {
   type BehaviorDocument,
@@ -14,7 +15,7 @@ import {
 } from "@woofx3/scene/model";
 import type { AlertComposition } from "@/engine/types";
 import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
+import { expressionCalls } from "@/lib/expression-text";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
@@ -33,7 +34,7 @@ import type { VariableOption } from "@/lib/workflow-variables";
 /**
  * The cached parts of a library alert that make up its document. Convex
  * stores them with `$`-prefixed keys (an input reference's `$input`)
- * escaped; see lib/dollar-keys.ts.
+ * escaped; see shared/dollar-keys.ts.
  */
 export type LibraryAlertDocument = Pick<AlertComposition, "widgets" | "layout" | "behaviors" | "inputs">;
 
@@ -215,7 +216,9 @@ export function libraryAlertOfStep(
       return known;
     }
     const inner = reference.slice(2, -1).trim();
-    const base = (inner.split(/[.:]/).pop() ?? "").replace(/[^A-Za-z0-9_-]/g, "_") || "input";
+    // A call is named for its outermost function: its last path segment would hold the rest of the arguments.
+    const named = expressionCalls(inner)[0] ?? inner.split(/[.:]/).pop() ?? "";
+    const base = named.replace(/[^A-Za-z0-9_-]/g, "_") || "input";
     let id = base;
     for (let n = 2; inputs.some((input) => input.id === id); n += 1) {
       id = `${base}_${n}`;

@@ -1,4 +1,4 @@
-import type { CatalogListing } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListing } from "@shared/marketplace-catalog";
 import { Check, Download, Star } from "lucide-react";
 import { ListingArt } from "@/components/marketplace/listing-art";
 import { Button } from "@/components/ui/button";
