@@ -230,6 +230,12 @@ export type ChooseHostModeArgs = { mode: HostModeKind, };
  */
 export type FinishAppLinkArgs = { instanceId: string, instanceName: string, };
 
+/**
+ * The hash of the nonce the dashboard keeps for a Twitch sign-in, which
+ * binds the sign-in to this app (core/src/twitch_sign_in.rs).
+ */
+export type OpenTwitchSignInArgs = { nonceHash: string, };
+
 export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
 export const SHOUTOUT_QUEUE_EVENT = "companion://shoutout-queue";
@@ -264,6 +270,7 @@ export const COMMANDS = {
   companion_link_status: "companion_link_status",
   begin_app_link: "begin_app_link",
   finish_app_link: "finish_app_link",
+  open_twitch_sign_in: "open_twitch_sign_in",
 } as const;
 
 export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
@@ -297,6 +304,7 @@ export type CommandArgs = {
   companion_link_status: null;
   begin_app_link: null;
   finish_app_link: FinishAppLinkArgs;
+  open_twitch_sign_in: OpenTwitchSignInArgs;
 };
 
 /** What each command resolves to. */
@@ -328,4 +336,5 @@ export type CommandResults = {
   companion_link_status: CompanionLinkStatus;
   begin_app_link: AppLinkStart;
   finish_app_link: void;
+  open_twitch_sign_in: void;
 };
