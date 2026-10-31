@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useQuery } from "convex/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { isInsideActionPicker } from "@/components/flow/object-action-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,23 +15,20 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import type { Macro, MacroInput } from "@/engine/types";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import {
   chatCommandParts,
   extractMacroVariables,
   type MacroActionStep,
   type MacroActionType,
-  type MacroButton,
   type MacroHttpMethod,
-  type MacroInput,
   macroButtonLabel,
   typedMacroLabel,
 } from "@/lib/macro-pad";
 import { MacroActionStepEditor, useMacroActionSentence } from "./macro-action-step";
 import { MacroColorPicker } from "./macro-color-picker";
 import { MacroIconPicker } from "./macro-icon-picker";
-import { MacroRemoteTrigger } from "./macro-remote-trigger";
 
 /**
  * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
@@ -46,23 +41,30 @@ type WorkflowOption = { id: string; name: string };
 type CommandOption = { command: string; argumentPattern?: string; enabled: boolean };
 
 interface MacroConfigModalProps {
-  instanceId: Id<"instances"> | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  macro: MacroButton | null;
+  macro: Macro | null;
   workflows: WorkflowOption[];
   commands: CommandOption[];
+  /**
+   * The macro has a trigger URL and the viewer may not change what it does:
+   * only its label, icon and color stay editable.
+   */
+  behaviorLocked: boolean;
+  /** Shown under the form for a saved macro, such as its remote trigger; null for none. */
+  remoteTriggerSection: ReactNode;
   /** Ids are assigned by the server, so an edit is identified by `macro`, not by the payload. */
   onSave: (input: MacroInput) => void;
 }
 
 export function MacroConfigModal({
-  instanceId,
   open,
   onOpenChange,
   macro,
   workflows,
   commands,
+  behaviorLocked,
+  remoteTriggerSection,
   onSave,
 }: MacroConfigModalProps) {
   // What the streamer typed as the label; null while a run-action button's label
@@ -93,15 +95,6 @@ export function MacroConfigModal({
   );
   const sentence = type === "run-action" ? actionSentence.sentence : "";
   const label = macroButtonLabel(typedLabel, sentence);
-
-  // A macro with a trigger URL does, from anywhere, whatever it is set to do;
-  // macros.updateMacro enforces that only a manager may change that.
-  const triggerStatus = useQuery(api.macroTriggers.listForInstance, instanceId ? { instanceId } : "skip");
-  const behaviorLocked =
-    macro !== null &&
-    triggerStatus !== undefined &&
-    !triggerStatus.canManage &&
-    triggerStatus.triggers.some((trigger) => trigger.macroId === macro.id);
 
   // A stored label that is its step's sentence keeps following the step. Declared
   // before the reset below so it never compares a just-opened button's label with
@@ -460,10 +453,8 @@ export function MacroConfigModal({
             )}
           </div>
 
-          {macro && instanceId && (
-            <div className="rounded-md border border-border p-3">
-              <MacroRemoteTrigger instanceId={instanceId} macro={macro} />
-            </div>
+          {macro && remoteTriggerSection && (
+            <div className="rounded-md border border-border p-3">{remoteTriggerSection}</div>
           )}
         </div>
 

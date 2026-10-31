@@ -1,4 +1,4 @@
-import type { RecapClip } from "@convex/lib/recapClips";
+import type { RecapClip } from "@/engine/types";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@/lib/stream-recap";
 
 function pad2(value: number): string {

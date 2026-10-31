@@ -7,10 +7,15 @@ import type {
   CommandSnapshot,
   CreateCommandInput,
   EngineModuleSummary,
+  EventLogPage,
+  EventLogQuery,
   FieldOptionsReference,
+  GroupSnapshot,
   Leaderboard,
   LeaderboardQuery,
+  MarketplaceAuthorQuery,
   MarketplaceBundleInstallResult,
+  MarketplaceCatalogQuery,
   MarketplaceInstallRequest,
   MarketplaceInstallResult,
   MarketplaceListingInspection,
@@ -26,6 +31,8 @@ import type {
   StreamEventFrame,
   StreamEventSubscriber,
   StreamSession,
+  StreamSessionsQuery,
+  StreamSessionTotals,
   StreamStatus,
   TriggerWorkflowOptions,
   TriggerWorkflowResponse,
@@ -47,6 +54,9 @@ import type {
   TwitchSendShoutoutParams,
   TwitchUnbanUserParams,
   TwitchUpdateChatSettingsParams,
+  UISetting,
+  UISettingValue,
+  UISettingWriteResult,
   UninstallModuleResponse,
   ViewerTotals,
   ViewerTotalsQuery,
@@ -61,6 +71,7 @@ import type {
   WorkflowRunSnapshotsQuery,
   WorkflowsQuery,
 } from "@woofx3/api";
+import { formatMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
 import type {
   TwitchDeviceLoginStartResult,
   TwitchDeviceLoginState,
@@ -73,9 +84,13 @@ import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngin
 type DirectFakeSurface = Pick<
   Woofx3EngineApi,
   | "listCommands"
+  | "listGroups"
+  | "listEvents"
   | "createCommand"
   | "getStreamStatus"
   | "listStreamSessions"
+  | "getStreamSession"
+  | "getStreamSessionTotals"
   | "listAlerts"
   | "subscribeStreamEvents"
   | "dispatchFieldOptionsRequest"
@@ -93,6 +108,10 @@ type DirectFakeSurface = Pick<
   | "getSceneSnapshot"
   | "getAvailableWidgets"
   | "listWidgetThemes"
+  | "listUISettings"
+  | "getUISetting"
+  | "setUISetting"
+  | "deleteUISetting"
   | "listEngineModules"
   | "getWorkflows"
   | "getWorkflow"
@@ -109,8 +128,12 @@ type DirectFakeSurface = Pick<
   | "getResourceValues"
   | "createResourceInstance"
   | "runActions"
+  | "executeCommand"
   | "listAvailableFunctions"
   | "marketplaceGetListing"
+  | "marketplaceSearch"
+  | "marketplaceCounts"
+  | "marketplaceGetAuthor"
   | "inspectMarketplaceListing"
   | "installMarketplaceListing"
   | "installMarketplaceBundle"
@@ -165,9 +188,15 @@ interface StreamSubscription {
 /** What the fake engine holds, shared by every session a test opens. */
 export class FakeEngineState {
   commands: CommandSnapshot[] = [];
+  groups: GroupSnapshot[] = [];
+  /** The engine's event log, newest first. */
+  events: StreamEventFrame[] = [];
   alerts: AlertSnapshot[] = [];
   streamStatus: StreamStatus = { isLive: false, uptime: "", viewerCount: 0 };
+  /** Newest first. */
   sessions: StreamSession[] = [];
+  /** A session's totals by its id; a session with none answers null. */
+  sessionTotals: Record<string, StreamSessionTotals> = {};
   alertCompositions: AlertComposition[] = [];
   /** Null answers as an engine whose scene manager gave no preview. */
   compositionPreview: { url: string; expiresInSeconds: number } | null = null;
@@ -179,6 +208,15 @@ export class FakeEngineState {
   overlayTokens: OverlayToken[] = [];
   scenes: SceneSnapshot[] = [];
   widgets: AvailableWidget[] = [];
+  /** UI settings by namespace, then key, tombstones (`deleted`) included. */
+  uiSettings: Record<string, Record<string, UISetting>> = {};
+  uiSettingRevision = 0;
+  /**
+   * Runs before a set or delete checks its expected revision, as another
+   * writer landing first would: a test changes `uiSettings` here to make the
+   * write conflict.
+   */
+  beforeUISettingWrite: ((namespace: string, key: string) => void) | null = null;
   /** Themes by widget canonical id; a widget not here is refused. */
   widgetThemes: Record<string, WidgetThemes["themes"]> = {};
   modules: EngineModuleSummary[] = [];
@@ -192,8 +230,14 @@ export class FakeEngineState {
   /** Resource values by canonical id; an instance not here holds nothing yet. */
   resourceValues: Record<string, unknown> = {};
   functions: AvailableFunction[] = [];
-  /** Marketplace listings by id; an id not here is refused, as the marketplace answers 404. */
+  /** The marketplace's answers to `/catalog/{id}` by listing id; an id not here is refused, as the marketplace answers 404. */
   listings: Record<string, unknown> = {};
+  /** The marketplace's answer to `/catalog` for a query. */
+  catalogSearch: (query: MarketplaceCatalogQuery) => unknown = () => ({ listings: [], total: 0 });
+  /** The marketplace's answer to `/catalog/counts`; a status refuses it, as an older marketplace answers 404. */
+  catalogCounts: unknown | { refusedWith: number } = { counts: {}, total: 0 };
+  /** The marketplace's answers to `/authors/{slug}` by slug, given the page asked for; a slug not here is refused with 404. */
+  authors: Record<string, (query: MarketplaceAuthorQuery | undefined) => unknown> = {};
   /** Listing inspections by id; an id not here is refused, as a paid listing is without a buyer token. */
   inspections: Record<string, MarketplaceListingInspection> = {};
   /** What `installMarketplaceListing` and `installMarketplaceBundle` answer. */
@@ -222,6 +266,8 @@ export class FakeEngineState {
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
   twitchLink: TwitchLinkInfo = { linked: false, revision: 1 };
+  /** What `executeCommand` answers; the engine refuses a command by answering `success: false`. */
+  commandAnswer: { success: boolean; message: string } = { success: true, message: "" };
   /** What each Twitch method answers, given its arguments; no answer configured fails the call. */
   twitchAnswer: (method: TwitchFakeMethod, params: unknown) => TwitchHelixResult = (method) => ({
     ok: false,
@@ -251,6 +297,11 @@ export class FakeEngineState {
   }
 }
 
+/** The error message an engine throws for a marketplace that refused a catalog read with `status`. */
+function marketplaceRefusal(status: number): string {
+  return formatMarketplaceCatalogError({ kind: "http", status, code: "refused", message: `Refused with ${status}` });
+}
+
 /** A session's API serving the direct gateway's reads from `FakeEngineState`. */
 export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   constructor(
@@ -264,6 +315,23 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     this.state.record("listCommands");
     await this.engine.answering("listCommands");
     return this.state.commands;
+  }
+
+  async listGroups(): Promise<GroupSnapshot[]> {
+    this.state.record("listGroups");
+    return this.state.groups;
+  }
+
+  /** Pages `state.events` by position: the cursor is the index of the next event. */
+  async listEvents(query?: EventLogQuery): Promise<EventLogPage> {
+    this.state.record("listEvents", query);
+    const start = query?.cursor === undefined ? 0 : Number(query.cursor);
+    const limit = query?.limit ?? 50;
+    const matching = this.state.events.filter(
+      (event) => query?.types === undefined || query.types.length === 0 || query.types.includes(event.type)
+    );
+    const events = matching.slice(start, start + limit);
+    return { events, nextCursor: start + limit < matching.length ? String(start + limit) : null };
   }
 
   async createCommand(data: CreateCommandInput): Promise<CommandSnapshot> {
@@ -292,9 +360,20 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return this.state.streamStatus;
   }
 
-  async listStreamSessions(): Promise<PaginatedStreamSessions> {
-    this.state.record("listStreamSessions");
-    return { sessions: this.state.sessions.slice(0, 1), total: this.state.sessions.length, limit: 1, offset: 0 };
+  async listStreamSessions(query?: StreamSessionsQuery): Promise<PaginatedStreamSessions> {
+    this.state.record("listStreamSessions", query);
+    const limit = query?.limit ?? 50;
+    return { sessions: this.state.sessions.slice(0, limit), total: this.state.sessions.length, limit, offset: 0 };
+  }
+
+  async getStreamSession(id: string): Promise<StreamSession | null> {
+    this.state.record("getStreamSession", id);
+    return this.state.sessions.find((session) => session.id === id) ?? null;
+  }
+
+  async getStreamSessionTotals(sessionId: string): Promise<StreamSessionTotals | null> {
+    this.state.record("getStreamSessionTotals", sessionId);
+    return this.state.sessionTotals[sessionId] ?? null;
   }
 
   async listAlerts(query?: AlertListQuery): Promise<AlertListPage> {
@@ -402,6 +481,68 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async getAvailableWidgets(): Promise<{ widgets: AvailableWidget[] }> {
     this.state.record("getAvailableWidgets");
     return { widgets: this.state.widgets };
+  }
+
+  async listUISettings(namespace: string): Promise<UISetting[]> {
+    this.state.record("listUISettings", namespace);
+    return Object.values(this.state.uiSettings[namespace] ?? {}).filter((setting) => !setting.deleted);
+  }
+
+  async getUISetting(namespace: string, key: string): Promise<UISetting | null> {
+    this.state.record("getUISetting", namespace, key);
+    const setting = this.state.uiSettings[namespace]?.[key];
+    return setting && !setting.deleted ? setting : null;
+  }
+
+  async setUISetting(
+    namespace: string,
+    key: string,
+    value: UISettingValue,
+    expectedRevision?: number
+  ): Promise<UISettingWriteResult> {
+    this.state.record(
+      "setUISetting",
+      namespace,
+      key,
+      value,
+      ...(expectedRevision === undefined ? [] : [expectedRevision])
+    );
+    return this.writeUISetting(namespace, key, value, false, expectedRevision);
+  }
+
+  async deleteUISetting(namespace: string, key: string, expectedRevision?: number): Promise<UISettingWriteResult> {
+    this.state.record("deleteUISetting", namespace, key, ...(expectedRevision === undefined ? [] : [expectedRevision]));
+    return this.writeUISetting(namespace, key, null, true, expectedRevision);
+  }
+
+  /** The engine's check and write: 0 expects no live value, any other revision the stored one. */
+  private writeUISetting(
+    namespace: string,
+    key: string,
+    value: UISettingValue,
+    deleted: boolean,
+    expectedRevision: number | undefined
+  ): UISettingWriteResult {
+    this.state.beforeUISettingWrite?.(namespace, key);
+    const stored = this.state.uiSettings[namespace]?.[key] ?? null;
+    if (expectedRevision !== undefined) {
+      const matches =
+        expectedRevision === 0 ? stored === null || stored.deleted : stored?.revision === expectedRevision;
+      if (!matches) {
+        return { ok: false, reason: "conflict", current: stored };
+      }
+    }
+    this.state.uiSettingRevision += 1;
+    const setting: UISetting = {
+      namespace,
+      key,
+      value,
+      revision: this.state.uiSettingRevision,
+      updatedAt: "2026-10-30T10:00:00Z",
+      deleted,
+    };
+    this.state.uiSettings[namespace] = { ...(this.state.uiSettings[namespace] ?? {}), [key]: setting };
+    return { ok: true, setting };
   }
 
   async listWidgetThemes(widgetCanonicalId: string): Promise<WidgetThemes> {
@@ -549,6 +690,15 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return { requested: true, triggerId: "trigger-1" };
   }
 
+  async executeCommand(
+    commandName: string,
+    username: string,
+    text?: string
+  ): Promise<{ success: boolean; message: string }> {
+    this.state.record("executeCommand", commandName, username, text);
+    return this.state.commandAnswer;
+  }
+
   async listAvailableFunctions(): Promise<AvailableFunction[]> {
     this.state.record("listAvailableFunctions");
     return this.state.functions;
@@ -558,9 +708,32 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     this.state.record("marketplaceGetListing", listingId, buyerToken);
     const listing = this.state.listings[listingId];
     if (listing === undefined) {
-      throw new Error(`Marketplace request failed (404)`);
+      throw new Error(marketplaceRefusal(404));
     }
     return listing;
+  }
+
+  async marketplaceSearch(query: MarketplaceCatalogQuery, buyerToken?: string): Promise<unknown> {
+    this.state.record("marketplaceSearch", query, buyerToken);
+    return this.state.catalogSearch(query);
+  }
+
+  async marketplaceCounts(buyerToken?: string): Promise<unknown> {
+    this.state.record("marketplaceCounts", buyerToken);
+    const counts = this.state.catalogCounts;
+    if (counts && typeof counts === "object" && "refusedWith" in counts) {
+      throw new Error(marketplaceRefusal(counts.refusedWith as number));
+    }
+    return counts;
+  }
+
+  async marketplaceGetAuthor(slug: string, query?: MarketplaceAuthorQuery, buyerToken?: string): Promise<unknown> {
+    this.state.record("marketplaceGetAuthor", slug, query, buyerToken);
+    const author = this.state.authors[slug];
+    if (author === undefined) {
+      throw new Error(marketplaceRefusal(404));
+    }
+    return author(query);
   }
 
   async inspectMarketplaceListing(listingId: string, buyerToken?: string): Promise<MarketplaceListingInspection> {

@@ -1,3 +1,6 @@
+import { functionCallProblem } from "@woofx3/api/expression";
+import { isExpressionFunction } from "@/lib/expression-functions";
+import { expressionReferences, rewriteExpressionReferences } from "@/lib/expression-text";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
@@ -15,6 +18,9 @@ import type { VariableOption } from "@/lib/workflow-variables";
  * `${…}` or `{{…}}` (a compound expression, a reference to a step that no longer
  * runs first, an input the alert does not declare) stays as typed, so a broken
  * reference is visible rather than disguised.
+ *
+ * A function call reads the same way: `${round(trigger.data.amount, 2)}` is shown as
+ * `{round(amount, 2)}`, with only the references it names shortened.
  */
 export interface VariableNames {
   /** Stored token (`${trigger.data.firstName}`) to its short name (`firstName`). */
@@ -78,6 +84,10 @@ const STORED_REFERENCE = /\$\{[^{}]*\}|(?<!\\)\{\{[A-Za-z0-9_.-]+\}\}/g;
 // A short name is a lone `{name}`. One right after "$" starts an expression typed out in
 // full, and one with a brace on either side is the inside of an input reference, `{{name}}`.
 const DISPLAYED_REFERENCE = /(?<![${])\{([^{}\s$]+)\}(?!\})/g;
+// A displayed call is a lone `{name(…)}`, read the same way.
+const DISPLAYED_CALL = /(?<![${])\{([A-Za-z_][A-Za-z0-9_]*)\s*\([^{}]*\)\}(?!\})/g;
+// What a stored call must look like to be shown short: toStoredText reads back only this shape.
+const STORED_CALL = /^([A-Za-z_][A-Za-z0-9_]*)\s*\(.*\)$/s;
 
 /**
  * The stored value as a field shows it: every known reference as `{name}`. A reference
@@ -87,7 +97,7 @@ const DISPLAYED_REFERENCE = /(?<![${])\{([^{}\s$]+)\}(?!\})/g;
  */
 export function toDisplayText(stored: string, names: VariableNames): string {
   return stored.replace(STORED_REFERENCE, (match: string, offset: number) => {
-    const name = names.nameByToken.get(match);
+    const name = names.nameByToken.get(match) ?? shortCall(match, names);
     const before = stored[offset - 1];
     const after = stored[offset + match.length];
     if (name === undefined || before === "$" || before === "{" || after === "}") {
@@ -97,9 +107,67 @@ export function toDisplayText(stored: string, names: VariableNames): string {
   });
 }
 
-/** What a field's text stores: every `{name}` that names a known variable as its full reference. */
-export function toStoredText(display: string, names: VariableNames): string {
-  return display.replace(DISPLAYED_REFERENCE, (match, name: string) => names.tokenByName.get(name) ?? match);
+/**
+ * What a field's text stores: every `{name}` that names a known variable as its full
+ * reference. With `functions`, for an engine that runs them, a `{round(amount, 2)}`
+ * calling a known function is an expression too. Left as text, it would reach viewers
+ * in its braces.
+ */
+export function toStoredText(display: string, names: VariableNames, { functions }: { functions: boolean }): string {
+  const called = functions
+    ? display.replace(DISPLAYED_CALL, (match, name: string) =>
+        isExpressionFunction(name) ? fullCall(match, names) : match
+      )
+    : display;
+  return called.replace(DISPLAYED_REFERENCE, (match, name: string) => names.tokenByName.get(name) ?? match);
+}
+
+/**
+ * Why a field's expressions would not run, in a streamer's words, or `null`. The
+ * engine refuses a bad call when the workflow is saved; this says so while typing.
+ */
+export function expressionProblem(stored: string, display: string, names: VariableNames): string | null {
+  for (const match of display.matchAll(DISPLAYED_CALL)) {
+    const name = match[1] as string;
+    if (!isExpressionFunction(name)) {
+      return `"${name}" isn't a function.`;
+    }
+  }
+  const problem = functionCallProblem(stored);
+  if (problem !== null) {
+    return problem.slice(problem.indexOf("}: ") + 3).replace(/\b1 arguments\b/, "1 argument");
+  }
+  for (const match of stored.matchAll(/\$\{([^{}]*)\}/g)) {
+    const inner = match[1] as string;
+    if (STORED_CALL.test(inner)) {
+      // A bare name is never a path into anything, so it can only be a misspelt variable.
+      const unknown = expressionReferences(inner).find(
+        (path) => !path.includes(".") && !names.nameByToken.has(`\${${path}}`)
+      );
+      if (unknown !== undefined) {
+        return `"${unknown}" isn't a variable here.`;
+      }
+    }
+  }
+  return null;
+}
+
+function shortCall(token: string, names: VariableNames): string | undefined {
+  const inner = VARIABLE_TOKEN.exec(token)?.[1];
+  const name = inner === undefined ? undefined : STORED_CALL.exec(inner)?.[1];
+  if (inner === undefined || name === undefined || !isExpressionFunction(name)) {
+    return undefined;
+  }
+  return rewriteExpressionReferences(inner, (path) => names.nameByToken.get(`\${${path}}`) ?? path);
+}
+
+function fullCall(displayed: string, names: VariableNames): string {
+  const inner = displayed.slice(1, -1);
+  const full = rewriteExpressionReferences(inner, (path) => {
+    const token = names.tokenByName.get(path);
+    return token !== undefined && VARIABLE_TOKEN.test(token) ? token.slice(2, -1) : path;
+  });
+  return `\${${full}}`;
 }
 
 function referenceSegments(token: string): string[] {

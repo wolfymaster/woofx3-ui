@@ -1,11 +1,13 @@
-import { api } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
 import { Gift, HandHeart, Heart, Star, Trash2, UserPlus, Zap } from "lucide-react";
 import { useCallback } from "react";
 import { type EventsRow, EventsWidget } from "@/components/dashboard/widgets/events";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
+import {
+  useRemoveStreamHighlightRequest,
+  useSaveStreamHighlightRequest,
+  useStreamHighlights,
+} from "@/engine/hooks/use-dashboard";
 import { useToast } from "@/hooks/use-toast";
 import type { AlertSummary } from "@/lib/alert-summary";
 
@@ -43,9 +45,8 @@ function EmptyTab({ icon: Icon, children }: { icon: typeof Star; children: strin
 }
 
 function HighlightsTab() {
-  const { instance } = useInstance();
-  const highlights = useQuery(api.activityPanel.listHighlights, instance ? { instanceId: instance._id } : "skip");
-  const removeHighlight = useMutation(api.activityPanel.removeHighlight);
+  const highlights = useStreamHighlights();
+  const removeHighlight = useRemoveStreamHighlightRequest();
 
   if (highlights !== undefined && highlights.length === 0) {
     return <EmptyTab icon={Star}>Star an event on the Events tab to keep it here.</EmptyTab>;
@@ -54,13 +55,13 @@ function HighlightsTab() {
   return (
     <div className="h-full overflow-auto">
       <ul className="divide-y divide-border">
-        {(highlights ?? []).map((highlight: Doc<"streamHighlights">) => {
+        {(highlights ?? []).map((highlight) => {
           const Icon = highlightIcons[highlight.kind] ?? Star;
           return (
             <li
-              key={highlight._id}
+              key={highlight.id}
               className="flex items-start gap-3 px-3 py-2"
-              data-testid={`highlight-${highlight._id}`}
+              data-testid={`highlight-${highlight.id}`}
             >
               <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
                 <Icon className="h-4 w-4 text-primary" />
@@ -75,9 +76,9 @@ function HighlightsTab() {
               <button
                 type="button"
                 className="shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={() => void removeHighlight({ highlightId: highlight._id })}
+                onClick={() => void removeHighlight(highlight.id)}
                 aria-label="Remove highlight"
-                data-testid={`button-remove-highlight-${highlight._id}`}
+                data-testid={`button-remove-highlight-${highlight.id}`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -90,19 +91,18 @@ function HighlightsTab() {
 }
 
 export function ActivityPanelWidget() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
-  const saveHighlight = useMutation(api.activityPanel.saveHighlight);
+  const saveHighlight = useSaveStreamHighlightRequest();
 
   // A highlight keeps the row as it read when saved: it outlives the trigger
   // that worded it, and the event behind it ages out of the engine's log.
   const handleSaveHighlight = useCallback(
     (row: EventsRow, summary: AlertSummary) => {
-      if (!instance) {
+      if (!instanceId) {
         return;
       }
       void saveHighlight({
-        instanceId: instance._id,
         kind: row.event?.type ?? "alert",
         userName: summary.title,
         detail: summary.details.join(" · ") || undefined,
@@ -117,7 +117,7 @@ export function ActivityPanelWidget() {
           })
         );
     },
-    [instance, saveHighlight, toast]
+    [instanceId, saveHighlight, toast]
   );
 
   return (

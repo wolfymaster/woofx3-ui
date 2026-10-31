@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import {
   buildTriggerOptions,
@@ -14,7 +15,6 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { CORRELATION_TIMEOUT_MS, nextPollDelayMs } from "./lib/completionPolling";
-import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { manualRunOrigin } from "./lib/manualRunOrigin";
 import { logger } from "./logger";

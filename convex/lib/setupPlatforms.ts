@@ -5,7 +5,7 @@
  */
 
 import type { LocalEndpointSummary } from "@shared/local-endpoints";
-import type { MarketplaceImages } from "./marketplaceImages";
+import type { MarketplaceImages } from "@shared/marketplace-images";
 
 export interface CuratedSetupPlatform {
   marketplaceModuleId: string;

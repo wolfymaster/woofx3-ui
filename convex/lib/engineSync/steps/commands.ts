@@ -1,5 +1,5 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import { internal } from "../../../_generated/api";
-import { escapeDollarKeys } from "../../dollarKeys";
 import type { SyncStep, SyncStepContext } from "../steps";
 
 /**
@@ -19,7 +19,7 @@ export const commandsStep: SyncStep = {
       engineCommandId: s.id,
       command: s.command,
       // Escaped like every other engine JSON Convex stores: an action's `$ref`
-      // is a reserved field name there (see lib/dollarKeys.ts).
+      // is a reserved field name there (see shared/dollar-keys.ts).
       actions: escapeDollarKeys(s.actions ?? []) as unknown[],
       engineWorkflowId: s.workflowId ?? "",
       workflowError: s.workflowError ?? "",

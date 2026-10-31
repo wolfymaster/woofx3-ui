@@ -1,6 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { isGoLiveCheckId } from "@shared/go-live-check-ids";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@shared/twitch-chat";
 import { missingTwitchScopeMessage } from "@shared/twitch-link-refusal";
+import { missingRequiredTwitchScopes } from "@shared/twitch-scope-health";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -13,15 +15,14 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import {
-  type GoLiveCompletion,
-  type GoLiveStepOutcome,
-  isGoLiveCheckId,
-  type LastGoLive,
-  type OverlayFacts,
-  type StreamInfoFacts,
-  type TwitchLinkFacts,
-  type WorkflowFacts,
+import type {
+  GoLiveCompletion,
+  GoLiveStepOutcome,
+  LastGoLive,
+  OverlayFacts,
+  StreamInfoFacts,
+  TwitchLinkFacts,
+  WorkflowFacts,
 } from "./lib/goLiveFacts";
 import { isMarkerRequestPending } from "./lib/goLiveMarker";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
@@ -34,7 +35,6 @@ import {
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { sendChatMessage } from "./lib/twitchChat";
 import { twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
 // broken setup is found by the streamer rather than by their viewers.

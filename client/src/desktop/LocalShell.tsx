@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { Uptime } from "@/components/common/uptime";
 import { isSectionActive, MAIN_NAV_SECTIONS, type NavSection, navItemsServed } from "@/components/layout/nav-config";
 import { SectionSidebar } from "@/components/layout/section-sidebar";
+import { StatusBarCenterMount, StatusBarSlotProvider } from "@/components/layout/status-bar-slot";
 import { Button } from "@/components/ui/button";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
@@ -66,7 +67,10 @@ function LocalStatusBar() {
           {formatEngineVersion(engineVersion)}
         </span>
       </div>
-      <div className="flex items-center gap-3">
+
+      <StatusBarCenterMount className="flex items-center justify-center shrink-0" />
+
+      <div className="flex-1 flex items-center justify-end gap-3 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className={cn("h-1.5 w-1.5 rounded-full", isLive ? "bg-red-500" : "bg-muted-foreground")} />
           <span
@@ -86,7 +90,8 @@ function LocalStatusBar() {
 
 /**
  * The frame around local mode's pages: the sections it serves, the active
- * section's sidebar, and the engine's status. It has no account, instance or
+ * section's sidebar, and the engine's status, with the status bar's center
+ * slot a page such as the dashboard fills. It has no account, instance or
  * notification controls, since local mode has none of them.
  */
 export function LocalShell({ children }: { children: ReactNode }) {
@@ -95,15 +100,17 @@ export function LocalShell({ children }: { children: ReactNode }) {
   const activeSection = LOCAL_SECTIONS.find((section) => isSectionActive(section, location));
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-      <LocalHeader location={location} />
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        {activeSection?.children && (
-          <SectionSidebar title={activeSection.label} items={activeSection.children} location={location} />
-        )}
-        <main className="flex-1 overflow-auto">{children}</main>
+    <StatusBarSlotProvider>
+      <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+        <LocalHeader location={location} />
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {activeSection?.children && (
+            <SectionSidebar title={activeSection.label} items={activeSection.children} location={location} />
+          )}
+          <main className="flex-1 overflow-auto">{children}</main>
+        </div>
+        <LocalStatusBar />
       </div>
-      <LocalStatusBar />
-    </div>
+    </StatusBarSlotProvider>
   );
 }

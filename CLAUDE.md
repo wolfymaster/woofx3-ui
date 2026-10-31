@@ -257,7 +257,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - Pure code both `convex/` and `client/` import as `@shared/*`: parsers and mappers of engine data (scene JSON, widget keys, recap and supporter figures) and the rules built on them (alert widget names). The engine gateway's adapters may not import Convex modules, so a helper the direct gateway needs as well as Convex lives here, not in `convex/lib/`. Nothing here imports Convex or React.
 
 ### Companion (`companion/`)
-- The woofx3 desktop app (Tauri), which lives in the tray on the streamer's PC. Its main window shows the dashboard, built with `bun run build:desktop` (`IS_DESKTOP` in `client/src/lib/desktop.ts` gates desktop-only code). Its companion window pairs with an instance through `/companion/pair` and authenticates to Convex with a companion token (only its hash is stored; the `companions` row is the credential). See `docs/ui/companion.md`.
+- The woofx3 desktop app (Tauri), which lives in the tray on the streamer's PC. Its main window shows the dashboard, built with `bun run build:desktop` (`IS_DESKTOP` in `client/src/lib/desktop.ts` gates desktop-only code). Signed in to an account, the dashboard links the app as the instance's companion by itself; otherwise its companion window pairs with an instance through `/companion/pair`. It authenticates to Convex with a companion token (only its hash is stored; the `companions` row is the credential). See `docs/ui/companion.md`.
 
 ## Task Management
 

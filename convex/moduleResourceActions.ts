@@ -1,10 +1,10 @@
 "use node";
 
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import type { ActionStep, ModuleResourceUsage } from "@woofx3/api";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
@@ -210,7 +210,7 @@ export const refreshResourceValues = action({
  * actions change, not through this call.
  *
  * `actions` arrive with `$` keys escaped, as every engine JSON crossing Convex
- * does (see lib/dollarKeys.ts).
+ * does (see shared/dollar-keys.ts).
  */
 export const runActions = action({
   args: {

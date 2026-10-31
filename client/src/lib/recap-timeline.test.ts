@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { RecapClip } from "@convex/lib/recapClips";
 import type { RecapEvent } from "@shared/stream-recap";
+import type { RecapClip } from "@/engine/types";
 import {
   buildLanePoints,
   clipLayerStatus,
@@ -151,6 +151,8 @@ describe("layer statuses", () => {
 
   it("counts clips and markers and explains a missing marker scope or VOD", () => {
     expect(clipLayerStatus({ kind: "loaded", clips: [clip("c", 1, "t")] })).toEqual({ kind: "ready", count: 1 });
+    expect(clipLayerStatus({ kind: "unsupported" }).kind).toBe("unavailable");
+    expect(markerLayerStatus({ kind: "unsupported" }).kind).toBe("unavailable");
     expect(markerLayerStatus({ kind: "loaded", result: { status: "missing_scope" } }).kind).toBe("unavailable");
     expect(markerLayerStatus({ kind: "loaded", result: { status: "no_vod" } }).kind).toBe("unavailable");
   });

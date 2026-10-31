@@ -10,6 +10,7 @@ import type { EngineModuleSummary, MarketplaceListingInspection } from "@woofx3/
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
   EngineWorkflowOption,
+  InstalledModule,
   MarketplaceBundleInstall,
   ModuleAsset,
   ModuleDetail,
@@ -23,8 +24,10 @@ import { fromModuleId } from "./ids";
 import { MODULE_INVALIDATIONS } from "./invalidations";
 import { directKeys as k } from "./keys";
 import {
+  catalogModuleRecord,
   inspectionLocalEndpoints,
   isModuleNamed,
+  toInstalledModule,
   toInstalledModuleDetail,
   toModuleDetail,
   toModuleSettingValue,
@@ -57,6 +60,14 @@ function assetsRead(runtime: DirectRuntime, moduleId: string, kinds: readonly st
   };
 }
 
+function installedRead(runtime: DirectRuntime): EngineRead<InstalledModule[]> {
+  return {
+    queryKey: k.modules.installed(),
+    queryFn: async () =>
+      (await runtime.call("listEngineModules", (api) => api.listEngineModules())).map(toInstalledModule),
+  };
+}
+
 export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
   const installedModules = () => runtime.call("listEngineModules", (api) => api.listEngineModules());
 
@@ -80,7 +91,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
   const listingMetadata = async (listingId: string): Promise<MarketplaceMergeData | null> => {
     try {
       return marketplaceMetadataOf(
-        await runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(listingId))
+        catalogModuleRecord(await runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(listingId)))
       );
     } catch {
       return null;
@@ -95,7 +106,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
         inspectListing(moduleId),
       ]);
       return toModuleDetail({
-        ...marketplaceDetail(moduleId, listing, null),
+        ...marketplaceDetail(moduleId, catalogModuleRecord(listing), null),
         permissions: inspection?.permissions ?? null,
         localEndpoints: inspection ? inspectionLocalEndpoints(inspection) : null,
       });
@@ -222,6 +233,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
   const storageUsage = async (): Promise<ModuleStorageUsage | null> => null;
 
   return {
+    useInstalled: () => useEngineQuery(runtime, installedRead(runtime)),
     useDetailRequest: () => useEngineRequest(detail),
     useSettingsRequest: () => useEngineRequest(settings),
     useUpdateSettingRequest: () => useEngineRequest(updateSetting),

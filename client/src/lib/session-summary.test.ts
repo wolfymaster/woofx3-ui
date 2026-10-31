@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import type { StreamRecapTotals } from "@/engine/types";
 import {
   formatLiveDuration,
   formatSubsBreakdown,
   formatViewerFigure,
   liveDurationMs,
-  type SessionSummaryRow,
   summarySegments,
 } from "./session-summary";
 
@@ -65,12 +65,27 @@ describe("summarySegments", () => {
     { id: "a", startedAt: "2026-09-20T00:00:00.000Z", endedAt: "2026-09-20T01:00:00.000Z" },
     { id: "b", startedAt: "2026-09-20T02:00:00.000Z", endedAt: null },
   ];
-  const row = (status: "open" | "closed", inProgress: boolean) =>
-    ({
-      generatedAt: "2026-09-20T02:30:00.000Z",
-      inProgress,
+  const totals: StreamRecapTotals = {
+    bits: 0,
+    cheers: 0,
+    subs: 0,
+    giftedSubs: 0,
+    follows: 0,
+    raids: 0,
+    raiders: 0,
+    peakViewers: null,
+    averageViewers: null,
+    viewerSampleMinutes: 0,
+  };
+  const row = (status: "open" | "closed", inProgress: boolean) => ({
+    generatedAt: "2026-09-20T02:30:00.000Z",
+    inProgress,
+    summary: {
+      kind: "read" as const,
       session: { status, startedAt: "2026-09-20T00:00:00.000Z", endedAt: null, segments },
-    }) as unknown as SessionSummaryRow;
+      totals,
+    },
+  });
 
   it("ends a still-live segment when the summary was taken", () => {
     const result = summarySegments(row("open", true));
@@ -89,6 +104,9 @@ describe("summarySegments", () => {
   });
 
   it("has no segments for an unreadable summary", () => {
-    expect(summarySegments({ session: undefined } as unknown as SessionSummaryRow)).toEqual([]);
+    const unreadable = { kind: "unreadable" as const, schemaVersion: 2 };
+    expect(
+      summarySegments({ generatedAt: "2026-09-20T02:30:00.000Z", inProgress: false, summary: unreadable })
+    ).toEqual([]);
   });
 });

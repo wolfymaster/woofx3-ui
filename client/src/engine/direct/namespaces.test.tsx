@@ -11,32 +11,41 @@ import {
   type SceneSnapshot,
   type StreamEventFrame,
   type TwitchHelixResult,
+  type UISettingValue,
   type Workflow,
 } from "@woofx3/api";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
-import type { WorkflowRun } from "@/engine/types";
+import type { MacroId, MacroInput, WorkflowRun } from "@/engine/types";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
 import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
+import { directDashboardGateway } from "./dashboard";
 import { directEventLogGateway } from "./event-log";
-import { toModuleId, toSceneId } from "./ids";
+import { directGoLiveGateway } from "./go-live";
+import { toModuleId, toSceneId, toStreamInfoPresetId } from "./ids";
 import { directKeys } from "./keys";
+import { directMacrosGateway } from "./macros";
+import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
 import { directOverlaysGateway } from "./overlays";
+import { directPageIntrosGateway } from "./page-intros";
 import { directPinsGateway } from "./pins";
 import { directRequestsGateway } from "./requests";
 import { directScenesGateway } from "./scenes";
+import { directShoutoutsGateway } from "./shoutouts";
 import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
 import type { AvailableWidget, FakeEngineState, TwitchFakeMethod } from "./testing/DirectFakeApi";
-import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
+import { createDirectHarness, type DirectHarness, type RenderedHook, renderDirect } from "./testing/direct-harness";
+import { FakeShoutoutQueueHost } from "./testing/FakeShoutoutQueueHost";
+import { FakeStreamStartMarkers } from "./testing/FakeStreamStartMarkers";
 import { directTwitchChatGateway } from "./twitch-chat";
 import { directWorkflowsGateway } from "./workflows";
 
@@ -231,7 +240,52 @@ describe("eventLog", () => {
     expect(state.streamSubscriptions[1].types).toEqual(["channel.raid"]);
   });
 
-  test("the webhook log is a dashboard's record, which this gateway has none of", async () => {
+  test("the log screen reads the engine's event log, newest first, a page at a time", async () => {
+    const { runtime, state } = await connected();
+    state.events = [3, 2, 1].map((n) => ({
+      id: `ev-${n}`,
+      type: n === 2 ? "channel.raid" : "channel.follow",
+      source: "twitch",
+      time: `2026-10-31T10:0${n}:00Z`,
+      data: { n },
+    }));
+    const gateway = directEventLogGateway(runtime);
+    expect(gateway.canRetrigger).toBe(false);
+
+    const read = renderDirect(() => gateway.useWebhookEvents(null, 2));
+    await read.until((value) => value.status === "CanLoadMore", "the first page");
+    expect(read.current().results.map((event) => event.id)).toEqual(["ev-3", "ev-2"]);
+    expect(read.current().results[0]).toMatchObject({
+      eventType: "channel.follow",
+      source: "webhook",
+      receivedAt: Date.parse("2026-10-31T10:03:00Z"),
+      payloadLength: JSON.stringify({ n: 3 }).length,
+    });
+
+    read.current().loadMore(2);
+    await read.until((value) => value.status === "Exhausted", "the last page");
+    expect(read.current().results.map((event) => event.id)).toEqual(["ev-3", "ev-2", "ev-1"]);
+
+    const payload = renderDirect(() => gateway.useWebhookPayload("ev-2" as never));
+    expect(await payload.until((value) => value !== undefined, "the payload")).toBe(JSON.stringify({ n: 2 }));
+    read.unmount();
+    payload.unmount();
+  });
+
+  test("an engine that keeps no event log reads as an empty log", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    const { runtime, state, engine } = harness;
+    engine.capabilities = engine.capabilities.filter((capability) => capability !== ENGINE_CAPABILITIES.eventsLog);
+    state.events = [{ id: "ev-1", type: "channel.follow", source: "twitch", time: "", data: {} }];
+    await harness.connect();
+    const read = renderDirect(() => directEventLogGateway(runtime).useWebhookEvents(null, 10));
+    await read.until((value) => value.status === "Exhausted", "an empty log");
+    expect(read.current().results).toEqual([]);
+    read.unmount();
+  });
+
+  test("a logged event cannot be fired again", async () => {
     const { runtime } = await connected();
     const retrigger = renderDirect(() => directEventLogGateway(runtime).useRetriggerRequest()).current();
     await expect(retrigger("log-1" as never)).rejects.toBeInstanceOf(GatewayUnsupportedError);
@@ -421,10 +475,123 @@ describe("streamOps", () => {
     expect(await detail("gone")).toEqual({ status: "unknown_session" });
   });
 
-  test("the stored recap summary is a dashboard's record, which this gateway has none of", async () => {
+  const sessionTotals = (sessionId: string, bits: number) => ({
+    sessionId,
+    bits,
+    cheers: 1,
+    subs: 0,
+    giftedSubs: 0,
+    follows: 2,
+    raids: 0,
+    raiders: 0,
+    peakViewers: 12,
+    averageViewers: 8,
+    viewerSampleMinutes: 30,
+  });
+  const liveSegment = [{ id: "seg-2", startedAt: "2026-10-28T10:00:00Z", endedAt: null }];
+
+  test("recaps are the engine's sessions and totals, in progress only while live in that session", async () => {
+    const { runtime, state, clock } = await connected();
+    state.streamStatus = { isLive: true, uptime: "1h", viewerCount: 9 };
+    state.sessions = [
+      { id: "s-2", status: "open", startedAt: "2026-10-28T10:00:00Z", endedAt: null, segments: liveSegment },
+      { id: "s-1", status: "closed", startedAt: "2026-10-27T10:00:00Z", endedAt: "2026-10-28T10:00:00Z", segments: [] },
+      { id: "merged", status: "closed", startedAt: "2026-10-26T10:00:00Z", endedAt: null, segments: [] },
+    ];
+    state.sessionTotals = { "s-2": sessionTotals("s-2", 300), "s-1": sessionTotals("s-1", 100) };
+    const read = renderDirect(() => directStreamOpsGateway(runtime).useRecentRecaps(10));
+    const recaps = await read.until((value) => value !== undefined, "the recaps");
+
+    expect(recaps?.map((recap) => [recap.sessionId, recap.inProgress])).toEqual([
+      ["s-2", true],
+      ["s-1", false],
+    ]);
+    expect(recaps?.[0]).toEqual({
+      sessionId: "s-2",
+      generatedAt: new Date(clock.now()).toISOString(),
+      generatedAtMs: clock.now(),
+      inProgress: true,
+      summary: {
+        kind: "read",
+        session: { status: "open", startedAt: "2026-10-28T10:00:00Z", endedAt: null, segments: liveSegment },
+        totals: {
+          bits: 300,
+          cheers: 1,
+          subs: 0,
+          giftedSubs: 0,
+          follows: 2,
+          raids: 0,
+          raiders: 0,
+          peakViewers: 12,
+          averageViewers: 8,
+          viewerSampleMinutes: 30,
+        },
+      },
+    });
+    expect(state.callsOf("listStreamSessions")).toContainEqual([{ limit: 10 }]);
+    read.unmount();
+  });
+
+  test("a recap is read again when the stream goes offline and when a page refreshes the open session", async () => {
+    const { runtime, state, engine } = await connected();
+    state.streamStatus = { isLive: true, uptime: "1h", viewerCount: 9 };
+    state.sessions = [
+      { id: "s-2", status: "open", startedAt: "2026-10-28T10:00:00Z", endedAt: null, segments: liveSegment },
+    ];
+    state.sessionTotals = { "s-2": sessionTotals("s-2", 300) };
+    const streamOps = directStreamOpsGateway(runtime);
+    const read = renderDirect(() => streamOps.useRecap("s-2"));
+    await read.until((value) => value?.inProgress === true, "the live recap");
+
+    state.sessionTotals = { "s-2": sessionTotals("s-2", 450) };
+    const refresh = renderDirect(() => streamOps.useOpenSessionRefreshRequest()).current();
+    expect(await refresh()).toEqual({ status: "stored" });
+    await read.until(
+      (value) => value?.summary.kind === "read" && value.summary.totals.bits === 450,
+      "the refreshed totals"
+    );
+
+    state.streamStatus = { isLive: false, uptime: "", viewerCount: 0 };
+    await engine.pushEvent(
+      makeCallbackEnvelope({ type: EngineEventType.STREAM_OFFLINE, twitchUserId: "u-1" }, "engine", "e-1")
+    );
+    await read.until((value) => value?.inProgress === false, "the finished recap");
+    read.unmount();
+  });
+
+  test("a session the engine does not have, or has no totals for, has no recap", async () => {
+    const { runtime, state } = await connected();
+    state.sessions = [{ id: "s-1", status: "closed", startedAt: "2026-10-27T10:00:00Z", endedAt: null, segments: [] }];
+    const streamOps = directStreamOpsGateway(runtime);
+    const missing = renderDirect(() => streamOps.useRecap("gone"));
+    expect(await missing.until((value) => value !== undefined, "the missing recap")).toBeNull();
+    const untotalled = renderDirect(() => streamOps.useRecap("s-1"));
+    expect(await untotalled.until((value) => value !== undefined, "the recap without totals")).toBeNull();
+    missing.unmount();
+    untotalled.unmount();
+  });
+
+  test("an engine without session history has no recaps", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    harness.engine.capabilities = harness.engine.capabilities.filter(
+      (id) => id !== ENGINE_CAPABILITIES.analyticsSessions
+    );
+    await harness.connect();
+    const read = renderDirect(() => directStreamOpsGateway(harness.runtime).useRecentRecaps(10));
+    expect(await read.until((value) => value !== undefined, "the recaps")).toEqual([]);
+    expect(harness.state.callsOf("listStreamSessions")).toEqual([]);
+    read.unmount();
+  });
+
+  test("a recap's clips and markers are Twitch's lists, which the engine cannot serve", async () => {
     const { runtime } = await connected();
-    const refresh = renderDirect(() => directStreamOpsGateway(runtime).useOpenSessionRefreshRequest()).current();
-    await expect(refresh()).rejects.toBeInstanceOf(GatewayUnsupportedError);
+    const streamOps = directStreamOpsGateway(runtime);
+    expect(streamOps.support).toEqual({ recapClips: false, recapMarkers: false });
+    const clips = renderDirect(() => streamOps.useRecapClipsRequest()).current();
+    const markers = renderDirect(() => streamOps.useRecapMarkersRequest()).current();
+    await expect(clips("s-1")).rejects.toBeInstanceOf(GatewayUnsupportedError);
+    await expect(markers("s-1")).rejects.toBeInstanceOf(GatewayUnsupportedError);
   });
 });
 
@@ -892,6 +1059,48 @@ describe("modules", () => {
     files: [{ path: "manifest.json", size: 10, kind: "text" as const }],
   });
 
+  test("the installed list says where each module came from, and follows installs", async () => {
+    const { runtime, state, engine } = await connected();
+    state.modules = [
+      { ...installed("woofx3", { id: "woofx3" }), createdByType: "SYSTEM" },
+      installed("cozy", { id: "cozy", description: "Warm", tags: ["chat"], author: "Ana" }, "cozy-v2"),
+      { ...installed("mine", { id: "mine" }), uploadResourceId: "res-1" },
+    ];
+    const read = renderDirect(() => directModulesGateway(runtime).useInstalled());
+    const modules = await read.until((value) => value !== undefined, "the installed modules");
+    expect(modules?.map((module) => [module.id, module.provenance, module.status])).toEqual([
+      ["woofx3", "builtIn", "installed"],
+      ["cozy", "marketplace", "installed"],
+      ["mine", "uploaded", "installed"],
+    ]);
+    expect(modules?.[1]).toMatchObject({
+      name: "cozy module",
+      description: "Warm",
+      tags: ["chat"],
+      author: "Ana",
+      moduleKey: "cozy:1.0.0:abc1234",
+      marketplaceListingId: "cozy-v2",
+      manifest: { id: "cozy", description: "Warm", tags: ["chat"], author: "Ana" },
+    });
+
+    state.modules = [...state.modules, installed("fresh", { id: "fresh" })];
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.MODULE_INSTALLED,
+          modulePrefix: "fresh",
+          moduleName: "fresh module",
+          version: "1.0.0",
+          moduleKey: "fresh:1.0.0:abc1234",
+        },
+        "engine",
+        "e-installed"
+      )
+    );
+    await read.until((value) => value?.length === 4, "the newly installed module");
+    read.unmount();
+  });
+
   test("an installed module's detail is what it registered, with its listing's readme and newer build", async () => {
     const { runtime, state } = await connected();
     state.modules = [
@@ -919,7 +1128,9 @@ describe("modules", () => {
       actions: [],
       functions: [],
     } as never;
-    state.listings = { "cozy-listing": { module: { readme: "# Cozy", version: "2.0.0" } } };
+    state.listings = {
+      "cozy-listing": { listing: { id: "cozy-listing", version: "2.0.0", module: { readme: "# Cozy" } } },
+    };
     state.inspections = { "cozy-listing": inspection("cozy-listing", ["chat.read", "chat.write"]) };
     const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("cozy");
     expect(detail).toMatchObject({
@@ -939,15 +1150,27 @@ describe("modules", () => {
 
   test("a listing's detail says its permissions are unknown when the engine cannot inspect it", async () => {
     const { runtime, state } = await connected();
-    state.listings = { paid: { module: { id: "paid", name: "Paid", version: "1.0.0" } } };
+    state.listings = {
+      paid: {
+        listing: {
+          id: "paid",
+          name: "Paid",
+          version: "1.0.0",
+          module: { readme: "# Paid", triggers: [{ id: "paid.tipped", name: "Tipped", description: "" }] },
+        },
+      },
+    };
     const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("paid");
     expect(detail).toMatchObject({
       id: "paid",
       name: "Paid",
+      version: "1.0.0",
+      readme: "# Paid",
       isInstalled: false,
       permissions: null,
       localEndpoints: null,
     });
+    expect(detail.triggers).toMatchObject([{ key: "paid.tipped", name: "Tipped" }]);
   });
 
   test("only declared settings are read, and only declared settings are written", async () => {
@@ -1037,6 +1260,106 @@ describe("modules", () => {
       .current()({} as never)
       .catch((error: Error) => error);
     expect(archive).toBeInstanceOf(GatewayUnsupportedError);
+  });
+});
+
+describe("marketplace", () => {
+  const listing = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    type: "module",
+    name: `${id} listing`,
+    description: "",
+    version: "1.0.0",
+    author: "Ana",
+    authorSlug: "ana",
+    category: "Utilities",
+    tags: [],
+    images: {},
+    tier: "public",
+    pricing: { mode: "free", currency: "usd" },
+    edition: 1,
+    credits: [],
+    ...overrides,
+  });
+
+  test("a search is sent as the marketplace names it, unbought, and parsed as the marketplace's own answer", async () => {
+    const { runtime, state } = await connected();
+    state.catalogSearch = () => ({ listings: [listing("cozy"), { id: "broken" }], total: 2 });
+    const search = renderDirect(() => directMarketplaceGateway(runtime).useSearchRequest()).current();
+    const page = await search({ query: "co", types: ["module", "theme"], featured: false, sort: "newest", limit: 24 });
+    expect(page.listings.map((l) => l.id)).toEqual(["cozy"]);
+    expect(page.total).toBe(2);
+    expect(state.callsOf("marketplaceSearch")).toEqual([
+      [
+        {
+          q: "co",
+          type: ["module", "theme"],
+          category: undefined,
+          featured: undefined,
+          sort: "newest",
+          limit: 24,
+          offset: undefined,
+        },
+        undefined,
+      ],
+    ]);
+  });
+
+  test("a listing the marketplace does not have reads as null, and any other refusal says why", async () => {
+    const { runtime, state } = await connected();
+    state.listings = { cozy: { listing: listing("cozy", { module: { readme: "# Cozy" } }) } };
+    const read = renderDirect(() => directMarketplaceGateway(runtime).useListingRequest()).current();
+    expect(await read("cozy")).toMatchObject({ id: "cozy", name: "cozy listing", module: { readme: "# Cozy" } });
+    expect(await read("gone")).toBeNull();
+    expect(state.callsOf("marketplaceGetListing")).toEqual([
+      ["cozy", undefined],
+      ["gone", undefined],
+    ]);
+
+    state.catalogCounts = { refusedWith: 503 };
+    const counts = renderDirect(() => directMarketplaceGateway(runtime).useCountsRequest()).current();
+    expect(String(await counts().catch((error: Error) => error))).toBe("Error: Refused with 503");
+  });
+
+  test("counts read as null from a marketplace that cannot count", async () => {
+    const { runtime, state } = await connected();
+    const counts = renderDirect(() => directMarketplaceGateway(runtime).useCountsRequest()).current();
+    state.catalogCounts = { counts: { module: 3, theme: 1 }, total: 4 };
+    expect(await counts()).toEqual({ module: 3, theme: 1, emote: 0, overlay: 0, alert: 0 });
+    state.catalogCounts = { refusedWith: 404 };
+    expect(await counts()).toBeNull();
+  });
+
+  test("an author's page is read a page at a time, and an unknown author reads as null", async () => {
+    const { runtime, state } = await connected();
+    state.authors = {
+      ana: (query) => ({ author: { slug: "ana", claimed: false }, listings: [listing("cozy")], total: 3, ...query }),
+    };
+    const read = renderDirect(() => directMarketplaceGateway(runtime).useAuthorRequest()).current();
+    const page = await read("ana", { limit: 1, offset: 2 });
+    expect(page?.author.slug).toBe("ana");
+    expect(page?.listings.map((l) => l.id)).toEqual(["cozy"]);
+    expect(state.callsOf("marketplaceGetAuthor")).toEqual([["ana", { limit: 1, offset: 2 }, undefined]]);
+    expect(await read("nobody", { limit: 1, offset: 0 })).toBeNull();
+  });
+
+  test("quotes, entitlements and checkout need an account", async () => {
+    const { runtime } = await connected();
+    const marketplace = directMarketplaceGateway(runtime);
+    const refusals = await Promise.all([
+      renderDirect(() => marketplace.useQuoteRequest())
+        .current()("cozy")
+        .catch((error: Error) => error),
+      renderDirect(() => marketplace.useEntitlementsRequest())
+        .current()()
+        .catch((error: Error) => error),
+      renderDirect(() => marketplace.useCheckoutRequest())
+        .current()("cozy", "/")
+        .catch((error: Error) => error),
+    ]);
+    for (const refusal of refusals) {
+      expect(refusal).toBeInstanceOf(GatewayUnsupportedError);
+    }
   });
 });
 
@@ -1304,6 +1627,60 @@ describe("twitchChat", () => {
   });
 });
 
+describe("supporter lookups", () => {
+  test("a viewer is looked up on Twitch by login or by id, and a login that cannot be one asks nobody", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, []);
+    answerTwitch(state, {
+      twitchGetUsers: () =>
+        ok({ data: [{ id: "v-1", login: "someone", display_name: "SomeOne", broadcaster_type: "affiliate" }] }),
+    });
+    const lookUp = renderDirect(() => directStreamOpsGateway(runtime).useTwitchViewerRequest()).current();
+    const someone = {
+      twitchUserId: "v-1",
+      login: "someone",
+      displayName: "SomeOne",
+      profileImageUrl: null,
+      broadcasterType: "affiliate",
+    };
+    expect(await lookUp({ login: "@SomeOne" })).toEqual(someone);
+    expect(await lookUp({ twitchUserId: "v-1" })).toEqual(someone);
+    expect(await lookUp({ login: "not a login" })).toBeNull();
+    expect(state.callsOf("twitchGetUsers")).toEqual([[{ login: "someone" }], [{ id: "v-1" }]]);
+  });
+
+  test("a viewer Twitch does not have is null, and an unlinked engine says Twitch is not connected", async () => {
+    const { runtime, state } = await connected();
+    const lookUp = renderDirect(() => directStreamOpsGateway(runtime).useTwitchViewerRequest()).current();
+    expect(String(await failure(lookUp({ login: "someone" })))).toContain(TWITCH_NOT_CONNECTED_MESSAGE);
+
+    linkTwitch(state, []);
+    runtime.queryClient.removeQueries({ queryKey: directKeys.twitch.link() });
+    answerTwitch(state, { twitchGetUsers: () => ok({ data: [] }) });
+    expect(await lookUp({ twitchUserId: "gone" })).toBeNull();
+  });
+});
+
+describe("shoutouts", () => {
+  test("whether the link may shout out follows its scopes", async () => {
+    const { runtime, state, engine } = await connected();
+    const shoutouts = directShoutoutsGateway(runtime, new FakeShoutoutQueueHost());
+    linkTwitch(state, []);
+    const read = renderDirect(() => shoutouts.useCanShoutOut());
+    expect(await read.until((value) => value !== undefined, "the shoutout access")).toBe(false);
+    linkTwitch(state, ["moderator:manage:shoutouts"]);
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.TWITCH_LINK_CHANGED, revision: 3, linked: true, userId: "b-1", authFailedAt: null },
+        "engine",
+        "e-1"
+      )
+    );
+    await read.until((value) => value === true, "the new scope");
+    read.unmount();
+  });
+});
+
 describe("clips", () => {
   test("clips the live stream, names an offline channel, and needs a link", async () => {
     const { runtime, state } = await connected();
@@ -1385,13 +1762,51 @@ describe("streamInfo", () => {
     expect(state.callsOf("twitchCreateStreamMarker")).toEqual([[{ description: "highlight" }]]);
   });
 
-  test("presets are kept in the account, which the engine cannot reach", async () => {
-    const { runtime } = await connected();
+  test("presets are kept by name in the engine's local UI settings, a second save replacing the first", async () => {
+    const { runtime, state } = await connected();
     const streamInfo = directStreamInfoGateway(runtime);
-    const save = await failure(renderDirect(() => streamInfo.useSavePresetRequest()).current()({} as never));
-    expect(save).toBeInstanceOf(GatewayUnsupportedError);
-    const read = renderDirect(() => streamInfo.usePresets());
-    expect(read.error()).toBeInstanceOf(GatewayUnsupportedError);
+    const presets = renderDirect(() => streamInfo.usePresets());
+    expect(await presets.until((value) => value !== undefined, "the presets")).toEqual([]);
+    const save = renderDirect(() => streamInfo.useSavePresetRequest()).current();
+    const chess = { id: "1", name: "Chess", boxArtUrl: null };
+
+    const id = await save({ name: " Chess night ", info: { title: " Rapid ", category: chess, tags: ["English"] } });
+    await save({ name: "Art", info: { title: "Drawing", category: null, tags: [] } });
+    await save({ name: "Chess night", info: { title: "Blitz", category: chess, tags: [] } });
+
+    expect(
+      await presets.until((value) => value?.length === 2 && value[1].info.title === "Blitz", "both presets")
+    ).toEqual([
+      { id: toStreamInfoPresetId("Art"), name: "Art", info: { title: "Drawing", category: null, tags: [] } },
+      { id, name: "Chess night", info: { title: "Blitz", category: chess, tags: [] } },
+    ]);
+    expect(state.uiSettings.streamInfoPresets?.["Chess night"]?.value).toEqual({
+      title: "Blitz",
+      category: chess,
+      tags: [],
+    });
+
+    await renderDirect(() => streamInfo.useRemovePresetRequest()).current()(id);
+    await presets.until((value) => value?.length === 1, "the removal");
+    presets.unmount();
+  });
+
+  test("a preset needs a short name and channel fields Twitch would take, and an unreadable one is left out", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "streamInfoPresets", "Broken", "not a preset");
+    const streamInfo = directStreamInfoGateway(runtime);
+    const save = renderDirect(() => streamInfo.useSavePresetRequest()).current();
+    const info = { title: "Cozy", category: null, tags: [] };
+
+    expect(String(await failure(save({ name: "  ", info })))).toContain("A preset needs a name");
+    expect(String(await failure(save({ name: "x".repeat(61), info })))).toContain("limited to 60 characters");
+    expect(String(await failure(save({ name: "Long", info: { ...info, title: "t".repeat(141) } })))).toContain("140");
+    expect(state.callsOf("setUISetting")).toEqual([]);
+
+    const presets = renderDirect(() => streamInfo.usePresets());
+    expect(await presets.until((value) => value !== undefined, "the presets")).toEqual([]);
+    expect(logger.entries.some((entry) => entry.level === "warn" && entry.fields?.key === "Broken")).toBe(true);
+    presets.unmount();
   });
 });
 
@@ -1437,5 +1852,630 @@ describe("pins", () => {
         GatewayUnsupportedError
       );
     }
+  });
+});
+
+describe("pageIntros", () => {
+  test("dismissing an intro stores it in the engine, and another writer's dismissal shows up", async () => {
+    const { runtime, state, engine } = await connected();
+    const intros = directPageIntrosGateway(runtime);
+    const read = renderDirect(() => intros.useDismissed());
+    expect(await read.until((value) => value !== undefined, "the dismissals")).toEqual([]);
+
+    await renderDirect(() => intros.useDismissRequest()).current()("workflows");
+    expect(state.callsOf("setUISetting")).toEqual([["pageIntros", "workflows", true]]);
+    await read.until((value) => value?.includes("workflows") === true, "the dismissal");
+
+    state.uiSettingRevision += 1;
+    state.uiSettings.pageIntros = {
+      ...state.uiSettings.pageIntros,
+      scenes: {
+        namespace: "pageIntros",
+        key: "scenes",
+        value: true,
+        revision: state.uiSettingRevision,
+        updatedAt: "2026-10-30T10:01:00Z",
+        deleted: false,
+      },
+    };
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.UI_SETTING_CHANGED,
+          namespace: "pageIntros",
+          key: "scenes",
+          revision: state.uiSettingRevision,
+          deleted: false,
+          value: true,
+        },
+        "engine",
+        "e-intro"
+      )
+    );
+    await read.until((value) => value?.includes("scenes") === true, "the other writer's dismissal");
+    read.unmount();
+  });
+});
+
+/** Stores `value` under `namespace`/`key` as another window or device would, at the next revision. */
+function storeSetting(state: FakeEngineState, namespace: string, key: string, value: UISettingValue): void {
+  state.uiSettingRevision += 1;
+  state.uiSettings[namespace] = {
+    ...(state.uiSettings[namespace] ?? {}),
+    [key]: {
+      namespace,
+      key,
+      value,
+      revision: state.uiSettingRevision,
+      updatedAt: "2026-10-30T10:05:00Z",
+      deleted: false,
+    },
+  };
+}
+
+/** Resolves once `read` renders a value deeply equal to `expected`. */
+function untilEqual<T>(read: RenderedHook<T>, expected: T): Promise<T> {
+  return read.until((value) => Bun.deepEquals(value, expected), JSON.stringify(expected));
+}
+
+describe("dashboard", () => {
+  test("panels are added, renamed, filled and removed in the engine's layout", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const panels = renderDirect(() => dashboard.usePanels());
+    expect(await panels.until((value) => value !== undefined, "the panels")).toEqual([]);
+
+    const panelId = await renderDirect(() => dashboard.useAddPanelRequest()).current()("quad");
+    expect(panelId).toBe("id-1");
+    await untilEqual(panels, [{ id: "id-1", name: "Panel 1", layoutId: "quad", widgets: [] }]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["dashboardLayouts", "panels", [{ id: "id-1", name: "Panel 1", layoutId: "quad", widgets: [] }], 0],
+    ]);
+
+    await renderDirect(() => dashboard.useRenamePanelRequest()).current()("id-1", " Raids ");
+    const widgets = [{ zoneId: "0-0", slotId: "s1", type: "notes", config: { pinned: true } }];
+    await renderDirect(() => dashboard.useSetPanelWidgetsRequest()).current()("id-1", widgets);
+    await untilEqual(panels, [{ id: "id-1", name: "Raids", layoutId: "quad", widgets }]);
+
+    const refused = await renderDirect(() => dashboard.useRenamePanelRequest())
+      .current()("id-1", "  ")
+      .catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("Name cannot be empty");
+
+    await renderDirect(() => dashboard.useRemovePanelRequest()).current()("id-1");
+    await untilEqual(panels, []);
+    panels.unmount();
+  });
+
+  test("a panel added elsewhere while one is added here keeps both", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const elsewhere = { id: "other", name: "Other", layoutId: "single", widgets: [] };
+    let raced = false;
+    state.beforeUISettingWrite = () => {
+      if (!raced) {
+        raced = true;
+        storeSetting(state, "dashboardLayouts", "panels", [elsewhere]);
+      }
+    };
+
+    await renderDirect(() => dashboard.useAddPanelRequest()).current()("quad");
+    expect(state.uiSettings.dashboardLayouts?.panels?.value).toEqual([
+      elsewhere,
+      { id: "id-1", name: "Panel 2", layoutId: "quad", widgets: [] },
+    ]);
+    expect(state.callsOf("setUISetting")).toHaveLength(2);
+  });
+
+  test("an unreadable stored layout reads as empty and is logged, without breaking the read", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "dashboardLayouts", "panels", [{ id: 7, widgets: "nope" }]);
+    storeSetting(state, "dashboardLayouts", "rail", "not a rail");
+    const dashboard = directDashboardGateway(runtime);
+    const panels = renderDirect(() => dashboard.usePanels());
+    const rail = renderDirect(() => dashboard.useRailWidgets());
+
+    expect(await panels.until((value) => value !== undefined, "the panels")).toEqual([]);
+    expect(await rail.until((value) => value !== undefined, "the rail")).toBeNull();
+    expect(panels.error()).toBeUndefined();
+    const warned = logger.entries.filter((entry) => entry.level === "warn").map((entry) => entry.fields?.key);
+    expect(warned).toContain("panels");
+    expect(warned).toContain("rail");
+    panels.unmount();
+    rail.unmount();
+  });
+
+  test("the rail is null until saved, and one over the limit is refused before any write", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const rail = renderDirect(() => dashboard.useRailWidgets());
+    expect(await rail.until((value) => value !== undefined, "the rail")).toBeNull();
+
+    const saved = [{ slotId: "notes", type: "notes" }];
+    await renderDirect(() => dashboard.useSetRailWidgetsRequest()).current()(saved);
+    await untilEqual(rail, saved);
+
+    const tooMany = Array.from({ length: 13 }, (_, index) => ({ slotId: `s${index}`, type: "notes" }));
+    const refused = await renderDirect(() => dashboard.useSetRailWidgetsRequest())
+      .current()(tooMany)
+      .catch((error: unknown) => error);
+    expect((refused as Error).message).toContain("at most 12 widgets");
+    expect(state.callsOf("setUISetting")).toHaveLength(1);
+    rail.unmount();
+  });
+
+  test("the note is saved, and another window's save shows up", async () => {
+    const { runtime, state, engine } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const note = renderDirect(() => dashboard.useNote());
+    expect(await note.until((value) => value !== undefined, "the note")).toBeNull();
+
+    await renderDirect(() => dashboard.useSaveNoteRequest()).current()("raid at 9");
+    await untilEqual(note, {
+      content: "raid at 9",
+      updatedAt: Date.parse("2026-10-30T10:00:00Z"),
+      updatedByName: null,
+      updatedByMe: true,
+    });
+
+    storeSetting(state, "dashboardNotes", "notes", { content: "raid at 10" });
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.UI_SETTING_CHANGED,
+          namespace: "dashboardNotes",
+          key: "notes",
+          revision: state.uiSettingRevision,
+          deleted: false,
+          value: { content: "raid at 10" },
+        },
+        "engine",
+        "e-note"
+      )
+    );
+    await note.until((value) => value?.content === "raid at 10", "the other window's note");
+    note.unmount();
+  });
+
+  test("counters are pinned in order, pinning one twice keeps its place, and unpinning drops it", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "dashboardCounters", "broken", "not a pin");
+    const dashboard = directDashboardGateway(runtime);
+    const pinned = renderDirect(() => dashboard.usePinnedCounters());
+    expect(await pinned.until((value) => value !== undefined, "the pinned counters")).toEqual([]);
+
+    const pin = renderDirect(() => dashboard.usePinCounterRequest()).current();
+    await pin("woofx3:counter:deaths");
+    await pin("woofx3:counter:wins");
+    await pin("woofx3:counter:deaths");
+    await untilEqual(pinned, ["woofx3:counter:deaths", "woofx3:counter:wins"]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["dashboardCounters", "woofx3:counter:deaths", { sortOrder: 0 }, 0],
+      ["dashboardCounters", "woofx3:counter:wins", { sortOrder: 1 }, 0],
+    ]);
+
+    await renderDirect(() => dashboard.useUnpinCounterRequest()).current()("woofx3:counter:deaths");
+    await untilEqual(pinned, ["woofx3:counter:wins"]);
+    expect(state.callsOf("deleteUISetting")).toEqual([["dashboardCounters", "woofx3:counter:deaths"]]);
+    pinned.unmount();
+  });
+
+  test("highlights are listed newest first and removed by id", async () => {
+    const { runtime, state } = await connected();
+    const dashboard = directDashboardGateway(runtime);
+    const highlights = renderDirect(() => dashboard.useHighlights());
+    expect(await highlights.until((value) => value !== undefined, "the highlights")).toEqual([]);
+
+    const save = renderDirect(() => dashboard.useSaveHighlightRequest()).current();
+    const first = await save({ kind: "follow", userName: " viewer ", detail: " ", occurredAt: 1000 });
+    const second = await save({
+      kind: "cheer",
+      userName: "cheerer",
+      detail: "100 bits",
+      amount: 100,
+      occurredAt: 2000,
+    });
+    await untilEqual(highlights, [
+      { id: second, kind: "cheer", userName: "cheerer", detail: "100 bits", amount: 100, occurredAt: 2000 },
+      { id: first, kind: "follow", userName: "viewer", detail: null, amount: null, occurredAt: 1000 },
+    ]);
+
+    const refused = await save({ kind: "follow", userName: "  ", occurredAt: 3000 }).catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("A highlight needs a name");
+
+    await renderDirect(() => dashboard.useRemoveHighlightRequest()).current()(first);
+    await highlights.until((value) => value?.length === 1 && value[0].id === second, "the highlight removed");
+    expect(state.uiSettings.dashboardHighlights?.[first]?.deleted).toBe(true);
+    highlights.unmount();
+  });
+});
+
+const hype: MacroInput = {
+  label: "Hype",
+  icon: "Zap",
+  color: "#22c55e",
+  type: "send-message",
+  config: { message: "hype!" },
+};
+const raid: MacroInput = {
+  label: "Raid",
+  type: "chat-command",
+  config: { command: "raid", commandText: "{{channel}}" },
+};
+
+/** The labels `read` renders, in pad order. */
+const labels = (macros: { label: string }[] | undefined) => macros?.map((macro) => macro.label);
+
+describe("macros", () => {
+  test("macros are added in order, edited and deleted in the engine's settings", async () => {
+    const { runtime, state } = await connected();
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+    expect(await pad.until((value) => value !== undefined, "the pad")).toEqual([]);
+
+    const add = renderDirect(() => macros.useAddRequest()).current();
+    const hypeId = await add(hype);
+    const raidId = await add(raid);
+    await untilEqual(pad, [
+      { id: hypeId, ...hype },
+      { id: raidId, ...raid },
+    ]);
+    expect(state.callsOf("setUISetting")).toEqual([
+      ["macros", hypeId, { ...hype, sortOrder: 0 }, 0],
+      ["macros", raidId, { ...raid, sortOrder: 1 }, 0],
+    ]);
+
+    await renderDirect(() => macros.useUpdateRequest()).current()(hypeId, {
+      ...hype,
+      label: "Hype!",
+      color: undefined,
+    });
+    await pad.until((value) => labels(value)?.[0] === "Hype!", "the edit");
+    expect(state.uiSettings.macros?.[hypeId]?.value).toEqual({
+      label: "Hype!",
+      icon: "Zap",
+      type: "send-message",
+      config: { message: "hype!" },
+      sortOrder: 0,
+    });
+
+    await renderDirect(() => macros.useDeleteRequest()).current()(hypeId);
+    await pad.until((value) => value?.length === 1, "the delete");
+    expect(state.uiSettings.macros?.[hypeId]?.deleted).toBe(true);
+    pad.unmount();
+  });
+
+  test("a blank label, a bad color and a missing macro are refused before any write", async () => {
+    const { runtime, state } = await connected();
+    const macros = directMacrosGateway(runtime);
+    const add = renderDirect(() => macros.useAddRequest()).current();
+    const update = renderDirect(() => macros.useUpdateRequest()).current();
+
+    const blank = await add({ ...hype, label: " " }).catch((error: unknown) => error);
+    const color = await add({ ...hype, color: "red" }).catch((error: unknown) => error);
+    const missing = await update("gone" as MacroId, hype).catch((error: unknown) => error);
+    expect((blank as Error).message).toBe("A macro needs a label");
+    expect((color as Error).message).toContain("six-digit hex");
+    expect((missing as Error).message).toBe("Macro not found");
+    expect(state.callsOf("setUISetting")).toEqual([]);
+  });
+
+  test("a reorder writes only the macros that moved", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "a", { ...hype, label: "A", sortOrder: 0 });
+    storeSetting(state, "macros", "b", { ...hype, label: "B", sortOrder: 1 });
+    storeSetting(state, "macros", "c", { ...hype, label: "C", sortOrder: 2 });
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+    expect(labels(await pad.until((value) => value?.length === 3, "the pad"))).toEqual(["A", "B", "C"]);
+
+    await renderDirect(() => macros.useReorderRequest()).current()(["b", "a", "c", "gone"] as MacroId[]);
+    await pad.until((value) => labels(value)?.join() === "B,A,C", "the new order");
+    expect(
+      state.callsOf("setUISetting").map((call) => [call[1], (call[2] as { sortOrder: number }).sortOrder])
+    ).toEqual([
+      ["b", 0],
+      ["a", 1],
+    ]);
+    expect(state.uiSettings.macros?.c?.value).toMatchObject({ sortOrder: 2 });
+    pad.unmount();
+  });
+
+  test("an edit made elsewhere while one is written here is retried on what was written there", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "a", { ...hype, sortOrder: 0 });
+    storeSetting(state, "macros", "b", { ...hype, label: "B", sortOrder: 1 });
+    const macros = directMacrosGateway(runtime);
+    let raced = false;
+    state.beforeUISettingWrite = (_namespace, key) => {
+      if (!raced && key === "a") {
+        raced = true;
+        storeSetting(state, "macros", "a", { ...hype, label: "Renamed elsewhere", sortOrder: 5 });
+      }
+    };
+
+    await renderDirect(() => macros.useReorderRequest()).current()(["b", "a"] as MacroId[]);
+    expect(state.uiSettings.macros?.a?.value).toMatchObject({ label: "Renamed elsewhere", sortOrder: 1 });
+    expect(state.callsOf("setUISetting").filter((call) => call[1] === "a")).toHaveLength(2);
+  });
+
+  test("an unreadable stored macro is left off the pad and logged", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "macros", "broken", { label: 7 });
+    storeSetting(state, "macros", "ok", { ...hype, sortOrder: 0 });
+    const macros = directMacrosGateway(runtime);
+    const pad = renderDirect(() => macros.useMacros());
+
+    expect(labels(await pad.until((value) => value !== undefined, "the pad"))).toEqual(["Hype"]);
+    expect(pad.error()).toBeUndefined();
+    const warned = logger.entries.filter((entry) => entry.level === "warn").map((entry) => entry.fields?.key);
+    expect(warned).toContain("broken");
+    pad.unmount();
+  });
+
+  test("a workflow macro triggers its workflow, unrecorded, with a trigger id to watch", async () => {
+    const { runtime, state } = await connected();
+    state.workflows = [alertWorkflow("wf-1", "Raid train", "alert")];
+    storeSetting(state, "macros", "m", {
+      label: "Go",
+      type: "trigger-workflow",
+      config: { workflowId: "wf-1" },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const result = await run("m" as MacroId, []);
+    expect(result.triggerId).not.toBeNull();
+    expect(state.callsOf("triggerWorkflowByName")).toEqual([
+      ["wf-1", {}, undefined, result.triggerId, "dashboard", undefined],
+    ]);
+  });
+
+  test("an action macro runs its one step with its variables filled in", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", {
+      label: "Scene",
+      type: "run-action",
+      config: { actionStep: { action: "function", ref: "obs:action:setScene", parameters: { scene: "{{scene}}" } } },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    expect(await run("m" as MacroId, [{ name: "scene", value: "Gaming" }])).toEqual({ triggerId: null });
+    expect(state.callsOf("runActions")).toEqual([
+      [
+        {
+          label: "macro:dashboard",
+          actions: [{ action: "function", $ref: "obs:action:setScene", parameters: { scene: "Gaming" } }],
+          event: { type: "macro.run", source: "dashboard", data: {} },
+        },
+      ],
+    ]);
+    const missing = await run("m" as MacroId, []).catch((error: unknown) => error);
+    expect((missing as Error).message).toBe("missing variables: scene");
+  });
+
+  test("a chat-command macro runs as the linked broadcaster, and the engine's refusal is passed on", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", { ...raid, sortOrder: 0 });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const unlinked = await run("m" as MacroId, [{ name: "channel", value: "bob" }]).catch((error: unknown) => error);
+    expect((unlinked as Error).message).toBe("link a Twitch account before running chat-command macros");
+    expect(state.callsOf("executeCommand")).toEqual([]);
+
+    linkTwitch(state, []);
+    await runtime.queryClient.invalidateQueries({ queryKey: directKeys.twitch.link() });
+    await run("m" as MacroId, [{ name: "channel", value: "bob" }]);
+    expect(state.callsOf("executeCommand")).toEqual([["raid", "streamer", "bob"]]);
+
+    state.commandAnswer = { success: false, message: "Command is disabled" };
+    const refused = await run("m" as MacroId, [{ name: "channel", value: "bob" }]).catch((error: unknown) => error);
+    expect((refused as Error).message).toBe("Command is disabled");
+  });
+
+  test("an HTTP-request macro is not run on the engine", async () => {
+    const { runtime, state } = await connected();
+    storeSetting(state, "macros", "m", {
+      label: "Ping",
+      type: "http-request",
+      config: { url: "https://x.test" },
+      sortOrder: 0,
+    });
+    const run = renderDirect(() => directMacrosGateway(runtime).useRunRequest()).current();
+
+    const refused = await run("m" as MacroId, []).catch((error: unknown) => error);
+    expect((refused as Error).message).toContain("run in the browser");
+    expect(state.calls.map((call) => call.method)).not.toContain("runActions");
+  });
+});
+
+describe("goLive", () => {
+  const CHANNEL = { data: [{ title: "Cozy", game_id: "509658", game_name: "Just Chatting", tags: ["English"] }] };
+  const FINISH_SCOPES = ["user:write:chat", "channel:manage:broadcast"];
+
+  function overlayToken(tokenId: string, sceneId: string, createdAt: string, status = "active") {
+    return {
+      tokenId,
+      token: `ovl_${tokenId}`,
+      sceneId,
+      label: "",
+      status,
+      createdAt,
+      url: `http://overlay.test/${tokenId}/`,
+    };
+  }
+
+  test("the checklist reads what is kept in the local UI settings, the workflows and the waiting marker", async () => {
+    const { runtime, state } = await connected();
+    state.workflows = [
+      alertWorkflow("w-1", "Follow", "s-1"),
+      { ...alertWorkflow("w-2", "Raid", "s-1"), isEnabled: false },
+    ];
+    storeSetting(state, "goLiveChecklist", "dismissedCheckIds", ["obs", "retired-check"]);
+    storeSetting(state, "goLiveChecklist", "lastGoLive", {
+      completedAt: 5,
+      title: "Cozy",
+      categoryId: "509658",
+      categoryName: "Just Chatting",
+    });
+    const markers = new FakeStreamStartMarkers();
+    const goLive = directGoLiveGateway(runtime, markers);
+    const checklist = renderDirect(() => goLive.useChecklist());
+
+    expect(await checklist.until((value) => value !== undefined, "the checklist")).toEqual({
+      dismissedCheckIds: ["obs"],
+      lastGoLive: { completedAt: 5, title: "Cozy", categoryId: "509658", categoryName: "Just Chatting" },
+      markerPending: false,
+      workflows: { any: true, enabled: 1, enabledCapped: false },
+    });
+
+    await renderDirect(() => goLive.useSetCheckDismissedRequest()).current()("twitch", true);
+    await checklist.until((value) => value?.dismissedCheckIds.join() === "obs,twitch", "the dismissal");
+    await renderDirect(() => goLive.useSetCheckDismissedRequest()).current()("obs", false);
+    await checklist.until((value) => value?.dismissedCheckIds.join() === "twitch", "the dismissal undone");
+
+    await markers.request();
+    await checklist.until((value) => value?.markerPending === true, "the waiting marker");
+    markers.goLive();
+    await checklist.until((value) => value?.markerPending === false, "the dropped marker");
+    checklist.unmount();
+    expect(markers.listening).toBe(0);
+  });
+
+  test("the overlay facts offer the newest active token of a scene that still exists, refreshed as tokens change", async () => {
+    const { runtime, state, engine } = await connected();
+    const overlays = renderDirect(() => directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useOverlays());
+    expect(await overlays.until((value) => value !== undefined, "the overlay facts")).toEqual({
+      hasScene: false,
+      browserSourceKeyCount: 0,
+      featuredUrl: null,
+      lastLoadedAt: null,
+    });
+
+    state.scenes = [scene("s-1"), compositionSnapshot("a-1", "alert")];
+    state.overlayTokens = [
+      overlayToken("old", "s-1", "2026-10-28T09:00:00Z"),
+      overlayToken("new", "s-1", "2026-10-28T10:00:00Z"),
+      overlayToken("revoked", "s-1", "2026-10-28T11:00:00Z", "revoked"),
+      overlayToken("gone", "s-2", "2026-10-28T12:00:00Z"),
+      overlayToken("alert", "a-1", "2026-10-28T12:00:00Z"),
+    ];
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.OVERLAY_TOKEN_MINTED, tokenId: "new", sceneId: "s-1", label: "" },
+        "engine",
+        "e-token"
+      )
+    );
+    expect(await overlays.until((value) => value?.hasScene === true, "the minted token")).toEqual({
+      hasScene: true,
+      browserSourceKeyCount: 2,
+      featuredUrl: "http://overlay.test/new/",
+      lastLoadedAt: null,
+    });
+    overlays.unmount();
+  });
+
+  test("the Twitch check reads the engine's link: unlinked, refused by Twitch, or missing scopes", async () => {
+    const { runtime, state } = await connected();
+    const check = renderDirect(() =>
+      directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useCheckTwitchRequest()
+    ).current();
+    expect(await check()).toEqual({ linked: false });
+
+    linkTwitch(state, ["user:read:email"]);
+    const linked = await check();
+    expect(linked).toMatchObject({ linked: true, login: "streamer", tokenValid: true, tokenProblem: null });
+    expect(linked.linked && linked.missingScopes).toContain("user:write:chat");
+
+    state.twitchLink = { ...state.twitchLink, authFailedAt: 9 } as typeof state.twitchLink;
+    expect(await check()).toMatchObject({ tokenValid: false, tokenProblem: "Twitch no longer accepts the connection" });
+  });
+
+  test("the stream info check reads the channel, and says when it could not", async () => {
+    const { runtime, state } = await connected();
+    const check = renderDirect(() =>
+      directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useCheckStreamInfoRequest()
+    ).current();
+    expect(await check()).toEqual({ kind: "unlinked" });
+
+    linkTwitch(state, []);
+    runtime.queryClient.removeQueries({ queryKey: directKeys.twitch.link() });
+    answerTwitch(state, { twitchGetChannelInformation: () => ok(CHANNEL) });
+    expect(await check()).toEqual({
+      kind: "ok",
+      login: "streamer",
+      title: "Cozy",
+      categoryId: "509658",
+      categoryName: "Just Chatting",
+      tags: ["English"],
+    });
+
+    answerTwitch(state, { twitchGetChannelInformation: () => refused(500, "down") });
+    expect(String(await failure(check()))).toContain("Couldn't read your stream info from Twitch");
+  });
+
+  test("finishing announces, asks the host for the marker and records the channel as the last go-live", async () => {
+    const { runtime, state, clock } = await connected();
+    linkTwitch(state, FINISH_SCOPES);
+    answerTwitch(state, {
+      twitchSendChatMessage: () => ok({ data: [{ is_sent: true }] }),
+      twitchGetChannelInformation: () => ok(CHANNEL),
+    });
+    const markers = new FakeStreamStartMarkers();
+    const complete = renderDirect(() => directGoLiveGateway(runtime, markers).useCompleteRequest()).current();
+
+    expect(await complete({ announcement: " We're live! ", dropMarker: true })).toEqual({
+      announcement: { status: "done" },
+      marker: { status: "queued", reason: "The marker will be dropped when your stream goes live." },
+    });
+    expect(state.callsOf("twitchSendChatMessage")).toEqual([[{ message: "We're live!" }]]);
+    expect(markers.requests).toBe(1);
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).toEqual({
+      completedAt: clock.now(),
+      title: "Cozy",
+      categoryId: "509658",
+      categoryName: "Just Chatting",
+    });
+
+    expect(await complete({ dropMarker: false })).toEqual({
+      announcement: { status: "skipped", reason: "No announcement was asked for" },
+      marker: { status: "skipped", reason: "No stream marker was asked for" },
+    });
+  });
+
+  test("a finish where every step failed is not a go-live, and one without a channel keeps the last title", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["user:write:chat"]);
+    storeSetting(state, "goLiveChecklist", "lastGoLive", {
+      completedAt: 5,
+      title: "Old",
+      categoryId: "1",
+      categoryName: "Chess",
+    });
+    answerTwitch(state, { twitchSendChatMessage: () => ok({ data: [{ is_sent: true }] }) });
+    const markers = new FakeStreamStartMarkers();
+    const complete = renderDirect(() => directGoLiveGateway(runtime, markers).useCompleteRequest()).current();
+
+    const failed = await complete({ dropMarker: true });
+    expect(failed.marker).toEqual({ status: "failed", message: missingTwitchScopeMessage("channel:manage:broadcast") });
+    expect(markers.requests).toBe(0);
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).toMatchObject({ completedAt: 5 });
+
+    await complete({ announcement: "Live", dropMarker: false });
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).toMatchObject({ title: "Old", categoryName: "Chess" });
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).not.toMatchObject({ completedAt: 5 });
+  });
+
+  test("finishing needs a Twitch link", async () => {
+    const { runtime } = await connected();
+    const complete = renderDirect(() =>
+      directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useCompleteRequest()
+    ).current();
+    expect(String(await failure(complete({ dropMarker: true })))).toContain("Connect Twitch");
+    expect(String(await failure(complete({ announcement: "  ", dropMarker: true })))).toContain(
+      "A chat message needs some text"
+    );
   });
 });

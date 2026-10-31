@@ -23,7 +23,6 @@ import type {
   StreamInfoField,
   StreamInfoPresetId,
 } from "@/engine/types";
-import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { dispatchErrorMessage } from "@/lib/field-options-request";
 import {
   type ChecklistSummary,
@@ -222,11 +221,10 @@ export function useGoLiveChecklist(): GoLiveChecklist {
         }
       }
     };
-    const featuredKey = overlays.featuredKey;
     const results: CheckResult[] = [
       engineCheck(connected),
       remote("twitch"),
-      overlaysCheck(overlays, featuredKey ? browserSourceUrlForKey(featuredKey) : null, now),
+      overlaysCheck(overlays, now),
       remote("obs"),
       remote("stream-info"),
       workflowsCheck(local.workflows),

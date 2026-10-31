@@ -8,8 +8,12 @@ import type {
   AlertSkipResult,
   AlertTargetUsage,
   Announcement,
+  AuthorPage,
   BlockedTerm,
   BlockedTermList,
+  CatalogCounts,
+  CatalogListingDetail,
+  CatalogPage,
   ChatCommand,
   ChatCommandChanges,
   ChatCommandGroup,
@@ -28,6 +32,10 @@ import type {
   CreatedClip,
   CreatedModuleResourceInstance,
   CurrentPin,
+  DashboardNote,
+  DashboardPanel,
+  DashboardPanelWidget,
+  DashboardRailWidget,
   DeclaredResourceKind,
   EngineAlert,
   EngineCapabilityReport,
@@ -50,13 +58,20 @@ import type {
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
   HostedStorageUsage,
+  InstalledModule,
   InstanceLiveState,
   KnownBoxArt,
+  ListingQuote,
   Live,
+  Macro,
   MacroId,
+  MacroInput,
   MacroRunResult,
   MacroVariableValue,
   MarketplaceBundleInstall,
+  MarketplaceCheckout,
+  MarketplacePageRequest,
+  MarketplaceSearchQuery,
   ModeratedUser,
   ModerationAccess,
   ModuleArchiveInstall,
@@ -76,6 +91,7 @@ import type {
   NewLibraryAlert,
   NewModuleResourceInstance,
   NewScene,
+  NewStreamHighlight,
   NewStreamInfoPreset,
   NotRunningWorkflow,
   ObsStatus,
@@ -86,6 +102,8 @@ import type {
   PinnedMessage,
   PublishedTestEvent,
   ReadOptions,
+  RecapClips,
+  RecapMarkers,
   RecapTimelineEvents,
   RecordedWorkflowRun,
   RepinnedMessage,
@@ -111,12 +129,15 @@ import type {
   StorageConfig,
   StreamCategory,
   StreamEventFrame,
+  StreamHighlight,
+  StreamHighlightId,
   StreamInfo,
   StreamInfoChanges,
   StreamInfoPreset,
   StreamInfoPresetId,
   StreamInfoUpdate,
   StreamMarker,
+  StreamRecap,
   StreamRecapEngineDetail,
   Supporter,
   SupporterLeaderboardQuery,
@@ -125,6 +146,7 @@ import type {
   TwitchChannel,
   TwitchLink,
   TwitchLinkFlow,
+  TwitchViewerLookup,
   UploadGrant,
   UploadRequest,
   ViewerFact,
@@ -145,6 +167,44 @@ import type {
 } from "@/engine/types";
 
 /**
+ * The dashboard's own state: the viewer's panels and rail, the instance's
+ * notes, the counters pinned to the command bar, and saved highlights. Kept
+ * by Convex with an account (layouts per user and instance, the rest per
+ * instance), and by the engine's local UI settings on a lone computer.
+ */
+export interface DashboardGateway {
+  /** The viewer's panels in order; empty until the first is added. */
+  usePanels(): Live<DashboardPanel[]>;
+  /** Resolves with the new panel's id. */
+  useAddPanelRequest(): (layoutId: string, name?: string) => Promise<string>;
+  /** Removing a panel that is not there succeeds. */
+  useRemovePanelRequest(): (panelId: string) => Promise<void>;
+  /** Rejects an empty name and a panel that is not there. */
+  useRenamePanelRequest(): (panelId: string, name: string) => Promise<void>;
+  /** Replaces a panel's widgets in one write. Rejects a panel that is not there. */
+  useSetPanelWidgetsRequest(): (panelId: string, widgets: DashboardPanelWidget[]) => Promise<void>;
+  /** Null until the viewer first edits the rail, so the screen shows its defaults; empty once they removed every widget. */
+  useRailWidgets(): Live<DashboardRailWidget[] | null>;
+  /** Replaces the rail in one write. Rejects more than MAX_RAIL_WIDGETS, or a slot id used twice. */
+  useSetRailWidgetsRequest(): (widgets: DashboardRailWidget[]) => Promise<void>;
+  /** Null before anyone saved one. */
+  useNote(): Live<DashboardNote | null>;
+  /** Replaces the note; the last write wins. */
+  useSaveNoteRequest(): (content: string) => Promise<void>;
+  /** Canonical ids of the counters on the command bar, in bar order. */
+  usePinnedCounters(): Live<readonly string[]>;
+  /** Pins a counter to the end of the bar; pinning one already there does nothing. */
+  usePinCounterRequest(): (canonicalId: string) => Promise<void>;
+  /** Takes a counter off the bar; the counter itself is untouched. */
+  useUnpinCounterRequest(): (canonicalId: string) => Promise<void>;
+  /** The latest highlights, newest first. */
+  useHighlights(): Live<StreamHighlight[]>;
+  useSaveHighlightRequest(): (highlight: NewStreamHighlight) => Promise<StreamHighlightId>;
+  /** Removing one already gone succeeds. */
+  useRemoveHighlightRequest(): (highlightId: StreamHighlightId) => Promise<void>;
+}
+
+/**
  * Everything the UI asks of the instance's engine, one namespace per domain
  * (namespaces.ts lists the Convex modules behind each).
  *
@@ -159,6 +219,16 @@ import type {
  * the scope's instance changes, so it is safe in effect dependencies and an
  * effect using it runs again for a newly selected instance.
  */
+/**
+ * Which page intros the viewer has closed. Kept per user with an account, and
+ * by the engine on a lone computer; an intro id is one of the app's own
+ * (`PAGE_INTROS`).
+ */
+export interface PageIntrosGateway {
+  useDismissed(): Live<readonly string[]>;
+  useDismissRequest(): (introId: string) => Promise<void>;
+}
+
 export interface EngineGateway {
   readonly status: StatusGateway;
   readonly resources: ResourcesGateway;
@@ -168,6 +238,7 @@ export interface EngineGateway {
   readonly commands: CommandsGateway;
   readonly moduleResources: ModuleResourcesGateway;
   readonly modules: ModulesGateway;
+  readonly marketplace: MarketplaceGateway;
   readonly scenes: ScenesGateway;
   readonly workflows: WorkflowsGateway;
   readonly requests: RequestsGateway;
@@ -188,6 +259,8 @@ export interface EngineGateway {
   readonly clips: ClipsGateway;
   readonly streamInfo: StreamInfoGateway;
   readonly goLive: GoLiveGateway;
+  readonly pageIntros: PageIntrosGateway;
+  readonly dashboard: DashboardGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -241,6 +314,8 @@ export interface ResourcesGateway {
  * its live push and type selection.
  */
 export interface EventLogGateway {
+  /** Whether a logged event can be fired at the engine again; false hides the control rather than failing it. */
+  readonly canRetrigger: boolean;
   /** Newest first, optionally of one type. */
   useWebhookEvents(eventType: string | null, initialNumItems: number): Paginated<WebhookEventSummary>;
   /** The raw payload JSON; null when the entry is gone or not the caller's. */
@@ -359,7 +434,7 @@ export interface ModuleResourcesGateway {
   useRefreshValuesRequest(): (kind: string) => Promise<null>;
   /**
    * Runs action steps on the engine now. `actions` carry their `$` keys escaped
-   * (lib/dollar-keys); the result arrives through the values they change.
+   * (shared/dollar-keys); the result arrives through the values they change.
    */
   useRunActionsRequest(): (label: string, actions: unknown[]) => Promise<null>;
 }
@@ -370,6 +445,8 @@ export interface ModuleResourcesGateway {
  * with (an installed module's key or a marketplace id) unless typed `ModuleId`.
  */
 export interface ModulesGateway {
+  /** Every module on the engine, built-in ones included. Empty when the caller cannot see the instance. */
+  useInstalled(): Live<InstalledModule[]>;
   /** The module's manifest-derived detail, merged with its marketplace listing when it has one. */
   useDetailRequest(): (moduleId: string) => Promise<ModuleDetail>;
   /** The declared settings' current values; a secret's value never comes back, only whether one is set. */
@@ -416,6 +493,31 @@ export interface ModulesGateway {
   useAssets(moduleId: ModuleId, kinds: readonly string[] | undefined): Live<ModuleAsset[]>;
   /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
   useStorageUsageRequest(): () => Promise<ModuleStorageUsage | null>;
+}
+
+/**
+ * The marketplace's catalog: searching it, a listing's page, an author's page
+ * and the counts per listing type. The catalog is a separate HTTP service, so
+ * every read is a request and nothing pushes a change.
+ *
+ * Quotes, entitlements and checkout are what one account holds and pays for.
+ * Only a gateway with an account serves them; any other rejects with
+ * `GatewayUnsupportedError`, and screens offer no purchase there.
+ */
+export interface MarketplaceGateway {
+  useSearchRequest(): (search: MarketplaceSearchQuery) => Promise<CatalogPage>;
+  /** Null when the marketplace has no such listing for this instance. */
+  useListingRequest(): (listingId: string) => Promise<CatalogListingDetail | null>;
+  /** One page of an author's listings with their profile; null for an author the marketplace does not know. */
+  useAuthorRequest(): (slug: string, page: MarketplacePageRequest) => Promise<AuthorPage | null>;
+  /** Null when the marketplace cannot count listings by type. */
+  useCountsRequest(): () => Promise<CatalogCounts | null>;
+  /** What the account must do to hold the listing; null when there is no such listing. */
+  useQuoteRequest(): (listingId: string) => Promise<ListingQuote | null>;
+  /** The ids of every listing the account holds. */
+  useEntitlementsRequest(): () => Promise<string[]>;
+  /** Starts buying a listing, returning to `returnPath`, a path in this app, when done. */
+  useCheckoutRequest(): (listingId: string, returnPath: string) => Promise<MarketplaceCheckout>;
 }
 
 /**
@@ -486,7 +588,7 @@ export interface WorkflowsGateway {
   useCatalog(): Live<WorkflowCatalog | null>;
   /**
    * Creates a workflow from a definition with its `$` keys escaped
-   * (lib/dollar-keys), and resolves once its webhook echo has landed, with
+   * (shared/dollar-keys), and resolves once its webhook echo has landed, with
    * the id the engine gave it.
    */
   useCreateRequest(): (definition: unknown) => Promise<{ engineWorkflowId: string }>;
@@ -553,8 +655,21 @@ export interface RequestsGateway {
   useEventWatchRequest(): (correlationKey: string) => EventWatch;
 }
 
-/** Running the dashboard's macros. The macros themselves are kept in Convex, not on the engine. */
+/**
+ * The instance's macro pad: one shared set of buttons in one order, and
+ * running a button on the engine.
+ */
 export interface MacrosGateway {
+  /** The pad's macros in the order shown. */
+  useMacros(): Live<Macro[]>;
+  /** Adds a macro after the last; resolves with its id. Rejects a blank label or a color that is not `#rrggbb`. */
+  useAddRequest(): (input: MacroInput) => Promise<MacroId>;
+  /** Replaces a macro's fields. Rejects what the add request rejects, and a macro that is not there. */
+  useUpdateRequest(): (macroId: MacroId, input: MacroInput) => Promise<void>;
+  /** Deleting a macro already gone succeeds. */
+  useDeleteRequest(): (macroId: MacroId) => Promise<void>;
+  /** Puts the pad in `macroIds` order; an id no longer there is skipped. */
+  useReorderRequest(): (macroIds: MacroId[]) => Promise<void>;
   /**
    * Runs a chat-command, workflow or action macro on the engine. Rejects for
    * an HTTP-request macro, which the browser fetches itself, and for a
@@ -564,13 +679,38 @@ export interface MacrosGateway {
 }
 
 /**
+ * Which of `StreamOpsGateway`'s members a gateway serves, for a screen to
+ * leave out what it cannot rather than show a failure. A member marked false
+ * rejects with `GatewayUnsupportedError`.
+ */
+export interface StreamOpsSupport {
+  /** A recap's clips, which Twitch keeps and the engine cannot list. */
+  recapClips: boolean;
+  /** A recap's stream markers, which Twitch keeps on the stream's VOD and the engine cannot list. */
+  recapMarkers: boolean;
+}
+
+/**
  * What the engine records about the channel's streams and the viewers who
- * support them, read on demand: no webhook mirrors these figures into Convex.
- * A recap's stored summary is Convex data; a recap's clips and markers, and a
- * viewer's Twitch profile, come from Twitch, not the engine. Also publishes
- * test events onto the engine's bus.
+ * support them. A recap's session and totals are subscribed to; the rest is
+ * read on demand, since no webhook mirrors those figures into Convex. A
+ * recap's clips and markers, and a viewer's Twitch profile, come from Twitch,
+ * not the engine. Also publishes test events onto the engine's bus.
  */
 export interface StreamOpsGateway {
+  readonly support: StreamOpsSupport;
+  /** The newest sessions' recaps, newest first, at most `limit` (capped at `MAX_RECENT_RECAPS`). */
+  useRecentRecaps(limit: number, options?: ReadOptions): Live<StreamRecap[]>;
+  /** Null when there is no recap of that session. */
+  useRecap(sessionId: string, options?: ReadOptions): Live<StreamRecap | null>;
+  /**
+   * The clips made while a recapped session was live, asked of Twitch on
+   * every call so view counts and deletions are current. Needs
+   * `support.recapClips`; rejects with what kept Twitch from answering.
+   */
+  useRecapClipsRequest(): (sessionId: string) => Promise<RecapClips>;
+  /** The markers placed while a recapped session was live, like clips. Needs `support.recapMarkers`. */
+  useRecapMarkersRequest(): (sessionId: string) => Promise<RecapMarkers>;
   /**
    * A recapped session's per-minute viewer samples and top cheerers and
    * gifters. An engine that is unregistered or cannot answer resolves with
@@ -583,9 +723,10 @@ export interface StreamOpsGateway {
    */
   useRecapTimelineEventsRequest(): (sessionId: string) => Promise<RecapTimelineEvents>;
   /**
-   * Stores a snapshot of the engine's open session as its summary, unless a
-   * fresh one is stored already; the summary itself arrives through the
-   * stored-summary reads.
+   * Brings the open session's recap up to date: stores a snapshot of it as
+   * its summary unless a fresh one is stored already, or, where a recap is
+   * read from the engine itself, reads it again. The recap itself arrives
+   * through the recap reads.
    */
   useOpenSessionRefreshRequest(): () => Promise<OpenSessionRefresh>;
   /** Recent streams, newest first. Rejects with the reason when the engine cannot be asked. */
@@ -594,6 +735,8 @@ export interface StreamOpsGateway {
   useSupporterLeaderboardRequest(): (query: SupporterLeaderboardQuery) => Promise<Supporter[]>;
   /** Rejects for a blank id. */
   useViewerSupportTotalsRequest(): (platformUserId: string) => Promise<ViewerSupportTotals>;
+  /** A viewer's Twitch account; null when Twitch has nobody by that login or id, or the login cannot be one. */
+  useTwitchViewerRequest(): (lookup: TwitchViewerLookup) => Promise<TwitchChannel | null>;
   /** Publishes an event as given, with no `platform` attribute. */
   usePublishEventRequest(): (event: EngineTestEvent) => Promise<PublishedTestEvent>;
   /**
@@ -646,6 +789,8 @@ export interface TwitchLinkGateway {
   useLink(): Live<TwitchLink | null>;
   /** Starts and follows linking for the calling component. */
   useLinkFlow(): TwitchLinkFlow;
+  /** Whether the viewer may link or replace the link; undefined while that is unknown. */
+  useCanManageLink(): Live<boolean>;
   /** Removes the link. Rejects for a caller who is not an owner or admin. */
   useUnlinkRequest(): () => Promise<void>;
 }
@@ -767,6 +912,8 @@ export interface PinsGateway {
  * same queue.
  */
 export interface ShoutoutsGateway {
+  /** Whether the channel's Twitch link may send shoutouts; false when the caller cannot see the instance. */
+  useCanShoutOut(options?: ReadOptions): Live<boolean>;
   /** In queue order. Empty when the caller cannot see the instance. */
   useQueue(options?: ReadOptions): Live<ShoutoutEntry[]>;
   /** The channel a login names, to confirm before queueing; null when there is none. */

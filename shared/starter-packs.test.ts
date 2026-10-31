@@ -19,7 +19,7 @@ import {
   starterPackDefaults,
   textTokens,
   validateStarterValues,
-} from "./starterPacks";
+} from "./starter-packs";
 
 const NO_FEATURES = { delayWait: false };
 

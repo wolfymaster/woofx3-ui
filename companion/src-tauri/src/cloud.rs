@@ -17,7 +17,7 @@ use serde::Deserialize;
 use tokio::sync::{mpsc, watch};
 
 /// Compiled in by build.rs, so a binary never points at the wrong deployment.
-const CONVEX_URL: &str = env!("WOOFX3_CONVEX_URL");
+pub(crate) const CONVEX_URL: &str = env!("WOOFX3_CONVEX_URL");
 
 // Convex function names, in one place so a rename in convex/ has one place to
 // update here.

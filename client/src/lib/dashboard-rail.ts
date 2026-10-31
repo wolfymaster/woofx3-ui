@@ -1,9 +1,4 @@
-import type { Doc } from "@convex/_generated/dataModel";
-
-export type DashboardRailWidget = NonNullable<Doc<"dashboardLayouts">["railWidgets"]>[number];
-
-/** Must match MAX_RAIL_WIDGETS in convex/dashboardLayouts.ts. */
-export const MAX_RAIL_WIDGETS = 12;
+import { type DashboardRailWidget, MAX_RAIL_WIDGETS } from "@shared/dashboard-layout";
 
 /**
  * The rail a user has before they first edit it. The slot ids are fixed so a

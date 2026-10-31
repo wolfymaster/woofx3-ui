@@ -1,5 +1,6 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: fixtures hold engine ${...} expressions as plain strings
 import { describe, expect, test } from "bun:test";
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { Workflow } from "@/engine/types";
 import {
@@ -12,7 +13,6 @@ import {
   triggerAimsAt,
   withFieldConditions,
 } from "@/lib/alert-triggers";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { resourceActions } from "@/lib/resource-actions";
 import type { ActionPreset, ConfigField, TriggerPreset } from "@/lib/workflow-presets";
 import { definitionToTree, treeToDefinition } from "@/lib/workflow-tree";

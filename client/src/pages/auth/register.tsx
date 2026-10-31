@@ -1,7 +1,8 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Loader2, MonitorPlay } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
+import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,11 @@ import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
 import { nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
+
+// The desktop app signs in with Twitch through the system browser, which its
+// window cannot follow. IS_DESKTOP is a build constant, so the web build
+// carries none of it.
+const DesktopTwitchSignIn = IS_DESKTOP ? lazy(() => import("@/desktop/TwitchSignIn")) : null;
 
 /**
  * Where a new account goes next: onboarding, unless it was created on the way
@@ -70,25 +76,23 @@ export default function Register() {
             <CardDescription>Get started with your streaming control plane</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Twitch sign-in leaves for twitch.tv and returns to the web app, which the desktop window
-                cannot follow, so the desktop app signs in with a password. */}
-            {!IS_DESKTOP && (
-              <>
-                <Button variant="outline" className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>
-                  <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
-                  </svg>
-                  Continue with Twitch
-                </Button>
-
-                <div className="relative">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                    or
-                  </span>
-                </div>
-              </>
+            {DesktopTwitchSignIn ? (
+              <Suspense fallback={null}>
+                <DesktopTwitchSignIn nextPath={afterRegisterPath()} />
+              </Suspense>
+            ) : (
+              <Button variant="outline" className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>
+                <TwitchGlyph className="mr-2" />
+                Continue with Twitch
+              </Button>
             )}
+
+            <div className="relative">
+              <Separator />
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                or
+              </span>
+            </div>
 
             <form onSubmit={handleRegister} className="space-y-3">
               <div>

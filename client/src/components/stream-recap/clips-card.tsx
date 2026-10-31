@@ -1,9 +1,9 @@
-import type { RecapClip } from "@convex/lib/recapClips";
 import { Clapperboard, Copy, ExternalLink, Eye, Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
+import type { RecapClip } from "@/engine/types";
 import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import { useToast } from "@/hooks/use-toast";
 import { buildClipShareMessage, formatClipDuration, formatStreamOffset } from "@/lib/recap-clips";
@@ -99,7 +99,9 @@ function ClipRow({ clip, canAnnounce }: { clip: RecapClip; canAnnounce: boolean 
   );
 }
 
-function ClipsBody({ state, canAnnounce }: { state: RecapClipsState; canAnnounce: boolean }) {
+type ListableClipsState = Exclude<RecapClipsState, { kind: "unsupported" }>;
+
+function ClipsBody({ state, canAnnounce }: { state: ListableClipsState; canAnnounce: boolean }) {
   switch (state.kind) {
     case "loading":
       return (
@@ -146,6 +148,9 @@ export function ClipsCard({
   onReload: () => void;
   canAnnounce: boolean;
 }) {
+  if (state.kind === "unsupported") {
+    return null;
+  }
   return (
     <Card data-testid="recap-clips">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">

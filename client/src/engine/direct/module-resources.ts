@@ -1,3 +1,4 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import { type KindDeclarer, parseKindRef, resolveResourceKind, rowsOfKind } from "@shared/resource-kinds";
 import type { ActionStep } from "@woofx3/api";
 import { useCallback } from "react";
@@ -10,7 +11,6 @@ import type {
   NewModuleResourceInstance,
   ResourceValues,
 } from "@/engine/types";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { fromModuleId } from "./ids";
 import { directKeys as k } from "./keys";
 import { toKindDeclarers, toModuleResourceInstance } from "./map/module-resources";

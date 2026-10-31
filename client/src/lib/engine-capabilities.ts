@@ -34,6 +34,9 @@ export function capabilitySupport(
 /** The alert skip, clear and replay controls, with the result shapes the dashboard reads. */
 export const ALERT_QUEUE_CONTROL_CAPABILITIES: readonly EngineCapability[] = ["alerts.queueControls"];
 
+/** `{round(amount, 2)}` and the other function calls in a step's text. */
+export const EXPRESSION_FUNCTION_CAPABILITIES: readonly EngineCapability[] = ["workflow.expressionFunctions"];
+
 /** The alert library: alerts the engine stores as starting points for the alerts steps hold. */
 export const ALERT_LIBRARY_CAPABILITIES: readonly EngineCapability[] = ["compositions.alerts"];
 

@@ -8,6 +8,12 @@
 //! it quits. There it also keeps the shoutout queue and the stream start
 //! marker for the window, which reaches them through the local-mode commands.
 //!
+//! The same crate builds two products: the companion, and the desktop app
+//! (the `bundled-engine` feature with `tauri.woofx3.conf.json`). Whatever
+//! names the product or files its state on the PC comes from the running
+//! app's Tauri config (`AppIdentity`), so the two install side by side and
+//! never share credentials or data.
+//!
 //! Commands are async so none of them runs on the main thread: tray updates
 //! (`MenuItem::set_text`) dispatch to the main thread and wait for it, so a
 //! command blocking the main thread on a lock that a state update holds
@@ -32,26 +38,37 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use tauri_plugin_opener::OpenerExt;
 use woofx3_companion_core::host::{
     choose_host_mode as write_host_mode, HostConfig, HostMode, HostModeKind, LocalEngineSettings,
     MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView, StreamStartMarker, HOST_CONFIG_FILE,
 };
 
 use cloud::CloudLink;
+use credentials::{Credentials, StoredToken};
 use engine_host::LocalEngine;
 use integrations::Integrations;
 use tray::Tray;
 use update::Downloaded;
+use woofx3_companion_core::twitch_sign_in::{convex_site_url, twitch_sign_in_url};
 use woofx3_companion_core::window::{
-    ChooseHostModeArgs, CompanionState, ConfirmAddressArgs, EnqueueShoutoutArgs, HostModeView,
-    IntegrationsView, LocalEngineSession, ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs,
+    AppLinkStart, ChooseHostModeArgs, CompanionLinkStatus, CompanionState, ConfirmAddressArgs,
+    EnqueueShoutoutArgs, FinishAppLinkArgs, HostModeView, IntegrationsView, LocalEngineSession,
+    OpenTwitchSignInArgs, ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs,
     SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs,
     WindowState, STATE_EVENT,
 };
+use woofx3_companion_core::AppIdentity;
 
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
+    /// Which product this is: the companion or the desktop app.
+    identity: AppIdentity,
+    credentials: Credentials,
+    /// The version Convex is told this app runs: the Tauri config's, which
+    /// the updater compares and each product sets for itself.
+    version: String,
     cloud_link: CloudLink,
     engine: LocalEngine,
     /// The mode this run started in, and whether the streamer chose it.
@@ -76,6 +93,10 @@ pub struct Companion {
     /// The pending pairing's device code, kept so cancelling can tell Convex.
     device_code: Mutex<Option<String>>,
     verification_url: Mutex<Option<String>>,
+    /// The token `begin_app_link` handed out the hash of, until
+    /// `finish_app_link` stores it. Only in memory: a link that never
+    /// finishes leaves nothing behind on this PC.
+    pending_link: Mutex<Option<String>>,
     tray: Mutex<Option<Tray>>,
 }
 
@@ -130,6 +151,7 @@ impl Companion {
     /// window and the tray. A newer download replaces an older one.
     fn set_ready_update(&self, downloaded: Downloaded) {
         let ready = ReadyUpdate {
+            product_name: self.identity.product_name().to_string(),
             version: downloaded.version().to_string(),
         };
         *lock(&self.ready_update) = Some(Arc::new(downloaded));
@@ -182,6 +204,19 @@ impl Companion {
         *lock(&self.device_code) = device_code;
     }
 
+    fn pending_link(&self) -> Option<String> {
+        lock(&self.pending_link).clone()
+    }
+
+    /// Drops the pending token once it is stored, unless a newer
+    /// `begin_app_link` has replaced it meanwhile.
+    fn clear_pending_link(&self, stored: &str) {
+        let mut pending = lock(&self.pending_link);
+        if pending.as_deref() == Some(stored) {
+            *pending = None;
+        }
+    }
+
     /// Shows the companion window: pairing, its confirmation and errors need
     /// the streamer there.
     pub fn show_window(&self) {
@@ -192,7 +227,7 @@ impl Companion {
     /// stored token opens the Convex connection; without one the companion
     /// stays off the cloud until a pairing starts.
     async fn resume(self: Arc<Self>) {
-        match credentials::load().await {
+        match self.credentials.load().await {
             // The dashboard window is already open; pairing waits until the
             // streamer asks for it.
             Ok(None) => {
@@ -202,12 +237,8 @@ impl Companion {
                 if !stored.confirmed {
                     self.show_window();
                 }
-                let session = tauri::async_runtime::spawn(pairing::run_session(
-                    Arc::clone(&self),
-                    stored.token,
-                    stored.confirmed,
-                    stored.instance_name,
-                ));
+                let session =
+                    tauri::async_runtime::spawn(pairing::run_session(Arc::clone(&self), stored));
                 self.replace_flow(Some(session));
             }
             Err(err) => {
@@ -226,7 +257,9 @@ impl Companion {
         self.end_start();
         self.set_verification_url(None);
         let device_code = lock(&self.device_code).take();
-        let token = credentials::load()
+        let token = self
+            .credentials
+            .load()
             .await
             .map_err(|err| format!("{err:#}"))?
             .map(|stored| stored.token);
@@ -452,6 +485,82 @@ async fn choose_host_mode(
     Ok(())
 }
 
+/// Whether this computer is already a companion, and of which instance, with
+/// what the dashboard sends Convex to link it.
+#[tauri::command]
+async fn companion_link_status(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<CompanionLinkStatus, String> {
+    let stored = companion
+        .credentials
+        .load()
+        .await
+        .map_err(|err| format!("{err:#}"))?;
+    Ok(CompanionLinkStatus {
+        linked: stored.as_ref().and_then(StoredToken::linked_instance),
+        installation_id: companion.installation_id.clone(),
+        device_name: pairing::device_name(),
+        companion_version: companion.version.clone(),
+    })
+}
+
+/// Starts making this computer the signed-in instance's companion: a fresh
+/// token, kept here, whose hash the dashboard gives Convex. Starting again
+/// replaces a token that never finished. Companion mode only, since local
+/// mode has no account to link to.
+#[tauri::command]
+async fn begin_app_link(companion: State<'_, Arc<Companion>>) -> Result<AppLinkStart, String> {
+    if companion.host.mode != HostModeKind::Companion {
+        return Err("Linking to an account needs the app signed in to one.".to_string());
+    }
+    let token = credentials::generate_token().map_err(|err| format!("{err:#}"))?;
+    let token_hash = credentials::hash_token(&token);
+    *lock(&companion.pending_link) = Some(token);
+    Ok(AppLinkStart {
+        token_hash,
+        installation_id: companion.installation_id.clone(),
+        device_name: pairing::device_name(),
+        companion_version: companion.version.clone(),
+    })
+}
+
+/// Convex recorded this computer as the instance's companion: stores the
+/// pending token as the confirmed pairing and starts the paired session.
+#[tauri::command]
+async fn finish_app_link(
+    companion: State<'_, Arc<Companion>>,
+    args: FinishAppLinkArgs,
+) -> Result<(), String> {
+    pairing::finish_app_link(Arc::clone(&companion), args).await
+}
+
+/// The deployment's HTTP origin, when it is not derived from
+/// `WOOFX3_CONVEX_URL`: the variable the dashboard's build reads too
+/// (vite.config.ts), so both open the same origin.
+const CONVEX_SITE_URL: Option<&str> = option_env!("WOOFX3_CONVEX_SITE_URL");
+
+/// Opens the system browser at Convex's Twitch sign-in, bound to the nonce
+/// the dashboard keeps. The window names only the nonce's hash; the address
+/// is built here from the deployment compiled in, so the window cannot have
+/// the host open any other page. Companion mode only, since local mode has
+/// no account to sign in to.
+#[tauri::command]
+async fn open_twitch_sign_in(
+    companion: State<'_, Arc<Companion>>,
+    args: OpenTwitchSignInArgs,
+) -> Result<(), String> {
+    if companion.host.mode != HostModeKind::Companion {
+        return Err("Signing in to an account needs the app set up to use one.".to_string());
+    }
+    let site_url = convex_site_url(cloud::CONVEX_URL, CONVEX_SITE_URL);
+    let url = twitch_sign_in_url(&site_url, &args.nonce_hash).map_err(|err| err.to_string())?;
+    companion
+        .app
+        .opener()
+        .open_url(url, None::<&str>)
+        .map_err(|err| format!("Could not open the browser: {err}"))
+}
+
 /// Connects to the relay again after another connection displaced this one
 /// or woofx3 refused a credential.
 #[tauri::command]
@@ -517,9 +626,14 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
+            let identity = AppIdentity::new(
+                &app.config().identifier,
+                app.config().product_name.as_deref().unwrap_or_default(),
+            )?;
+            let credentials = Credentials::new(&identity);
             let app_data_dir = app.path().app_data_dir()?;
             let started = load_host_config(app).and_then(|(path, config)| {
-                let engine = start_local_engine(app, &config)?;
+                let engine = start_local_engine(app, &config, &credentials)?;
                 Ok((path, config, engine))
             });
             let (host_config_path, host_config, engine) = match started {
@@ -527,6 +641,7 @@ pub fn run() {
                 Err(err) => {
                     startup_failure::report(
                         app.path().app_log_dir().ok().as_deref(),
+                        &identity.startup_failure_title(),
                         &format!("{err:#}"),
                     );
                     std::process::exit(1);
@@ -540,6 +655,9 @@ pub fn run() {
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
+                version: app.package_info().version.to_string(),
+                identity,
+                credentials,
                 cloud_link: CloudLink::dormant(),
                 engine,
                 host: HostModeView {
@@ -558,6 +676,7 @@ pub fn run() {
                 starting: AtomicBool::new(false),
                 device_code: Mutex::new(None),
                 verification_url: Mutex::new(None),
+                pending_link: Mutex::new(None),
                 tray: Mutex::new(None),
             });
             let tray = tray::build(&handle, &companion.state().tray_label())?;
@@ -587,7 +706,7 @@ pub fn run() {
         })
         .invoke_handler(woofx3_companion_core::with_command_names!(command_handler))
         .build(tauri::generate_context!())
-        .expect("error while building the woofx3 companion")
+        .expect("error while building the Tauri app")
         .run(|app, event| {
             if let RunEvent::ExitRequested { api, code, .. } = event {
                 stop_engine_before_exit(app, &api, code);
@@ -598,13 +717,18 @@ pub fn run() {
 /// The local engine the host configuration asks for, started. An invalid
 /// configuration, or a release with no orchestrator, is an error the caller
 /// shows before exiting.
-fn start_local_engine(app: &tauri::App, config: &HostConfig) -> anyhow::Result<LocalEngine> {
+fn start_local_engine(
+    app: &tauri::App,
+    config: &HostConfig,
+    credentials: &Credentials,
+) -> anyhow::Result<LocalEngine> {
     match &config.mode {
         HostMode::Companion => Ok(LocalEngine::Off),
         HostMode::Local(settings) => Ok(LocalEngine::start(
             settings,
             &app.path().resource_dir()?,
             &app.path().app_local_data_dir()?,
+            Arc::new(credentials.engine_client_store()),
             Arc::new(app.handle().clone()),
         )?),
     }
