@@ -88,6 +88,10 @@ Where browser storage is blocked, the page behaves as signed out.
 
 ## Forms
 
+A form is an instance of the bundled `woofx3:form` resource kind, made and edited at `/stream/forms`. Its title and button text are the kind's settings, and its questions are the `fields` setting, written by the form page's question editor (`FormQuestionsEditor`) because a question's choices are a list inside a list, which a kind's schema can't declare. A page's form widget holds only the instance's canonical id, so one form can sit on several pages and an edit reaches them all at once, without publishing.
+
+`publicSettings` projects the definition into `userPageState` like any binding, and `parseFormDefinition` reads it for the public page and for each submit. A form that was deleted, has no questions yet, or whose stored settings break the rules reads as unavailable: the page says so and a submit is refused as `form_stale`. A deleted form's row goes with it; bringing it back under the same id takes a publish. Canonical ids don't leave Convex, so a visitor names a form by its widget's id (`widgetId`), and Convex writes the instance's canonical id on the row as `formId`.
+
 A visitor's answers go through the edge to Convex, wait in an outbox and reach the engine from there. A submit never calls the engine, so forms keep working while it is offline.
 
 ```
@@ -146,7 +150,11 @@ The engine refuses a malformed delivery for good (its rules are in woofx3 `docs/
 
 ### In workflows
 
-The `userpage.form.submitted` trigger takes an optional `form` field, which matches the Form ID. A step reads an answer with `${trigger.data.answers.<fieldId>}`, and the editor shows that reference for each question. A path would read an id of only digits as an array index, so the page checks refuse one for a question. The editor's ids are UUIDs, which always contain hyphens.
+The `userpage.form.submitted` trigger's `form` field picks a form instance, so a form's page lists and edits its own workflows. Once a workflow is narrowed to a form, the step editor offers each question as a variable (`formAnswerVariables`), which reads as `${trigger.data.answers.<fieldId>}`.
+
+"Add to a queue", on the form's page and on the page editor's form widget, writes an ordinary workflow: this form submitted, then `queue.add` with the chosen question, the viewer's name or a template. It can make the queue too. Nothing else routes answers, so the result edits like any other workflow.
+
+A path would read an id of only digits as an array index, so the page checks refuse one for a question. The editor's ids are UUIDs, which always contain hyphens.
 
 ### Setup
 

@@ -1,3 +1,4 @@
+import type { FormFieldType } from "@shared/user-pages";
 // The types every EngineGateway speaks. They describe the engine's data as the
 // UI uses it, whoever serves it: a gateway maps its own storage or wire shapes
 // into these at its edge, so nothing here may name a gateway's backend.
@@ -106,6 +107,28 @@ export interface Fetched<T> {
  * A paged subscribed read: `results` grows as `loadMore` brings in pages, and
  * every loaded page stays live.
  */
+export type FormSubmissionId = GatewayId<"formSubmission">;
+
+/** One answer to a page form, with the labels and viewer as they were when it was sent. */
+export interface FormSubmission {
+  id: FormSubmissionId;
+  status: "pending" | "delivered" | "failed";
+  formTitle: string | null;
+  submittedAt: number;
+  deliveredAt: number | null;
+  viewer: { platform: string; platformUserId: string; displayName: string; roles: string[] } | null;
+  fields: { id: string; label: string; type: FormFieldType; value: string | boolean }[];
+  failureReason: string | null;
+  lastError: string | null;
+}
+
+export interface FormSubmissionQueueStatus {
+  pendingCount: number;
+  /** Why answers are waiting, when it's something about the engine and not the answers. */
+  engineProblem: "not_registered" | "unreachable" | "capability_missing" | null;
+  atCapacity: boolean;
+}
+
 export interface Paginated<T> {
   results: T[];
   status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";

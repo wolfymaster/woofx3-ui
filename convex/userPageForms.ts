@@ -26,7 +26,7 @@ import { viewerFromSession } from "./lib/viewerSessionAuth";
 
 const attemptArgs = {
   slug: v.string(),
-  formId: v.string(),
+  widgetId: v.string(),
   idempotencyKey: v.string(),
   answers: v.array(v.object({ id: v.string(), value: v.union(v.string(), v.boolean()) })),
   sessionToken: v.union(v.string(), v.null()),
@@ -72,7 +72,7 @@ export const acceptSubmission = internalMutation({
     await ctx.db.insert("pageSubmissions", {
       instanceId: decided.instanceId,
       pageId: decided.pageId,
-      formId: attempt.formId,
+      formId: decided.formId,
       ...(decided.formTitle !== undefined ? { formTitle: decided.formTitle } : {}),
       idempotencyKey: attempt.idempotencyKey,
       submittedAt: now,
@@ -308,17 +308,17 @@ function toDashboardSubmission(row: Doc<"pageSubmissions">): DashboardSubmission
   };
 }
 
-/** The instance's submissions, newest first. A non-member gets an empty list. */
+/** A form's submissions, by its canonical id, newest first. A non-member gets an empty list. */
 export const listSubmissions = query({
-  args: { instanceId: v.id("instances"), paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { instanceId, paginationOpts }) => {
+  args: { instanceId: v.id("instances"), formId: v.string(), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { instanceId, formId, paginationOpts }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId || (await getInstanceMembership(ctx, instanceId, userId)) === null) {
       return { page: [] as DashboardSubmission[], isDone: true, continueCursor: "" };
     }
     const result = await ctx.db
       .query("pageSubmissions")
-      .withIndex("by_instance_and_submitted_at", (q) => q.eq("instanceId", instanceId))
+      .withIndex("by_instance_and_form_and_submitted_at", (q) => q.eq("instanceId", instanceId).eq("formId", formId))
       .order("desc")
       .paginate(paginationOpts);
     return { ...result, page: result.page.map(toDashboardSubmission) };

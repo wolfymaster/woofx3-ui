@@ -1,7 +1,7 @@
-import type { DashboardSubmission, SubmissionQueueStatus } from "@convex/userPageForms";
+import type { FormSubmission, FormSubmissionQueueStatus } from "@/engine/types";
 
 /** How a submission's status reads on the dashboard. */
-export function submissionStatusLabel(status: DashboardSubmission["status"]): string {
+export function submissionStatusLabel(status: FormSubmission["status"]): string {
   switch (status) {
     case "pending":
       return "Waiting to send";
@@ -20,7 +20,7 @@ export function submissionAnswerText(value: string | boolean): string {
 }
 
 /** Why answers are waiting, when it's something about the engine and not the answers. */
-export function engineProblemMessage(problem: NonNullable<SubmissionQueueStatus["engineProblem"]>): string {
+export function engineProblemMessage(problem: NonNullable<FormSubmissionQueueStatus["engineProblem"]>): string {
   switch (problem) {
     case "not_registered":
       return "This page's engine isn't set up yet. Answers are saved and will be sent once it is.";

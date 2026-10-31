@@ -1,5 +1,5 @@
 import type { Doc } from "@convex/_generated/dataModel";
-import { COUNTER_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, FORM_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import {
   Bell,
   Boxes,
@@ -112,6 +112,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const timers = useResourceInstancesOfKind(TIMER_KIND);
   const queues = useResourceInstancesOfKind(QUEUE_KIND);
   const schedules = useResourceInstancesOfKind(SCHEDULE_KIND);
+  const forms = useResourceInstancesOfKind(FORM_KIND);
   const counterKind = useResourceKind(COUNTER_KIND);
   const timerKind = useResourceKind(TIMER_KIND);
   const queueKind = useResourceKind(QUEUE_KIND);
@@ -431,6 +432,20 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
           }),
     ];
     result.push(item);
+  }
+
+  for (const row of forms ?? []) {
+    const href = `/stream/forms/${encodeURIComponent(row.resourceInstanceId)}`;
+    result.push({
+      id: `form:${row.canonicalId}`,
+      title: resourceName(row),
+      kind: "item",
+      group: "Forms",
+      keywords: ["form", "questions", "submissions"],
+      icon: STREAM_OBJECT_ICONS.forms,
+      action: { type: "navigate", href },
+      isOpenAt: isAtOrBelow(href),
+    });
   }
 
   for (const row of queues ?? []) {

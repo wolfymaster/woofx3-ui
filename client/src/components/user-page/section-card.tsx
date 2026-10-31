@@ -43,7 +43,6 @@ interface SectionCardProps {
   pageHasRoom: boolean;
   /** The widget most recently added, which opens with its settings showing. */
   addedWidgetId: string | null;
-  newId: () => string;
   onAddWidget: (sectionId: string, widgetType: PageWidgetType) => void;
   dispatch: Dispatch<PageEditorAction>;
 }
@@ -56,7 +55,6 @@ export function SectionCard({
   canDrag,
   pageHasRoom,
   addedWidgetId,
-  newId,
   onAddWidget,
   dispatch,
 }: SectionCardProps) {
@@ -176,7 +174,6 @@ export function SectionCard({
                     problems={problems}
                     canDrag={section.widgets.length > 1}
                     startOpen={widget.id === addedWidgetId}
-                    newId={newId}
                     onChange={(next) => dispatch({ type: "replaceWidget", sectionId: section.id, widget: next })}
                     onRemove={() => dispatch({ type: "removeWidget", sectionId: section.id, widgetId: widget.id })}
                   />

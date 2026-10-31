@@ -52,31 +52,7 @@ const valid: [string, PageContent][] = [
       config: { image: { kind: "url", url: "https://cdn.example/a.png" }, alt: "A", linkUrl: "https://x.example" },
     }),
   ],
-  [
-    "a form of every field type",
-    onlyWidget({
-      id: "w1",
-      type: "form",
-      config: {
-        submitLabel: "Send",
-        fields: [
-          { id: "name", type: "text", label: "Name", required: true, maxLength: 50 },
-          { id: "about", type: "textarea", label: "About", required: false, maxLength: 2000 },
-          {
-            id: "game",
-            type: "select",
-            label: "Game",
-            required: true,
-            options: [
-              { value: "a", label: "A" },
-              { value: "b", label: "B" },
-            ],
-          },
-          { id: "ok", type: "checkbox", label: "Agree", required: true },
-        ],
-      },
-    }),
-  ],
+  ["a form", onlyWidget({ id: "w1", type: "form", config: { resource: "woofx3:form:requests" } })],
   [
     "a sidebar layout using both regions",
     page(
@@ -170,47 +146,9 @@ const invalid: [string, PageContent, string][] = [
     "theme.banner.url",
   ],
   [
-    "a text answer longer than the ceiling",
-    onlyWidget({
-      id: "w1",
-      type: "form",
-      config: {
-        submitLabel: "Send",
-        fields: [
-          { id: "f", type: "text", label: "Q", required: false, maxLength: USER_PAGE_LIMITS.formTextAnswerLength + 1 },
-        ],
-      },
-    }),
-    "sections[0].widgets[0].config.fields[0].maxLength",
-  ],
-  [
-    "a select with no options",
-    onlyWidget({
-      id: "w1",
-      type: "form",
-      config: { submitLabel: "Send", fields: [{ id: "f", type: "select", label: "Q", required: false, options: [] }] },
-    }),
-    "sections[0].widgets[0].config.fields[0].options",
-  ],
-  [
-    "repeated form field ids",
-    onlyWidget({
-      id: "w1",
-      type: "form",
-      config: {
-        submitLabel: "Send",
-        fields: [
-          { id: "f", type: "checkbox", label: "A", required: false },
-          { id: "f", type: "checkbox", label: "B", required: false },
-        ],
-      },
-    }),
-    "sections[0].widgets[0].config.fields[1].id",
-  ],
-  [
-    "a form with no button text",
-    onlyWidget({ id: "w1", type: "form", config: { submitLabel: "", fields: [] } }),
-    "sections[0].widgets[0].config.submitLabel",
+    "a form not chosen yet",
+    onlyWidget({ id: "w1", type: "form", config: { resource: "" } }),
+    "sections[0].widgets[0].config.resource",
   ],
 ];
 
@@ -226,7 +164,12 @@ describe("checkPageContent refuses", () => {
 
 describe("the widget registry", () => {
   // A widget that shows a resource or an image starts without one, which the owner must pick.
-  const needsChoosing: Record<string, string> = { counter: "resource", timer: "resource", image: "image.url" };
+  const needsChoosing: Record<string, string> = {
+    counter: "resource",
+    timer: "resource",
+    form: "resource",
+    image: "image.url",
+  };
 
   test.each(PAGE_WIDGET_TYPES)("%s starts valid but for what its owner must choose", (type) => {
     const widget = { id: "w1", type, config: PAGE_WIDGETS[type].defaultConfig() } as PageWidget;
@@ -267,47 +210,5 @@ describe("pageBindings", () => {
       ]),
     ];
     expect(pageBindings(sections)).toHaveLength(2);
-  });
-});
-
-describe("form text and ids workflows and the engine depend on", () => {
-  function problemsFor(config: Extract<PageWidget, { type: "form" }>["config"]): string[] {
-    const checked = checkPageContent({
-      ...defaultPageContent(),
-      sections: [
-        {
-          id: "s",
-          region: "main",
-          visibility: { kind: "public" },
-          widgets: [{ id: "w", type: "form", config }],
-        },
-      ],
-    });
-    return checked.ok ? [] : checked.problems.map((problem) => problem.path);
-  }
-  const question = (overrides: { id?: string; label?: string }) => ({
-    id: "q1",
-    label: "Question",
-    type: "checkbox" as const,
-    required: false,
-    ...overrides,
-  });
-
-  test("refuses a question id of only digits", () => {
-    const fieldId = "sections[0].widgets[0].config.fields[0].id";
-    expect(problemsFor({ submitLabel: "Send", fields: [question({ id: "123" })] })).toEqual([fieldId]);
-    expect(problemsFor({ submitLabel: "Send", fields: [question({ id: "1-2" })] })).toEqual([]);
-    expect(
-      problemsFor({ submitLabel: "Send", fields: [question({ id: "3f2b1c9e-7a10-4d2e-9b11-0c6f5a7d8e21" })] })
-    ).toEqual([]);
-  });
-
-  test("refuses a NUL or lone surrogate in a title or question", () => {
-    expect(problemsFor({ title: "a\0", submitLabel: "Send", fields: [] })).toEqual([
-      "sections[0].widgets[0].config.title",
-    ]);
-    expect(problemsFor({ submitLabel: "Send", fields: [question({ label: "a\ud800" })] })).toEqual([
-      "sections[0].widgets[0].config.fields[0].label",
-    ]);
   });
 });

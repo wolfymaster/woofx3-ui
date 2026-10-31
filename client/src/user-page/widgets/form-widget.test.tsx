@@ -22,7 +22,7 @@ function formWidget(accepting = true): Extract<PublicPageWidget, { type: "form" 
     id: "f",
     type: "form",
     accepting,
-    config: { title: "Song requests", submitLabel: "Request", fields: FIELDS },
+    form: { title: "Song requests", submitLabel: "Request", fields: FIELDS },
   };
 }
 
@@ -120,6 +120,12 @@ function text(renderer: ReactTestRenderer): string {
 }
 
 describe("what a form shows", () => {
+  test("no form to show: says so, with no questions and no check", () => {
+    const out = html({ ...formWidget(), form: null }, SIGNED_OUT);
+    expect(out).toContain("isn&#x27;t available");
+    expect(out).not.toContain("<form");
+  });
+
   test("open: its questions are enabled and there is no closed notice", () => {
     const out = html(formWidget(), SIGNED_IN);
     expect(out).toContain("Song requests");
@@ -153,8 +159,10 @@ describe("what a form shows", () => {
   });
 
   test("answers and labels are text, never markup", () => {
-    const widget = formWidget();
-    widget.config.fields = [{ id: "a", type: "checkbox", label: "<img src=x>", required: false }];
+    const widget: ReturnType<typeof formWidget> = {
+      ...formWidget(),
+      form: { submitLabel: "Send", fields: [{ id: "a", type: "checkbox", label: "<img src=x>", required: false }] },
+    };
     expect(html(widget, SIGNED_IN)).toContain("&lt;img src=x&gt;");
   });
 });
@@ -168,7 +176,7 @@ describe("sending a form", () => {
     expect(requests).toEqual([
       {
         slug: "wolfy",
-        formId: "f",
+        widgetId: "f",
         idempotencyKey: "key-1",
         answers: { song: "Never", why: "", mood: "", ok: false },
         sessionToken: "session",

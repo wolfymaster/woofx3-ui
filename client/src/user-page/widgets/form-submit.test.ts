@@ -3,7 +3,7 @@ import { FORM_REFUSAL_CODES, USER_PAGE_LIMITS } from "@shared/user-pages";
 import { turnstileSiteKey } from "../viewer/config";
 import { formFailureCopy, formSubmitUrl, postFormSubmission } from "./form-submit";
 
-const REQUEST = { slug: "wolfy", formId: "f", idempotencyKey: "k".repeat(43), answers: { a: "b" } };
+const REQUEST = { slug: "wolfy", widgetId: "f", idempotencyKey: "k".repeat(43), answers: { a: "b" } };
 const URL_ = "https://woofx3.tv/u/_/forms/submit";
 
 function answering(status: number, body: string): typeof fetch {

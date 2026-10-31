@@ -1,13 +1,15 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import type { DashboardSubmission } from "@convex/userPageForms";
-import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  useFormSubmissionQueueStatus,
+  useFormSubmissions,
+  useRetryFormSubmissionRequest,
+} from "@/engine/hooks/use-form-submissions";
+import type { FormSubmission } from "@/engine/types";
 import { toast } from "@/hooks/use-toast";
 import { engineProblemMessage, submissionAnswerText, submissionStatusLabel } from "@/lib/user-page-submissions";
 
@@ -19,14 +21,10 @@ const STATUS_VARIANT = {
   failed: "destructive",
 } as const;
 
-/** What visitors sent through the page's forms and whether each answer reached the engine. */
-export function SubmissionsPanel({ instanceId }: { instanceId: Id<"instances"> }) {
-  const status = useQuery(api.userPageForms.queueStatus, { instanceId });
-  const {
-    results,
-    status: listStatus,
-    loadMore,
-  } = usePaginatedQuery(api.userPageForms.listSubmissions, { instanceId }, { initialNumItems: PAGE_SIZE });
+/** What visitors sent through one form and whether each answer reached the engine. */
+export function SubmissionsPanel({ formId }: { formId: string }) {
+  const status = useFormSubmissionQueueStatus();
+  const { results, status: listStatus, loadMore } = useFormSubmissions(formId, PAGE_SIZE);
 
   return (
     <div className="space-y-4" data-testid="submissions-panel">
@@ -53,7 +51,7 @@ export function SubmissionsPanel({ instanceId }: { instanceId: Id<"instances"> }
       )}
       {listStatus !== "LoadingFirstPage" && results.length === 0 && (
         <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-          No answers yet. They'll show up here when visitors send a form on your page.
+          No answers yet. They'll show up here when visitors send this form on your page.
         </div>
       )}
       {results.map((submission) => (
@@ -73,14 +71,14 @@ export function SubmissionsPanel({ instanceId }: { instanceId: Id<"instances"> }
   );
 }
 
-function SubmissionCard({ submission }: { submission: DashboardSubmission }) {
-  const retry = useMutation(api.userPageForms.retrySubmission);
+function SubmissionCard({ submission }: { submission: FormSubmission }) {
+  const retry = useRetryFormSubmissionRequest();
   const [retrying, setRetrying] = useState(false);
 
   const onRetry = async () => {
     setRetrying(true);
     try {
-      await retry({ submissionId: submission.id });
+      await retry(submission.id);
     } catch {
       toast({ title: "Couldn't retry that answer", variant: "destructive" });
     } finally {

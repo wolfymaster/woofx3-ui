@@ -29,14 +29,12 @@ everything comes from the shared registry in `shared/user-pages/`.
   never a list of its own), each with its registry `defaultConfig`. Every widget
   type has a settings form in `components/user-page/widget-config-form.tsx`; the
   switch there is exhaustive, so a new registry type does not type-check until
-  it has one. Counter and timer widgets bind a resource through a picker of the
+  it has one. Counter, timer and form widgets bind a resource through a picker of the
   instance's resources of the kind the registry entry binds.
 
-## Submissions
+## Forms
 
-The **Submissions** tab on the same screen lists what visitors sent through the page's forms, newest first: the status, when it was sent, who sent it (a viewer's name, or "Anonymous visitor"), the answers and, for a failed one, the reason with a **Retry** button. A note above the list says when answers are waiting because the engine can't be reached or needs an update, and when the page's forms have stopped accepting because too many are waiting. The editor stays mounted behind the tab, so unsaved edits survive a look at it.
-
-Each form widget's settings show its **Form ID**, for the optional `form` field of the workflow trigger, which matches on it. Each question shows the reference that reads its answer in a workflow, `${trigger.data.answers.<fieldId>}`. [User pages](./user-pages.md#forms) covers delivery.
+A form widget places one of the engine's forms, chosen through the same picker, and can make a new one or send the chosen one's answers to a queue from where it sits. Questions and answers live on the form's own page at `/stream/forms`: the question editor, the submissions newest first (status, when, who, the answers and, for a failed one, the reason with a **Retry** button) and a note when answers are waiting because the engine can't be reached or needs an update, or when forms have stopped accepting because too many are waiting. [User pages](./user-pages.md#forms) covers delivery and workflows.
 
 ## Validation
 

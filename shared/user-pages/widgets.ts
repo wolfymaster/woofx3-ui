@@ -1,9 +1,9 @@
-import { COUNTER_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, FORM_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { type Infer, type Validator, v } from "convex/values";
 import { checkFormFieldId, checkId, checkImage, checkLinkUrl, checkUniqueIds, pageImageValidator } from "./fields";
 import { hasUndeliverableText } from "./forms";
 import { USER_PAGE_LIMITS } from "./limits";
-import type { ProblemReport } from "./problems";
+import { type PageProblem, ProblemReport } from "./problems";
 
 /**
  * First-party page widgets, keyed by a stable type id that is stored in every
@@ -15,9 +15,13 @@ import type { ProblemReport } from "./problems";
  */
 
 /** The resource kinds a widget can bind, as `{module}:{kind}`. */
-export const BINDABLE_RESOURCE_KINDS = [COUNTER_KIND, TIMER_KIND] as const;
+export const BINDABLE_RESOURCE_KINDS = [COUNTER_KIND, TIMER_KIND, FORM_KIND] as const;
 export type BindableResourceKind = (typeof BINDABLE_RESOURCE_KINDS)[number];
-export const bindableResourceKindValidator = v.union(v.literal(COUNTER_KIND), v.literal(TIMER_KIND));
+export const bindableResourceKindValidator = v.union(
+  v.literal(COUNTER_KIND),
+  v.literal(TIMER_KIND),
+  v.literal(FORM_KIND)
+);
 
 /** An engine resource a widget shows the value of, by the canonical id `{module}:{kind}:{id}`. */
 export interface ResourceBinding {
@@ -214,32 +218,115 @@ function checkFormField(field: FormField, report: ProblemReport): void {
   }
 }
 
+/**
+ * What a `woofx3:form` instance holds in its settings. The engine keeps those
+ * opaque, so every reader goes through parseFormDefinition.
+ */
+export interface FormDefinition {
+  title?: string;
+  submitLabel: string;
+  fields: FormField[];
+}
+
+export function checkFormDefinition(definition: FormDefinition, report: ProblemReport): void {
+  if (definition.title !== undefined) {
+    checkFormText(definition.title, "Title", report.field("title"));
+  }
+  report.field("submitLabel").text(definition.submitLabel, "Button text", USER_PAGE_LIMITS.labelLength, true);
+  checkFormQuestions(definition.fields, report.field("fields"));
+}
+
+/** The rules for a form's questions; `report` sits at the list itself. */
+export function checkFormQuestions(questions: readonly FormField[], report: ProblemReport): void {
+  report.count(questions.length, "questions", USER_PAGE_LIMITS.formFields);
+  questions.forEach((field, index) => {
+    checkFormField(field, report.item(index));
+  });
+  checkUniqueIds(
+    questions.map((field) => field.id),
+    report
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function parseFormField(raw: unknown): FormField | null {
+  const field = asRecord(raw);
+  if (
+    !field ||
+    typeof field.id !== "string" ||
+    typeof field.label !== "string" ||
+    typeof field.required !== "boolean"
+  ) {
+    return null;
+  }
+  const base = { id: field.id, label: field.label, required: field.required };
+  switch (field.type) {
+    case "text":
+    case "textarea":
+      return typeof field.maxLength === "number" ? { ...base, type: field.type, maxLength: field.maxLength } : null;
+    case "select": {
+      if (!Array.isArray(field.options)) {
+        return null;
+      }
+      const options = field.options.flatMap((option: unknown) => {
+        const entry = asRecord(option);
+        return entry && typeof entry.value === "string" && typeof entry.label === "string"
+          ? [{ value: entry.value, label: entry.label }]
+          : [];
+      });
+      return options.length === field.options.length ? { ...base, type: "select", options } : null;
+    }
+    case "checkbox":
+      return { ...base, type: "checkbox" };
+    default:
+      return null;
+  }
+}
+
+/** The questions in a form instance's `fields` setting; one that can't be read is left out. */
+export function parseFormFields(raw: unknown): FormField[] {
+  return Array.isArray(raw) ? raw.flatMap((field) => parseFormField(field) ?? []) : [];
+}
+
+/**
+ * The form an instance's settings describe, or null when visitors can't be
+ * shown one: it has no questions yet, or its settings break the rules. An empty
+ * title is how the kind's text field says there is none.
+ */
+export function parseFormDefinition(settings: unknown): FormDefinition | null {
+  const source = asRecord(settings);
+  if (!source || typeof source.submitLabel !== "string" || !Array.isArray(source.fields)) {
+    return null;
+  }
+  const fields = parseFormFields(source.fields);
+  if (fields.length === 0 || fields.length !== source.fields.length) {
+    return null;
+  }
+  const definition: FormDefinition = {
+    ...(typeof source.title === "string" && source.title !== "" ? { title: source.title } : {}),
+    submitLabel: source.submitLabel,
+    fields,
+  };
+  const problems: PageProblem[] = [];
+  checkFormDefinition(definition, ProblemReport.root(problems));
+  return problems.length === 0 ? definition : null;
+}
+
 export const FORM_WIDGET = defineWidget({
   type: "form",
   label: "Form",
-  description: "Questions visitors can answer.",
-  configValidator: v.object({
-    title: v.optional(v.string()),
-    submitLabel: v.string(),
-    fields: v.array(formFieldValidator),
-  }),
-  defaultConfig: () => ({ submitLabel: "Send", fields: [] }),
+  description: "One of your forms, for visitors to answer.",
+  configValidator: v.object({ resource: v.string() }),
+  defaultConfig: () => ({ resource: "" }),
   check: (config, report) => {
-    if (config.title !== undefined) {
-      checkFormText(config.title, "Title", report.field("title"));
-    }
-    report.field("submitLabel").text(config.submitLabel, "Button text", USER_PAGE_LIMITS.labelLength, true);
-    const fields = report.field("fields");
-    fields.count(config.fields.length, "questions", USER_PAGE_LIMITS.formFields);
-    config.fields.forEach((field, index) => {
-      checkFormField(field, fields.item(index));
-    });
-    checkUniqueIds(
-      config.fields.map((field) => field.id),
-      fields
-    );
+    checkResource(config.resource, report);
   },
-  bindings: noBindings,
+  bindings: (config) => [{ canonicalId: config.resource, kind: FORM_KIND }],
 });
 
 function placedWidget<Type extends string, Config>(definition: PageWidgetDefinition<Type, Config>) {

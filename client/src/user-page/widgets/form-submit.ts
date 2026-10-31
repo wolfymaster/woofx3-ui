@@ -2,7 +2,7 @@ import { type FormAnswers, type FormRefusalCode, isFormRefusalCode, USER_PAGE_LI
 
 export interface FormSubmitRequest {
   slug: string;
-  formId: string;
+  widgetId: string;
   /** Kept across resends of the same answers, so a lost response cannot queue them twice. */
   idempotencyKey: string;
   answers: FormAnswers;
