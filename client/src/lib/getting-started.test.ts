@@ -15,8 +15,12 @@ function facts(overrides: Partial<GettingStartedFacts> = {}, setup: Partial<Gett
       engineRegistered: true,
       platformsNeedingSettings: [],
     },
-    overlays: { hasScene: true, browserSourceKeyCount: 1, featuredKey: "k", lastLoadedAt: 3 },
-    browserSourceUrl: "https://example.test/browser-source/k",
+    overlays: {
+      hasScene: true,
+      browserSourceKeyCount: 1,
+      featuredUrl: "https://example.test/browser-source/k",
+      lastLoadedAt: 3,
+    },
     doneItemIds: ["test-follow", "chat-command"],
     obsStatus: null,
   };
@@ -79,7 +83,14 @@ describe("gettingStartedItems", () => {
 
   test("offers the browser-source URL while OBS has not loaded an overlay", () => {
     const item = byId(
-      facts({ overlays: { hasScene: true, browserSourceKeyCount: 1, featuredKey: "k", lastLoadedAt: null } })
+      facts({
+        overlays: {
+          hasScene: true,
+          browserSourceKeyCount: 1,
+          featuredUrl: "https://example.test/browser-source/k",
+          lastLoadedAt: null,
+        },
+      })
     ).overlay;
     expect(item.status).toBe("todo");
     expect(item.fixes[0]).toEqual({
@@ -91,7 +102,7 @@ describe("gettingStartedItems", () => {
 
   test("asks for a scene first when there is none", () => {
     const item = byId(
-      facts({ overlays: { hasScene: false, browserSourceKeyCount: 0, featuredKey: null, lastLoadedAt: null } })
+      facts({ overlays: { hasScene: false, browserSourceKeyCount: 0, featuredUrl: null, lastLoadedAt: null } })
     ).overlay;
     expect(item.fixes).toEqual([{ kind: "route", label: "Open scenes", href: "/stream/scenes" }]);
   });

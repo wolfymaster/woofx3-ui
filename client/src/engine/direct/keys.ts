@@ -34,6 +34,8 @@ export const directKeys = {
     allWidgetThemes: ["scenes", "widgetThemes"] as const,
     widgetThemes: (widgetCanonicalId: string) => ["scenes", "widgetThemes", widgetCanonicalId] as const,
     alertTargetUsage: (engineSceneId: string) => ["scenes", "alertTargetUsage", engineSceneId] as const,
+    /** The scenes' overlay tokens, as the go-live checklist checks them. */
+    browserSources: () => ["scenes", "browserSources"] as const,
   },
   workflows: {
     all: ["workflows"] as const,
@@ -65,6 +67,15 @@ export const directKeys = {
   twitch: {
     all: ["twitch"] as const,
     link: () => ["twitch", "link"] as const,
+  },
+  goLive: {
+    all: ["goLive"] as const,
+    /** Whether a "Stream start" marker waits for the stream to go live; the desktop host's answer, not the engine's. */
+    marker: () => ["goLive", "marker"] as const,
+  },
+  shoutouts: {
+    all: ["shoutouts"] as const,
+    queue: () => ["shoutouts", "queue"] as const,
   },
   commands: {
     all: ["commands"] as const,

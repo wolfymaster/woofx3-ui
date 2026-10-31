@@ -209,6 +209,21 @@ every requested step failed, it also records the channel's title and
 category, which is what the next run's "same title as last time" is measured
 against: Twitch keeps no history of either.
 
+### In local mode
+
+The desktop app's local mode runs the same checklist through the direct
+gateway (`client/src/engine/direct/go-live.ts`), with no Convex:
+
+| Check or step | Local source |
+|---|---|
+| Twitch connection | The engine's Twitch link (`getTwitchLink`), read fresh. The engine renews its own token and records a refused renewal, which reads as Twitch no longer accepting the connection; missing scopes come from the same rules (`shared/twitch-scope-health.ts`) |
+| Overlays | The engine's scenes and active overlay tokens; the URL offered is the newest token's, served by the engine itself. The engine does not record when a browser source loads its URL, so the check never says when one last did. Token and scene events refresh it |
+| Stream info | The engine's `twitchGetChannelInformation` |
+| Workflows | The engine's workflows, counted the same way |
+| Dismissals and the last go-live | The engine's local UI settings, namespace `goLiveChecklist`: key `dismissedCheckIds` (the sorted ids) and key `lastGoLive` (when, and the title and category then) |
+| Announcement | The engine's chat send, as the broadcaster |
+| "Stream start" marker | The desktop host (`request_stream_start_marker`), which drops it now when live, else when the stream next goes live. The checklist's "waiting for the stream" note follows the host's marker event |
+
 ## Getting started checklist
 
 The getting started checklist (`client/src/components/dashboard/getting-started-checklist.tsx`) is pinned as the first rail item, above the user's own rail widgets. Its flyout lists the items in one column. While anything is left to do, the rail icon carries a dot, red when an item needs attention (a failed install, say). The rail item cannot be moved or removed in edit mode. `useGettingStarted` is called once, by the hosted catalog's pinned rail entry, and feeds both the icon and the flyout. Local mode has no account setup to finish, so its catalog pins nothing. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
@@ -705,7 +720,8 @@ cooldown.
 The chatter list, the confirmation lookup and each send go to Helix, or through
 an engine with `twitch.chat` (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). The queue
-itself stays in Convex. A
+itself stays in Convex; in the desktop app's local mode it is the desktop host's
+queue instead (the confirmation lookup still goes through the engine). A
 queued shoutout the engine could not confirm fails like a Twitch 5xx and is
 retried after its backoff, which cannot shout out twice: Twitch refuses a
 second shoutout to the same channel within the hour.
@@ -805,6 +821,8 @@ data has its own UI settings namespace (`client/src/engine/direct/dashboard.ts`,
 | `dashboardCounters` | One per counter's canonical id | `{ sortOrder }` |
 | `dashboardHighlights` | One per highlight id | The saved row: kind, name, detail, amount, time |
 | `macros` | One per macro id | `{ label, icon?, color?, type, config, sortOrder }`; the pad is sorted by `sortOrder`, then id |
+| `streamInfoPresets` | One per preset name | `{ title, category, tags }`; saving under a name replaces that preset |
+| `goLiveChecklist` | `dismissedCheckIds`, `lastGoLive` | See [Go live checklist in local mode](#in-local-mode) |
 
 A layout edit is a read-modify-write that writes only if no other write landed
 since the read (`updateUISetting` with the engine's `expectedRevision`), so a

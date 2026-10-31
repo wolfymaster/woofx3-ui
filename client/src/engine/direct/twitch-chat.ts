@@ -19,24 +19,29 @@ import type { TwitchChatGateway } from "@/engine/gateway";
 import type { Announcement, Chatter } from "@/engine/types";
 import { useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
-import { directTwitch } from "./twitch";
+import { type DirectTwitch, directTwitch } from "./twitch";
+
+/** Posts `text` in chat as the broadcaster; rejects with Twitch's reason when it drops the message. */
+export async function sendChatMessage(twitch: DirectTwitch, text: string): Promise<void> {
+  const message = text.trim();
+  const problem = chatMessageProblem(message);
+  if (problem) {
+    throw new Error(problem);
+  }
+  await twitch.authorize(SEND_MESSAGE_SCOPE);
+  await readChatMessageAnswer(
+    await twitch.helix(ENGINE_CAPABILITIES.twitchChat, "twitchSendChatMessage", (api) =>
+      api.twitchSendChatMessage({ message })
+    )
+  );
+}
 
 /** Writing in chat as the broadcaster, and who is in it, through the engine's `twitch.chat` methods. */
 export function directTwitchChatGateway(runtime: DirectRuntime): TwitchChatGateway {
   const twitch = directTwitch(runtime);
   const chat = ENGINE_CAPABILITIES.twitchChat;
 
-  const sendMessage = async (text: string): Promise<void> => {
-    const message = text.trim();
-    const problem = chatMessageProblem(message);
-    if (problem) {
-      throw new Error(problem);
-    }
-    await twitch.authorize(SEND_MESSAGE_SCOPE);
-    await readChatMessageAnswer(
-      await twitch.helix(chat, "twitchSendChatMessage", (api) => api.twitchSendChatMessage({ message }))
-    );
-  };
+  const sendMessage = (text: string): Promise<void> => sendChatMessage(twitch, text);
 
   const sendAnnouncement = async (announcement: Announcement): Promise<void> => {
     const message = announcement.message.trim();

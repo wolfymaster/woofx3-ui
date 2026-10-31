@@ -25,7 +25,8 @@ import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
 import { directEventLogGateway } from "./event-log";
-import { toModuleId, toSceneId } from "./ids";
+import { directGoLiveGateway } from "./go-live";
+import { toModuleId, toSceneId, toStreamInfoPresetId } from "./ids";
 import { directKeys } from "./keys";
 import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
@@ -42,6 +43,7 @@ import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
 import type { AvailableWidget, FakeEngineState, TwitchFakeMethod } from "./testing/DirectFakeApi";
 import { createDirectHarness, type DirectHarness, type RenderedHook, renderDirect } from "./testing/direct-harness";
+import { FakeStreamStartMarkers } from "./testing/FakeStreamStartMarkers";
 import { directTwitchChatGateway } from "./twitch-chat";
 import { directWorkflowsGateway } from "./workflows";
 
@@ -1591,13 +1593,51 @@ describe("streamInfo", () => {
     expect(state.callsOf("twitchCreateStreamMarker")).toEqual([[{ description: "highlight" }]]);
   });
 
-  test("presets are kept in the account, which the engine cannot reach", async () => {
-    const { runtime } = await connected();
+  test("presets are kept by name in the engine's local UI settings, a second save replacing the first", async () => {
+    const { runtime, state } = await connected();
     const streamInfo = directStreamInfoGateway(runtime);
-    const save = await failure(renderDirect(() => streamInfo.useSavePresetRequest()).current()({} as never));
-    expect(save).toBeInstanceOf(GatewayUnsupportedError);
-    const read = renderDirect(() => streamInfo.usePresets());
-    expect(read.error()).toBeInstanceOf(GatewayUnsupportedError);
+    const presets = renderDirect(() => streamInfo.usePresets());
+    expect(await presets.until((value) => value !== undefined, "the presets")).toEqual([]);
+    const save = renderDirect(() => streamInfo.useSavePresetRequest()).current();
+    const chess = { id: "1", name: "Chess", boxArtUrl: null };
+
+    const id = await save({ name: " Chess night ", info: { title: " Rapid ", category: chess, tags: ["English"] } });
+    await save({ name: "Art", info: { title: "Drawing", category: null, tags: [] } });
+    await save({ name: "Chess night", info: { title: "Blitz", category: chess, tags: [] } });
+
+    expect(
+      await presets.until((value) => value?.length === 2 && value[1].info.title === "Blitz", "both presets")
+    ).toEqual([
+      { id: toStreamInfoPresetId("Art"), name: "Art", info: { title: "Drawing", category: null, tags: [] } },
+      { id, name: "Chess night", info: { title: "Blitz", category: chess, tags: [] } },
+    ]);
+    expect(state.uiSettings.streamInfoPresets?.["Chess night"]?.value).toEqual({
+      title: "Blitz",
+      category: chess,
+      tags: [],
+    });
+
+    await renderDirect(() => streamInfo.useRemovePresetRequest()).current()(id);
+    await presets.until((value) => value?.length === 1, "the removal");
+    presets.unmount();
+  });
+
+  test("a preset needs a short name and channel fields Twitch would take, and an unreadable one is left out", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "streamInfoPresets", "Broken", "not a preset");
+    const streamInfo = directStreamInfoGateway(runtime);
+    const save = renderDirect(() => streamInfo.useSavePresetRequest()).current();
+    const info = { title: "Cozy", category: null, tags: [] };
+
+    expect(String(await failure(save({ name: "  ", info })))).toContain("A preset needs a name");
+    expect(String(await failure(save({ name: "x".repeat(61), info })))).toContain("limited to 60 characters");
+    expect(String(await failure(save({ name: "Long", info: { ...info, title: "t".repeat(141) } })))).toContain("140");
+    expect(state.callsOf("setUISetting")).toEqual([]);
+
+    const presets = renderDirect(() => streamInfo.usePresets());
+    expect(await presets.until((value) => value !== undefined, "the presets")).toEqual([]);
+    expect(logger.entries.some((entry) => entry.level === "warn" && entry.fields?.key === "Broken")).toBe(true);
+    presets.unmount();
   });
 });
 
@@ -2078,5 +2118,195 @@ describe("macros", () => {
     const refused = await run("m" as MacroId, []).catch((error: unknown) => error);
     expect((refused as Error).message).toContain("run in the browser");
     expect(state.calls.map((call) => call.method)).not.toContain("runActions");
+  });
+});
+
+describe("goLive", () => {
+  const CHANNEL = { data: [{ title: "Cozy", game_id: "509658", game_name: "Just Chatting", tags: ["English"] }] };
+  const FINISH_SCOPES = ["user:write:chat", "channel:manage:broadcast"];
+
+  function overlayToken(tokenId: string, sceneId: string, createdAt: string, status = "active") {
+    return {
+      tokenId,
+      token: `ovl_${tokenId}`,
+      sceneId,
+      label: "",
+      status,
+      createdAt,
+      url: `http://overlay.test/${tokenId}/`,
+    };
+  }
+
+  test("the checklist reads what is kept in the local UI settings, the workflows and the waiting marker", async () => {
+    const { runtime, state } = await connected();
+    state.workflows = [
+      alertWorkflow("w-1", "Follow", "s-1"),
+      { ...alertWorkflow("w-2", "Raid", "s-1"), isEnabled: false },
+    ];
+    storeSetting(state, "goLiveChecklist", "dismissedCheckIds", ["obs", "retired-check"]);
+    storeSetting(state, "goLiveChecklist", "lastGoLive", {
+      completedAt: 5,
+      title: "Cozy",
+      categoryId: "509658",
+      categoryName: "Just Chatting",
+    });
+    const markers = new FakeStreamStartMarkers();
+    const goLive = directGoLiveGateway(runtime, markers);
+    const checklist = renderDirect(() => goLive.useChecklist());
+
+    expect(await checklist.until((value) => value !== undefined, "the checklist")).toEqual({
+      dismissedCheckIds: ["obs"],
+      lastGoLive: { completedAt: 5, title: "Cozy", categoryId: "509658", categoryName: "Just Chatting" },
+      markerPending: false,
+      workflows: { any: true, enabled: 1, enabledCapped: false },
+    });
+
+    await renderDirect(() => goLive.useSetCheckDismissedRequest()).current()("twitch", true);
+    await checklist.until((value) => value?.dismissedCheckIds.join() === "obs,twitch", "the dismissal");
+    await renderDirect(() => goLive.useSetCheckDismissedRequest()).current()("obs", false);
+    await checklist.until((value) => value?.dismissedCheckIds.join() === "twitch", "the dismissal undone");
+
+    await markers.request();
+    await checklist.until((value) => value?.markerPending === true, "the waiting marker");
+    markers.goLive();
+    await checklist.until((value) => value?.markerPending === false, "the dropped marker");
+    checklist.unmount();
+    expect(markers.listening).toBe(0);
+  });
+
+  test("the overlay facts offer the newest active token of a scene that still exists, refreshed as tokens change", async () => {
+    const { runtime, state, engine } = await connected();
+    const overlays = renderDirect(() => directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useOverlays());
+    expect(await overlays.until((value) => value !== undefined, "the overlay facts")).toEqual({
+      hasScene: false,
+      browserSourceKeyCount: 0,
+      featuredUrl: null,
+      lastLoadedAt: null,
+    });
+
+    state.scenes = [scene("s-1"), compositionSnapshot("a-1", "alert")];
+    state.overlayTokens = [
+      overlayToken("old", "s-1", "2026-10-28T09:00:00Z"),
+      overlayToken("new", "s-1", "2026-10-28T10:00:00Z"),
+      overlayToken("revoked", "s-1", "2026-10-28T11:00:00Z", "revoked"),
+      overlayToken("gone", "s-2", "2026-10-28T12:00:00Z"),
+      overlayToken("alert", "a-1", "2026-10-28T12:00:00Z"),
+    ];
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.OVERLAY_TOKEN_MINTED, tokenId: "new", sceneId: "s-1", label: "" },
+        "engine",
+        "e-token"
+      )
+    );
+    expect(await overlays.until((value) => value?.hasScene === true, "the minted token")).toEqual({
+      hasScene: true,
+      browserSourceKeyCount: 2,
+      featuredUrl: "http://overlay.test/new/",
+      lastLoadedAt: null,
+    });
+    overlays.unmount();
+  });
+
+  test("the Twitch check reads the engine's link: unlinked, refused by Twitch, or missing scopes", async () => {
+    const { runtime, state } = await connected();
+    const check = renderDirect(() =>
+      directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useCheckTwitchRequest()
+    ).current();
+    expect(await check()).toEqual({ linked: false });
+
+    linkTwitch(state, ["user:read:email"]);
+    const linked = await check();
+    expect(linked).toMatchObject({ linked: true, login: "streamer", tokenValid: true, tokenProblem: null });
+    expect(linked.linked && linked.missingScopes).toContain("user:write:chat");
+
+    state.twitchLink = { ...state.twitchLink, authFailedAt: 9 } as typeof state.twitchLink;
+    expect(await check()).toMatchObject({ tokenValid: false, tokenProblem: "Twitch no longer accepts the connection" });
+  });
+
+  test("the stream info check reads the channel, and says when it could not", async () => {
+    const { runtime, state } = await connected();
+    const check = renderDirect(() =>
+      directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useCheckStreamInfoRequest()
+    ).current();
+    expect(await check()).toEqual({ kind: "unlinked" });
+
+    linkTwitch(state, []);
+    runtime.queryClient.removeQueries({ queryKey: directKeys.twitch.link() });
+    answerTwitch(state, { twitchGetChannelInformation: () => ok(CHANNEL) });
+    expect(await check()).toEqual({
+      kind: "ok",
+      login: "streamer",
+      title: "Cozy",
+      categoryId: "509658",
+      categoryName: "Just Chatting",
+      tags: ["English"],
+    });
+
+    answerTwitch(state, { twitchGetChannelInformation: () => refused(500, "down") });
+    expect(String(await failure(check()))).toContain("Couldn't read your stream info from Twitch");
+  });
+
+  test("finishing announces, asks the host for the marker and records the channel as the last go-live", async () => {
+    const { runtime, state, clock } = await connected();
+    linkTwitch(state, FINISH_SCOPES);
+    answerTwitch(state, {
+      twitchSendChatMessage: () => ok({ data: [{ is_sent: true }] }),
+      twitchGetChannelInformation: () => ok(CHANNEL),
+    });
+    const markers = new FakeStreamStartMarkers();
+    const complete = renderDirect(() => directGoLiveGateway(runtime, markers).useCompleteRequest()).current();
+
+    expect(await complete({ announcement: " We're live! ", dropMarker: true })).toEqual({
+      announcement: { status: "done" },
+      marker: { status: "queued", reason: "The marker will be dropped when your stream goes live." },
+    });
+    expect(state.callsOf("twitchSendChatMessage")).toEqual([[{ message: "We're live!" }]]);
+    expect(markers.requests).toBe(1);
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).toEqual({
+      completedAt: clock.now(),
+      title: "Cozy",
+      categoryId: "509658",
+      categoryName: "Just Chatting",
+    });
+
+    expect(await complete({ dropMarker: false })).toEqual({
+      announcement: { status: "skipped", reason: "No announcement was asked for" },
+      marker: { status: "skipped", reason: "No stream marker was asked for" },
+    });
+  });
+
+  test("a finish where every step failed is not a go-live, and one without a channel keeps the last title", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, ["user:write:chat"]);
+    storeSetting(state, "goLiveChecklist", "lastGoLive", {
+      completedAt: 5,
+      title: "Old",
+      categoryId: "1",
+      categoryName: "Chess",
+    });
+    answerTwitch(state, { twitchSendChatMessage: () => ok({ data: [{ is_sent: true }] }) });
+    const markers = new FakeStreamStartMarkers();
+    const complete = renderDirect(() => directGoLiveGateway(runtime, markers).useCompleteRequest()).current();
+
+    const failed = await complete({ dropMarker: true });
+    expect(failed.marker).toEqual({ status: "failed", message: missingTwitchScopeMessage("channel:manage:broadcast") });
+    expect(markers.requests).toBe(0);
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).toMatchObject({ completedAt: 5 });
+
+    await complete({ announcement: "Live", dropMarker: false });
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).toMatchObject({ title: "Old", categoryName: "Chess" });
+    expect(state.uiSettings.goLiveChecklist?.lastGoLive?.value).not.toMatchObject({ completedAt: 5 });
+  });
+
+  test("finishing needs a Twitch link", async () => {
+    const { runtime } = await connected();
+    const complete = renderDirect(() =>
+      directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useCompleteRequest()
+    ).current();
+    expect(String(await failure(complete({ dropMarker: true })))).toContain("Connect Twitch");
+    expect(String(await failure(complete({ announcement: "  ", dropMarker: true })))).toContain(
+      "A chat message needs some text"
+    );
   });
 });

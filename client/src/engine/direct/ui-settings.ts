@@ -1,10 +1,12 @@
 import { ENGINE_CAPABILITIES, type UISetting, type UISettingValue, type UISettingWriteResult } from "@woofx3/api";
+import type { z } from "zod";
 import { GatewayUnsupportedError } from "@/engine/errors";
+import type { Logger } from "@/lib/engine-session/deps";
 import { directKeys as k } from "./keys";
 import type { EngineRead } from "./query";
 import type { DirectRuntime } from "./runtime";
 
-// The dashboard's own data (page intros, layouts, notes, counters, macros)
+// The dashboard's own data (page intros, layouts, notes, counters, macros, stream info presets, the go-live checklist)
 // kept by the engine for a dashboard with no account: one namespace per kind
 // of data, the engine storing values it never reads. Each namespace is read
 // whole and cached; `ui.setting.changed` refreshes it, whichever window or
@@ -20,9 +22,39 @@ export const UI_SETTING_NAMESPACES = {
   dashboardCounters: "dashboardCounters",
   dashboardHighlights: "dashboardHighlights",
   macros: "macros",
+  streamInfoPresets: "streamInfoPresets",
+  goLiveChecklist: "goLiveChecklist",
 } as const;
 
 export type UISettingNamespace = (typeof UI_SETTING_NAMESPACES)[keyof typeof UI_SETTING_NAMESPACES];
+
+/**
+ * Everything the dashboard writes is built from JSON it read or typed
+ * values of plain fields, so it is a value JSON can represent; the engine
+ * refuses one that is not.
+ */
+export function toSettingValue(value: object): UISettingValue {
+  return value as UISettingValue;
+}
+
+/**
+ * `setting`'s value read by `schema`, or null (logged) when it does not fit.
+ * The engine stores values it never reads, so a value an older or newer
+ * dashboard wrote reads as nothing rather than breaking the screen, and the
+ * next write replaces it.
+ */
+export function parseSetting<T>(logger: Logger, schema: z.ZodType<T>, setting: UISetting): T | null {
+  const parsed = schema.safeParse(setting.value);
+  if (!parsed.success) {
+    logger.warn("Direct gateway: a stored UI setting is unreadable and reads as empty", {
+      namespace: setting.namespace,
+      key: setting.key,
+      issues: parsed.error.issues,
+    });
+    return null;
+  }
+  return parsed.data;
+}
 
 function requireUISettings(runtime: DirectRuntime, member: string): void {
   if (!runtime.supports(ENGINE_CAPABILITIES.uiSettings)) {
