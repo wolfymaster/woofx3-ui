@@ -1,6 +1,6 @@
+import type { DesktopHostState } from "@/engine/desktop-host";
 import type {
   EngineGateway,
-  GoLiveGateway,
   ModuleOAuthGateway,
   SetupImportsGateway,
   ShoutoutsGateway,
@@ -14,6 +14,7 @@ import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
+import { directGoLiveGateway } from "./go-live";
 import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
@@ -65,21 +66,12 @@ const shoutouts: ShoutoutsGateway = {
   useReorderRequest: unsupportedRequest("shoutouts.useReorderRequest"),
 };
 
-const goLive: GoLiveGateway = {
-  useChecklist: unsupportedRead("goLive.useChecklist"),
-  useOverlays: unsupportedRead("goLive.useOverlays"),
-  useSetCheckDismissedRequest: unsupportedRequest("goLive.useSetCheckDismissedRequest"),
-  useCheckTwitchRequest: unsupportedRequest("goLive.useCheckTwitchRequest"),
-  useCheckStreamInfoRequest: unsupportedRequest("goLive.useCheckStreamInfoRequest"),
-  useCompleteRequest: unsupportedRequest("goLive.useCompleteRequest"),
-};
-
 /**
  * The gateway that talks to one engine directly, with no Convex in between.
  * Built once at boot around `runtime`, which must be started for its reads to
  * load; the namespaces share its connection and its one query cache.
  */
-export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway {
+export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopHostState): EngineGateway {
   return {
     status: directStatusGateway(runtime),
     resources: directResourcesGateway(runtime),
@@ -109,7 +101,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
-    goLive,
+    goLive: directGoLiveGateway(runtime, host.streamStartMarkers),
     pageIntros: directPageIntrosGateway(runtime),
     dashboard: directDashboardGateway(runtime),
   };

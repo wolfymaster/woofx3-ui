@@ -103,8 +103,8 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.STREAM_OFFLINE]: LIVE_STATE,
   [EngineEventType.SESSION_STARTED]: LIVE_STATE,
   [EngineEventType.SESSION_SUMMARY]: LIVE_STATE,
-  [EngineEventType.OVERLAY_TOKEN_MINTED]: NONE,
-  [EngineEventType.OVERLAY_TOKEN_REVOKED]: NONE,
+  [EngineEventType.OVERLAY_TOKEN_MINTED]: () => [k.scenes.browserSources()],
+  [EngineEventType.OVERLAY_TOKEN_REVOKED]: () => [k.scenes.browserSources()],
   // A notification for approvers; nothing here caches pending pairings.
   [EngineEventType.CLIENT_PAIRING_STARTED]: NONE,
   [EngineEventType.COMMAND_CREATED]: COMMANDS,

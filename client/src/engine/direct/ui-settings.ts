@@ -6,7 +6,7 @@ import { directKeys as k } from "./keys";
 import type { EngineRead } from "./query";
 import type { DirectRuntime } from "./runtime";
 
-// The dashboard's own data (page intros, layouts, notes, counters, macros, stream info presets)
+// The dashboard's own data (page intros, layouts, notes, counters, macros, stream info presets, the go-live checklist)
 // kept by the engine for a dashboard with no account: one namespace per kind
 // of data, the engine storing values it never reads. Each namespace is read
 // whole and cached; `ui.setting.changed` refreshes it, whichever window or
@@ -22,6 +22,7 @@ export const UI_SETTING_NAMESPACES = {
   dashboardHighlights: "dashboardHighlights",
   macros: "macros",
   streamInfoPresets: "streamInfoPresets",
+  goLiveChecklist: "goLiveChecklist",
 } as const;
 
 export type UISettingNamespace = (typeof UI_SETTING_NAMESPACES)[keyof typeof UI_SETTING_NAMESPACES];
