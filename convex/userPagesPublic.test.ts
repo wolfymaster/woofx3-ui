@@ -58,7 +58,7 @@ async function seeded(options: FixtureOptions = {}): Promise<Fixture> {
   });
   await f.t.mutation(internal.resourceValues.upsertMany, {
     instanceId: f.instanceId,
-    values: { [COUNTER]: { value: 3, reached: {} }, [SECRET]: 4242 },
+    values: { [COUNTER]: { value: 3, reached: {} }, [SECRET]: 42.4242 },
   });
   return f;
 }
@@ -198,7 +198,7 @@ describe("bySlug", () => {
     expect(Object.keys(page.sections[1] ?? {}).sort()).toEqual(["kind", "reason", "region", "requirement"]);
     expect(page.rolesStale).toBe(false);
     const json = JSON.stringify(page);
-    expect(json).not.toContain("4242");
+    expect(json).not.toContain("42.4242");
     expect(json).not.toContain("subs only");
     expect(json).not.toContain("For subs");
     expect(json).not.toContain('"subs"');
@@ -422,7 +422,8 @@ function gated(visibility: SectionVisibility): PageSection {
 }
 
 /** Everything a gated section holds that must not reach a viewer who may not see it. */
-const GATED_CONTENT = ["4242", "HOWL", "Secret giveaway code", "secret-giveaway", '"note"'];
+// The secret value has a decimal point so it can never occur inside a millisecond timestamp in the page JSON.
+const GATED_CONTENT = ["42.4242", "HOWL", "Secret giveaway code", "secret-giveaway", '"note"'];
 
 function expectNoGatedContent(page: Extract<PublicPageLookup, { kind: "page" }>): void {
   const json = JSON.stringify(page);
@@ -518,7 +519,7 @@ describe("bySlug for a viewer", () => {
             kind: "open",
             id: "secret-giveaway",
             title: "Secret giveaway code",
-            widgets: [{ id: "secret", state: { value: 4242 } }, { id: "note" }],
+            widgets: [{ id: "secret", state: { value: 42.4242 } }, { id: "note" }],
           });
         } else {
           expect(page.sections[1]).toEqual({
