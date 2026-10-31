@@ -1,3 +1,5 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
+import { valuesToPairs } from "@shared/macro-run";
 import { integrationOfModuleOAuthState } from "@shared/module-oauth";
 import { canonicalIdForStorageKey } from "@shared/resource-values";
 import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
@@ -12,7 +14,6 @@ import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
-import { escapeDollarKeys } from "./lib/dollarKeys";
 import { ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLifecycle";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
@@ -25,7 +26,7 @@ import {
   toHttpResponse,
   withEngineTimeout,
 } from "./lib/inboundWebhookRelay";
-import { executeMacroPlan, MacroRunRefused, valuesToPairs } from "./lib/macroExecution";
+import { executeMacroPlan, MacroRunRefused } from "./lib/macroExecution";
 import {
   hashTriggerToken,
   isBrowserRequest,

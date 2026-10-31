@@ -27,7 +27,7 @@ Widgets that follow this: `pinned` (history), `shoutout` (queue) and `moderation
 
 ## Context
 
-The dashboard runs in two modes: the hosted app, with Convex, and the desktop app's local mode, which reaches one engine directly and has no Convex client. Some widgets are built on data only Convex keeps (macros, stream recaps, the go-live checklist, pin history, the shoutout queue, stream info presets). Loading one of them in local mode would throw, and `client/src/desktop/local-routes.test.ts` fails if anything local mode imports reaches Convex.
+The dashboard runs in two modes: the hosted app, with Convex, and the desktop app's local mode, which reaches one engine directly and has no Convex client. Some widgets are built on data only Convex keeps (stream recaps, the go-live checklist, pin history, the shoutout queue, stream info presets). Loading one of them in local mode would throw, and `client/src/desktop/local-routes.test.ts` fails if anything local mode imports reaches Convex.
 
 ## Decision
 
@@ -45,4 +45,5 @@ Each catalog module is imported only by its route, which is its own lazily loade
 
 - A new widget goes in `gateway-widgets.ts` when it reaches only gateway members every gateway serves, and in `hosted-catalog.tsx` otherwise. Adding it to the local catalog is what makes local mode offer it.
 - A hosted-only widget joins local mode by moving its data behind the gateway, then its definition into `gateway-widgets.ts`.
+- A widget with a hosted-only part takes that part from the catalog that mounts it. The macro pad is defined in `gateway-widgets.ts` without remote trigger URLs; `hosted-catalog.tsx` mounts it with them (`hosted-macro-pad.tsx`), so the pad itself loads nothing from Convex.
 - The picker offers only the current mode's widgets, so local mode never places a widget it cannot render.

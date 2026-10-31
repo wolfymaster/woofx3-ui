@@ -116,6 +116,7 @@ type DirectFakeSurface = Pick<
   | "getResourceValues"
   | "createResourceInstance"
   | "runActions"
+  | "executeCommand"
   | "listAvailableFunctions"
   | "marketplaceGetListing"
   | "inspectMarketplaceListing"
@@ -238,6 +239,8 @@ export class FakeEngineState {
   /** What `getWorkflowHealth` answers, or the error it throws. */
   workflowHealth: WorkflowHealth[] | Error = [];
   twitchLink: TwitchLinkInfo = { linked: false, revision: 1 };
+  /** What `executeCommand` answers; the engine refuses a command by answering `success: false`. */
+  commandAnswer: { success: boolean; message: string } = { success: true, message: "" };
   /** What each Twitch method answers, given its arguments; no answer configured fails the call. */
   twitchAnswer: (method: TwitchFakeMethod, params: unknown) => TwitchHelixResult = (method) => ({
     ok: false,
@@ -625,6 +628,15 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async runActions(input: RunActionsInput): Promise<{ requested: true; triggerId: string }> {
     this.state.record("runActions", input);
     return { requested: true, triggerId: "trigger-1" };
+  }
+
+  async executeCommand(
+    commandName: string,
+    username: string,
+    text?: string
+  ): Promise<{ success: boolean; message: string }> {
+    this.state.record("executeCommand", commandName, username, text);
+    return this.state.commandAnswer;
   }
 
   async listAvailableFunctions(): Promise<AvailableFunction[]> {

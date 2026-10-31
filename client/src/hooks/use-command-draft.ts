@@ -1,3 +1,4 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import type { ActionStep, TaskDefinition } from "@woofx3/api";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { ChatCommand } from "@/engine/types";
@@ -12,7 +13,6 @@ import {
 } from "@/lib/command-drafts";
 import { joinCommandInput } from "@/lib/command-input";
 import { commandFlow } from "@/lib/command-steps";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 
 /** The draft for one command, re-rendering whenever any draft changes. See lib/command-drafts.ts. */
 export function useCommandDraft(key: string): CommandDraft | undefined {
