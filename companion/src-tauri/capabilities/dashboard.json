@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "dashboard",
-  "description": "The dashboard window runs the app's local mode: it reads the host mode and chooses it on first launch, opens its session with the local engine, and uses the local shoutout queue and stream start marker. Signed in to an account, it makes this computer the instance's companion. Beyond listening for their events, nothing from Tauri's core or its plugins.",
+  "description": "The dashboard window runs the app's local mode: it reads the host mode and chooses it on first launch, opens its session with the local engine, and uses the local shoutout queue and stream start marker. In companion mode it opens the system browser for Twitch sign-in, and signed in to an account, it makes this computer the instance's companion. Beyond listening for their events, nothing from Tauri's core or its plugins.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
@@ -17,6 +17,7 @@
     "allow-choose-host-mode",
     "allow-companion-link-status",
     "allow-begin-app-link",
-    "allow-finish-app-link"
+    "allow-finish-app-link",
+    "allow-open-twitch-sign-in"
   ]
 }

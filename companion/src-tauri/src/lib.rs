@@ -38,6 +38,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use tauri_plugin_opener::OpenerExt;
 use woofx3_companion_core::host::{
     choose_host_mode as write_host_mode, HostConfig, HostMode, HostModeKind, LocalEngineSettings,
     MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView, StreamStartMarker, HOST_CONFIG_FILE,
@@ -49,12 +50,13 @@ use engine_host::LocalEngine;
 use integrations::Integrations;
 use tray::Tray;
 use update::Downloaded;
+use woofx3_companion_core::twitch_sign_in::{convex_site_url, twitch_sign_in_url};
 use woofx3_companion_core::window::{
     AppLinkStart, ChooseHostModeArgs, CompanionLinkStatus, CompanionState, ConfirmAddressArgs,
     EnqueueShoutoutArgs, FinishAppLinkArgs, HostModeView, IntegrationsView, LocalEngineSession,
-    ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs,
-    SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs, WindowState,
-    STATE_EVENT,
+    OpenTwitchSignInArgs, ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs,
+    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs,
+    WindowState, STATE_EVENT,
 };
 use woofx3_companion_core::AppIdentity;
 
@@ -530,6 +532,33 @@ async fn finish_app_link(
     args: FinishAppLinkArgs,
 ) -> Result<(), String> {
     pairing::finish_app_link(Arc::clone(&companion), args).await
+}
+
+/// The deployment's HTTP origin, when it is not derived from
+/// `WOOFX3_CONVEX_URL`: the variable the dashboard's build reads too
+/// (vite.config.ts), so both open the same origin.
+const CONVEX_SITE_URL: Option<&str> = option_env!("WOOFX3_CONVEX_SITE_URL");
+
+/// Opens the system browser at Convex's Twitch sign-in, bound to the nonce
+/// the dashboard keeps. The window names only the nonce's hash; the address
+/// is built here from the deployment compiled in, so the window cannot have
+/// the host open any other page. Companion mode only, since local mode has
+/// no account to sign in to.
+#[tauri::command]
+async fn open_twitch_sign_in(
+    companion: State<'_, Arc<Companion>>,
+    args: OpenTwitchSignInArgs,
+) -> Result<(), String> {
+    if companion.host.mode != HostModeKind::Companion {
+        return Err("Signing in to an account needs the app set up to use one.".to_string());
+    }
+    let site_url = convex_site_url(cloud::CONVEX_URL, CONVEX_SITE_URL);
+    let url = twitch_sign_in_url(&site_url, &args.nonce_hash).map_err(|err| err.to_string())?;
+    companion
+        .app
+        .opener()
+        .open_url(url, None::<&str>)
+        .map_err(|err| format!("Could not open the browser: {err}"))
 }
 
 /// Connects to the relay again after another connection displaced this one

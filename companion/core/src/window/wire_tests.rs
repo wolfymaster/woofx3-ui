@@ -221,3 +221,20 @@ fn test_window_wire_app_link_shapes() {
         "the instance id is required"
     );
 }
+
+/// What the dashboard sends to sign in with Twitch through the system browser.
+#[test]
+fn test_window_wire_twitch_sign_in_args() {
+    let read: OpenTwitchSignInArgs =
+        serde_json::from_value(json!({ "nonceHash": "ab".repeat(32) })).expect("reads");
+    assert_eq!(
+        read,
+        OpenTwitchSignInArgs {
+            nonce_hash: "ab".repeat(32),
+        }
+    );
+    assert!(
+        serde_json::from_value::<OpenTwitchSignInArgs>(json!({})).is_err(),
+        "the nonce hash is required"
+    );
+}

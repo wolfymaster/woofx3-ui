@@ -15,6 +15,7 @@ pub mod identity;
 pub mod obs_config;
 pub mod relay;
 pub mod stored_token;
+pub mod twitch_sign_in;
 pub mod window;
 
 pub use address::{AddressOrigin, ConfirmedAddress};
