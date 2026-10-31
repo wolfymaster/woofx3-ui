@@ -8,12 +8,13 @@ use std::any::TypeId;
 use ts_rs::{Config, TS};
 
 use super::{
-    AddressView, Availability, ChooseHostModeArgs, CompanionState, ConfirmAddressArgs,
-    DiscoveryView, EndpointView, EnqueueShoutoutArgs, HostModeView, IntegrationsView,
-    LocalEngineSession, ModuleView, ReadyUpdate, RelayView, RemoveShoutoutArgs,
-    ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
-    TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES, INTEGRATIONS_EVENT,
-    SHOUTOUT_QUEUE_EVENT, STATE_EVENT, STREAM_START_MARKER_EVENT,
+    AddressView, AppLinkStart, Availability, ChooseHostModeArgs, CompanionLinkStatus,
+    CompanionState, ConfirmAddressArgs, DiscoveryView, EndpointView, EnqueueShoutoutArgs,
+    FinishAppLinkArgs, HostModeView, IntegrationsView, LinkedInstance, LocalEngineSession,
+    ModuleView, ReadyUpdate, RelayView, RemoveShoutoutArgs, ReorderShoutoutsArgs,
+    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs,
+    WindowState, COMMAND_NAMES, INTEGRATIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT,
+    STREAM_START_MARKER_EVENT,
 };
 use crate::host::{
     HostModeKind, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry,
@@ -95,6 +96,9 @@ pub fn window_bindings() -> String {
         declaration::<MarkerRequestOutcome>(&cfg),
         declaration::<HostModeKind>(&cfg),
         declaration::<HostModeView>(&cfg),
+        declaration::<LinkedInstance>(&cfg),
+        declaration::<CompanionLinkStatus>(&cfg),
+        declaration::<AppLinkStart>(&cfg),
         declaration::<SetEndpointEnabledArgs>(&cfg),
         declaration::<ConfirmAddressArgs>(&cfg),
         declaration::<UseDiscoveredArgs>(&cfg),
@@ -104,6 +108,7 @@ pub fn window_bindings() -> String {
         declaration::<RemoveShoutoutArgs>(&cfg),
         declaration::<ReorderShoutoutsArgs>(&cfg),
         declaration::<ChooseHostModeArgs>(&cfg),
+        declaration::<FinishAppLinkArgs>(&cfg),
     ];
     let events = [
         ("STATE_EVENT", STATE_EVENT),

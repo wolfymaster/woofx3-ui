@@ -1,16 +1,16 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { type MacroRunPlan, valuesFromPairs } from "@shared/macro-run";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
-import { loadMacroEngineContext, type MacroEngineContext, valuesFromPairs } from "./lib/macroExecution";
+import { loadMacroEngineContext, type MacroEngineContext } from "./lib/macroExecution";
 import {
   canTriggerRemotely,
   decideTrigger,
   fullRateBucket,
   generateTriggerToken,
   hashTriggerToken,
-  type MacroRunPlan,
   macroBehaviorFingerprint,
 } from "./lib/macroTrigger";
 import { getInstanceMembership } from "./lib/teamAccess";

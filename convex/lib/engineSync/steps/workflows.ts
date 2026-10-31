@@ -1,5 +1,5 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import { internal } from "../../../_generated/api";
-import { escapeDollarKeys } from "../../dollarKeys";
 import type { EngineApi } from "../../engineInstanceUrl";
 import { ENGINE_SYNC_CONFIG } from "../config";
 import type { SyncStep, SyncStepContext } from "../steps";

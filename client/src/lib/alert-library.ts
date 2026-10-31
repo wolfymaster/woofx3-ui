@@ -1,3 +1,4 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import { randomNodeId } from "@woofx3/scene/editor";
 import {
   type BehaviorDocument,
@@ -14,7 +15,6 @@ import {
 } from "@woofx3/scene/model";
 import type { AlertComposition } from "@/engine/types";
 import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
@@ -33,7 +33,7 @@ import type { VariableOption } from "@/lib/workflow-variables";
 /**
  * The cached parts of a library alert that make up its document. Convex
  * stores them with `$`-prefixed keys (an input reference's `$input`)
- * escaped; see lib/dollar-keys.ts.
+ * escaped; see shared/dollar-keys.ts.
  */
 export type LibraryAlertDocument = Pick<AlertComposition, "widgets" | "layout" | "behaviors" | "inputs">;
 

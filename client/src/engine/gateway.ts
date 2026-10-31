@@ -63,7 +63,9 @@ import type {
   KnownBoxArt,
   ListingQuote,
   Live,
+  Macro,
   MacroId,
+  MacroInput,
   MacroRunResult,
   MacroVariableValue,
   MarketplaceBundleInstall,
@@ -426,7 +428,7 @@ export interface ModuleResourcesGateway {
   useRefreshValuesRequest(): (kind: string) => Promise<null>;
   /**
    * Runs action steps on the engine now. `actions` carry their `$` keys escaped
-   * (lib/dollar-keys); the result arrives through the values they change.
+   * (shared/dollar-keys); the result arrives through the values they change.
    */
   useRunActionsRequest(): (label: string, actions: unknown[]) => Promise<null>;
 }
@@ -580,7 +582,7 @@ export interface WorkflowsGateway {
   useCatalog(): Live<WorkflowCatalog | null>;
   /**
    * Creates a workflow from a definition with its `$` keys escaped
-   * (lib/dollar-keys), and resolves once its webhook echo has landed, with
+   * (shared/dollar-keys), and resolves once its webhook echo has landed, with
    * the id the engine gave it.
    */
   useCreateRequest(): (definition: unknown) => Promise<{ engineWorkflowId: string }>;
@@ -647,8 +649,21 @@ export interface RequestsGateway {
   useEventWatchRequest(): (correlationKey: string) => EventWatch;
 }
 
-/** Running the dashboard's macros. The macros themselves are kept in Convex, not on the engine. */
+/**
+ * The instance's macro pad: one shared set of buttons in one order, and
+ * running a button on the engine.
+ */
 export interface MacrosGateway {
+  /** The pad's macros in the order shown. */
+  useMacros(): Live<Macro[]>;
+  /** Adds a macro after the last; resolves with its id. Rejects a blank label or a color that is not `#rrggbb`. */
+  useAddRequest(): (input: MacroInput) => Promise<MacroId>;
+  /** Replaces a macro's fields. Rejects what the add request rejects, and a macro that is not there. */
+  useUpdateRequest(): (macroId: MacroId, input: MacroInput) => Promise<void>;
+  /** Deleting a macro already gone succeeds. */
+  useDeleteRequest(): (macroId: MacroId) => Promise<void>;
+  /** Puts the pad in `macroIds` order; an id no longer there is skipped. */
+  useReorderRequest(): (macroIds: MacroId[]) => Promise<void>;
   /**
    * Runs a chat-command, workflow or action macro on the engine. Rejects for
    * an HTTP-request macro, which the browser fetches itself, and for a

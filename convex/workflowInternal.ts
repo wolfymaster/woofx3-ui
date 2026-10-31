@@ -1,7 +1,7 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { escapeDollarKeys } from "./lib/dollarKeys";
 import { completeImportItemByCorrelation } from "./lib/setupImportLedger";
 import { completeStarterItemByCorrelation } from "./lib/starterPackLedger";
 import { deleteWorkflowHealth } from "./workflowHealth";

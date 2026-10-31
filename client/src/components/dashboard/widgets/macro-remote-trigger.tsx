@@ -7,14 +7,16 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import type { Macro } from "@/engine/types";
+import { fromMacroId } from "@/lib/cloud-ids";
 import { convexSiteUrl } from "@/lib/convexSiteUrl";
-import { extractMacroVariables, type MacroButton } from "@/lib/macro-pad";
+import { extractMacroVariables } from "@/lib/macro-pad";
 import { type MacroTriggerTarget, macroTriggerExamples, macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
 
 interface MacroRemoteTriggerProps {
   instanceId: Id<"instances">;
   /** The saved macro. A trigger fires what is stored, not unsaved edits in the form. */
-  macro: MacroButton;
+  macro: Macro;
 }
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -104,7 +106,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
   const setAllowGet = useMutation(api.macroTriggers.setAllowGet);
   const reconfirm = useMutation(api.macroTriggers.reconfirm);
 
-  const macroId = macro.id;
+  const macroId = fromMacroId(macro.id);
   const [revealedToken, setRevealedToken] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<"rotate" | "revoke" | null>(null);
   const [busy, setBusy] = useState(false);
