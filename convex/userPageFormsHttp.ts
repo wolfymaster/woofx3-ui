@@ -1,6 +1,6 @@
 import {
   type FormRefusalCode,
-  hasLoneSurrogate,
+  hasUndeliverableText,
   isFormIdempotencyKey,
   MAX_FORM_ANSWERS,
   USER_PAGE_LIMITS,
@@ -51,7 +51,7 @@ const ACCEPTED_BODY = { ok: true };
 
 /** Whether a value from the body can safely be passed to a Convex function. */
 function isCleanString(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length <= maxLength && !hasLoneSurrogate(value);
+  return typeof value === "string" && value.length <= maxLength && !hasUndeliverableText(value);
 }
 
 const MAX_SLUG_LENGTH = 128;

@@ -22,12 +22,26 @@ export interface FormFieldProblem {
  */
 export type FormAnswersCheck = { kind: "ok" } | { kind: "stale" } | { kind: "invalid"; problems: FormFieldProblem[] };
 
-// In unicode mode this matches only surrogates that are not part of a pair,
-// which cannot be stored as UTF-8.
-const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
+// In unicode mode this matches only surrogates that are not part of a pair.
+const LONE_SURROGATES = /[\uD800-\uDFFF]/gu;
 
-export function hasLoneSurrogate(text: string): boolean {
-  return LONE_SURROGATE.test(text);
+/**
+ * Whether `text` holds a character the engine's database cannot store: NUL or a
+ * lone surrogate. The engine refuses a delivery carrying one for good, so
+ * nothing with one may be queued.
+ */
+export function hasUndeliverableText(text: string): boolean {
+  return text.includes("\0") || text.search(LONE_SURROGATES) !== -1;
+}
+
+/**
+ * `text` as it can be delivered: without those characters and within `maxLength`,
+ * for text the visitor did not write and so cannot be asked to fix.
+ */
+export function deliverableText(text: string, maxLength: number): string {
+  const clean = (value: string) => value.replaceAll("\0", "").replace(LONE_SURROGATES, "");
+  // Cleaned again because the cut can land inside a surrogate pair.
+  return clean(clean(text).slice(0, maxLength));
 }
 
 /** A form's answers before anything is filled in: one entry per question, as a submit always carries. */
@@ -48,7 +62,7 @@ function fieldProblem(field: FormField, value: FormAnswerValue): "stale" | strin
       if (value.length > field.maxLength) {
         return `Keep this to ${field.maxLength} characters`;
       }
-      return hasLoneSurrogate(value) ? "This has a character that can't be sent" : null;
+      return hasUndeliverableText(value) ? "This has a character that can't be sent" : null;
     }
     case "select": {
       if (typeof value !== "string") {
@@ -57,7 +71,10 @@ function fieldProblem(field: FormField, value: FormAnswerValue): "stale" | strin
       if (value === "") {
         return field.required ? "Choose one" : null;
       }
-      return field.options.some((option) => option.value === value) ? null : "stale";
+      if (!field.options.some((option) => option.value === value)) {
+        return "stale";
+      }
+      return hasUndeliverableText(value) ? "This choice can't be sent; let the streamer know" : null;
     }
     case "checkbox": {
       if (typeof value !== "boolean") {

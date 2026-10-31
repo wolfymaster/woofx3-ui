@@ -190,6 +190,7 @@ describe("reading the body", () => {
     ["answers that aren't a map", { ...submitBody(), answers: ["a"] }],
     ["an answer that is a number", { ...submitBody(), answers: { song: 1 } }],
     ["a lone surrogate", { ...submitBody(), answers: { song: "\ud800" } }],
+    ["a NUL", { ...submitBody(), answers: { song: "a\0" } }],
   ])("refuses %s", async (_name, body) => {
     const f = await formFixture();
     expect(await refusal(await post(f, body))).toEqual({ status: 400, code: "invalid_request" });
@@ -236,6 +237,30 @@ describe("submitting", () => {
     const renamed = FIELDS.map((field) => ({ ...field, label: `${field.label} (new)` }));
     await publish(f, withSections([formSection({ kind: "public" }, renamed)]));
     expect((await rows(f))[0].fields[0].label).toBe("Song");
+  });
+
+  test("text a page published before the checks holds is cleaned in the snapshot", async () => {
+    const f = await formFixture();
+    await f.t.run(async (ctx) => {
+      const page = await ctx.db.query("userPages").first();
+      const revision = page?.publishedRevisionId ? await ctx.db.get(page.publishedRevisionId) : null;
+      if (!revision) {
+        throw new Error("no published revision");
+      }
+      const fields = FIELDS.map((field) => ({ ...field, label: `${field.label}\0` }));
+      await ctx.db.patch(revision._id, {
+        content: withSections([
+          {
+            ...formSection({ kind: "public" }, fields),
+            widgets: [{ id: "form1", type: "form", config: { title: "T\0", submitLabel: "Send", fields } }],
+          },
+        ]),
+      });
+    });
+    expect((await post(f, submitBody({ turnstileToken: "t" }))).status).toBe(200);
+    const [row] = await rows(f);
+    expect(row.formTitle).toBe("T");
+    expect(row.fields.map((field) => field.label)).toEqual(["Song", "Mood", "I follow"]);
   });
 
   test("a repeated key returns ok, writes one row and spends no second check", async () => {
@@ -358,6 +383,39 @@ describe("gating and identity", () => {
       roles: ["follower", "subscriber", "subscriber_tier_2"],
     });
     expect(turnstile.calls).toHaveLength(0);
+  });
+
+  test("the viewer's name is cleaned and cut to what the engine takes", async () => {
+    const f = await formFixture();
+    const sessionToken = await signIn(f);
+    await f.t.run(async (ctx) => {
+      const viewer = await ctx.db.query("viewers").first();
+      if (viewer) {
+        await ctx.db.patch(viewer._id, { displayName: `a\0${"b".repeat(300)}` });
+      }
+    });
+    expect((await post(f, submitBody({ sessionToken }))).status).toBe(200);
+    const name = (await rows(f))[0].viewer?.displayName ?? "";
+    expect(name.startsWith("ab")).toBe(true);
+    expect(name.includes("\0")).toBe(false);
+    expect(name).toHaveLength(USER_PAGE_LIMITS.deliveredTextLength);
+  });
+
+  test.each([
+    ["too long", "x".repeat(USER_PAGE_LIMITS.deliveredPlatformUserIdLength + 1)],
+    ["with a NUL", "a\0"],
+    ["empty", ""],
+  ])("a platform id the engine would refuse is never queued: %s", async (_name, platformUserId) => {
+    const f = await formFixture();
+    const sessionToken = await signIn(f);
+    await f.t.run(async (ctx) => {
+      const viewer = await ctx.db.query("viewers").first();
+      if (viewer) {
+        await ctx.db.patch(viewer._id, { platformUserId });
+      }
+    });
+    expect(await refusal(await post(f, submitBody({ sessionToken })))).toEqual({ status: 500, code: "internal" });
+    expect(await rows(f)).toHaveLength(0);
   });
 
   test("a token that signs nobody in is told so", async () => {

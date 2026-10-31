@@ -1,6 +1,7 @@
 import { COUNTER_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { type Infer, type Validator, v } from "convex/values";
-import { checkId, checkImage, checkLinkUrl, checkUniqueIds, pageImageValidator } from "./fields";
+import { checkFormFieldId, checkId, checkImage, checkLinkUrl, checkUniqueIds, pageImageValidator } from "./fields";
+import { hasUndeliverableText } from "./forms";
 import { USER_PAGE_LIMITS } from "./limits";
 import type { ProblemReport } from "./problems";
 
@@ -171,9 +172,17 @@ const FORM_ANSWER_CEILING: Record<"text" | "textarea", number> = {
   textarea: USER_PAGE_LIMITS.formTextareaAnswerLength,
 };
 
+/** Text a submission carries to the engine, which refuses characters its database can't store. */
+function checkFormText(text: string, label: string, report: ProblemReport, required = false): void {
+  report.text(text, label, USER_PAGE_LIMITS.labelLength, required);
+  if (hasUndeliverableText(text)) {
+    report.add(`${label} has a character that can't be saved`);
+  }
+}
+
 function checkFormField(field: FormField, report: ProblemReport): void {
-  checkId(field.id, report.field("id"));
-  report.field("label").text(field.label, "Question", USER_PAGE_LIMITS.labelLength, true);
+  checkFormFieldId(field.id, report.field("id"));
+  checkFormText(field.label, "Question", report.field("label"), true);
   switch (field.type) {
     case "text":
     case "textarea": {
@@ -191,7 +200,7 @@ function checkFormField(field: FormField, report: ProblemReport): void {
       options.count(field.options.length, "options", USER_PAGE_LIMITS.formSelectOptions);
       field.options.forEach((option, index) => {
         const item = options.item(index);
-        item.field("value").text(option.value, "Value", USER_PAGE_LIMITS.labelLength, true);
+        checkFormText(option.value, "Value", item.field("value"), true);
         item.field("label").text(option.label, "Option", USER_PAGE_LIMITS.labelLength, true);
       });
       const values = field.options.map((option) => option.value);
@@ -217,7 +226,7 @@ export const FORM_WIDGET = defineWidget({
   defaultConfig: () => ({ submitLabel: "Send", fields: [] }),
   check: (config, report) => {
     if (config.title !== undefined) {
-      report.field("title").text(config.title, "Title", USER_PAGE_LIMITS.labelLength);
+      checkFormText(config.title, "Title", report.field("title"));
     }
     report.field("submitLabel").text(config.submitLabel, "Button text", USER_PAGE_LIMITS.labelLength, true);
     const fields = report.field("fields");

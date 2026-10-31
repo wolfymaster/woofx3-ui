@@ -32,4 +32,12 @@ export const USER_PAGE_LIMITS = {
    * this, so the page checks it before sending.
    */
   formSubmissionBytes: 64 * 1024,
+  /**
+   * What the engine takes for a delivery's labels, title and viewer name, and
+   * for the viewer's platform id; it refuses more for good. Must match
+   * SUBMISSION_LIMITS in the engine's api/src/routes/user-pages.ts, as must
+   * every id, count and answer limit above, which sit at or under its own.
+   */
+  deliveredTextLength: 255,
+  deliveredPlatformUserIdLength: 100,
 } as const;
