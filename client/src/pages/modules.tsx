@@ -359,8 +359,8 @@ export default function Modules() {
               <CardContent className="pt-6 space-y-3">
                 <p className="font-medium">Your modules</p>
                 <p className="text-sm text-muted-foreground">
-                  Pick a module on the left to see what it adds and change its settings, or add one: from the
-                  marketplace, or a module you made yourself.
+                  Pick a module on the left to see what it adds and change its settings, or add one
+                  {mode.uploads ? ": from the marketplace, or a module you made yourself." : " from the marketplace."}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {mode.uploads && (
