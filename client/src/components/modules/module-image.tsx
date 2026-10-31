@@ -1,8 +1,8 @@
-import type { MarketplaceBannerUrls, MarketplaceIconUrls } from "@convex/lib/marketplaceImages";
+import type { MarketplaceBannerUrls, MarketplaceIconUrls } from "@shared/marketplace-images";
 import { cn } from "@/lib/utils";
 
 // Width descriptors are the renditions' pixel widths, documented on the types
-// in convex/lib/marketplaceImages.ts. They let the browser pick the smallest
+// in shared/marketplace-images.ts. They let the browser pick the smallest
 // rendition that is sharp at the displayed size and pixel density.
 
 interface ModuleIconImageProps {

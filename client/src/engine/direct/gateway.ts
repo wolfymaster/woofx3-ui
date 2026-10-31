@@ -15,6 +15,7 @@ import { directDashboardGateway } from "./dashboard";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
 import { directMacrosGateway } from "./macros";
+import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
@@ -88,6 +89,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     commands: directCommandsGateway(runtime),
     moduleResources: directModuleResourcesGateway(runtime),
     modules: directModulesGateway(runtime),
+    marketplace: directMarketplaceGateway(runtime),
     scenes: directScenesGateway(runtime),
     workflows: directWorkflowsGateway(runtime),
     requests: directRequestsGateway(runtime),

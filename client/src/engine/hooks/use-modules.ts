@@ -1,6 +1,11 @@
 import { useEngineGateway } from "@/engine/context";
 import type { ModuleId } from "@/engine/types";
 
+/** Every module installed on the engine, built-in ones included. */
+export function useInstalledModules() {
+  return useEngineGateway().modules.useInstalled();
+}
+
 /** Fetches a module's detail, merged with its marketplace listing when it has one. */
 export function useModuleDetailRequest() {
   return useEngineGateway().modules.useDetailRequest();

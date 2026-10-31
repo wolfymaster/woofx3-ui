@@ -28,6 +28,7 @@ import { directEventLogGateway } from "./event-log";
 import { toModuleId, toSceneId } from "./ids";
 import { directKeys } from "./keys";
 import { directMacrosGateway } from "./macros";
+import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
 import { directModuleResourcesGateway } from "./module-resources";
 import { directModulesGateway } from "./modules";
@@ -896,6 +897,48 @@ describe("modules", () => {
     files: [{ path: "manifest.json", size: 10, kind: "text" as const }],
   });
 
+  test("the installed list says where each module came from, and follows installs", async () => {
+    const { runtime, state, engine } = await connected();
+    state.modules = [
+      { ...installed("woofx3", { id: "woofx3" }), createdByType: "SYSTEM" },
+      installed("cozy", { id: "cozy", description: "Warm", tags: ["chat"], author: "Ana" }, "cozy-v2"),
+      { ...installed("mine", { id: "mine" }), uploadResourceId: "res-1" },
+    ];
+    const read = renderDirect(() => directModulesGateway(runtime).useInstalled());
+    const modules = await read.until((value) => value !== undefined, "the installed modules");
+    expect(modules?.map((module) => [module.id, module.provenance, module.status])).toEqual([
+      ["woofx3", "builtIn", "installed"],
+      ["cozy", "marketplace", "installed"],
+      ["mine", "uploaded", "installed"],
+    ]);
+    expect(modules?.[1]).toMatchObject({
+      name: "cozy module",
+      description: "Warm",
+      tags: ["chat"],
+      author: "Ana",
+      moduleKey: "cozy:1.0.0:abc1234",
+      marketplaceListingId: "cozy-v2",
+      manifest: { id: "cozy", description: "Warm", tags: ["chat"], author: "Ana" },
+    });
+
+    state.modules = [...state.modules, installed("fresh", { id: "fresh" })];
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        {
+          type: EngineEventType.MODULE_INSTALLED,
+          modulePrefix: "fresh",
+          moduleName: "fresh module",
+          version: "1.0.0",
+          moduleKey: "fresh:1.0.0:abc1234",
+        },
+        "engine",
+        "e-installed"
+      )
+    );
+    await read.until((value) => value?.length === 4, "the newly installed module");
+    read.unmount();
+  });
+
   test("an installed module's detail is what it registered, with its listing's readme and newer build", async () => {
     const { runtime, state } = await connected();
     state.modules = [
@@ -923,7 +966,9 @@ describe("modules", () => {
       actions: [],
       functions: [],
     } as never;
-    state.listings = { "cozy-listing": { module: { readme: "# Cozy", version: "2.0.0" } } };
+    state.listings = {
+      "cozy-listing": { listing: { id: "cozy-listing", version: "2.0.0", module: { readme: "# Cozy" } } },
+    };
     state.inspections = { "cozy-listing": inspection("cozy-listing", ["chat.read", "chat.write"]) };
     const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("cozy");
     expect(detail).toMatchObject({
@@ -943,15 +988,27 @@ describe("modules", () => {
 
   test("a listing's detail says its permissions are unknown when the engine cannot inspect it", async () => {
     const { runtime, state } = await connected();
-    state.listings = { paid: { module: { id: "paid", name: "Paid", version: "1.0.0" } } };
+    state.listings = {
+      paid: {
+        listing: {
+          id: "paid",
+          name: "Paid",
+          version: "1.0.0",
+          module: { readme: "# Paid", triggers: [{ id: "paid.tipped", name: "Tipped", description: "" }] },
+        },
+      },
+    };
     const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("paid");
     expect(detail).toMatchObject({
       id: "paid",
       name: "Paid",
+      version: "1.0.0",
+      readme: "# Paid",
       isInstalled: false,
       permissions: null,
       localEndpoints: null,
     });
+    expect(detail.triggers).toMatchObject([{ key: "paid.tipped", name: "Tipped" }]);
   });
 
   test("only declared settings are read, and only declared settings are written", async () => {
@@ -1041,6 +1098,106 @@ describe("modules", () => {
       .current()({} as never)
       .catch((error: Error) => error);
     expect(archive).toBeInstanceOf(GatewayUnsupportedError);
+  });
+});
+
+describe("marketplace", () => {
+  const listing = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    type: "module",
+    name: `${id} listing`,
+    description: "",
+    version: "1.0.0",
+    author: "Ana",
+    authorSlug: "ana",
+    category: "Utilities",
+    tags: [],
+    images: {},
+    tier: "public",
+    pricing: { mode: "free", currency: "usd" },
+    edition: 1,
+    credits: [],
+    ...overrides,
+  });
+
+  test("a search is sent as the marketplace names it, unbought, and parsed as the marketplace's own answer", async () => {
+    const { runtime, state } = await connected();
+    state.catalogSearch = () => ({ listings: [listing("cozy"), { id: "broken" }], total: 2 });
+    const search = renderDirect(() => directMarketplaceGateway(runtime).useSearchRequest()).current();
+    const page = await search({ query: "co", types: ["module", "theme"], featured: false, sort: "newest", limit: 24 });
+    expect(page.listings.map((l) => l.id)).toEqual(["cozy"]);
+    expect(page.total).toBe(2);
+    expect(state.callsOf("marketplaceSearch")).toEqual([
+      [
+        {
+          q: "co",
+          type: ["module", "theme"],
+          category: undefined,
+          featured: undefined,
+          sort: "newest",
+          limit: 24,
+          offset: undefined,
+        },
+        undefined,
+      ],
+    ]);
+  });
+
+  test("a listing the marketplace does not have reads as null, and any other refusal says why", async () => {
+    const { runtime, state } = await connected();
+    state.listings = { cozy: { listing: listing("cozy", { module: { readme: "# Cozy" } }) } };
+    const read = renderDirect(() => directMarketplaceGateway(runtime).useListingRequest()).current();
+    expect(await read("cozy")).toMatchObject({ id: "cozy", name: "cozy listing", module: { readme: "# Cozy" } });
+    expect(await read("gone")).toBeNull();
+    expect(state.callsOf("marketplaceGetListing")).toEqual([
+      ["cozy", undefined],
+      ["gone", undefined],
+    ]);
+
+    state.catalogCounts = { refusedWith: 503 };
+    const counts = renderDirect(() => directMarketplaceGateway(runtime).useCountsRequest()).current();
+    expect(String(await counts().catch((error: Error) => error))).toBe("Error: Refused with 503");
+  });
+
+  test("counts read as null from a marketplace that cannot count", async () => {
+    const { runtime, state } = await connected();
+    const counts = renderDirect(() => directMarketplaceGateway(runtime).useCountsRequest()).current();
+    state.catalogCounts = { counts: { module: 3, theme: 1 }, total: 4 };
+    expect(await counts()).toEqual({ module: 3, theme: 1, emote: 0, overlay: 0, alert: 0 });
+    state.catalogCounts = { refusedWith: 404 };
+    expect(await counts()).toBeNull();
+  });
+
+  test("an author's page is read a page at a time, and an unknown author reads as null", async () => {
+    const { runtime, state } = await connected();
+    state.authors = {
+      ana: (query) => ({ author: { slug: "ana", claimed: false }, listings: [listing("cozy")], total: 3, ...query }),
+    };
+    const read = renderDirect(() => directMarketplaceGateway(runtime).useAuthorRequest()).current();
+    const page = await read("ana", { limit: 1, offset: 2 });
+    expect(page?.author.slug).toBe("ana");
+    expect(page?.listings.map((l) => l.id)).toEqual(["cozy"]);
+    expect(state.callsOf("marketplaceGetAuthor")).toEqual([["ana", { limit: 1, offset: 2 }, undefined]]);
+    expect(await read("nobody", { limit: 1, offset: 0 })).toBeNull();
+  });
+
+  test("quotes, entitlements and checkout need an account", async () => {
+    const { runtime } = await connected();
+    const marketplace = directMarketplaceGateway(runtime);
+    const refusals = await Promise.all([
+      renderDirect(() => marketplace.useQuoteRequest())
+        .current()("cozy")
+        .catch((error: Error) => error),
+      renderDirect(() => marketplace.useEntitlementsRequest())
+        .current()()
+        .catch((error: Error) => error),
+      renderDirect(() => marketplace.useCheckoutRequest())
+        .current()("cozy", "/")
+        .catch((error: Error) => error),
+    ]);
+    for (const refusal of refusals) {
+      expect(refusal).toBeInstanceOf(GatewayUnsupportedError);
+    }
   });
 });
 

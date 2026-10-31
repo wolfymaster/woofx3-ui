@@ -9,6 +9,7 @@ import { convexDashboardGateway } from "./dashboard";
 import { convexEventLogGateway } from "./event-log";
 import { convexGoLiveGateway } from "./go-live";
 import { convexMacrosGateway } from "./macros";
+import { convexMarketplaceGateway } from "./marketplace";
 import { convexModerationGateway } from "./moderation";
 import { convexModuleOAuthGateway } from "./module-oauth";
 import { convexModuleResourcesGateway } from "./module-resources";
@@ -45,6 +46,7 @@ export const convexEngineGateway: EngineGateway = {
   commands: convexCommandsGateway,
   moduleResources: convexModuleResourcesGateway,
   modules: convexModulesGateway,
+  marketplace: convexMarketplaceGateway,
   scenes: convexScenesGateway,
   workflows: convexWorkflowsGateway,
   requests: convexRequestsGateway,

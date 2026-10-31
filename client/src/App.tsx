@@ -24,6 +24,8 @@ import {
 } from "@/lib/command-editor-route";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
+import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
+import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import {
   legacyModulesRedirect,
   MARKETPLACE_AUTHOR_ROUTE,
@@ -391,17 +393,19 @@ function App() {
       <ConvexAuthProvider client={convex} shouldHandleCode={false}>
         <EngineGatewayProvider gateway={hostedEngineGateway}>
           <AccountViewerName>
-            <TooltipProvider>
-              <Suspense fallback={<SplashScreen />}>
-                <AppRoutes />
-              </Suspense>
-              {DesktopAppLink && (
-                <Suspense fallback={null}>
-                  <DesktopAppLink />
+            <MarketplaceModeProvider mode={hostedMarketplaceMode}>
+              <TooltipProvider>
+                <Suspense fallback={<SplashScreen />}>
+                  <AppRoutes />
                 </Suspense>
-              )}
-              <Toaster />
-            </TooltipProvider>
+                {DesktopAppLink && (
+                  <Suspense fallback={null}>
+                    <DesktopAppLink />
+                  </Suspense>
+                )}
+                <Toaster />
+              </TooltipProvider>
+            </MarketplaceModeProvider>
           </AccountViewerName>
         </EngineGatewayProvider>
       </ConvexAuthProvider>

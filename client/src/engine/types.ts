@@ -3,6 +3,7 @@
 // into these at its edge, so nothing here may name a gateway's backend.
 
 import type { MacroFields } from "@shared/macro-pad";
+import type { ListingType } from "@shared/marketplace-catalog";
 import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
@@ -596,6 +597,40 @@ export interface LocalEndpointSummary {
   id: string;
   name: string;
   protocol: "websocket" | "http";
+}
+
+/**
+ * Where an installed module came from: shipped with the engine, installed
+ * from a marketplace listing, or from an archive someone uploaded.
+ */
+export type ModuleProvenance = "builtIn" | "marketplace" | "uploaded";
+
+/**
+ * How far an installed module has got. Only an engine-confirmed module is
+ * `installed`; the others are uploads the dashboard is still handing over, or
+ * one that failed.
+ */
+export type InstalledModuleStatus = "pending" | "delivering" | "installed" | "failed";
+
+/** A module installed on the engine, as the Installed list and the storefront read it. */
+export interface InstalledModule {
+  id: ModuleId;
+  name: string;
+  description: string;
+  version: string;
+  tags: string[];
+  author?: string;
+  category?: string;
+  /** `{manifest id}:{version}:{sha7}`, the key it was installed under; absent until the engine has hashed it. */
+  moduleKey?: string;
+  status: InstalledModuleStatus;
+  /** Null when nothing recorded where it came from. */
+  provenance: ModuleProvenance | null;
+  /** The marketplace listing and edition it was installed from, when it was. */
+  marketplaceListingId?: string;
+  marketplaceEdition?: number;
+  /** The installed manifest, parsed; null when none is recorded. */
+  manifest: Record<string, unknown> | null;
 }
 
 /** A module's manifest-derived detail, merged with its marketplace listing when it has one. */
@@ -1383,6 +1418,51 @@ export interface SetupImportAnalysis {
   source: SetupImportSource;
   documentChunks: string[];
 }
+
+// ==================== Marketplace catalog ====================
+
+/** The catalog as the marketplace serves it, parsed in shared code by every gateway. */
+export type {
+  AuthorPage,
+  CatalogCounts,
+  CatalogListing,
+  CatalogListingDetail,
+  CatalogPage,
+  ListingQuote,
+  ListingType,
+} from "@shared/marketplace-catalog";
+
+/** The orders the marketplace can return a page in. */
+export type MarketplaceSort = "relevance" | "newest" | "name" | "popular" | "trending";
+
+/** One search of the catalog. An empty `query` or `types` narrows nothing. */
+export interface MarketplaceSearchQuery {
+  query: string;
+  types: ListingType[];
+  category?: string;
+  /** Only curated listings, in `featuredRank` order. */
+  featured?: boolean;
+  sort: MarketplaceSort;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of a list the marketplace pages itself. */
+export interface MarketplacePageRequest {
+  limit: number;
+  offset: number;
+}
+
+/** What starting a purchase came to. */
+export type MarketplaceCheckout =
+  /** Pay on the marketplace's payment page at `url`. */
+  | { status: "redirect"; url: string }
+  /** The account already holds the listing. */
+  | { status: "already_entitled" }
+  /** Nothing to pay, such as a free upgrade. */
+  | { status: "no_payment_needed" }
+  /** Nothing can be bought here; `message` says why. */
+  | { status: "unavailable"; message: string };
 
 // ==================== Marketplace installs and starter packs ====================
 

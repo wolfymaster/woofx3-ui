@@ -15,6 +15,7 @@
  */
 
 import type { LocalEndpointSummary, LocalProtocol } from "@shared/local-endpoints";
+import { type CatalogListing, isModuleListing, parseCatalogDetail } from "@shared/marketplace-catalog";
 import type {
   MarketplaceBundleInstallResult as EngineBundleInstallResult,
   MarketplaceInstallResult as EngineModuleInstallResult,
@@ -35,7 +36,6 @@ import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
 import { marketplaceGet } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
-import { type CatalogListing, isModuleListing, parseCatalogDetail } from "./marketplaceCatalog";
 import { notBoughtMessage } from "./marketplaceEntitlement";
 
 export const ENGINE_INSTALL_CAPABILITY: EngineCapability = "modules.marketplaceInstall";

@@ -10,7 +10,9 @@ import type {
   FieldOptionsReference,
   Leaderboard,
   LeaderboardQuery,
+  MarketplaceAuthorQuery,
   MarketplaceBundleInstallResult,
+  MarketplaceCatalogQuery,
   MarketplaceInstallRequest,
   MarketplaceInstallResult,
   MarketplaceListingInspection,
@@ -64,6 +66,7 @@ import type {
   WorkflowRunSnapshotsQuery,
   WorkflowsQuery,
 } from "@woofx3/api";
+import { formatMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
 import type {
   TwitchDeviceLoginStartResult,
   TwitchDeviceLoginState,
@@ -119,6 +122,9 @@ type DirectFakeSurface = Pick<
   | "executeCommand"
   | "listAvailableFunctions"
   | "marketplaceGetListing"
+  | "marketplaceSearch"
+  | "marketplaceCounts"
+  | "marketplaceGetAuthor"
   | "inspectMarketplaceListing"
   | "installMarketplaceListing"
   | "installMarketplaceBundle"
@@ -209,8 +215,14 @@ export class FakeEngineState {
   /** Resource values by canonical id; an instance not here holds nothing yet. */
   resourceValues: Record<string, unknown> = {};
   functions: AvailableFunction[] = [];
-  /** Marketplace listings by id; an id not here is refused, as the marketplace answers 404. */
+  /** The marketplace's answers to `/catalog/{id}` by listing id; an id not here is refused, as the marketplace answers 404. */
   listings: Record<string, unknown> = {};
+  /** The marketplace's answer to `/catalog` for a query. */
+  catalogSearch: (query: MarketplaceCatalogQuery) => unknown = () => ({ listings: [], total: 0 });
+  /** The marketplace's answer to `/catalog/counts`; a status refuses it, as an older marketplace answers 404. */
+  catalogCounts: unknown | { refusedWith: number } = { counts: {}, total: 0 };
+  /** The marketplace's answers to `/authors/{slug}` by slug, given the page asked for; a slug not here is refused with 404. */
+  authors: Record<string, (query: MarketplaceAuthorQuery | undefined) => unknown> = {};
   /** Listing inspections by id; an id not here is refused, as a paid listing is without a buyer token. */
   inspections: Record<string, MarketplaceListingInspection> = {};
   /** What `installMarketplaceListing` and `installMarketplaceBundle` answer. */
@@ -268,6 +280,11 @@ export class FakeEngineState {
     }
     await subscription.subscriber.onStreamEvent(frame);
   }
+}
+
+/** The error message an engine throws for a marketplace that refused a catalog read with `status`. */
+function marketplaceRefusal(status: number): string {
+  return formatMarketplaceCatalogError({ kind: "http", status, code: "refused", message: `Refused with ${status}` });
 }
 
 /** A session's API serving the direct gateway's reads from `FakeEngineState`. */
@@ -648,9 +665,32 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     this.state.record("marketplaceGetListing", listingId, buyerToken);
     const listing = this.state.listings[listingId];
     if (listing === undefined) {
-      throw new Error(`Marketplace request failed (404)`);
+      throw new Error(marketplaceRefusal(404));
     }
     return listing;
+  }
+
+  async marketplaceSearch(query: MarketplaceCatalogQuery, buyerToken?: string): Promise<unknown> {
+    this.state.record("marketplaceSearch", query, buyerToken);
+    return this.state.catalogSearch(query);
+  }
+
+  async marketplaceCounts(buyerToken?: string): Promise<unknown> {
+    this.state.record("marketplaceCounts", buyerToken);
+    const counts = this.state.catalogCounts;
+    if (counts && typeof counts === "object" && "refusedWith" in counts) {
+      throw new Error(marketplaceRefusal(counts.refusedWith as number));
+    }
+    return counts;
+  }
+
+  async marketplaceGetAuthor(slug: string, query?: MarketplaceAuthorQuery, buyerToken?: string): Promise<unknown> {
+    this.state.record("marketplaceGetAuthor", slug, query, buyerToken);
+    const author = this.state.authors[slug];
+    if (author === undefined) {
+      throw new Error(marketplaceRefusal(404));
+    }
+    return author(query);
   }
 
   async inspectMarketplaceListing(listingId: string, buyerToken?: string): Promise<MarketplaceListingInspection> {

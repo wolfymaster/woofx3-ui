@@ -38,6 +38,7 @@ import {
   useResourceKinds,
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
+import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
 import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
@@ -96,7 +97,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const commands = useChatCommands();
   const commandGroups = useChatCommandGroups();
   const scenes = useScenes();
-  const modules = useQuery(api.moduleRepository.list, args);
+  const modules = useInstalledModules();
   const recaps = useQuery(
     api.streamSessionSummaries.listRecent,
     instanceId ? { instanceId, limit: RECENT_RECAPS } : "skip"
@@ -483,7 +484,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   }
 
   for (const mod of modules ?? []) {
-    const key = bareModuleKey(mod.moduleKey) ?? mod._id;
+    const key = bareModuleKey(mod.moduleKey) ?? mod.id;
     result.push({
       id: `module:${key}`,
       title: mod.name,
@@ -491,7 +492,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
       group: "Modules",
       subtitle: mod.description,
       keywords: ["module", ...(mod.tags ?? [])],
-      meta: mod.status && mod.status !== "installed" ? mod.status : `v${mod.version}`,
+      meta: mod.status !== "installed" ? mod.status : `v${mod.version}`,
       icon: Puzzle,
       action: { type: "navigate", href: installedModulePath(key) },
     });

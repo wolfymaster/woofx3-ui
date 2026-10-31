@@ -1,16 +1,3 @@
-import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalAction } from "./_generated/server";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import {
-  MarketplaceError,
-  marketplaceAuthed,
-  marketplaceGet,
-  queryString,
-  withClientErrors,
-} from "./lib/marketplaceApi";
 import {
   type AuthorPage,
   type CatalogCounts,
@@ -25,7 +12,20 @@ import {
   parseCatalogDetail,
   parseCatalogPage,
   parseQuote,
-} from "./lib/marketplaceCatalog";
+} from "@shared/marketplace-catalog";
+import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalAction } from "./_generated/server";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import {
+  MarketplaceError,
+  marketplaceAuthed,
+  marketplaceGet,
+  queryString,
+  withClientErrors,
+} from "./lib/marketplaceApi";
 import {
   type InstallBundleResult,
   installBundleThroughEngine,

@@ -46,6 +46,7 @@ export const directKeys = {
   },
   modules: {
     all: ["modules"] as const,
+    installed: () => ["modules", "installed"] as const,
     assets: (moduleId: string, kinds: readonly string[]) => ["modules", "assets", moduleId, ...kinds] as const,
   },
   moduleResources: {

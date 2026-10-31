@@ -1,9 +1,5 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { LocalEndpointSummary } from "@shared/local-endpoints";
 import { functionLocation, type ModuleFunctionSummary } from "@shared/module-function-summary";
-import { useMutation, useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 import {
   ArrowLeft,
   Bell,
@@ -26,7 +22,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ListField } from "@/components/common/list-field";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
-import { LocalEndpointPanel } from "@/components/modules/local-endpoint-panel";
 import { ModuleFileContentView, ModuleFilesTab } from "@/components/modules/module-files";
 import {
   ModuleLocalEndpointList,
@@ -34,7 +29,6 @@ import {
   ModulePermissionList,
   ModulePermissionsSection,
 } from "@/components/modules/module-permissions";
-import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
 import { ObsConnectionStatus } from "@/components/modules/obs-connection-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +54,7 @@ import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
 import { actionErrorMessage } from "@/lib/action-error";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
 import { listSettingText, listSettingValue } from "@/lib/list-setting-value";
+import { type SettingSource, useMarketplaceMode } from "@/lib/marketplace-mode";
 import { matchFunctionFile } from "@/lib/module-files";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
@@ -124,7 +119,6 @@ interface ModuleDetailPanelProps {
   installSucceeded?: boolean;
   installError?: string | null;
   onDismissError?: () => void;
-  instanceId?: Id<"instances">;
   moduleDbId?: ModuleId;
   manifestSettings?: ManifestSettingField[];
   manifestResourceKinds?: ManifestResourceKind[];
@@ -172,7 +166,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     installSucceeded,
     installError,
     onDismissError,
-    instanceId,
     moduleDbId,
     manifestSettings,
     manifestResourceKinds,
@@ -284,7 +277,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
               <ModuleFilesTab files={moduleFiles} />
             ) : topTab === "settings" ? (
               <ModuleSettingsSections
-                instanceId={instanceId}
                 moduleId={module.identifier ?? ""}
                 manifestSettings={manifestSettings ?? []}
                 className="flex-1 min-h-0 overflow-hidden"
@@ -850,32 +842,6 @@ function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) 
 
 // --- Settings Tab ---
 
-/** Who wrote a setting a local endpoint names, and whether the companion could fill it again. */
-interface SettingSource {
-  source: "companion" | "manual" | null;
-  /** The companion has the setting's endpoint turned on, so handing the setting back to it means something. */
-  companionEnabled: boolean;
-}
-
-function settingSourcesFrom(
-  view: FunctionReturnType<typeof api.companionIntegrations.forModule> | undefined
-): Map<string, SettingSource> {
-  const sources = new Map<string, SettingSource>();
-  if (!view) {
-    return sources;
-  }
-  const recorded = new Map(view.provenance.map((row) => [row.key, row.source]));
-  for (const endpoint of view.endpoints) {
-    const companionEnabled = endpoint.state?.enabled ?? false;
-    for (const key of [endpoint.hostSetting, endpoint.portSetting, endpoint.passwordSetting]) {
-      if (key) {
-        sources.set(key, { source: recorded.get(key) ?? null, companionEnabled });
-      }
-    }
-  }
-  return sources;
-}
-
 function FromCompanionBadge() {
   return (
     <Badge variant="secondary" className="ml-2 text-[10px]">
@@ -900,34 +866,32 @@ function SettingSourceNote({ source, onReturn }: { source: SettingSource | undef
 }
 
 /**
- * Everything a streamer configures on an installed module: its webhook
- * endpoints, the services it reaches on their PC, the OBS connection for the
- * OBS module, and the settings its manifest declares.
+ * Everything a streamer configures on an installed module: what the app's
+ * mode adds above it (webhook endpoints, companion routing), the OBS
+ * connection for the OBS module, and the settings its manifest declares.
  */
 export function ModuleSettingsSections({
-  instanceId,
   moduleId,
   manifestSettings,
   className,
 }: SettingsTabProps & { className?: string }) {
   const { instanceId: engineInstanceId } = useEngineScope();
+  const { ModuleSettingsExtras } = useMarketplaceMode();
   return (
     <div className={cn("flex flex-col gap-6", className)}>
-      {instanceId && moduleId && <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={moduleId} />}
-      {instanceId && moduleId && <LocalEndpointPanel instanceId={instanceId} moduleId={moduleId} />}
+      {ModuleSettingsExtras && moduleId && <ModuleSettingsExtras moduleId={moduleId} />}
       {engineInstanceId && moduleId === OBS_MODULE_ID && <ObsConnectionStatus />}
-      <SettingsTab instanceId={instanceId} moduleId={moduleId} manifestSettings={manifestSettings} />
+      <SettingsTab moduleId={moduleId} manifestSettings={manifestSettings} />
     </div>
   );
 }
 
 interface SettingsTabProps {
-  instanceId?: Id<"instances">;
   moduleId: string;
   manifestSettings: ManifestSettingField[];
 }
 
-function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProps) {
+function SettingsTab({ moduleId, manifestSettings }: SettingsTabProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [loadedValues, setLoadedValues] = useState<Record<string, string> | null>(null);
   // A secret's value never comes back from the engine, only whether one is stored.
@@ -943,26 +907,17 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const localView = useQuery(
-    api.companionIntegrations.forModule,
-    instanceId && moduleId ? { instanceId, moduleId } : "skip"
-  );
-  const returnToCompanion = useMutation(api.moduleSettingProvenance.useCompanionValue);
-  const settingSources = useMemo(() => settingSourcesFrom(localView), [localView]);
-
-  // The companion writes settings in the engine, which pushes nothing here, so
-  // the form reloads when Convex records a new companion write.
-  const companionWrites =
-    localView === undefined
-      ? null
-      : (localView?.provenance ?? [])
-          .filter((row) => row.source === "companion")
-          .map((row) => `${row.key}@${row.updatedAt}`)
-          .join(",");
-  const [seenCompanionWrites, setSeenCompanionWrites] = useState<string | null>(null);
-  if (companionWrites !== null && companionWrites !== seenCompanionWrites) {
-    setSeenCompanionWrites(companionWrites);
-    if (seenCompanionWrites !== null && loadState === "loaded") {
+  const {
+    sources: settingSources,
+    revision: writeRevision,
+    returnToCompanion,
+  } = useMarketplaceMode().useSettingSources(moduleId);
+  // Another writer's change reaches the form only through the mode, so the
+  // form reloads when the mode reports one.
+  const [seenWriteRevision, setSeenWriteRevision] = useState<string | null>(null);
+  if (writeRevision !== null && writeRevision !== seenWriteRevision) {
+    setSeenWriteRevision(writeRevision);
+    if (seenWriteRevision !== null && loadState === "loaded") {
       setLoadState("idle");
     }
   }
@@ -1044,11 +999,8 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
   }
 
   function returnSettingToCompanion(key: string) {
-    if (!instanceId) {
-      return;
-    }
     setSaveError(null);
-    returnToCompanion({ instanceId, moduleId, key }).catch((err: unknown) => {
+    returnToCompanion(key).catch((err: unknown) => {
       setSaveError(actionErrorMessage(err));
     });
   }

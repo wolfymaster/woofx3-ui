@@ -8,8 +8,12 @@ import type {
   AlertSkipResult,
   AlertTargetUsage,
   Announcement,
+  AuthorPage,
   BlockedTerm,
   BlockedTermList,
+  CatalogCounts,
+  CatalogListingDetail,
+  CatalogPage,
   ChatCommand,
   ChatCommandChanges,
   ChatCommandGroup,
@@ -54,8 +58,10 @@ import type {
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
   HostedStorageUsage,
+  InstalledModule,
   InstanceLiveState,
   KnownBoxArt,
+  ListingQuote,
   Live,
   Macro,
   MacroId,
@@ -63,6 +69,9 @@ import type {
   MacroRunResult,
   MacroVariableValue,
   MarketplaceBundleInstall,
+  MarketplaceCheckout,
+  MarketplacePageRequest,
+  MarketplaceSearchQuery,
   ModeratedUser,
   ModerationAccess,
   ModuleArchiveInstall,
@@ -225,6 +234,7 @@ export interface EngineGateway {
   readonly commands: CommandsGateway;
   readonly moduleResources: ModuleResourcesGateway;
   readonly modules: ModulesGateway;
+  readonly marketplace: MarketplaceGateway;
   readonly scenes: ScenesGateway;
   readonly workflows: WorkflowsGateway;
   readonly requests: RequestsGateway;
@@ -429,6 +439,8 @@ export interface ModuleResourcesGateway {
  * with (an installed module's key or a marketplace id) unless typed `ModuleId`.
  */
 export interface ModulesGateway {
+  /** Every module on the engine, built-in ones included. Empty when the caller cannot see the instance. */
+  useInstalled(): Live<InstalledModule[]>;
   /** The module's manifest-derived detail, merged with its marketplace listing when it has one. */
   useDetailRequest(): (moduleId: string) => Promise<ModuleDetail>;
   /** The declared settings' current values; a secret's value never comes back, only whether one is set. */
@@ -475,6 +487,31 @@ export interface ModulesGateway {
   useAssets(moduleId: ModuleId, kinds: readonly string[] | undefined): Live<ModuleAsset[]>;
   /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
   useStorageUsageRequest(): () => Promise<ModuleStorageUsage | null>;
+}
+
+/**
+ * The marketplace's catalog: searching it, a listing's page, an author's page
+ * and the counts per listing type. The catalog is a separate HTTP service, so
+ * every read is a request and nothing pushes a change.
+ *
+ * Quotes, entitlements and checkout are what one account holds and pays for.
+ * Only a gateway with an account serves them; any other rejects with
+ * `GatewayUnsupportedError`, and screens offer no purchase there.
+ */
+export interface MarketplaceGateway {
+  useSearchRequest(): (search: MarketplaceSearchQuery) => Promise<CatalogPage>;
+  /** Null when the marketplace has no such listing for this instance. */
+  useListingRequest(): (listingId: string) => Promise<CatalogListingDetail | null>;
+  /** One page of an author's listings with their profile; null for an author the marketplace does not know. */
+  useAuthorRequest(): (slug: string, page: MarketplacePageRequest) => Promise<AuthorPage | null>;
+  /** Null when the marketplace cannot count listings by type. */
+  useCountsRequest(): () => Promise<CatalogCounts | null>;
+  /** What the account must do to hold the listing; null when there is no such listing. */
+  useQuoteRequest(): (listingId: string) => Promise<ListingQuote | null>;
+  /** The ids of every listing the account holds. */
+  useEntitlementsRequest(): () => Promise<string[]>;
+  /** Starts buying a listing, returning to `returnPath`, a path in this app, when done. */
+  useCheckoutRequest(): (listingId: string, returnPath: string) => Promise<MarketplaceCheckout>;
 }
 
 /**

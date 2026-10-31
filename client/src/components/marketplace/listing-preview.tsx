@@ -1,4 +1,4 @@
-import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListingDetail } from "@shared/marketplace-catalog";
 import { Eye, Image as ImageIcon, MonitorPlay, Play } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";

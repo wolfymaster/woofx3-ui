@@ -1,4 +1,4 @@
-import type { ListingCredit } from "@convex/lib/marketplaceCatalog";
+import type { ListingCredit } from "@shared/marketplace-catalog";
 import { ExternalLink, Heart } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
