@@ -182,7 +182,8 @@ function useCreateRequest() {
 function useUpdateRequest() {
   const updateFromDefinition = useInstanceAction(api.workflowActions.updateFromDefinition);
   return useCallback(
-    (engineWorkflowId: string, definition: unknown) => updateFromDefinition({ engineWorkflowId, definition }),
+    (engineWorkflowId: string, definition: unknown, expectedRevision?: number) =>
+      updateFromDefinition({ engineWorkflowId, definition, expectedRevision }),
     [updateFromDefinition]
   );
 }

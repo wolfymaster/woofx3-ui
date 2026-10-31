@@ -1,8 +1,8 @@
-import { escapeDollarKeys } from "@shared/dollar-keys";
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { ExternalLink } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { TriggerWhenCard } from "@/components/alerts/trigger-when-card";
 import { FlowEditor } from "@/components/flow/flow-editor";
@@ -15,16 +15,18 @@ import {
   useSetWorkflowEnabledRequest,
   useUpdateWorkflowRequest,
 } from "@/engine/hooks/use-workflows";
-import { useFlowSave } from "@/hooks/use-flow-save";
+import { FLOW_REPLACED, useFlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { type TriggerPin, triggerFieldValues, withFieldConditions } from "@/lib/alert-triggers";
+import { storedStepsGained, type TriggerPin, triggerFieldValues, withFieldConditions } from "@/lib/alert-triggers";
 import { type OptionLabels, sentenceParts, sentenceText } from "@/lib/condition-sentence";
+import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import { incompleteConditionFields } from "@/lib/workflow-presets-json";
 import {
   countActionSteps,
+  definitionToTree,
   removeStepFromTree,
   type StepNode,
   treeToDefinition,
@@ -35,6 +37,7 @@ import {
 export interface SavedTrigger {
   engineWorkflowId: string;
   definition: WorkflowDefinition;
+  revision?: number;
 }
 
 interface TriggerEditorProps {
@@ -101,6 +104,10 @@ export function TriggerEditor({
   const treeRef = useRef(tree);
   treeRef.current = tree;
   const savedTriggerRef = useRef(JSON.stringify(initialTree.trigger));
+  // The revision the steps on screen were read at. Not the latest stored one: an
+  // edit of steps that have since changed has to be refused, not saved over them.
+  const baseRevisionRef = useRef(saved?.revision);
+  const replaceTreeRef = useRef<(read: WorkflowTree, revision: number | undefined) => void>(() => undefined);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -118,7 +125,7 @@ export function TriggerEditor({
   const editableFields = pin ? conditionFields.filter((field) => field.id !== pin.fieldId) : conditionFields;
 
   const commit = useCallback(
-    async (next: WorkflowTree): Promise<boolean> => {
+    async (next: WorkflowTree): Promise<boolean | typeof FLOW_REPLACED> => {
       const missing = incompleteConditionFields(
         conditionFields,
         triggerFieldValues(next.trigger.conditions, conditionFields)
@@ -140,7 +147,20 @@ export function TriggerEditor({
         if (saved) {
           definition.id = saved.definition.id;
           definition.name = saved.definition.name;
-          await updateFromDefinition(saved.engineWorkflowId, escapeDollarKeys(definition));
+          const outcome = await updateFromDefinition(
+            saved.engineWorkflowId,
+            escapeDollarKeys(definition),
+            baseRevisionRef.current
+          );
+          if (outcome.conflict) {
+            const read = definitionToTree(unescapeDollarKeys(outcome.definition) as WorkflowDefinition);
+            if (read.editable) {
+              replaceTreeRef.current(read.tree, outcome.revision);
+            }
+            toast(STEPS_CHANGED_TOAST);
+            return FLOW_REPLACED;
+          }
+          baseRevisionRef.current = outcome.revision;
         } else {
           const { id: _unsaved, ...unsaved } = definition;
           const name = sentenceText(parts) || triggerPreset.name;
@@ -186,6 +206,33 @@ export function TriggerEditor({
     commit,
     !saved && countActionSteps(tree.steps) === 0 ? "Not saved yet. Add a step to save this trigger." : null
   );
+
+  const { markSaved } = save;
+  replaceTreeRef.current = (read, revision) => {
+    setTree(read);
+    markSaved(read);
+    savedTriggerRef.current = JSON.stringify(read.trigger);
+    baseRevisionRef.current = revision;
+  };
+  const storedRevisionRef = useRef(saved?.revision);
+  storedRevisionRef.current = saved?.revision;
+  const storedDefinition = saved?.definition;
+  const previousStoredRef = useRef(storedDefinition);
+  useEffect(() => {
+    const previous = previousStoredRef.current;
+    previousStoredRef.current = storedDefinition;
+    if (!previous || !storedDefinition || previous === storedDefinition) {
+      return;
+    }
+    const held = treeToDefinition(treeRef.current).tasks;
+    if (!storedStepsGained(previous.tasks ?? [], storedDefinition.tasks ?? [], held)) {
+      return;
+    }
+    const read = definitionToTree(storedDefinition);
+    if (read.editable) {
+      replaceTreeRef.current(read.tree, storedRevisionRef.current);
+    }
+  }, [storedDefinition]);
 
   const changeValue = (fieldId: string, value: unknown) => {
     const conditions = withFieldConditions(tree.trigger.conditions, conditionFields, {

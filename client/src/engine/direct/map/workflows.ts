@@ -50,6 +50,7 @@ export function toWorkflow(workflow: EngineWorkflow): Workflow | null {
     engineWorkflowId: workflow.id,
     definition: escapeDollarKeys(workflow.definition),
     isEnabled: workflow.isEnabled,
+    revision: workflow.revision,
     createdAt: epochMs(workflow.createdAt, "workflow creation time"),
     updatedAt: epochMs(workflow.updatedAt, "workflow update time"),
   };

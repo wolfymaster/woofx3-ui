@@ -70,6 +70,7 @@ import type {
   WorkflowRunSnapshot,
   WorkflowRunSnapshotsQuery,
   WorkflowsQuery,
+  WorkflowUpdateConflict,
 } from "@woofx3/api";
 import { formatMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
 import type {
@@ -597,14 +598,22 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return { id, definition, isEnabled: true };
   }
 
-  async updateWorkflow(id: string, data: { definition: WorkflowDefinition }): Promise<WorkflowMutationResult | null> {
+  async updateWorkflow(
+    id: string,
+    data: { definition: WorkflowDefinition; expectedRevision?: number }
+  ): Promise<WorkflowMutationResult | WorkflowUpdateConflict | null> {
     this.state.record("updateWorkflow", id, data);
     const found = this.state.workflows.find((workflow) => workflow.id === id);
     if (found === undefined) {
       return null;
     }
+    if (data.expectedRevision !== undefined && found.revision !== data.expectedRevision) {
+      const definition = found.definition as WorkflowDefinition;
+      return { conflict: true, current: { id, definition, isEnabled: found.isEnabled, revision: found.revision } };
+    }
     found.definition = data.definition;
-    return { id, definition: data.definition, isEnabled: found.isEnabled };
+    found.revision = (found.revision ?? 0) + 1;
+    return { id, definition: data.definition, isEnabled: found.isEnabled, revision: found.revision };
   }
 
   async setWorkflowEnabled(id: string, isEnabled: boolean): Promise<{ id: string; isEnabled: boolean }> {

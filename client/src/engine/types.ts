@@ -848,10 +848,17 @@ export interface AlertTargetUsage {
 // ==================== Workflows ====================
 
 /** A workflow on the engine. `definition` and `nodes` carry their `$` keys escaped (shared/dollar-keys). */
+/** How a save went: stored, or refused because the workflow changed after the copy being saved was read. */
+export type WorkflowSaveOutcome =
+  | { conflict: false; engineWorkflowId: string; revision?: number }
+  | { conflict: true; definition: unknown; revision?: number };
+
 export interface Workflow {
   engineWorkflowId: string;
   definition: unknown;
   isEnabled: boolean;
+  /** Counts changes to the steps and trigger; absent until an engine that counts them reports it. */
+  revision?: number;
   /** The builder's nodes and edges. */
   nodes?: unknown[];
   edges?: unknown[];

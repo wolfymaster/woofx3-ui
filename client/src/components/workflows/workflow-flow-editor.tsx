@@ -1,16 +1,17 @@
 import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlowEditor } from "@/components/flow/flow-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workflows";
-import { useFlowSave } from "@/hooks/use-flow-save";
+import { FLOW_REPLACED, useFlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
 import {
   countActionSteps,
   definitionToTree,
@@ -53,6 +54,7 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
 
   const [tree, setTree] = useState<WorkflowTree | null>(null);
   const [notEditableReason, setNotEditableReason] = useState<string | null>(null);
+  const baseRevisionRef = useRef<number | undefined>(undefined);
 
   const toDefinition = useCallback(
     (next: WorkflowTree): WorkflowDefinition | null => {
@@ -79,14 +81,31 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
     [toDefinition, onDefinitionChange]
   );
 
+  const markSavedRef = useRef<(tree: WorkflowTree) => void>(() => undefined);
+
   const handleCommit = useCallback(
-    async (next: WorkflowTree): Promise<boolean> => {
+    async (next: WorkflowTree): Promise<boolean | typeof FLOW_REPLACED> => {
       const definition = toDefinition(next);
       if (!definition) {
         return true;
       }
       try {
-        await updateFromDefinition(engineWorkflowId, escapeDollarKeys(definition) as WorkflowDefinition);
+        const outcome = await updateFromDefinition(
+          engineWorkflowId,
+          escapeDollarKeys(definition) as WorkflowDefinition,
+          baseRevisionRef.current
+        );
+        if (outcome.conflict) {
+          const read = definitionToTree(unescapeDollarKeys(outcome.definition) as WorkflowDefinition);
+          if (read.editable) {
+            setTree(read.tree);
+            markSavedRef.current(read.tree);
+          }
+          baseRevisionRef.current = outcome.revision;
+          toast(STEPS_CHANGED_TOAST);
+          return FLOW_REPLACED;
+        }
+        baseRevisionRef.current = outcome.revision;
         return true;
       } catch (err) {
         toast({
@@ -102,17 +121,19 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
 
   const save = useFlowSave(tree, handleCommit);
   const { markSaved } = save;
+  markSavedRef.current = markSaved;
 
   useEffect(() => {
     if (workflow?.definition) {
       const result = definitionToTree(unescapeDollarKeys(workflow.definition) as WorkflowDefinition);
       setTree(result.editable ? result.tree : null);
+      baseRevisionRef.current = workflow.revision;
       if (result.editable) {
         markSaved(result.tree);
       }
       setNotEditableReason(result.editable ? null : result.message);
     }
-  }, [workflow?.definition, markSaved]);
+  }, [workflow?.definition, workflow?.revision, markSaved]);
 
   return (
     <ScrollArea className="h-full">

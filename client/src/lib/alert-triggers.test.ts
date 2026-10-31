@@ -10,6 +10,7 @@ import {
   newTriggerTree,
   nextTriggerOrder,
   SEED_STEP_ID,
+  storedStepsGained,
   storedTriggerCount,
   triggerAimsAt,
   triggerSourceLabel,
@@ -340,5 +341,18 @@ describe("unownedConditionPhrases", () => {
       'message starts with "!"',
       "${viewer.isVip} exists",
     ]);
+  });
+});
+
+describe("storedStepsGained", () => {
+  const steps = (...ids: string[]) => ids.map((id) => ({ id }));
+
+  test.each([
+    ["a step merged in", steps("a"), steps("a", "b"), steps("a"), true],
+    ["the editor's own new step echoed back", steps("a"), steps("a", "b"), steps("a", "b"), false],
+    ["a stale copy of a step the editor removed", steps("a", "b"), steps("a", "b"), steps("a"), false],
+    ["a removal echoed back", steps("a", "b"), steps("a"), steps("a"), false],
+  ])("%s", (_name, previous, stored, held, expected) => {
+    expect(storedStepsGained(previous, stored, held)).toBe(expected);
   });
 });

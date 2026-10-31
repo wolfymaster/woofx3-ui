@@ -1,7 +1,8 @@
 import { escapeDollarKeys } from "@shared/dollar-keys";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { completeImportItemByCorrelation } from "./lib/setupImportLedger";
 import { completeStarterItemByCorrelation } from "./lib/starterPackLedger";
 import { deleteWorkflowHealth } from "./workflowHealth";
@@ -96,8 +97,9 @@ export const upsertFromWebhook = internalMutation({
     engineWorkflowId: v.string(),
     definition: v.any(),
     isEnabled: v.boolean(),
+    revision: v.optional(v.number()),
   },
-  handler: async (ctx, { instanceId, engineWorkflowId, definition, isEnabled }) => {
+  handler: async (ctx, { instanceId, engineWorkflowId, definition, isEnabled, revision }) => {
     const storedDefinition = escapeDollarKeys(definition);
     const existing = await ctx.db
       .query("workflows")
@@ -105,9 +107,15 @@ export const upsertFromWebhook = internalMutation({
       .first();
     const now = Date.now();
     if (existing) {
+      // Callbacks can arrive out of order, and a late one must not put steps back
+      // to an older copy that an editor would then save from.
+      if (revision !== undefined && existing.revision !== undefined && revision < existing.revision) {
+        return existing._id;
+      }
       await ctx.db.patch(existing._id, {
         definition: storedDefinition,
         isEnabled,
+        revision,
         updatedAt: now,
       });
       return existing._id;
@@ -117,11 +125,41 @@ export const upsertFromWebhook = internalMutation({
       engineWorkflowId,
       definition: storedDefinition,
       isEnabled,
+      revision,
       createdAt: now,
       updatedAt: now,
     });
   },
 });
+
+const MAX_ROWS_FOLLOWING_A_WORKFLOW = 1000;
+
+/** Points what holds a merged-away workflow's id at the workflow its steps moved into. */
+async function followMergedWorkflow(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  engineWorkflowId: string,
+  mergedInto: string
+) {
+  const macros = await ctx.db
+    .query("macros")
+    .withIndex("by_instance_and_sort_order", (q) => q.eq("instanceId", instanceId))
+    .take(MAX_ROWS_FOLLOWING_A_WORKFLOW);
+  for (const macro of macros) {
+    if (macro.config.workflowId === engineWorkflowId) {
+      await ctx.db.patch(macro._id, { config: { ...macro.config, workflowId: mergedInto } });
+    }
+  }
+  const packItems = await ctx.db
+    .query("starterPackItems")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .take(MAX_ROWS_FOLLOWING_A_WORKFLOW);
+  for (const item of packItems) {
+    if (item.kind === "workflow" && item.engineId === engineWorkflowId) {
+      await ctx.db.patch(item._id, { engineId: mergedInto });
+    }
+  }
+}
 
 /**
  * Delete a mirrored workflow row in response to a workflow.deleted webhook.
@@ -130,8 +168,12 @@ export const deleteFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
     engineWorkflowId: v.string(),
+    mergedInto: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, engineWorkflowId }) => {
+  handler: async (ctx, { instanceId, engineWorkflowId, mergedInto }) => {
+    if (mergedInto) {
+      await followMergedWorkflow(ctx, instanceId, engineWorkflowId, mergedInto);
+    }
     const row = await ctx.db
       .query("workflows")
       .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", engineWorkflowId))

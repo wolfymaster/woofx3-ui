@@ -162,6 +162,7 @@ import type {
   WorkflowReplay,
   WorkflowRun,
   WorkflowRunDetail,
+  WorkflowSaveOutcome,
   WorkflowTrigger,
   WorkflowTriggerResult,
 } from "@/engine/types";
@@ -592,8 +593,16 @@ export interface WorkflowsGateway {
    * the id the engine gave it.
    */
   useCreateRequest(): (definition: unknown) => Promise<{ engineWorkflowId: string }>;
-  /** Replaces a workflow's definition (`$` keys escaped); resolves once its webhook echo has landed. */
-  useUpdateRequest(): (engineWorkflowId: string, definition: unknown) => Promise<{ engineWorkflowId: string }>;
+  /**
+   * Replaces a workflow's definition (`$` keys escaped); resolves once its webhook
+   * echo has landed. With `expectedRevision`, a workflow that has moved on past it
+   * stays as it is and the outcome carries what is stored, `$` keys escaped.
+   */
+  useUpdateRequest(): (
+    engineWorkflowId: string,
+    definition: unknown,
+    expectedRevision?: number
+  ) => Promise<WorkflowSaveOutcome>;
   /** Resolves once the delete's webhook echo has landed. */
   useRemoveRequest(): (engineWorkflowId: string) => Promise<{ deleted: true }>;
   /** Resolves once the change's webhook echo has landed. */

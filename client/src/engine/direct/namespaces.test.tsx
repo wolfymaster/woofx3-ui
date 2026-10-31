@@ -842,6 +842,24 @@ describe("workflows", () => {
     expect(sent.definition.trigger).toHaveProperty("$ref", "woofx3:trigger:follow");
   });
 
+  test("a save from an older revision changes nothing and comes back with what is stored", async () => {
+    const { runtime, state } = await connected();
+    const stored = alertWorkflow("w-1", "Follow", "default");
+    state.workflows = [{ ...stored, revision: 3 }];
+    const update = renderDirect(() => directWorkflowsGateway(runtime).useUpdateRequest()).current();
+
+    const refused = await update(
+      "w-1",
+      { id: "w-1", name: "Old", trigger: { type: "event", event: "e" }, tasks: [] },
+      2
+    );
+    expect(refused).toMatchObject({ conflict: true, revision: 3 });
+    expect(state.workflows[0].definition).toEqual(stored.definition);
+
+    const saved = await update("w-1", { id: "w-1", name: "New", trigger: { type: "event", event: "e" }, tasks: [] }, 3);
+    expect(saved).toEqual({ conflict: false, engineWorkflowId: "w-1", revision: 4 });
+  });
+
   test("a manual run carries the key it resolves with and says the run was not recorded by default", async () => {
     const { runtime, state } = await connected();
     state.workflows = [alertWorkflow("w-1", "Follow", "default")];
