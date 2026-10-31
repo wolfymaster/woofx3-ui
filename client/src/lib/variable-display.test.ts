@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { expressionProblem, toDisplayText, toStoredText, variableNames } from "./variable-display";
+import {
+  expressionProblem,
+  storedExpressionProblem,
+  toDisplayText,
+  toStoredText,
+  variableNames,
+} from "./variable-display";
 import type { VariableOption } from "./workflow-variables";
 
 function option(value: string): VariableOption {
@@ -166,7 +172,62 @@ describe("function calls in a field", () => {
   ];
   for (const [display, want] of problems) {
     test(`problem in ${display}`, () => {
-      expect(expressionProblem(toStoredText(display, names, on), display, names, { functions: false })).toBe(want);
+      expect(expressionProblem(toStoredText(display, names, on), display, names, "available")).toBe(want);
+    });
+  }
+});
+
+describe("braced call arguments", () => {
+  const names = variableNames([{ value: "${trigger.data.amount}", label: "Amount", group: "Trigger" }]);
+
+  test.each([
+    ["{round(divide({amount}, 100))}", "${round(divide(trigger.data.amount, 100))}"],
+    ["{round(divide(${trigger.data.amount}, 100))}", "${round(divide(trigger.data.amount, 100))}"],
+    ["{add({amount}, {amount})}", "${add(trigger.data.amount, trigger.data.amount)}"],
+  ])("%s is stored as one expression", (display, stored) => {
+    expect(toStoredText(display, names, { functions: true })).toBe(stored);
+  });
+
+  test("only a known function's arguments are rewritten", () => {
+    expect(toStoredText("{note({amount})}", names, { functions: true })).toBe("{note(${trigger.data.amount})}");
+  });
+});
+
+describe("functions a field can't run", () => {
+  const names = variableNames([option("${trigger.data.amount}")]);
+  const text = "{round(divide(amount, 100))}";
+
+  test("an engine without them says to update", () => {
+    expect(expressionProblem(text, text, names, "engine-update-needed")).toContain("Update your engine");
+  });
+
+  test("a field without them says so", () => {
+    expect(expressionProblem(text, text, names, "not-here")).toContain("can't be used here");
+  });
+
+  test("says nothing while the engine is still being asked", () => {
+    expect(expressionProblem(text, text, names, "checking")).toBeNull();
+  });
+
+  test("leaves other text alone", () => {
+    expect(expressionProblem("{note(s)}", "{note(s)}", names, "engine-update-needed")).toBeNull();
+  });
+});
+
+describe("storedExpressionProblem", () => {
+  const cases: [string, unknown, boolean][] = [
+    ["a working call", "${round(divide(trigger.data.amount, 100))}", false],
+    ["plain text and references", "Hi ${trigger.data.name} {note(s)}", false],
+    ["numbers and empties", [1, null, true, {}], false],
+    ["an unknown call", "${shout(1)}", true],
+    ["a wrong argument count", "${add(1)}", true],
+    ["a call left as text", "{round(divide(amount, 100))}", true],
+    ["one nested deep in a step", [{ parameters: { layout: { widgets: [{ text: "${round(}" }] } } }], true],
+    ["an input reference", "{{round}}", false],
+  ];
+  for (const [name, value, bad] of cases) {
+    test(name, () => {
+      expect(storedExpressionProblem(value) !== null).toBe(bad);
     });
   }
 });

@@ -11,6 +11,7 @@ import { configFieldRenderers } from "@/components/workflows/trigger-config-form
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
 import {
   appendToken,
+  isExpressionText,
   isWholeReference,
   settingProblem,
   variablesForSetting,
@@ -143,7 +144,9 @@ function SettingRow({
   // Held apart from the value: switching to an earlier value clears the fixed one, and an
   // empty value can't say the switch happened.
   const [chosenEarlier, setChosenEarlier] = useState(() => isWholeReference(value));
-  const usingEarlier = use === "replace" && (chosenEarlier || isWholeReference(value));
+  // Text in a control that can't draw it, such as an expression left unconverted in a
+  // number input, would show as blank. It goes in the field that can show and fix it.
+  const usingEarlier = use === "replace" && (chosenEarlier || isWholeReference(value) || isExpressionText(value));
   const [helpOpen, setHelpOpen] = useState(false);
   const helpId = useId();
   const problem = settingProblem(field, value);

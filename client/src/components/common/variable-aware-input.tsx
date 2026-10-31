@@ -14,9 +14,15 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import { EXPRESSION_FUNCTION_CAPABILITIES } from "@/lib/engine-capabilities";
+import { type CapabilitySupport, EXPRESSION_FUNCTION_CAPABILITIES } from "@/lib/engine-capabilities";
 import { cn } from "@/lib/utils";
-import { expressionProblem, toDisplayText, toStoredText, variableNames } from "@/lib/variable-display";
+import {
+  expressionProblem,
+  type FunctionAvailability,
+  toDisplayText,
+  toStoredText,
+  variableNames,
+} from "@/lib/variable-display";
 import {
   findTypedReference,
   flattenVariableMenu,
@@ -35,6 +41,16 @@ import type { VariableOption } from "@/lib/workflow-variables";
  */
 interface VariableMenu extends TypedReference {
   source: "typed" | "browse";
+}
+
+function functionAvailability(support: CapabilitySupport, variables: readonly VariableOption[]): FunctionAvailability {
+  if (variables.length === 0 || !variables.every((option) => option.value.startsWith("${"))) {
+    return "not-here";
+  }
+  if (support === "checking") {
+    return "checking";
+  }
+  return support === "supported" ? "available" : "engine-update-needed";
 }
 
 function typedMenu(text: string, cursor: number, functions: boolean): VariableMenu | null {
@@ -95,10 +111,12 @@ export function VariableAwareInput({
   const names = useMemo(() => variableNames(availableVariables), [availableVariables]);
   const displayed = toDisplayText(value, names);
   const hasVariables = availableVariables.length > 0;
-  const engineSupportsFunctions = useEngineCapabilities().support(...EXPRESSION_FUNCTION_CAPABILITIES) === "supported";
-  const functions =
-    engineSupportsFunctions && hasVariables && availableVariables.every((option) => option.value.startsWith("${"));
-  const problem = functions ? expressionProblem(value, displayed, names) : null;
+  const availability = functionAvailability(
+    useEngineCapabilities().support(...EXPRESSION_FUNCTION_CAPABILITIES),
+    availableVariables
+  );
+  const functions = availability === "available";
+  const problem = expressionProblem(value, displayed, names, availability);
 
   const groups = useMemo(
     () =>
