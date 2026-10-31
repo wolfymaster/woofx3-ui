@@ -1,4 +1,4 @@
-import type { TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
+import type { TwitchScopeHealth } from "@shared/twitch-scope-health";
 
 /**
  * How a streaming platform's link stands, as the shell's status bar shows it.

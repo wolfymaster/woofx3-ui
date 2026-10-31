@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@shared/twitch-chat";
 import { missingTwitchScopeMessage } from "@shared/twitch-link-refusal";
+import { missingRequiredTwitchScopes } from "@shared/twitch-scope-health";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -34,7 +35,6 @@ import {
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { sendChatMessage } from "./lib/twitchChat";
 import { twitchHelixRoute } from "./lib/twitchEngineHelix";
-import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
 // broken setup is found by the streamer rather than by their viewers.

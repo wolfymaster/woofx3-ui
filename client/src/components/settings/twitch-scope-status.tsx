@@ -1,4 +1,4 @@
-import type { MissingTwitchCapability, TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
+import type { MissingTwitchCapability, TwitchScopeHealth } from "@shared/twitch-scope-health";
 import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

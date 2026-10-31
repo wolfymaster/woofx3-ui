@@ -1,4 +1,4 @@
-import { twitchScopeHealthKey } from "@convex/lib/twitchScopeHealth";
+import { twitchScopeHealthKey } from "@shared/twitch-scope-health";
 import { Loader2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
