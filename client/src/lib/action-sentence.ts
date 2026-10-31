@@ -9,6 +9,7 @@ import {
   type SentencePart,
   withArticle,
 } from "@/lib/condition-sentence";
+import { shortenExpression, shortenExpressions } from "@/lib/expression-text";
 import { toMediaValue } from "@/lib/media-value";
 import { alertLayoutSummary } from "@/lib/workflow-node-summary";
 
@@ -118,7 +119,7 @@ function settingText(field: ConfigField, value: unknown, optionLabels: OptionLab
         return String(value);
       }
       // A name picked from the streamer's own things is a name, not words to quote.
-      return field.source ? value : `“${shortenReferences(value)}”`;
+      return field.source ? value : `“${shortenExpressions(value)}”`;
     default:
       return displayValue(field, value, optionLabels);
   }
@@ -126,13 +127,7 @@ function settingText(field: ConfigField, value: unknown, optionLabels: OptionLab
 
 /** `${increment.next}` reads as `next`, the way text fields show a reference. */
 function variableName(reference: string): string {
-  const path = reference.trim().slice(2, -1);
-  return path.split(".").pop() || path;
-}
-
-/** Every `${a.b.c}` in a text as `{c}`. */
-function shortenReferences(text: string): string {
-  return text.replace(/\$\{([^{}]*)\}/g, (_match, path: string) => `{${path.split(".").pop()}}`);
+  return shortenExpression(reference.trim().slice(2, -1));
 }
 
 /** An asset's canonical id (`module:asset:bell.mp3`) by the name its module gave the file. */

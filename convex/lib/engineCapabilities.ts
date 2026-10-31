@@ -48,6 +48,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "workflow.conditionListReferences",
   "workflow.delayWait",
   "workflow.dryRun",
+  "workflow.expressionFunctions",
   "workflow.health",
   "workflow.realCancel",
   "workflow.testRunOptions",

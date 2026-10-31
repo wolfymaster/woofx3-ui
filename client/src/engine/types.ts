@@ -170,6 +170,7 @@ export type EngineCapability =
   | "workflow.conditionListReferences"
   | "workflow.delayWait"
   | "workflow.dryRun"
+  | "workflow.expressionFunctions"
   | "workflow.health"
   | "workflow.realCancel"
   | "workflow.testRunOptions"
