@@ -86,6 +86,8 @@ const STORED_REFERENCE = /\$\{[^{}]*\}|(?<!\\)\{\{[A-Za-z0-9_.-]+\}\}/g;
 const DISPLAYED_REFERENCE = /(?<![${])\{([^{}\s$]+)\}(?!\})/g;
 // A displayed call is a lone `{name(…)}`, read the same way.
 const DISPLAYED_CALL = /(?<![${])\{([A-Za-z_][A-Za-z0-9_]*)\s*\([^{}]*\)\}(?!\})/g;
+// A `{name}` written inside a call's arguments, where a bare name is what the engine reads.
+const BRACED_ARGUMENT = /(?<![${])(\{([A-Za-z_][A-Za-z0-9_]*)\s*\([^{}]*?)\$?\{([^{}\s$]+)\}/;
 // What a stored call must look like to be shown short: toStoredText reads back only this shape.
 const STORED_CALL = /^([A-Za-z_][A-Za-z0-9_]*)\s*\(.*\)$/s;
 
@@ -115,11 +117,23 @@ export function toDisplayText(stored: string, names: VariableNames): string {
  */
 export function toStoredText(display: string, names: VariableNames, { functions }: { functions: boolean }): string {
   const called = functions
-    ? display.replace(DISPLAYED_CALL, (match, name: string) =>
+    ? withBareArguments(display).replace(DISPLAYED_CALL, (match, name: string) =>
         isExpressionFunction(name) ? fullCall(match, names) : match
       )
     : display;
   return called.replace(DISPLAYED_REFERENCE, (match, name: string) => names.tokenByName.get(name) ?? match);
+}
+
+/** The text with each call's `{name}` arguments written as `name`, as an argument is meant to be. */
+function withBareArguments(display: string): string {
+  let text = display;
+  for (;;) {
+    const match = BRACED_ARGUMENT.exec(text);
+    if (match === null || !isExpressionFunction(match[2] as string)) {
+      return text;
+    }
+    text = `${text.slice(0, match.index)}${match[1]}${match[3]}${text.slice(match.index + match[0].length)}`;
+  }
 }
 
 /**

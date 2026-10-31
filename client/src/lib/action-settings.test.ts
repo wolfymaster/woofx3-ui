@@ -155,7 +155,9 @@ describe("an expression left as text", () => {
     expect(isExpressionText("{round(divide(amount, 100))}")).toBe(true);
     expect(isExpressionText("{round(amount")).toBe(true);
     expect(isExpressionText("${trigger.data.amount}")).toBe(false);
-    expect(isExpressionText("hello {name}")).toBe(false);
+    expect(isExpressionText("5 + {amount}")).toBe(true);
+    expect(isExpressionText("{round(divide(${trigger.data.amount}, 100))}")).toBe(true);
+    expect(isExpressionText("hello")).toBe(false);
     expect(isExpressionText(5)).toBe(false);
   });
 

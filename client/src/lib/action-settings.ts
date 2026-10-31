@@ -17,9 +17,9 @@ export function isWholeReference(value: unknown): value is string {
   return typeof value === "string" && WHOLE_REFERENCE.test(value.trim());
 }
 
-/** Text written as an expression but not stored as a reference, such as `{round(amount)}`. */
+/** Text with an expression in it that isn't stored as one reference, such as `{round(amount)}`. */
 export function isExpressionText(value: unknown): value is string {
-  return typeof value === "string" && !isWholeReference(value) && /^\s*\$?\{.*$/s.test(value);
+  return typeof value === "string" && !isWholeReference(value) && /\{/.test(value);
 }
 
 /** Nothing entered: no value, blank text, no rows. */

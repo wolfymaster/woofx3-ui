@@ -83,6 +83,12 @@ describe("insertVariableReference", () => {
 describe("typing a function call", () => {
   const typed = (text: string, functions = true) => findTypedReference(text, text.length, functions);
 
+  test("a brace among a call's arguments starts an argument", () => {
+    expect(typed("{round(divide({am")).toEqual({ start: 14, end: 17, query: "am", argument: true });
+    expect(typed("{a} {am")?.argument).toBe(false);
+    expect(typed("{round(divide({am", false)?.argument).toBe(false);
+  });
+
   test("a plain reference searches everything since the brace", () => {
     expect(typed("Hi {rou")).toEqual({ start: 3, end: 7, query: "rou", argument: false });
     expect(typed("Hi ${rou")).toEqual({ start: 3, end: 8, query: "rou", argument: false });

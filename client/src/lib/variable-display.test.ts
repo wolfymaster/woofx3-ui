@@ -177,6 +177,22 @@ describe("function calls in a field", () => {
   }
 });
 
+describe("braced call arguments", () => {
+  const names = variableNames([{ value: "${trigger.data.amount}", label: "Amount", group: "Trigger" }]);
+
+  test.each([
+    ["{round(divide({amount}, 100))}", "${round(divide(trigger.data.amount, 100))}"],
+    ["{round(divide(${trigger.data.amount}, 100))}", "${round(divide(trigger.data.amount, 100))}"],
+    ["{add({amount}, {amount})}", "${add(trigger.data.amount, trigger.data.amount)}"],
+  ])("%s is stored as one expression", (display, stored) => {
+    expect(toStoredText(display, names, { functions: true })).toBe(stored);
+  });
+
+  test("only a known function's arguments are rewritten", () => {
+    expect(toStoredText("{note({amount})}", names, { functions: true })).toBe("{note(${trigger.data.amount})}");
+  });
+});
+
 describe("functions a field can't run", () => {
   const names = variableNames([option("${trigger.data.amount}")]);
   const text = "{round(divide(amount, 100))}";
