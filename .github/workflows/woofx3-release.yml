@@ -142,8 +142,8 @@ jobs:
           projectPath: companion
           tagName: ${{ github.ref_name }}
           args: --features bundled-engine --config ${{ env.DESKTOP_CONFIG }}
-          releaseName: woofx3 desktop app ${{ needs.check-version.outputs.version }}
-          releaseBody: Download the installer below (the file ending in -setup.exe). Installed desktop apps update themselves.
+          releaseName: woofx3 ${{ needs.check-version.outputs.version }}
+          releaseBody: Download the installer below (the file ending in -setup.exe). Installed copies of woofx3 update themselves.
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
@@ -216,8 +216,8 @@ jobs:
               --prerelease \
               --latest=false \
               --target "$GITHUB_SHA" \
-              --title "woofx3 desktop app updates" \
-              --notes "Not a release to download. Installed desktop apps read latest.json here to find their next update."
+              --title "woofx3 updates" \
+              --notes "Not a release to download. Installed copies of woofx3 read latest.json here to find their next update."
           fi
           gh release edit "$LATEST_TAG" --prerelease
           gh release upload "$LATEST_TAG" release/latest.json --clobber
