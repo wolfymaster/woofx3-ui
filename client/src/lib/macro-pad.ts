@@ -1,8 +1,8 @@
-// A macro pad button. Its `{{name}}` variables live in
-// shared/macro-variables.ts, shared with the remote trigger route.
+// What the macro pad's widget and editor need to show a button. The button
+// itself is the gateway's `Macro`; its `{{name}}` variables live in
+// shared/macro-variables.ts, shared with every place a macro runs.
 
-import type { Id } from "@convex/_generated/dataModel";
-import type { MacroActionStep, MacroActionType, MacroConfig } from "@shared/macro-variables";
+import type { MacroActionStep, MacroConfig } from "@shared/macro-variables";
 import type { ActionNode } from "@/lib/workflow-tree";
 
 export { isHexColor } from "@shared/macro-pad";
@@ -15,21 +15,6 @@ export {
   type MacroConfig,
   type MacroHttpMethod,
 } from "@shared/macro-variables";
-
-/** A macro's editable fields — everything except its server-assigned id. */
-export type MacroInput = Omit<MacroButton, "id">;
-
-export interface MacroButton {
-  /** Macros are kept by the dashboard, so a macro is its Convex row. */
-  id: Id<"macros">;
-  label: string;
-  /** Lucide icon name, resolved through resolveLucideIcon. */
-  icon?: string;
-  /** Six-digit hex (`#rrggbb`). Undefined leaves the tile in the default card style. */
-  color?: string;
-  type: MacroActionType;
-  config: MacroConfig;
-}
 
 /**
  * Default swatches, mid-tone so they stay legible tinting a tile on both the

@@ -1,6 +1,7 @@
 import {
   Activity,
   AlarmClock,
+  Grid3x3,
   ListOrdered,
   Megaphone,
   MessagesSquare,
@@ -16,6 +17,7 @@ import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-pan
 import { AdBreaksWidget } from "@/components/dashboard/widgets/ad-breaks";
 import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement";
 import { EventsWidget } from "@/components/dashboard/widgets/events";
+import { MacroPadWidget } from "@/components/dashboard/widgets/macro-pad";
 import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
@@ -139,4 +141,14 @@ export const notesWidget: DashboardWidgetDefinition = {
   icon: NotebookPen,
   category: "utility",
   component: NotesWidget,
+};
+
+/** The pad alone; the hosted catalog's adds its macros' remote trigger URLs. */
+export const macroPadWidget: DashboardWidgetDefinition = {
+  type: "macro-pad",
+  label: "Macro Pad",
+  description: "One-click buttons for chat commands, workflows, and HTTP requests.",
+  icon: Grid3x3,
+  category: "automation",
+  component: MacroPadWidget,
 };
