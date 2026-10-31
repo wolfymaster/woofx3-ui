@@ -1,6 +1,7 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import {
   alertWidgetName,
+  type CanvasSize,
   type CommandResult,
   type CompositionEditor,
   type EditorState,
@@ -84,7 +85,6 @@ export function WidgetLayoutCanvas({
   const width = settings?.width ?? 1920;
   const height = settings?.height ?? 1080;
   const background = settings?.backgroundColor ?? "transparent";
-  // StageArea re-observes whenever this identity changes, so it is not rebuilt per render.
   const canvasSize = useMemo(() => ({ width, height }), [width, height]);
   const nodes = state.view.nodes;
   const zoom = state.viewport.zoom;
@@ -111,16 +111,17 @@ export function WidgetLayoutCanvas({
     [onRefused]
   );
 
+  const onMeasure = useCallback((size: CanvasSize) => editor.viewport.setStage(size), [editor]);
   const zoomControl: StageZoom = useMemo(
     () => ({
       zoom,
       fit: state.viewport.fit,
-      onMeasure: (size) => editor.viewport.setStage(size),
+      onMeasure,
       zoomIn: () => editor.dispatch("view.zoomIn"),
       zoomOut: () => editor.dispatch("view.zoomOut"),
       zoomToFit: () => editor.dispatch("view.zoomFit"),
     }),
-    [editor, zoom, state.viewport.fit]
+    [editor, zoom, state.viewport.fit, onMeasure]
   );
 
   const canvasOrigin = useCallback((): Point => {
