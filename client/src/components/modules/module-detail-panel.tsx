@@ -851,7 +851,7 @@ function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) 
 function FromCompanionBadge() {
   return (
     <Badge variant="secondary" className="ml-2 text-[10px]">
-      From companion
+      From woofx3 desktop app
     </Badge>
   );
 }
@@ -859,12 +859,12 @@ function FromCompanionBadge() {
 /** Under a local endpoint's setting: what editing it does, or how to hand it back to the companion. */
 function SettingSourceNote({ source, onReturn }: { source: SettingSource | undefined; onReturn: () => void }) {
   if (source?.source === "companion") {
-    return <p className="text-xs text-muted-foreground">Editing this stops the companion from updating it.</p>;
+    return <p className="text-xs text-muted-foreground">Editing this stops the woofx3 desktop app from updating it.</p>;
   }
   if (source?.source === "manual" && source.companionEnabled) {
     return (
       <button type="button" className="text-xs text-primary underline-offset-4 hover:underline" onClick={onReturn}>
-        Use the companion's value
+        Use the value from the woofx3 desktop app
       </button>
     );
   }

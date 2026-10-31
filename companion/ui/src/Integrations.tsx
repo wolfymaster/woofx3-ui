@@ -94,7 +94,7 @@ function discoveryText(endpoint: EndpointView): string {
     case "manual":
       return "Enter its address below.";
     case "unsupported":
-      return "This companion can't search for it yet. Enter its address below.";
+      return "This app can't search for it yet. Enter its address below.";
     case "notPermitted":
       return "Discovery not available for this module. Enter its address below.";
   }
@@ -113,11 +113,11 @@ function connectionText(endpoint: EndpointView, relay: RelayView): { text: strin
     case "retrying":
       return { text: `Offline: ${relay.error}`, ok: false };
     case "displaced":
-      return { text: "Offline: another companion connection took over", ok: false };
+      return { text: "Offline: another connection took over", ok: false };
     case "refused":
       return { text: "Offline: woofx3 refused the relay connection", ok: false };
     case "unavailable":
-      return { text: "Offline: your woofx3 doesn't offer the companion relay yet", ok: false };
+      return { text: "Offline: your woofx3 doesn't offer the relay yet", ok: false };
     case "notNeeded":
       return { text: "Offline", ok: false };
   }
@@ -158,7 +158,7 @@ function AddressEditor({
           onChange={(event) => setInput(event.target.value)}
         />
       </label>
-      <p className="muted">The companion connects only to an address you confirm here or one it found on this PC.</p>
+      <p className="muted">The app connects only to an address you confirm here or one it found on this PC.</p>
       <div className="row">
         <button type="button" disabled={busy} onClick={onCancel}>
           Cancel
@@ -210,7 +210,7 @@ function Endpoint({
         </label>
       </div>
 
-      {!endpoint.bridgeable && <p className="muted">{endpoint.name} can't be connected through the companion yet.</p>}
+      {!endpoint.bridgeable && <p className="muted">{endpoint.name} can't be connected through the app yet.</p>}
 
       <p className="muted">{discoveryText(endpoint)}</p>
 
@@ -269,7 +269,7 @@ function Endpoint({
         </label>
       )}
       {endpoint.passwordSetByHand && (
-        <p className="muted">The password was typed into the module's settings, so the companion leaves it alone.</p>
+        <p className="muted">The password was typed into the module's settings, so the app leaves it alone.</p>
       )}
 
       <div className="endpoint-foot">
@@ -313,7 +313,7 @@ export function Integrations({ instanceName, view }: { instanceName: string; vie
   }
   return (
     <div className="integrations">
-      {!view.relayAvailable && <p className="notice">Your woofx3 doesn't offer the companion relay yet.</p>}
+      {!view.relayAvailable && <p className="notice">Your woofx3 doesn't offer the relay yet.</p>}
       {view.modules.map((module) => (
         <section key={module.moduleId} className="module">
           <h2>{module.moduleName}</h2>

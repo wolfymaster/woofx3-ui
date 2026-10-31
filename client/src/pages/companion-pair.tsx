@@ -108,8 +108,8 @@ function CodeEntry({ invalidCode }: { invalidCode: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Pair the companion</CardTitle>
-        <CardDescription>Enter the code shown in the woofx3 companion on your computer.</CardDescription>
+        <CardTitle>Pair the woofx3 desktop app</CardTitle>
+        <CardDescription>Enter the code shown in the woofx3 desktop app on your computer.</CardDescription>
       </CardHeader>
       <form onSubmit={submit}>
         <CardContent className="space-y-3">
@@ -156,7 +156,7 @@ function ExpiredOutcome() {
     <Outcome
       icon={<XCircle className="h-10 w-10 text-muted-foreground" />}
       title="Code expired"
-      description="This code has expired. Start pairing again from the companion."
+      description="This code has expired. Start pairing again from the woofx3 desktop app."
     />
   );
 }
@@ -218,8 +218,8 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Pair a companion</CardTitle>
-        <CardDescription>A woofx3 companion is asking to connect to one of your instances.</CardDescription>
+        <CardTitle>Pair the woofx3 desktop app</CardTitle>
+        <CardDescription>A woofx3 desktop app is asking to connect to one of your instances.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-lg border bg-muted/40 py-4 text-center">
@@ -252,8 +252,8 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
         <Alert>
           <ShieldAlert className="h-4 w-4" />
           <AlertDescription>
-            Only approve this if you started pairing on your own computer just now. An approved companion can act on
-            this instance.
+            Only approve this if you started pairing on your own computer just now. An approved app can act on this
+            instance.
           </AlertDescription>
         </Alert>
 
@@ -293,18 +293,18 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
                 data-testid="checkbox-code-matches"
               />
               <Label htmlFor="code-matches" className="text-sm font-normal leading-snug">
-                This matches the code shown in the companion on my computer
+                This matches the code shown in the woofx3 desktop app on my computer
               </Label>
             </div>
             {replacement && replacementKey && (
               <Alert variant="destructive" data-testid="alert-replaces-companion">
                 <AlertDescription className="space-y-3">
                   <p>
-                    This replaces the companion on <strong>{replacement.deviceName}</strong>, last seen{" "}
+                    This replaces the woofx3 desktop app on <strong>{replacement.deviceName}</strong>, last seen{" "}
                     {replacement.lastSeenAt === null
                       ? "never"
                       : formatDistanceToNow(new Date(replacement.lastSeenAt), { addSuffix: true })}
-                    . An instance has one companion; that computer is unpaired at once.
+                    . An instance has one desktop app; that computer is unpaired at once.
                   </p>
                   <div className="flex items-start gap-2">
                     <Checkbox
@@ -314,7 +314,7 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
                       data-testid="checkbox-replace-companion"
                     />
                     <Label htmlFor="replace-companion" className="text-sm font-normal leading-snug">
-                      Replace the companion on {replacement.deviceName}
+                      Replace the app on {replacement.deviceName}
                     </Label>
                   </div>
                 </AlertDescription>
@@ -382,7 +382,7 @@ function PairingForCode({ code }: { code: string }) {
         <Outcome
           icon={<CheckCircle2 className="h-10 w-10 text-primary" />}
           title="Approved"
-          description="Confirm the pairing in the companion on your computer. You can close this tab."
+          description="Confirm the pairing in the woofx3 desktop app on your computer. You can close this tab."
         />
       );
     case "denied":
@@ -398,7 +398,7 @@ function PairingForCode({ code }: { code: string }) {
         <Outcome
           icon={<XCircle className="h-10 w-10 text-muted-foreground" />}
           title="Cancelled"
-          description="Pairing was cancelled in the companion. Start pairing again from the companion."
+          description="Pairing was cancelled in the woofx3 desktop app. Start pairing again from the woofx3 desktop app."
         />
       );
     case "unknown":
