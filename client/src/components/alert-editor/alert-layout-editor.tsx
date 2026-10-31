@@ -260,6 +260,7 @@ export function useAlertEditorView(
 
   const zoom = state?.viewport.zoom ?? 1;
   const fit = state?.viewport.fit ?? true;
+  const onMeasure = useCallback((size: CanvasSize) => editor?.viewport.setStage(size), [editor]);
   const zoomControl: StageZoom | null = useMemo(
     () =>
       editor === null
@@ -267,12 +268,12 @@ export function useAlertEditorView(
         : {
             zoom,
             fit,
-            onMeasure: (size) => editor.viewport.setStage(size),
+            onMeasure,
             zoomIn: () => editor.dispatch("view.zoomIn"),
             zoomOut: () => editor.dispatch("view.zoomOut"),
             zoomToFit: () => editor.dispatch("view.zoomFit"),
           },
-    [editor, zoom, fit]
+    [editor, zoom, fit, onMeasure]
   );
 
   if (session === null || state === null || state.doc === null || zoomControl === null) {
