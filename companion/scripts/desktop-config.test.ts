@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The desktop app is the companion's crate built with tauri.desktop.conf.json
+// The desktop app is the companion's crate built with tauri.woofx3.conf.json
 // merged over tauri.conf.json. These checks keep the two products apart: an
 // identifier, version or update feed that leaks from one into the other would
 // make side-by-side installs share credentials and data, or update one into
@@ -81,7 +81,7 @@ function workflowLatestTag(workflow: string): string {
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
 
 const companion = readJson(join(COMPANION_DIR, "src-tauri", "tauri.conf.json"));
-const overlay = readJson(join(COMPANION_DIR, "src-tauri", "tauri.desktop.conf.json"));
+const overlay = readJson(join(COMPANION_DIR, "src-tauri", "tauri.woofx3.conf.json"));
 const desktop = mergePatch(companion, overlay);
 
 describe("the desktop app's Tauri config", () => {

@@ -339,13 +339,13 @@ jobs:
           workspaces: companion/src-tauri -> target
           key: desktop-installer
 
-      # tauri.desktop.conf.json gives the build the desktop app's identity:
+      # tauri.woofx3.conf.json gives the build the desktop app's identity:
       # its own identifier, product name, version and update feed.
       - name: Build installer
         working-directory: companion
         run: >-
           bunx tauri build --bundles nsis --features bundled-engine
-          --config src-tauri/tauri.desktop.conf.json
+          --config src-tauri/tauri.woofx3.conf.json
           --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
       # Tauri copies bundle resources next to the binary before packaging them.

@@ -8,12 +8,12 @@ Everything here mirrors [Companion releases](/ops/companion-releases); this page
 |------|-------|
 | Installer, signature, `latest.json` | The GitHub release for the tag, e.g. `desktop-v0.2.0` |
 | What installed desktop apps read | `https://github.com/wolfymaster/woofx3-ui/releases/download/desktop-latest/latest.json` |
-| Identity, version and update feed | `companion/src-tauri/tauri.desktop.conf.json` |
+| Identity, version and update feed | `companion/src-tauri/tauri.woofx3.conf.json` |
 | The bundled engine | `companion/bundled-engine.json` |
 
 ## Cutting a release
 
-1. Bump `version` in `companion/src-tauri/tauri.desktop.conf.json`. Merge that to `master`.
+1. Bump `version` in `companion/src-tauri/tauri.woofx3.conf.json`. Merge that to `master`.
 2. Tag the merged commit and push the tag:
 
    ```bash
@@ -25,7 +25,7 @@ The version must be semver and newer than the one installed desktop apps run, or
 
 ### Versions
 
-The desktop app and the companion version independently. The desktop app's version is the `version` in `tauri.desktop.conf.json`, which overrides `tauri.conf.json`'s; that is the version the updater compares, the signature is bound to, and the app reports to Convex. `Cargo.toml`'s version belongs to the companion, whose release checks it against `tauri.conf.json`; a desktop release neither reads nor needs it, so bumping the desktop app never touches `Cargo.toml` or `Cargo.lock`.
+The desktop app and the companion version independently. The desktop app's version is the `version` in `tauri.woofx3.conf.json`, which overrides `tauri.conf.json`'s; that is the version the updater compares, the signature is bound to, and the app reports to Convex. `Cargo.toml`'s version belongs to the companion, whose release checks it against `tauri.conf.json`; a desktop release neither reads nor needs it, so bumping the desktop app never touches `Cargo.toml` or `Cargo.lock`.
 
 ### The bundled engine
 
@@ -33,8 +33,8 @@ Each desktop release ships the engine release pinned in `companion/bundled-engin
 
 ## What happens
 
-1. **Check**: the tag must be `desktop-v<semver>`, and its version must equal `version` in `tauri.desktop.conf.json`. A desktop config without a `version` fails too, since the build would otherwise carry the companion's.
-2. **Build**: on `windows-latest`, in the `production` environment, with `WOOFX3_CONVEX_URL` and `WOOFX3_CONVEX_SITE_URL` from the environment's `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL`, like the companion. The pinned engine is downloaded and checked first, then `tauri-apps/tauri-action` builds with the `bundled-engine` feature and `--config src-tauri/tauri.desktop.conf.json`, signs the NSIS installer, and creates the GitHub release with the installer, its `.sig` and `latest.json`. The job then checks the engine was bundled.
+1. **Check**: the tag must be `desktop-v<semver>`, and its version must equal `version` in `tauri.woofx3.conf.json`. A desktop config without a `version` fails too, since the build would otherwise carry the companion's.
+2. **Build**: on `windows-latest`, in the `production` environment, with `WOOFX3_CONVEX_URL` and `WOOFX3_CONVEX_SITE_URL` from the environment's `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL`, like the companion. The pinned engine is downloaded and checked first, then `tauri-apps/tauri-action` builds with the `bundled-engine` feature and `--config src-tauri/tauri.woofx3.conf.json`, signs the NSIS installer, and creates the GitHub release with the installer, its `.sig` and `latest.json`. The job then checks the engine was bundled.
 3. **Point `latest.json` at the release** and **publish** it to the `desktop-latest` prerelease, exactly as the companion does with `companion-latest`, including refusing to move `desktop-latest` back to an older version.
 
 Desktop releases queue behind each other (their own `concurrency` group). They never touch `companion-latest`, and companion releases never touch `desktop-latest`, so the two can run at the same time.

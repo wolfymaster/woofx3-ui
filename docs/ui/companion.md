@@ -23,14 +23,14 @@ The same code builds two apps, which install side by side without sharing anythi
 | What it is | The tray app that pairs a PC with a cloud instance | The companion with an engine bundled, starting in [local mode](#local-mode) |
 | Identifier | `tv.woofx3.companion` | `tv.woofx3.app` |
 | Product name | woofx3 companion | woofx3 |
-| Tauri config | `src-tauri/tauri.conf.json` | the same, with `src-tauri/tauri.desktop.conf.json` merged over it |
+| Tauri config | `src-tauri/tauri.conf.json` | the same, with `src-tauri/tauri.woofx3.conf.json` merged over it |
 | Cargo features | none | `bundled-engine` |
-| Version | `version` in `tauri.conf.json`, equal to `Cargo.toml`'s | `version` in `tauri.desktop.conf.json` |
+| Version | `version` in `tauri.conf.json`, equal to `Cargo.toml`'s | `version` in `tauri.woofx3.conf.json` |
 | Update feed | `companion-latest` ([Companion releases](/ops/companion-releases)) | `desktop-latest` ([Desktop releases](/ops/desktop-releases)) |
 
 The identifier decides where each keeps its state: Tauri derives the app's data, config and log directories from it, and the Rust side files its secrets in the OS credential store under it too (`AppIdentity` in `core/src/identity.rs`, read from the running app's config at startup). So the two never read each other's pairing token, engine client credentials, installation id, host configuration or engine data. The product name titles the startup failure message box and the update banner, and the Tauri config gives each its installer name, window titles and update endpoint. The app reports the version from its Tauri config to Convex, the same version the updater compares.
 
-Tauri merges `tauri.desktop.conf.json` as a JSON merge patch, which replaces arrays whole, so it repeats the window list with its own titles. `companion/scripts/desktop-config.test.ts` checks the merged config: its own identifier, product name, version and feed, the companion's windows apart from their titles, and the companion's updater key.
+Tauri merges `tauri.woofx3.conf.json` as a JSON merge patch, which replaces arrays whole, so it repeats the window list with its own titles. `companion/scripts/desktop-config.test.ts` checks the merged config: its own identifier, product name, version and feed, the companion's windows apart from their titles, and the companion's updater key.
 
 ## Layout
 

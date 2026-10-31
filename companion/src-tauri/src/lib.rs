@@ -9,7 +9,7 @@
 //! marker for the window, which reaches them through the local-mode commands.
 //!
 //! The same crate builds two products: the companion, and the desktop app
-//! (the `bundled-engine` feature with `tauri.desktop.conf.json`). Whatever
+//! (the `bundled-engine` feature with `tauri.woofx3.conf.json`). Whatever
 //! names the product or files its state on the PC comes from the running
 //! app's Tauri config (`AppIdentity`), so the two install side by side and
 //! never share credentials or data.
