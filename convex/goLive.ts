@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { isGoLiveCheckId } from "@shared/go-live-check-ids";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@shared/twitch-chat";
 import { missingTwitchScopeMessage } from "@shared/twitch-link-refusal";
 import { missingRequiredTwitchScopes } from "@shared/twitch-scope-health";
@@ -14,15 +15,14 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import {
-  type GoLiveCompletion,
-  type GoLiveStepOutcome,
-  isGoLiveCheckId,
-  type LastGoLive,
-  type OverlayFacts,
-  type StreamInfoFacts,
-  type TwitchLinkFacts,
-  type WorkflowFacts,
+import type {
+  GoLiveCompletion,
+  GoLiveStepOutcome,
+  LastGoLive,
+  OverlayFacts,
+  StreamInfoFacts,
+  TwitchLinkFacts,
+  WorkflowFacts,
 } from "./lib/goLiveFacts";
 import { isMarkerRequestPending } from "./lib/goLiveMarker";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";

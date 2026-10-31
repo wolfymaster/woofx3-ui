@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { isGoLiveCheckId } from "@convex/lib/goLiveFacts";
+import { isGoLiveCheckId } from "@shared/go-live-check-ids";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";

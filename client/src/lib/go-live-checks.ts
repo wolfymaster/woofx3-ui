@@ -1,12 +1,6 @@
 import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
-import {
-  GO_LIVE_CHECK_IDS,
-  type GoLiveCheckId,
-  type LastGoLive,
-  type StreamInfoFacts,
-  type TwitchLinkFacts,
-  type WorkflowFacts,
-} from "@convex/lib/goLiveFacts";
+import type { LastGoLive, StreamInfoFacts, TwitchLinkFacts, WorkflowFacts } from "@convex/lib/goLiveFacts";
+import { GO_LIVE_CHECK_IDS, type GoLiveCheckId } from "@shared/go-live-check-ids";
 import type { GoLiveOverlayFacts, StreamInfo, StreamInfoPresetId } from "@/engine/types";
 import { parseFieldOptionsReply } from "@/lib/field-options";
 import { comparePreset } from "@/lib/stream-info-edit";
