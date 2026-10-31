@@ -216,6 +216,15 @@ export default function CommandEditor() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {isDirty && (
+            <span
+              className="hidden items-center gap-1.5 text-[13px] text-amber-800 dark:text-amber-200 sm:inline-flex"
+              data-testid="text-command-unsaved"
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+              Unsaved changes
+            </span>
+          )}
           <Button variant="ghost" className="hidden sm:inline-flex" onClick={leave} disabled={saving}>
             Cancel
           </Button>

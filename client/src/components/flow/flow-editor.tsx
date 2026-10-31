@@ -13,14 +13,17 @@ import {
   Zap,
 } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { FlowSaveBar, StepSaveFooter } from "@/components/flow/flow-save-status";
 import { ObjectActionPicker } from "@/components/flow/object-action-picker";
 import { StepInlineEditor } from "@/components/flow/step-inline-editor";
 import { TriggerConfigPanel } from "@/components/flow/trigger-config-panel";
 import { Button } from "@/components/ui/button";
+import type { FlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { conditionSourcesFor, type EngineConditionSupport, NO_ENGINE_CONDITION_SUPPORT } from "@/lib/condition-builder";
 import type { SentencePart } from "@/lib/condition-sentence";
+import { type FlowSaveView, flowSaveView } from "@/lib/flow-save";
 import {
   descendantIds,
   type FlowPick,
@@ -88,9 +91,12 @@ export interface FlowEditorProps {
    * outputs. Without it, the fields the tree's catalog trigger emits.
    */
   triggerVariables?: VariableOption[];
+  /**
+   * The flow's save state, for a surface whose `onCommit` really saves (`useFlowSave`). Without
+   * it the steps are held for a Save button elsewhere, so the flow says nothing about saving.
+   */
+  save?: FlowSave;
   /** What the engine lets condition steps check beyond the catalog; nothing extra when absent. */
-  /** Whether a commit saves for real, rather than holding the steps for a Save button elsewhere. */
-  autosaves?: boolean;
   conditionSupport?: EngineConditionSupport;
 }
 
@@ -106,6 +112,11 @@ interface FlowState {
   placeOf: (id: string) => { index: number; count: number } | null;
   removeBlockedReason: (id: string) => string | null;
   renderEditor: (step: StepNode) => ReactNode;
+  /** The open step's save state; null where the flow doesn't save itself. */
+  saveView: FlowSaveView | null;
+  /** The open part of the flow differs from when it was opened and from what is saved. */
+  openChanged: boolean;
+  discardOpen: () => void;
   toggle: (id: string) => void;
   openPicker: (point: InsertPoint) => void;
   closePicker: () => void;
@@ -134,30 +145,6 @@ type FocusTarget = { attribute: string; value: string } | null;
  * its Then and Otherwise branches indented below it. Adding, editing and removing all happen
  * in place. At most one step is open for editing, and leaving it saves it if it changed.
  */
-type FlowSaveState = "idle" | "saving" | "saved" | "failed";
-
-/**
- * What became of the steps, for an editor with no Save button of its own: a step saves
- * when it is closed, which nothing else on the page would say.
- */
-function FlowSaveStatus({ state, editing }: { state: FlowSaveState; editing: boolean }) {
-  const text = {
-    saving: "Saving…",
-    failed: "Couldn't save. Your changes are still here.",
-    saved: editing ? "Saved. Changes to this step save when you close it." : "All changes saved",
-    idle: editing ? "Changes save when you close this step." : "Changes save automatically",
-  }[state];
-  return (
-    <p
-      className={cn("self-end text-xs", state === "failed" ? "text-destructive" : "text-muted-foreground")}
-      aria-live="polite"
-      data-testid="flow-save-status"
-    >
-      {text}
-    </p>
-  );
-}
-
 export function FlowEditor({
   tree,
   onChange,
@@ -172,10 +159,9 @@ export function FlowEditor({
   when,
   triggerVariables,
   conditionSupport = NO_ENGINE_CONDITION_SUPPORT,
-  autosaves = false,
+  save,
 }: FlowEditorProps) {
   const { toast } = useToast();
-  const [saveState, setSaveState] = useState<FlowSaveState>("idle");
   /** The caller's save, refused while a step holds an expression that can't work. */
   const commitChecked = useCallback(
     async (next: WorkflowTree): Promise<boolean> => {
@@ -184,10 +170,7 @@ export function FlowEditor({
         toast({ title: "Fix this expression to save", description: problem, variant: "destructive" });
         return false;
       }
-      setSaveState("saving");
-      const ok = await onCommit(next);
-      setSaveState(ok ? "saved" : "failed");
-      return ok;
+      return onCommit(next);
     },
     [onCommit, toast]
   );
@@ -199,10 +182,10 @@ export function FlowEditor({
   const treeRef = useRef(tree);
   treeRef.current = tree;
   /**
-   * The tree as it was when the open step was opened, so closing it saves only when something
-   * changed. Null means save regardless: a step just added is itself the change.
+   * The tree as it was before the open step was opened or added, so closing it saves only when
+   * something changed and discarding it has something to go back to.
    */
-  const baselineRef = useRef<string | null>(null);
+  const baselineRef = useRef(tree);
 
   useEffect(() => {
     if (!focusTarget) {
@@ -222,7 +205,7 @@ export function FlowEditor({
       return true;
     }
     const current = treeRef.current;
-    if (baselineRef.current !== null && JSON.stringify(current) === baselineRef.current) {
+    if (JSON.stringify(current) === JSON.stringify(baselineRef.current)) {
       setExpandedId(null);
       return true;
     }
@@ -241,7 +224,7 @@ export function FlowEditor({
           return;
         }
         if (await leaveExpanded()) {
-          baselineRef.current = JSON.stringify(treeRef.current);
+          baselineRef.current = treeRef.current;
           setExpandedId(id);
         }
       })();
@@ -280,9 +263,9 @@ export function FlowEditor({
         });
         return;
       }
+      baselineRef.current = tree;
       onChange({ ...tree, steps: insertAtPoint(tree.steps, point, step) });
       setOpenPoint(null);
-      baselineRef.current = null;
       setExpandedId(step.id);
       setFocusTarget({ attribute: "data-step-toggle", value: step.id });
     },
@@ -297,7 +280,7 @@ export function FlowEditor({
       if (closesExpanded) {
         setExpandedId(null);
       } else if (ok) {
-        baselineRef.current = JSON.stringify(next);
+        baselineRef.current = next;
       }
     },
     [onChange, commitChecked]
@@ -373,6 +356,27 @@ export function FlowEditor({
     [tree, onChange, toast]
   );
 
+  const discardOpen = useCallback(() => {
+    onChange(baselineRef.current);
+    setExpandedId(null);
+  }, [onChange]);
+
+  const openPart =
+    expandedId === null ? null : expandedId === triggerId ? "the trigger" : `step ${numbers.get(expandedId)}`;
+  const openChanged =
+    expandedId !== null &&
+    (save === undefined || save.changed) &&
+    JSON.stringify(tree) !== JSON.stringify(baselineRef.current);
+  const saveView = save
+    ? flowSaveView({
+        changed: save.changed,
+        phase: save.phase,
+        problem: save.problem,
+        notSavedYet: save.notSavedYet,
+        openPart,
+      })
+    : null;
+
   const existingStepIds = useMemo(() => collectStepIds(tree.steps), [tree.steps]);
 
   const triggerRow = useMemo(
@@ -442,6 +446,9 @@ export function FlowEditor({
     placeOf: (id) => findStepPlace(tree.steps, id),
     removeBlockedReason: (id) => removeBlockedReason?.(tree.steps, id) ?? null,
     renderEditor,
+    saveView,
+    openChanged,
+    discardOpen,
     toggle,
     openPicker,
     closePicker,
@@ -460,11 +467,12 @@ export function FlowEditor({
   return (
     <FlowContext.Provider value={state}>
       <div ref={rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
-        {autosaves && <FlowSaveStatus state={saveState} editing={expandedId !== null} />}
+        {save && saveView && <FlowSaveBar view={saveView} onRetry={() => void commitChecked(tree)} />}
         {when ?? (
           <TriggerWhenCard
             tree={tree}
             expanded={expandedId === triggerId}
+            changed={save !== undefined && openChanged}
             onToggle={() => toggle(triggerId)}
             catalogTriggers={catalogTriggers}
             catalogLoading={catalogLoading}
@@ -508,10 +516,20 @@ export interface FlowWhenCardProps {
   toggleId: string;
   /** The card's settings, shown while it is expanded. */
   children: ReactNode;
+  /** Closing the card saves edits to its settings, so its button says so while there are any. */
+  changed?: boolean;
 }
 
 /** The card at the top of a flow that says what starts it, and opens in place to change that. */
-export function FlowWhenCard({ title, options, expanded, onToggle, toggleId, children }: FlowWhenCardProps) {
+export function FlowWhenCard({
+  title,
+  options,
+  expanded,
+  onToggle,
+  toggleId,
+  children,
+  changed = false,
+}: FlowWhenCardProps) {
   return (
     <section
       aria-label="When this runs"
@@ -523,7 +541,7 @@ export function FlowWhenCard({ title, options, expanded, onToggle, toggleId, chi
         <span className="min-w-0 text-base font-semibold">{title}</span>
         <Button
           type="button"
-          variant="ghost"
+          variant={changed ? "default" : "ghost"}
           size="sm"
           className="ml-auto"
           onClick={onToggle}
@@ -531,7 +549,7 @@ export function FlowWhenCard({ title, options, expanded, onToggle, toggleId, chi
           data-step-toggle={toggleId}
           data-testid="button-flow-when-toggle"
         >
-          {expanded ? "Done" : "Change"}
+          {expanded ? (changed ? "Save changes" : "Done") : "Change"}
         </Button>
         {options.length > 0 && (
           <div className="flex w-full flex-wrap gap-2">
@@ -551,6 +569,7 @@ export function FlowWhenCard({ title, options, expanded, onToggle, toggleId, chi
 function TriggerWhenCard({
   tree,
   expanded,
+  changed,
   onToggle,
   catalogTriggers,
   catalogLoading,
@@ -559,6 +578,7 @@ function TriggerWhenCard({
 }: {
   tree: WorkflowTree;
   expanded: boolean;
+  changed: boolean;
   onToggle: () => void;
   catalogTriggers: CatalogTriggerRow[];
   catalogLoading: boolean;
@@ -570,6 +590,7 @@ function TriggerWhenCard({
       title={triggerNodeLabel(tree.trigger, catalogTriggers)}
       options={triggerNodeSummary(tree.trigger, catalogTriggers, resourceLabels)}
       expanded={expanded}
+      changed={changed}
       onToggle={onToggle}
       toggleId={tree.trigger.id}
     >
@@ -722,7 +743,7 @@ function StepRow({ step }: { step: StepNode }) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-0.5">
-          {editable && (
+          {editable && !(expanded && flow.saveView) && (
             <Button type="button" variant="ghost" size="sm" onClick={() => flow.toggle(step.id)} tabIndex={-1}>
               {expanded ? "Done" : "Settings"}
             </Button>
@@ -780,7 +801,20 @@ function StepRow({ step }: { step: StepNode }) {
           onCancel={flow.cancelRemove}
         />
       )}
-      {expanded && <div className="flex flex-col gap-4 border-t px-4 pb-4 pt-3">{flow.renderEditor(step)}</div>}
+      {expanded && (
+        <div className="flex flex-col gap-4 border-t px-4 pb-4 pt-3">
+          {flow.renderEditor(step)}
+          {flow.saveView && (
+            <StepSaveFooter
+              view={flow.saveView}
+              changed={flow.openChanged}
+              onSave={() => flow.toggle(step.id)}
+              onDiscard={flow.discardOpen}
+              onClose={() => flow.toggle(step.id)}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

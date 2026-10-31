@@ -7,6 +7,7 @@ import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editabl
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workflows";
+import { useFlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -52,14 +53,6 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
 
   const [tree, setTree] = useState<WorkflowTree | null>(null);
   const [notEditableReason, setNotEditableReason] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (workflow?.definition) {
-      const result = definitionToTree(unescapeDollarKeys(workflow.definition) as WorkflowDefinition);
-      setTree(result.editable ? result.tree : null);
-      setNotEditableReason(result.editable ? null : result.message);
-    }
-  }, [workflow?.definition]);
 
   const toDefinition = useCallback(
     (next: WorkflowTree): WorkflowDefinition | null => {
@@ -107,6 +100,20 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
     [toDefinition, updateFromDefinition, engineWorkflowId, toast]
   );
 
+  const save = useFlowSave(tree, handleCommit);
+  const { markSaved } = save;
+
+  useEffect(() => {
+    if (workflow?.definition) {
+      const result = definitionToTree(unescapeDollarKeys(workflow.definition) as WorkflowDefinition);
+      setTree(result.editable ? result.tree : null);
+      if (result.editable) {
+        markSaved(result.tree);
+      }
+      setNotEditableReason(result.editable ? null : result.message);
+    }
+  }, [workflow?.definition, markSaved]);
+
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-3xl p-8">
@@ -118,8 +125,8 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
           <FlowEditor
             tree={tree}
             onChange={handleChange}
-            onCommit={handleCommit}
-            autosaves
+            onCommit={save.commit}
+            save={save}
             catalogTriggers={catalogTriggers}
             catalogActions={catalogActions}
             catalogLoading={catalogLoading}
