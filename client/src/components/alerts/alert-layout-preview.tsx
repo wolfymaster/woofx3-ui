@@ -1,4 +1,4 @@
-import { canvasOf } from "@woofx3/scene/editor";
+import { canvasSizeOf } from "@woofx3/scene/editor";
 import { type PlacementDocument, stackOrder } from "@woofx3/scene/model";
 import { Volume2 } from "lucide-react";
 import { useMemo } from "react";
@@ -24,7 +24,7 @@ interface AlertLayoutPreviewProps {
  */
 export function AlertLayoutPreview({ layout, className }: AlertLayoutPreviewProps) {
   const doc = useMemo(() => readAlertComposition(layout, (widgetCanonicalId) => widgetCanonicalId), [layout]);
-  const canvas = canvasOf(doc);
+  const canvas = canvasSizeOf(doc);
   const visible = stackOrder(doc)
     .map((id) => ({ id, placement: doc.widgets[id] as PlacementDocument }))
     .filter(({ placement }) => placement.visible);
