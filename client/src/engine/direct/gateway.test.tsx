@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { createDirectEngineGateway } from "./gateway";
 import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
+import { FakeShoutoutQueueHost } from "./testing/FakeShoutoutQueueHost";
 
 const harnesses: DirectHarness[] = [];
 
@@ -16,7 +17,7 @@ test("the assembled gateway reads through the runtime it was built around", asyn
   harnesses.push(harness);
   await harness.connect();
   harness.state.commands = [];
-  const gateway = createDirectEngineGateway(harness.runtime);
+  const gateway = createDirectEngineGateway(harness.runtime, new FakeShoutoutQueueHost());
   const commands = renderDirect(() => gateway.commands.useCommands());
   expect(await commands.until((value) => value !== undefined, "the commands")).toEqual([]);
   commands.unmount();
@@ -26,7 +27,7 @@ test("a namespace with no engine home rejects, naming the member", async () => {
   const harness = createDirectHarness();
   harnesses.push(harness);
   await harness.connect();
-  const gateway = createDirectEngineGateway(harness.runtime);
+  const gateway = createDirectEngineGateway(harness.runtime, new FakeShoutoutQueueHost());
   const run = renderDirect(() => gateway.macros.useRunRequest()).current();
   const error = await run("macro" as never, []).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(GatewayUnsupportedError);

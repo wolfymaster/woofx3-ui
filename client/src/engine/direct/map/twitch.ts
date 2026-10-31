@@ -12,6 +12,7 @@ import type {
   StreamCategory,
   StreamInfo,
   StreamInfoChanges,
+  TwitchChannel,
 } from "@/engine/types";
 
 /** Why an engine never called Twitch, in words for the streamer. */
@@ -52,6 +53,16 @@ export function toModerationAccess(link: TwitchLinkInfo): ModerationAccess {
 
 export function toModeratedUser(user: TwitchUser): ModeratedUser {
   return { login: user.login, displayName: user.displayName };
+}
+
+export function toTwitchChannel(user: TwitchUser): TwitchChannel {
+  return {
+    twitchUserId: user.twitchUserId,
+    login: user.login,
+    displayName: user.displayName,
+    profileImageUrl: user.profileImageUrl ?? null,
+    broadcasterType: user.broadcasterType ?? null,
+  };
 }
 
 export function toStreamCategory(category: HelixStreamCategory): StreamCategory {

@@ -1,4 +1,4 @@
-import type { ModuleId, SceneId, StreamHighlightId } from "@/engine/types";
+import type { ModuleId, SceneId, ShoutoutEntryId, StreamHighlightId } from "@/engine/types";
 
 // The direct gateway's ids are the engine's own: a scene is its engine scene
 // id, a module its manifest id. These convert between the two at the edge,
@@ -28,4 +28,17 @@ export function toStreamHighlightId(key: string): StreamHighlightId {
 
 export function fromStreamHighlightId(id: StreamHighlightId): string {
   return id as string;
+}
+
+/** A shoutout entry is the number the desktop host numbers its queue with, as text. */
+export function toShoutoutEntryId(hostEntryId: number): ShoutoutEntryId {
+  return String(hostEntryId) as ShoutoutEntryId;
+}
+
+export function fromShoutoutEntryId(id: ShoutoutEntryId): number {
+  const hostEntryId = Number(id);
+  if (!Number.isSafeInteger(hostEntryId)) {
+    throw new Error(`"${id}" is not a shoutout entry id`);
+  }
+  return hostEntryId;
 }

@@ -60,6 +60,10 @@ export const directKeys = {
     all: ["twitch"] as const,
     link: () => ["twitch", "link"] as const,
   },
+  shoutouts: {
+    all: ["shoutouts"] as const,
+    queue: () => ["shoutouts", "queue"] as const,
+  },
   commands: {
     all: ["commands"] as const,
     list: () => ["commands", "list"] as const,
