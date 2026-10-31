@@ -202,7 +202,7 @@ export function useMarketplaceAuthor(instanceId: InstanceId | null, slug: string
   const currentError = error && error.key === key ? error.message : null;
 
   useEffect(() => {
-    if (!instanceId || !slug || !key || current || loading || currentError) {
+    if (!instanceId || !slug || !key || current || currentError) {
       return;
     }
     let cancelled = false;
@@ -225,8 +225,11 @@ export function useMarketplaceAuthor(instanceId: InstanceId | null, slug: string
       });
     return () => {
       cancelled = true;
+      setLoading(false);
     };
-  }, [getAuthor, instanceId, slug, key, current, loading, currentError]);
+    // `loading` stays out of the dependencies: this effect sets it, and a re-run
+    // would run the cleanup above and discard the request it has just started.
+  }, [getAuthor, instanceId, slug, key, current, currentError]);
 
   const page = current?.result ?? null;
   const hasMore = page !== null && page.listings.length < page.total;
