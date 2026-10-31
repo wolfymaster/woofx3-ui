@@ -3,6 +3,7 @@ import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
+import { CHAT_MESSAGE_EVENT, ChatCommandTriggers } from "@/components/alerts/chat-command-triggers";
 import { AlertsDashboard } from "@/components/alerts/dashboard/alerts-dashboard";
 import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { EmptyState } from "@/components/common/empty-state";
@@ -21,7 +22,7 @@ import {
   subtreePresets,
   taxonomyLabel,
 } from "@/lib/alert-groups";
-import { eventTriggers } from "@/lib/alert-triggers";
+import { eventTriggers, groupEventTriggers } from "@/lib/alert-triggers";
 import { decodeSegment, subPathSegments } from "@/lib/route-subpath";
 import { $hideUnusedAlerts } from "@/lib/stores";
 import { cn } from "@/lib/utils";
@@ -82,7 +83,7 @@ export default function Alerts() {
     const perEvent: [string[], number][] = [];
     const events = new Set<string>();
     for (const [event, path] of menuPathByEvent) {
-      const triggers = eventTriggers(rows, event).length;
+      const triggers = groupEventTriggers(eventTriggers(rows, event)).length;
       if (triggers > 0) {
         perEvent.push([path, triggers]);
         events.add(event);
@@ -196,7 +197,9 @@ export default function Alerts() {
                   breadcrumb={nodePresets.length > 1 ? [] : breadcrumb}
                   headingLevel={nodePresets.length > 1 ? "h2" : "h1"}
                   onTest={() => openTest(preset.id)}
-                />
+                >
+                  {preset.event === CHAT_MESSAGE_EVENT && <ChatCommandTriggers />}
+                </EventTriggerList>
               ))}
             </div>
           )}

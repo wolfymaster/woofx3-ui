@@ -5,12 +5,15 @@ import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { Workflow } from "@/engine/types";
 import {
   eventTriggers,
+  groupEventTriggers,
   isPinnedTo,
   newTriggerTree,
   nextTriggerOrder,
   SEED_STEP_ID,
   storedTriggerCount,
   triggerAimsAt,
+  triggerSourceLabel,
+  unownedConditionPhrases,
   withFieldConditions,
 } from "@/lib/alert-triggers";
 import { resourceActions } from "@/lib/resource-actions";
@@ -253,5 +256,89 @@ describe("storedTriggerCount", () => {
     ["no tasks", definition([]), 0],
   ])("%s", (_name, workflow, expected) => {
     expect(storedTriggerCount(workflow)).toBe(expected);
+  });
+});
+
+describe("groupEventTriggers", () => {
+  const over100 = { field: "${trigger.data.amount}", operator: "gte", value: 100 };
+  const named = { field: "${trigger.data.userName}", operator: "eq", value: "wolfy" };
+  const ids = (workflows: Workflow[]) =>
+    groupEventTriggers(eventTriggers(workflows, "channel.cheer")).map((group) =>
+      group.members.map((member) => member.row.engineWorkflowId)
+    );
+  const step = { id: "s", type: "action", action: "chat.reply" };
+
+  test.each([
+    ["no conditions match", [[], []], [["a", "b"]]],
+    ["the same conditions match", [[over100], [over100]], [["a", "b"]]],
+    [
+      "written order doesn't matter",
+      [
+        [over100, named],
+        [named, over100],
+      ],
+      [["a", "b"]],
+    ],
+    ["a hidden condition keeps them apart", [[over100], [over100, named]], [["a"], ["b"]]],
+    ["a different value keeps them apart", [[over100], [{ ...over100, value: 200 }]], [["a"], ["b"]]],
+  ])("%s", (_name, conditions, expected) => {
+    const workflows = [
+      row("a", cheer({ order: 0, conditions: conditions[0] }), [step]),
+      row("b", cheer({ order: 1, conditions: conditions[1] }), [step]),
+    ];
+    expect(ids(workflows)).toEqual(expected);
+  });
+
+  test("keeps a group's members in run order, placed where its first member runs", () => {
+    const workflows = [
+      row("c", cheer({ order: 2 }), [step]),
+      row("b", cheer({ order: 1, conditions: [over100] }), [step]),
+      row("a", cheer({ order: 0 }), [step]),
+    ];
+    expect(ids(workflows)).toEqual([["a", "c"], ["b"]]);
+  });
+
+  test("never groups a workflow holding several triggers in its tasks", () => {
+    const definition = (multiTriggerAlerts as unknown as Record<string, WorkflowDefinition>).two;
+    const workflows = [
+      row("many", definition.trigger as Record<string, unknown>, definition.tasks),
+      row("a", definition.trigger as Record<string, unknown>, [step]),
+    ];
+    expect(groupEventTriggers(eventTriggers(workflows, (definition.trigger as { event: string }).event))).toHaveLength(
+      2
+    );
+  });
+});
+
+describe("triggerSourceLabel", () => {
+  const [mine, theirs] = eventTriggers(
+    [
+      row("mine", cheer({ order: 0 })),
+      {
+        ...row("theirs", cheer({ order: 1 })),
+        projectionKey: "hype:workflow:cheers",
+        definition: { id: "theirs", name: "hype/Hype Board: count cheers", trigger: cheer({ order: 1 }), tasks: [] },
+      } as unknown as Workflow,
+    ],
+    "channel.cheer"
+  );
+
+  test("names the streamer's steps and a module's", () => {
+    expect(triggerSourceLabel(mine)).toBe("Your steps");
+    expect(triggerSourceLabel(theirs)).toBe("Hype Board: count cheers");
+  });
+});
+
+describe("unownedConditionPhrases", () => {
+  test("words only the conditions no field shows", () => {
+    const conditions = [
+      { field: "${trigger.data.amount}", operator: "gte", value: 100 },
+      { field: "${trigger.data.message}", operator: "starts_with", value: "!" },
+      { field: "${viewer.isVip}", operator: "exists" },
+    ] as ConditionConfig[];
+    expect(unownedConditionPhrases(conditions, [amount])).toEqual([
+      'message starts with "!"',
+      "${viewer.isVip} exists",
+    ]);
   });
 });

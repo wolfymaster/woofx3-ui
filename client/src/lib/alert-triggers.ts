@@ -65,6 +65,81 @@ export function eventTriggers(workflows: readonly Workflow[], event: string): Ev
   });
 }
 
+/**
+ * Workflows that start on the same event under the same conditions, shown as one trigger.
+ * They stay separate workflows so one module's failure or wait can't stop another's steps;
+ * the group is only how they read. `members` are in the order they run.
+ */
+export interface TriggerGroup {
+  key: string;
+  conditions: ConditionConfig[];
+  members: EventTrigger[];
+}
+
+/** One group per distinct set of conditions, in the order its first member runs. */
+export function groupEventTriggers(triggers: readonly EventTrigger[]): TriggerGroup[] {
+  const groups = new Map<string, TriggerGroup>();
+  for (const trigger of triggers) {
+    // A workflow keeping several triggers in its tasks has conditions its trigger doesn't
+    // show, so it matches nothing else.
+    const key = definitionToTree(trigger.definition).editable
+      ? conditionsKey(trigger.conditions)
+      : `workflow:${trigger.row.engineWorkflowId}`;
+    const group = groups.get(key);
+    if (group) {
+      group.members.push(trigger);
+    } else {
+      groups.set(key, { key, conditions: trigger.conditions, members: [trigger] });
+    }
+  }
+  return Array.from(groups.values());
+}
+
+/** The same conditions give the same key whatever order they were written in. */
+function conditionsKey(conditions: readonly ConditionConfig[]): string {
+  const written = conditions.map((condition) =>
+    JSON.stringify([condition.field, condition.operator, condition.value ?? null])
+  );
+  return `conditions:${Array.from(new Set(written)).sort().join("|")}`;
+}
+
+/** Who a workflow's steps came from: the module's own name for them, or the streamer. */
+export function triggerSourceLabel(trigger: EventTrigger): string {
+  if (!trigger.row.projectionKey) {
+    return "Your steps";
+  }
+  // Barkloader names a module's workflow `{module}/{manifest name}`.
+  const name = trigger.definition.name ?? "";
+  return name.slice(name.indexOf("/") + 1) || name;
+}
+
+const OPERATOR_WORDS: Partial<Record<ConditionConfig["operator"], string>> = {
+  eq: "is",
+  ne: "is not",
+  gt: "is more than",
+  gte: "is at least",
+  lt: "is less than",
+  lte: "is at most",
+  contains: "contains",
+  starts_with: "starts with",
+  ends_with: "ends with",
+  regex: "matches",
+};
+
+/** The conditions no sentence field shows, read as words, so no check on a trigger is invisible. */
+export function unownedConditionPhrases(conditions: readonly ConditionConfig[], fields: ConfigField[]): string[] {
+  const owned = new Set(fields.map((field) => `\${trigger.data.${field.eventPath ?? field.id}}`));
+  return conditions
+    .filter((condition) => !owned.has(condition.field))
+    .map((condition) => {
+      const subject = condition.field.replace(/^\$\{trigger\.data\.(.*)\}$/, "$1");
+      const operator = OPERATOR_WORDS[condition.operator] ?? condition.operator.replaceAll("_", " ");
+      return condition.value === undefined
+        ? `${subject} ${operator}`
+        : `${subject} ${operator} ${JSON.stringify(condition.value)}`;
+    });
+}
+
 /** Byte order, as Go's strings.Compare orders ids. */
 function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
