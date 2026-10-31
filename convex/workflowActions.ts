@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { unescapeDollarKeys } from "@shared/dollar-keys";
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import {
   buildTriggerOptions,
@@ -148,15 +148,23 @@ export const createFromDefinition = action({
 
 /**
  * Update an existing workflow's definition in the engine. Waits for the
- * engine's webhook echo before returning.
+ * engine's webhook echo before returning, unless the engine refused the update
+ * as made from an older copy: then nothing changed and no echo is coming.
  */
 export const updateFromDefinition = action({
   args: {
     instanceId: v.id("instances"),
     engineWorkflowId: v.string(),
     definition: v.any(), // WorkflowDefinition
+    expectedRevision: v.optional(v.number()),
   },
-  handler: async (ctx, { instanceId, engineWorkflowId, definition }): Promise<{ engineWorkflowId: string }> => {
+  handler: async (
+    ctx,
+    { instanceId, engineWorkflowId, definition, expectedRevision }
+  ): Promise<
+    | { conflict: false; engineWorkflowId: string; revision?: number }
+    | { conflict: true; definition: unknown; revision?: number }
+  > => {
     const bundle = await requireInstanceContext(ctx, instanceId);
     const correlationKey = crypto.randomUUID();
 
@@ -169,13 +177,21 @@ export const updateFromDefinition = action({
 
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const engineDefinition = unescapeDollarKeys(definition) as WorkflowDefinition;
-    await rpc.updateWorkflow(engineWorkflowId, {
+    const updated = await rpc.updateWorkflow(engineWorkflowId, {
       definition: engineDefinition,
       correlationKey,
+      expectedRevision,
     });
+    if (updated !== null && "conflict" in updated) {
+      return {
+        conflict: true,
+        definition: escapeDollarKeys(updated.current.definition),
+        revision: updated.current.revision,
+      };
+    }
 
     const result = await waitForCompletion(ctx, correlationKey);
-    return { engineWorkflowId: result };
+    return { conflict: false, engineWorkflowId: result, revision: updated?.revision };
   },
 });
 

@@ -53,3 +53,28 @@ describe("deleteFromWebhook", () => {
     });
   });
 });
+
+describe("upsertFromWebhook", () => {
+  test("keeps the newer copy when callbacks arrive out of order", async () => {
+    const { t, instanceId } = await fixture();
+    const deliver = (revision: number | undefined, name: string) =>
+      t.mutation(internal.workflowInternal.upsertFromWebhook, {
+        instanceId,
+        engineWorkflowId: "wf",
+        definition: { name },
+        isEnabled: true,
+        revision,
+      });
+    const id = await deliver(5, "merged");
+    await deliver(4, "before the merge");
+    await t.run(async (ctx) => {
+      const row = await ctx.db.get(id);
+      expect(row?.definition.name).toBe("merged");
+      expect(row?.revision).toBe(5);
+    });
+    await deliver(undefined, "from an engine that doesn't count");
+    await t.run(async (ctx) => {
+      expect((await ctx.db.get(id))?.definition.name).toBe("from an engine that doesn't count");
+    });
+  });
+});

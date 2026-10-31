@@ -815,6 +815,7 @@ http.route({
           engineWorkflowId: event.workflow.id,
           definition: event.workflow.definition,
           isEnabled: event.workflow.isEnabled,
+          revision: event.workflow.revision,
         });
         if (event.correlationKey) {
           await ctx.runMutation(internal.workflowInternal.resolveCorrelation, {

@@ -97,8 +97,9 @@ export const upsertFromWebhook = internalMutation({
     engineWorkflowId: v.string(),
     definition: v.any(),
     isEnabled: v.boolean(),
+    revision: v.optional(v.number()),
   },
-  handler: async (ctx, { instanceId, engineWorkflowId, definition, isEnabled }) => {
+  handler: async (ctx, { instanceId, engineWorkflowId, definition, isEnabled, revision }) => {
     const storedDefinition = escapeDollarKeys(definition);
     const existing = await ctx.db
       .query("workflows")
@@ -106,9 +107,15 @@ export const upsertFromWebhook = internalMutation({
       .first();
     const now = Date.now();
     if (existing) {
+      // Callbacks can arrive out of order, and a late one must not put steps back
+      // to an older copy that an editor would then save from.
+      if (revision !== undefined && existing.revision !== undefined && revision < existing.revision) {
+        return existing._id;
+      }
       await ctx.db.patch(existing._id, {
         definition: storedDefinition,
         isEnabled,
+        revision,
         updatedAt: now,
       });
       return existing._id;
@@ -118,6 +125,7 @@ export const upsertFromWebhook = internalMutation({
       engineWorkflowId,
       definition: storedDefinition,
       isEnabled,
+      revision,
       createdAt: now,
       updatedAt: now,
     });

@@ -1,4 +1,4 @@
-import { unescapeDollarKeys } from "@shared/dollar-keys";
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { parseViewerFacts } from "@shared/viewer-facts";
@@ -26,6 +26,7 @@ import type {
   WorkflowReplay,
   WorkflowRun,
   WorkflowRunDetail,
+  WorkflowSaveOutcome,
   WorkflowTrigger,
   WorkflowTriggerResult,
 } from "@/engine/types";
@@ -198,18 +199,31 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
     return { engineWorkflowId: created.id };
   };
 
-  const update = async (engineWorkflowId: string, definition: unknown) => {
+  const update = async (
+    engineWorkflowId: string,
+    definition: unknown,
+    expectedRevision?: number
+  ): Promise<WorkflowSaveOutcome> => {
     const updated = await runtime.call("updateWorkflow", (api) =>
       api.updateWorkflow(engineWorkflowId, {
         definition: unescapeDollarKeys(definition) as WorkflowDefinition,
         correlationKey: crypto.randomUUID(),
+        expectedRevision,
       })
     );
     if (updated === null) {
       throw new Error("That workflow no longer exists on the engine.");
     }
+    if ("conflict" in updated) {
+      await workflowStale(engineWorkflowId);
+      return {
+        conflict: true,
+        definition: escapeDollarKeys(updated.current.definition),
+        revision: updated.current.revision,
+      };
+    }
     await workflowStale(updated.id);
-    return { engineWorkflowId: updated.id };
+    return { conflict: false, engineWorkflowId: updated.id, revision: updated.revision };
   };
 
   const remove = async (engineWorkflowId: string) => {

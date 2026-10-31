@@ -201,7 +201,13 @@ export function EventTriggerList({
         <TriggerEditor
           triggerPreset={triggerPreset}
           conditionFields={conditionFields}
-          saved={{ engineWorkflowId: trigger.row.engineWorkflowId, definition: trigger.definition } as SavedTrigger}
+          saved={
+            {
+              engineWorkflowId: trigger.row.engineWorkflowId,
+              definition: trigger.definition,
+              revision: trigger.row.revision,
+            } as SavedTrigger
+          }
           initialTree={read}
           pin={pin}
           loadedOptions={loadedOptions}
