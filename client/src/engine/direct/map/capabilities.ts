@@ -35,6 +35,7 @@ const GATED: { readonly [C in EngineCapability]: true } = {
   "workflow.conditionListReferences": true,
   "workflow.delayWait": true,
   "workflow.dryRun": true,
+  "workflow.expressionFunctions": true,
   "workflow.health": true,
   "workflow.realCancel": true,
   "workflow.testRunOptions": true,

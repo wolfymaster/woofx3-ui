@@ -110,6 +110,15 @@ A collapsed action reads as one line, built by `actionSentenceParts` (`lib/actio
 
 An action declaring no sentence reads as its name and the settings it has: "Increment counter: counter Deaths, amount 5". Empty optional settings are left out of that form.
 
+### Functions in text fields
+
+On an engine with the `workflow.expressionFunctions` capability, a field that takes variables also takes function calls, written `{round(amount, 2)}` and stored as `${round(trigger.data.amount, 2)}` (`toStoredText` and `toDisplayText` in `lib/variable-display.ts`). See [Expression Resolution](https://github.com/wolfymaster/woofx3/blob/master/docs/workflow/expressions.md#functions) in the engine repo for what each function does.
+
+- `VariableAwareInput` lists functions below the variables. Inside a call's parentheses the menu searches the word at the cursor and inserts it bare, without braces of its own (`findTypedReference` in `lib/variable-menu.ts`).
+- Only a known function converts, so text like `{note(s)}` stays text, with a note under the field. The same note covers a wrong argument count and a bare name that is no variable (`expressionProblem`).
+- A library alert's own text has no functions: its variables are `{{id}}` inputs, substituted into the text rather than resolved as expressions.
+- The list of functions is `EXPRESSION_FUNCTIONS` in `@woofx3/api/expression`; `lib/expression-functions.ts` adds the menu's wording, and a test holds the two to the same names.
+
 ### Action settings
 
 `ActionSettingsEditor` (`components/flow/action-settings-editor.tsx`) draws each setting with the same renderer every other form uses: `ConfigurationForm` one field at a time, with `configFieldRenderers` from `trigger-config-form.tsx`. Around each one it adds:

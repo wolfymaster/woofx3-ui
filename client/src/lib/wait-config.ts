@@ -1,4 +1,5 @@
 import type { AggregationConfig, WaitConfig as EngineWaitConfig } from "@woofx3/api";
+import { expressionCalls, expressionReferences } from "@/lib/expression-text";
 
 /** A wait that pauses for an event (or an aggregation over events), optionally with a timeout. */
 export type EventWaitConfig = Extract<EngineWaitConfig, { type: "event" | "aggregation" }>;
@@ -243,11 +244,18 @@ function referencesIn(value: unknown): string[] {
   return [];
 }
 
-/** The first reference whose source a wait's resolver does not have. A compound expression is not checked. */
+/**
+ * The first reference whose source a wait's resolver does not have. A function call's
+ * arguments are checked; any other compound expression is not.
+ */
 function unavailableReference(value: unknown): string | undefined {
-  return referencesIn(value).find((reference) => {
-    const source = REFERENCE_SOURCE.exec(reference.slice(2, -1).trim())?.[1];
+  const unavailable = (path: string) => {
+    const source = REFERENCE_SOURCE.exec(path.trim())?.[1];
     return source !== undefined && !WAIT_CONDITION_SOURCES.has(source);
+  };
+  return referencesIn(value).find((reference) => {
+    const inner = reference.slice(2, -1);
+    return expressionCalls(inner).length > 0 ? expressionReferences(inner).some(unavailable) : unavailable(inner);
   });
 }
 

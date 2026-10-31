@@ -2,6 +2,7 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import { stackOrder } from "@woofx3/scene/model";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { alertCompositionOf } from "@/lib/alert-layout";
+import { shortenExpressions } from "@/lib/expression-text";
 import { toMediaValue } from "@/lib/media-value";
 import { isCommandsSource, parseConfigFields } from "@/lib/parse-config-fields";
 import { resolveCatalogTrigger } from "@/lib/workflow-node-label";
@@ -56,7 +57,7 @@ export function alertLayoutSummary(raw: unknown): string {
   if (text === undefined) {
     return layers;
   }
-  const shown = text.trim().replace(/\$\{([^{}]*)\}/g, (_match, path: string) => `{${path.split(".").pop()}}`);
+  const shown = shortenExpressions(text.trim());
   const clipped = shown.length > SUMMARY_TEXT_LENGTH ? `${shown.slice(0, SUMMARY_TEXT_LENGTH - 1)}…` : shown;
   return `“${clipped}” · ${layers}`;
 }
