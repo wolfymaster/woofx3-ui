@@ -625,6 +625,8 @@ export interface InstalledModule {
   /** The marketplace listing and edition it was installed from, when it was. */
   marketplaceListingId?: string;
   marketplaceEdition?: number;
+  /** The installed manifest, parsed; null when none is recorded. */
+  manifest: Record<string, unknown> | null;
 }
 
 /** A module's manifest-derived detail, merged with its marketplace listing when it has one. */

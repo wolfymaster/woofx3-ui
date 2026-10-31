@@ -30,6 +30,13 @@ function rowProvenance(row: Doc<"moduleRepository">): ModuleProvenance | null {
   return row.archiveKey ? "uploaded" : null;
 }
 
+/** The row keeps the manifest it was given unchecked; only an object is one. */
+function manifestRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 function toInstalledModule(row: Doc<"moduleRepository">): InstalledModule {
   return {
     id: toModuleId(row._id),
@@ -45,6 +52,7 @@ function toInstalledModule(row: Doc<"moduleRepository">): InstalledModule {
     provenance: rowProvenance(row),
     marketplaceListingId: row.marketplaceListingId,
     marketplaceEdition: row.marketplaceEdition,
+    manifest: manifestRecord(row.manifest),
   };
 }
 

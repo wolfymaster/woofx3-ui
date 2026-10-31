@@ -915,6 +915,7 @@ describe("modules", () => {
       author: "Ana",
       moduleKey: "cozy:1.0.0:abc1234",
       marketplaceListingId: "cozy-v2",
+      manifest: { id: "cozy", description: "Warm", tags: ["chat"], author: "Ana" },
     });
 
     state.modules = [...state.modules, installed("fresh", { id: "fresh" })];

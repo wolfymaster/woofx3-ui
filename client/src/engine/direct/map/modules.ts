@@ -110,6 +110,7 @@ export function toInstalledModule(summary: EngineModuleSummary): InstalledModule
     provenance: summaryProvenance(summary),
     marketplaceListingId: summary.marketplaceListingId,
     marketplaceEdition: summary.marketplaceEdition,
+    manifest,
   };
 }
 
