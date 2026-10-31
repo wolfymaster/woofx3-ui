@@ -8,7 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstalledModules } from "@/engine/hooks/use-modules";
 import type { ModuleId, ModuleProvenance } from "@/engine/types";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
-import { MARKETPLACE_PATH, MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
+import { installedModulePath, MARKETPLACE_PATH, MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
+import { bareModuleKey } from "@/lib/module-key";
 import { cn } from "@/lib/utils";
 
 const PROVENANCE_LABEL: { readonly [P in ModuleProvenance]: string } = {
@@ -19,11 +20,10 @@ const PROVENANCE_LABEL: { readonly [P in ModuleProvenance]: string } = {
 
 interface ModuleSidebarProps {
   selectedId: ModuleId | null;
-  onSelectModule: (moduleId: ModuleId) => void;
 }
 
 /** The Marketplace tab's installed modules, and the ways to add one. */
-export function ModuleSidebar({ selectedId, onSelectModule }: ModuleSidebarProps) {
+export function ModuleSidebar({ selectedId }: ModuleSidebarProps) {
   const [, navigate] = useLocation();
   const { uploads } = useMarketplaceMode();
   const modules = useInstalledModules();
@@ -82,7 +82,7 @@ export function ModuleSidebar({ selectedId, onSelectModule }: ModuleSidebarProps
                   "group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left cursor-pointer hover:bg-accent",
                   isSelected && "bg-accent"
                 )}
-                onClick={() => onSelectModule(module.id)}
+                onClick={() => navigate(installedModulePath(bareModuleKey(module.moduleKey) ?? module.id))}
               >
                 <div
                   className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 text-[11px] font-bold text-white"

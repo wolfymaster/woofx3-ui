@@ -49,7 +49,7 @@ export default function MarketplaceAuthor() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto w-full max-w-5xl space-y-8 p-6 lg:p-8">
+      <div className="w-full space-y-8 p-6 lg:p-8">
         <Button variant="ghost" size="sm" className="-ml-2 gap-2" onClick={() => navigate(MARKETPLACE_PATH)}>
           <ArrowLeft className="h-4 w-4" />
           Marketplace
@@ -130,7 +130,7 @@ export default function MarketplaceAuthor() {
                   {listingTypeMeta(group.type).plural}
                   <span className="ml-2 font-normal normal-case tracking-normal">{group.listings.length}</span>
                 </h2>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-4">
                   {group.listings.map((listing) => (
                     <ListingCard
                       key={listing.id}

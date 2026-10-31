@@ -70,7 +70,7 @@ export default function MarketplaceListing() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto w-full max-w-5xl space-y-6 p-6 lg:p-8">
+      <div className="w-full space-y-6 p-6 lg:p-8">
         <Button variant="ghost" size="sm" className="gap-2 -ml-2" onClick={() => navigate(MARKETPLACE_PATH)}>
           <ArrowLeft className="h-4 w-4" />
           Marketplace
@@ -243,12 +243,13 @@ function ListingBody({
   return (
     <>
       <div className="relative h-40 overflow-hidden rounded-2xl border bg-neutral-950">
-        <ListingArt listing={listing} sizes="(min-width: 1024px) 1024px, 100vw" scale={1.3} />
+        <ListingArt listing={listing} sizes="100vw" scale={1.3} />
         <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-background/20" />
       </div>
 
       <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-        <div className="-mt-12 flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-card text-primary shadow-sm">
+        {/* Positioned so it paints over the banner it overlaps, which is positioned too. */}
+        <div className="relative -mt-12 flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-card text-primary shadow-sm">
           {listing.images.icon ? (
             <ModuleIconImage icon={listing.images.icon} displaySize={80} />
           ) : (
@@ -372,8 +373,15 @@ function ListingBody({
       )}
 
       {isModuleListing(listing.type) ? (
-        <ListingModuleTabs load={detailLoad} onRetry={() => setDetailAttempt((attempt) => attempt + 1)}>
-          <CreditsCard credits={listing.credits} listingName={listing.name} />
+        <ListingModuleTabs
+          load={detailLoad}
+          onRetry={() => setDetailAttempt((attempt) => attempt + 1)}
+          rail={
+            listing.credits.length > 0 ? (
+              <CreditsCard credits={listing.credits} listingName={listing.name} compact />
+            ) : null
+          }
+        >
           {listing.type === "theme" && listing.module && <ThemeSection listing={listing} />}
           {listing.type === "module" && listing.module && (
             <ModuleSections module={listing.module} showDeclarations={detailLoad.status === "error"} />

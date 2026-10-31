@@ -21,6 +21,7 @@ import {
   ModuleLocalEndpointsSection,
   ModulePermissionsSection,
 } from "@/components/modules/module-permissions";
+import { ModuleSidebar } from "@/components/modules/module-sidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -283,6 +284,19 @@ function toSnakeCase(str: string): string {
 }
 
 export default function ModuleInstall() {
+  // An upload installs onto the engine rather than into the catalog, so this
+  // page sits beside what is installed, not beside the storefront's rail.
+  return (
+    <div className="flex h-full w-full overflow-hidden">
+      <ModuleSidebar selectedId={null} />
+      <div className="h-full min-w-0 flex-1 overflow-auto">
+        <ModuleUpload />
+      </div>
+    </div>
+  );
+}
+
+function ModuleUpload() {
   const [, navigate] = useLocation();
   const { mode } = useTheme();
   // The archive's files as their bytes; edits replace a text file's bytes, and
@@ -542,7 +556,7 @@ export default function ModuleInstall() {
 
   if (Object.keys(files).length === 0) {
     return (
-      <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+      <div className="p-6 lg:p-8">
         <PageHeader title="Install Module" description="Upload a module zip file to install it." />
 
         <Card
@@ -578,7 +592,7 @@ export default function ModuleInstall() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="border-b bg-background shrink-0">
-        <div className="p-6 max-w-[1600px] mx-auto">
+        <div className="p-6">
           <PageHeader title="Install Module" description="Review and edit module files before installation." />
         </div>
       </div>

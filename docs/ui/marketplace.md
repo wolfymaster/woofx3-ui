@@ -5,6 +5,8 @@
 
 The storefront. [Modules](./modules.md) covers the installed modules and uploads beside it in the same tab.
 
+The storefront, listing and author pages render inside one route (`client/src/pages/marketplace-section.tsx`), which owns the catalog rail and its overview read, so moving between them keeps the rail in place. Rail selections are URLs, parsed by `parseMarketplaceFilter`.
+
 ## Where the catalog lives
 
 In `woofx3-marketplace-api`, not here. This deployment is a **proxy**: it holds
@@ -113,7 +115,9 @@ pack is not counted twice.
 `CreditsCard` is a designed showcase, not a metadata row: the streamers whose
 ideas a listing borrows are the reason it exists, so the card gives them
 avatars, roles and a link out. Credits also ride on the list response, so a grid
-renders them without a request per card.
+renders them without a request per card. A module or theme shows the card in its
+overview's side rail, and on its installed page when it came from a listing;
+other listing types have no rail and show it full width.
 
 ## Previews
 
