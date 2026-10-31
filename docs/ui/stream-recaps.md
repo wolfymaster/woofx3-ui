@@ -5,8 +5,12 @@ first, and
 `/stream/recaps/:sessionId` shows one of them: how the stream went and who
 supported it. The engine sends a summary when a session ends. The current
 session shows too, from snapshots the UI takes itself (below), badged "In
-progress" while its stream is live since its totals can still change. Both read the same `streamSessionSummaries` rows as the dashboard's
-[recent streams](./dashboard#recent-streams) widget, whose rows link here.
+progress" while its stream is live since its totals can still change. Both read recaps through the engine gateway
+(`streamOps.useRecentRecaps` and `streamOps.useRecap`), as do the dashboard's
+[recent streams](./dashboard#recent-streams) widget, whose rows link here, and
+the command palette. In the hosted app those are the `streamSessionSummaries`
+rows described below; local mode reads the engine itself (see
+[Local mode](#local-mode)).
 
 ## The session in progress
 
@@ -44,7 +48,7 @@ its summary. So a stored `status: "open"` means the engine has not closed the
 session yet, not that the stream is live.
 
 `listRecent` and `get` add `inProgress` to each row instead
-(`isSummaryInProgress` in `convex/lib/sessionSummary.ts`): true only while the
+(`isSummaryInProgress` in `shared/stream-recap.ts`): true only while the
 instance's `instanceLiveState` says it is live and, when the engine has
 announced its session, that session is this row's. It is derived on every read
 and never stored, so a session reads as finished the moment its stream goes
@@ -175,3 +179,30 @@ Twitch" opens it, and "Share to chat" posts "Clip: " followed by the title (whit
 clipper and link as a
 chat announcement through the same `twitchBroadcast.sendAnnouncement` path as
 the thank-you message.
+
+## Local mode
+
+The desktop app's local mode serves both pages with no Convex in between. Its
+gateway (`client/src/engine/direct/stream-ops.ts`) reads a recap from the engine
+directly: `listStreamSessions` or `getStreamSession` for the session, and
+`getStreamSessionTotals` for its totals, the same two reads a hosted snapshot is
+built from. Nothing is stored, so a recap is exactly what the engine has now and
+`generatedAt` is the moment it was read. Whether a recap is in progress comes
+from the engine's live state by the same rule (`isSummaryInProgress`). The
+reads are cached and read again on `stream.online`, `stream.offline`,
+`session.started` and `session.summary`, and the open-session refresh above
+reads them again instead of storing a snapshot, so a live stream's totals still
+move every minute. An engine without `analytics.sessions` has no recaps.
+
+What a lone engine cannot serve:
+
+| Part | Hosted | Local mode |
+|------|--------|------------|
+| A summary that outlives the engine's database | Stored summary | Not kept: a recap is gone if the engine loses its history |
+| Clips and the "Top clip" tile | Helix `GET /clips` | Left out: the engine has no method that lists clips |
+| Timeline markers | Helix `GET /videos` and `GET /streams/markers` | Layer unavailable, with the reason: the engine has no method that lists markers |
+
+The gateway says which of these it serves in `streamOps.support`
+(`recapClips`, `recapMarkers`), and the page reads that rather than which app it
+runs in: without clips the Clips section is not shown and the clips lane says
+why, and without markers the markers lane says why.

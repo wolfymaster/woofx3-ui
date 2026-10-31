@@ -1,3 +1,4 @@
+import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlowEditor } from "@/components/flow/flow-editor";
@@ -9,7 +10,6 @@ import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workfl
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import {
   countActionSteps,
   definitionToTree,

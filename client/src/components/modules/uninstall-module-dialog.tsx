@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -15,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useReconcileModuleUninstallRequest, useUninstallModuleRequest } from "@/engine/hooks/use-modules";
-import { toModuleId } from "@/lib/cloud-ids";
+import type { ModuleId } from "@/engine/types";
 import { usedByContext, usedByHeading } from "@/lib/uninstall-conflicts";
 
 const ENGINE_RESPONSE_TIMEOUT_MS = 60_000;
@@ -39,7 +38,7 @@ type ConflictResource = {
 };
 
 type UninstallDialogModule = {
-  _id: Id<"moduleRepository">;
+  id: ModuleId;
   name: string;
   version: string;
   moduleKey?: string;
@@ -126,7 +125,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
       // the dialog (and the stale Convex record) stuck on a webhook that may
       // never come.
       try {
-        const result = await reconcileUninstall(toModuleId(module._id), key);
+        const result = await reconcileUninstall(module.id, key);
         if (!result.stillInstalled) {
           setPendingKey(null);
           onOpenChange(false);
@@ -159,7 +158,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
     setErrorMessage(null);
     setConflicts([]);
     try {
-      const result = await requestModuleUninstall(toModuleId(module._id));
+      const result = await requestModuleUninstall(module.id);
       setPendingKey(result.moduleKey);
       setPhase("awaiting-engine");
     } catch (err) {

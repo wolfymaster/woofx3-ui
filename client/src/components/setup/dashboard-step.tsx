@@ -7,7 +7,8 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { columnWeight, getDashboardLayout } from "@/lib/dashboard-layouts";
-import { getDashboardWidget } from "@/lib/dashboard-widgets/registry";
+import { findDashboardWidget } from "@/lib/dashboard-widgets/catalog";
+import { hostedDashboardCatalog } from "@/lib/dashboard-widgets/hosted-catalog";
 
 interface DashboardStepProps {
   instanceId: Id<"instances">;
@@ -56,7 +57,7 @@ export function DashboardStep({ instanceId, status, onContinue }: DashboardStepP
             return (
               <div key={zoneId} className="flex min-w-0 flex-col gap-2" style={{ flexGrow: columnWeight(row, column) }}>
                 {zoneWidgets.map((widget) => {
-                  const definition = getDashboardWidget(widget.type);
+                  const definition = findDashboardWidget(hostedDashboardCatalog, widget.type);
                   const Icon = definition?.icon;
                   return (
                     <div

@@ -1,15 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { macroFieldsProblem, macroOrderChanges, nextMacroSortOrder } from "@shared/macro-pad";
+import { CHAT_COMMAND_RUN_RESTRICTION, planMacroRun, valuesFromPairs } from "@shared/macro-run";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalQuery, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
-import { executeMacroPlan, loadMacroEngineContext, valuesFromPairs } from "./lib/macroExecution";
-import {
-  CHAT_COMMAND_RUN_RESTRICTION,
-  canTriggerRemotely,
-  macroBehaviorFingerprint,
-  planMacroRun,
-} from "./lib/macroTrigger";
+import { executeMacroPlan, loadMacroEngineContext } from "./lib/macroExecution";
+import { canTriggerRemotely, macroBehaviorFingerprint } from "./lib/macroTrigger";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { deleteTriggerForMacro, findTriggerForMacro, isInstanceManager } from "./macroTriggers";
 import { macroActionTypeValidator, macroConfigValidator } from "./schema";
@@ -28,6 +25,13 @@ function toMacroButton(row: Doc<"macros">) {
     type: row.type,
     config: row.config,
   };
+}
+
+function requireStorableFields(fields: Parameters<typeof macroFieldsProblem>[0]): void {
+  const problem = macroFieldsProblem(fields);
+  if (problem !== null) {
+    throw new Error(problem);
+  }
 }
 
 async function requireMember(ctx: QueryCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
@@ -108,6 +112,7 @@ export const addMacro = mutation({
   },
   handler: async (ctx, args): Promise<Id<"macros">> => {
     await requireMember(ctx, args.instanceId);
+    requireStorableFields(args);
 
     const last = await ctx.db
       .query("macros")
@@ -122,7 +127,7 @@ export const addMacro = mutation({
       color: args.color,
       type: args.type,
       config: args.config,
-      sortOrder: last ? last.sortOrder + 1 : 0,
+      sortOrder: nextMacroSortOrder(last ? [last.sortOrder] : []),
       updatedAt: Date.now(),
     });
   },
@@ -140,6 +145,7 @@ export const updateMacro = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireMember(ctx, args.instanceId);
+    requireStorableFields(args);
     const macro = await requireMacro(ctx, args.instanceId, args.macroId);
     const changesBehavior =
       macroBehaviorFingerprint(args.type, args.config) !== macroBehaviorFingerprint(macro.type, macro.config);
@@ -173,7 +179,13 @@ export const deleteMacro = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireMember(ctx, args.instanceId);
-    await requireMacro(ctx, args.instanceId, args.macroId);
+    const macro = await ctx.db.get(args.macroId);
+    if (!macro) {
+      return;
+    }
+    if (macro.instanceId !== args.instanceId) {
+      throw new Error("Macro not found");
+    }
     await requireManagerIfTriggered(ctx, args.instanceId, args.macroId, userId, "delete it");
     await deleteTriggerForMacro(ctx, args.macroId);
     await ctx.db.delete(args.macroId);
@@ -188,17 +200,15 @@ export const reorderMacros = mutation({
   handler: async (ctx, args) => {
     await requireMember(ctx, args.instanceId);
 
-    // Only rows whose position actually changed are written. A macro deleted by
-    // someone else between the drag and this call is skipped rather than failing
-    // the whole reorder.
-    for (let index = 0; index < args.macroIds.length; index++) {
-      const macro = await ctx.db.get(args.macroIds[index]);
-      if (!macro || macro.instanceId !== args.instanceId) {
-        continue;
+    const current = new Map<Id<"macros">, number>();
+    for (const macroId of args.macroIds) {
+      const macro = await ctx.db.get(macroId);
+      if (macro && macro.instanceId === args.instanceId) {
+        current.set(macro._id, macro.sortOrder);
       }
-      if (macro.sortOrder !== index) {
-        await ctx.db.patch(macro._id, { sortOrder: index, updatedAt: Date.now() });
-      }
+    }
+    for (const { id, sortOrder } of macroOrderChanges(args.macroIds, current)) {
+      await ctx.db.patch(id, { sortOrder, updatedAt: Date.now() });
     }
   },
 });

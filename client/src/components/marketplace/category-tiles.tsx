@@ -1,5 +1,5 @@
-import type { CatalogCounts, CatalogListing, ListingType } from "@convex/lib/marketplaceCatalog";
-import { LISTING_TYPES } from "@convex/lib/marketplaceCatalog";
+import type { CatalogCounts, CatalogListing, ListingType } from "@shared/marketplace-catalog";
+import { LISTING_TYPES } from "@shared/marketplace-catalog";
 import { ListingArt } from "@/components/marketplace/listing-art";
 import { Card } from "@/components/ui/card";
 import { listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";

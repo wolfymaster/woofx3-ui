@@ -22,3 +22,8 @@ export function useRemoveShoutoutRequest() {
 export function useReorderShoutoutsRequest() {
   return useEngineGateway().shoutouts.useReorderRequest();
 }
+
+/** Whether the channel's Twitch link may send shoutouts. */
+export function useCanShoutOut(options?: ReadOptions) {
+  return useEngineGateway().shoutouts.useCanShoutOut(options);
+}

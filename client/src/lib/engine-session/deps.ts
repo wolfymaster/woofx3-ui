@@ -14,6 +14,9 @@ export interface Clock {
 /** Returns a number in [0, 1). */
 export type Random = () => number;
 
+/** Returns a new id, unique among every id it has returned and will return. */
+export type IdSource = () => string;
+
 export type LogFields = Record<string, unknown>;
 
 export interface Logger {

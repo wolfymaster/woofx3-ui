@@ -1,4 +1,5 @@
 import { useStore } from "@nanostores/react";
+import type { DashboardPanel } from "@shared/dashboard-layout";
 import { Check, LayoutGrid, Loader2, PanelTop, Pencil, Plus, Trash2, X } from "lucide-react";
 import { memo, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import {
 } from "@/components/ui/context-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { DashboardPanel } from "@/lib/dashboard-panels";
 import { $commandBarHidden } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 

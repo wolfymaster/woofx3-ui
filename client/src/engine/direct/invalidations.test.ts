@@ -47,9 +47,9 @@ describe("INVALIDATIONS", () => {
       [k.twitch.link()],
     ],
     [
-      "a stream going offline refreshes the live state",
+      "a stream going offline refreshes the live state and the recaps",
       makeCallbackEnvelope({ type: EngineEventType.STREAM_OFFLINE, twitchUserId: "u-1" }),
-      [k.status.liveState()],
+      [k.status.liveState(), k.streamOps.allRecaps],
     ],
     [
       "a deleted command refreshes the command list and the alert target usage",

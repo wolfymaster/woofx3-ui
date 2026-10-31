@@ -158,6 +158,8 @@ export function directTwitchLinkGateway(runtime: DirectRuntime): TwitchLinkGatew
   return {
     useLink: () => useEngineQuery(runtime, twitch.linkRead, { select: toTwitchLink }),
     useLinkFlow,
+    // The streamer running the engine is its only user.
+    useCanManageLink: () => true,
     useUnlinkRequest: () => useEngineRequest(unlink),
   };
 }

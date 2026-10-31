@@ -1,8 +1,6 @@
-import { api } from "@convex/_generated/api";
 import Editor from "@monaco-editor/react";
 import { localEndpointSummaries } from "@shared/local-endpoints";
 import { parseManifestPermissions } from "@shared/module-permissions";
-import { useQuery } from "convex/react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -29,8 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEngineScope } from "@/engine/context";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
-import { useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
-import { useInstance } from "@/hooks/use-instance";
+import { useInstalledModules, useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useTheme } from "@/hooks/use-theme";
 import { MARKETPLACE_INSTALLED_PATH } from "@/lib/marketplace-route";
 import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } from "@/lib/module-archive";
@@ -288,7 +285,6 @@ function toSnakeCase(str: string): string {
 export default function ModuleInstall() {
   const [, navigate] = useLocation();
   const { mode } = useTheme();
-  const { instance } = useInstance();
   // The archive's files as their bytes; edits replace a text file's bytes, and
   // binary files pass through untouched.
   const [files, setFiles] = useState<Record<string, Uint8Array>>({});
@@ -310,7 +306,7 @@ export default function ModuleInstall() {
   const textFiles = useMemo(() => textFilesOf(files), [files]);
   const fileTree = useMemo(() => buildFileTree(Object.keys(files)), [files]);
 
-  const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+  const installedModules = useInstalledModules();
   const editedManifest = useMemo(() => parseEditedManifest(textFiles), [textFiles]);
   const declaredPermissions = useMemo(
     () => (editedManifest === null ? null : parseManifestPermissions(editedManifest)),
@@ -324,8 +320,8 @@ export default function ModuleInstall() {
     if (!manifestId) {
       return undefined;
     }
-    return (repoModules ?? []).find((m) => m.status === "installed" && bareModuleKey(m.moduleKey) === manifestId);
-  }, [editedManifest, repoModules]);
+    return (installedModules ?? []).find((m) => m.status === "installed" && bareModuleKey(m.moduleKey) === manifestId);
+  }, [editedManifest, installedModules]);
   const permissionsNeedingApproval = useMemo(() => {
     if (!declaredPermissions) {
       return [];

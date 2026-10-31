@@ -1,6 +1,6 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "@shared/workflow-test-run";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { describeTestEventOutcome, type TestEventOutcome } from "@/lib/test-event-outcome";
 import { resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { TriggerPreset } from "@/lib/workflow-presets";

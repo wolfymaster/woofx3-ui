@@ -1,4 +1,4 @@
-import { twitchScopeHealth } from "@convex/lib/twitchScopeHealth";
+import { twitchScopeHealth } from "@shared/twitch-scope-health";
 import { useMemo } from "react";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 

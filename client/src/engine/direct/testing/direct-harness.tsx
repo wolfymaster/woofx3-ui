@@ -44,11 +44,16 @@ export function createDirectHarness(overrides: Partial<DirectGatewayConfig> = {}
   const clock = new FakeClock();
   const logger = new RecordingLogger();
   const pings: string[] = [];
+  let ids = 0;
   const runtime = createDirectRuntime({
     targets: { current: async () => engine.target(), onChange: () => () => {} },
     open: engine.open,
     clock,
     random: () => 0.5,
+    newId: () => {
+      ids += 1;
+      return `id-${ids}`;
+    },
     logger,
     config: { ...TEST_CONFIG, ...overrides },
     ping: async (url) => {

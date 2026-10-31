@@ -1,3 +1,4 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { ExternalLink } from "lucide-react";
@@ -19,7 +20,6 @@ import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { type TriggerPin, triggerFieldValues, withFieldConditions } from "@/lib/alert-triggers";
 import { type OptionLabels, sentenceParts, sentenceText } from "@/lib/condition-sentence";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import { incompleteConditionFields } from "@/lib/workflow-presets-json";
 import {

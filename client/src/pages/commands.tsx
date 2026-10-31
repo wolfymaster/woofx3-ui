@@ -1,3 +1,4 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import type { ActionStep } from "@woofx3/api";
 import {
   AlertTriangle,
@@ -53,7 +54,6 @@ import {
   commandEditorPath,
   commandGroupEditorPath,
 } from "@/lib/command-editor-route";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { groupLabel, sortGroups } from "@/lib/group-display";
 import { isRowActionClick } from "@/lib/row-click";
 import { cn } from "@/lib/utils";

@@ -4,11 +4,9 @@ import { TwitchIntegrationCard } from "@/components/settings/twitch-integration-
 import { TwitchScopeStatus } from "@/components/settings/twitch-scope-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useInstance } from "@/hooks/use-instance";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 
 export default function AdminIntegrations() {
-  const { instance } = useInstance();
   const { isConnected, twitchLink, isLoading: twitchLoading, health } = useTwitchIntegration();
 
   return (
@@ -20,13 +18,8 @@ export default function AdminIntegrations() {
           <CardDescription>Manage your connected streaming platforms.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <TwitchIntegrationCard
-            instanceId={instance?._id}
-            isConnected={isConnected}
-            twitchLink={twitchLink}
-            isLoading={twitchLoading}
-          />
-          {instance && twitchLink && (
+          <TwitchIntegrationCard isConnected={isConnected} twitchLink={twitchLink} isLoading={twitchLoading} />
+          {twitchLink && (
             <TwitchScopeStatus
               health={health}
               platformUsername={twitchLink.platformUsername}

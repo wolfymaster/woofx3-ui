@@ -1,3 +1,4 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import {
   parseCompositionInputs,
   parseSceneBehaviors,
@@ -6,7 +7,6 @@ import {
 } from "@shared/scene-serialization";
 import type { AlertComposition as EngineAlertComposition } from "@woofx3/api";
 import type { AlertComposition } from "@/engine/types";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 
 /**
  * A library alert as the gateway contract holds it: the stored JSON parsed

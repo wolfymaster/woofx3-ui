@@ -1,0 +1,223 @@
+name: woofx3 release
+
+# Builds, signs and publishes the woofx3 desktop app, the companion's crate
+# with an engine bundled and the identity in tauri.woofx3.conf.json, when a
+# `woofx3-v<version>` tag is pushed, then points installed desktop apps at it
+# through the woofx3-latest prerelease. See docs/ops/woofx3-releases.md.
+on:
+  push:
+    tags: ["woofx3-v*"]
+
+# Releases queue behind each other and are never cancelled halfway, so two
+# can never race to write woofx3-latest.
+concurrency:
+  group: woofx3-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  BUN_VERSION: "1.3.14"
+  # The rolling prerelease whose latest.json installed desktop apps read. Must
+  # match `plugins.updater.endpoints` in
+  # companion/src-tauri/tauri.woofx3.conf.json, as
+  # companion/scripts/product-configs.test.ts checks.
+  LATEST_TAG: woofx3-latest
+  # The overlay that turns the companion's build into the desktop app's,
+  # relative to companion/.
+  DESKTOP_CONFIG: src-tauri/tauri.woofx3.conf.json
+  # The engine's shared TypeScript packages the dashboard builds against.
+  ENGINE_REPOSITORY: wolfymaster/woofx3
+  ENGINE_REF: master
+
+jobs:
+  check-version:
+    name: Check the tag against the app version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The updater compares the version the merged Tauri config sets, and
+      # the signature is bound to it, so a tag naming any other version would
+      # publish a release that does not say what it is. The desktop app's
+      # version is the overlay's own `version`; Cargo.toml's belongs to the
+      # companion, so the two products version independently. An overlay
+      # without a version would silently ship the companion's, so that fails
+      # too.
+      - name: Compare the tag with the desktop config's version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          semver='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?'
+          if [[ ! "$TAG" =~ ^woofx3-v${semver}$ ]]; then
+            echo "::error::Tag ${TAG} is not woofx3-v<semver>, e.g. woofx3-v1.2.3"
+            exit 1
+          fi
+          version="${TAG#woofx3-v}"
+          config="companion/${DESKTOP_CONFIG}"
+          conf_version="$(jq -r '.version // empty' "$config")"
+          if [[ -z "$conf_version" ]]; then
+            echo "::error file=${config}::sets no version, so the build would carry the companion's"
+            exit 1
+          fi
+          if [[ "$conf_version" != "$version" ]]; then
+            echo "::error file=${config}::version is ${conf_version}, but the tag is ${TAG}"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build, sign and release
+    needs: check-version
+    runs-on: windows-latest
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check signing secrets and build variables
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+        run: |
+          missing=0
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Secret ${name} is not set on the production environment"
+              missing=1
+            fi
+          done
+          if [[ -z "$VITE_CONVEX_URL" ]]; then
+            echo "::error::Variable VITE_CONVEX_URL is not set on the production environment"
+            missing=1
+          fi
+          exit "$missing"
+
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install companion dependencies
+        working-directory: companion
+        run: bun install --frozen-lockfile
+
+      # The companion build builds the dashboard the app shows.
+      - uses: ./.github/actions/dashboard-deps
+        with:
+          engine-repository: ${{ env.ENGINE_REPOSITORY }}
+          engine-ref: ${{ env.ENGINE_REF }}
+
+      # The engine release pinned in companion/bundled-engine.json, checked
+      # against its sha256 and for what the app needs to start it.
+      - name: Fetch the pinned engine
+        working-directory: companion
+        run: bun run fetch-engine
+
+      # Signs the installer with the desktop config's version bound into the
+      # signature (the app requires that), uploads it with its .sig, and
+      # writes latest.json into the release. tauri-action reads the same
+      # `--config` overlay, so latest.json and the asset names follow it.
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WOOFX3_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+          # The deployment's HTTP origin, which the dashboard builds browser
+          # source and sign-in URLs from; the same variable the web build uses.
+          WOOFX3_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: companion
+          tagName: ${{ github.ref_name }}
+          args: --features bundled-engine --config ${{ env.DESKTOP_CONFIG }}
+          releaseName: woofx3 desktop app ${{ needs.check-version.outputs.version }}
+          releaseBody: Download the installer below (the file ending in -setup.exe). Installed desktop apps update themselves.
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+
+      # Tauri copies bundle resources next to the binary before packaging
+      # them. The release is already published by now, but woofx3-latest is
+      # not yet pointed at it, so no installed app updates to one without its
+      # engine.
+      - name: Check the engine was bundled
+        run: test -f companion/src-tauri/target/release/engine/orchestrator.exe
+
+  publish-latest:
+    name: Point woofx3-latest at this release
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.check-version.outputs.version }}
+    steps:
+      # tauri-action writes API asset URLs (`/releases/assets/<id>`) into
+      # latest.json. The public download URL of the same asset needs no API
+      # call, so it is not subject to the API's rate limit for anonymous
+      # clients, and it names the release it belongs to.
+      - name: Point latest.json at this release's download URLs
+        run: |
+          mkdir release
+          gh release download "$TAG" --pattern latest.json --dir release
+          gh api "repos/${GH_REPO}/releases/tags/${TAG}" \
+            --jq '[.assets[] | {key: (.id | tostring), value: .name}] | from_entries' > release/asset-names.json
+          base="https://github.com/${GH_REPO}/releases/download/${TAG}/"
+          jq --arg base "$base" --arg version "$VERSION" --slurpfile names release/asset-names.json '
+            def asset_name:
+              if test("/releases/assets/[0-9]+$") then
+                $names[0][capture("/releases/assets/(?<id>[0-9]+)$").id]
+                  // error("latest.json names an asset this release does not have: \(.)")
+              elif startswith($base) then
+                ltrimstr($base)
+              else
+                error("latest.json has a download URL outside this release: \(.)")
+              end;
+            if (.version | ltrimstr("v")) != $version then
+              error("latest.json announces \(.version), not \($version)")
+            elif (.platforms["windows-x86_64"] | not) then
+              error("latest.json has no windows-x86_64 entry")
+            else
+              .platforms |= map_values(.url |= ($base + (asset_name | @uri)))
+            end
+          ' release/latest.json > release/latest.rewritten.json
+          mv release/latest.rewritten.json release/latest.json
+          cat release/latest.json
+          gh release upload "$TAG" release/latest.json --clobber
+
+      # woofx3-latest is a prerelease so it can never become the
+      # repository's "latest release": other releases in this repository must
+      # not be able to change what installed desktop apps update to.
+      - name: Publish latest.json to woofx3-latest
+        run: |
+          if gh release view "$LATEST_TAG" > /dev/null 2>&1; then
+            current="$(gh release download "$LATEST_TAG" --pattern latest.json --output - | jq -r '.version' || true)"
+            newest="$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -n 1)"
+            if [[ -n "$current" && "$current" != "$VERSION" && "$newest" != "$VERSION" ]]; then
+              echo "::error::${LATEST_TAG} already points at ${current}, which is newer than ${VERSION}"
+              exit 1
+            fi
+          else
+            gh release create "$LATEST_TAG" \
+              --prerelease \
+              --latest=false \
+              --target "$GITHUB_SHA" \
+              --title "woofx3 desktop app updates" \
+              --notes "Not a release to download. Installed desktop apps read latest.json here to find their next update."
+          fi
+          gh release edit "$LATEST_TAG" --prerelease
+          gh release upload "$LATEST_TAG" release/latest.json --clobber

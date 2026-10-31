@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogListingDetail, ListingPricing, ListingQuote } from "@convex/lib/marketplaceCatalog";
 import { installedVersionsByListing, laterEditionInstalled } from "@convex/lib/marketplaceInstallIdentity";
+import type { CatalogListingDetail, ListingPricing, ListingQuote } from "@shared/marketplace-catalog";
 import { type InstallStateInput, listingInstallState } from "./listing-install-state";
 
 const FREE: ListingPricing = { mode: "free" };
@@ -32,6 +32,7 @@ function listing(overrides: Partial<CatalogListingDetail> = {}): CatalogListingD
 function state(overrides: Partial<InstallStateInput> = {}) {
   return listingInstallState({
     listing: listing(),
+    purchases: true,
     quote: null,
     quoteLoading: false,
     quoteError: null,
@@ -181,6 +182,24 @@ describe("listingInstallState", () => {
 
   test("while the quote loads, a paid listing waits rather than guessing a price", () => {
     expect(state({ listing: listing({ pricing: PAID }), quoteLoading: true })).toEqual({ kind: "checking" });
+  });
+
+  test("with no purchases, a paid listing asks for a sign-in and no quote is waited for", () => {
+    const local = { purchases: false, quote: null, quoteLoading: false };
+    expect(state({ ...local, listing: listing({ pricing: PAID }) })).toEqual({ kind: "sign_in_to_buy" });
+    expect(state({ ...local, listing: listing({ pricing: FREE }) })).toEqual({ kind: "installable" });
+    expect(state({ ...local, listing: listing({ pricing: null }) })).toEqual({
+      kind: "unavailable",
+      reason: "unpriced",
+    });
+    expect(state({ ...local, listing: listing({ pricing: FREE, supersededBy: "counter-v2" }) })).toEqual({
+      kind: "unavailable",
+      reason: "superseded",
+      supersededBy: "counter-v2",
+    });
+    expect(state({ ...local, listing: listing({ pricing: PAID }), installedVersion: "1.2.0" })).toEqual({
+      kind: "installed",
+    });
   });
 
   test("a freshly installed bundle reads as installed", () => {

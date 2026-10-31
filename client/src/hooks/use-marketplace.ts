@@ -1,19 +1,26 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useMarketplaceAuthorRequest,
+  useMarketplaceCountsRequest,
+  useMarketplaceEntitlementsRequest,
+  useMarketplaceListingRequest,
+  useMarketplaceQuoteRequest,
+  useMarketplaceSearchRequest,
+} from "@/engine/hooks/use-marketplace";
 import type {
   AuthorPage,
   CatalogCounts,
   CatalogListingDetail,
   CatalogPage,
+  InstanceId,
   ListingQuote,
-  ListingType,
-} from "@convex/lib/marketplaceCatalog";
-import { useAction } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+  MarketplaceSearchQuery,
+} from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
+import { useMarketplaceMode } from "@/lib/marketplace-mode";
 
-// The marketplace catalog is served by a separate HTTP service through Convex
-// *actions*, not queries, so none of it is reactive. These hooks do the one
+// The marketplace catalog is a separate HTTP service, read through the engine
+// gateway's requests rather than subscriptions, so none of it is reactive. These hooks do the one
 // thing that matters as a result: they tie every fetched result to the inputs
 // it was fetched for, and never show a result belonging to a different
 // instance, query or listing. A stale render here is a streamer installing
@@ -32,21 +39,7 @@ export interface MarketplaceSearch {
   refetch: () => Promise<void>;
 }
 
-/** The orders the marketplace can return a page in. */
-export type MarketplaceSort = "relevance" | "newest" | "name" | "popular" | "trending";
-
-export interface MarketplaceSearchArgs {
-  query: string;
-  types: ListingType[];
-  category?: string;
-  /** Only curated listings, in `featuredRank` order. */
-  featured?: boolean;
-  sort: MarketplaceSort;
-  limit?: number;
-  offset?: number;
-}
-
-function sameSearch(a: MarketplaceSearchArgs, b: MarketplaceSearchArgs): boolean {
+function sameSearch(a: MarketplaceSearchQuery, b: MarketplaceSearchQuery): boolean {
   return (
     a.query === b.query &&
     a.category === b.category &&
@@ -66,20 +59,17 @@ function sameSearch(a: MarketplaceSearchArgs, b: MarketplaceSearchArgs): boolean
  * filter over a cached list. The debounce is in the caller (`useDebounced`
  * below) so typing does not fire a request per keystroke.
  */
-export function useMarketplaceSearch(
-  instanceId: Id<"instances"> | null,
-  args: MarketplaceSearchArgs
-): MarketplaceSearch {
-  const search = useAction(api.marketplaceCatalog.search);
+export function useMarketplaceSearch(instanceId: InstanceId | null, args: MarketplaceSearchQuery): MarketplaceSearch {
+  const search = useMarketplaceSearchRequest();
   const [fetched, setFetched] = useState<
-    (Fetched<MarketplaceSearchArgs, CatalogPage> & { instanceId: Id<"instances"> }) | null
+    (Fetched<MarketplaceSearchQuery, CatalogPage> & { instanceId: InstanceId }) | null
   >(null);
   const [loading, setLoading] = useState(false);
   // Keyed by the search as well as the instance: a failure belongs to the
   // request that failed, so changing the query or a filter asks again.
   const [error, setError] = useState<{
-    instanceId: Id<"instances">;
-    args: MarketplaceSearchArgs;
+    instanceId: InstanceId;
+    args: MarketplaceSearchQuery;
     message: string;
   } | null>(null);
 
@@ -98,16 +88,7 @@ export function useMarketplaceSearch(
     setLoading(true);
     setError(null);
     try {
-      const page = await search({
-        instanceId,
-        query: stableArgs.query || undefined,
-        types: stableArgs.types.length > 0 ? stableArgs.types : undefined,
-        category: stableArgs.category,
-        featured: stableArgs.featured,
-        sort: stableArgs.sort,
-        limit: stableArgs.limit,
-        offset: stableArgs.offset,
-      });
+      const page = await search(stableArgs);
       setFetched({ instanceId, args: stableArgs, result: page });
     } catch (err) {
       setError({ instanceId, args: stableArgs, message: actionErrorMessage(err) });
@@ -142,13 +123,10 @@ export interface MarketplaceListing {
 }
 
 /** One listing's detail page. */
-export function useMarketplaceListing(
-  instanceId: Id<"instances"> | null,
-  listingId: string | null
-): MarketplaceListing {
-  const getListing = useAction(api.marketplaceCatalog.getListing);
+export function useMarketplaceListing(instanceId: InstanceId | null, listingId: string | null): MarketplaceListing {
+  const getListing = useMarketplaceListingRequest();
   const [fetched, setFetched] = useState<{
-    instanceId: Id<"instances">;
+    instanceId: InstanceId;
     listingId: string;
     result: CatalogListingDetail | null;
   } | null>(null);
@@ -162,7 +140,7 @@ export function useMarketplaceListing(
     setLoading(true);
     setError(null);
     try {
-      setFetched({ instanceId, listingId, result: await getListing({ instanceId, listingId }) });
+      setFetched({ instanceId, listingId, result: await getListing(listingId) });
     } catch (err) {
       setError({ listingId, message: actionErrorMessage(err) });
     } finally {
@@ -211,8 +189,8 @@ const AUTHOR_PAGE_SIZE = 48;
  * marketplace pages the listings itself, so an author with hundreds of them
  * costs one page to open.
  */
-export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: string | null): MarketplaceAuthorResult {
-  const getAuthor = useAction(api.marketplaceCatalog.getAuthor);
+export function useMarketplaceAuthor(instanceId: InstanceId | null, slug: string | null): MarketplaceAuthorResult {
+  const getAuthor = useMarketplaceAuthorRequest();
   const [fetched, setFetched] = useState<{ key: string; result: AuthorPage | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -229,7 +207,7 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
     }
     let cancelled = false;
     setLoading(true);
-    void getAuthor({ instanceId, slug, limit: AUTHOR_PAGE_SIZE, offset: 0 })
+    void getAuthor(slug, { limit: AUTHOR_PAGE_SIZE, offset: 0 })
       .then((result) => {
         if (!cancelled) {
           setFetched({ key, result });
@@ -260,7 +238,7 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
     setLoadingMore(true);
     setMoreError(null);
     try {
-      const next = await getAuthor({ instanceId, slug, limit: AUTHOR_PAGE_SIZE, offset: page.listings.length });
+      const next = await getAuthor(slug, { limit: AUTHOR_PAGE_SIZE, offset: page.listings.length });
       if (next) {
         // Ids already shown are dropped, in case a publish shifted the pages.
         const seen = new Set(page.listings.map((l) => l.id));
@@ -302,14 +280,16 @@ export interface MarketplaceQuote {
  * What this account must do to hold one listing, as the marketplace decides
  * it: owned, free, an upgrade price, the full price, or unavailable. The
  * listing page's button reads nothing else, because only the marketplace
- * knows what the account holds.
+ * knows what the account holds. Nothing is asked in a mode with no
+ * purchases, where there is no account to quote for.
  */
-export function useMarketplaceQuote(instanceId: Id<"instances"> | null, listingId: string | null): MarketplaceQuote {
-  const getQuote = useAction(api.marketplaceCatalog.quote);
+export function useMarketplaceQuote(instanceId: InstanceId | null, listingId: string | null): MarketplaceQuote {
+  const { purchases } = useMarketplaceMode();
+  const getQuote = useMarketplaceQuoteRequest();
   const [fetched, setFetched] = useState<{ key: string; quote: ListingQuote | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
-  const key = instanceId && listingId ? `${instanceId}:${listingId}` : null;
+  const key = purchases && instanceId && listingId ? `${instanceId}:${listingId}` : null;
 
   const refetch = useCallback(async () => {
     if (!instanceId || !listingId || !key) {
@@ -318,7 +298,7 @@ export function useMarketplaceQuote(instanceId: Id<"instances"> | null, listingI
     setLoading(true);
     setError(null);
     try {
-      setFetched({ key, quote: await getQuote({ instanceId, listingId }) });
+      setFetched({ key, quote: await getQuote(listingId) });
     } catch (err) {
       setError({ key, message: actionErrorMessage(err) });
     } finally {
@@ -337,7 +317,7 @@ export function useMarketplaceQuote(instanceId: Id<"instances"> | null, listingI
 
   return {
     quote: current?.quote ?? null,
-    loading: current === null && currentError === null,
+    loading: purchases && current === null && currentError === null,
     error: currentError,
     refetch,
   };
@@ -361,22 +341,24 @@ export interface MarketplaceEntitlements {
  * Which paid listings this account owns.
  *
  * Fetched once for a whole grid rather than per card: every button on the page
- * is answered by one request.
+ * is answered by one request. A mode with no purchases owns nothing and asks
+ * nothing.
  */
-export function useMarketplaceEntitlements(instanceId: Id<"instances"> | null): MarketplaceEntitlements {
-  const list = useAction(api.marketplaceCatalog.entitlements);
-  const [fetched, setFetched] = useState<{ instanceId: Id<"instances">; ids: string[] } | null>(null);
+export function useMarketplaceEntitlements(instanceId: InstanceId | null): MarketplaceEntitlements {
+  const { purchases } = useMarketplaceMode();
+  const list = useMarketplaceEntitlementsRequest();
+  const [fetched, setFetched] = useState<{ instanceId: InstanceId; ids: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<{ instanceId: Id<"instances">; message: string } | null>(null);
+  const [error, setError] = useState<{ instanceId: InstanceId; message: string } | null>(null);
 
   const refetch = useCallback(async () => {
-    if (!instanceId) {
+    if (!purchases || !instanceId) {
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      setFetched({ instanceId, ids: await list({ instanceId }) });
+      setFetched({ instanceId, ids: await list() });
     } catch (err) {
       setError({
         instanceId,
@@ -385,19 +367,19 @@ export function useMarketplaceEntitlements(instanceId: Id<"instances"> | null): 
     } finally {
       setLoading(false);
     }
-  }, [list, instanceId]);
+  }, [list, purchases, instanceId]);
 
   const ids = fetched && fetched.instanceId === instanceId ? fetched.ids : null;
   const currentError = error && error.instanceId === instanceId ? error.message : null;
 
   useEffect(() => {
-    if (instanceId && ids === null && !loading && !currentError) {
+    if (purchases && instanceId && ids === null && !loading && !currentError) {
       void refetch();
     }
-  }, [instanceId, ids, loading, currentError, refetch]);
+  }, [purchases, instanceId, ids, loading, currentError, refetch]);
 
   const owned = useMemo(() => new Set(ids ?? []), [ids]);
-  return { owned, loading: ids === null && currentError === null, error: currentError, refetch };
+  return { owned, loading: purchases && ids === null && currentError === null, error: currentError, refetch };
 }
 
 export interface MarketplaceCounts {
@@ -414,11 +396,11 @@ export interface MarketplaceCounts {
  * back to counting the listings the page already has, which is a smaller
  * number but never a wrong-looking page.
  */
-export function useMarketplaceCounts(instanceId: Id<"instances"> | null): MarketplaceCounts {
-  const read = useAction(api.marketplaceCatalog.counts);
-  const [fetched, setFetched] = useState<{ instanceId: Id<"instances">; counts: CatalogCounts | null } | null>(null);
+export function useMarketplaceCounts(instanceId: InstanceId | null): MarketplaceCounts {
+  const read = useMarketplaceCountsRequest();
+  const [fetched, setFetched] = useState<{ instanceId: InstanceId; counts: CatalogCounts | null } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState<Id<"instances"> | null>(null);
+  const [failed, setFailed] = useState<InstanceId | null>(null);
 
   const matches = fetched !== null && fetched.instanceId === instanceId;
 
@@ -428,7 +410,7 @@ export function useMarketplaceCounts(instanceId: Id<"instances"> | null): Market
     }
     let cancelled = false;
     setLoading(true);
-    void read({ instanceId })
+    void read()
       .then((counts) => {
         if (!cancelled) {
           setFetched({ instanceId, counts });

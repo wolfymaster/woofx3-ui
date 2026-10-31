@@ -1,9 +1,11 @@
+import { DESKTOP_SIGN_IN_PAGE_PATH } from "@convex/lib/twitchSignIn";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation, useSearch } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { AccountViewerName } from "@/components/layout/account-viewer-name";
 import { AdminOnly } from "@/components/layout/admin-only";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { USER_PAGE_PATH } from "@/components/layout/nav-config";
@@ -21,7 +23,10 @@ import {
   COMMAND_GROUPS_PATH,
   COMMAND_NEW_ROUTE,
 } from "@/lib/command-editor-route";
+import { IS_DESKTOP } from "@/lib/desktop";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
+import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
+import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import {
   legacyModulesRedirect,
   MARKETPLACE_AUTHOR_ROUTE,
@@ -51,6 +56,7 @@ const Login = lazy(() => import("@/pages/auth/login"));
 const Onboarding = lazy(() => import("@/pages/auth/onboarding"));
 const Register = lazy(() => import("@/pages/auth/register"));
 const TwitchCallback = lazy(() => import("@/pages/auth/twitch-callback"));
+const TwitchDesktopSignIn = lazy(() => import("@/pages/auth/twitch-desktop"));
 const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
@@ -81,6 +87,10 @@ const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const UserPage = lazy(() => import("@/pages/user-page"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
+
+// In the desktop app, signing in makes the computer the instance's companion.
+// IS_DESKTOP is a build constant, so the web build carries none of it.
+const DesktopAppLink = IS_DESKTOP ? lazy(() => import("@/desktop/AppLink")) : null;
 
 function SplashScreen() {
   return (
@@ -188,6 +198,7 @@ function AppRoutes() {
       <Route path="/auth/login" component={Login} />
       <Route path="/auth/register" component={Register} />
       <Route path="/auth/twitch/callback" component={TwitchCallback} />
+      <Route path={DESKTOP_SIGN_IN_PAGE_PATH} component={TwitchDesktopSignIn} />
       <Route path="/auth/accept-invite" component={AcceptInvite} />
       <Route path="/auth/onboarding">
         <AuthGuard>
@@ -384,12 +395,21 @@ function App() {
       */}
       <ConvexAuthProvider client={convex} shouldHandleCode={false}>
         <EngineGatewayProvider gateway={hostedEngineGateway}>
-          <TooltipProvider>
-            <Suspense fallback={<SplashScreen />}>
-              <AppRoutes />
-            </Suspense>
-            <Toaster />
-          </TooltipProvider>
+          <AccountViewerName>
+            <MarketplaceModeProvider mode={hostedMarketplaceMode}>
+              <TooltipProvider>
+                <Suspense fallback={<SplashScreen />}>
+                  <AppRoutes />
+                </Suspense>
+                {DesktopAppLink && (
+                  <Suspense fallback={null}>
+                    <DesktopAppLink />
+                  </Suspense>
+                )}
+                <Toaster />
+              </TooltipProvider>
+            </MarketplaceModeProvider>
+          </AccountViewerName>
         </EngineGatewayProvider>
       </ConvexAuthProvider>
     </ErrorBoundary>

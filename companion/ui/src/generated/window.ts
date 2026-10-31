@@ -9,9 +9,10 @@ export type CompanionState = { "kind": "starting" } | { "kind": "offline" } | { 
 
 /**
  * A newer release, downloaded and verified, that installs on Restart to
- * update.
+ * update. `product_name` is the running app's, which the window names the
+ * update with.
  */
-export type ReadyUpdate = { version: string, };
+export type ReadyUpdate = { productName: string, version: string, };
 
 /**
  * What the window renders: where pairing stands, plus the update waiting to
@@ -170,6 +171,28 @@ export type HostModeKind = "local" | "companion";
 export type HostModeView = { mode: HostModeKind, chosen: boolean, };
 
 /**
+ * A confirmed pairing's instance. `instance_id` is missing only for a
+ * pairing stored before the id was kept, until Convex next names it.
+ */
+export type LinkedInstance = { instanceId: string | null, instanceName: string, };
+
+/**
+ * What the dashboard needs to decide whether to make this computer the
+ * companion of the instance it is signed in to, and to ask Convex to.
+ */
+export type CompanionLinkStatus = { 
+/**
+ * The instance this computer is the confirmed companion of, if any.
+ */
+linked: LinkedInstance | null, installationId: string, deviceName: string, companionVersion: string, };
+
+/**
+ * A fresh companion token, held by the host until the link finishes. Only
+ * its hash leaves the host, with the details Convex records beside it.
+ */
+export type AppLinkStart = { tokenHash: string, installationId: string, deviceName: string, companionVersion: string, };
+
+/**
  * Turns an integration endpoint on or off. On needs an address,
  * discovered or confirmed.
  */
@@ -200,6 +223,18 @@ export type ReorderShoutoutsArgs = { entryIds: Array<ShoutoutEntryId>, };
  * The mode the streamer chose the first time the app ran.
  */
 export type ChooseHostModeArgs = { mode: HostModeKind, };
+
+/**
+ * The instance the signed-in dashboard made this computer the companion
+ * of, as Convex named it when it recorded the link.
+ */
+export type FinishAppLinkArgs = { instanceId: string, instanceName: string, };
+
+/**
+ * The hash of the nonce the dashboard keeps for a Twitch sign-in, which
+ * binds the sign-in to this app (core/src/twitch_sign_in.rs).
+ */
+export type OpenTwitchSignInArgs = { nonceHash: string, };
 
 export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
@@ -232,6 +267,10 @@ export const COMMANDS = {
   request_stream_start_marker: "request_stream_start_marker",
   host_mode: "host_mode",
   choose_host_mode: "choose_host_mode",
+  companion_link_status: "companion_link_status",
+  begin_app_link: "begin_app_link",
+  finish_app_link: "finish_app_link",
+  open_twitch_sign_in: "open_twitch_sign_in",
 } as const;
 
 export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
@@ -262,6 +301,10 @@ export type CommandArgs = {
   request_stream_start_marker: null;
   host_mode: null;
   choose_host_mode: ChooseHostModeArgs;
+  companion_link_status: null;
+  begin_app_link: null;
+  finish_app_link: FinishAppLinkArgs;
+  open_twitch_sign_in: OpenTwitchSignInArgs;
 };
 
 /** What each command resolves to. */
@@ -290,4 +333,8 @@ export type CommandResults = {
   request_stream_start_marker: MarkerRequestOutcome;
   host_mode: HostModeView;
   choose_host_mode: void;
+  companion_link_status: CompanionLinkStatus;
+  begin_app_link: AppLinkStart;
+  finish_app_link: void;
+  open_twitch_sign_in: void;
 };

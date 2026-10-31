@@ -1,4 +1,4 @@
-import type { TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
+import type { TwitchScopeHealth } from "@shared/twitch-scope-health";
 
 /** What the reconnect prompt says for a link that needs one, or null when it does not. */
 export function twitchReconnectMessage(health: TwitchScopeHealth): string | null {
