@@ -784,7 +784,9 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
 
 #[cfg(test)]
 mod tests {
-    use woofx3_companion_core::window::{COMMAND_NAMES, DASHBOARD_COMMAND_NAMES};
+    use woofx3_companion_core::window::{
+        COMMAND_NAMES, DASHBOARD_COMMAND_NAMES, SHARED_COMMAND_NAMES,
+    };
 
     use super::convex_url::check_convex_url;
 
@@ -815,8 +817,12 @@ mod tests {
         assert!(DASHBOARD_COMMAND_NAMES
             .iter()
             .all(|name| COMMAND_NAMES.contains(name)));
+        assert!(SHARED_COMMAND_NAMES
+            .iter()
+            .all(|name| COMMAND_NAMES.contains(name) && !DASHBOARD_COMMAND_NAMES.contains(name)));
         let expected_dashboard: Vec<String> = DASHBOARD_COMMAND_NAMES
             .iter()
+            .chain(SHARED_COMMAND_NAMES)
             .map(|name| permission(name))
             .collect();
         let expected_companion: Vec<String> = COMMAND_NAMES

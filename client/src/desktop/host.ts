@@ -5,6 +5,8 @@ import {
   type FinishAppLinkArgs,
   type HostModeKind,
   type HostModeView,
+  INTEGRATIONS_EVENT,
+  type IntegrationsView,
   type LocalEngineSession,
   type MarkerRequestOutcome,
   SHOUTOUT_QUEUE_EVENT,
@@ -94,6 +96,23 @@ export async function requestStreamStartMarker(): Promise<MarkerRequestOutcome> 
 
 export function onStreamStartMarkerChange(handler: (marker: StreamStartMarker) => void): Promise<() => void> {
   return listen<StreamStartMarker>(STREAM_START_MARKER_EVENT, (event) => handler(event.payload));
+}
+
+// ==================== The relay ====================
+// Signed in to an account, a cloud engine reaches this computer's local apps
+// through the relay. Outside companion mode the view reports it as not needed.
+
+export async function integrations(): Promise<IntegrationsView> {
+  return call(COMMANDS.get_integrations);
+}
+
+export function onIntegrationsChange(handler: (view: IntegrationsView) => void): Promise<() => void> {
+  return listen<IntegrationsView>(INTEGRATIONS_EVENT, (event) => handler(event.payload));
+}
+
+/** Connects again after another connection displaced the relay or woofx3 refused it. */
+export async function reconnectRelay(): Promise<void> {
+  await call(COMMANDS.reconnect_relay);
 }
 
 // ==================== Linking the companion ====================
