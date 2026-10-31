@@ -1,16 +1,16 @@
-import { TWITCH_INTEGRATION_SCOPES } from "./twitchIntegrationScopes";
+import { TWITCH_INTEGRATION_SCOPES } from "./twitch-integration-scopes";
 
 /**
  * Whether an instance's Twitch link can still do everything the app asks of it.
  *
  * A link keeps the scopes Twitch granted when it was made. Adding a scope to
  * TWITCH_INTEGRATION_SCOPES does not reach links made before, and a token
- * revoked on Twitch's side keeps its row here; both show up only as a 401 on
+ * revoked on Twitch's side leaves the link in place; both show up only as a 401 on
  * whichever call needs them. This names the gap up front, in the creator's
  * words rather than Twitch's scope strings.
  *
- * Shared by the shell banner and the integrations page, so it stays free of
- * Convex server imports.
+ * Shared by Convex and the dashboard, whichever gateway it runs on, so it
+ * imports nothing of either.
  */
 
 export interface TwitchCapability {
@@ -27,7 +27,7 @@ export interface TwitchCapability {
 
 /**
  * Every scope in TWITCH_INTEGRATION_SCOPES belongs to exactly one capability;
- * twitchScopeHealth.test.ts holds that invariant so a new scope cannot be
+ * twitch-scope-health.test.ts holds that invariant so a new scope cannot be
  * requested without the banner being able to name it.
  */
 export const TWITCH_CAPABILITIES: readonly TwitchCapability[] = [

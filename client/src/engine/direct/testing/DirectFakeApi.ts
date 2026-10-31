@@ -7,7 +7,10 @@ import type {
   CommandSnapshot,
   CreateCommandInput,
   EngineModuleSummary,
+  EventLogPage,
+  EventLogQuery,
   FieldOptionsReference,
+  GroupSnapshot,
   Leaderboard,
   LeaderboardQuery,
   MarketplaceAuthorQuery,
@@ -81,6 +84,8 @@ import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngin
 type DirectFakeSurface = Pick<
   Woofx3EngineApi,
   | "listCommands"
+  | "listGroups"
+  | "listEvents"
   | "createCommand"
   | "getStreamStatus"
   | "listStreamSessions"
@@ -183,6 +188,9 @@ interface StreamSubscription {
 /** What the fake engine holds, shared by every session a test opens. */
 export class FakeEngineState {
   commands: CommandSnapshot[] = [];
+  groups: GroupSnapshot[] = [];
+  /** The engine's event log, newest first. */
+  events: StreamEventFrame[] = [];
   alerts: AlertSnapshot[] = [];
   streamStatus: StreamStatus = { isLive: false, uptime: "", viewerCount: 0 };
   /** Newest first. */
@@ -307,6 +315,23 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     this.state.record("listCommands");
     await this.engine.answering("listCommands");
     return this.state.commands;
+  }
+
+  async listGroups(): Promise<GroupSnapshot[]> {
+    this.state.record("listGroups");
+    return this.state.groups;
+  }
+
+  /** Pages `state.events` by position: the cursor is the index of the next event. */
+  async listEvents(query?: EventLogQuery): Promise<EventLogPage> {
+    this.state.record("listEvents", query);
+    const start = query?.cursor === undefined ? 0 : Number(query.cursor);
+    const limit = query?.limit ?? 50;
+    const matching = this.state.events.filter(
+      (event) => query?.types === undefined || query.types.length === 0 || query.types.includes(event.type)
+    );
+    const events = matching.slice(start, start + limit);
+    return { events, nextCursor: start + limit < matching.length ? String(start + limit) : null };
   }
 
   async createCommand(data: CreateCommandInput): Promise<CommandSnapshot> {

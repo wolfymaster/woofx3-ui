@@ -27,7 +27,7 @@ Widgets that follow this: `pinned` (history), `shoutout` (queue) and `moderation
 
 ## Context
 
-The dashboard runs in two modes: the hosted app, with Convex, and the desktop app's local mode, which reaches one engine directly and has no Convex client. Some widgets are built on data only Convex keeps (the go-live checklist, pin history, the shoutout queue, stream info presets, macros' remote trigger URLs). Loading one of them in local mode would throw, and `client/src/desktop/local-routes.test.ts` fails if anything local mode imports reaches Convex.
+The dashboard runs in two modes: the hosted app, with Convex, and the desktop app's local mode, which reaches one engine directly and has no Convex client. Some widgets are built on data only Convex keeps (pin history, macros' remote trigger URLs). Loading one of them in local mode would throw, and `client/src/desktop/local-routes.test.ts` fails if anything local mode imports reaches Convex.
 
 ## Decision
 

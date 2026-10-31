@@ -7,7 +7,7 @@ import {
   type StarterPack,
   type StarterStep,
   starterItemKey,
-} from "@convex/lib/starterPacks";
+} from "@shared/starter-packs";
 import type { StarterPackItemState } from "@/engine/types";
 
 export type StarterItemView =

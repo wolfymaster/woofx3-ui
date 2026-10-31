@@ -1,5 +1,6 @@
-import type { MissingTwitchCapability, TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
+import type { MissingTwitchCapability, TwitchScopeHealth } from "@shared/twitch-scope-health";
 import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
+import { TwitchApprovalCode } from "@/components/settings/twitch-approval-code";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
@@ -14,7 +15,7 @@ interface TwitchScopeStatusProps {
 
 /** Which Twitch permissions the linked account granted, with a way to fix a gap. */
 export function TwitchScopeStatus({ health, platformUsername, canRelink }: TwitchScopeStatusProps) {
-  const { connect, starting, error: connectError } = useTwitchConnect();
+  const { connect, cancel, starting, error: connectError, linking } = useTwitchConnect();
 
   if (health.state === "unlinked") {
     return null;
@@ -55,6 +56,7 @@ export function TwitchScopeStatus({ health, platformUsername, canRelink }: Twitc
             <p>Every required permission is granted. Reconnect to add these optional ones:</p>
             <OptionalCapabilityBadges capabilities={health.optionalMissing} />
             {connectError && <p className="text-destructive">{connectError}</p>}
+            <TwitchApprovalCode linking={linking} onCancel={cancel} />
           </div>
         </div>
         {reconnect}
@@ -91,6 +93,7 @@ export function TwitchScopeStatus({ health, platformUsername, canRelink }: Twitc
             </>
           )}
           {connectError && <p className="text-destructive">{connectError}</p>}
+          <TwitchApprovalCode linking={linking} onCancel={cancel} />
         </div>
       </div>
       {reconnect}

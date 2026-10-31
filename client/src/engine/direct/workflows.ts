@@ -46,7 +46,7 @@ import { readAllWorkflows } from "./workflow-pages";
 /** The reason a run stopped from the dashboard carries, as the Convex gateway gives it. */
 const CANCEL_REASON = "Cancelled from the dashboard";
 
-function workflowsRead(runtime: DirectRuntime): EngineRead<Workflow[]> {
+export function workflowsRead(runtime: DirectRuntime): EngineRead<Workflow[]> {
   return {
     queryKey: k.workflows.list(),
     queryFn: async () =>
@@ -67,7 +67,7 @@ function workflowRead(runtime: DirectRuntime, engineWorkflowId: string): EngineR
   };
 }
 
-function catalogRead(runtime: DirectRuntime): EngineRead<WorkflowCatalog> {
+export function catalogRead(runtime: DirectRuntime): EngineRead<WorkflowCatalog> {
   return {
     queryKey: k.workflows.catalog(),
     queryFn: async () => {

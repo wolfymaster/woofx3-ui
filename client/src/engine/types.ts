@@ -1832,8 +1832,8 @@ export interface GoLiveOverlayFacts {
   hasScene: boolean;
   /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
   browserSourceKeyCount: number;
-  /** The key most recently loaded by a browser source, else the newest one. */
-  featuredKey: string | null;
+  /** The browser-source URL to offer for OBS: the one a browser source loaded most recently, else the newest. */
+  featuredUrl: string | null;
   /** When any browser source last loaded one of those keys, in epoch ms. */
   lastLoadedAt: number | null;
 }
