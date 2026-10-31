@@ -37,6 +37,7 @@ const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
 const Dashboard = lazy(() => import("./LocalDashboard"));
+const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Marketplace = lazy(() => import("@/pages/marketplace"));
 const MarketplaceAuthor = lazy(() => import("@/pages/marketplace-author"));
@@ -87,6 +88,7 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/workflows/:id", render: () => <Workflows /> },
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
+  { path: "/stream/go-live", render: () => <GoLive /> },
   { path: MARKETPLACE_AUTHOR_ROUTE, render: () => <MarketplaceAuthor /> },
   { path: MARKETPLACE_LISTING_ROUTE, render: () => <MarketplaceListing /> },
   { path: MARKETPLACE_PATH, render: () => <Marketplace /> },
