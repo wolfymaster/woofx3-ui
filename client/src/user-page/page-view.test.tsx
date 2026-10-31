@@ -322,39 +322,6 @@ describe("widgets", () => {
     );
     expect(html).toBe("");
   });
-
-  test("a form shows its questions disabled and says it is not taking answers", () => {
-    const html = render(
-      <PageWidgetView
-        widget={{
-          id: "f",
-          type: "form",
-          config: {
-            title: "Song requests",
-            submitLabel: "Request",
-            fields: [
-              { id: "song", type: "text", label: "Song", required: true, maxLength: 100 },
-              { id: "why", type: "textarea", label: "Why", required: false, maxLength: 500 },
-              {
-                id: "mood",
-                type: "select",
-                label: "Mood",
-                required: false,
-                options: [{ value: "hype", label: "Hype" }],
-              },
-              { id: "ok", type: "checkbox", label: "I follow", required: false },
-            ],
-          },
-        }}
-      />
-    );
-    expect(html).toContain("Song requests");
-    expect(html).toContain("<fieldset disabled");
-    expect(html).toContain("This form isn&#x27;t taking answers yet.");
-    for (const label of ["Song", "Why", "Hype", "I follow", "Request"]) {
-      expect(html).toContain(label);
-    }
-  });
 });
 
 describe("documentTitle", () => {

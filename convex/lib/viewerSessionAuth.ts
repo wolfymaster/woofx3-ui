@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { hashOpaqueToken, isOpaqueToken } from "./oauthHandoff";
+import type { PageViewer } from "./sectionAccess";
 import { isViewerPlatform, type ViewerPlatform, type ViewerRoles } from "./viewerAuth";
 
 /**
@@ -103,4 +104,32 @@ export async function broadcasterForInstance(ctx: QueryCtx, instanceId: Id<"inst
     }
   }
   return null;
+}
+
+/** `viewer` as section visibility sees them on the page of `instanceId`; null is an anonymous visitor. */
+export async function pageViewerFor(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  viewer: Doc<"viewers"> | null
+): Promise<PageViewer> {
+  if (!viewer) {
+    return { kind: "anonymous" };
+  }
+  const broadcaster = await broadcasterForInstance(ctx, instanceId);
+  if (!broadcaster || broadcaster.platform !== viewer.platform) {
+    return { kind: "signed_in", roles: { kind: "uncheckable" } };
+  }
+  const roles = await viewerRolesFor(ctx, viewer._id, broadcaster.platformUserId);
+  if (!roles) {
+    return { kind: "signed_in", roles: { kind: "unknown" } };
+  }
+  return {
+    kind: "signed_in",
+    roles: {
+      kind: "known",
+      follower: roles.follower,
+      subscriberTier: roles.subscriberTier,
+      checkedAt: roles.checkedAt,
+    },
+  };
 }

@@ -14,9 +14,14 @@ import { components } from "../_generated/api";
  * platform. The role cache already answers repeat views, so the bucket covers
  * a viewer moving between many channels and stops a script holding one
  * session from spending that viewer's platform quota.
+ *
+ * Form submissions are keyed by the signed-in viewer. Anonymous ones have no
+ * key here: the edge limits them per client address, and Turnstile stands in
+ * for an identity.
  */
 export const viewerRateLimiter = new RateLimiter(components.rateLimiter, {
   viewerLoginStart: { kind: "token bucket", rate: 6000, period: HOUR, capacity: 600 },
   viewerHandoffExchange: { kind: "token bucket", rate: 6000, period: HOUR, capacity: 600 },
   viewerRolesRefresh: { kind: "token bucket", rate: 120, period: HOUR, capacity: 20 },
+  viewerFormSubmit: { kind: "token bucket", rate: 30, period: HOUR, capacity: 5 },
 });

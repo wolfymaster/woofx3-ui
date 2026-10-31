@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { checkPageContent, type FormField, USER_PAGE_LIMITS } from "@shared/user-pages";
 import {
+  formAnswerReference,
   formFieldOfType,
   newFormField,
   nudge,
@@ -9,6 +10,10 @@ import {
   replaceAt,
   widgetSummary,
 } from "@/lib/user-page-widgets";
+
+test("formAnswerReference is the path the form trigger's data takes", () => {
+  expect(formAnswerReference("a-1")).toBe("${trigger.data.answers.a-1}");
+});
 
 describe("newFormField", () => {
   test("passes the shared checks once it has a question", () => {

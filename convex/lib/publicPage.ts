@@ -20,6 +20,8 @@ export interface PublicPageSources {
   states: ReadonlyMap<string, PublicResourceState>;
   /** The instance's live state, or null when it has none. */
   live: Pick<Doc<"instanceLiveState">, "isLive" | "streamTitle" | "gameName" | "viewerCount"> | null;
+  /** Whether this page's forms can take an answer from this viewer right now. */
+  formsAccepting: boolean;
 }
 
 /** Only the facts the widget is set to show; nothing at all about the stream while it is offline. */
@@ -50,10 +52,11 @@ function toPublicWidget(widget: PageWidget, sources: PublicPageSources): PublicP
     }
     case "live-status":
       return { ...widget, live: toPublicLiveStatus(widget.config, sources.live) };
+    case "form":
+      return { ...widget, accepting: sources.formsAccepting };
     case "text":
     case "links":
     case "image":
-    case "form":
       return widget;
   }
 }

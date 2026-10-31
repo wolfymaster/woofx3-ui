@@ -59,6 +59,7 @@ import {
 } from "./lib/webhookTransients";
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
+import { registerUserPageFormRoutes } from "./userPageFormsHttp";
 import { registerViewerAuthRoutes } from "./viewerAuthHttp";
 import "./browserSource";
 import "./moduleWebhook";
@@ -1522,6 +1523,7 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "POST", handler: mac
 http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macroTriggerHandler });
 
 registerViewerAuthRoutes(http);
+registerUserPageFormRoutes(http);
 
 export default http;
 
