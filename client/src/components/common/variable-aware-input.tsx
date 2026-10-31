@@ -13,9 +13,18 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { EXPRESSION_FUNCTION_CAPABILITIES } from "@/lib/engine-capabilities";
 import { cn } from "@/lib/utils";
-import { toDisplayText, toStoredText, variableNames } from "@/lib/variable-display";
-import { flattenVariableMenu, insertVariableReference, variableMenuGroups } from "@/lib/variable-menu";
+import { expressionProblem, toDisplayText, toStoredText, variableNames } from "@/lib/variable-display";
+import {
+  findTypedReference,
+  flattenVariableMenu,
+  functionMenuGroup,
+  insertMenuItem,
+  type TypedReference,
+  variableMenuGroups,
+} from "@/lib/variable-menu";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
@@ -24,33 +33,13 @@ import type { VariableOption } from "@/lib/workflow-variables";
  * button, searches from a box of its own, and stays open with no matches so the
  * search can be corrected.
  */
-interface VariableMenu {
+interface VariableMenu extends TypedReference {
   source: "typed" | "browse";
-  /** Index in the displayed text where the inserted reference will start. */
-  start: number;
-  /** Index in the displayed text where the replaced range ends. */
-  end: number;
-  query: string;
 }
 
-/**
- * If the cursor sits inside an unclosed "{...", returns where it started and what's been
- * typed since. A "}" or newline between the "{" and the cursor means it's already closed
- * (or the user moved on), so no menu.
- */
-function findTypedReference(text: string, cursor: number): VariableMenu | null {
-  const uptoCursor = text.slice(0, cursor);
-  const brace = uptoCursor.lastIndexOf("{");
-  if (brace === -1) {
-    return null;
-  }
-  const since = uptoCursor.slice(brace + 1);
-  if (since.includes("}") || since.includes("\n")) {
-    return null;
-  }
-  // Someone used to the engine's syntax types "${"; the "$" goes with the reference it opens.
-  const start = brace > 0 && uptoCursor[brace - 1] === "$" ? brace - 1 : brace;
-  return { source: "typed", start, end: cursor, query: since };
+function typedMenu(text: string, cursor: number, functions: boolean): VariableMenu | null {
+  const typed = findTypedReference(text, cursor, functions);
+  return typed && { ...typed, source: "typed" };
 }
 
 interface VariableAwareInputProps {
@@ -74,6 +63,10 @@ interface VariableAwareInputProps {
  * shows each known one by its short name, `{firstName}` (see variable-display.ts).
  * Typing "{", or pressing the field's variable button, opens a menu of the variables
  * available at this point in the workflow, and choosing one inserts its short name.
+ *
+ * On an engine that runs them, the menu also offers functions, written
+ * `{round(amount, 2)}`. Not where the variables are a library alert's `{{id}}` inputs:
+ * those are substituted into the text rather than resolved as expressions.
  */
 export function VariableAwareInput({
   id,
@@ -98,10 +91,20 @@ export function VariableAwareInput({
   const names = useMemo(() => variableNames(availableVariables), [availableVariables]);
   const displayed = toDisplayText(value, names);
   const hasVariables = availableVariables.length > 0;
+  const engineSupportsFunctions = useEngineCapabilities().support(...EXPRESSION_FUNCTION_CAPABILITIES) === "supported";
+  const functions =
+    engineSupportsFunctions && hasVariables && availableVariables.every((option) => option.value.startsWith("${"));
+  const problem = functions ? expressionProblem(value, displayed, names) : null;
 
   const groups = useMemo(
-    () => (menu ? variableMenuGroups(availableVariables, names, menu.query) : []),
-    [menu, availableVariables, names]
+    () =>
+      menu
+        ? [
+            ...variableMenuGroups(availableVariables, names, menu.query),
+            ...(functions ? functionMenuGroup(menu.query) : []),
+          ]
+        : [],
+    [menu, availableVariables, names, functions]
   );
   const items = useMemo(() => flattenVariableMenu(groups), [groups]);
   const activePosition = Math.min(activeIndex, items.length - 1);
@@ -129,9 +132,9 @@ export function VariableAwareInput({
   };
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    onChange(toStoredText(e.target.value, names));
+    onChange(toStoredText(e.target.value, names, { functions }));
     rememberSelection(e.target);
-    updateMenu(findTypedReference(e.target.value, e.target.selectionStart ?? e.target.value.length));
+    updateMenu(typedMenu(e.target.value, e.target.selectionStart ?? e.target.value.length, functions));
   };
 
   // Moving the cursor into or out of an unclosed "{" opens or closes the menu, as typing does.
@@ -141,7 +144,7 @@ export function VariableAwareInput({
     if (menu?.source === "browse") {
       return;
     }
-    updateMenu(findTypedReference(el.value, el.selectionStart ?? el.value.length));
+    updateMenu(typedMenu(el.value, el.selectionStart ?? el.value.length, functions));
   };
 
   const closeMenu = () => {
@@ -160,11 +163,14 @@ export function VariableAwareInput({
     }
     const end = displayed.length;
     const selection = lastSelection.current ?? { start: end, end };
+    const start = Math.min(selection.start, end);
     updateMenu({
       source: "browse",
-      start: Math.min(selection.start, end),
+      start,
       end: Math.min(selection.end, end),
       query: "",
+      // Inside a call's parentheses, what is chosen is one of its arguments.
+      argument: findTypedReference(displayed, start, functions)?.argument ?? false,
     });
   };
 
@@ -173,8 +179,8 @@ export function VariableAwareInput({
     if (!menu || !item) {
       return;
     }
-    const inserted = insertVariableReference(displayed, menu.start, menu.end, item.name);
-    onChange(toStoredText(inserted.text, names));
+    const inserted = insertMenuItem(displayed, menu, item);
+    onChange(toStoredText(inserted.text, names, { functions }));
     setMenu(null);
     lastSelection.current = { start: inserted.cursor, end: inserted.cursor };
     requestAnimationFrame(() => {
@@ -271,6 +277,11 @@ export function VariableAwareInput({
           )}
         </div>
       </PopoverAnchor>
+      {problem !== null && (
+        <p className="mt-1 text-xs text-destructive" data-testid={testId ? `${testId}-problem` : undefined}>
+          {problem}
+        </p>
+      )}
       <PopoverContent
         className="w-72 p-0"
         align="start"
@@ -343,7 +354,9 @@ export function VariableAwareInput({
                     onClick={() => choose(index)}
                     data-testid={`variable-option-${item.option.value}`}
                   >
-                    <span className="truncate font-mono text-xs">{`{${item.name}}`}</span>
+                    <span className="truncate font-mono text-xs">
+                      {item.callable?.signature ?? (menu?.argument ? item.name : `{${item.name}}`)}
+                    </span>
                     {item.option.type && (
                       <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
                         {item.option.type}
