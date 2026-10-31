@@ -9,13 +9,14 @@ import {
   TIMER_WIDGET,
   USER_PAGE_LIMITS,
 } from "@shared/user-pages";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FieldProblems } from "@/components/user-page/field-problems";
 import { FieldFrame, SwitchField, TextField } from "@/components/user-page/fields";
 import { ResourcePicker } from "@/components/user-page/resource-picker";
+import { toast } from "@/hooks/use-toast";
 import { fieldPath, itemPath, type ProblemIndex } from "@/lib/page-problems";
 import { optionalText } from "@/lib/user-page-editor";
 import {
@@ -70,7 +71,14 @@ export function WidgetConfigForm({ widget, onChange, path, problems, newId }: Wi
     case "image":
       return <ImageForm {...common} config={widget.config} onChange={(config) => onChange({ ...widget, config })} />;
     case "form":
-      return <FormForm {...common} config={widget.config} onChange={(config) => onChange({ ...widget, config })} />;
+      return (
+        <FormForm
+          {...common}
+          formId={widget.id}
+          config={widget.config}
+          onChange={(config) => onChange({ ...widget, config })}
+        />
+      );
     default: {
       const unhandled: never = widget;
       throw new Error(`No settings form for widget ${JSON.stringify(unhandled)}`);
@@ -387,12 +395,50 @@ function ImageForm({ idPrefix, config, onChange, path, problems }: FormProps<Pag
   );
 }
 
-function FormForm({ idPrefix, config, onChange, path, problems, newId }: FormProps<PageWidgetConfig<"form">>) {
+/** The id workflows use to react to this form and no other. */
+function FormIdRow({ formId }: { formId: string }) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(formId);
+      toast({ title: "Form ID copied" });
+    } catch {
+      toast({
+        title: "Couldn't copy the form ID",
+        description: "Select it and copy it by hand.",
+        variant: "destructive",
+      });
+    }
+  };
+  return (
+    <div className="space-y-1.5" data-testid="form-id">
+      <p className="text-xs font-medium">Form ID</p>
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{formId}</code>
+        <Button type="button" variant="outline" size="sm" onClick={copy} data-testid="button-copy-form-id">
+          <Copy className="mr-1.5 h-3.5 w-3.5" />
+          Copy
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Use this in a workflow to react only to answers from this form.</p>
+    </div>
+  );
+}
+
+function FormForm({
+  idPrefix,
+  formId,
+  config,
+  onChange,
+  path,
+  problems,
+  newId,
+}: FormProps<PageWidgetConfig<"form">> & { formId: string }) {
   const fieldsPath = fieldPath(path, "fields");
   const setFields = (fields: FormField[]) => onChange({ ...config, fields });
   const { title: _title, ...withoutTitle } = config;
   return (
     <div className="space-y-4">
+      <FormIdRow formId={formId} />
       <TextField
         id={`${idPrefix}-title`}
         label="Title"
