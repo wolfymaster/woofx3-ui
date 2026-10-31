@@ -135,7 +135,7 @@ export function expressionProblem(stored: string, display: string, names: Variab
   }
   const problem = functionCallProblem(stored);
   if (problem !== null) {
-    return problem.slice(problem.indexOf("}: ") + 3);
+    return problem.slice(problem.indexOf("}: ") + 3).replace(/\b1 arguments\b/, "1 argument");
   }
   for (const match of stored.matchAll(/\$\{([^{}]*)\}/g)) {
     const inner = match[1] as string;

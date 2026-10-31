@@ -158,6 +158,7 @@ describe("function calls in a field", () => {
     ["{round(amount, 2)}", null],
     ["{note(s)}", '"note" isn\'t a function.'],
     ["{add(amount)}", "add takes at least 2 arguments, got 1"],
+    ["{round()}", "round takes at least 1 argument, got 0"],
     ["{round(1, 2, 3)}", "round takes at most 2 arguments, got 3"],
     ["{round(amuont)}", '"amuont" isn\'t a variable here.'],
     ["{round(trigger.data.other)}", null],

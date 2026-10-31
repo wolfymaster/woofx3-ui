@@ -86,6 +86,9 @@ export function VariableAwareInput({
   // The field loses its selection to the search box while browsing, so the insert
   // range comes from the last selection the field reported.
   const lastSelection = useRef<{ start: number; end: number } | null>(null);
+  // Where a choice left the cursor. The selection event it causes must not read the
+  // choice as still being typed and offer it again.
+  const choiceCursor = useRef<number | null>(null);
   const listId = useId();
 
   const names = useMemo(() => variableNames(availableVariables), [availableVariables]);
@@ -144,6 +147,10 @@ export function VariableAwareInput({
     if (menu?.source === "browse") {
       return;
     }
+    if (el.selectionStart === choiceCursor.current) {
+      return;
+    }
+    choiceCursor.current = null;
     updateMenu(typedMenu(el.value, el.selectionStart ?? el.value.length, functions));
   };
 
@@ -181,7 +188,9 @@ export function VariableAwareInput({
     }
     const inserted = insertMenuItem(displayed, menu, item);
     onChange(toStoredText(inserted.text, names, { functions }));
-    setMenu(null);
+    // A function's parentheses are waiting for its first argument, so the menu stays up for it.
+    updateMenu(item.callable ? typedMenu(inserted.text, inserted.cursor, functions) : null);
+    choiceCursor.current = inserted.cursor;
     lastSelection.current = { start: inserted.cursor, end: inserted.cursor };
     requestAnimationFrame(() => {
       const el = elementRef.current;
@@ -277,7 +286,7 @@ export function VariableAwareInput({
           )}
         </div>
       </PopoverAnchor>
-      {problem !== null && (
+      {problem !== null && !typedMenuOpen && (
         <p className="mt-1 text-xs text-destructive" data-testid={testId ? `${testId}-problem` : undefined}>
           {problem}
         </p>
