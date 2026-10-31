@@ -473,10 +473,123 @@ describe("streamOps", () => {
     expect(await detail("gone")).toEqual({ status: "unknown_session" });
   });
 
-  test("the stored recap summary is a dashboard's record, which this gateway has none of", async () => {
+  const sessionTotals = (sessionId: string, bits: number) => ({
+    sessionId,
+    bits,
+    cheers: 1,
+    subs: 0,
+    giftedSubs: 0,
+    follows: 2,
+    raids: 0,
+    raiders: 0,
+    peakViewers: 12,
+    averageViewers: 8,
+    viewerSampleMinutes: 30,
+  });
+  const liveSegment = [{ id: "seg-2", startedAt: "2026-10-28T10:00:00Z", endedAt: null }];
+
+  test("recaps are the engine's sessions and totals, in progress only while live in that session", async () => {
+    const { runtime, state, clock } = await connected();
+    state.streamStatus = { isLive: true, uptime: "1h", viewerCount: 9 };
+    state.sessions = [
+      { id: "s-2", status: "open", startedAt: "2026-10-28T10:00:00Z", endedAt: null, segments: liveSegment },
+      { id: "s-1", status: "closed", startedAt: "2026-10-27T10:00:00Z", endedAt: "2026-10-28T10:00:00Z", segments: [] },
+      { id: "merged", status: "closed", startedAt: "2026-10-26T10:00:00Z", endedAt: null, segments: [] },
+    ];
+    state.sessionTotals = { "s-2": sessionTotals("s-2", 300), "s-1": sessionTotals("s-1", 100) };
+    const read = renderDirect(() => directStreamOpsGateway(runtime).useRecentRecaps(10));
+    const recaps = await read.until((value) => value !== undefined, "the recaps");
+
+    expect(recaps?.map((recap) => [recap.sessionId, recap.inProgress])).toEqual([
+      ["s-2", true],
+      ["s-1", false],
+    ]);
+    expect(recaps?.[0]).toEqual({
+      sessionId: "s-2",
+      generatedAt: new Date(clock.now()).toISOString(),
+      generatedAtMs: clock.now(),
+      inProgress: true,
+      summary: {
+        kind: "read",
+        session: { status: "open", startedAt: "2026-10-28T10:00:00Z", endedAt: null, segments: liveSegment },
+        totals: {
+          bits: 300,
+          cheers: 1,
+          subs: 0,
+          giftedSubs: 0,
+          follows: 2,
+          raids: 0,
+          raiders: 0,
+          peakViewers: 12,
+          averageViewers: 8,
+          viewerSampleMinutes: 30,
+        },
+      },
+    });
+    expect(state.callsOf("listStreamSessions")).toContainEqual([{ limit: 10 }]);
+    read.unmount();
+  });
+
+  test("a recap is read again when the stream goes offline and when a page refreshes the open session", async () => {
+    const { runtime, state, engine } = await connected();
+    state.streamStatus = { isLive: true, uptime: "1h", viewerCount: 9 };
+    state.sessions = [
+      { id: "s-2", status: "open", startedAt: "2026-10-28T10:00:00Z", endedAt: null, segments: liveSegment },
+    ];
+    state.sessionTotals = { "s-2": sessionTotals("s-2", 300) };
+    const streamOps = directStreamOpsGateway(runtime);
+    const read = renderDirect(() => streamOps.useRecap("s-2"));
+    await read.until((value) => value?.inProgress === true, "the live recap");
+
+    state.sessionTotals = { "s-2": sessionTotals("s-2", 450) };
+    const refresh = renderDirect(() => streamOps.useOpenSessionRefreshRequest()).current();
+    expect(await refresh()).toEqual({ status: "stored" });
+    await read.until(
+      (value) => value?.summary.kind === "read" && value.summary.totals.bits === 450,
+      "the refreshed totals"
+    );
+
+    state.streamStatus = { isLive: false, uptime: "", viewerCount: 0 };
+    await engine.pushEvent(
+      makeCallbackEnvelope({ type: EngineEventType.STREAM_OFFLINE, twitchUserId: "u-1" }, "engine", "e-1")
+    );
+    await read.until((value) => value?.inProgress === false, "the finished recap");
+    read.unmount();
+  });
+
+  test("a session the engine does not have, or has no totals for, has no recap", async () => {
+    const { runtime, state } = await connected();
+    state.sessions = [{ id: "s-1", status: "closed", startedAt: "2026-10-27T10:00:00Z", endedAt: null, segments: [] }];
+    const streamOps = directStreamOpsGateway(runtime);
+    const missing = renderDirect(() => streamOps.useRecap("gone"));
+    expect(await missing.until((value) => value !== undefined, "the missing recap")).toBeNull();
+    const untotalled = renderDirect(() => streamOps.useRecap("s-1"));
+    expect(await untotalled.until((value) => value !== undefined, "the recap without totals")).toBeNull();
+    missing.unmount();
+    untotalled.unmount();
+  });
+
+  test("an engine without session history has no recaps", async () => {
+    const harness = createDirectHarness();
+    harnesses.push(harness);
+    harness.engine.capabilities = harness.engine.capabilities.filter(
+      (id) => id !== ENGINE_CAPABILITIES.analyticsSessions
+    );
+    await harness.connect();
+    const read = renderDirect(() => directStreamOpsGateway(harness.runtime).useRecentRecaps(10));
+    expect(await read.until((value) => value !== undefined, "the recaps")).toEqual([]);
+    expect(harness.state.callsOf("listStreamSessions")).toEqual([]);
+    read.unmount();
+  });
+
+  test("a recap's clips and markers are Twitch's lists, which the engine cannot serve", async () => {
     const { runtime } = await connected();
-    const refresh = renderDirect(() => directStreamOpsGateway(runtime).useOpenSessionRefreshRequest()).current();
-    await expect(refresh()).rejects.toBeInstanceOf(GatewayUnsupportedError);
+    const streamOps = directStreamOpsGateway(runtime);
+    expect(streamOps.support).toEqual({ recapClips: false, recapMarkers: false });
+    const clips = renderDirect(() => streamOps.useRecapClipsRequest()).current();
+    const markers = renderDirect(() => streamOps.useRecapMarkersRequest()).current();
+    await expect(clips("s-1")).rejects.toBeInstanceOf(GatewayUnsupportedError);
+    await expect(markers("s-1")).rejects.toBeInstanceOf(GatewayUnsupportedError);
   });
 });
 

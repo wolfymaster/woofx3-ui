@@ -84,7 +84,7 @@ settings do (see [Data sources](#data-sources)).
 | `workflow-runs` | automation | Recent and in-progress executions |
 | `macro-pad` | automation | One-click buttons — see below |
 | `stream-stats` | utility | Viewers, uptime, category, and follows/subs/bits/raids pushed since the page loaded |
-| `recent-streams` | utility | Totals for the last finished sessions, from `streamSessionSummaries` — see below |
+| `recent-streams` | utility | Totals for the last sessions, through `streamOps.useRecentRecaps` — see below |
 | `notes` | utility | Scratch pad shared by everyone on the instance — see below |
 
 Saved panels can hold two retired types, `live-events` and `alert-log`. Both
@@ -254,8 +254,10 @@ Notes used to be private per member (`dashboardNotes`, now read only by the migr
 
 ## Recent streams
 
-`recent-streams` lists the instance's last ten finished sessions from
-`streamSessionSummaries` (`convex/streamSessionSummaries.ts`), newest first.
+`recent-streams` lists the instance's last ten sessions through the gateway's
+`streamOps.useRecentRecaps`, newest first: in the hosted app the stored
+summaries in `streamSessionSummaries` (`convex/streamSessionSummaries.ts`), in
+local mode the engine's own sessions (see [Stream recaps](./stream-recaps.md#local-mode)).
 Each row is one engine session: the time actually live (its segments added up,
 so the gaps a session spans across brief dropouts are left out), peak and
 average viewers, and the session's follows, subs, gifted subs, bits and raids.

@@ -31,6 +31,8 @@ import type {
   StreamEventFrame,
   StreamEventSubscriber,
   StreamSession,
+  StreamSessionsQuery,
+  StreamSessionTotals,
   StreamStatus,
   TriggerWorkflowOptions,
   TriggerWorkflowResponse,
@@ -87,6 +89,8 @@ type DirectFakeSurface = Pick<
   | "createCommand"
   | "getStreamStatus"
   | "listStreamSessions"
+  | "getStreamSession"
+  | "getStreamSessionTotals"
   | "listAlerts"
   | "subscribeStreamEvents"
   | "dispatchFieldOptionsRequest"
@@ -189,7 +193,10 @@ export class FakeEngineState {
   events: StreamEventFrame[] = [];
   alerts: AlertSnapshot[] = [];
   streamStatus: StreamStatus = { isLive: false, uptime: "", viewerCount: 0 };
+  /** Newest first. */
   sessions: StreamSession[] = [];
+  /** A session's totals by its id; a session with none answers null. */
+  sessionTotals: Record<string, StreamSessionTotals> = {};
   alertCompositions: AlertComposition[] = [];
   /** Null answers as an engine whose scene manager gave no preview. */
   compositionPreview: { url: string; expiresInSeconds: number } | null = null;
@@ -353,9 +360,20 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return this.state.streamStatus;
   }
 
-  async listStreamSessions(): Promise<PaginatedStreamSessions> {
-    this.state.record("listStreamSessions");
-    return { sessions: this.state.sessions.slice(0, 1), total: this.state.sessions.length, limit: 1, offset: 0 };
+  async listStreamSessions(query?: StreamSessionsQuery): Promise<PaginatedStreamSessions> {
+    this.state.record("listStreamSessions", query);
+    const limit = query?.limit ?? 50;
+    return { sessions: this.state.sessions.slice(0, limit), total: this.state.sessions.length, limit, offset: 0 };
+  }
+
+  async getStreamSession(id: string): Promise<StreamSession | null> {
+    this.state.record("getStreamSession", id);
+    return this.state.sessions.find((session) => session.id === id) ?? null;
+  }
+
+  async getStreamSessionTotals(sessionId: string): Promise<StreamSessionTotals | null> {
+    this.state.record("getStreamSessionTotals", sessionId);
+    return this.state.sessionTotals[sessionId] ?? null;
   }
 
   async listAlerts(query?: AlertListQuery): Promise<AlertListPage> {

@@ -8,6 +8,12 @@ export const directKeys = {
     all: ["status"] as const,
     liveState: () => ["status", "liveState"] as const,
   },
+  streamOps: {
+    all: ["streamOps"] as const,
+    allRecaps: ["streamOps", "recaps"] as const,
+    recentRecaps: (limit: number) => ["streamOps", "recaps", "recent", limit] as const,
+    recap: (sessionId: string) => ["streamOps", "recaps", "session", sessionId] as const,
+  },
   eventLog: {
     all: ["eventLog"] as const,
     allPages: ["eventLog", "pages"] as const,

@@ -11,7 +11,8 @@ const NONE = (): readonly QueryKey[] => [];
 /** A run's detail lists the alerts it published, and an alert names the run as its `workflowId`. */
 const ALERT = (event: { alert: { workflowId?: string } }): readonly QueryKey[] =>
   event.alert.workflowId ? [k.alertQueue.all, k.workflows.run(event.alert.workflowId)] : [k.alertQueue.all];
-const LIVE_STATE = (): readonly QueryKey[] => [k.status.liveState()];
+/** A recap's figures and whether it is in progress move with the stream and its session. */
+const SESSIONS = (): readonly QueryKey[] => [k.status.liveState(), k.streamOps.allRecaps];
 // Alert Steps live in commands and workflows, so a change to either can
 // leave a scene's alert widgets unused, or used again.
 const COMMANDS = (): readonly QueryKey[] => [k.commands.list(), k.scenes.allAlertTargetUsage];
@@ -99,10 +100,10 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.ALERT_TIMED_OUT]: ALERT,
   [EngineEventType.ALERT_SKIPPED]: ALERT,
   [EngineEventType.WIDGET_STATUS_CHANGED]: NONE,
-  [EngineEventType.STREAM_ONLINE]: LIVE_STATE,
-  [EngineEventType.STREAM_OFFLINE]: LIVE_STATE,
-  [EngineEventType.SESSION_STARTED]: LIVE_STATE,
-  [EngineEventType.SESSION_SUMMARY]: LIVE_STATE,
+  [EngineEventType.STREAM_ONLINE]: SESSIONS,
+  [EngineEventType.STREAM_OFFLINE]: SESSIONS,
+  [EngineEventType.SESSION_STARTED]: SESSIONS,
+  [EngineEventType.SESSION_SUMMARY]: SESSIONS,
   [EngineEventType.OVERLAY_TOKEN_MINTED]: () => [k.scenes.browserSources()],
   [EngineEventType.OVERLAY_TOKEN_REVOKED]: () => [k.scenes.browserSources()],
   // A notification for approvers; nothing here caches pending pairings.

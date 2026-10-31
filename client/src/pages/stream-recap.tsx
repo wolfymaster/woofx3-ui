@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { RecapSupporter, StreamRecapEngineDetail } from "@shared/stream-recap";
-import { useQuery } from "convex/react";
 import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -11,10 +9,12 @@ import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { RecapTimeline } from "@/components/stream-recap/recap-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useRecap } from "@/engine/hooks/use-stream-recap";
 import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
-import { useInstance } from "@/hooks/use-instance";
+import type { StreamRecap, StreamRecapSession, StreamRecapTotals } from "@/engine/types";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import { useRecapClips } from "@/hooks/use-recap-clips";
 import { useRecapMarkers } from "@/hooks/use-recap-markers";
@@ -32,13 +32,7 @@ import {
   recapLayerStatuses,
   viewerLayerStatus,
 } from "@/lib/recap-timeline";
-import {
-  formatLiveDuration,
-  formatViewerFigure,
-  liveDurationMs,
-  type SessionSummaryRow,
-  summarySegments,
-} from "@/lib/session-summary";
+import { formatLiveDuration, formatViewerFigure, liveDurationMs, summarySegments } from "@/lib/session-summary";
 import { buildThankYouMessage, buildViewerSeries, segmentTimeline, type TimelineSegment } from "@/lib/stream-recap";
 import { STREAM_RECAPS_PATH, sessionIdFromParam } from "@/lib/stream-recap-route";
 
@@ -48,8 +42,8 @@ const DATE_FORMAT: Intl.DateTimeFormatOptions = { weekday: "long", month: "long"
 const TIME_FORMAT: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
 
 type SessionBody = {
-  session: NonNullable<SessionSummaryRow["session"]>;
-  totals: NonNullable<SessionSummaryRow["totals"]>;
+  session: StreamRecapSession;
+  totals: StreamRecapTotals;
 };
 
 function formatTime(iso: string): string {
@@ -363,20 +357,21 @@ function SupportersCard({
   );
 }
 
-function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: string }) {
+function RecapBody({ row, sessionId }: { row: StreamRecap; sessionId: string }) {
   const twitchLink = useTwitchLink();
   const capabilities = useEngineCapabilities();
   const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
   // Keyed on any open session, not only a live one: the snapshot taken after
   // the stream goes offline carries its last minutes, which the chart and
   // leaderboards should then pick up too.
-  const engineDetailRefreshKey = row.session?.status === "open" ? row.generatedAtMs : 0;
+  const body: SessionBody | null =
+    row.summary.kind === "read" ? { session: row.summary.session, totals: row.summary.totals } : null;
+  const engineDetailRefreshKey = body?.session.status === "open" ? row.generatedAtMs : 0;
   const { state, retry } = useStreamRecapEngineDetail(sessionId, engineSupport === "supported", engineDetailRefreshKey);
   const eventSupport = capabilities.support(...RECAP_EVENT_CAPABILITIES);
   const events = useRecapTimelineEvents(sessionId, eventSupport === "supported", engineDetailRefreshKey);
-  const clips = useRecapClips(row.instanceId, sessionId);
-  const markers = useRecapMarkers(row.instanceId, sessionId);
-  const body: SessionBody | null = row.session && row.totals ? { session: row.session, totals: row.totals } : null;
+  const clips = useRecapClips(sessionId);
+  const markers = useRecapMarkers(sessionId);
   const segments = useMemo(() => summarySegments(row), [row]);
   const detail = okDetail(state);
   const series = useMemo(() => buildViewerSeries(detail?.viewerSamples ?? [], segments), [detail, segments]);
@@ -405,11 +400,12 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
   const canAnnounce = !!twitchLink?.scopes.includes(ANNOUNCEMENT_SCOPE);
 
   const title = body ? new Date(body.session.startedAt).toLocaleDateString(undefined, DATE_FORMAT) : "Stream recap";
-  const description = body
-    ? segments.length === 0
-      ? "Never went live"
-      : `Live ${formatLiveDuration(liveDurationMs(segments))}, from ${formatTime(body.session.startedAt)}`
-    : `A summary from a newer engine version (schema ${row.schemaVersion}) that this dashboard cannot read yet.`;
+  const description =
+    row.summary.kind === "unreadable"
+      ? `A summary from a newer engine version (schema ${row.summary.schemaVersion}) that this dashboard cannot read yet.`
+      : segments.length === 0
+        ? "Never went live"
+        : `Live ${formatLiveDuration(liveDurationMs(segments))}, from ${formatTime(row.summary.session.startedAt)}`;
 
   return (
     <div className="space-y-6">
@@ -501,17 +497,14 @@ function RecapNotFound() {
   );
 }
 
-export default function StreamRecap() {
+export default function StreamRecapPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = sessionIdFromParam(params.sessionId);
-  const { instance, isLoading } = useInstance();
+  const { instanceId, isInstanceLoading } = useEngineScope();
   useOpenSessionRefresh();
-  const row = useQuery(
-    api.streamSessionSummaries.get,
-    instance && sessionId ? { instanceId: instance._id, sessionId } : "skip"
-  );
+  const row = useRecap(sessionId, { enabled: sessionId !== "" });
 
-  if (!isLoading && !instance) {
+  if (!isInstanceLoading && !instanceId) {
     return (
       <div className="container mx-auto p-6">
         <p className="py-16 text-center text-sm text-muted-foreground">No instance connected.</p>

@@ -1,9 +1,8 @@
-import { History, ListChecks, Pin } from "lucide-react";
+import { ListChecks, Pin } from "lucide-react";
 import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { HostedMacroPadWidget } from "@/components/dashboard/widgets/hosted-macro-pad";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
-import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
 import { useInstance } from "@/hooks/use-instance";
 import type { DashboardCatalog, RailPinnedItem } from "./catalog";
 import {
@@ -16,6 +15,7 @@ import {
   moderationWidget,
   notesWidget,
   queueWidget,
+  recentStreamsWidget,
   shoutoutWidget,
   streamInfoWidget,
   streamPreviewWidget,
@@ -27,8 +27,8 @@ import {
 import type { DashboardWidgetDefinition } from "./types";
 
 // The hosted app's dashboard: every widget. Those below reach data only
-// Convex keeps (recaps, pin history, macros' remote trigger URLs), so only the
-// hosted app may load this module.
+// Convex keeps (pin history, macros' remote trigger URLs), so only the hosted
+// app may load this module.
 
 const pinnedWidget: DashboardWidgetDefinition = {
   type: "pinned",
@@ -37,15 +37,6 @@ const pinnedWidget: DashboardWidgetDefinition = {
   icon: Pin,
   category: "stream",
   component: PinnedWidget,
-};
-
-const recentStreamsWidget: DashboardWidgetDefinition = {
-  type: "recent-streams",
-  label: "Recent Streams",
-  description: "Viewers, follows, subs and bits for each of your last finished streams.",
-  icon: History,
-  category: "utility",
-  component: RecentStreamsWidget,
 };
 
 const hostedMacroPadWidget: DashboardWidgetDefinition = { ...macroPadWidget, component: HostedMacroPadWidget };

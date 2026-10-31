@@ -3,6 +3,7 @@ import {
   AlarmClock,
   Clapperboard,
   Grid3x3,
+  History,
   ListOrdered,
   Megaphone,
   MessagesSquare,
@@ -25,6 +26,7 @@ import { MacroPadWidget } from "@/components/dashboard/widgets/macro-pad";
 import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
+import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
 import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
@@ -165,6 +167,15 @@ export const notesWidget: DashboardWidgetDefinition = {
   icon: NotebookPen,
   category: "utility",
   component: NotesWidget,
+};
+
+export const recentStreamsWidget: DashboardWidgetDefinition = {
+  type: "recent-streams",
+  label: "Recent Streams",
+  description: "Viewers, follows, subs and bits for each of your last finished streams.",
+  icon: History,
+  category: "utility",
+  component: RecentStreamsWidget,
 };
 
 export const shoutoutWidget: DashboardWidgetDefinition = {

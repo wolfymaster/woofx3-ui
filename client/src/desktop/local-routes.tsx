@@ -17,6 +17,7 @@ import {
   MARKETPLACE_PATH,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
+import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 
 // The pages local mode serves: those that reach the engine only through its
@@ -50,6 +51,8 @@ const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Scenes = lazy(() => import("@/pages/scenes"));
 const StarterPacks = lazy(() => import("@/pages/starter-packs"));
+const StreamRecap = lazy(() => import("@/pages/stream-recap"));
+const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -84,6 +87,8 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: COMMAND_EDITOR_ROUTE, render: () => <CommandEditor /> },
   { path: COMMAND_LIST_PATH, render: () => <Commands /> },
   ...resourceKindRoutes(),
+  { path: STREAM_RECAPS_PATH, render: () => <StreamRecaps /> },
+  { path: STREAM_RECAP_ROUTE, render: () => <StreamRecap /> },
   { path: "/stream/scenes", render: () => <Scenes /> },
   { path: "/stream/scenes/:id", render: () => <Scenes /> },
   { path: "/stream/workflows", render: () => <Workflows /> },
