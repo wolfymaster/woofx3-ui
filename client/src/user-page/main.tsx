@@ -5,10 +5,13 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { UserPageApp } from "./app";
 import { slugFromPath } from "./slug";
-import { userPagesOrigin } from "./viewer/config";
+import { turnstileSiteKey, userPagesOrigin } from "./viewer/config";
 import { browserViewerStorage, finishSignIn, readSignInReturn } from "./viewer/sign-in";
 import type { ViewerEnvironment } from "./viewer/use-viewer";
+import type { FormEnvironment } from "./widgets/form-environment";
+import { formSubmitUrl, postFormSubmission } from "./widgets/form-submit";
 import { preloadMarkdown } from "./widgets/text-widget";
+import { loadTurnstileScript } from "./widgets/turnstile";
 import "./styles.css";
 
 // No Convex Auth: a viewer signs in with a session token of their own
@@ -18,6 +21,7 @@ if (typeof convexUrl !== "string" || convexUrl === "") {
   throw new Error("VITE_CONVEX_URL must be set to build the user page");
 }
 const origin = userPagesOrigin(import.meta.env.VITE_USER_PAGES_BASE_URL);
+const siteKey = turnstileSiteKey(import.meta.env.VITE_TURNSTILE_SITE_KEY);
 const root = document.getElementById("root");
 if (root === null) {
   throw new Error("The user page's HTML has no #root element");
@@ -60,12 +64,21 @@ const viewerEnv: ViewerEnvironment = {
   random: Math.random,
 };
 
+const formSubmitAddress = formSubmitUrl(origin, import.meta.env.BASE_URL);
+const formEnv: FormEnvironment = {
+  submit: (request) => postFormSubmission(formSubmitAddress, request, window.fetch.bind(window)),
+  turnstileSiteKey: siteKey,
+  loadTurnstile: loadTurnstileScript,
+  newIdempotencyKey: generateOpaqueToken,
+  reload: () => window.location.reload(),
+};
+
 preloadMarkdown();
 const slug = slugFromPath(window.location.pathname, import.meta.env.BASE_URL);
 createRoot(root).render(
   <StrictMode>
     <ConvexProvider client={client}>
-      <UserPageApp slug={slug} viewerEnv={viewerEnv} />
+      <UserPageApp slug={slug} viewerEnv={viewerEnv} formEnv={formEnv} />
     </ConvexProvider>
   </StrictMode>
 );
