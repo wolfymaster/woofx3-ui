@@ -3,12 +3,11 @@ import {
   GO_LIVE_CHECK_IDS,
   type GoLiveCheckId,
   type LastGoLive,
-  type OverlayFacts,
   type StreamInfoFacts,
   type TwitchLinkFacts,
   type WorkflowFacts,
 } from "@convex/lib/goLiveFacts";
-import type { StreamInfo, StreamInfoPresetId } from "@/engine/types";
+import type { GoLiveOverlayFacts, StreamInfo, StreamInfoPresetId } from "@/engine/types";
 import { parseFieldOptionsReply } from "@/lib/field-options";
 import { comparePreset } from "@/lib/stream-info-edit";
 import { formatTimeAgo } from "@/lib/time-ago";
@@ -155,7 +154,7 @@ export function twitchCheck(facts: TwitchLinkFacts): CheckResult {
  * this can confirm is that one exists to open. A browser source loading its
  * URL is recorded, which says the URL has worked, not that it is loaded now.
  */
-export function overlaysCheck(facts: OverlayFacts, browserSourceUrl: string | null, now: number): CheckResult {
+export function overlaysCheck(facts: GoLiveOverlayFacts, now: number): CheckResult {
   if (!facts.hasScene) {
     return result("overlays", "fail", "There are no scenes yet, so OBS has no overlay to show", {
       fixes: [{ kind: "route", label: "Create a scene", href: SCENES_PATH }],
@@ -172,8 +171,8 @@ export function overlaysCheck(facts: OverlayFacts, browserSourceUrl: string | nu
       ? "No browser source has loaded an overlay URL yet."
       : `A browser source last loaded an overlay ${formatTimeAgo(new Date(facts.lastLoadedAt).toISOString(), now)}.`;
   const fixes: CheckFix[] = [];
-  if (browserSourceUrl) {
-    fixes.push({ kind: "copy", label: "Copy browser-source URL", text: browserSourceUrl });
+  if (facts.featuredUrl) {
+    fixes.push({ kind: "copy", label: "Copy browser-source URL", text: facts.featuredUrl });
   }
   fixes.push({ kind: "route", label: "Open scenes", href: SCENES_PATH });
   return result("overlays", "warn", "Can't verify an overlay is loaded in OBS right now", {

@@ -15,6 +15,7 @@ import type {
   GoLiveTwitchFacts,
   ReadOptions,
 } from "@/engine/types";
+import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { withPlainError } from "./errors";
 import { useMappedValue } from "./mapped";
 import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./scope";
@@ -56,7 +57,7 @@ export function toGoLiveOverlayFacts(row: OverlaysRow): GoLiveOverlayFacts {
   return {
     hasScene: row.hasScene,
     browserSourceKeyCount: row.browserSourceKeyCount,
-    featuredKey: row.featuredKey,
+    featuredUrl: row.featuredKey ? browserSourceUrlForKey(row.featuredKey) : null,
     lastLoadedAt: row.lastLoadedAt,
   };
 }

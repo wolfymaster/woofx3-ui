@@ -1,7 +1,7 @@
 import type { ObsStatus } from "@convex/lib/engineObsStatus";
 import { platformSettingsItemId } from "@convex/lib/gettingStarted";
-import type { OverlayFacts } from "@convex/lib/goLiveFacts";
 import type { SetupStatus } from "@convex/setup";
+import type { GoLiveOverlayFacts } from "@/engine/types";
 import type { CheckFix } from "@/lib/go-live-checks";
 import { installedModulePath } from "@/lib/marketplace-route";
 import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
@@ -48,9 +48,7 @@ export interface GettingStartedFacts {
     | "engineRegistered"
     | "platformsNeedingSettings"
   >;
-  overlays: OverlayFacts;
-  /** The browser-source URL to offer for OBS, when there is one. */
-  browserSourceUrl: string | null;
+  overlays: GoLiveOverlayFacts;
   /** Items the card recorded itself; see MANUAL_GETTING_STARTED_ITEM_IDS. */
   doneItemIds: readonly string[];
   /**
@@ -183,7 +181,7 @@ function twitchItem(setup: GettingStartedFacts["setup"]): GettingStartedItem {
   });
 }
 
-function overlayItem(overlays: OverlayFacts, browserSourceUrl: string | null): GettingStartedItem {
+function overlayItem(overlays: GoLiveOverlayFacts): GettingStartedItem {
   const title = "Overlay added to OBS";
   if (overlays.lastLoadedAt !== null) {
     return item("overlay", title, "done", "OBS has loaded your overlay");
@@ -194,8 +192,8 @@ function overlayItem(overlays: OverlayFacts, browserSourceUrl: string | null): G
     });
   }
   const fixes: CheckFix[] = [];
-  if (browserSourceUrl) {
-    fixes.push({ kind: "copy", label: "Copy browser-source URL", text: browserSourceUrl });
+  if (overlays.featuredUrl) {
+    fixes.push({ kind: "copy", label: "Copy browser-source URL", text: overlays.featuredUrl });
   }
   fixes.push({ kind: "route", label: "Open scenes", href: SCENES_PATH });
   return item("overlay", title, "todo", "In OBS, add a Browser source and paste your scene's URL", { fixes });
@@ -230,7 +228,7 @@ export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedI
     platformsItem(facts.setup),
     ...platformSettingsItems(facts.setup, done, facts.obsStatus),
     twitchItem(facts.setup),
-    overlayItem(facts.overlays, facts.browserSourceUrl),
+    overlayItem(facts.overlays),
     testFollowItem(done.has("test-follow")),
     chatCommandItem(done.has("chat-command")),
   ];
