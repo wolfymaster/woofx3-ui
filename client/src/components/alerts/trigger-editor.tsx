@@ -222,6 +222,7 @@ export function TriggerEditor({
         tree={tree}
         onChange={setTree}
         onCommit={commit}
+        autosaves
         catalogTriggers={catalogTriggers}
         catalogActions={catalogActions}
         catalogLoading={catalogLoading}

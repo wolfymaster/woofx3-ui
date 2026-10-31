@@ -17,6 +17,11 @@ export function isWholeReference(value: unknown): value is string {
   return typeof value === "string" && WHOLE_REFERENCE.test(value.trim());
 }
 
+/** Text written as an expression but not stored as a reference, such as `{round(amount)}`. */
+export function isExpressionText(value: unknown): value is string {
+  return typeof value === "string" && !isWholeReference(value) && /^\s*\$?\{.*$/s.test(value);
+}
+
 /** Nothing entered: no value, blank text, no rows. */
 export function isEmptySetting(value: unknown): boolean {
   if (value === undefined || value === null) {
@@ -59,6 +64,9 @@ export function settingProblem(field: ConfigField, value: unknown): SettingProbl
     return field.required && !ALWAYS_SET.has(field.type) ? { kind: "missing", message: MISSING_SETTING_MESSAGE } : null;
   }
   if (field.type === "number") {
+    if (isExpressionText(value)) {
+      return { kind: "invalid", message: "This expression isn't working yet, so the step can't use it." };
+    }
     return typeof value === "number" ? boundsProblem(field, [value]) : null;
   }
   if (field.type === "range" && typeof value === "object") {

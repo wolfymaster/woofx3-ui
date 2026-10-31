@@ -37,6 +37,7 @@ import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { SceneRow } from "@/lib/scene-field-options";
 import { type StepSummary, stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
+import { storedExpressionProblem } from "@/lib/variable-display";
 import { isDelayWait } from "@/lib/wait-config";
 import { resolveCatalogAction, resolveCatalogTrigger, triggerNodeLabel } from "@/lib/workflow-node-label";
 import { triggerNodeSummary } from "@/lib/workflow-node-summary";
@@ -88,6 +89,8 @@ export interface FlowEditorProps {
    */
   triggerVariables?: VariableOption[];
   /** What the engine lets condition steps check beyond the catalog; nothing extra when absent. */
+  /** Whether a commit saves for real, rather than holding the steps for a Save button elsewhere. */
+  autosaves?: boolean;
   conditionSupport?: EngineConditionSupport;
 }
 
@@ -131,6 +134,30 @@ type FocusTarget = { attribute: string; value: string } | null;
  * its Then and Otherwise branches indented below it. Adding, editing and removing all happen
  * in place. At most one step is open for editing, and leaving it saves it if it changed.
  */
+type FlowSaveState = "idle" | "saving" | "saved" | "failed";
+
+/**
+ * What became of the steps, for an editor with no Save button of its own: a step saves
+ * when it is closed, which nothing else on the page would say.
+ */
+function FlowSaveStatus({ state, editing }: { state: FlowSaveState; editing: boolean }) {
+  const text = {
+    saving: "Saving…",
+    failed: "Couldn't save. Your changes are still here.",
+    saved: editing ? "Saved. Changes to this step save when you close it." : "All changes saved",
+    idle: editing ? "Changes save when you close this step." : "Changes save automatically",
+  }[state];
+  return (
+    <p
+      className={cn("self-end text-xs", state === "failed" ? "text-destructive" : "text-muted-foreground")}
+      aria-live="polite"
+      data-testid="flow-save-status"
+    >
+      {text}
+    </p>
+  );
+}
+
 export function FlowEditor({
   tree,
   onChange,
@@ -145,8 +172,25 @@ export function FlowEditor({
   when,
   triggerVariables,
   conditionSupport = NO_ENGINE_CONDITION_SUPPORT,
+  autosaves = false,
 }: FlowEditorProps) {
   const { toast } = useToast();
+  const [saveState, setSaveState] = useState<FlowSaveState>("idle");
+  /** The caller's save, refused while a step holds an expression that can't work. */
+  const commitChecked = useCallback(
+    async (next: WorkflowTree): Promise<boolean> => {
+      const problem = storedExpressionProblem(next.steps);
+      if (problem !== null) {
+        toast({ title: "Fix this expression to save", description: problem, variant: "destructive" });
+        return false;
+      }
+      setSaveState("saving");
+      const ok = await onCommit(next);
+      setSaveState(ok ? "saved" : "failed");
+      return ok;
+    },
+    [onCommit, toast]
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [openPoint, setOpenPoint] = useState<InsertPoint | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
@@ -182,12 +226,12 @@ export function FlowEditor({
       setExpandedId(null);
       return true;
     }
-    const ok = await onCommit(current);
+    const ok = await commitChecked(current);
     if (ok) {
       setExpandedId(null);
     }
     return ok;
-  }, [expandedId, onCommit]);
+  }, [expandedId, commitChecked]);
 
   const toggle = useCallback(
     (id: string) => {
@@ -249,14 +293,14 @@ export function FlowEditor({
   const commitStructural = useCallback(
     async (next: WorkflowTree, closesExpanded: boolean) => {
       onChange(next);
-      const ok = await onCommit(next);
+      const ok = await commitChecked(next);
       if (closesExpanded) {
         setExpandedId(null);
       } else if (ok) {
         baselineRef.current = JSON.stringify(next);
       }
     },
-    [onChange, onCommit]
+    [onChange, commitChecked]
   );
 
   const move = useCallback(
@@ -416,6 +460,7 @@ export function FlowEditor({
   return (
     <FlowContext.Provider value={state}>
       <div ref={rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
+        {autosaves && <FlowSaveStatus state={saveState} editing={expandedId !== null} />}
         {when ?? (
           <TriggerWhenCard
             tree={tree}

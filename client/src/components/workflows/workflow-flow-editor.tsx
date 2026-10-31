@@ -119,6 +119,7 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
             tree={tree}
             onChange={handleChange}
             onCommit={handleCommit}
+            autosaves
             catalogTriggers={catalogTriggers}
             catalogActions={catalogActions}
             catalogLoading={catalogLoading}

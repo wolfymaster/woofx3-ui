@@ -40,6 +40,7 @@ import { splitCommandInput } from "@/lib/command-input";
 import { commandSteps } from "@/lib/command-steps";
 import { commandActionVariables } from "@/lib/command-variables";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
+import { storedExpressionProblem } from "@/lib/variable-display";
 import type { WorkflowTree } from "@/lib/workflow-tree";
 
 /**
@@ -132,6 +133,12 @@ export default function CommandEditor() {
     const { command, argumentPattern } = splitCommandInput(form.command);
     if (!command) {
       setFormError("Command name is required.");
+      return;
+    }
+
+    const expressionProblem = form.flow.editable ? storedExpressionProblem(form.flow.tree.steps) : null;
+    if (expressionProblem !== null) {
+      setFormError(expressionProblem);
       return;
     }
 

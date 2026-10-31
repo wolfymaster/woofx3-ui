@@ -123,10 +123,46 @@ export function toStoredText(display: string, names: VariableNames, { functions 
 }
 
 /**
- * Why a field's expressions would not run, in a streamer's words, or `null`. The
- * engine refuses a bad call when the workflow is saved; this says so while typing.
+ * Whether a field can take function calls. `available` converts them; the others leave
+ * `{round(amount)}` as text, which a note under the field has to say.
  */
-export function expressionProblem(stored: string, display: string, names: VariableNames): string | null {
+export type FunctionAvailability = "available" | "engine-update-needed" | "not-here" | "checking";
+
+/** A known function's call opening in a field's text, with or without its `$`. */
+const CALL_OPENING = /(?<!\{)\$?\{([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+
+/**
+ * Why a field's expressions would not run, in a streamer's words, or `null`. The engine
+ * refuses a bad call when the workflow is saved; this says so while typing.
+ */
+export function expressionProblem(
+  stored: string,
+  display: string,
+  names: VariableNames,
+  availability: FunctionAvailability
+): string | null {
+  for (const match of display.matchAll(CALL_OPENING)) {
+    const name = match[1] as string;
+    if (!isExpressionFunction(name)) {
+      continue;
+    }
+    if (availability === "engine-update-needed") {
+      return `Update your engine to use functions like ${name}. For now this would be shown as plain text.`;
+    }
+    if (availability === "not-here") {
+      return `Functions like ${name} can't be used here. This would be shown as plain text.`;
+    }
+    if (availability === "checking") {
+      return null;
+    }
+    const rest = display.slice(match.index + match[0].length);
+    if (!closesBeforeNextBrace(rest)) {
+      return `This ${name}(…) isn't finished. Check its parentheses and the closing }.`;
+    }
+  }
+  if (availability !== "available") {
+    return null;
+  }
   for (const match of display.matchAll(DISPLAYED_CALL)) {
     const name = match[1] as string;
     if (!isExpressionFunction(name)) {
@@ -135,7 +171,7 @@ export function expressionProblem(stored: string, display: string, names: Variab
   }
   const problem = functionCallProblem(stored);
   if (problem !== null) {
-    return problem.slice(problem.indexOf("}: ") + 3).replace(/\b1 arguments\b/, "1 argument");
+    return readableCallProblem(problem);
   }
   for (const match of stored.matchAll(/\$\{([^{}]*)\}/g)) {
     const inner = match[1] as string;
@@ -150,6 +186,51 @@ export function expressionProblem(stored: string, display: string, names: Variab
     }
   }
   return null;
+}
+
+/**
+ * The first expression in a step's settings that could only go wrong once saved, or
+ * `null`: a call the engine would refuse, or one left as text that viewers would see.
+ * It checks stored values alone, so it can run over a whole workflow.
+ */
+export function storedExpressionProblem(value: unknown): string | null {
+  if (typeof value === "string") {
+    const problem = functionCallProblem(value);
+    if (problem !== null) {
+      return readableCallProblem(problem);
+    }
+    for (const match of value.matchAll(/(?<![${])\{([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)) {
+      const name = match[1] as string;
+      if (isExpressionFunction(name)) {
+        return `{${name}(…)} isn't a working expression. Check it's finished and that your engine is up to date.`;
+      }
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const problem = storedExpressionProblem(item);
+      if (problem !== null) {
+        return problem;
+      }
+    }
+    return null;
+  }
+  if (value !== null && typeof value === "object") {
+    return storedExpressionProblem(Object.values(value));
+  }
+  return null;
+}
+
+function closesBeforeNextBrace(text: string): boolean {
+  const close = text.indexOf("}");
+  const open = text.indexOf("{");
+  return close !== -1 && (open === -1 || close < open);
+}
+
+function readableCallProblem(problem: string): string {
+  const detail = problem.slice(problem.indexOf("}: ") + 3).replace(/\b1 arguments\b/, "1 argument");
+  return /^(unknown function|\S+ takes at)/.test(detail) ? detail : "Check this call's parentheses, commas and quotes.";
 }
 
 function shortCall(token: string, names: VariableNames): string | undefined {
