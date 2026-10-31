@@ -1,6 +1,7 @@
 import {
   Activity,
   AlarmClock,
+  History,
   ListOrdered,
   Megaphone,
   MessagesSquare,
@@ -19,6 +20,7 @@ import { EventsWidget } from "@/components/dashboard/widgets/events";
 import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
+import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
@@ -139,4 +141,13 @@ export const notesWidget: DashboardWidgetDefinition = {
   icon: NotebookPen,
   category: "utility",
   component: NotesWidget,
+};
+
+export const recentStreamsWidget: DashboardWidgetDefinition = {
+  type: "recent-streams",
+  label: "Recent Streams",
+  description: "Viewers, follows, subs and bits for each of your last finished streams.",
+  icon: History,
+  category: "utility",
+  component: RecentStreamsWidget,
 };

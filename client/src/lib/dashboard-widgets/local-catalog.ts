@@ -7,6 +7,7 @@ import {
   moderationWidget,
   notesWidget,
   queueWidget,
+  recentStreamsWidget,
   streamPreviewWidget,
   streamStatsWidget,
   streamStatusWidget,
@@ -16,10 +17,9 @@ import {
 
 /**
  * The desktop app's local mode: the widgets a lone engine can serve. It
- * leaves out the go-live checklist, stream info, pinned messages, shoutouts,
- * recent streams and the macro pad, whose data only Convex keeps, and has no
- * getting started checklist or starter packs, which belong to an account's
- * setup.
+ * leaves out the go-live checklist, stream info, pinned messages, shoutouts
+ * and the macro pad, whose data only Convex keeps, and has no getting started
+ * checklist or starter packs, which belong to an account's setup.
  */
 export const localDashboardCatalog: DashboardCatalog = {
   widgets: [
@@ -34,6 +34,7 @@ export const localDashboardCatalog: DashboardCatalog = {
     timerWidget,
     workflowRunsWidget,
     streamStatsWidget,
+    recentStreamsWidget,
     notesWidget,
   ],
   usePinnedRailItem: noPinnedRailItem,
