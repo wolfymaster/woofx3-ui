@@ -1,5 +1,8 @@
 import {
+  type AppLinkStart,
   COMMANDS,
+  type CompanionLinkStatus,
+  type FinishAppLinkArgs,
   type HostModeKind,
   type HostModeView,
   type LocalEngineSession,
@@ -16,6 +19,9 @@ import { listen } from "@tauri-apps/api/event";
 import { call } from "./invoke";
 
 export type {
+  AppLinkStart,
+  CompanionLinkStatus,
+  FinishAppLinkArgs,
   HostModeKind,
   HostModeView,
   LocalEngineSession,
@@ -88,4 +94,28 @@ export async function requestStreamStartMarker(): Promise<MarkerRequestOutcome> 
 
 export function onStreamStartMarkerChange(handler: (marker: StreamStartMarker) => void): Promise<() => void> {
   return listen<StreamStartMarker>(STREAM_START_MARKER_EVENT, (event) => handler(event.payload));
+}
+
+// ==================== Linking the companion ====================
+// Signed in to an account, the dashboard makes this computer the instance's
+// companion. The host keeps the companion token; only its hash reaches the
+// webview. Companion mode only.
+
+/** Which instance this computer is the confirmed companion of, if any, and what Convex records about it. */
+export async function companionLinkStatus(): Promise<CompanionLinkStatus> {
+  return call(COMMANDS.companion_link_status);
+}
+
+/** A fresh companion token held by the host, and its hash for Convex. Replaces one that never finished. */
+export async function beginAppLink(): Promise<AppLinkStart> {
+  return call(COMMANDS.begin_app_link);
+}
+
+/**
+ * Convex recorded this computer as the instance's companion: the host keeps
+ * the token from `beginAppLink` as its confirmed pairing, giving up any
+ * previous one, and connects.
+ */
+export async function finishAppLink(link: FinishAppLinkArgs): Promise<void> {
+  await call(COMMANDS.finish_app_link, link);
 }

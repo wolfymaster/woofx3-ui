@@ -1,10 +1,7 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { CHAT_COMMAND_RUN_RESTRICTION } from "@convex/lib/macroTrigger";
 import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMutation, useQuery } from "convex/react";
+import { CHAT_COMMAND_RUN_RESTRICTION, valuesToPairs } from "@shared/macro-run";
 import { Check, GripVertical, Loader2, Pencil, Plus, Radio, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -12,29 +9,27 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
-import { useRunMacroRequest } from "@/engine/hooks/use-macros";
+import {
+  useAddMacroRequest,
+  useDeleteMacroRequest,
+  useMacros,
+  useReorderMacrosRequest,
+  useRunMacroRequest,
+  useUpdateMacroRequest,
+} from "@/engine/hooks/use-macros";
 import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
 import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
-import { useInstance } from "@/hooks/use-instance";
+import type { Macro, MacroId, MacroInput } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
-import { toMacroId } from "@/lib/cloud-ids";
-import {
-  applyMacroVariables,
-  extractMacroVariables,
-  isHexColor,
-  type MacroButton,
-  type MacroInput,
-} from "@/lib/macro-pad";
-import { macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
+import { applyMacroVariables, extractMacroVariables, isHexColor } from "@/lib/macro-pad";
 import { cn } from "@/lib/utils";
 import { MacroIconPreview } from "./macro-icon-picker";
 import { MacroConfigModal } from "./macro-pad-config-modal";
+import { type MacroPadRemoteTriggers, useNoRemoteTriggers } from "./macro-pad-remote-triggers";
 import { MacroVariablePrompt } from "./macro-variable-prompt";
 
-export type { MacroButton } from "@/lib/macro-pad";
-
 interface MacroTileProps {
-  macro: MacroButton;
+  macro: Macro;
   isEditMode: boolean;
   isExecuting: boolean;
   variableCount: number;
@@ -171,55 +166,43 @@ function MacroTile({
   );
 }
 
-// Takes no props: the pad is shared per instance, so nothing about it comes from
-// the per-user widget config.
-export function MacroPadModule() {
-  const { instance } = useInstance();
-  const { instanceId: engineInstanceId } = useEngineScope();
+interface MacroPadProps {
+  /**
+   * Reads what the pad shows of remote trigger URLs. A hook, called once per
+   * render, so it must be the same function for the pad's whole life.
+   */
+  useRemoteTriggers: () => MacroPadRemoteTriggers;
+}
+
+// Nothing about the pad comes from the per-user widget config: it is shared
+// per instance and kept behind the gateway.
+export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
+  const { instanceId } = useEngineScope();
   const [isEditMode, setIsEditMode] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
-  const [editingMacro, setEditingMacro] = useState<MacroButton | null>(null);
-  const [isExecuting, setIsExecuting] = useState<string | null>(null);
-  const [pendingMacro, setPendingMacro] = useState<MacroButton | null>(null);
+  const [editingMacro, setEditingMacro] = useState<Macro | null>(null);
+  const [isExecuting, setIsExecuting] = useState<MacroId | null>(null);
+  const [pendingMacro, setPendingMacro] = useState<Macro | null>(null);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useEngineWorkflowsRequest();
-  const runMacroOnServer = useRunMacroRequest();
+  const runMacroOnEngine = useRunMacroRequest();
   const sendChatMessage = useSendChatMessageRequest();
   const { toast } = useToast();
 
-  const instanceId = instance?._id;
-  const listArgs = instanceId ? { instanceId } : "skip";
-
-  const macros = useQuery(api.macros.list, listArgs);
+  const macros = useMacros();
   const commands = useChatCommands();
-  const remoteTriggers = useQuery(api.macroTriggers.listForInstance, listArgs);
-  const addMacro = useMutation(api.macros.addMacro);
-  const updateMacro = useMutation(api.macros.updateMacro);
-  const deleteMacro = useMutation(api.macros.deleteMacro);
-  // Without an optimistic update a dragged tile springs back to its old slot
-  // until the server round-trip lands.
-  const reorderMacros = useMutation(api.macros.reorderMacros).withOptimisticUpdate((localStore, args) => {
+  const remoteTriggers = useRemoteTriggers();
+  const addMacro = useAddMacroRequest();
+  const updateMacro = useUpdateMacroRequest();
+  const deleteMacro = useDeleteMacroRequest();
+  const reorderMacros = useReorderMacrosRequest();
+
+  useEffect(() => {
     if (!instanceId) {
       return;
     }
-    const current = localStore.getQuery(api.macros.list, { instanceId });
-    if (!current) {
-      return;
-    }
-    const byId = new Map(current.map((macro) => [macro.id, macro]));
-    const reordered = args.macroIds.flatMap((id) => {
-      const macro = byId.get(id);
-      return macro ? [macro] : [];
-    });
-    localStore.setQuery(api.macros.list, { instanceId }, reordered);
-  });
-
-  useEffect(() => {
-    if (!engineInstanceId) {
-      return;
-    }
     listEngineWorkflows().then(setWorkflows).catch(console.error);
-  }, [engineInstanceId, listEngineWorkflows]);
+  }, [instanceId, listEngineWorkflows]);
 
   const variableCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -230,16 +213,25 @@ export function MacroPadModule() {
   }, [macros]);
 
   // Until the role is known, members and managers alike see buttons enabled;
-  // the server refuses what the role does not allow either way.
-  const canManage = remoteTriggers?.canManage ?? true;
+  // the store refuses what the role does not allow either way.
+  const canManage = remoteTriggers.canManage ?? true;
+  const remoteTriggerStatuses = remoteTriggers.statuses;
+  const RemoteTriggerSection = remoteTriggers.EditorSection;
 
-  const remoteTriggerStatuses = useMemo(() => {
-    const statuses: Record<string, string> = {};
-    for (const trigger of remoteTriggers?.triggers ?? []) {
-      statuses[trigger.macroId] = macroTriggerStatusLabel(trigger);
-    }
-    return statuses;
-  }, [remoteTriggers]);
+  // A macro with a trigger URL does, from anywhere, whatever it is set to do,
+  // so only a manager may change that.
+  const behaviorLocked = editingMacro !== null && !canManage && editingMacro.id in remoteTriggerStatuses;
+
+  const failed = useCallback(
+    (title: string) => (error: unknown) => {
+      toast({
+        title,
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    },
+    [toast]
+  );
 
   const handleAddMacro = useCallback(() => {
     setEditingMacro(null);
@@ -247,35 +239,29 @@ export function MacroPadModule() {
   }, []);
 
   const handleDeleteMacro = useCallback(
-    (id: Id<"macros">) => {
-      if (!instanceId) {
-        return;
-      }
-      void deleteMacro({ instanceId, macroId: id });
+    (id: MacroId) => {
+      deleteMacro(id).catch(failed("Couldn't delete the macro"));
     },
-    [instanceId, deleteMacro]
+    [deleteMacro, failed]
   );
 
   const handleSaveMacro = useCallback(
     (input: MacroInput) => {
-      if (!instanceId) {
-        return;
-      }
       if (editingMacro) {
-        void updateMacro({ instanceId, macroId: editingMacro.id, ...input });
+        updateMacro(editingMacro.id, input).catch(failed("Couldn't save the macro"));
       } else {
-        void addMacro({ instanceId, ...input });
+        addMacro(input).catch(failed("Couldn't add the macro"));
       }
       setConfigModalOpen(false);
       setEditingMacro(null);
     },
-    [editingMacro, instanceId, addMacro, updateMacro]
+    [editingMacro, addMacro, updateMacro, failed]
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
-      if (!over || active.id === over.id || !instanceId || !macros) {
+      if (!over || active.id === over.id || !macros) {
         return;
       }
       const from = macros.findIndex((m) => m.id === active.id);
@@ -284,21 +270,22 @@ export function MacroPadModule() {
         return;
       }
       const macroIds = arrayMove(macros, from, to).map((m) => m.id);
-      void reorderMacros({ instanceId, macroIds });
+      reorderMacros(macroIds).catch(failed("Couldn't reorder the macros"));
     },
-    [macros, instanceId, reorderMacros]
+    [macros, reorderMacros, failed]
   );
 
   // A pad button is a small target; requiring a few pixels of movement keeps a
   // click from being swallowed as the start of a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // Chat-command, workflow and action macros run in Convex through the same path as a
-  // remote trigger URL. HTTP-request macros are fetched from here, in the
-  // browser, so a target on the streamer's local network stays reachable.
-  // Send-message macros post through the signed-in user's Twitch link.
+  // Chat-command, workflow and action macros run on the engine through the
+  // gateway, planned as a remote trigger URL plans them. HTTP-request macros
+  // are fetched from here, in the browser, so a target on the streamer's local
+  // network stays reachable. Send-message macros post through the gateway's
+  // Twitch chat, as the broadcaster.
   const runMacro = useCallback(
-    async (macro: MacroButton, values: Record<string, string>) => {
+    async (macro: Macro, values: Record<string, string>) => {
       if (!instanceId) {
         return;
       }
@@ -318,13 +305,7 @@ export function MacroPadModule() {
           const resolved = applyMacroVariables(macro.config, values);
           await sendChatMessage(resolved.message ?? "");
         } else {
-          if (!engineInstanceId) {
-            return;
-          }
-          await runMacroOnServer(
-            toMacroId(macro.id),
-            Object.entries(values).map(([name, value]) => ({ name, value }))
-          );
+          await runMacroOnEngine(macro.id, valuesToPairs(values));
         }
       } catch (error) {
         toast({
@@ -336,11 +317,11 @@ export function MacroPadModule() {
         setIsExecuting(null);
       }
     },
-    [instanceId, engineInstanceId, runMacroOnServer, sendChatMessage, toast]
+    [instanceId, runMacroOnEngine, sendChatMessage, toast]
   );
 
   const handlePress = useCallback(
-    (macro: MacroButton) => {
+    (macro: Macro) => {
       if (isEditMode) {
         return;
       }
@@ -455,12 +436,15 @@ export function MacroPadModule() {
       </div>
 
       <MacroConfigModal
-        instanceId={instanceId}
         open={configModalOpen}
         onOpenChange={setConfigModalOpen}
         macro={editingMacro}
         workflows={workflows}
         commands={commands ?? []}
+        behaviorLocked={behaviorLocked}
+        remoteTriggerSection={
+          editingMacro && RemoteTriggerSection ? <RemoteTriggerSection macro={editingMacro} /> : null
+        }
         onSave={handleSaveMacro}
       />
 
@@ -477,4 +461,9 @@ export function MacroPadModule() {
       />
     </div>
   );
+}
+
+/** The macro pad with no remote trigger URLs, as any gateway serves it. */
+export function MacroPadWidget() {
+  return <MacroPad useRemoteTriggers={useNoRemoteTriggers} />;
 }

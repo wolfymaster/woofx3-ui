@@ -1,3 +1,4 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -12,7 +13,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { conditionFieldsOf, newTriggerTree } from "@/lib/alert-triggers";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { isCommandsSource } from "@/lib/parse-config-fields";
 import { type WaitEventChoice, type WaitEventGroup, waitEventGroups } from "@/lib/wait-event";
 import type { TriggerPreset } from "@/lib/workflow-presets";

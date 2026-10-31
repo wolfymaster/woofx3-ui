@@ -10,6 +10,7 @@ import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import { ViewerNameProvider } from "@/lib/viewer-name";
 import type { LocalEngineSession } from "./host";
 import { LocalShell } from "./LocalShell";
+import { localGatewayHost } from "./local-gateway-host";
 import { localMarketplaceMode } from "./local-marketplace-mode";
 import { LOCAL_HOME_PATH, LOCAL_ROUTES } from "./local-routes";
 import { useLocalEngineSession } from "./use-local-engine-session";
@@ -80,7 +81,7 @@ function readyTarget(session: ReadySession): EngineTargetSource {
 function LocalPages({ session }: { session: ReadySession }) {
   const targets = useMemo(() => readyTarget(session), [session]);
   return (
-    <LocalEngineGatewayProvider targets={targets}>
+    <LocalEngineGatewayProvider targets={targets} host={localGatewayHost}>
       <ViewerNameProvider name={LOCAL_VIEWER_NAME}>
         <MarketplaceModeProvider mode={localMarketplaceMode}>
           <TooltipProvider>

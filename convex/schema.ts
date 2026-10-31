@@ -62,7 +62,7 @@ export const macroActionTypeValidator = v.union(
   v.literal("run-action")
 );
 
-// Mirrors MacroConfig in convex/lib/macroVariables.ts. Free-text fields may
+// Mirrors MacroConfig in shared/macro-variables.ts. Free-text fields may
 // carry `{{name}}` variables, resolved each time the macro runs.
 export const macroConfigValidator = v.object({
   message: v.optional(v.string()),
@@ -479,7 +479,7 @@ export default defineSchema({
     connectedByUserId: v.optional(v.string()),
     // When Twitch last refused this link's refresh token: the creator revoked
     // the app or changed their password. Cleared by a relink or a successful
-    // refresh. Drives the "Reconnect Twitch" banner (lib/twitchScopeHealth.ts).
+    // refresh. Drives the "Reconnect Twitch" banner (shared/twitch-scope-health.ts).
     authFailedAt: v.optional(v.number()),
   }).index("by_instance", ["instanceId"]),
 
@@ -495,7 +495,7 @@ export default defineSchema({
     command: v.string(), // without the "!" prefix
     // The actions this command runs, in order -- the same shape a workflow step
     // has (`ActionStep` in @woofx3/api). Stored with `$ref` escaped, like every
-    // other engine JSON Convex holds (see lib/dollarKeys.ts), and validated by
+    // other engine JSON Convex holds (see shared/dollar-keys.ts), and validated by
     // the engine, which is the authority on what it can run.
     actions: v.array(v.any()),
     // The stored workflow the command runs, by engine id, and that workflow's
@@ -1105,7 +1105,7 @@ export default defineSchema({
     // See instanceTriggers.by_trigger.
     .index("by_widget", ["widgetId"]),
 
-  // starterPackItems: which starter pack items (convex/lib/starterPacks.ts) an
+  // starterPackItems: which starter pack items (shared/starter-packs.ts) an
   // instance has installed, and the engine workflow or command each became.
   // A row is written as "installing" before the engine call, so a second
   // install racing the first finds it and skips the item instead of creating
@@ -1960,7 +1960,7 @@ export default defineSchema({
   // (source: "retrigger", written by engineEventLog.retrigger). payload is a
   // JSON string of the raw, unescaped event data — never structured v.any(),
   // since the engine embeds $ref keys that Convex rejects on structured
-  // fields (see lib/dollarKeys.ts).
+  // fields (see shared/dollar-keys.ts).
   engineEventLog: defineTable({
     instanceId: v.id("instances"),
     eventType: v.string(),

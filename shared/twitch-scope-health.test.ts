@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { TWITCH_INTEGRATION_SCOPES } from "./twitchIntegrationScopes";
+import { TWITCH_INTEGRATION_SCOPES } from "./twitch-integration-scopes";
 import {
   missingRequiredTwitchScopes,
   missingTwitchCapabilities,
   TWITCH_CAPABILITIES,
   twitchScopeHealth,
   twitchScopeHealthKey,
-} from "./twitchScopeHealth";
+} from "./twitch-scope-health";
 
 describe("TWITCH_CAPABILITIES", () => {
   test("every requested scope belongs to exactly one capability", () => {

@@ -1,6 +1,7 @@
 import { createEngineBrowserSession, createEngineGatewaySession } from "@woofx3/api/client";
 import { type ReactNode, useEffect, useState } from "react";
 import { EngineGatewayProvider } from "@/engine/context";
+import type { DesktopHostState } from "@/engine/desktop-host";
 import { DEFAULT_DIRECT_GATEWAY_CONFIG } from "@/engine/direct/config";
 import type { DirectEngineApi } from "@/engine/direct/connection";
 import { createDirectEngineGateway } from "@/engine/direct/gateway";
@@ -29,8 +30,11 @@ interface LocalEngine {
   gateway: EngineGateway;
 }
 
-/** The direct gateway over the engine `targets` names, on the browser's own clock, randomness, ids and console. */
-function createLocalEngine(targets: EngineTargetSource): LocalEngine {
+/**
+ * The direct gateway over the engine `targets` names, on the browser's own
+ * clock, randomness, ids and console, with the UI state `host` keeps.
+ */
+function createLocalEngine(targets: EngineTargetSource, host: DesktopHostState): LocalEngine {
   const runtime = createDirectRuntime({
     targets,
     open: (target) => createEngineBrowserSession<DirectEngineApi>(target.url, target.clientId, target.clientSecret),
@@ -43,23 +47,25 @@ function createLocalEngine(targets: EngineTargetSource): LocalEngine {
     logger: consoleLogger("engine"),
     config: DEFAULT_DIRECT_GATEWAY_CONFIG,
   });
-  return { runtime, gateway: createDirectEngineGateway(runtime) };
+  return { runtime, gateway: createDirectEngineGateway(runtime, host) };
 }
 
 /**
  * Talks to the engine `targets` names directly, for the desktop app's local
  * mode: the direct gateway at the root and a scope that always holds the one
  * engine. The connection starts on mount and stops on unmount, and `targets`
- * is read once, so a host that changes engines remounts this.
+ * and `host` are read once, so a host that changes engines remounts this.
  */
 export function LocalEngineGatewayProvider({
   targets,
+  host,
   children,
 }: {
   targets: EngineTargetSource;
+  host: DesktopHostState;
   children: ReactNode;
 }) {
-  const [engine] = useState(() => createLocalEngine(targets));
+  const [engine] = useState(() => createLocalEngine(targets, host));
   useEffect(() => {
     engine.runtime.start();
     return () => {

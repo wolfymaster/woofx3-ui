@@ -7,16 +7,17 @@ import {
   renamePanel,
   setPanelWidgets,
 } from "@shared/dashboard-layout";
-import type { UISetting, UISettingValue } from "@woofx3/api";
+import type { UISetting } from "@woofx3/api";
 import { z } from "zod";
 import type { DashboardGateway } from "@/engine/gateway";
 import type { DashboardNote, NewStreamHighlight, StreamHighlight, StreamHighlightId } from "@/engine/types";
-import type { Logger } from "@/lib/engine-session/deps";
 import { fromStreamHighlightId, toStreamHighlightId } from "./ids";
 import { useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import {
+  parseSetting,
   removeUISetting,
+  toSettingValue,
   UI_SETTING_NAMESPACES,
   type UISettingNamespace,
   type UISettingUpdate,
@@ -83,29 +84,6 @@ const highlightSchema = z.object({
   amount: z.number().optional(),
   occurredAt: z.number(),
 });
-
-/**
- * Everything the dashboard writes is built from JSON it read or typed
- * values of plain fields, so it is a value JSON can represent; the engine
- * refuses one that is not.
- */
-function toSettingValue(value: object): UISettingValue {
-  return value as UISettingValue;
-}
-
-/** `setting`'s value read by `schema`, or null (logged) when it does not fit. */
-function parseSetting<T>(logger: Logger, schema: z.ZodType<T>, setting: UISetting): T | null {
-  const parsed = schema.safeParse(setting.value);
-  if (!parsed.success) {
-    logger.warn("Direct dashboard: a stored setting is unreadable and reads as empty", {
-      namespace: setting.namespace,
-      key: setting.key,
-      issues: parsed.error.issues,
-    });
-    return null;
-  }
-  return parsed.data;
-}
 
 const findKey = (settings: UISetting[], key: string): UISetting | null =>
   settings.find((setting) => setting.key === key) ?? null;

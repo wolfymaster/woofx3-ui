@@ -1,3 +1,4 @@
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import type { ActionStep } from "@woofx3/api";
 import { useState } from "react";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
@@ -6,7 +7,6 @@ import { useRunResourceActionsRequest } from "@/engine/hooks/use-module-resource
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { type ResourceAction, resourceActionStep, resourceActionStepFor } from "@/lib/resource-actions";
 
 /**

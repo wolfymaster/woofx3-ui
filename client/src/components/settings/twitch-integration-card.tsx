@@ -1,9 +1,6 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { canManageTwitchLink } from "@convex/lib/twitchLinkPolicy";
-import { useQuery } from "convex/react";
 import { Loader2, Unlink } from "lucide-react";
 import { useState } from "react";
+import { TwitchApprovalCode } from "@/components/settings/twitch-approval-code";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,11 +13,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useUnlinkTwitchRequest } from "@/engine/hooks/use-twitch-link";
+import { useEngineScope } from "@/engine/context";
+import { useCanManageTwitchLink, useUnlinkTwitchRequest } from "@/engine/hooks/use-twitch-link";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 
 interface TwitchIntegrationCardProps {
-  instanceId: Id<"instances"> | undefined;
   isConnected: boolean;
   twitchLink?: {
     platformUsername: string;
@@ -30,16 +27,17 @@ interface TwitchIntegrationCardProps {
   isLoading: boolean;
 }
 
-export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isLoading }: TwitchIntegrationCardProps) {
+export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: TwitchIntegrationCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const unlink = useUnlinkTwitchRequest();
-  const { connect, starting, error: connectError } = useTwitchConnect();
+  const { instanceId } = useEngineScope();
+  const { connect, cancel, starting, error: connectError, linking } = useTwitchConnect();
   // The server refuses a member's connect or disconnect; this only keeps the
   // buttons from offering what will be refused. Undefined while loading, which
   // leaves them disabled rather than flashing enabled.
-  const viewerRole = useQuery(api.instances.viewerRole, instanceId ? { instanceId } : "skip");
-  const canManage = canManageTwitchLink(viewerRole);
+  const canManageLink = useCanManageTwitchLink();
+  const canManage = canManageLink === true;
 
   const handleConnect = () => {
     connect("/admin/integrations");
@@ -147,15 +145,16 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
           <p className="font-medium">Twitch</p>
           <p className="text-sm text-muted-foreground">Not connected</p>
           {connectError && <p className="text-sm text-destructive">{connectError}</p>}
-          {viewerRole !== undefined && !canManage && (
+          {canManageLink === false && (
             <p className="text-xs text-muted-foreground">Only an owner or admin can connect Twitch.</p>
           )}
+          <TwitchApprovalCode linking={linking} onCancel={cancel} />
         </div>
       </div>
       <Button
         variant="outline"
         onClick={handleConnect}
-        disabled={!instanceId || !canManage || starting}
+        disabled={instanceId === null || !canManage || starting}
         data-testid="button-connect-twitch"
       >
         {starting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}

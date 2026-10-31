@@ -1,11 +1,8 @@
-import { Clapperboard, Grid3x3, ListChecks, Pin, Rocket, Volume2 } from "lucide-react";
+import { ListChecks, Pin } from "lucide-react";
 import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
-import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
-import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
+import { HostedMacroPadWidget } from "@/components/dashboard/widgets/hosted-macro-pad";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
-import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
-import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { useInstance } from "@/hooks/use-instance";
 import type { DashboardCatalog, RailPinnedItem } from "./catalog";
 import {
@@ -13,10 +10,14 @@ import {
   adBreaksWidget,
   announcementWidget,
   eventsWidget,
+  goLiveWidget,
+  macroPadWidget,
   moderationWidget,
   notesWidget,
   queueWidget,
   recentStreamsWidget,
+  shoutoutWidget,
+  streamInfoWidget,
   streamPreviewWidget,
   streamStatsWidget,
   streamStatusWidget,
@@ -26,26 +27,8 @@ import {
 import type { DashboardWidgetDefinition } from "./types";
 
 // The hosted app's dashboard: every widget. Those below reach data only
-// Convex keeps (macros, the go-live checklist, pin history, the shoutout
-// queue, stream info presets), so only the hosted app may load this module.
-
-const goLiveWidget: DashboardWidgetDefinition = {
-  type: "go-live",
-  label: "Go Live Checklist",
-  description: "Pre-flight checks before you go live: engine, Twitch, overlays, OBS, stream info and workflows.",
-  icon: Rocket,
-  category: "stream",
-  component: GoLiveWidget,
-};
-
-const streamInfoWidget: DashboardWidgetDefinition = {
-  type: "stream-info",
-  label: "Stream Info",
-  description: "Edit your title, category and tags, switch between saved presets, and drop stream markers.",
-  icon: Clapperboard,
-  category: "stream",
-  component: StreamInfoWidget,
-};
+// Convex keeps (pin history, macros' remote trigger URLs), so only the hosted
+// app may load this module.
 
 const pinnedWidget: DashboardWidgetDefinition = {
   type: "pinned",
@@ -56,23 +39,7 @@ const pinnedWidget: DashboardWidgetDefinition = {
   component: PinnedWidget,
 };
 
-const shoutoutWidget: DashboardWidgetDefinition = {
-  type: "shoutout",
-  label: "Shoutout",
-  description: "Queue shoutouts for people in chat — sent one at a time, two minutes apart.",
-  icon: Volume2,
-  category: "stream",
-  component: ShoutoutWidget,
-};
-
-const macroPadWidget: DashboardWidgetDefinition = {
-  type: "macro-pad",
-  label: "Macro Pad",
-  description: "One-click buttons for chat commands, workflows, and HTTP requests.",
-  icon: Grid3x3,
-  category: "automation",
-  component: MacroPadModule,
-};
+const hostedMacroPadWidget: DashboardWidgetDefinition = { ...macroPadWidget, component: HostedMacroPadWidget };
 
 /** The getting started checklist, pinned first on the rail while it has anything left to do. */
 function useGettingStartedRailItem(): RailPinnedItem | null {
@@ -109,7 +76,7 @@ export const hostedDashboardCatalog: DashboardCatalog = {
     streamStatsWidget,
     recentStreamsWidget,
     notesWidget,
-    macroPadWidget,
+    hostedMacroPadWidget,
   ],
   usePinnedRailItem: useGettingStartedRailItem,
   Notice: StarterPacksNudge,

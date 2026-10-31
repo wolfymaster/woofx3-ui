@@ -217,11 +217,10 @@ describe("supporter lookups", () => {
     ]);
   });
 
-  test("whether the link may shout out is the cloud's answer, and the queue is served", () => {
+  test("whether the link may shout out is the cloud's answer", () => {
     rows = { "supporters:canShoutOut": true };
     expect(renderInScope(() => convexShoutoutsGateway.useCanShoutOut())).toBe(true);
     expect(queries).toEqual([{ name: "supporters:canShoutOut", args: { instanceId } }]);
-    expect(convexShoutoutsGateway.support).toEqual({ queue: true });
   });
 });
 

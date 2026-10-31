@@ -115,7 +115,6 @@ function useCanShoutOut({ enabled = true }: ReadOptions = {}) {
 }
 
 export const convexShoutoutsGateway: ShoutoutsGateway = {
-  support: { queue: true },
   useCanShoutOut,
   useQueue,
   useLookupRequest,

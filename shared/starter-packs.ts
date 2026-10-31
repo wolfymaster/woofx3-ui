@@ -1,5 +1,11 @@
-import type { ActionStep, ConditionConfig, ConditionOperator, TaskDefinition, WorkflowDefinition } from "@woofx3/api";
-import type { EngineCapability } from "./engineCapabilities";
+import type {
+  ActionStep,
+  ConditionConfig,
+  ConditionOperator,
+  EngineCapability,
+  TaskDefinition,
+  WorkflowDefinition,
+} from "@woofx3/api";
 
 /**
  * Starter packs: curated sets of workflows and chat commands a new streamer

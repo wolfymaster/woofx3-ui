@@ -14,14 +14,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import { useCanShoutOut, useEnqueueShoutoutRequest, useShoutoutsSupport } from "@/engine/hooks/use-shoutouts";
+import { useCanShoutOut, useEnqueueShoutoutRequest } from "@/engine/hooks/use-shoutouts";
 import {
   useSupporterLeaderboardRequest,
   useSupporterStreamsRequest,
   useTwitchViewerRequest,
   useViewerSupportTotalsRequest,
 } from "@/engine/hooks/use-supporters";
-import { useSendShoutoutRequest } from "@/engine/hooks/use-twitch-chat";
 import type { InstanceId } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "@/hooks/use-toast";
@@ -453,9 +452,7 @@ function ViewerCard({
 function ViewerDetail({ engineInstanceId, viewer }: { engineInstanceId: InstanceId; viewer: SelectedViewer }) {
   const readViewerTotals = useViewerSupportTotalsRequest();
   const findTwitchViewer = useTwitchViewerRequest();
-  const shoutoutQueue = useShoutoutsSupport().queue;
   const enqueueShoutout = useEnqueueShoutoutRequest();
-  const sendShoutout = useSendShoutoutRequest();
   const canShoutOut = useCanShoutOut();
   const [queueing, setQueueing] = useState(false);
 
@@ -478,28 +475,21 @@ function ViewerDetail({ engineInstanceId, viewer }: { engineInstanceId: Instance
     }
     setQueueing(true);
     try {
-      // Without a queue to wait out Twitch's cooldown, the shoutout goes now
-      // and a cooldown refusal comes back as the error.
-      if (shoutoutQueue) {
-        await enqueueShoutout(user);
-        toast({
-          title: "Shoutout queued",
-          description: `${user.displayName} is shouted out when Twitch's cooldown allows.`,
-        });
-      } else {
-        await sendShoutout(user.login);
-        toast({ title: "Shoutout sent", description: `${user.displayName} was shouted out.` });
-      }
+      await enqueueShoutout(user);
+      toast({
+        title: "Shoutout queued",
+        description: `${user.displayName} is shouted out when Twitch's cooldown allows.`,
+      });
     } catch (err) {
       toast({
-        title: shoutoutQueue ? "Could not queue the shoutout" : "Could not send the shoutout",
+        title: "Could not queue the shoutout",
         description: supporterErrorText(err),
         variant: "destructive",
       });
     } finally {
       setQueueing(false);
     }
-  }, [enqueueShoutout, sendShoutout, shoutoutQueue, twitch.data]);
+  }, [enqueueShoutout, twitch.data]);
 
   return (
     <div className="space-y-5" data-testid="viewer-detail">

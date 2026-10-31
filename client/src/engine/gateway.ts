@@ -63,7 +63,9 @@ import type {
   KnownBoxArt,
   ListingQuote,
   Live,
+  Macro,
   MacroId,
+  MacroInput,
   MacroRunResult,
   MacroVariableValue,
   MarketplaceBundleInstall,
@@ -312,6 +314,8 @@ export interface ResourcesGateway {
  * its live push and type selection.
  */
 export interface EventLogGateway {
+  /** Whether a logged event can be fired at the engine again; false hides the control rather than failing it. */
+  readonly canRetrigger: boolean;
   /** Newest first, optionally of one type. */
   useWebhookEvents(eventType: string | null, initialNumItems: number): Paginated<WebhookEventSummary>;
   /** The raw payload JSON; null when the entry is gone or not the caller's. */
@@ -430,7 +434,7 @@ export interface ModuleResourcesGateway {
   useRefreshValuesRequest(): (kind: string) => Promise<null>;
   /**
    * Runs action steps on the engine now. `actions` carry their `$` keys escaped
-   * (lib/dollar-keys); the result arrives through the values they change.
+   * (shared/dollar-keys); the result arrives through the values they change.
    */
   useRunActionsRequest(): (label: string, actions: unknown[]) => Promise<null>;
 }
@@ -584,7 +588,7 @@ export interface WorkflowsGateway {
   useCatalog(): Live<WorkflowCatalog | null>;
   /**
    * Creates a workflow from a definition with its `$` keys escaped
-   * (lib/dollar-keys), and resolves once its webhook echo has landed, with
+   * (shared/dollar-keys), and resolves once its webhook echo has landed, with
    * the id the engine gave it.
    */
   useCreateRequest(): (definition: unknown) => Promise<{ engineWorkflowId: string }>;
@@ -651,8 +655,21 @@ export interface RequestsGateway {
   useEventWatchRequest(): (correlationKey: string) => EventWatch;
 }
 
-/** Running the dashboard's macros. The macros themselves are kept in Convex, not on the engine. */
+/**
+ * The instance's macro pad: one shared set of buttons in one order, and
+ * running a button on the engine.
+ */
 export interface MacrosGateway {
+  /** The pad's macros in the order shown. */
+  useMacros(): Live<Macro[]>;
+  /** Adds a macro after the last; resolves with its id. Rejects a blank label or a color that is not `#rrggbb`. */
+  useAddRequest(): (input: MacroInput) => Promise<MacroId>;
+  /** Replaces a macro's fields. Rejects what the add request rejects, and a macro that is not there. */
+  useUpdateRequest(): (macroId: MacroId, input: MacroInput) => Promise<void>;
+  /** Deleting a macro already gone succeeds. */
+  useDeleteRequest(): (macroId: MacroId) => Promise<void>;
+  /** Puts the pad in `macroIds` order; an id no longer there is skipped. */
+  useReorderRequest(): (macroIds: MacroId[]) => Promise<void>;
   /**
    * Runs a chat-command, workflow or action macro on the engine. Rejects for
    * an HTTP-request macro, which the browser fetches itself, and for a
@@ -772,6 +789,8 @@ export interface TwitchLinkGateway {
   useLink(): Live<TwitchLink | null>;
   /** Starts and follows linking for the calling component. */
   useLinkFlow(): TwitchLinkFlow;
+  /** Whether the viewer may link or replace the link; undefined while that is unknown. */
+  useCanManageLink(): Live<boolean>;
   /** Removes the link. Rejects for a caller who is not an owner or admin. */
   useUnlinkRequest(): () => Promise<void>;
 }
@@ -887,19 +906,12 @@ export interface PinsGateway {
   useRemoveFromHistoryRequest(): (entryId: PinHistoryEntryId) => Promise<void>;
 }
 
-/** Which of `ShoutoutsGateway`'s members a gateway serves; see `StreamOpsSupport`. */
-export interface ShoutoutsSupport {
-  /** The queue and its members; without it a screen shouts out at once (`twitchChat.useSendShoutoutRequest`). */
-  queue: boolean;
-}
-
 /**
  * The shoutout queue: channels waiting for a Twitch shoutout, sent one at a
  * time within Twitch's rate limits. Workflows and chat commands add to the
  * same queue.
  */
 export interface ShoutoutsGateway {
-  readonly support: ShoutoutsSupport;
   /** Whether the channel's Twitch link may send shoutouts; false when the caller cannot see the instance. */
   useCanShoutOut(options?: ReadOptions): Live<boolean>;
   /** In queue order. Empty when the caller cannot see the instance. */

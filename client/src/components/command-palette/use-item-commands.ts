@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
-import { useQuery } from "convex/react";
 import {
   Bell,
   Boxes,
@@ -30,7 +28,7 @@ import {
 } from "lucide-react";
 import { useEngineScope } from "@/engine/context";
 import { useChatCommandGroups, useChatCommands, useUpdateChatCommandRequest } from "@/engine/hooks/use-chat-commands";
-import { useRunMacroRequest } from "@/engine/hooks/use-macros";
+import { useMacros, useRunMacroRequest } from "@/engine/hooks/use-macros";
 import {
   useResourceInstances,
   useResourceInstancesOfKind,
@@ -49,7 +47,6 @@ import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { buildAlertTree, flattenAlertTree } from "@/lib/alert-groups";
-import { toMacroId } from "@/lib/cloud-ids";
 import { commandEditorPath, commandGroupEditorPath } from "@/lib/command-editor-route";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { groupLabel } from "@/lib/group-display";
@@ -93,7 +90,6 @@ const RECENT_RECAPS = 10;
 export function useItemCommands(instance: Doc<"instances"> | null): PaletteCommand[] {
   const instanceId = instance?._id;
   const { instanceId: engineInstanceId } = useEngineScope();
-  const args = instanceId ? { instanceId } : "skip";
 
   const workflows = useWorkflows();
   const commands = useChatCommands();
@@ -101,7 +97,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const scenes = useScenes();
   const modules = useInstalledModules();
   const recaps = useRecentRecaps(RECENT_RECAPS);
-  const macros = useQuery(api.macros.list, args);
+  const macros = useMacros();
   const presets = useStreamInfoPresets();
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
   const timers = useResourceInstancesOfKind(TIMER_KIND);
@@ -562,7 +558,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
           if (macro.type === "send-message") {
             await sendChatMessage(applyMacroVariables(macro.config, {}).message ?? "");
           } else {
-            await runMacro(toMacroId(macro.id), []);
+            await runMacro(macro.id, []);
           }
           return `Ran ${macro.label}`;
         },

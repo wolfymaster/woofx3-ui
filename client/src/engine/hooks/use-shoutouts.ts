@@ -23,11 +23,6 @@ export function useReorderShoutoutsRequest() {
   return useEngineGateway().shoutouts.useReorderRequest();
 }
 
-/** What this connection to the engine serves of shoutouts. */
-export function useShoutoutsSupport() {
-  return useEngineGateway().shoutouts.support;
-}
-
 /** Whether the channel's Twitch link may send shoutouts. */
 export function useCanShoutOut(options?: ReadOptions) {
   return useEngineGateway().shoutouts.useCanShoutOut(options);
