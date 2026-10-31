@@ -53,6 +53,7 @@ const Scenes = lazy(() => import("@/pages/scenes"));
 const StarterPacks = lazy(() => import("@/pages/starter-packs"));
 const StreamRecap = lazy(() => import("@/pages/stream-recap"));
 const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
+const Supporters = lazy(() => import("@/pages/supporters"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -91,6 +92,7 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: STREAM_RECAP_ROUTE, render: () => <StreamRecap /> },
   { path: "/stream/scenes", render: () => <Scenes /> },
   { path: "/stream/scenes/:id", render: () => <Scenes /> },
+  { path: "/stream/supporters", render: () => <Supporters /> },
   { path: "/stream/workflows", render: () => <Workflows /> },
   { path: "/stream/workflows/new", render: () => <Workflows /> },
   { path: WORKFLOW_RUN_ROUTE, render: () => <WorkflowRun /> },

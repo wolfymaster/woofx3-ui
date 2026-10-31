@@ -9,7 +9,7 @@ import type { ReadOptions, ShoutoutEntryId, TwitchChannel } from "@/engine/types
 import { fromShoutoutEntryId } from "./ids";
 import { directKeys as k } from "./keys";
 import { fromTwitchChannel, toShoutoutEntries } from "./map/shoutouts";
-import { toTwitchChannel } from "./map/twitch";
+import { canShoutOutOf, toTwitchChannel } from "./map/twitch";
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { directTwitch } from "./twitch";
@@ -95,6 +95,8 @@ export function directShoutoutsGateway(runtime: DirectRuntime, host: ShoutoutQue
   };
 
   return {
+    useCanShoutOut: ({ enabled = true }: ReadOptions = {}) =>
+      useEngineQuery(runtime, twitch.linkRead, { enabled, select: canShoutOutOf }),
     useQueue,
     useLookupRequest: () => useEngineRequest(lookup),
     useEnqueueRequest: () => useEngineRequest(enqueue),

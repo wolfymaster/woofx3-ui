@@ -146,6 +146,7 @@ import type {
   TwitchChannel,
   TwitchLink,
   TwitchLinkFlow,
+  TwitchViewerLookup,
   UploadGrant,
   UploadRequest,
   ViewerFact,
@@ -734,6 +735,8 @@ export interface StreamOpsGateway {
   useSupporterLeaderboardRequest(): (query: SupporterLeaderboardQuery) => Promise<Supporter[]>;
   /** Rejects for a blank id. */
   useViewerSupportTotalsRequest(): (platformUserId: string) => Promise<ViewerSupportTotals>;
+  /** A viewer's Twitch account; null when Twitch has nobody by that login or id, or the login cannot be one. */
+  useTwitchViewerRequest(): (lookup: TwitchViewerLookup) => Promise<TwitchChannel | null>;
   /** Publishes an event as given, with no `platform` attribute. */
   usePublishEventRequest(): (event: EngineTestEvent) => Promise<PublishedTestEvent>;
   /**
@@ -909,6 +912,8 @@ export interface PinsGateway {
  * same queue.
  */
 export interface ShoutoutsGateway {
+  /** Whether the channel's Twitch link may send shoutouts; false when the caller cannot see the instance. */
+  useCanShoutOut(options?: ReadOptions): Live<boolean>;
   /** In queue order. Empty when the caller cannot see the instance. */
   useQueue(options?: ReadOptions): Live<ShoutoutEntry[]>;
   /** The channel a login names, to confirm before queueing; null when there is none. */

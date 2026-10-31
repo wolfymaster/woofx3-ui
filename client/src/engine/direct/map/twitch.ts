@@ -1,10 +1,11 @@
 import { type InstanceRole, moderationAccess } from "@shared/moderation";
 import type { StreamCategory as HelixStreamCategory, StreamInfo as HelixStreamInfo } from "@shared/stream-info";
+import { SHOUTOUT_SCOPE } from "@shared/twitch-chat";
 import { readHelixResult, unconfirmedResponse } from "@shared/twitch-helix-answer";
 import { TWITCH_NOT_CONNECTED_MESSAGE } from "@shared/twitch-link-refusal";
 import type { TwitchPin } from "@shared/twitch-pins";
-import type { TwitchUser } from "@shared/twitch-users";
-import type { TwitchLinkInfo } from "@woofx3/api";
+import { normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
+import type { TwitchGetUsersParams, TwitchLinkInfo } from "@woofx3/api";
 import type {
   CurrentPin,
   ModeratedUser,
@@ -13,6 +14,7 @@ import type {
   StreamInfo,
   StreamInfoChanges,
   TwitchChannel,
+  TwitchViewerLookup,
 } from "@/engine/types";
 
 /** Why an engine never called Twitch, in words for the streamer. */
@@ -51,10 +53,6 @@ export function toModerationAccess(link: TwitchLinkInfo): ModerationAccess {
   return moderationAccess(ENGINE_ROLE, link.linked ? link.scopes : null);
 }
 
-export function toModeratedUser(user: TwitchUser): ModeratedUser {
-  return { login: user.login, displayName: user.displayName };
-}
-
 export function toTwitchChannel(user: TwitchUser): TwitchChannel {
   return {
     twitchUserId: user.twitchUserId,
@@ -63,6 +61,24 @@ export function toTwitchChannel(user: TwitchUser): TwitchChannel {
     profileImageUrl: user.profileImageUrl ?? null,
     broadcasterType: user.broadcasterType ?? null,
   };
+}
+
+/** The `/helix/users` query a lookup makes; null for a login that cannot be one, so Twitch is never sent it. */
+export function toTwitchUsersQuery(lookup: TwitchViewerLookup): TwitchGetUsersParams | null {
+  if ("login" in lookup) {
+    const login = normalizeTwitchLogin(lookup.login);
+    return login === null ? null : { login };
+  }
+  return { id: lookup.twitchUserId };
+}
+
+/** Whether a link may send shoutouts; an engine with no link may not. */
+export function canShoutOutOf(link: TwitchLinkInfo): boolean {
+  return link.linked && link.scopes.includes(SHOUTOUT_SCOPE);
+}
+
+export function toModeratedUser(user: TwitchUser): ModeratedUser {
+  return { login: user.login, displayName: user.displayName };
 }
 
 export function toStreamCategory(category: HelixStreamCategory): StreamCategory {

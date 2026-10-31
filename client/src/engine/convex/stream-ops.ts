@@ -15,10 +15,12 @@ import type {
   RecapMarkers,
   StreamRecap,
   SupporterLeaderboardQuery,
+  TwitchViewerLookup,
 } from "@/engine/types";
 import { withPlainError } from "./errors";
 import { useMappedList, useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
+import { toTwitchChannel } from "./shoutouts";
 
 type SummaryRow = FunctionReturnType<typeof api.streamSessionSummaries.listRecent>[number];
 
@@ -145,6 +147,17 @@ function useViewerSupportTotalsRequest() {
   return useCallback((platformUserId: string) => viewerTotals({ platformUserId }), [viewerTotals]);
 }
 
+function useTwitchViewerRequest() {
+  const findTwitchViewer = useInstanceAction(api.supporters.findTwitchViewer);
+  return useCallback(
+    async (lookup: TwitchViewerLookup) => {
+      const user = await findTwitchViewer({ by: lookup }).catch(withPlainError);
+      return user ? toTwitchChannel(user) : null;
+    },
+    [findTwitchViewer]
+  );
+}
+
 function usePublishEventRequest() {
   const fireTrigger = useInstanceAction(api.debug.fireTrigger);
   return useCallback((event: EngineTestEvent) => fireTrigger(event), [fireTrigger]);
@@ -167,6 +180,7 @@ export const convexStreamOpsGateway: StreamOpsGateway = {
   useSupporterStreamsRequest,
   useSupporterLeaderboardRequest,
   useViewerSupportTotalsRequest,
+  useTwitchViewerRequest,
   usePublishEventRequest,
   useSimulateTwitchEventRequest,
 };

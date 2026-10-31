@@ -1,7 +1,4 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { SupporterMetric, SupporterStream } from "@shared/supporters";
-import { useAction, useQuery } from "convex/react";
 import { Copy, Gem, Gift, Loader2, Megaphone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
@@ -17,15 +14,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import { useEnqueueShoutoutRequest } from "@/engine/hooks/use-shoutouts";
+import { useCanShoutOut, useEnqueueShoutoutRequest } from "@/engine/hooks/use-shoutouts";
 import {
   useSupporterLeaderboardRequest,
   useSupporterStreamsRequest,
+  useTwitchViewerRequest,
   useViewerSupportTotalsRequest,
 } from "@/engine/hooks/use-supporters";
 import type { InstanceId } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
 import { SUPPORTER_CAPABILITIES } from "@/lib/engine-capabilities";
 import {
@@ -62,12 +59,12 @@ interface Loaded<T> {
 }
 
 /**
- * The result of a Convex action, re-run whenever `key` changes. Actions have
- * no reactive subscription, and a slower answer to an older key must not
+ * The result of a gateway request, re-run whenever `key` changes. Requests
+ * have no reactive subscription, and a slower answer to an older key must not
  * overwrite a newer one, so each run checks it is still current before
  * storing. A null key loads nothing.
  */
-function useActionResult<T>(key: string | null, load: () => Promise<T>): Loaded<T> {
+function useRequestResult<T>(key: string | null, load: () => Promise<T>): Loaded<T> {
   const [state, setState] = useState<Loaded<T>>({ data: undefined, error: null, loading: key !== null });
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` names everything `load` reads.
@@ -108,7 +105,6 @@ async function copyToClipboard(text: string): Promise<void> {
 }
 
 export default function Supporters() {
-  const { instance } = useInstance();
   const { instanceId: engineInstanceId } = useEngineScope();
   const capabilities = useEngineCapabilities();
 
@@ -118,14 +114,14 @@ export default function Supporters() {
         title="Supporters"
         description="The viewers who cheer and gift subs, all time or for one stream. Look anyone up before a thank-you or a VIP decision."
       />
-      {instance && engineInstanceId ? (
+      {engineInstanceId ? (
         <EngineFeatureGate
           support={capabilities.support(...SUPPORTER_CAPABILITIES)}
           state={capabilities.state}
           feature="Supporter stats"
           onRetry={capabilities.refresh}
         >
-          <SupportersView instanceId={instance._id} engineInstanceId={engineInstanceId} />
+          <SupportersView engineInstanceId={engineInstanceId} />
         </EngineFeatureGate>
       ) : (
         <p className="text-sm text-muted-foreground">No instance available yet.</p>
@@ -134,13 +130,7 @@ export default function Supporters() {
   );
 }
 
-function SupportersView({
-  instanceId,
-  engineInstanceId,
-}: {
-  instanceId: Id<"instances">;
-  engineInstanceId: InstanceId;
-}) {
+function SupportersView({ engineInstanceId }: { engineInstanceId: InstanceId }) {
   const listStreams = useSupporterStreamsRequest();
   const readLeaderboard = useSupporterLeaderboardRequest();
 
@@ -152,7 +142,7 @@ function SupportersView({
   const settledMinTotal = useDebouncedValue(minTotal, MIN_TOTAL_DEBOUNCE_MS);
   const [selected, setSelected] = useState<SelectedViewer | null>(null);
 
-  const streams = useActionResult(engineInstanceId, () => listStreams());
+  const streams = useRequestResult(engineInstanceId, () => listStreams());
   useEffect(() => {
     if (streams.data) {
       setRange((current) => reconcileRange(current, streams.data ?? []));
@@ -160,7 +150,7 @@ function SupportersView({
   }, [streams.data]);
 
   const sessionId = rangeSessionId(range);
-  const board = useActionResult(`${engineInstanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
+  const board = useRequestResult(`${engineInstanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
     readLeaderboard({
       metric,
       minTotal: settledMinTotal,
@@ -194,13 +184,7 @@ function SupportersView({
         }
         selectedId={selected?.platformUserId ?? null}
       />
-      <ViewerCard
-        instanceId={instanceId}
-        engineInstanceId={engineInstanceId}
-        ranked={ranked}
-        selected={selected}
-        onSelect={setSelected}
-      />
+      <ViewerCard engineInstanceId={engineInstanceId} ranked={ranked} selected={selected} onSelect={setSelected} />
     </div>
   );
 }
@@ -367,19 +351,17 @@ function LeaderboardCard(props: {
 }
 
 function ViewerCard({
-  instanceId,
   engineInstanceId,
   ranked,
   selected,
   onSelect,
 }: {
-  instanceId: Id<"instances">;
   engineInstanceId: InstanceId;
   ranked: RankedSupporter[];
   selected: SelectedViewer | null;
   onSelect: (viewer: SelectedViewer) => void;
 }) {
-  const findTwitchViewer = useAction(api.supporters.findTwitchViewer);
+  const findTwitchViewer = useTwitchViewerRequest();
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -394,7 +376,7 @@ function ViewerCard({
     setSearching(true);
     setSearchError(null);
     try {
-      const found = await findTwitchViewer({ instanceId, by: { login } });
+      const found = await findTwitchViewer({ login });
       if (!found) {
         setSearchError(`No Twitch user called "${login.replace(/^@/, "")}".`);
         return;
@@ -458,12 +440,7 @@ function ViewerCard({
       </CardHeader>
       <CardContent>
         {selected ? (
-          <ViewerDetail
-            key={selected.platformUserId}
-            instanceId={instanceId}
-            engineInstanceId={engineInstanceId}
-            viewer={selected}
-          />
+          <ViewerDetail key={selected.platformUserId} engineInstanceId={engineInstanceId} viewer={selected} />
         ) : (
           <p className="text-sm text-muted-foreground">No viewer picked yet.</p>
         )}
@@ -472,26 +449,18 @@ function ViewerCard({
   );
 }
 
-function ViewerDetail({
-  instanceId,
-  engineInstanceId,
-  viewer,
-}: {
-  instanceId: Id<"instances">;
-  engineInstanceId: InstanceId;
-  viewer: SelectedViewer;
-}) {
+function ViewerDetail({ engineInstanceId, viewer }: { engineInstanceId: InstanceId; viewer: SelectedViewer }) {
   const readViewerTotals = useViewerSupportTotalsRequest();
-  const findTwitchViewer = useAction(api.supporters.findTwitchViewer);
+  const findTwitchViewer = useTwitchViewerRequest();
   const enqueueShoutout = useEnqueueShoutoutRequest();
-  const canShoutOut = useQuery(api.supporters.canShoutOut, { instanceId });
+  const canShoutOut = useCanShoutOut();
   const [queueing, setQueueing] = useState(false);
 
-  const totals = useActionResult(`${engineInstanceId}|${viewer.platformUserId}`, () =>
+  const totals = useRequestResult(`${engineInstanceId}|${viewer.platformUserId}`, () =>
     readViewerTotals(viewer.platformUserId)
   );
-  const twitch = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
-    findTwitchViewer({ instanceId, by: { twitchUserId: viewer.platformUserId } })
+  const twitch = useRequestResult(`${engineInstanceId}|${viewer.platformUserId}`, () =>
+    findTwitchViewer({ twitchUserId: viewer.platformUserId })
   );
 
   const name =
@@ -506,19 +475,17 @@ function ViewerDetail({
     }
     setQueueing(true);
     try {
-      await enqueueShoutout({
-        twitchUserId: user.twitchUserId,
-        login: user.login,
-        displayName: user.displayName,
-        profileImageUrl: user.profileImageUrl ?? null,
-        broadcasterType: user.broadcasterType ?? null,
-      });
+      await enqueueShoutout(user);
       toast({
         title: "Shoutout queued",
         description: `${user.displayName} is shouted out when Twitch's cooldown allows.`,
       });
     } catch (err) {
-      toast({ title: "Could not queue the shoutout", description: supporterErrorText(err), variant: "destructive" });
+      toast({
+        title: "Could not queue the shoutout",
+        description: supporterErrorText(err),
+        variant: "destructive",
+      });
     } finally {
       setQueueing(false);
     }

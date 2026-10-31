@@ -38,11 +38,13 @@ import { directPageIntrosGateway } from "./page-intros";
 import { directPinsGateway } from "./pins";
 import { directRequestsGateway } from "./requests";
 import { directScenesGateway } from "./scenes";
+import { directShoutoutsGateway } from "./shoutouts";
 import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
 import type { AvailableWidget, FakeEngineState, TwitchFakeMethod } from "./testing/DirectFakeApi";
 import { createDirectHarness, type DirectHarness, type RenderedHook, renderDirect } from "./testing/direct-harness";
+import { FakeShoutoutQueueHost } from "./testing/FakeShoutoutQueueHost";
 import { FakeStreamStartMarkers } from "./testing/FakeStreamStartMarkers";
 import { directTwitchChatGateway } from "./twitch-chat";
 import { directWorkflowsGateway } from "./workflows";
@@ -1622,6 +1624,60 @@ describe("twitchChat", () => {
     });
     expect(await chatters()).toEqual([{ userId: "1", login: "someone", displayName: "SomeOne" }]);
     expect(state.callsOf("twitchGetChatters")).toEqual([[{ first: 1000 }]]);
+  });
+});
+
+describe("supporter lookups", () => {
+  test("a viewer is looked up on Twitch by login or by id, and a login that cannot be one asks nobody", async () => {
+    const { runtime, state } = await connected();
+    linkTwitch(state, []);
+    answerTwitch(state, {
+      twitchGetUsers: () =>
+        ok({ data: [{ id: "v-1", login: "someone", display_name: "SomeOne", broadcaster_type: "affiliate" }] }),
+    });
+    const lookUp = renderDirect(() => directStreamOpsGateway(runtime).useTwitchViewerRequest()).current();
+    const someone = {
+      twitchUserId: "v-1",
+      login: "someone",
+      displayName: "SomeOne",
+      profileImageUrl: null,
+      broadcasterType: "affiliate",
+    };
+    expect(await lookUp({ login: "@SomeOne" })).toEqual(someone);
+    expect(await lookUp({ twitchUserId: "v-1" })).toEqual(someone);
+    expect(await lookUp({ login: "not a login" })).toBeNull();
+    expect(state.callsOf("twitchGetUsers")).toEqual([[{ login: "someone" }], [{ id: "v-1" }]]);
+  });
+
+  test("a viewer Twitch does not have is null, and an unlinked engine says Twitch is not connected", async () => {
+    const { runtime, state } = await connected();
+    const lookUp = renderDirect(() => directStreamOpsGateway(runtime).useTwitchViewerRequest()).current();
+    expect(String(await failure(lookUp({ login: "someone" })))).toContain(TWITCH_NOT_CONNECTED_MESSAGE);
+
+    linkTwitch(state, []);
+    runtime.queryClient.removeQueries({ queryKey: directKeys.twitch.link() });
+    answerTwitch(state, { twitchGetUsers: () => ok({ data: [] }) });
+    expect(await lookUp({ twitchUserId: "gone" })).toBeNull();
+  });
+});
+
+describe("shoutouts", () => {
+  test("whether the link may shout out follows its scopes", async () => {
+    const { runtime, state, engine } = await connected();
+    const shoutouts = directShoutoutsGateway(runtime, new FakeShoutoutQueueHost());
+    linkTwitch(state, []);
+    const read = renderDirect(() => shoutouts.useCanShoutOut());
+    expect(await read.until((value) => value !== undefined, "the shoutout access")).toBe(false);
+    linkTwitch(state, ["moderator:manage:shoutouts"]);
+    await engine.pushEvent(
+      makeCallbackEnvelope(
+        { type: EngineEventType.TWITCH_LINK_CHANGED, revision: 3, linked: true, userId: "b-1", authFailedAt: null },
+        "engine",
+        "e-1"
+      )
+    );
+    await read.until((value) => value === true, "the new scope");
+    read.unmount();
   });
 });
 
