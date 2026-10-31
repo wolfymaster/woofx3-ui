@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { canManageTwitchLink } from "@convex/lib/twitchLinkPolicy";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback, useMemo, useState } from "react";
@@ -37,6 +38,12 @@ function useLink() {
   const instanceId = useScopeInstanceId();
   const rows = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
   return useMemo(() => (rows === undefined ? undefined : twitchLinkOf(rows)), [rows]);
+}
+
+function useCanManageLink() {
+  const instanceId = useScopeInstanceId();
+  const role = useQuery(api.instances.viewerRole, instanceId ? { instanceId } : "skip");
+  return useMemo(() => (role === undefined ? undefined : canManageTwitchLink(role)), [role]);
 }
 
 /** What happens to an OAuth-redirect linking attempt. */
@@ -114,5 +121,6 @@ function useUnlinkRequest() {
 export const convexTwitchLinkGateway: TwitchLinkGateway = {
   useLink,
   useLinkFlow,
+  useCanManageLink,
   useUnlinkRequest,
 };
