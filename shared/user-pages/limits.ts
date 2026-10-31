@@ -21,4 +21,15 @@ export const USER_PAGE_LIMITS = {
   /** The longest answer any form field may be configured to accept. */
   formTextAnswerLength: 500,
   formTextareaAnswerLength: 5000,
+  /**
+   * Answers waiting to reach one page's engine. At this many its forms stop
+   * accepting, so an engine that stays offline cannot grow the queue forever.
+   */
+  pendingSubmissionsPerPage: 1000,
+  /**
+   * The largest submit request, which must match the edge Worker's limit. The
+   * longest answers a form can be configured to take can add up to more than
+   * this, so the page checks it before sending.
+   */
+  formSubmissionBytes: 64 * 1024,
 } as const;

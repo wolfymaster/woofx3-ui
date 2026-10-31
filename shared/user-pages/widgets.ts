@@ -143,8 +143,8 @@ const formFieldBase = { id: v.string(), label: v.string(), required: v.boolean()
 
 /**
  * One question on a form. Text answers carry their own maximum length, which
- * a submission will be held to; it can be set no higher than the per-type
- * ceiling in USER_PAGE_LIMITS.
+ * a submission is held to (forms.ts); it can be set no higher than the
+ * per-type ceiling in USER_PAGE_LIMITS.
  */
 export const formFieldValidator = v.union(
   v.object({ ...formFieldBase, type: v.literal("text"), maxLength: v.number() }),
@@ -159,6 +159,12 @@ export const formFieldValidator = v.union(
 
 export type FormField = Infer<typeof formFieldValidator>;
 export type FormFieldType = FormField["type"];
+export const formFieldTypeValidator = v.union(
+  v.literal("text"),
+  v.literal("textarea"),
+  v.literal("select"),
+  v.literal("checkbox")
+);
 
 const FORM_ANSWER_CEILING: Record<"text" | "textarea", number> = {
   text: USER_PAGE_LIMITS.formTextAnswerLength,
@@ -199,7 +205,6 @@ function checkFormField(field: FormField, report: ProblemReport): void {
   }
 }
 
-/** A form's questions. What a visitor submits is not stored by this widget yet; only its definition is. */
 export const FORM_WIDGET = defineWidget({
   type: "form",
   label: "Form",
