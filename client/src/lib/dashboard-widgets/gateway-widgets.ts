@@ -9,6 +9,7 @@ import {
   Shield,
   Timer,
   Tv,
+  Volume2,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { EventsWidget } from "@/components/dashboard/widgets/events";
 import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
+import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
@@ -139,4 +141,13 @@ export const notesWidget: DashboardWidgetDefinition = {
   icon: NotebookPen,
   category: "utility",
   component: NotesWidget,
+};
+
+export const shoutoutWidget: DashboardWidgetDefinition = {
+  type: "shoutout",
+  label: "Shoutout",
+  description: "Queue shoutouts for people in chat — sent one at a time, two minutes apart.",
+  icon: Volume2,
+  category: "stream",
+  component: ShoutoutWidget,
 };
