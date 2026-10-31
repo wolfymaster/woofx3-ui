@@ -7,7 +7,7 @@ import type { StarterPackInstall, StarterPackInstallOutcome, StarterPackItemStat
 import { useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
-// The packs themselves are the app's own (lib/starterPacks); Convex creates
+// The packs themselves are the app's own (shared/starter-packs.ts); Convex creates
 // their commands and workflows on the engine and keeps a ledger of what each
 // item made, which the status read checks against the engine's mirror.
 

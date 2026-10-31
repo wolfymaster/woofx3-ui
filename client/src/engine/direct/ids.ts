@@ -5,6 +5,7 @@ import type {
   ShoutoutEntryId,
   StreamHighlightId,
   StreamInfoPresetId,
+  WebhookEventId,
 } from "@/engine/types";
 
 // The direct gateway's ids are the engine's own: a scene is its engine scene
@@ -66,4 +67,13 @@ export function fromShoutoutEntryId(id: ShoutoutEntryId): number {
     throw new Error(`"${id}" is not a shoutout entry id`);
   }
   return hostEntryId;
+}
+
+/** A logged event is the CloudEvent id the engine's event log gives it. */
+export function toWebhookEventId(eventId: string): WebhookEventId {
+  return eventId as WebhookEventId;
+}
+
+export function fromWebhookEventId(id: WebhookEventId): string {
+  return id as string;
 }

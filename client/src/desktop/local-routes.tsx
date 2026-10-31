@@ -30,6 +30,8 @@ export interface LocalRoute {
   render: (params: Record<string, string | undefined>) => ReactNode;
 }
 
+const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
+const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
 const Assets = lazy(() => import("@/pages/assets"));
@@ -39,6 +41,7 @@ const Commands = lazy(() => import("@/pages/commands"));
 const Dashboard = lazy(() => import("./LocalDashboard"));
 const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
+const Logs = lazy(() => import("@/pages/logs"));
 const Marketplace = lazy(() => import("@/pages/marketplace"));
 const MarketplaceAuthor = lazy(() => import("@/pages/marketplace-author"));
 const MarketplaceListing = lazy(() => import("@/pages/marketplace-listing"));
@@ -46,6 +49,7 @@ const Modules = lazy(() => import("@/pages/modules"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Scenes = lazy(() => import("@/pages/scenes"));
+const StarterPacks = lazy(() => import("@/pages/starter-packs"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -89,12 +93,16 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
   { path: "/stream/go-live", render: () => <GoLive /> },
+  { path: "/stream/starter-packs", render: () => <StarterPacks /> },
   { path: MARKETPLACE_AUTHOR_ROUTE, render: () => <MarketplaceAuthor /> },
   { path: MARKETPLACE_LISTING_ROUTE, render: () => <MarketplaceListing /> },
   { path: MARKETPLACE_PATH, render: () => <Marketplace /> },
   { path: MARKETPLACE_INSTALLED_PATH, render: () => <Modules /> },
   { path: MARKETPLACE_INSTALLED_MODULE_ROUTE, render: () => <Modules /> },
   { path: "/help/learning", render: () => <Learning /> },
+  { path: "/help/logs", render: () => <Logs /> },
+  { path: "/admin/appearance", render: () => <AdminAppearance /> },
+  { path: "/admin/integrations", render: () => <AdminIntegrations /> },
 ];
 
 /** Where local mode opens, and where a path it does not serve leads back to. */

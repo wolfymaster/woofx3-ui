@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useEngineScope } from "@/engine/context";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
 import { useRetriggerEvent, useWebhookEventLog } from "@/engine/hooks/use-webhook-event-log";
 import type { WebhookEventId, WebhookEventSummary } from "@/engine/types";
 
@@ -116,7 +116,7 @@ interface EventRowProps {
   index: number;
   isPending: boolean;
   measureRef: (element: HTMLTableRowElement | null) => void;
-  onRetrigger: (logId: WebhookEventId, eventType: string) => void;
+  onRetrigger: ((logId: WebhookEventId, eventType: string) => void) | null;
 }
 
 const EventRow = memo(function EventRow({ event, index, isPending, measureRef, onRetrigger }: EventRowProps) {
@@ -142,17 +142,19 @@ const EventRow = memo(function EventRow({ event, index, isPending, measureRef, o
         <WebhookEventPayloadDialog logId={event.id} eventType={event.eventType} />
         <span className="ml-1 text-xs text-muted-foreground">{formatPayloadSize(event.payloadLength)}</span>
       </TableCell>
-      <TableCell>
-        <button
-          type="button"
-          onClick={() => onRetrigger(event.id, event.eventType)}
-          disabled={isPending}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          {isPending ? "Retriggering…" : "Retrigger"}
-        </button>
-      </TableCell>
+      {onRetrigger !== null && (
+        <TableCell>
+          <button
+            type="button"
+            onClick={() => onRetrigger(event.id, event.eventType)}
+            disabled={isPending}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {isPending ? "Retriggering…" : "Retrigger"}
+          </button>
+        </TableCell>
+      )}
     </TableRow>
   );
 });
@@ -161,6 +163,7 @@ export function WebhookEventLogTable() {
   const { isInstanceLoading: instanceLoading } = useEngineScope();
   const [typeFilter, setTypeFilter] = useState("all");
   const [pendingIds, setPendingIds] = useState<Set<WebhookEventId>>(new Set());
+  const canRetrigger = useEngineGateway().eventLog.canRetrigger;
   const retriggerEvent = useRetriggerEvent();
   const retriggerEventRef = useRef(retriggerEvent);
   retriggerEventRef.current = retriggerEvent;
@@ -254,13 +257,13 @@ export function WebhookEventLogTable() {
                   <TableHead>Event Type</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Payload</TableHead>
-                  <TableHead>Actions</TableHead>
+                  {canRetrigger && <TableHead>Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paddingTop > 0 && (
                   <tr>
-                    <td colSpan={5} style={{ height: paddingTop }} />
+                    <td colSpan={canRetrigger ? 5 : 4} style={{ height: paddingTop }} />
                   </tr>
                 )}
                 {virtualRows.map((virtualRow) => {
@@ -272,13 +275,13 @@ export function WebhookEventLogTable() {
                       index={virtualRow.index}
                       isPending={pendingIds.has(event.id)}
                       measureRef={virtualizer.measureElement}
-                      onRetrigger={handleRetrigger}
+                      onRetrigger={canRetrigger ? handleRetrigger : null}
                     />
                   );
                 })}
                 {paddingBottom > 0 && (
                   <tr>
-                    <td colSpan={5} style={{ height: paddingBottom }} />
+                    <td colSpan={canRetrigger ? 5 : 4} style={{ height: paddingBottom }} />
                   </tr>
                 )}
               </TableBody>

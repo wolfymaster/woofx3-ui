@@ -1105,7 +1105,7 @@ export default defineSchema({
     // See instanceTriggers.by_trigger.
     .index("by_widget", ["widgetId"]),
 
-  // starterPackItems: which starter pack items (convex/lib/starterPacks.ts) an
+  // starterPackItems: which starter pack items (shared/starter-packs.ts) an
   // instance has installed, and the engine workflow or command each became.
   // A row is written as "installing" before the engine call, so a second
   // install racing the first finds it and skips the item instead of creating

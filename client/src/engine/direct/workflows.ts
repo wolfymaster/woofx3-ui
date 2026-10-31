@@ -67,7 +67,7 @@ function workflowRead(runtime: DirectRuntime, engineWorkflowId: string): EngineR
   };
 }
 
-function catalogRead(runtime: DirectRuntime): EngineRead<WorkflowCatalog> {
+export function catalogRead(runtime: DirectRuntime): EngineRead<WorkflowCatalog> {
   return {
     queryKey: k.workflows.catalog(),
     queryFn: async () => {
