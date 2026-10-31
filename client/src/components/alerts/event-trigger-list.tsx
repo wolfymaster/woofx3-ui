@@ -417,7 +417,7 @@ function TriggerGroupCard({ group, sentence, renderMember }: TriggerGroupCardPro
             <SentenceText sentence={sentence} />
           </span>
           <span className="truncate text-[13px] text-muted-foreground">
-            {group.members.map(triggerSourceLabel).join("  →  ")}
+            {Array.from(new Set(group.members.map(triggerSourceLabel))).join("  →  ")}
           </span>
         </span>
       </button>
