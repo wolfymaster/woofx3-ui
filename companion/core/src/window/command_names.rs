@@ -46,7 +46,8 @@ macro_rules! with_command_names {
             choose_host_mode(ChooseHostModeArgs) -> (),
             companion_link_status(()) -> CompanionLinkStatus,
             begin_app_link(()) -> AppLinkStart,
-            finish_app_link(FinishAppLinkArgs) -> ()
+            finish_app_link(FinishAppLinkArgs) -> (),
+            open_twitch_sign_in(OpenTwitchSignInArgs) -> ()
         }
     };
 }

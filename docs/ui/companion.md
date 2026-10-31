@@ -68,11 +68,23 @@ bun run companion:test    # cargo test --manifest-path companion/core/Cargo.toml
 
 The repo-root `vite.config.ts` has a `desktop` mode. It writes the dashboard into `companion/dist/`, the app's `frontendDist`, and the companion window's build writes into `companion/dist/companion/` beside it. It sets `__WOOFX3_DESKTOP__` (`IS_DESKTOP` in `client/src/lib/desktop.ts`), which is false in the web build, so desktop-only code is dropped from it. And it points the dashboard at the Convex deployment the Rust side compiles in, `WOOFX3_CONVEX_URL` (plus `WOOFX3_CONVEX_SITE_URL` when the deployment's HTTP origin is not derived from it), so one variable configures both; the build fails without it.
 
-Twitch sign-in leaves for twitch.tv and returns to the web app's origin, which the desktop window cannot follow, so the desktop dashboard offers password sign-in only.
+Twitch sign-in runs in the system browser, since the window cannot follow twitch.tv and back; see [Twitch sign-in in the desktop app](#twitch-sign-in-in-the-desktop-app).
 
 In dev, `bun run dev` in `companion/` starts both dev servers: the dashboard on port 1421 (the app's `devUrl`), which proxies `/companion` to the companion window's server on 1420.
 
 The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin, and frames only from Twitch's player and clips.
+
+### Twitch sign-in in the desktop app
+
+In companion mode the login and register pages offer **Continue with Twitch**, which signs in through the system browser (`client/src/desktop/TwitchSignIn.tsx`, `twitch-sign-in.ts`). There is no deep link back into the app: the app keeps the sign-in's nonce and asks Convex for the outcome itself.
+
+1. The dashboard makes a random nonce and keeps it in memory. It calls `open_twitch_sign_in` with only its SHA-256. The host builds the address from the deployment compiled in (`WOOFX3_CONVEX_SITE_URL`, else `WOOFX3_CONVEX_URL` with `.convex.cloud` turned into `.convex.site`, as the dashboard's build derives it) and refuses anything but 64 lowercase hex digits (`core/src/twitch_sign_in.rs`), so the window cannot have the host open any other page. It opens `/api/auth/twitch/start?client=desktop&nonce_hash=…` with the opener plugin.
+2. The start route reads `client` as a closed set (`web` when absent, or `desktop`) and stores the OAuth state with the hash and the client. It refuses a desktop hash another sign-in already holds, waiting or finished, so a second sign-in started from a hash seen in the browser's address bar cannot leave a different Twitch account's outcome for the app. Twitch's redirect URI is the same Convex callback as on the web.
+3. For a desktop sign-in the callback stores the pending sign-in as on the web, and under the nonce hash a `twitchDesktopSignIns` row holding its token, or the error code when Twitch or the callback refused. It sends the browser to `/auth/twitch/desktop`, a page that says to return to the app (or shows the error's fixed text). Neither that URL nor the page carries anything that signs anyone in.
+4. The dashboard calls the public mutation `twitchAuth.claimDesktopSignIn({ nonce })` every 2 seconds. It answers `pending` until there is an outcome for the nonce's hash, and also for a nonce that started no sign-in, so a guess learns nothing. The outcome is deleted as it is handed out, so it is claimed once; one left unclaimed is deleted after five minutes.
+5. With the token, the dashboard calls `signIn("twitch", { token, nonce })` as the web callback page does, and Convex Auth releases the profile only for the nonce behind the stored hash.
+
+The dashboard waits at most as long as Convex keeps the sign-in's state (ten minutes) plus one poll, shows **Cancel** while it waits, and stops polling when the page closes. The nonce leaves the app only as its hash in the browser, and in the claim and sign-in calls to Convex.
 
 ### Choosing a mode
 
@@ -210,7 +222,7 @@ The client secret stays in the Rust process and the credential store. The dashbo
 
 ### Window permissions
 
-The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue and the stream start marker, and in companion mode the three commands that [link the app](#linking-the-desktop-app) as the instance's companion. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
+The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue and the stream start marker, and in companion mode `open_twitch_sign_in` ([Twitch sign-in](#twitch-sign-in-in-the-desktop-app)) and the three commands that [link the app](#linking-the-desktop-app) as the instance's companion. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
 
 ## Updates
 

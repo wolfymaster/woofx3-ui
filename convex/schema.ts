@@ -8,6 +8,7 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
+import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
@@ -1272,8 +1273,13 @@ export default defineSchema({
     // SHA-256 of the nonce the sign-in's browser tab keeps (lib/oauthHandoff.ts).
     // Present only for the sign-in flow; carried to twitchPendingAuth.
     nonceHash: v.optional(v.string()),
+    // How the sign-in is finished (lib/twitchSignIn.ts). Present only for the
+    // sign-in flow; a sign-in row without one is a web sign-in.
+    signInClient: v.optional(signInClientValidator),
     createdAt: v.number(),
-  }).index("by_state", ["state"]),
+  })
+    .index("by_state", ["state"])
+    .index("by_nonce_hash", ["nonceHash"]),
 
   // twitchPendingAuth: one-time token bridging Convex HTTP callback → frontend signIn
   twitchPendingAuth: defineTable({
@@ -1293,6 +1299,16 @@ export default defineSchema({
     nonceHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_token", ["token"]),
+
+  // twitchDesktopSignIns: how a desktop sign-in ended, held under the hash of
+  // the nonce the desktop app keeps until the app claims it
+  // (twitchAuth.claimDesktopSignIn). A success carries the twitchPendingAuth
+  // token, which never appears in a URL. Single use, deleted after five minutes.
+  twitchDesktopSignIns: defineTable({
+    nonceHash: v.string(),
+    outcome: desktopSignInOutcomeValidator,
+    createdAt: v.number(),
+  }).index("by_nonce_hash", ["nonceHash"]),
 
   // oauthConnectHandoffs: the result of an integration OAuth callback, held
   // until the signed-in user who started the flow claims it with the one-time

@@ -19,8 +19,8 @@ use crate::host::{EnginePhase, HostModeKind, LocalSession, StopCause};
 pub use bindings::{window_bindings, BINDINGS_FILE};
 pub use command_args::{
     ChooseHostModeArgs, ConfirmAddressArgs, EnqueueShoutoutArgs, FinishAppLinkArgs,
-    RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs,
-    TestEndpointArgs, UseDiscoveredArgs,
+    OpenTwitchSignInArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs,
+    SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
 };
 
 /// The largest integer a JavaScript number holds exactly, 2^53 - 1
@@ -39,8 +39,8 @@ macro_rules! command_name_list {
 pub const COMMAND_NAMES: &[&str] = crate::with_command_names!(command_name_list);
 
 /// The commands the dashboard window may call: running the app's local mode,
-/// and in companion mode making this computer the signed-in instance's
-/// companion. The companion window may call every other command. Each
+/// and in companion mode signing in with Twitch through the system browser
+/// and making this computer the signed-in instance's companion. The companion window may call every other command. Each
 /// window's capability grants exactly its set (companion/src-tauri/capabilities).
 pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "local_engine_session",
@@ -55,6 +55,7 @@ pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "companion_link_status",
     "begin_app_link",
     "finish_app_link",
+    "open_twitch_sign_in",
 ];
 
 /// The mode this app runs in, and whether the streamer chose it. Until they

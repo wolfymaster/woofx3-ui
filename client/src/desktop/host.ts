@@ -119,3 +119,13 @@ export async function beginAppLink(): Promise<AppLinkStart> {
 export async function finishAppLink(link: FinishAppLinkArgs): Promise<void> {
   await call(COMMANDS.finish_app_link, link);
 }
+
+// ==================== Twitch sign-in ====================
+// Twitch sign-in runs in the system browser, which the window cannot follow;
+// the dashboard keeps the nonce and claims the outcome from Convex itself
+// (twitch-sign-in.ts). Companion mode only.
+
+/** Opens the system browser at Convex's Twitch sign-in, bound to the nonce behind `nonceHash`. */
+export async function openTwitchSignIn(nonceHash: string): Promise<void> {
+  await call(COMMANDS.open_twitch_sign_in, { nonceHash });
+}
