@@ -5,6 +5,7 @@ dist
 .env*
 docs
 companion
+!companion/ui/src/generated
 .agents
 .claude
 .local
