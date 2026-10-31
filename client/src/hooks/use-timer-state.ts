@@ -6,7 +6,7 @@ import { type TimerState, timerState } from "@/lib/resource-values";
  * running timer is stored as the moment it ends, so showing it counting down
  * is the reader's job; a stopped one needs no refresh.
  */
-function useNow(ticking: boolean): number {
+export function useNow(ticking: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     setNow(Date.now());

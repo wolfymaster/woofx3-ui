@@ -165,6 +165,41 @@ export function timerProgressPercent(remainingMs: number, settings: Record<strin
 /** Seconds each quick-adjust button adds to a timer; negative takes time away. */
 export const TIMER_QUICK_ADJUSTMENTS: readonly number[] = [-30, 30, 60, 300];
 
+export interface ScheduleState {
+  running: boolean;
+  /** Time until its next run at the moment it was read, never below zero; 0 while stopped. */
+  nextRunMs: number;
+  /** When it last ran, in milliseconds since the epoch; null when it has not. */
+  lastFiredAt: number | null;
+}
+
+/** A schedule's `interval` setting when it is missing; the module's own default. */
+const DEFAULT_SCHEDULE_MINUTES = 15;
+
+/**
+ * A running schedule is stored as its next run, so the time until it depends on
+ * `now`. A schedule with no stored value is stopped.
+ */
+export function scheduleState(value: unknown, now: number): ScheduleState {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { running: false, nextRunMs: 0, lastFiredAt: null };
+  }
+  const stored = value as Record<string, unknown>;
+  const lastFiredAt = Number(stored.lastFiredAt) > 0 ? Number(stored.lastFiredAt) : null;
+  if (stored.running === true) {
+    return { running: true, nextRunMs: Math.max(0, Number(stored.nextAt) - now || 0), lastFiredAt };
+  }
+  return { running: false, nextRunMs: 0, lastFiredAt };
+}
+
+/** The interval a schedule runs on, in words: "Every 15 minutes". */
+export function scheduleIntervalLabel(settings: Record<string, unknown>): string {
+  const minutes = Number(settings.interval);
+  const valid = settings.interval !== undefined && settings.interval !== "" && Number.isFinite(minutes) && minutes > 0;
+  const interval = valid ? minutes : DEFAULT_SCHEDULE_MINUTES;
+  return interval === 1 ? "Every minute" : `Every ${interval.toLocaleString()} minutes`;
+}
+
 /**
  * `h:mm:ss`, or `m:ss` under an hour. Rounds up, so a timer with any time left
  * never shows 0:00 — the same rounding the timer actions report.

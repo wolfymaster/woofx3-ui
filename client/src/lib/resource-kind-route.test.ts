@@ -16,6 +16,7 @@ describe("resourceKindPath", () => {
       "/stream/counters",
       "/stream/timers",
       "/stream/queues",
+      "/stream/schedules",
     ]);
   });
 

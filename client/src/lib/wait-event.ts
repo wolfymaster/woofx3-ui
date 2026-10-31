@@ -53,11 +53,12 @@ const SYSTEM_GROUPS: Record<string, { label: string; rank: number }> = {
   counter: { label: "Counters", rank: 2 },
   timer: { label: "Timers", rank: 3 },
   queue: { label: "Queues", rank: 4 },
-  viewer: { label: "Viewers", rank: 5 },
+  schedule: { label: "Schedules", rank: 5 },
+  viewer: { label: "Viewers", rank: 6 },
 };
 const PLATFORM_RANK = 0;
-const MODULE_RANK = 6;
-const ADVANCED_RANK = 7;
+const MODULE_RANK = 7;
+const ADVANCED_RANK = 8;
 const ADVANCED_GROUP = { key: "advanced", label: "Advanced" };
 
 function placement(row: CatalogTriggerRow): { key: string; label: string; rank: number } {

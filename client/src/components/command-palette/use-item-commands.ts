@@ -1,5 +1,5 @@
 import type { Doc } from "@convex/_generated/dataModel";
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import {
   Bell,
   Boxes,
@@ -55,7 +55,16 @@ import { installedModulePath } from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
 import { resourceActions } from "@/lib/resource-actions";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
-import { counterValue, formatDuration, parseDuration, queueEntries, timerState } from "@/lib/resource-values";
+import {
+  counterValue,
+  formatDuration,
+  parseDuration,
+  queueEntries,
+  scheduleIntervalLabel,
+  scheduleState,
+  timerState,
+} from "@/lib/resource-values";
+import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { streamRecapPath } from "@/lib/stream-recap-route";
 import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
 import { workflowDescription, workflowName } from "@/lib/workflow-display";
@@ -102,9 +111,11 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
   const timers = useResourceInstancesOfKind(TIMER_KIND);
   const queues = useResourceInstancesOfKind(QUEUE_KIND);
+  const schedules = useResourceInstancesOfKind(SCHEDULE_KIND);
   const counterKind = useResourceKind(COUNTER_KIND);
   const timerKind = useResourceKind(TIMER_KIND);
   const queueKind = useResourceKind(QUEUE_KIND);
+  const scheduleKind = useResourceKind(SCHEDULE_KIND);
   const values = useResourceValues();
   const resourceInstances = useResourceInstances();
   const declaredKinds = useResourceKinds();
@@ -381,6 +392,43 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         confirm: true,
         action: { type: "run", run: resourceRun(row, moduleName, "timer.reset") },
       }),
+    ];
+    result.push(item);
+  }
+
+  for (const row of schedules ?? []) {
+    const moduleName = moduleFor(scheduleKind, row);
+    const href = `/stream/schedules/${encodeURIComponent(row.resourceInstanceId)}`;
+    const { running } = scheduleState(values?.[row.canonicalId], now);
+    const item: PaletteCommand = {
+      id: `schedule:${row.canonicalId}`,
+      title: resourceName(row),
+      kind: "item",
+      group: "Schedules",
+      keywords: ["schedule", "repeat", "interval"],
+      meta: `${scheduleIntervalLabel(resourceSettings(row))}${running ? " ▶" : ""}`,
+      icon: STREAM_OBJECT_ICONS.schedules,
+      action: { type: "navigate", href },
+      isOpenAt: isAtOrBelow(href),
+    };
+    item.children = [
+      running
+        ? childOf(item, {
+            id: "stop",
+            title: "Stop",
+            kind: "action",
+            keywords: ["pause"],
+            icon: Pause,
+            action: { type: "run", run: resourceRun(row, moduleName, "schedule.stop") },
+          })
+        : childOf(item, {
+            id: "start",
+            title: "Start",
+            kind: "action",
+            keywords: ["resume", "play"],
+            icon: Play,
+            action: { type: "run", run: resourceRun(row, moduleName, "schedule.start") },
+          }),
     ];
     result.push(item);
   }

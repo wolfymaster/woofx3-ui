@@ -1,9 +1,10 @@
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
 import { counterView } from "@/components/resources/views/counter-view";
 import { queueView } from "@/components/resources/views/queue-view";
+import { scheduleView } from "@/components/resources/views/schedule-view";
 import { timerView } from "@/components/resources/views/timer-view";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
@@ -32,6 +33,7 @@ const KIND_VIEWS: Readonly<Record<string, KindView>> = {
   [COUNTER_KIND]: counterView,
   [TIMER_KIND]: timerView,
   [QUEUE_KIND]: queueView,
+  [SCHEDULE_KIND]: scheduleView,
 };
 
 /** The view made for a kind, as `module:kind`; null for a kind shown from its declarations. */

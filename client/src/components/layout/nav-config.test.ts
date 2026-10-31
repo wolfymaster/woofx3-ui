@@ -89,11 +89,12 @@ describe("isNavGroupOpen", () => {
 describe("flattenNavItems", () => {
   test("nested entries follow their parent", () => {
     const ids = flattenNavItems(STREAM_ITEMS).map((item) => item.id);
-    expect(ids.slice(ids.indexOf("alerts"), ids.indexOf("alerts") + 5)).toEqual([
+    expect(ids.slice(ids.indexOf("alerts"), ids.indexOf("alerts") + 6)).toEqual([
       "alerts",
       "counters",
       "timers",
       "queues",
+      "schedules",
       "workflows",
     ]);
   });
@@ -110,7 +111,7 @@ describe("withAlertsChildren", () => {
   test("nests the extra entries under Alerts, ahead of Workflows", () => {
     const merged = withAlertsChildren(STREAM_ITEMS, [wheels]);
     const ids = merged.find((item) => item.id === "alerts")?.children?.map((child) => child.id);
-    expect(ids).toEqual(["counters", "timers", "queues", "resource-kind:wheel_spin:wheel", "workflows"]);
+    expect(ids).toEqual(["counters", "timers", "queues", "schedules", "resource-kind:wheel_spin:wheel", "workflows"]);
   });
 
   test("leaves a menu without Alerts as it is", () => {
