@@ -1,4 +1,4 @@
-import type { MacroId, ModuleId, SceneId, StreamHighlightId } from "@/engine/types";
+import type { MacroId, ModuleId, SceneId, StreamHighlightId, StreamInfoPresetId } from "@/engine/types";
 
 // The direct gateway's ids are the engine's own: a scene is its engine scene
 // id, a module its manifest id. These convert between the two at the edge,
@@ -36,5 +36,14 @@ export function toMacroId(key: string): MacroId {
 }
 
 export function fromMacroId(id: MacroId): string {
+  return id as string;
+}
+
+/** A preset is its name, the key it is stored under: saving under a name replaces that preset. */
+export function toStreamInfoPresetId(name: string): StreamInfoPresetId {
+  return name as StreamInfoPresetId;
+}
+
+export function fromStreamInfoPresetId(id: StreamInfoPresetId): string {
   return id as string;
 }

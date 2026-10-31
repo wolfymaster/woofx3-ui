@@ -25,7 +25,7 @@ import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
 import { directEventLogGateway } from "./event-log";
-import { toModuleId, toSceneId } from "./ids";
+import { toModuleId, toSceneId, toStreamInfoPresetId } from "./ids";
 import { directKeys } from "./keys";
 import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
@@ -1546,13 +1546,51 @@ describe("streamInfo", () => {
     expect(state.callsOf("twitchCreateStreamMarker")).toEqual([[{ description: "highlight" }]]);
   });
 
-  test("presets are kept in the account, which the engine cannot reach", async () => {
-    const { runtime } = await connected();
+  test("presets are kept by name in the engine's local UI settings, a second save replacing the first", async () => {
+    const { runtime, state } = await connected();
     const streamInfo = directStreamInfoGateway(runtime);
-    const save = await failure(renderDirect(() => streamInfo.useSavePresetRequest()).current()({} as never));
-    expect(save).toBeInstanceOf(GatewayUnsupportedError);
-    const read = renderDirect(() => streamInfo.usePresets());
-    expect(read.error()).toBeInstanceOf(GatewayUnsupportedError);
+    const presets = renderDirect(() => streamInfo.usePresets());
+    expect(await presets.until((value) => value !== undefined, "the presets")).toEqual([]);
+    const save = renderDirect(() => streamInfo.useSavePresetRequest()).current();
+    const chess = { id: "1", name: "Chess", boxArtUrl: null };
+
+    const id = await save({ name: " Chess night ", info: { title: " Rapid ", category: chess, tags: ["English"] } });
+    await save({ name: "Art", info: { title: "Drawing", category: null, tags: [] } });
+    await save({ name: "Chess night", info: { title: "Blitz", category: chess, tags: [] } });
+
+    expect(
+      await presets.until((value) => value?.length === 2 && value[1].info.title === "Blitz", "both presets")
+    ).toEqual([
+      { id: toStreamInfoPresetId("Art"), name: "Art", info: { title: "Drawing", category: null, tags: [] } },
+      { id, name: "Chess night", info: { title: "Blitz", category: chess, tags: [] } },
+    ]);
+    expect(state.uiSettings.streamInfoPresets?.["Chess night"]?.value).toEqual({
+      title: "Blitz",
+      category: chess,
+      tags: [],
+    });
+
+    await renderDirect(() => streamInfo.useRemovePresetRequest()).current()(id);
+    await presets.until((value) => value?.length === 1, "the removal");
+    presets.unmount();
+  });
+
+  test("a preset needs a short name and channel fields Twitch would take, and an unreadable one is left out", async () => {
+    const { runtime, state, logger } = await connected();
+    storeSetting(state, "streamInfoPresets", "Broken", "not a preset");
+    const streamInfo = directStreamInfoGateway(runtime);
+    const save = renderDirect(() => streamInfo.useSavePresetRequest()).current();
+    const info = { title: "Cozy", category: null, tags: [] };
+
+    expect(String(await failure(save({ name: "  ", info })))).toContain("A preset needs a name");
+    expect(String(await failure(save({ name: "x".repeat(61), info })))).toContain("limited to 60 characters");
+    expect(String(await failure(save({ name: "Long", info: { ...info, title: "t".repeat(141) } })))).toContain("140");
+    expect(state.callsOf("setUISetting")).toEqual([]);
+
+    const presets = renderDirect(() => streamInfo.usePresets());
+    expect(await presets.until((value) => value !== undefined, "the presets")).toEqual([]);
+    expect(logger.entries.some((entry) => entry.level === "warn" && entry.fields?.key === "Broken")).toBe(true);
+    presets.unmount();
   });
 });
 
