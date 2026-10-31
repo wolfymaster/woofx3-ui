@@ -1,3 +1,5 @@
+import { LISTING_TYPES, type ListingType } from "@shared/marketplace-catalog";
+
 /**
  * Marketplace paths.
  *
@@ -15,6 +17,50 @@ export const MARKETPLACE_AUTHOR_ROUTE = "/marketplace/author/:slug";
 export const MARKETPLACE_INSTALLED_PATH = "/marketplace/installed";
 export const MARKETPLACE_INSTALLED_MODULE_ROUTE = "/marketplace/installed/:moduleId";
 export const MARKETPLACE_UPLOAD_PATH = "/marketplace/upload";
+/**
+ * Everything that browses the catalog: the storefront, a listing and an author.
+ * One route, so moving between them keeps the catalog rail mounted. It also
+ * matches the installed and upload paths, so it has to be listed after them.
+ */
+export const MARKETPLACE_BROWSE_ROUTE = "/marketplace/*?";
+
+export const ALL_CATEGORIES = "all";
+
+/** What the storefront is narrowed to. The URL holds it, so it survives a reload and the back button. */
+export interface MarketplaceFilter {
+  type: ListingType | null;
+  category: string;
+  /** The whole catalog as one paged grid, rather than the front window. */
+  browseAll: boolean;
+}
+
+export function parseMarketplaceFilter(search: string): MarketplaceFilter {
+  const params = new URLSearchParams(search);
+  return {
+    // A type the storefront does not know, from a hand-edited or stale link,
+    // shows the whole catalog rather than a page built around a missing type.
+    type: LISTING_TYPES.find((type) => type === params.get("type")) ?? null,
+    category: params.get("category") ?? ALL_CATEGORIES,
+    browseAll: params.get("browse") === "all",
+  };
+}
+
+export function marketplaceFilterPath({ type, category, browseAll }: MarketplaceFilter): string {
+  const params = new URLSearchParams();
+  if (type) {
+    params.set("type", type);
+  }
+  if (category !== ALL_CATEGORIES) {
+    params.set("category", category);
+  }
+  // Only when nothing else narrows the grid: a type or a category already
+  // opens it, and two things saying "show the grid" can disagree.
+  if (browseAll && !type && category === ALL_CATEGORIES) {
+    params.set("browse", "all");
+  }
+  const encoded = params.toString();
+  return encoded === "" ? MARKETPLACE_PATH : `${MARKETPLACE_PATH}?${encoded}`;
+}
 
 export function marketplaceListingPath(listingId: string): string {
   return `/marketplace/listing/${encodeURIComponent(listingId)}`;
@@ -62,5 +108,7 @@ export function legacyModulesRedirect(rest: string, search: string): string {
 
 /** The storefront filtered to one category. */
 export function marketplaceCategoryPath(category: string): string {
-  return category === "all" ? MARKETPLACE_PATH : `${MARKETPLACE_PATH}?category=${encodeURIComponent(category)}`;
+  return category === ALL_CATEGORIES
+    ? MARKETPLACE_PATH
+    : `${MARKETPLACE_PATH}?category=${encodeURIComponent(category)}`;
 }

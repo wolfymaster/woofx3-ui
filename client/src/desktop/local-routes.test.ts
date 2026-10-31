@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { LOCAL_HOME_PATH, LOCAL_ROUTES, servesLocally } from "./local-routes";
 
 // Local mode runs with no Convex client, so nothing it loads may reach one: a
@@ -108,5 +109,9 @@ describe("local mode", () => {
   test("its home is a page it serves", () => {
     expect(servesLocally(LOCAL_HOME_PATH)).toBe(true);
     expect(new Set(LOCAL_ROUTES.map((route) => route.path)).size).toBe(LOCAL_ROUTES.length);
+  });
+
+  test("the marketplace link survives being served by the browse route", () => {
+    expect(servesLocally(MARKETPLACE_PATH)).toBe(true);
   });
 });

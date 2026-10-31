@@ -10,10 +10,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
-import { MARKETPLACE_INSTALLED_PATH, MARKETPLACE_PATH, MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
+import {
+  ALL_CATEGORIES,
+  MARKETPLACE_INSTALLED_PATH,
+  MARKETPLACE_PATH,
+  MARKETPLACE_UPLOAD_PATH,
+  marketplaceFilterPath,
+} from "@/lib/marketplace-route";
 import { cn } from "@/lib/utils";
-
-export const ALL_CATEGORIES = "all";
 
 /**
  * A browsable category: either one of the five listing types, or a free-text
@@ -36,10 +40,8 @@ interface MarketplaceSidebarProps {
   /** Module categories, derived from whatever the catalog returned. */
   categories: CategoryEntry[];
   total: number;
-  selectedType: ListingType | null;
-  selectedCategory: string;
-  onSelectType: (type: ListingType | null) => void;
-  onSelectCategory: (category: string) => void;
+  /** What the storefront is narrowed to, or null on a page that is not the storefront, where nothing is selected. */
+  selection: { type: ListingType | null; category: string } | null;
 }
 
 /**
@@ -51,17 +53,11 @@ interface MarketplaceSidebarProps {
  * the hash-derived colour the module store has always used and appear only
  * when something is in them.
  */
-export function MarketplaceSidebar({
-  typeCounts,
-  categories,
-  total,
-  selectedType,
-  selectedCategory,
-  onSelectType,
-  onSelectCategory,
-}: MarketplaceSidebarProps) {
+export function MarketplaceSidebar({ typeCounts, categories, total, selection }: MarketplaceSidebarProps) {
   const [, navigate] = useLocation();
-  const nothingSelected = selectedType === null && selectedCategory === ALL_CATEGORIES;
+  const selectedType = selection?.type ?? null;
+  const selectedCategory = selection?.category ?? ALL_CATEGORIES;
+  const nothingSelected = selection !== null && selectedType === null && selectedCategory === ALL_CATEGORIES;
   const { uploads } = useMarketplaceMode();
   const installedCount = (useInstalledModules() ?? []).filter((module) => module.status === "installed").length;
 
@@ -110,10 +106,7 @@ export function MarketplaceSidebar({
             label="Everything"
             count={total}
             selected={nothingSelected}
-            onClick={() => {
-              onSelectType(null);
-              onSelectCategory(ALL_CATEGORIES);
-            }}
+            onClick={() => navigate(MARKETPLACE_PATH)}
           />
 
           {LISTING_TYPES.map((type) => {
@@ -127,10 +120,15 @@ export function MarketplaceSidebar({
                 color={listingTypeColor(type)}
                 icon={listingTypeIcon(type, "h-3 w-3")}
                 title={meta.blurb}
-                onClick={() => {
-                  onSelectType(selectedType === type ? null : type);
-                  onSelectCategory(ALL_CATEGORIES);
-                }}
+                onClick={() =>
+                  navigate(
+                    marketplaceFilterPath({
+                      type: selectedType === type ? null : type,
+                      category: ALL_CATEGORIES,
+                      browseAll: false,
+                    })
+                  )
+                }
               />
             );
           })}
@@ -148,10 +146,15 @@ export function MarketplaceSidebar({
                   count={category.count}
                   selected={selectedCategory === category.key}
                   color={category.color}
-                  onClick={() => {
-                    onSelectType(null);
-                    onSelectCategory(selectedCategory === category.key ? ALL_CATEGORIES : category.key);
-                  }}
+                  onClick={() =>
+                    navigate(
+                      marketplaceFilterPath({
+                        type: null,
+                        category: selectedCategory === category.key ? ALL_CATEGORIES : category.key,
+                        browseAll: false,
+                      })
+                    )
+                  }
                 />
               ))}
             </>

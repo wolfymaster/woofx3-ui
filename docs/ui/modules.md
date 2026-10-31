@@ -41,6 +41,8 @@ The desktop app's local mode serves the Installed view and a module's page with 
 
 ## Custom upload (`/marketplace/upload`)
 
+An upload installs onto the engine, not into the catalog, so this page shows the installed-modules sidebar.
+
 Installs are **asynchronous** and correlated via a `moduleKey` echoed by the engine in its webhook callback.
 
 1. The page uploads the ZIP to Convex storage (`assets.generateUploadUrl`), then calls the mutation `api.moduleRepository.uploadAndDeliver` with a **client-generated `moduleKey`**. This mutation does **not** create a `moduleRepository` row yet — it schedules the internal action `moduleEngine.deliverZipToInstance`.

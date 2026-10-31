@@ -29,11 +29,9 @@ import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import {
   legacyModulesRedirect,
-  MARKETPLACE_AUTHOR_ROUTE,
+  MARKETPLACE_BROWSE_ROUTE,
   MARKETPLACE_INSTALLED_MODULE_ROUTE,
   MARKETPLACE_INSTALLED_PATH,
-  MARKETPLACE_LISTING_ROUTE,
-  MARKETPLACE_PATH,
   MARKETPLACE_UPLOAD_PATH,
   modulesIndexRedirect,
 } from "@/lib/marketplace-route";
@@ -70,9 +68,7 @@ const FeedbackEdit = lazy(() => import("@/pages/feedback-edit"));
 const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
-const Marketplace = lazy(() => import("@/pages/marketplace"));
-const MarketplaceAuthor = lazy(() => import("@/pages/marketplace-author"));
-const MarketplaceListing = lazy(() => import("@/pages/marketplace-listing"));
+const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
 const Modules = lazy(() => import("@/pages/modules"));
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -275,13 +271,11 @@ function AppRoutes() {
                     <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
                     {/* Marketplace section */}
-                    <Route path={MARKETPLACE_AUTHOR_ROUTE} component={MarketplaceAuthor} />
-                    <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
-                    <Route path={MARKETPLACE_PATH} component={Marketplace} />
 
                     <Route path={MARKETPLACE_UPLOAD_PATH} component={ModuleInstall} />
                     <Route path={MARKETPLACE_INSTALLED_PATH} component={Modules} />
                     <Route path={MARKETPLACE_INSTALLED_MODULE_ROUTE} component={Modules} />
+                    <Route path={MARKETPLACE_BROWSE_ROUTE} component={MarketplaceSection} />
 
                     {/* Where installed modules used to live; old links forward into the Marketplace tab. */}
                     <Route path="/modules/:rest" component={LegacyModulesRedirect} />

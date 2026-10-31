@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useEngineScope } from "@/engine/context";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
-import type { InstalledModule, ModuleDetail, ModuleId } from "@/engine/types";
+import type { InstalledModule, ModuleDetail } from "@/engine/types";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import {
@@ -74,14 +74,6 @@ export default function Modules() {
   }, [selectedModule, install]);
 
   const installedModules = useInstalledModules();
-
-  const handleSelectInstalled = useCallback(
-    (moduleId: ModuleId) => {
-      const target = (installedModules || []).find((m) => m.id === moduleId);
-      navigate(installedModulePath(bareModuleKey(target?.moduleKey) ?? moduleId));
-    },
-    [navigate, installedModules]
-  );
 
   useEffect(() => {
     if (routeModuleId === undefined) {
@@ -283,11 +275,8 @@ export default function Modules() {
   const removableModule = shownModule && shownModule.provenance !== "builtIn" ? shownModule : null;
 
   return (
-    <div className="flex h-full overflow-hidden max-w-[1600px] w-full">
-      <ModuleSidebar
-        selectedId={selectedModule?.source === "installed" ? selectedModule.module.id : null}
-        onSelectModule={handleSelectInstalled}
-      />
+    <div className="flex h-full w-full overflow-hidden">
+      <ModuleSidebar selectedId={selectedModule?.source === "installed" ? selectedModule.module.id : null} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="mx-6 mt-4 w-auto" />}

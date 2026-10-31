@@ -5,6 +5,8 @@
 
 The storefront. [Modules](./modules.md) covers the installed modules and uploads beside it in the same tab.
 
+The storefront, listing and author pages render inside one route (`client/src/pages/marketplace-section.tsx`), which owns the catalog rail and its overview read, so moving between them keeps the rail in place. Rail selections are URLs, parsed by `parseMarketplaceFilter`.
+
 ## Where the catalog lives
 
 In `woofx3-marketplace-api`, not here. This deployment is a **proxy**: it holds

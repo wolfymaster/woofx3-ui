@@ -10,10 +10,9 @@ import {
   COMMAND_NEW_ROUTE,
 } from "@/lib/command-editor-route";
 import {
-  MARKETPLACE_AUTHOR_ROUTE,
+  MARKETPLACE_BROWSE_ROUTE,
   MARKETPLACE_INSTALLED_MODULE_ROUTE,
   MARKETPLACE_INSTALLED_PATH,
-  MARKETPLACE_LISTING_ROUTE,
   MARKETPLACE_PATH,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
@@ -43,9 +42,7 @@ const Dashboard = lazy(() => import("./LocalDashboard"));
 const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
-const Marketplace = lazy(() => import("@/pages/marketplace"));
-const MarketplaceAuthor = lazy(() => import("@/pages/marketplace-author"));
-const MarketplaceListing = lazy(() => import("@/pages/marketplace-listing"));
+const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const Modules = lazy(() => import("@/pages/modules"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
@@ -101,11 +98,9 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/assets", render: () => <Assets /> },
   { path: "/stream/go-live", render: () => <GoLive /> },
   { path: "/stream/starter-packs", render: () => <StarterPacks /> },
-  { path: MARKETPLACE_AUTHOR_ROUTE, render: () => <MarketplaceAuthor /> },
-  { path: MARKETPLACE_LISTING_ROUTE, render: () => <MarketplaceListing /> },
-  { path: MARKETPLACE_PATH, render: () => <Marketplace /> },
   { path: MARKETPLACE_INSTALLED_PATH, render: () => <Modules /> },
   { path: MARKETPLACE_INSTALLED_MODULE_ROUTE, render: () => <Modules /> },
+  { path: MARKETPLACE_BROWSE_ROUTE, render: () => <MarketplaceSection /> },
   { path: "/help/learning", render: () => <Learning /> },
   { path: "/help/logs", render: () => <Logs /> },
   { path: "/admin/appearance", render: () => <AdminAppearance /> },
@@ -117,5 +112,5 @@ export const LOCAL_HOME_PATH = "/";
 
 /** Whether local mode serves a page at `href`, a path without parameters. */
 export function servesLocally(href: string): boolean {
-  return LOCAL_ROUTES.some((route) => route.path === href);
+  return href === MARKETPLACE_PATH || LOCAL_ROUTES.some((route) => route.path === href);
 }
