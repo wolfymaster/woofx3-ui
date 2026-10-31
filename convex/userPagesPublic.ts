@@ -6,47 +6,14 @@ import type { Id } from "./_generated/dataModel";
 import { action, type QueryCtx, query } from "./_generated/server";
 import { slugAvailability } from "./lib/maintenanceClient";
 import { openSections, type PublicPageSources, toPublicPage } from "./lib/publicPage";
-import type { PageViewer } from "./lib/sectionAccess";
+import { turnstileSecret } from "./lib/turnstile";
 import { instanceAllowsUserPages, instanceForPageSlug, requireRevision, userPageForInstance } from "./lib/userPages";
-import { broadcasterForInstance, viewerFromSession, viewerRolesFor } from "./lib/viewerSessionAuth";
+import { pageViewerFor, viewerFromSession } from "./lib/viewerSessionAuth";
 
 // The visitor's side of a user page, open to anyone. It reads only Convex:
 // nothing a visitor does reaches the engine. What it returns is the published
 // page, the sections the viewer may see and the values only those bind, never
 // an id that names an account, an instance or a resource.
-
-/**
- * The viewer `sessionToken` signs in, as section visibility sees them on the
- * page of `instanceId`. Fails closed: a token that signs nobody in is an
- * anonymous visitor.
- */
-async function pageViewer(
-  ctx: QueryCtx,
-  instanceId: Id<"instances">,
-  sessionToken: string | null
-): Promise<PageViewer> {
-  const viewer = await viewerFromSession(ctx, sessionToken);
-  if (!viewer) {
-    return { kind: "anonymous" };
-  }
-  const broadcaster = await broadcasterForInstance(ctx, instanceId);
-  if (!broadcaster || broadcaster.platform !== viewer.platform) {
-    return { kind: "signed_in", roles: { kind: "uncheckable" } };
-  }
-  const roles = await viewerRolesFor(ctx, viewer._id, broadcaster.platformUserId);
-  if (!roles) {
-    return { kind: "signed_in", roles: { kind: "unknown" } };
-  }
-  return {
-    kind: "signed_in",
-    roles: {
-      kind: "known",
-      follower: roles.follower,
-      subscriberTier: roles.subscriberTier,
-      checkedAt: roles.checkedAt,
-    },
-  };
-}
 
 /** Values for the resources `sections` bind, from the projection. */
 async function sectionStates(
@@ -110,13 +77,17 @@ export const bySlug = query({
       return { kind: "unavailable" };
     }
     const { content } = await requireRevision(ctx, page.publishedRevisionId);
-    const viewer = await pageViewer(ctx, instanceId, args.sessionToken ?? null);
+    // A session token that signs nobody in fails closed: an anonymous visitor.
+    const signedIn = await viewerFromSession(ctx, args.sessionToken ?? null);
+    const viewer = await pageViewerFor(ctx, instanceId, signedIn);
     const shown = openSections(content, viewer);
     const [states, live] = await Promise.all([
       sectionStates(ctx, instanceId, shown),
       sectionLive(ctx, instanceId, shown),
     ]);
-    return toPublicPage(slug, content, page.publishedAt, viewer, { states, live });
+    const formsAccepting =
+      page.formsAtCapacity !== true && (viewer.kind === "signed_in" || turnstileSecret(process.env) !== null);
+    return toPublicPage(slug, content, page.publishedAt, viewer, { states, live, formsAccepting });
   },
 });
 

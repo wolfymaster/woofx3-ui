@@ -6,6 +6,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { accountEntitlements } from "./entitlementAccess";
 import { normalizeSlug } from "./maintenanceClient";
 import { rebuildPageState } from "./userPageState";
+import { deletePageSubmissions } from "./userPageSubmissions";
 
 /** Provisioning states in which the maintenance API no longer holds the engine's slug for it. */
 const SLUG_RELEASED_STATUSES: ReadonlySet<Doc<"engineProvisioning">["status"]> = new Set(["deprovisioning", "deleted"]);
@@ -170,6 +171,7 @@ export async function deleteUserPage(ctx: MutationCtx, instanceId: Id<"instances
     await ctx.db.delete(page.publishedRevisionId);
   }
   await ctx.db.delete(page._id);
+  await deletePageSubmissions(ctx, instanceId);
 }
 
 /**

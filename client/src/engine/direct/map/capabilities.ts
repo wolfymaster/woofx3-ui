@@ -31,6 +31,7 @@ const GATED: { readonly [C in EngineCapability]: true } = {
   "twitch.moderation": true,
   "twitch.pins": true,
   "twitch.streamInfo": true,
+  "userPages.formSubmissions": true,
   "widgets.themes": true,
   "workflow.conditionListReferences": true,
   "workflow.delayWait": true,

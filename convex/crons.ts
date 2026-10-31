@@ -58,4 +58,11 @@ crons.interval("engine alert staleness sweep", { minutes: 5 }, internal.engineAl
 // releasing them, and deletes released ones no limit check can still need.
 crons.interval("hosted storage reservation sweep", { minutes: 5 }, internal.hostedStorage.sweep, {});
 
+// Picks up submission queues whose delivery is due: backoff retries, and any
+// pass that died before finishing. Reads only queues already due.
+crons.interval("page submission delivery sweep", { minutes: 1 }, internal.userPageForms.sweepDueQueues, {});
+
+// Deletes delivered submissions past their retention. Pending and failed ones are kept.
+crons.interval("page submission prune", { hours: 6 }, internal.userPageForms.pruneDelivered, {});
+
 export default crons;

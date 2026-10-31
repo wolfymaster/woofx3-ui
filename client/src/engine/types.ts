@@ -161,6 +161,7 @@ export type EngineCapability =
   | "twitch.moderation"
   | "twitch.pins"
   | "twitch.streamInfo"
+  | "userPages.formSubmissions"
   | "widgets.themes"
   | "workflow.conditionListReferences"
   | "workflow.delayWait"
