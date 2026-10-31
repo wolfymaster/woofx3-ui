@@ -408,7 +408,7 @@ export function useMarketplaceCounts(instanceId: InstanceId | null): Marketplace
   const matches = fetched !== null && fetched.instanceId === instanceId;
 
   useEffect(() => {
-    if (!instanceId || matches || loading || failed === instanceId) {
+    if (!instanceId || matches || failed === instanceId) {
       return;
     }
     let cancelled = false;
@@ -433,8 +433,11 @@ export function useMarketplaceCounts(instanceId: InstanceId | null): Marketplace
       });
     return () => {
       cancelled = true;
+      setLoading(false);
     };
-  }, [read, instanceId, matches, loading, failed]);
+    // `loading` stays out of the dependencies: this effect sets it, and a re-run
+    // would run the cleanup above and discard the request it has just started.
+  }, [read, instanceId, matches, failed]);
 
   return { counts: matches ? fetched.counts : null, loading };
 }
