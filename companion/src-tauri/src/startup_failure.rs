@@ -1,6 +1,6 @@
-//! Telling the person at this PC why the companion could not start. A
+//! Telling the person at this PC why the app could not start. A
 //! release build has no console, so an error returned from setup would
-//! vanish and the companion would simply not open. Instead the reason goes
+//! vanish and the app would simply not open. Instead the reason goes
 //! to a log file in the app's log directory and into a message box.
 
 use std::fs::OpenOptions;
@@ -10,8 +10,9 @@ use std::path::{Path, PathBuf};
 /// The file the reason is appended to, in the app's log directory.
 pub const STARTUP_ERROR_LOG: &str = "startup-error.log";
 
-/// Logs `reason` and shows it, then waits for the message box to close.
-pub fn report(log_dir: Option<&Path>, reason: &str) {
+/// Logs `reason` and shows it under `title`, then waits for the message box
+/// to close.
+pub fn report(log_dir: Option<&Path>, title: &str, reason: &str) {
     eprintln!("[companion] could not start: {reason}");
     let logged = match log_dir {
         Some(dir) => write_log(dir, reason).map_err(|err| err.to_string()),
@@ -26,7 +27,7 @@ pub fn report(log_dir: Option<&Path>, reason: &str) {
     };
     rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Error)
-        .set_title("woofx3 companion could not start")
+        .set_title(title)
         .set_description(format!("{reason}\n\n{where_logged}"))
         .set_buttons(rfd::MessageButtons::Ok)
         .show();

@@ -1,18 +1,20 @@
 //! What the companion keeps in the OS credential store: the companion token,
 //! generated here and sent to Convex only as a hash until pairing is
 //! approved, and in local mode the client id and secret the local engine
-//! issued to this host.
+//! issued to this host. Entries are filed under the running app's credential
+//! service, so the companion and the desktop app never read each other's.
 
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use futures::future::BoxFuture;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, OnceLock};
 use woofx3_companion_core::host::{ClientCredentials, CredentialStore};
+use woofx3_companion_core::AppIdentity;
+pub use woofx3_companion_core::StoredToken;
 
-const SERVICE: &str = "tv.woofx3.companion";
 const TOKEN_ACCOUNT: &str = "companion-token";
 const ENGINE_CLIENT_ACCOUNT: &str = "local-engine-client";
 
@@ -38,26 +40,17 @@ pub fn hash_token(token: &str) -> String {
         .collect()
 }
 
-/// The stored token, and whether the person at this PC has confirmed the
-/// pairing it belongs to. An unconfirmed token is kept across a restart so
-/// an approval made meanwhile can still be confirmed. `instance_name` is what
-/// the window shows until Convex answers, so a restart while offline still
-/// says what this PC is paired with.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct StoredToken {
-    pub token: String,
-    pub confirmed: bool,
-    #[serde(default)]
-    pub instance_name: Option<String>,
-}
-
-fn entry(account: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, account).context("could not open the credential store")
+fn entry(service: &str, account: &str) -> Result<keyring::Entry> {
+    keyring::Entry::new(service, account).context("could not open the credential store")
 }
 
 /// The JSON value stored under `account`; `label` names it in errors.
-fn load_blocking<T: DeserializeOwned>(account: &str, label: &str) -> Result<Option<T>> {
-    match entry(account)?.get_password() {
+fn load_blocking<T: DeserializeOwned>(
+    service: &str,
+    account: &str,
+    label: &str,
+) -> Result<Option<T>> {
+    match entry(service, account)?.get_password() {
         Ok(raw) => {
             let stored: T = serde_json::from_str(&raw)
                 .with_context(|| format!("the stored {label} is unreadable"))?;
@@ -68,15 +61,15 @@ fn load_blocking<T: DeserializeOwned>(account: &str, label: &str) -> Result<Opti
     }
 }
 
-fn store_blocking<T: Serialize>(account: &str, stored: &T) -> Result<()> {
+fn store_blocking<T: Serialize>(service: &str, account: &str, stored: &T) -> Result<()> {
     let raw = serde_json::to_string(stored)?;
-    entry(account)?
+    entry(service, account)?
         .set_password(&raw)
         .context("could not write to the credential store")
 }
 
-fn clear_blocking(account: &str) -> Result<()> {
-    match entry(account)?.delete_credential() {
+fn clear_blocking(service: &str, account: &str) -> Result<()> {
+    match entry(service, account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(err) => Err(anyhow::Error::new(err).context("could not clear the credential store")),
     }
@@ -110,32 +103,59 @@ where
     .map_err(|err| anyhow!("the credential store task failed: {err}"))?
 }
 
-pub async fn load() -> Result<Option<StoredToken>> {
-    off_thread(|| load_blocking(TOKEN_ACCOUNT, "companion credential")).await
+/// The running app's entries in the OS credential store.
+#[derive(Clone, Debug)]
+pub struct Credentials {
+    service: String,
 }
 
-pub async fn store(stored: StoredToken) -> Result<()> {
-    off_thread(move || store_blocking(TOKEN_ACCOUNT, &stored)).await
-}
+impl Credentials {
+    pub fn new(identity: &AppIdentity) -> Self {
+        Self {
+            service: identity.credential_service().to_string(),
+        }
+    }
 
-pub async fn clear() -> Result<()> {
-    off_thread(|| clear_blocking(TOKEN_ACCOUNT)).await
+    pub async fn load(&self) -> Result<Option<StoredToken>> {
+        let service = self.service.clone();
+        off_thread(move || load_blocking(&service, TOKEN_ACCOUNT, "companion credential")).await
+    }
+
+    pub async fn store(&self, stored: StoredToken) -> Result<()> {
+        let service = self.service.clone();
+        off_thread(move || store_blocking(&service, TOKEN_ACCOUNT, &stored)).await
+    }
+
+    pub async fn clear(&self) -> Result<()> {
+        let service = self.service.clone();
+        off_thread(move || clear_blocking(&service, TOKEN_ACCOUNT)).await
+    }
+
+    pub fn engine_client_store(&self) -> EngineClientStore {
+        EngineClientStore {
+            service: self.service.clone(),
+        }
+    }
 }
 
 /// The local engine's client credentials, in the credential store next to
 /// the companion token.
-pub struct EngineClientStore;
+pub struct EngineClientStore {
+    service: String,
+}
 
 impl CredentialStore for EngineClientStore {
     fn load(&self) -> BoxFuture<'_, Result<Option<ClientCredentials>>> {
-        Box::pin(off_thread(|| {
-            load_blocking(ENGINE_CLIENT_ACCOUNT, "engine client credential")
+        let service = self.service.clone();
+        Box::pin(off_thread(move || {
+            load_blocking(&service, ENGINE_CLIENT_ACCOUNT, "engine client credential")
         }))
     }
 
     fn store(&self, credentials: ClientCredentials) -> BoxFuture<'_, Result<()>> {
+        let service = self.service.clone();
         Box::pin(off_thread(move || {
-            store_blocking(ENGINE_CLIENT_ACCOUNT, &credentials)
+            store_blocking(&service, ENGINE_CLIENT_ACCOUNT, &credentials)
         }))
     }
 }

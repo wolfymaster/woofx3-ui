@@ -1,5 +1,6 @@
 import { canonicalRefFromProjectionKey } from "@shared/canonical-ref";
 import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import { bareModuleKey } from "@shared/module-key";
 import { isWebhookTrigger } from "@shared/webhook-endpoint-key";
 import type { ParsedWorkflowHealth } from "@shared/workflow-health";
@@ -24,7 +25,6 @@ import type {
   WorkflowRunRecord,
   WorkflowRunStep,
 } from "@/engine/types";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { toModuleId } from "../ids";
 import { toEngineAlert } from "./alerts";
 
@@ -39,7 +39,7 @@ function epochMs(iso: string, what: string): number {
 
 /**
  * A workflow as every gateway serves it, its definition's `$` keys escaped
- * (lib/dollar-keys). Null for a row with no definition yet: nothing can show
+ * (shared/dollar-keys). Null for a row with no definition yet: nothing can show
  * or run it, and the Convex mirror leaves such rows out too.
  */
 export function toWorkflow(workflow: EngineWorkflow): Workflow | null {

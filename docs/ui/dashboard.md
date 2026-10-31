@@ -398,17 +398,21 @@ edit mode (distinct from the dashboard's) enables drag-to-reorder via dnd-kit pl
 per-button edit and delete.
 
 **There is one macro pad per instance, and it is shared.** The buttons and their
-order both live in the `macros` table (`convex/macros.ts`), not in the widget's
-config — the same reasoning as `dashboardCounters`: a dashboard layout is a personal
+order are kept behind the engine gateway's `macros` namespace, not in the widget's
+config: with an account in the `macros` table (`convex/macros.ts`), in the desktop
+app's local mode in the engine's local UI settings (see [Data sources](#data-sources)).
+The same reasoning as `dashboardCounters`: a dashboard layout is a personal
 workspace preference, but the macro pad is the channel's, so everyone sharing the
 account sees the same buttons in the same order. Placing the widget on two panels
 shows the same pad in both.
 
 One row per macro, not an array on a parent document: add, edit and delete each
 touch a single document, and a reorder writes `sortOrder` only on the rows that
-moved, so two people editing the pad cannot clobber each other. Reorder is applied
-through a Convex optimistic update so a dragged tile does not spring back while
-the round-trip completes.
+moved, so two people editing the pad cannot clobber each other. What a button must
+hold (a label, a `#rrggbb` color) and how a reorder is written are in
+`shared/macro-pad.ts`, which both stores use. A reorder shows at once (a Convex
+optimistic update, or the local cache) so a dragged tile does not spring back
+while the writes complete.
 
 Each button carries an optional Lucide **icon** and **color**. Color is stored as
 six-digit hex (`#rrggbb`) — chosen from preset swatches or the native picker — and
@@ -419,15 +423,17 @@ foreground so any choice stays readable.
 Buttons support **variables**: any <code v-pre>{{name}}</code> written into the command,
 URL, body, a header value, or any text setting of an action is collected from the user in a prompt before the macro runs.
 The <code v-pre>{{…}}</code> delimiter is deliberately distinct from the workflow engine's `${…}`
-and the shared TS resolver's `{…}` (see `convex/lib/macroVariables.ts` for why) —
+and the shared TS resolver's `{…}` (see `shared/macro-variables.ts` for why) —
 variable names are restricted to `[A-Za-z0-9_]`.
 
-`chat-command`, `trigger-workflow` and `run-action` macros run in Convex through `macros.run`,
-the same `planMacroRun` / `executeMacroPlan` path a remote trigger uses
-(`convex/lib/macroTrigger.ts`, `convex/lib/macroExecution.ts`). A workflow macro
+`chat-command`, `trigger-workflow` and `run-action` macros run on the engine through the
+gateway's `macros.useRunRequest`. Both gateways plan the run with `planMacroRun`
+(`shared/macro-run.ts`), the planner a remote trigger uses: with an account they
+run in Convex through `macros.run` and `executeMacroPlan` (`convex/lib/macroExecution.ts`),
+in local mode the direct gateway calls the engine itself. A workflow macro
 calls the engine's `triggerWorkflowByName`; a chat-command macro must be a
 `!command` and calls the engine's `executeCommand` as the linked Twitch
-broadcaster, exactly as if they had typed it — the engine cannot post a plain chat
+broadcaster (with an account, only owners and admins may press one), exactly as if they had typed it — the engine cannot post a plain chat
 message. An action macro holds one action and calls the engine's `runActions` with
 that one step. The engine records no run for it, so there is no outcome to watch. The step is stored
 with `$ref` as `ref`, since Convex refuses `$` field names, and is converted back
@@ -461,6 +467,10 @@ sentence keeps following it as the action changes (`typedMacroLabel`); clearing 
 label goes back to the sentence (`macroButtonLabel`).
 
 ### Trigger macros from a Stream Deck or phone
+
+Remote triggers need an account: Convex serves the trigger URLs, so the desktop
+app's local mode has none. The hosted catalog mounts the pad with them
+(`hosted-macro-pad.tsx`); local mode's pad leaves them out.
 
 Any `chat-command`, `trigger-workflow` or `run-action` macro can get a **remote trigger**: a
 secret token that presses the button with a single HTTP request, so an Elgato
@@ -779,12 +789,14 @@ page lists them as not granted, and the widget offers a reconnect.
 | Concern | Mechanism |
 |---------|-----------|
 | Layout and widget config, notes, pinned counters, highlights | The gateway's `dashboard` namespace: Convex (`dashboardLayouts`, `instanceNotes`, `dashboardCounters`, `streamHighlights`) with an account, the engine's local UI settings in local mode |
+| Macro pad | The gateway's `macros` namespace: Convex (`macros`) with an account, the engine's local UI settings in local mode (`client/src/engine/direct/macros.ts`) |
 | Per-widget data | Each widget reads the engine through the gateway, or its own Convex query/action for hosted-only widgets — see the widget file |
 
 Panel and rail edits go through the operations in `shared/dashboard-layout.ts`
 (add with a given id, remove, rename, replace a panel's widgets, check a rail),
 which the Convex mutations and the direct gateway both use. Locally each kind of
-data has its own UI settings namespace (`client/src/engine/direct/dashboard.ts`):
+data has its own UI settings namespace (`client/src/engine/direct/dashboard.ts`, and
+`client/src/engine/direct/macros.ts` for the macro pad):
 
 | Namespace | Keys | Value |
 |---|---|---|
@@ -792,12 +804,14 @@ data has its own UI settings namespace (`client/src/engine/direct/dashboard.ts`)
 | `dashboardNotes` | `notes` | `{ content }`; the setting's own timestamp is the last save |
 | `dashboardCounters` | One per counter's canonical id | `{ sortOrder }` |
 | `dashboardHighlights` | One per highlight id | The saved row: kind, name, detail, amount, time |
+| `macros` | One per macro id | `{ label, icon?, color?, type, config, sortOrder }`; the pad is sorted by `sortOrder`, then id |
 
 A layout edit is a read-modify-write that writes only if no other write landed
 since the read (`updateUISetting` with the engine's `expectedRevision`), so a
 second window's edit is merged, not lost; it retries on a conflict up to
 `uiSettingWriteAttempts` times and then fails. Values read back are checked with a
-schema, and one that does not fit reads as empty and is logged rather than
-breaking the dashboard.
+schema, and one that does not fit reads as empty (a macro is left off the pad)
+and is logged rather than breaking the dashboard. A macro reorder rewrites
+`sortOrder` on each macro that moved, each a conditional write of its own.
 
 Use this area when you need a **live operations** view without leaving the main shell.

@@ -18,9 +18,9 @@ use crate::host::{EnginePhase, HostModeKind, LocalSession, StopCause};
 #[cfg(feature = "ts")]
 pub use bindings::{window_bindings, BINDINGS_FILE};
 pub use command_args::{
-    ChooseHostModeArgs, ConfirmAddressArgs, EnqueueShoutoutArgs, RemoveShoutoutArgs,
-    ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
-    UseDiscoveredArgs,
+    ChooseHostModeArgs, ConfirmAddressArgs, EnqueueShoutoutArgs, FinishAppLinkArgs,
+    RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs,
+    TestEndpointArgs, UseDiscoveredArgs,
 };
 
 /// The largest integer a JavaScript number holds exactly, 2^53 - 1
@@ -38,9 +38,10 @@ macro_rules! command_name_list {
 /// Every command a window may call, in the order the host registers them.
 pub const COMMAND_NAMES: &[&str] = crate::with_command_names!(command_name_list);
 
-/// The commands the dashboard window may call: running the app's local mode.
-/// The companion window may call every other command. Each window's
-/// capability grants exactly its set (companion/src-tauri/capabilities).
+/// The commands the dashboard window may call: running the app's local mode,
+/// and in companion mode making this computer the signed-in instance's
+/// companion. The companion window may call every other command. Each
+/// window's capability grants exactly its set (companion/src-tauri/capabilities).
 pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "local_engine_session",
     "shoutout_queue",
@@ -51,6 +52,9 @@ pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "request_stream_start_marker",
     "host_mode",
     "choose_host_mode",
+    "companion_link_status",
+    "begin_app_link",
+    "finish_app_link",
 ];
 
 /// The mode this app runs in, and whether the streamer chose it. Until they
@@ -60,6 +64,41 @@ pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
 pub struct HostModeView {
     pub mode: HostModeKind,
     pub chosen: bool,
+}
+
+/// What the dashboard needs to decide whether to make this computer the
+/// companion of the instance it is signed in to, and to ask Convex to.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct CompanionLinkStatus {
+    /// The instance this computer is the confirmed companion of, if any.
+    pub linked: Option<LinkedInstance>,
+    pub installation_id: String,
+    pub device_name: String,
+    pub companion_version: String,
+}
+
+/// A confirmed pairing's instance. `instance_id` is missing only for a
+/// pairing stored before the id was kept, until Convex next names it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedInstance {
+    pub instance_id: Option<String>,
+    pub instance_name: String,
+}
+
+/// A fresh companion token, held by the host until the link finishes. Only
+/// its hash leaves the host, with the details Convex records beside it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct AppLinkStart {
+    pub token_hash: String,
+    pub installation_id: String,
+    pub device_name: String,
+    pub companion_version: String,
 }
 
 /// Where pairing stands.
@@ -129,10 +168,13 @@ pub struct WindowState {
 }
 
 /// A newer release, downloaded and verified, that installs on Restart to
-/// update.
+/// update. `product_name` is the running app's, which the window names the
+/// update with.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyUpdate {
+    pub product_name: String,
     pub version: String,
 }
 
@@ -485,6 +527,7 @@ mod tests {
     #[test]
     fn names_the_version_on_the_tray_item() {
         let update = ReadyUpdate {
+            product_name: "woofx3".into(),
             version: "1.2.3".into(),
         };
         assert_eq!(update.tray_label(), "Restart to update to 1.2.3");
