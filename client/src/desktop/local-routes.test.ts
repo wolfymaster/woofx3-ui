@@ -11,7 +11,11 @@ import { LOCAL_HOME_PATH, LOCAL_ROUTES, servesLocally } from "./local-routes";
 const CLIENT_SRC = join(import.meta.dir, "..");
 const REPO = join(CLIENT_SRC, "..", "..");
 
-/** What local mode cannot load: Convex's client and hooks, its generated API, and the hosted wiring built on them. */
+/**
+ * What local mode cannot load: Convex's client and hooks, its generated API,
+ * the hosted wiring built on them, and Convex's HTTP site, whose URLs (macro
+ * trigger URLs, overlay links) a lone engine has none of.
+ */
 const CONVEX_REACHING: readonly RegExp[] = [
   /^convex\/react$/,
   /^@convex-dev\/auth\//,
@@ -20,6 +24,7 @@ const CONVEX_REACHING: readonly RegExp[] = [
 ];
 const CONVEX_REACHING_FILES: readonly string[] = [
   join(CLIENT_SRC, "lib", "convexClient.ts"),
+  join(CLIENT_SRC, "lib", "convexSiteUrl.ts"),
   join(CLIENT_SRC, "hooks", "use-instance.ts"),
   join(CLIENT_SRC, "engine", "boot", "hosted.tsx"),
   join(CLIENT_SRC, "engine", "convex"),

@@ -1,8 +1,8 @@
-import { Clapperboard, Grid3x3, ListChecks, Pin, Rocket, Volume2 } from "lucide-react";
+import { Clapperboard, ListChecks, Pin, Rocket, Volume2 } from "lucide-react";
 import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
-import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
+import { HostedMacroPadWidget } from "@/components/dashboard/widgets/hosted-macro-pad";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
@@ -13,6 +13,7 @@ import {
   adBreaksWidget,
   announcementWidget,
   eventsWidget,
+  macroPadWidget,
   moderationWidget,
   notesWidget,
   queueWidget,
@@ -26,8 +27,9 @@ import {
 import type { DashboardWidgetDefinition } from "./types";
 
 // The hosted app's dashboard: every widget. Those below reach data only
-// Convex keeps (macros, the go-live checklist, pin history, the shoutout
-// queue, stream info presets), so only the hosted app may load this module.
+// Convex keeps (the go-live checklist, pin history, the shoutout queue,
+// stream info presets, macros' remote trigger URLs), so only the hosted app
+// may load this module.
 
 const goLiveWidget: DashboardWidgetDefinition = {
   type: "go-live",
@@ -65,14 +67,7 @@ const shoutoutWidget: DashboardWidgetDefinition = {
   component: ShoutoutWidget,
 };
 
-const macroPadWidget: DashboardWidgetDefinition = {
-  type: "macro-pad",
-  label: "Macro Pad",
-  description: "One-click buttons for chat commands, workflows, and HTTP requests.",
-  icon: Grid3x3,
-  category: "automation",
-  component: MacroPadModule,
-};
+const hostedMacroPadWidget: DashboardWidgetDefinition = { ...macroPadWidget, component: HostedMacroPadWidget };
 
 /** The getting started checklist, pinned first on the rail while it has anything left to do. */
 function useGettingStartedRailItem(): RailPinnedItem | null {
@@ -109,7 +104,7 @@ export const hostedDashboardCatalog: DashboardCatalog = {
     streamStatsWidget,
     recentStreamsWidget,
     notesWidget,
-    macroPadWidget,
+    hostedMacroPadWidget,
   ],
   usePinnedRailItem: useGettingStartedRailItem,
   Notice: StarterPacksNudge,

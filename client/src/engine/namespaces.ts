@@ -2,10 +2,12 @@
  * The domains the UI reaches the engine through, one `EngineGateway` namespace
  * each, and the Convex modules that serve each domain today.
  *
- * A module listed here relays to the engine or mirrors engine state, so only
- * the Convex adapter (client/src/engine/convex/) may call it; boundary.test.ts
- * holds every other file to that. An entry naming a function (`macros.run`)
- * claims that function alone, leaving the rest of the module cloud-owned.
+ * A module listed here relays to the engine, mirrors engine state, or keeps
+ * data a namespace serves from either store (the macro pad), so only the
+ * Convex adapter (client/src/engine/convex/) may call it; boundary.test.ts
+ * holds every other file to that. An entry naming a function
+ * (`marketplace.installModule`) claims that function alone, leaving the rest
+ * of the module cloud-owned.
  *
  * Cloud-owned modules (accounts, instances, provisioning, the legacy module listings, Twitch
  * calls the engine has no method for, dashboard preferences) are not engine access and stay out.
@@ -53,7 +55,7 @@ export const ENGINE_NAMESPACE_MODULES = {
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],
   workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog", "viewerFacts"],
-  macros: ["macros.run"],
+  macros: ["macros"],
   streamOps: [
     "streamRecap",
     "streamSessionSummaries",

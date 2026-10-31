@@ -1,11 +1,11 @@
 # Companion app
 
 **Routes:** `/companion/pair` (approval page), the Companion card on `/admin/engine`
-**Primary files:** `companion/` (the app; `companion/core/` holds the relay client, bridge and discovery), `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
+**Primary files:** `companion/` (the app; `companion/core/` holds the relay client, bridge and discovery), `client/src/pages/companion-pair.tsx`, `client/src/desktop/AppLink.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
 
 ## What it is
 
-The woofx3 desktop app (Tauri 2) runs on the streamer's PC and lives in the tray. It has two windows:
+The woofx3 app (Tauri 2), the desktop build of woofx3, runs on the streamer's PC and lives in the tray. It has two windows:
 
 - **The dashboard** (`main`): the same dashboard as the web app, built for the desktop (`bun run build:desktop`). It opens at launch and from the tray's **Open woofx3**.
 - **The companion window** (`companion`): pairing and local connections. It opens from the tray's **Local connections…**, and by itself when pairing needs the streamer (a code to approve, a pairing to confirm, an error).
@@ -13,6 +13,24 @@ The woofx3 desktop app (Tauri 2) runs on the streamer's PC and lives in the tray
 The companion part holds outbound connections from that PC to woofx3, so it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC. Its window shows its state and little else: a Status tab and an [Integrations](#integrations) tab, with Engine and Configuration tabs laid out but disabled until they have something to show.
 
 It pairs with one instance, shows that it is paired and connected, survives restarts, and [updates itself](#updates). Once paired and confirmed, it serves the [local endpoints](#integrations) of modules installed on its instance, such as OBS's WebSocket server, to a cloud engine through the relay. It does not carry a local engine's traffic yet.
+
+## Two products
+
+The same code builds two apps, which install side by side without sharing anything:
+
+| | Companion | woofx3 |
+|---|---|---|
+| What it is | The tray app that pairs a PC with a cloud instance | The companion with an engine bundled, starting in [local mode](#local-mode) |
+| Identifier | `tv.woofx3.companion` | `tv.woofx3.app` |
+| Product name | woofx3 companion | woofx3 |
+| Tauri config | `src-tauri/tauri.conf.json` | the same, with `src-tauri/tauri.woofx3.conf.json` merged over it |
+| Cargo features | none | `bundled-engine` |
+| Version | `version` in `tauri.conf.json`, equal to `Cargo.toml`'s | `version` in `tauri.woofx3.conf.json` |
+| Update feed | `companion-latest` ([Companion releases](/ops/companion-releases)) | `woofx3-latest` ([woofx3 releases](/ops/woofx3-releases)) |
+
+The identifier decides where each keeps its state: Tauri derives the app's data, config and log directories from it, and the Rust side files its secrets in the OS credential store under it too (`AppIdentity` in `core/src/identity.rs`, read from the running app's config at startup). So the two never read each other's pairing token, engine client credentials, installation id, host configuration or engine data. The product name titles the startup failure message box and the update banner, and the Tauri config gives each its installer name, window titles and update endpoint. The app reports the version from its Tauri config to Convex, the same version the updater compares.
+
+Tauri merges `tauri.woofx3.conf.json` as a JSON merge patch, which replaces arrays whole, so it repeats the window list with its own titles. `companion/scripts/product-configs.test.ts` checks the merged config: its own identifier, product name, version and feed, the companion's windows apart from their titles, and the companion's updater key.
 
 ## Layout
 
@@ -69,9 +87,9 @@ In the desktop build `client/src/main.tsx` starts at `client/src/desktop/Desktop
 
 Local mode has no Convex client, so it serves only pages that reach the engine through its gateway: `client/src/desktop/local-routes.tsx` lists them, and `local-routes.test.ts` walks every import from `LocalApp.tsx` and fails on any that reaches Convex (its client or hooks, the generated API, `useInstance`, or the hosted gateway). `LocalShell.tsx` frames them with the app's sections cut down to those pages (`navItemsServed`), and a status bar fed by the engine alone. A path local mode does not serve leads to its home, the dashboard. A page joins local mode once nothing it loads reaches Convex.
 
-Local mode's dashboard (`LocalDashboard.tsx`) is the hosted one with local mode's widget catalog (`client/src/lib/dashboard-widgets/local-catalog.ts`). It leaves out the widgets whose data only Convex keeps: the go-live checklist, stream info (its presets), pinned messages (their history), shoutouts (the queue) and the macro pad (macros). It has no getting started checklist or starter packs nudge either, which belong to an account's setup. A layout that names one of them shows it as not available here.
+Local mode's dashboard (`LocalDashboard.tsx`) is the hosted one with local mode's widget catalog (`client/src/lib/dashboard-widgets/local-catalog.ts`). It leaves out the widgets whose data only Convex keeps: the go-live checklist, stream info (its presets), pinned messages (their history), and shoutouts (the queue). Its macro pad keeps its buttons on the engine and runs them there, but has no remote trigger URLs, which Convex serves. It has no getting started checklist or starter packs nudge either, which belong to an account's setup. A layout that names one of them shows it as not available here.
 
-The dashboard's own data that Convex keeps per user or instance (which page intros were closed, the dashboard's layout, notes, pinned counters and highlights) local mode keeps in the engine's local UI settings (`client/src/engine/direct/ui-settings.ts`): one namespace per kind of data, read whole, cached, and refreshed by `ui.setting.changed`. An edit that must not lose another window's change is a read-modify-write against the revision it read, retried on a conflict; [the dashboard page](./dashboard.md#data-sources) lists its namespaces. The name an editor shows to others editing the same scene comes from the app root (`ViewerNameProvider`): the account's name when signed in, "This computer" in local mode.
+The dashboard's own data that Convex keeps per user or instance (which page intros were closed, the dashboard's layout, notes, pinned counters, highlights and the macro pad) local mode keeps in the engine's local UI settings (`client/src/engine/direct/ui-settings.ts`): one namespace per kind of data, read whole, cached, and refreshed by `ui.setting.changed`. An edit that must not lose another window's change is a read-modify-write against the revision it read, retried on a conflict; [the dashboard page](./dashboard.md#data-sources) lists its namespaces. The name an editor shows to others editing the same scene comes from the app root (`ViewerNameProvider`): the account's name when signed in, "This computer" in local mode.
 
 Stream recaps are served too, the list and a recap's page, from the engine's own session history; see [Stream recaps](./stream-recaps.md#local-mode). So is the dashboard's Recent Streams widget.
 
@@ -136,7 +154,7 @@ How the relay ends a connection decides what the companion does next:
 
 ## Local mode
 
-In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The desktop installer bundles an engine and starts in local mode; the companion installer starts as the tray app. The window has no switch between them; a file in the app's config directory overrides the installer's default (`%APPDATA%\tv.woofx3.companion\desktop-host.json` on Windows, `~/.config/tv.woofx3.companion/desktop-host.json` on Linux):
+In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The desktop installer bundles an engine and starts in local mode; the companion installer starts as the tray app. The window has no switch between them; a file in the app's config directory overrides the installer's default (`%APPDATA%\<identifier>\desktop-host.json` on Windows, `~/.config/<identifier>/desktop-host.json` on Linux, with the identifier of the [product](#two-products) installed: `tv.woofx3.app` or `tv.woofx3.companion`):
 
 ```json
 { "mode": "local", "engineDir": "C:\\woofx3\\engine", "apiPort": 5050 }
@@ -145,13 +163,13 @@ In local mode the companion is the desktop host for a woofx3 engine that runs on
 - Without the file the app runs in its installer's mode. With `{ "mode": "companion" }` it is the tray app described above and runs no engine.
 - `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Only the desktop installer bundles one, so local mode from the companion installer needs `engineDir`.
 - `apiPort` is the port the engine's api listens on, 5050 (an engine release's own default) unless set.
-- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup, so a typo never quietly turns local mode off. The reason appears in a message box and is appended to `startup-error.log` in the app's log directory (`%LOCALAPPDATA%\tv.woofx3.companion\logs` on Windows).
+- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup, so a typo never quietly turns local mode off. The reason appears in a message box and is appended to `startup-error.log` in the app's log directory (`%LOCALAPPDATA%\<identifier>\logs` on Windows).
 
 ### The engine sidecar
 
 In local mode the companion runs the engine's orchestrator as its one sidecar process (`engine_host.rs`, supervised by `core/src/host/sidecar.rs`). The orchestrator runs inside the engine release, from that directory, because it finds `services.json` and every service binary next to itself; that is why the companion does not use a Tauri `externalBin`, which would place a lone orchestrator beside the companion's own executable.
 
-- The engine keeps its state (databases, modules, uploads, logs) in `engine/` under the app's local data directory (`%LOCALAPPDATA%\tv.woofx3.companion` on Windows), passed as `WOOFX3_DATA_DIR`, never in the release, which may be read-only and is replaced by updates.
+- The engine keeps its state (databases, modules, uploads, logs) in `engine/` under the app's local data directory (`%LOCALAPPDATA%\<identifier>` on Windows), passed as `WOOFX3_DATA_DIR`, never in the release, which may be read-only and is replaced by updates.
 - It is started with `WOOFX3_SUPERVISOR_STATUS=stdout-jsonl` and `--exit-on-stdin-eof`. Its stdout carries only status lines, parsed into typed states (`core/src/host/status.rs`); unknown event types and statuses are ignored, as the engine's format asks.
 - The companion holds the orchestrator's stdin. Closing it is the stop request: the orchestrator stops its services in dependency order and exits. If the companion dies, the pipe closes with it and the engine stops just the same.
 - Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Installing an update stops the engine first, since Windows will not replace a running executable and the new companion needs the engine's ports; if the install fails, the engine starts again.
@@ -166,7 +184,7 @@ The engine is configured as a local engine (`core/src/host/engine.rs`), followin
 | Variable | Value |
 |---|---|
 | `WOOFX3_HOSTING` | `local`, so the engine advertises `engine.localMode` |
-| `WOOFX3_DATA_DIR` | `engine/` under the app's local data directory (`%LOCALAPPDATA%\tv.woofx3.companion` on Windows) |
+| `WOOFX3_DATA_DIR` | `engine/` under the app's local data directory (`%LOCALAPPDATA%\<identifier>` on Windows) |
 | `WOOFX3_REGISTRATION_TOKEN_FILE` | `engine-secrets/registration-token` under the same directory. The engine writes a token there on its first start, readable only by the user |
 | `WOOFX3_API_PORT` | `apiPort` |
 | `WOOFX3_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` |
@@ -190,21 +208,21 @@ The client secret stays in the Rust process and the credential store. The dashbo
 
 ### Window permissions
 
-The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue and the stream start marker. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
+The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue and the stream start marker, and in companion mode the three commands that [link the app](#linking-the-desktop-app) as the instance's companion. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
 
 ## Updates
 
-The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
+The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases) and [woofx3 releases](/ops/woofx3-releases).
 
-- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
+- It checks `latest.json` on its product's feed (`companion-latest` or `woofx3-latest`) 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
-- Once downloaded, `WindowState.update` carries its version. The window shows "woofx3 companion {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
+- Once downloaded, `WindowState.update` carries its version. The window shows "{product name} {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
 - A failed check, download or signature is logged and tried again on that backoff. It never becomes the `error` state, which is about pairing.
 - The installer is per user, so installs and updates need no administrator prompt.
 
 ## Pairing
 
-Pairing follows the OAuth device authorization shape (RFC 8628): the companion shows a short code, and a signed-in person approves it in the browser.
+There are two ways to pair. Signed in to an account inside the desktop app, the app [links itself](#linking-the-desktop-app) to the instance it shows. Otherwise, from the companion window's **Pair**, pairing follows the OAuth device authorization shape (RFC 8628): the companion shows a short code, and a signed-in person approves it in the browser.
 
 1. The companion generates its own token: 32 bytes from the OS RNG, base64url, prefixed `wfxc_`. It stores it in the OS credential store (Credential Manager on Windows) marked unconfirmed.
 2. It calls the action `companionPairing.start` with its device name, version, installation id and the token's SHA-256 hash. Convex draws a device code and an 8-character user code (`XXXX-XXXX`, from an alphabet with no vowels or look-alike characters), and returns them with the verification URL `<SITE_URL>/companion/pair?code=…` and how long the code is good for (10 minutes).
@@ -218,13 +236,32 @@ Because the companion makes its own token and sends only its hash, no secret eve
 
 The **installation id** is a UUID the companion generates once and keeps in its app data directory. Approving a pairing from an installation that already has a row on that instance replaces that row's token, keeping its id, so pairing the same PC again does not leave a duplicate.
 
+The stored pairing (`core/src/stored_token.rs`) holds the token, whether it is confirmed, and the instance's name and id. A pairing stored before the id was kept has none until `companions.self` next names the instance.
+
+### Linking the desktop app
+
+When an admin or owner of the selected instance is signed in to the dashboard in the desktop app (companion mode), the app makes its computer that instance's companion by itself, with no code to approve and nothing to confirm. `client/src/desktop/AppLink.tsx` runs it; it is mounted in the hosted root only in the desktop build, so the web build and local mode never load it.
+
+1. The dashboard asks the host `companion_link_status`: the instance this computer is the confirmed companion of (its id and name), plus its installation id, device name and version. If that is the selected instance, nothing happens. A stored pairing that names no instance id is left alone too, since which instance it belongs to cannot be told.
+2. `begin_app_link` generates a fresh token in the Rust process and keeps it in memory, not yet in the credential store. It returns only the token's hash, with the installation id, device name and version. Starting again replaces a token that never finished.
+3. The dashboard calls `companionPairing.linkSignedInApp` with the instance and those values. It requires the admin role on the instance, checks the hash, installation id, device name and version as `start` does, and is rate limited per user. It writes the `companions` row already confirmed, approved by the caller, through the same `writeCompanionCredential` (`convex/lib/companionRecords.ts`) an approval uses, so this installation's existing row keeps its id and gets the new token. Calling it again with the same installation and hash changes nothing.
+4. `finish_app_link` gives up any previous pairing as **Unpair** does, stores the token as confirmed with the instance's name and id, and starts the paired session.
+
+If another installation is the instance's companion, `linkSignedInApp` writes nothing and answers with that computer's name and last-seen time. The dashboard asks "Use this computer for local connections?" in a small prompt the person can dismiss. Choosing this computer calls the mutation again with `replaceOtherComputer`, which replaces the other companion as an approval does (see [One companion per instance](#one-companion-per-instance)); the other PC drops to Unpaired.
+
+The dashboard tries once per instance per run of the app. Anyone below admin is skipped without a word. A failure is shown with **Try again**, and never retried on its own.
+
+Why no confirmation: the device-code flow asks the person at the PC to confirm because a code shown on stream could be approved by anyone who saw it. Here the approval is the sign-in itself, made inside the app on that PC, so the person who approves is the person at the PC. The token never leaves the Rust process: the webview and Convex see only its hash, as in the device-code flow.
+
 ### One companion per instance
 
 An instance has at most one companion. Approving a pairing from a different installation **replaces** the current companion: `approve` deletes its row and presence row in the same transaction, and the old companion's `companions.self` subscription turns null, so it drops to Unpaired at once. Pairing the same installation again updates the row in place and keeps its id, with no warning.
 
+The desktop app's own link never replaces another computer without asking (see [Linking the desktop app](#linking-the-desktop-app)).
+
 Before Approve is enabled, the approval page asks `companionPairing.replacementForApproval` with the user code and the chosen instance. It answers with the device name and last-seen time of the companion that approving would replace, or null. It compares installation ids on the server, so they never reach the browser, and it answers only an admin of the instance, with no token data. When it names a companion, the page shows "This replaces the companion on {device}, last seen {time}" and requires a second checkbox. The confirmation is tied to that companion, so choosing another instance asks again.
 
-Because there is only one companion, holding a confirmed companion row is the privilege. A phished approval can only replace the streamer's own companion, and that is visible: the real companion drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows an approval replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
+Because there is only one companion, holding a confirmed companion row is the privilege. A phished approval can only replace the streamer's own companion, and that is visible: the real companion drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows an approval or a link replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
 
 ### The approval page
 

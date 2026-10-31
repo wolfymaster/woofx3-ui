@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { escapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowRecord } from "@/engine/types";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
 import {
   eventsChangingResource,
   resourceActionStep,

@@ -22,6 +22,7 @@ import {
   COMMAND_GROUPS_PATH,
   COMMAND_NEW_ROUTE,
 } from "@/lib/command-editor-route";
+import { IS_DESKTOP } from "@/lib/desktop";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
 import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
@@ -84,6 +85,10 @@ const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const UserPage = lazy(() => import("@/pages/user-page"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
+
+// In the desktop app, signing in makes the computer the instance's companion.
+// IS_DESKTOP is a build constant, so the web build carries none of it.
+const DesktopAppLink = IS_DESKTOP ? lazy(() => import("@/desktop/AppLink")) : null;
 
 function SplashScreen() {
   return (
@@ -393,6 +398,11 @@ function App() {
                 <Suspense fallback={<SplashScreen />}>
                   <AppRoutes />
                 </Suspense>
+                {DesktopAppLink && (
+                  <Suspense fallback={null}>
+                    <DesktopAppLink />
+                  </Suspense>
+                )}
                 <Toaster />
               </TooltipProvider>
             </MarketplaceModeProvider>

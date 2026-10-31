@@ -1,3 +1,4 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { parseViewerFacts } from "@shared/viewer-facts";
@@ -28,7 +29,6 @@ import type {
   WorkflowTrigger,
   WorkflowTriggerResult,
 } from "@/engine/types";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { directKeys as k } from "./keys";
 import {
   type RunLifecycleEvent,
