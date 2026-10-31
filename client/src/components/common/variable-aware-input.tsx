@@ -86,9 +86,10 @@ export function VariableAwareInput({
   // The field loses its selection to the search box while browsing, so the insert
   // range comes from the last selection the field reported.
   const lastSelection = useRef<{ start: number; end: number } | null>(null);
-  // Where a choice left the cursor. The selection event it causes must not read the
-  // choice as still being typed and offer it again.
-  const choiceCursor = useRef<number | null>(null);
+  // A choice rewrites the field and places the cursor, and the selection events that
+  // causes must not read as the user moving it: they would close a function's menu or
+  // offer a chosen argument again. Set until the user next presses a key or the mouse.
+  const settlingChoice = useRef(false);
   const listId = useId();
 
   const names = useMemo(() => variableNames(availableVariables), [availableVariables]);
@@ -147,10 +148,9 @@ export function VariableAwareInput({
     if (menu?.source === "browse") {
       return;
     }
-    if (el.selectionStart === choiceCursor.current) {
+    if (settlingChoice.current) {
       return;
     }
-    choiceCursor.current = null;
     updateMenu(typedMenu(el.value, el.selectionStart ?? el.value.length, functions));
   };
 
@@ -190,7 +190,7 @@ export function VariableAwareInput({
     onChange(toStoredText(inserted.text, names, { functions }));
     // A function's parentheses are waiting for its first argument, so the menu stays up for it.
     updateMenu(item.callable ? typedMenu(inserted.text, inserted.cursor, functions) : null);
-    choiceCursor.current = inserted.cursor;
+    settlingChoice.current = true;
     lastSelection.current = { start: inserted.cursor, end: inserted.cursor };
     requestAnimationFrame(() => {
       const el = elementRef.current;
@@ -228,7 +228,13 @@ export function VariableAwareInput({
     value: displayed,
     onChange: handleChange,
     onSelect: handleSelect,
-    onKeyDown: handleMenuKeyDown,
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+      settlingChoice.current = false;
+      handleMenuKeyDown(e);
+    },
+    onMouseDown: () => {
+      settlingChoice.current = false;
+    },
     onFocus: () => {
       if (menu?.source === "browse") {
         setMenu(null);
