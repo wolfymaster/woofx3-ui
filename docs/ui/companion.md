@@ -131,6 +131,14 @@ For each endpoint the controls show:
 The dashboard window renders hosted data, so it only requests the two choices that decide what the bridge dials or what leaves the PC. `Integrations::ask_streamer` puts a typed address and the password opt-in to the streamer in a native dialog the host draws, and refuses if they decline.
 - **The connection state** from the relay, and **Test**, which makes one WebSocket handshake with the stored address (offering `obswebsocket.json` and `obswebsocket.msgpack` to an OBS endpoint) and reports whether it answered within 3 seconds.
 
+### What the status bar reports
+
+The hosted shell's status bar (`ConnectionStatusBar` in `client/src/components/layout/connection-status.tsx`) shows the engine, then one coloured name per connected app. Names that don't fit collapse into a `+N` chip coloured by the worst state it hides, and problems sort first (`client/src/lib/connection-status.ts`). Clicking any of them opens one panel with the details and the engine version.
+
+"Connected" also depends on the relay, because a cloud engine can only reach this computer through it. `RelayWatch` (desktop only) follows the host's `RelayView` and sets `$relayLimitation`, which reads as **Limited**: the relay is displaced, refused or unavailable, or has been connecting for over `RELAY_GRACE_MS`. A relay with no enabled endpoint is not needed and counts as healthy. The web build never sets the store.
+
+The bar reports Twitch, plus every installed module whose manifest declares `local[]` endpoints. A module with no status source shows as grey ("doesn't report whether it's connected") rather than green, because Convex records how an endpoint is configured, not whether the engine is connected to it. Only OBS has a status source today (`engine.obs.status`).
+
 ### What the companion dials
 
 The companion's own store, `integrations.json` in its app data directory, is the only source of addresses the bridge dials:
