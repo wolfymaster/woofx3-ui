@@ -48,6 +48,7 @@ Everything environment-specific lives in the `production` GitHub Environment (**
 | `RAILWAY_TOKEN` | secret | Railway project token for the woofx3 project, production environment |
 | `VITE_CONVEX_URL` | variable | Production Convex URL (`*.convex.cloud`), baked into the bundle |
 | `VITE_CONVEX_SITE_URL` | variable | Production Convex HTTP actions URL (`*.convex.site`), baked into the bundle |
+| `VITE_TURNSTILE_SITE_KEY` | variable | Cloudflare Turnstile site key, baked into the user page bundle. Optional; see [Forms](../ui/user-pages.md#forms) |
 | `RAILWAY_ENVIRONMENT_ID` | variable | Railway production environment |
 | `RAILWAY_SERVICE_ID` | variable | Railway UI service |
 

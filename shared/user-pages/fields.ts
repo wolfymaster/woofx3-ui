@@ -11,6 +11,17 @@ export function checkId(id: string, report: ProblemReport): void {
   }
 }
 
+/**
+ * A form question's id, on top of `checkId`. Workflows read an answer by this
+ * id in a path, where an id of only digits would be taken as an array index.
+ */
+export function checkFormFieldId(id: string, report: ProblemReport): void {
+  checkId(id, report);
+  if (/^[0-9]+$/.test(id)) {
+    report.add("A question's id can't be only digits");
+  }
+}
+
 /** Reports every id in `ids` that appears more than once, at the index of each repeat. */
 export function checkUniqueIds(ids: readonly string[], report: ProblemReport): void {
   const seen = new Set<string>();

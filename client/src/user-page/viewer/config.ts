@@ -29,3 +29,20 @@ export function userPagesOrigin(configured: unknown): string {
   }
   return url.origin;
 }
+
+/**
+ * The Turnstile site key from `VITE_TURNSTILE_SITE_KEY`, or null when the page
+ * was built without one, which closes forms to anonymous visitors and leaves
+ * the rest of the page working. Blank counts as unset because an unset build
+ * argument reaches Vite as an empty string; a value that cannot be a site key
+ * fails the page at startup.
+ */
+export function turnstileSiteKey(configured: unknown): string | null {
+  if (configured === undefined || configured === "") {
+    return null;
+  }
+  if (typeof configured !== "string" || !/^[0-9A-Za-z_-]+$/.test(configured)) {
+    throw new Error(`VITE_TURNSTILE_SITE_KEY is not a site key: ${String(configured)}`);
+  }
+  return configured;
+}

@@ -30,7 +30,14 @@ export interface PublicLiveStatus {
 }
 
 export type PublicPageWidget =
-  | Extract<PageWidget, { type: "text" | "links" | "image" | "form" }>
+  | Extract<PageWidget, { type: "text" | "links" | "image" }>
+  | {
+      id: string;
+      type: "form";
+      config: PageWidgetConfig<"form">;
+      /** False when this viewer could not send it right now: the page's queue is full, or anonymous answers are off. */
+      accepting: boolean;
+    }
   | {
       id: string;
       type: "counter";

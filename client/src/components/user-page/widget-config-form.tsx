@@ -9,17 +9,19 @@ import {
   TIMER_WIDGET,
   USER_PAGE_LIMITS,
 } from "@shared/user-pages";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FieldProblems } from "@/components/user-page/field-problems";
 import { FieldFrame, SwitchField, TextField } from "@/components/user-page/fields";
 import { ResourcePicker } from "@/components/user-page/resource-picker";
+import { toast } from "@/hooks/use-toast";
 import { fieldPath, itemPath, type ProblemIndex } from "@/lib/page-problems";
 import { optionalText } from "@/lib/user-page-editor";
 import {
   FORM_FIELD_TYPES,
+  formAnswerReference,
   formFieldOfType,
   newFormField,
   nudge,
@@ -70,7 +72,14 @@ export function WidgetConfigForm({ widget, onChange, path, problems, newId }: Wi
     case "image":
       return <ImageForm {...common} config={widget.config} onChange={(config) => onChange({ ...widget, config })} />;
     case "form":
-      return <FormForm {...common} config={widget.config} onChange={(config) => onChange({ ...widget, config })} />;
+      return (
+        <FormForm
+          {...common}
+          formId={widget.id}
+          config={widget.config}
+          onChange={(config) => onChange({ ...widget, config })}
+        />
+      );
     default: {
       const unhandled: never = widget;
       throw new Error(`No settings form for widget ${JSON.stringify(unhandled)}`);
@@ -387,12 +396,57 @@ function ImageForm({ idPrefix, config, onChange, path, problems }: FormProps<Pag
   );
 }
 
-function FormForm({ idPrefix, config, onChange, path, problems, newId }: FormProps<PageWidgetConfig<"form">>) {
+/** A value a workflow needs from this form, read-only with a copy button. */
+function CopyableValue({ label, value, hint, testId }: { label: string; value: string; hint: string; testId: string }) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ title: `${label} copied` });
+    } catch {
+      toast({
+        title: `Couldn't copy ${label}`,
+        description: "Select it and copy it by hand.",
+        variant: "destructive",
+      });
+    }
+  };
+  return (
+    <div className="space-y-1.5" data-testid={testId}>
+      <p className="text-xs font-medium">{label}</p>
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{value}</code>
+        <Button type="button" variant="outline" size="sm" onClick={copy} data-testid={`button-copy-${testId}`}>
+          <Copy className="mr-1.5 h-3.5 w-3.5" />
+          Copy
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function FormForm({
+  idPrefix,
+  formId,
+  config,
+  onChange,
+  path,
+  problems,
+  newId,
+}: FormProps<PageWidgetConfig<"form">> & { formId: string }) {
   const fieldsPath = fieldPath(path, "fields");
   const setFields = (fields: FormField[]) => onChange({ ...config, fields });
   const { title: _title, ...withoutTitle } = config;
   return (
     <div className="space-y-4">
+      <CopyableValue
+        label="Form ID"
+        value={formId}
+        hint={
+          'To react only to this form, paste this into the Form setting of a workflow\'s "User page form submitted" trigger.'
+        }
+        testId="form-id"
+      />
       <TextField
         id={`${idPrefix}-title`}
         label="Title"
@@ -470,6 +524,12 @@ function FormFieldEditor({
 }) {
   return (
     <>
+      <CopyableValue
+        label="Answer in a workflow"
+        value={formAnswerReference(field.id)}
+        hint="Paste this into a workflow step to use what a visitor answered here."
+        testId={`answer-reference-${field.id}`}
+      />
       <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
         <TextField
           id={`${idPrefix}-label`}

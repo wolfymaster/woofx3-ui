@@ -1,6 +1,7 @@
 import { COUNTER_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { type Infer, type Validator, v } from "convex/values";
-import { checkId, checkImage, checkLinkUrl, checkUniqueIds, pageImageValidator } from "./fields";
+import { checkFormFieldId, checkId, checkImage, checkLinkUrl, checkUniqueIds, pageImageValidator } from "./fields";
+import { hasUndeliverableText } from "./forms";
 import { USER_PAGE_LIMITS } from "./limits";
 import type { ProblemReport } from "./problems";
 
@@ -143,8 +144,8 @@ const formFieldBase = { id: v.string(), label: v.string(), required: v.boolean()
 
 /**
  * One question on a form. Text answers carry their own maximum length, which
- * a submission will be held to; it can be set no higher than the per-type
- * ceiling in USER_PAGE_LIMITS.
+ * a submission is held to (forms.ts); it can be set no higher than the
+ * per-type ceiling in USER_PAGE_LIMITS.
  */
 export const formFieldValidator = v.union(
   v.object({ ...formFieldBase, type: v.literal("text"), maxLength: v.number() }),
@@ -159,15 +160,29 @@ export const formFieldValidator = v.union(
 
 export type FormField = Infer<typeof formFieldValidator>;
 export type FormFieldType = FormField["type"];
+export const formFieldTypeValidator = v.union(
+  v.literal("text"),
+  v.literal("textarea"),
+  v.literal("select"),
+  v.literal("checkbox")
+);
 
 const FORM_ANSWER_CEILING: Record<"text" | "textarea", number> = {
   text: USER_PAGE_LIMITS.formTextAnswerLength,
   textarea: USER_PAGE_LIMITS.formTextareaAnswerLength,
 };
 
+/** Text a submission carries to the engine, which refuses characters its database can't store. */
+function checkFormText(text: string, label: string, report: ProblemReport, required = false): void {
+  report.text(text, label, USER_PAGE_LIMITS.labelLength, required);
+  if (hasUndeliverableText(text)) {
+    report.add(`${label} has a character that can't be saved`);
+  }
+}
+
 function checkFormField(field: FormField, report: ProblemReport): void {
-  checkId(field.id, report.field("id"));
-  report.field("label").text(field.label, "Question", USER_PAGE_LIMITS.labelLength, true);
+  checkFormFieldId(field.id, report.field("id"));
+  checkFormText(field.label, "Question", report.field("label"), true);
   switch (field.type) {
     case "text":
     case "textarea": {
@@ -185,7 +200,7 @@ function checkFormField(field: FormField, report: ProblemReport): void {
       options.count(field.options.length, "options", USER_PAGE_LIMITS.formSelectOptions);
       field.options.forEach((option, index) => {
         const item = options.item(index);
-        item.field("value").text(option.value, "Value", USER_PAGE_LIMITS.labelLength, true);
+        checkFormText(option.value, "Value", item.field("value"), true);
         item.field("label").text(option.label, "Option", USER_PAGE_LIMITS.labelLength, true);
       });
       const values = field.options.map((option) => option.value);
@@ -199,7 +214,6 @@ function checkFormField(field: FormField, report: ProblemReport): void {
   }
 }
 
-/** A form's questions. What a visitor submits is not stored by this widget yet; only its definition is. */
 export const FORM_WIDGET = defineWidget({
   type: "form",
   label: "Form",
@@ -212,7 +226,7 @@ export const FORM_WIDGET = defineWidget({
   defaultConfig: () => ({ submitLabel: "Send", fields: [] }),
   check: (config, report) => {
     if (config.title !== undefined) {
-      report.field("title").text(config.title, "Title", USER_PAGE_LIMITS.labelLength);
+      checkFormText(config.title, "Title", report.field("title"));
     }
     report.field("submitLabel").text(config.submitLabel, "Button text", USER_PAGE_LIMITS.labelLength, true);
     const fields = report.field("fields");

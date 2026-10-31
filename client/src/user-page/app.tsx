@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { PublicPageLookup } from "@shared/user-pages";
 import { useAction, useQuery } from "convex/react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useLookupWhileLoading } from "./lookup-while-loading";
 import { documentTitle, UserPageView } from "./page-view";
 import { PageViewerProvider } from "./viewer/page-viewer";
@@ -9,16 +9,33 @@ import { canonicalPageUrl } from "./viewer/sign-in";
 import { SignInNotice } from "./viewer/sign-in-notice";
 import { useRoleCheck, useViewerSession, type ViewerEnvironment } from "./viewer/use-viewer";
 import { ViewerActions } from "./viewer/viewer-actions";
+import { type FormEnvironment, PageFormsProvider } from "./widgets/form-environment";
 
 /** The whole user page app for one path. A path that names no slug is not found without asking Convex. */
-export function UserPageApp({ slug, viewerEnv }: { slug: string | null; viewerEnv: ViewerEnvironment }) {
+export function UserPageApp({
+  slug,
+  viewerEnv,
+  formEnv,
+}: {
+  slug: string | null;
+  viewerEnv: ViewerEnvironment;
+  formEnv: FormEnvironment;
+}) {
   if (slug === null) {
     return <UserPageScreen lookup={{ kind: "unavailable" }} claimable={false} />;
   }
-  return <UserPageRoute slug={slug} viewerEnv={viewerEnv} />;
+  return <UserPageRoute slug={slug} viewerEnv={viewerEnv} formEnv={formEnv} />;
 }
 
-function UserPageRoute({ slug, viewerEnv }: { slug: string; viewerEnv: ViewerEnvironment }) {
+function UserPageRoute({
+  slug,
+  viewerEnv,
+  formEnv,
+}: {
+  slug: string;
+  viewerEnv: ViewerEnvironment;
+  formEnv: FormEnvironment;
+}) {
   const viewer = useViewerSession(viewerEnv);
   const sessionToken = viewer.session.status === "signed_in" ? viewer.session.sessionToken : null;
   const lookup = useQuery(api.userPagesPublic.bySlug, sessionToken === null ? { slug } : { slug, sessionToken });
@@ -30,6 +47,7 @@ function UserPageRoute({ slug, viewerEnv }: { slug: string; viewerEnv: ViewerEnv
       : { rolesStale: false, rolesRenewAt: null };
   const roleCheck = useRoleCheck(viewerEnv, slug, sessionToken, roles, viewer.forgetSession);
   const claimable = useClaimable(slug, shown?.kind === "unclaimed");
+  const forms = useMemo(() => ({ ...formEnv, slug }), [formEnv, slug]);
   return (
     <PageViewerProvider
       viewer={{
@@ -40,16 +58,18 @@ function UserPageRoute({ slug, viewerEnv }: { slug: string; viewerEnv: ViewerEnv
         signIn: viewer.signIn,
       }}
     >
-      <UserPageScreen
-        lookup={shown}
-        claimable={claimable}
-        actions={<ViewerActions onSignOut={viewer.signOut} />}
-        notice={
-          viewer.failure === null ? undefined : (
-            <SignInNotice failure={viewer.failure} onDismiss={viewer.dismissFailure} />
-          )
-        }
-      />
+      <PageFormsProvider forms={forms}>
+        <UserPageScreen
+          lookup={shown}
+          claimable={claimable}
+          actions={<ViewerActions onSignOut={viewer.signOut} />}
+          notice={
+            viewer.failure === null ? undefined : (
+              <SignInNotice failure={viewer.failure} onDismiss={viewer.dismissFailure} />
+            )
+          }
+        />
+      </PageFormsProvider>
     </PageViewerProvider>
   );
 }

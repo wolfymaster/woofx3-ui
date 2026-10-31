@@ -8,6 +8,11 @@ export const FORM_FIELD_TYPES: readonly { type: FormFieldType; label: string }[]
   { type: "checkbox", label: "Checkbox" },
 ];
 
+/** How a workflow triggered by this form reads the answer to the question `fieldId`. */
+export function formAnswerReference(fieldId: string): string {
+  return `\${trigger.data.answers.${fieldId}}`;
+}
+
 /** A newly added question: a short answer allowed the longest a short answer may be. */
 export function newFormField(id: string): FormField {
   return { id, type: "text", label: "", required: false, maxLength: USER_PAGE_LIMITS.formTextAnswerLength };

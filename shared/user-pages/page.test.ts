@@ -269,3 +269,45 @@ describe("pageBindings", () => {
     expect(pageBindings(sections)).toHaveLength(2);
   });
 });
+
+describe("form text and ids workflows and the engine depend on", () => {
+  function problemsFor(config: Extract<PageWidget, { type: "form" }>["config"]): string[] {
+    const checked = checkPageContent({
+      ...defaultPageContent(),
+      sections: [
+        {
+          id: "s",
+          region: "main",
+          visibility: { kind: "public" },
+          widgets: [{ id: "w", type: "form", config }],
+        },
+      ],
+    });
+    return checked.ok ? [] : checked.problems.map((problem) => problem.path);
+  }
+  const question = (overrides: { id?: string; label?: string }) => ({
+    id: "q1",
+    label: "Question",
+    type: "checkbox" as const,
+    required: false,
+    ...overrides,
+  });
+
+  test("refuses a question id of only digits", () => {
+    const fieldId = "sections[0].widgets[0].config.fields[0].id";
+    expect(problemsFor({ submitLabel: "Send", fields: [question({ id: "123" })] })).toEqual([fieldId]);
+    expect(problemsFor({ submitLabel: "Send", fields: [question({ id: "1-2" })] })).toEqual([]);
+    expect(
+      problemsFor({ submitLabel: "Send", fields: [question({ id: "3f2b1c9e-7a10-4d2e-9b11-0c6f5a7d8e21" })] })
+    ).toEqual([]);
+  });
+
+  test("refuses a NUL or lone surrogate in a title or question", () => {
+    expect(problemsFor({ title: "a\0", submitLabel: "Send", fields: [] })).toEqual([
+      "sections[0].widgets[0].config.title",
+    ]);
+    expect(problemsFor({ submitLabel: "Send", fields: [question({ label: "a\ud800" })] })).toEqual([
+      "sections[0].widgets[0].config.fields[0].label",
+    ]);
+  });
+});

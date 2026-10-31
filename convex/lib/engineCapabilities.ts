@@ -44,6 +44,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "twitch.moderation",
   "twitch.pins",
   "twitch.streamInfo",
+  "userPages.formSubmissions",
   "widgets.themes",
   "workflow.conditionListReferences",
   "workflow.delayWait",

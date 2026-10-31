@@ -21,4 +21,23 @@ export const USER_PAGE_LIMITS = {
   /** The longest answer any form field may be configured to accept. */
   formTextAnswerLength: 500,
   formTextareaAnswerLength: 5000,
+  /**
+   * Answers waiting to reach one page's engine. At this many its forms stop
+   * accepting, so an engine that stays offline cannot grow the queue forever.
+   */
+  pendingSubmissionsPerPage: 1000,
+  /**
+   * The largest submit request, which must match the edge Worker's limit. The
+   * longest answers a form can be configured to take can add up to more than
+   * this, so the page checks it before sending.
+   */
+  formSubmissionBytes: 64 * 1024,
+  /**
+   * What the engine takes for a delivery's labels, title and viewer name, and
+   * for the viewer's platform id; it refuses more for good. Must match
+   * SUBMISSION_LIMITS in the engine's api/src/routes/user-pages.ts, as must
+   * every id, count and answer limit above, which sit at or under its own.
+   */
+  deliveredTextLength: 255,
+  deliveredPlatformUserIdLength: 100,
 } as const;

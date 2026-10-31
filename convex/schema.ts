@@ -1,5 +1,5 @@
 import { authTables } from "@convex-dev/auth/server";
-import { bindableResourceKindValidator, pageContentValidator } from "@shared/user-pages";
+import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
@@ -2186,6 +2186,10 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     publishedAt: v.optional(v.number()),
+    // True while the page's submission queue is full. Written only when it
+    // flips, and kept here rather than read from pageSubmissionQueues so the
+    // public page read is not re-run for every visitor on each queue change.
+    formsAtCapacity: v.optional(v.boolean()),
   }).index("by_instance", ["instanceId"]),
 
   // userPageRevisions: one page's content, held whole in one document because
@@ -2219,4 +2223,68 @@ export default defineSchema({
     settings: v.record(v.string(), v.any()),
     updatedAt: v.number(),
   }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
+
+  // pageSubmissions: the outbox of form answers sent from public pages, each
+  // kept until its engine's receipt confirms it. Labels and the viewer are
+  // snapshots from submit time, so a later edit cannot change what is
+  // delivered. nextAttemptAt is set only while pending. See
+  // convex/lib/userPageSubmissions.ts.
+  pageSubmissions: defineTable({
+    instanceId: v.id("instances"),
+    pageId: v.id("userPages"),
+    formId: v.string(),
+    formTitle: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    submittedAt: v.number(),
+    viewer: v.union(
+      v.null(),
+      v.object({
+        platform: viewerPlatformValidator,
+        platformUserId: v.string(),
+        displayName: v.string(),
+        roles: v.array(v.string()),
+      })
+    ),
+    fields: v.array(
+      v.object({
+        id: v.string(),
+        label: v.string(),
+        type: formFieldTypeValidator,
+        value: v.union(v.string(), v.boolean()),
+      })
+    ),
+    status: v.union(v.literal("pending"), v.literal("delivered"), v.literal("failed")),
+    attempts: v.number(),
+    nextAttemptAt: v.optional(v.number()),
+    // Why the last attempt on a pending row did not get through.
+    lastError: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    deliveredAt: v.optional(v.number()),
+    receipt: v.optional(v.union(v.literal("recorded"), v.literal("duplicate"))),
+  })
+    .index("by_page_and_form_and_idempotency_key", ["pageId", "formId", "idempotencyKey"])
+    .index("by_instance_and_status_and_next_attempt_at", ["instanceId", "status", "nextAttemptAt"])
+    .index("by_instance_and_submitted_at", ["instanceId", "submittedAt"])
+    .index("by_status_and_delivered_at", ["status", "deliveredAt"]),
+
+  // pageSubmissionQueues: one row per instance with submissions: how many are
+  // pending, which the page's cap checks without counting rows, and when its
+  // engine is next worth contacting. Backoff lives here so an offline engine
+  // costs one probe per interval, however many rows wait for it.
+  pageSubmissionQueues: defineTable({
+    instanceId: v.id("instances"),
+    pageId: v.id("userPages"),
+    pendingCount: v.number(),
+    // Absent while nothing is pending, so the sweep reads only queues with work.
+    nextAttemptAt: v.optional(v.number()),
+    // A delivery pass holds this until it finishes, or dies and it runs out.
+    leaseUntil: v.optional(v.number()),
+    consecutiveFailures: v.number(),
+    engineRetryAt: v.optional(v.number()),
+    engineProblem: v.optional(
+      v.union(v.literal("not_registered"), v.literal("unreachable"), v.literal("capability_missing"))
+    ),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_next_attempt_at", ["nextAttemptAt"]),
 });

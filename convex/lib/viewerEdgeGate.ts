@@ -1,13 +1,14 @@
 /**
- * The gate on the viewer sign-in start route. Convex HTTP actions never see
- * the client's address, so sign-in is limited per address at the Cloudflare
- * edge (woofx3-maintenance `worker/src/viewer-sign-in.ts`), which forwards
- * every start within its limit with this shared secret. Requiring it here is
- * what keeps the limit from being skipped by calling this deployment directly.
- * The deployment-wide `viewerLoginStart` bucket stays behind it as a ceiling.
+ * The gate on routes the edge limits per client address: the viewer sign-in
+ * start and the form submit. Convex HTTP actions never see the client's
+ * address, so the Cloudflare edge (woofx3-maintenance
+ * `worker/src/viewer-sign-in.ts`) applies the limit and forwards every request
+ * within it with this shared secret. Requiring it here is what keeps the limit
+ * from being skipped by calling this deployment directly. The deployment-wide
+ * `viewerLoginStart` bucket stays behind sign-in as a ceiling.
  *
  * The gate never fails open: a deployment without a usable secret refuses
- * every start, previews included.
+ * every request, previews included.
  */
 
 import { secretsEqual } from "./secretCompare";
@@ -15,7 +16,7 @@ import { secretsEqual } from "./secretCompare";
 /** Must match `edgeSecretHeader` in woofx3-maintenance worker/src/viewer-sign-in.ts. */
 export const EDGE_SECRET_HEADER = "X-Woofx3-Edge-Secret";
 export const EDGE_SECRET_ENV = "VIEWER_SIGN_IN_EDGE_SECRET";
-/** A second accepted secret, so the secret can rotate without refusing sign-ins. */
+/** A second accepted secret, so the secret can rotate without refusing requests. */
 export const EDGE_SECRET_NEXT_ENV = "VIEWER_SIGN_IN_EDGE_SECRET_NEXT";
 
 /** 32 random bytes, base64url, is 43 characters; the edge refuses anything shorter too. */
@@ -44,7 +45,7 @@ export function edgeSecretsFromEnv(env: Env): { ok: true; secrets: string[] } | 
   return { ok: true, secrets: [current, next] };
 }
 
-/** Whether a start request came through the edge, checked in constant time against every accepted secret. */
+/** Whether a request came through the edge, checked in constant time against every accepted secret. */
 export async function checkEdgeGate(headers: Headers, env: Env): Promise<EdgeGateVerdict> {
   const configured = edgeSecretsFromEnv(env);
   if (!configured.ok) {
