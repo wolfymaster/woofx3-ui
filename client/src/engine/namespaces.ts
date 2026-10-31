@@ -7,7 +7,7 @@
  * holds every other file to that. An entry naming a function (`macros.run`)
  * claims that function alone, leaving the rest of the module cloud-owned.
  *
- * Cloud-owned modules (accounts, instances, provisioning, the marketplace catalog, Twitch
+ * Cloud-owned modules (accounts, instances, provisioning, the legacy module listings, Twitch
  * calls the engine has no method for, dashboard preferences) are not engine access and stay out.
  */
 export const ENGINE_NAMESPACE_MODULES = {
@@ -32,12 +32,23 @@ export const ENGINE_NAMESPACE_MODULES = {
     "moduleFiles",
     "moduleDetail",
     "moduleStorage",
-    // The rest of marketplace and marketplaceCatalog is the catalog, which the cloud serves.
+    // The rest of marketplace is the legacy module listings, which the cloud serves.
     "marketplace.installModule",
     "marketplaceCatalog.installBundle",
-    // The rest of moduleRepository is the cloud's list of installed modules.
+    // The rest of moduleRepository is the cloud's own record of installed modules.
+    "moduleRepository.list",
     "moduleRepository.generateUploadUrl",
     "moduleRepository.uploadAndDeliver",
+  ],
+  marketplace: [
+    // installBundle is modules'.
+    "marketplaceCatalog.search",
+    "marketplaceCatalog.getListing",
+    "marketplaceCatalog.getAuthor",
+    "marketplaceCatalog.counts",
+    "marketplaceCatalog.quote",
+    "marketplaceCatalog.entitlements",
+    "marketplaceCatalog.createCheckout",
   ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],

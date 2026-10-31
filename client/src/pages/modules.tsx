@@ -1,7 +1,4 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
-import { useQuery } from "convex/react";
 import { Loader2, Store, Upload, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -17,11 +14,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEngineScope } from "@/engine/context";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
-import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
-import type { ModuleDetail } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
+import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
+import type { InstalledModule, ModuleDetail, ModuleId } from "@/engine/types";
 import { useModuleInstall } from "@/hooks/use-module-install";
-import { useModuleOAuthReturn } from "@/hooks/use-module-oauth-return";
+import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import {
   installedModulePath,
   MARKETPLACE_INSTALLED_PATH,
@@ -30,25 +26,11 @@ import {
 } from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
 
-interface ModuleListItem {
-  _id: Id<"moduleRepository">;
-  name: string;
-  description: string;
-  version: string;
-  tags: string[];
-  author: string;
-  category: string;
-  moduleKey?: string;
-  isInstalled: boolean;
-  status?: "pending" | "delivering" | "installed" | "failed";
-}
-
 type SelectedModule =
-  | { source: "installed"; module: ModuleListItem }
+  | { source: "installed"; module: InstalledModule }
   | { source: "marketplace"; marketplaceId: string };
 
 export default function Modules() {
-  const { instance } = useInstance();
   const { instanceId: engineInstanceId } = useEngineScope();
   const [location, navigate] = useLocation();
   // `/marketplace/installed/:moduleId`: the module's id is an installed module's
@@ -59,15 +41,11 @@ export default function Modules() {
       ? decodeURIComponent(segments[2])
       : undefined;
 
-  const [oauthResult, dismissOauthResult] = useModuleOAuthReturn();
+  const mode = useMarketplaceMode();
+  const [oauthResult, dismissOauthResult] = mode.useOAuthReturn();
 
   const [selectedModule, setSelectedModule] = useState<SelectedModule | null>(null);
-  const [uninstallTarget, setUninstallTarget] = useState<{
-    _id: Id<"moduleRepository">;
-    name: string;
-    version: string;
-    moduleKey?: string;
-  } | null>(null);
+  const [uninstallTarget, setUninstallTarget] = useState<InstalledModule | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   const getModuleDetail = useModuleDetailRequest();
@@ -95,14 +73,14 @@ export default function Modules() {
     }
   }, [selectedModule, install]);
 
-  const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+  const installedModules = useInstalledModules();
 
   const handleSelectInstalled = useCallback(
-    (moduleId: Id<"moduleRepository">) => {
-      const target = (repoModules || []).find((m) => m._id === moduleId);
+    (moduleId: ModuleId) => {
+      const target = (installedModules || []).find((m) => m.id === moduleId);
       navigate(installedModulePath(bareModuleKey(target?.moduleKey) ?? moduleId));
     },
-    [navigate, repoModules]
+    [navigate, installedModules]
   );
 
   useEffect(() => {
@@ -110,39 +88,27 @@ export default function Modules() {
       setSelectedModule(null);
       return;
     }
-    if (!repoModules) return;
-
-    const byId = repoModules.find((m) => m._id === routeModuleId);
-    if (byId) {
-      setSelectedModule({
-        source: "installed",
-        module: {
-          _id: byId._id,
-          name: byId.name,
-          description: byId.description,
-          version: byId.version,
-          tags: byId.tags,
-          author: byId.author ?? "",
-          category: byId.category ?? "Utilities",
-          moduleKey: byId.moduleKey,
-          isInstalled: byId.status === "installed",
-          status: byId.status,
-        },
-      });
+    if (!installedModules) {
       return;
     }
 
-    const byKey = repoModules.find((m) => m.moduleKey?.startsWith(routeModuleId + ":"));
+    const byId = installedModules.find((m) => m.id === routeModuleId);
+    if (byId) {
+      setSelectedModule({ source: "installed", module: byId });
+      return;
+    }
+
+    const byKey = installedModules.find((m) => m.moduleKey?.startsWith(routeModuleId + ":"));
     if (byKey) {
       setSelectedModule({ source: "marketplace", marketplaceId: routeModuleId });
       return;
     }
 
     setSelectedModule({ source: "marketplace", marketplaceId: routeModuleId });
-  }, [routeModuleId, repoModules]);
+  }, [routeModuleId, installedModules]);
 
-  // An update started from the Installed list can be sitting on a route by Convex id (a
-  // module with no moduleKey is addressed by _id), so land on the marketplace-id route the upgraded
+  // An update started from the Installed list can be sitting on a route by module id (a
+  // module with no moduleKey is addressed by its id), so land on the marketplace-id route the upgraded
   // module now answers to. Only ever re-routes a detail view onto itself: a route that already
   // matches would just churn the detail fetch below, and someone who has browsed back to the store
   // in the meantime should not be yanked out of it.
@@ -157,14 +123,14 @@ export default function Modules() {
   }, [install.succeeded, install.pendingModuleKey, routeModuleId, navigate]);
 
   // A stable primitive (not the selectedModule object itself, which gets a new reference on every
-  // reactive repoModules update even when the logical selection hasn't changed) — keeps the fetch
-  // below from re-running the slow getModuleDetail action on every unrelated moduleRepository write.
+  // reactive installedModules update even when the logical selection hasn't changed) — keeps the fetch
+  // below from re-running the slow detail request on every unrelated change to the installed list.
   const detailModuleId = useMemo(
     () =>
       selectedModule
         ? selectedModule.source === "marketplace"
           ? selectedModule.marketplaceId
-          : selectedModule.module._id
+          : selectedModule.module.id
         : null,
     [selectedModule]
   );
@@ -211,13 +177,13 @@ export default function Modules() {
     }
     if (selectedModule.source === "marketplace") {
       const { marketplaceId } = selectedModule;
-      const installed = repoModules?.find((m) => m.moduleKey?.startsWith(`${marketplaceId}:`));
+      const installed = installedModules?.find((m) => m.moduleKey?.startsWith(`${marketplaceId}:`));
       return (installed && installedListing(installed)?.listingId) ?? marketplaceId;
     }
     const { module } = selectedModule;
-    const row = repoModules?.find((m) => m._id === module._id) ?? module;
+    const row = installedModules?.find((m) => m.id === module.id) ?? module;
     return installedListing(row)?.listingId ?? null;
-  }, [selectedModule, repoModules]);
+  }, [selectedModule, installedModules]);
 
   const requestMarketplaceInstall = useCallback(
     (mode: PermissionApprovalMode) => {
@@ -240,24 +206,15 @@ export default function Modules() {
   );
 
   const installedModuleForMarketplace = useMemo(() => {
-    if (selectedModule?.source !== "marketplace" || !repoModules) {
+    if (selectedModule?.source !== "marketplace" || !installedModules) {
       return null;
     }
     const mpId = selectedModule.marketplaceId;
-    return repoModules.find((m) => m.moduleKey?.startsWith(mpId + ":")) ?? null;
-  }, [selectedModule, repoModules]);
+    return installedModules.find((m) => m.moduleKey?.startsWith(mpId + ":")) ?? null;
+  }, [selectedModule, installedModules]);
 
-  const handleDelete = (moduleId: Id<"moduleRepository">) => {
-    const target = (repoModules || []).find((m) => m._id === moduleId);
-    if (!target) {
-      return;
-    }
-    setUninstallTarget({
-      _id: moduleId,
-      name: target.name,
-      version: target.version,
-      moduleKey: target.moduleKey,
-    });
+  const handleDelete = (module: InstalledModule) => {
+    setUninstallTarget(module);
   };
 
   const handleUninstallSuccess = () => {
@@ -311,20 +268,24 @@ export default function Modules() {
       name: m.name,
       description: m.description,
       version: m.version,
-      author: m.author,
-      category: m.category,
+      author: m.author ?? "",
+      category: m.category ?? "Utilities",
       tags: m.tags,
-      isInstalled: m.isInstalled,
+      isInstalled: m.status === "installed",
       identifier: bareModuleKey(m.moduleKey),
     };
   }, [selectedModule]);
 
   const meta = detailProps?.meta ?? fallbackMeta;
 
+  // A module that ships with the engine cannot be uninstalled, so it offers no Remove.
+  const shownModule = selectedModule?.source === "installed" ? selectedModule.module : installedModuleForMarketplace;
+  const removableModule = shownModule && shownModule.provenance !== "builtIn" ? shownModule : null;
+
   return (
     <div className="flex h-full overflow-hidden max-w-[1600px] w-full">
       <ModuleSidebar
-        selectedId={selectedModule?.source === "installed" ? selectedModule.module._id : null}
+        selectedId={selectedModule?.source === "installed" ? selectedModule.module.id : null}
         onSelectModule={handleSelectInstalled}
       />
 
@@ -362,7 +323,6 @@ export default function Modules() {
                     workflows={detailProps?.workflows}
                     loading={moduleDetailLoading || !detailProps}
                     onBack={() => navigate(MARKETPLACE_INSTALLED_PATH)}
-                    instanceId={instance?._id}
                     moduleDbId={detailProps?.moduleDbId}
                     manifestSettings={detailProps?.manifestSettings}
                     manifestResourceKinds={detailProps?.manifestResourceKinds}
@@ -370,13 +330,7 @@ export default function Modules() {
                     latestPermissions={detailProps?.latestPermissions}
                     localEndpoints={detailProps?.localEndpoints}
                     latestLocalEndpoints={detailProps?.latestLocalEndpoints}
-                    onRemove={
-                      selectedModule.source === "installed"
-                        ? () => handleDelete(selectedModule.module._id)
-                        : selectedModule.source === "marketplace" && installedModuleForMarketplace
-                          ? () => handleDelete(installedModuleForMarketplace._id)
-                          : undefined
-                    }
+                    onRemove={removableModule ? () => handleDelete(removableModule) : undefined}
                     onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
                     onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
                     isInstalling={install.isInstalling}
@@ -409,10 +363,12 @@ export default function Modules() {
                   marketplace, or a module you made yourself.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}>
-                    <Upload className="h-3.5 w-3.5 mr-1.5" />
-                    Upload a module
-                  </Button>
+                  {mode.uploads && (
+                    <Button size="sm" onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}>
+                      <Upload className="h-3.5 w-3.5 mr-1.5" />
+                      Upload a module
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={() => navigate(MARKETPLACE_PATH)}>
                     <Store className="h-3.5 w-3.5 mr-1.5" />
                     Browse the marketplace

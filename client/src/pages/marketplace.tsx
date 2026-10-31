@@ -1,8 +1,6 @@
-import { api } from "@convex/_generated/api";
 import { installedVersionsByListing } from "@convex/lib/marketplaceInstallIdentity";
 import { type CatalogListing, LISTING_TYPES, type ListingType } from "@shared/marketplace-catalog";
 import { featuredInOrder } from "@shared/marketplace-images";
-import { useQuery } from "convex/react";
 import { Loader2, Moon, RefreshCw, Search, Sun } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -24,9 +22,10 @@ import {
 } from "@/components/marketplace/storefront-states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
+import { useInstalledModules } from "@/engine/hooks/use-modules";
+import type { MarketplaceSort } from "@/engine/types";
 import {
-  type MarketplaceSort,
   useDebounced,
   useMarketplaceCounts,
   useMarketplaceEntitlements,
@@ -64,7 +63,7 @@ const WHATS_NEW_COUNT = 12;
 const PAGE_SIZE = 24;
 
 export default function Marketplace() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const [, navigate] = useLocation();
   const searchString = useSearch();
   const params = useMemo(() => new URLSearchParams(searchString), [searchString]);
@@ -109,7 +108,6 @@ export default function Marketplace() {
     [navigate, browseAll, selectedCategory, selectedType]
   );
 
-  const instanceId = instance?._id ?? null;
   const isFiltering = query !== "" || selectedType !== null || selectedCategory !== ALL_CATEGORIES || browseAll;
   // The storefront's own sections are not fetched while a search is on screen.
   // Passing null holds what they already fetched rather than discarding it, so
@@ -161,9 +159,9 @@ export default function Marketplace() {
   });
 
   const entitlements = useMarketplaceEntitlements(instanceId);
-  const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+  const installedModules = useInstalledModules();
 
-  const installedVersions = useMemo(() => installedVersionsByListing(repoModules ?? []), [repoModules]);
+  const installedVersions = useMemo(() => installedVersionsByListing(installedModules ?? []), [installedModules]);
 
   const stateFor = useCallback(
     (listing: CatalogListing) => {

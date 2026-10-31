@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
 import { useMarketplaceAuthor, useMarketplaceEntitlements } from "@/hooks/use-marketplace";
 import { listingTypeMeta } from "@/lib/listing-type";
 import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from "@/lib/marketplace-route";
@@ -20,16 +20,16 @@ import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from 
 // emote packs and one module reads very differently from the reverse.
 
 export default function MarketplaceAuthor() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const [, navigate] = useLocation();
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? null;
 
   const { page, notFound, loading, error, hasMore, loadingMore, loadMoreError, loadMore } = useMarketplaceAuthor(
-    instance?._id ?? null,
+    instanceId,
     slug
   );
-  const entitlements = useMarketplaceEntitlements(instance?._id ?? null);
+  const entitlements = useMarketplaceEntitlements(instanceId);
 
   const grouped = useMemo(() => {
     const byType = new Map<ListingType, CatalogListing[]>();

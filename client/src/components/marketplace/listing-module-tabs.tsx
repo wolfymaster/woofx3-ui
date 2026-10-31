@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -27,7 +26,6 @@ export type ModuleDetailLoad =
   | { status: "error"; message: string };
 
 interface ListingModuleTabsProps {
-  instanceId: Id<"instances"> | undefined;
   load: ModuleDetailLoad;
   onRetry: () => void;
   /** The catalog's own sections for this listing, shown under the README. */
@@ -41,7 +39,7 @@ interface ListingModuleTabsProps {
  * The tab lives in the URL (`?tab=`), so a link, a reload or a return from a
  * connection flow opens the same tab.
  */
-export function ListingModuleTabs({ instanceId, load, onRetry, children }: ListingModuleTabsProps) {
+export function ListingModuleTabs({ load, onRetry, children }: ListingModuleTabsProps) {
   const detail = load.status === "ready" ? load.detail : null;
   const tabs = availableTabs(detail);
   const [tab, setTab] = useListingTab(tabs);
@@ -91,11 +89,7 @@ export function ListingModuleTabs({ instanceId, load, onRetry, children }: Listi
           </TabsContent>
           {tabs.includes("settings") && (
             <TabsContent value="settings" className="mt-0">
-              <ModuleSettingsSections
-                instanceId={instanceId}
-                moduleId={detail.id}
-                manifestSettings={detail.manifestSettings}
-              />
+              <ModuleSettingsSections moduleId={detail.id} manifestSettings={detail.manifestSettings} />
             </TabsContent>
           )}
           {tabs.includes("resources") && (
