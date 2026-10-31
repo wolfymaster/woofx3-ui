@@ -4,7 +4,6 @@ import type {
   MacrosGateway,
   ModuleOAuthGateway,
   SetupImportsGateway,
-  ShoutoutsGateway,
   StarterPacksGateway,
 } from "@/engine/gateway";
 import { directAdBreaksGateway } from "./ad-breaks";
@@ -27,6 +26,7 @@ import { directResourcesGateway } from "./resources";
 import type { DirectRuntime } from "./runtime";
 import { directScenesGateway } from "./scenes";
 import { directSessionGateway } from "./session";
+import { directShoutoutsGateway } from "./shoutouts";
 import { directStatusGateway } from "./status";
 import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
@@ -59,14 +59,6 @@ const setupImports: SetupImportsGateway = {
 const starterPacks: StarterPacksGateway = {
   useStatus: unsupportedRead("starterPacks.useStatus"),
   useInstallRequest: unsupportedRequest("starterPacks.useInstallRequest"),
-};
-
-const shoutouts: ShoutoutsGateway = {
-  useQueue: unsupportedRead("shoutouts.useQueue"),
-  useLookupRequest: unsupportedRequest("shoutouts.useLookupRequest"),
-  useEnqueueRequest: unsupportedRequest("shoutouts.useEnqueueRequest"),
-  useRemoveRequest: unsupportedRequest("shoutouts.useRemoveRequest"),
-  useReorderRequest: unsupportedRequest("shoutouts.useReorderRequest"),
 };
 
 const goLive: GoLiveGateway = {
@@ -109,7 +101,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime): EngineGateway
     adBreaks: directAdBreaksGateway(runtime),
     moderation: directModerationGateway(runtime),
     pins: directPinsGateway(runtime),
-    shoutouts,
+    shoutouts: directShoutoutsGateway(runtime),
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),

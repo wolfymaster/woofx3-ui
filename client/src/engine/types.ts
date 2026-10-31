@@ -1705,6 +1705,9 @@ export interface TwitchChannel {
   broadcasterType: string | null;
 }
 
+/** Whom to look up on Twitch: by login as a person types it (`@SomeOne`), or by user id. */
+export type TwitchViewerLookup = { login: string } | { twitchUserId: string };
+
 /** A channel waiting to be shouted out; the queue paces shoutouts within Twitch's limits. Times are epoch ms. */
 export interface ShoutoutEntry {
   id: ShoutoutEntryId;

@@ -19,6 +19,7 @@ import {
   VIEWER_RECENT_STREAMS,
   VIEWER_STREAM_SCAN,
 } from "@shared/supporters";
+import { readTwitchUserAnswer } from "@shared/twitch-users";
 import { ENGINE_CAPABILITIES, type StreamSession } from "@woofx3/api";
 import type { StreamOpsGateway } from "@/engine/gateway";
 import type {
@@ -30,13 +31,17 @@ import type {
   Supporter,
   SupporterLeaderboardQuery,
   SupporterStream,
+  TwitchChannel,
+  TwitchViewerLookup,
   ViewerSupportTotals,
 } from "@/engine/types";
 import { directKeys as k } from "./keys";
 import { toEngineCallFailure, toStreamRecap, toSupporterReadError } from "./map/stream-ops";
+import { toTwitchChannel, toTwitchUsersQuery } from "./map/twitch";
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { liveStateRead } from "./status";
+import { directTwitch } from "./twitch";
 import { unsupportedRequest } from "./unsupported";
 
 /** The engine's sessions read as recaps, in its order, leaving out any it no longer has totals for. */
@@ -105,6 +110,8 @@ function recapLimit(limit: number): number {
  * and markers are Twitch's lists, which the engine has no method for.
  */
 export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway {
+  const twitch = directTwitch(runtime);
+
   const recapEngineDetail = async (sessionId: string): Promise<StreamRecapEngineDetail> => {
     try {
       const [gauges, cheerers, gifters] = await Promise.all([
@@ -219,6 +226,19 @@ export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway
     };
   };
 
+  // `GET /helix/users` needs no scope, so any link will do.
+  const twitchViewer = async (lookup: TwitchViewerLookup): Promise<TwitchChannel | null> => {
+    const query = toTwitchUsersQuery(lookup);
+    if (query === null) {
+      return null;
+    }
+    await twitch.authorize(null);
+    const user = await readTwitchUserAnswer(
+      await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, "twitchGetUsers", (api) => api.twitchGetUsers(query))
+    );
+    return user ? toTwitchChannel(user) : null;
+  };
+
   const publishEvent = ({ eventType, eventData, triggerId, triggeredBy }: EngineTestEvent) =>
     runtime.call("triggerEvent", (api) =>
       api.triggerEvent(eventType, eventData as Record<string, unknown>, triggerId, triggeredBy)
@@ -243,6 +263,7 @@ export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway
     useSupporterStreamsRequest: () => useEngineRequest(supporterStreams),
     useSupporterLeaderboardRequest: () => useEngineRequest(supporterLeaderboard),
     useViewerSupportTotalsRequest: () => useEngineRequest(viewerSupportTotals),
+    useTwitchViewerRequest: () => useEngineRequest(twitchViewer),
     usePublishEventRequest: () => useEngineRequest(publishEvent),
     useSimulateTwitchEventRequest: () => useEngineRequest(simulateTwitchEvent),
   };

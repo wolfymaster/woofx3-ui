@@ -109,7 +109,14 @@ function useReorderRequest() {
   );
 }
 
+function useCanShoutOut({ enabled = true }: ReadOptions = {}) {
+  const instanceId = useScopeInstanceId();
+  return useQuery(api.supporters.canShoutOut, enabled && instanceId ? { instanceId } : "skip");
+}
+
 export const convexShoutoutsGateway: ShoutoutsGateway = {
+  support: { queue: true },
+  useCanShoutOut,
   useQueue,
   useLookupRequest,
   useEnqueueRequest,

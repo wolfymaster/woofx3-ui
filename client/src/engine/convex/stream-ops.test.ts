@@ -32,6 +32,7 @@ mock.module("convex/react", () => ({
 }));
 
 const { convexStreamOpsGateway, toStreamRecap } = await import("./stream-ops");
+const { convexShoutoutsGateway } = await import("./shoutouts");
 
 const instanceId = TEST_INSTANCE_ID;
 
@@ -192,6 +193,35 @@ describe("streamOps supporter requests", () => {
     const viewerTotals = renderInScope(() => convexStreamOpsGateway.useViewerSupportTotalsRequest());
     await viewerTotals("1234");
     expect(calls).toEqual([{ name: "supporters:viewerTotals", args: { instanceId, platformUserId: "1234" } }]);
+  });
+});
+
+describe("supporter lookups", () => {
+  test("a Twitch viewer is looked up by login or id and comes back as a channel", async () => {
+    answers = {
+      "supporters:findTwitchViewer": { twitchUserId: "v-1", login: "someone", displayName: "SomeOne" },
+    };
+    const lookUp = renderInScope(() => convexStreamOpsGateway.useTwitchViewerRequest());
+    expect(await lookUp({ login: "@SomeOne" })).toEqual({
+      twitchUserId: "v-1",
+      login: "someone",
+      displayName: "SomeOne",
+      profileImageUrl: null,
+      broadcasterType: null,
+    });
+    answers = {};
+    expect(await lookUp({ twitchUserId: "gone" })).toBeNull();
+    expect(calls).toEqual([
+      { name: "supporters:findTwitchViewer", args: { instanceId, by: { login: "@SomeOne" } } },
+      { name: "supporters:findTwitchViewer", args: { instanceId, by: { twitchUserId: "gone" } } },
+    ]);
+  });
+
+  test("whether the link may shout out is the cloud's answer, and the queue is served", () => {
+    rows = { "supporters:canShoutOut": true };
+    expect(renderInScope(() => convexShoutoutsGateway.useCanShoutOut())).toBe(true);
+    expect(queries).toEqual([{ name: "supporters:canShoutOut", args: { instanceId } }]);
+    expect(convexShoutoutsGateway.support).toEqual({ queue: true });
   });
 });
 
