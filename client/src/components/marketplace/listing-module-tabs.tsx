@@ -28,6 +28,8 @@ export type ModuleDetailLoad =
 interface ListingModuleTabsProps {
   load: ModuleDetailLoad;
   onRetry: () => void;
+  /** Shown at the top of the overview's side rail, whether or not the module's detail could be read. */
+  rail?: React.ReactNode;
   /** The catalog's own sections for this listing, shown under the README. */
   children?: React.ReactNode;
 }
@@ -39,7 +41,7 @@ interface ListingModuleTabsProps {
  * The tab lives in the URL (`?tab=`), so a link, a reload or a return from a
  * connection flow opens the same tab.
  */
-export function ListingModuleTabs({ load, onRetry, children }: ListingModuleTabsProps) {
+export function ListingModuleTabs({ load, onRetry, rail, children }: ListingModuleTabsProps) {
   const detail = load.status === "ready" ? load.detail : null;
   const tabs = availableTabs(detail);
   const [tab, setTab] = useListingTab(tabs);
@@ -67,7 +69,7 @@ export function ListingModuleTabs({ load, onRetry, children }: ListingModuleTabs
       </TabsList>
 
       <TabsContent value="overview" className="mt-0">
-        <OverviewTab load={load} onRetry={onRetry}>
+        <OverviewTab load={load} onRetry={onRetry} rail={rail}>
           {children}
         </OverviewTab>
       </TabsContent>
@@ -174,10 +176,12 @@ function definitionCount(detail: ModuleDetail): number {
 function OverviewTab({
   load,
   onRetry,
+  rail,
   children,
 }: {
   load: ModuleDetailLoad;
   onRetry: () => void;
+  rail?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
@@ -190,7 +194,12 @@ function OverviewTab({
         </div>
         {children}
       </div>
-      {load.status === "ready" && <OverviewRail detail={load.detail} />}
+      {(rail || load.status === "ready") && (
+        <aside className="space-y-6 lg:border-l lg:pl-6">
+          {rail}
+          {load.status === "ready" && <OverviewRail detail={load.detail} />}
+        </aside>
+      )}
     </div>
   );
 }
@@ -214,7 +223,7 @@ function OverviewRail({ detail }: { detail: ModuleDetail }) {
   );
 
   return (
-    <aside className="space-y-6 lg:border-l lg:pl-6">
+    <>
       <ModuleAccessSummary
         permissions={detail.permissions}
         localEndpoints={detail.localEndpoints}
@@ -240,7 +249,7 @@ function OverviewRail({ detail }: { detail: ModuleDetail }) {
         )}
         {detail.category && <Fact label="Category">{detail.category}</Fact>}
       </dl>
-    </aside>
+    </>
   );
 }
 

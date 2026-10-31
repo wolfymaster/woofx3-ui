@@ -2,11 +2,14 @@ import type { ListingCredit } from "@shared/marketplace-catalog";
 import { ExternalLink, Heart } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface CreditsCardProps {
   credits: ListingCredit[];
   /** Named in the heading, so the card reads as a sentence about this thing. */
   listingName: string;
+  /** One column, for a page's narrow side rail. */
+  compact?: boolean;
 }
 
 /**
@@ -17,14 +20,14 @@ interface CreditsCardProps {
  * gets a real heading, avatars, and a link out to each of them — the whole
  * credit is clickable where there is somewhere to go.
  */
-export function CreditsCard({ credits, listingName }: CreditsCardProps) {
+export function CreditsCard({ credits, listingName, compact = false }: CreditsCardProps) {
   if (credits.length === 0) {
     return null;
   }
 
   return (
     <Card className="overflow-hidden border-amber-500/25 bg-gradient-to-br from-amber-500/[0.07] via-transparent to-transparent">
-      <CardContent className="p-5 space-y-4">
+      <CardContent className={cn("space-y-4", compact ? "p-3" : "p-5")}>
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
             <Heart className="h-3.5 w-3.5" />
@@ -37,7 +40,7 @@ export function CreditsCard({ credits, listingName }: CreditsCardProps) {
           </div>
         </div>
 
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className={cn("grid gap-2", !compact && "sm:grid-cols-2")}>
           {credits.map((credit) => (
             <li key={`${credit.name}-${credit.url ?? ""}`}>
               <CreditEntry credit={credit} />

@@ -1,4 +1,5 @@
 import type { LocalEndpointSummary } from "@shared/local-endpoints";
+import type { ListingCredit } from "@shared/marketplace-catalog";
 import { functionLocation, type ModuleFunctionSummary } from "@shared/module-function-summary";
 import {
   ArrowLeft,
@@ -21,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ListField } from "@/components/common/list-field";
+import { CreditsCard } from "@/components/marketplace/credits-card";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { ModuleFileContentView, ModuleFilesTab } from "@/components/modules/module-files";
 import {
@@ -130,6 +132,8 @@ interface ModuleDetailPanelProps {
   localEndpoints?: LocalEndpointSummary[] | null;
   /** Local endpoints the marketplace's latest version declares, for an installed module. */
   latestLocalEndpoints?: LocalEndpointSummary[] | null;
+  /** Who the listing this module came from credits; empty for a module with no listing. */
+  credits?: ListingCredit[];
 }
 
 type TopTab = "details" | "definitions" | "files" | "settings" | "resources";
@@ -173,6 +177,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     latestPermissions,
     localEndpoints,
     latestLocalEndpoints,
+    credits = [],
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
@@ -289,7 +294,8 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
               />
             )}
           </div>
-          <div className="w-56 shrink-0">
+          <div className="w-56 shrink-0 space-y-4 overflow-y-auto">
+            <CreditsCard credits={credits} listingName={module.name} compact />
             <ModuleMetaRail module={module} />
           </div>
         </div>

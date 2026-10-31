@@ -16,6 +16,7 @@ import { useEngineScope } from "@/engine/context";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import type { InstalledModule, ModuleDetail } from "@/engine/types";
+import { useMarketplaceListing } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import {
@@ -177,6 +178,10 @@ export default function Modules() {
     return installedListing(row)?.listingId ?? null;
   }, [selectedModule, installedModules]);
 
+  // Credits decorate the page, so a catalog that cannot be reached costs the
+  // card and nothing else. A module with no listing asks for nothing.
+  const { listing: creditedListing } = useMarketplaceListing(engineInstanceId, selectedMarketplaceId);
+
   const requestMarketplaceInstall = useCallback(
     (mode: PermissionApprovalMode) => {
       if (!moduleDetail || !selectedMarketplaceId) {
@@ -319,6 +324,7 @@ export default function Modules() {
                     latestPermissions={detailProps?.latestPermissions}
                     localEndpoints={detailProps?.localEndpoints}
                     latestLocalEndpoints={detailProps?.latestLocalEndpoints}
+                    credits={creditedListing?.credits}
                     onRemove={removableModule ? () => handleDelete(removableModule) : undefined}
                     onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
                     onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}

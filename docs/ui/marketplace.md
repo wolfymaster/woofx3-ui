@@ -115,7 +115,9 @@ pack is not counted twice.
 `CreditsCard` is a designed showcase, not a metadata row: the streamers whose
 ideas a listing borrows are the reason it exists, so the card gives them
 avatars, roles and a link out. Credits also ride on the list response, so a grid
-renders them without a request per card.
+renders them without a request per card. A module or theme shows the card in its
+overview's side rail, and on its installed page when it came from a listing;
+other listing types have no rail and show it full width.
 
 ## Previews
 

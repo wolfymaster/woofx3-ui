@@ -373,8 +373,15 @@ function ListingBody({
       )}
 
       {isModuleListing(listing.type) ? (
-        <ListingModuleTabs load={detailLoad} onRetry={() => setDetailAttempt((attempt) => attempt + 1)}>
-          <CreditsCard credits={listing.credits} listingName={listing.name} />
+        <ListingModuleTabs
+          load={detailLoad}
+          onRetry={() => setDetailAttempt((attempt) => attempt + 1)}
+          rail={
+            listing.credits.length > 0 ? (
+              <CreditsCard credits={listing.credits} listingName={listing.name} compact />
+            ) : null
+          }
+        >
           {listing.type === "theme" && listing.module && <ThemeSection listing={listing} />}
           {listing.type === "module" && listing.module && (
             <ModuleSections module={listing.module} showDeclarations={detailLoad.status === "error"} />
