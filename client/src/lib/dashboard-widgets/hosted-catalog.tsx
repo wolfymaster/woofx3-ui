@@ -1,12 +1,10 @@
-import { Clapperboard, History, ListChecks, Pin, Rocket, Volume2 } from "lucide-react";
+import { History, ListChecks, Pin, Volume2 } from "lucide-react";
 import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
-import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
 import { HostedMacroPadWidget } from "@/components/dashboard/widgets/hosted-macro-pad";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
 import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
-import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { useInstance } from "@/hooks/use-instance";
 import type { DashboardCatalog, RailPinnedItem } from "./catalog";
 import {
@@ -14,10 +12,12 @@ import {
   adBreaksWidget,
   announcementWidget,
   eventsWidget,
+  goLiveWidget,
   macroPadWidget,
   moderationWidget,
   notesWidget,
   queueWidget,
+  streamInfoWidget,
   streamPreviewWidget,
   streamStatsWidget,
   streamStatusWidget,
@@ -27,27 +27,8 @@ import {
 import type { DashboardWidgetDefinition } from "./types";
 
 // The hosted app's dashboard: every widget. Those below reach data only
-// Convex keeps (recaps, the go-live checklist, pin history, the shoutout
-// queue, stream info presets, macros' remote trigger URLs), so only the
-// hosted app may load this module.
-
-const goLiveWidget: DashboardWidgetDefinition = {
-  type: "go-live",
-  label: "Go Live Checklist",
-  description: "Pre-flight checks before you go live: engine, Twitch, overlays, OBS, stream info and workflows.",
-  icon: Rocket,
-  category: "stream",
-  component: GoLiveWidget,
-};
-
-const streamInfoWidget: DashboardWidgetDefinition = {
-  type: "stream-info",
-  label: "Stream Info",
-  description: "Edit your title, category and tags, switch between saved presets, and drop stream markers.",
-  icon: Clapperboard,
-  category: "stream",
-  component: StreamInfoWidget,
-};
+// Convex keeps (recaps, pin history, the shoutout queue, macros' remote
+// trigger URLs), so only the hosted app may load this module.
 
 const pinnedWidget: DashboardWidgetDefinition = {
   type: "pinned",
