@@ -1,5 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { type CanvasSize, type CommandResult, canvasOf, type NodeView } from "@woofx3/scene/editor";
+import { type CanvasSize, type CommandResult, canvasSizeOf, type NodeView } from "@woofx3/scene/editor";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { PreviewScrub, PreviewTransport } from "@/components/alert-editor/composition-preview-frame";
@@ -280,7 +280,7 @@ export function useAlertEditorView(
   }
 
   const { catalogRows } = session;
-  const canvas = canvasOf(state.doc);
+  const canvas = canvasSizeOf(state.doc);
   const nodes = state.view.nodes;
   const rowFor = (widgetId: string) => catalogRows.find((row) => row.widgetId === widgetId);
   const labelOf = (node: NodeView) =>
