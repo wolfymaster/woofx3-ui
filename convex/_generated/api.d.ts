@@ -187,6 +187,7 @@ import type * as lib_twitchIntegrationScopes from "../lib/twitchIntegrationScope
 import type * as lib_twitchLinkPolicy from "../lib/twitchLinkPolicy.js";
 import type * as lib_twitchRefresh from "../lib/twitchRefresh.js";
 import type * as lib_twitchScopeHealth from "../lib/twitchScopeHealth.js";
+import type * as lib_twitchSignIn from "../lib/twitchSignIn.js";
 import type * as lib_twitchTokenGrant from "../lib/twitchTokenGrant.js";
 import type * as lib_twitchUsers from "../lib/twitchUsers.js";
 import type * as lib_userPageState from "../lib/userPageState.js";
@@ -476,6 +477,7 @@ declare const fullApi: ApiFromModules<{
   "lib/twitchLinkPolicy": typeof lib_twitchLinkPolicy;
   "lib/twitchRefresh": typeof lib_twitchRefresh;
   "lib/twitchScopeHealth": typeof lib_twitchScopeHealth;
+  "lib/twitchSignIn": typeof lib_twitchSignIn;
   "lib/twitchTokenGrant": typeof lib_twitchTokenGrant;
   "lib/twitchUsers": typeof lib_twitchUsers;
   "lib/userPageState": typeof lib_userPageState;
