@@ -37,7 +37,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use woofx3_companion_core::host::{
     choose_host_mode as write_host_mode, HostConfig, HostMode, HostModeKind, LocalEngineSettings,
@@ -682,6 +682,7 @@ pub fn run() {
             let tray = tray::build(&handle, &companion.state().tray_label())?;
             *lock(&companion.tray) = Some(tray);
             app.manage(Arc::clone(&companion));
+            create_windows(app)?;
             tauri::async_runtime::spawn(update::run(Arc::clone(&companion)));
             tauri::async_runtime::spawn(companion.resume());
             Ok(())
@@ -712,6 +713,16 @@ pub fn run() {
                 stop_engine_before_exit(app, &api, code);
             }
         });
+}
+
+/// Builds the windows the Tauri config declares, each with `create: false`.
+/// Tauri would otherwise open them before the setup hook runs, and a page's
+/// first command could arrive before `Companion` is managed, which fails it.
+fn create_windows(app: &tauri::App) -> tauri::Result<()> {
+    for window in &app.config().app.windows {
+        WebviewWindowBuilder::from_config(app.handle(), window)?.build()?;
+    }
+    Ok(())
 }
 
 /// The local engine the host configuration asks for, started. An invalid
@@ -823,6 +834,21 @@ mod tests {
             companion_windows,
             serde_json::json!([super::COMPANION_WINDOW])
         );
+    }
+
+    #[test]
+    fn test_product_configs_leave_creating_windows_to_setup() {
+        for config in [
+            include_str!("../tauri.conf.json"),
+            include_str!("../tauri.woofx3.conf.json"),
+        ] {
+            let config: serde_json::Value = serde_json::from_str(config).expect("valid JSON");
+            let windows = config["app"]["windows"].as_array().expect("a window list");
+            assert!(!windows.is_empty());
+            for window in windows {
+                assert_eq!(window["create"], serde_json::json!(false), "{window}");
+            }
+        }
     }
 
     #[test]
