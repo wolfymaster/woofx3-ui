@@ -11,14 +11,12 @@ import {
   isInstallationId,
   isSha256Hex,
   isValidCompanionVersion,
-  MAX_COMPANION_ROWS_PER_INSTANCE,
   MAX_COMPANION_VERSION_LENGTH,
   MAX_DEVICE_NAME_LENGTH,
   normalizeUserCode,
   PAIRING_TTL_MS,
 } from "./lib/companionCodes";
-import { resyncRelayIfBridging } from "./lib/companionEndpoints";
-import { deleteCompanion, deleteCompanionPresence } from "./lib/companionRecords";
+import { companionsOf, describeReplacedCompanion, writeCompanionCredential } from "./lib/companionRecords";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
@@ -71,6 +69,7 @@ const rateLimiter = new RateLimiter(components.rateLimiter, {
   companionPairingStart: { kind: "token bucket", rate: 3000, period: HOUR, capacity: 300 },
   companionPairingStartPerInstallation: { kind: "token bucket", rate: 10, period: 10 * MINUTE, capacity: 5 },
   companionPairingDeny: { kind: "token bucket", rate: 30, period: HOUR, capacity: 10 },
+  companionAppLink: { kind: "token bucket", rate: 10, period: 10 * MINUTE, capacity: 5 },
 });
 
 const RATE_LIMITED_MESSAGE = "Too many pairing attempts. Try again in a few minutes.";
@@ -386,14 +385,6 @@ async function findPendingByUserCode(ctx: QueryCtx, rawUserCode: string, now: nu
   return { ok: true, row };
 }
 
-/** The instance's companion rows; at most one is expected, see MAX_COMPANION_ROWS_PER_INSTANCE. */
-async function companionsOf(ctx: QueryCtx, instanceId: Id<"instances">) {
-  return ctx.db
-    .query("companions")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .take(MAX_COMPANION_ROWS_PER_INSTANCE);
-}
-
 /**
  * The companion an approval of this code for this instance would replace, for
  * the approval page's warning. An instance has at most one companion, so
@@ -431,15 +422,7 @@ export const replacementForApproval = query({
     if (!replaced) {
       return null;
     }
-    const presence = await ctx.db
-      .query("companionPresence")
-      .withIndex("by_companion", (q) => q.eq("companionId", replaced._id))
-      .first();
-    return {
-      deviceName: replaced.deviceName,
-      pairedAt: replaced.pairedAt,
-      lastSeenAt: presence?.lastSeenAt ?? null,
-    };
+    return describeReplacedCompanion(ctx, replaced);
   },
 });
 
@@ -461,40 +444,18 @@ export const approve = mutation({
       throw new ConvexError(pending.message);
     }
     const row = pending.row;
-
-    const tokenHolder = await ctx.db
-      .query("companions")
-      .withIndex("by_token_hash", (q) => q.eq("tokenHash", row.tokenHash))
-      .first();
-    const existing = await ctx.db
-      .query("companions")
-      .withIndex("by_instance_installation", (q) =>
-        q.eq("instanceId", instanceId).eq("installationId", row.installationId)
-      )
-      .first();
-    if (tokenHolder && tokenHolder._id !== existing?._id) {
-      throw new ConvexError("This companion's token is already in use. Start pairing again from the companion.");
-    }
-    for (const replaced of companionsReplacedBy(await companionsOf(ctx, instanceId), row.installationId)) {
-      await deleteCompanion(ctx, replaced._id);
-    }
-
-    const credential = {
+    // A code shown on stream could be approved by anyone who saw it, so the
+    // token is unconfirmed until the person at the PC confirms it.
+    await writeCompanionCredential(ctx, {
+      instanceId,
+      installationId: row.installationId,
       tokenHash: row.tokenHash,
       deviceName: row.deviceName,
       companionVersion: row.companionVersion,
       pairedBy: userId,
       pairedAt: now,
-    };
-    if (existing) {
-      // A new token is unconfirmed until the person at the PC confirms it.
-      await ctx.db.patch(existing._id, { ...credential, confirmedAt: undefined });
-      await deleteCompanionPresence(ctx, existing._id);
-      // Unconfirmed, it bridges nothing until the person at the PC confirms.
-      await resyncRelayIfBridging(ctx, instanceId);
-    } else {
-      await ctx.db.insert("companions", { instanceId, installationId: row.installationId, ...credential });
-    }
+      confirmedAt: undefined,
+    });
     await ctx.db.patch(row._id, { status: "approved", instanceId, approvedBy: userId });
     return null;
   },
@@ -551,5 +512,92 @@ export const cleanupExpired = internalMutation({
       await ctx.scheduler.runAfter(0, internal.companionPairing.cleanupExpired, {});
     }
     return null;
+  },
+});
+
+// ── Desktop app ────────────────────────────────────────────────────────────
+
+const replacedCompanion = v.object({
+  deviceName: v.string(),
+  pairedAt: v.number(),
+  lastSeenAt: v.union(v.number(), v.null()),
+});
+
+/**
+ * Makes the desktop app the instance's companion when an admin signs in to
+ * it, without the device-code flow. The app generates the token and keeps
+ * it; the dashboard in the app sends only its hash. Being signed in inside
+ * the app on that PC is both the approval and the confirmation that the
+ * device code and the confirm screen ask for separately, so the row is
+ * written confirmed and approved by the caller.
+ *
+ * An instance has at most one companion. When another installation is it,
+ * nothing is written unless `replaceOtherComputer` is set: the answer names
+ * that computer so the dashboard can ask first, since replacing it unpairs
+ * a PC the admin may still use. With the flag, it is replaced the same way
+ * an approval replaces it.
+ *
+ * Idempotent for the same installation and token hash.
+ */
+export const linkSignedInApp = mutation({
+  args: {
+    instanceId: v.id("instances"),
+    tokenHash: v.string(),
+    installationId: v.string(),
+    deviceName: v.string(),
+    companionVersion: v.string(),
+    replaceOtherComputer: v.optional(v.boolean()),
+  },
+  returns: v.union(
+    v.object({ kind: v.literal("linked"), instanceId: v.id("instances"), instanceName: v.string() }),
+    v.object({ kind: v.literal("otherCompanion"), companion: replacedCompanion })
+  ),
+  handler: async (ctx, args) => {
+    const userId = await requireInstanceRole(ctx, args.instanceId, "admin");
+    const deviceName = args.deviceName.trim();
+    const companionVersion = args.companionVersion.trim();
+    if (deviceName.length === 0 || deviceName.length > MAX_DEVICE_NAME_LENGTH) {
+      throw new ConvexError(`deviceName must be 1-${MAX_DEVICE_NAME_LENGTH} characters`);
+    }
+    if (!isValidCompanionVersion(companionVersion)) {
+      throw new ConvexError(`companionVersion must be 1-${MAX_COMPANION_VERSION_LENGTH} characters`);
+    }
+    if (!isInstallationId(args.installationId)) {
+      throw new ConvexError("installationId must be a lowercase UUID");
+    }
+    if (!isSha256Hex(args.tokenHash)) {
+      throw new ConvexError("tokenHash must be a lowercase SHA-256 hex digest");
+    }
+    const instance = await ctx.db.get(args.instanceId);
+    if (!instance) {
+      throw new ConvexError("This instance no longer exists.");
+    }
+    const { ok } = await rateLimiter.limit(ctx, "companionAppLink", { key: userId });
+    if (!ok) {
+      throw new ConvexError(RATE_LIMITED_MESSAGE);
+    }
+    const linked = { kind: "linked" as const, instanceId: instance._id, instanceName: instance.name };
+
+    const rows = await companionsOf(ctx, instance._id);
+    const own = rows.find((row) => row.installationId === args.installationId);
+    if (own && own.tokenHash === args.tokenHash && own.confirmedAt !== undefined) {
+      return linked;
+    }
+    const [other] = companionsReplacedBy(rows, args.installationId);
+    if (other && args.replaceOtherComputer !== true) {
+      return { kind: "otherCompanion" as const, companion: await describeReplacedCompanion(ctx, other) };
+    }
+    const now = Date.now();
+    await writeCompanionCredential(ctx, {
+      instanceId: instance._id,
+      installationId: args.installationId,
+      tokenHash: args.tokenHash,
+      deviceName,
+      companionVersion,
+      pairedBy: userId,
+      pairedAt: now,
+      confirmedAt: now,
+    });
+    return linked;
   },
 });

@@ -29,9 +29,9 @@ use crate::credentials::{self, StoredToken};
 use crate::integration_store::StoreIdentity;
 use crate::integrations;
 use crate::Companion;
-use woofx3_companion_core::window::CompanionState;
+use woofx3_companion_core::window::{CompanionState, FinishAppLinkArgs};
 
-const COMPANION_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const COMPANION_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Must stay at or under MAX_DEVICE_NAME_LENGTH in convex/lib/companionCodes.ts.
 const MAX_DEVICE_NAME_CHARS: usize = 64;
@@ -52,7 +52,7 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn device_name() -> String {
+pub(crate) fn device_name() -> String {
     let name = hostname::get()
         .map(|raw| raw.to_string_lossy().trim().to_string())
         .unwrap_or_default();
@@ -167,12 +167,7 @@ pub async fn pair(companion: Arc<Companion>) {
             return;
         }
     };
-    let stored = StoredToken {
-        token: token.clone(),
-        confirmed: false,
-        instance_name: None,
-    };
-    if let Err(err) = credentials::store(stored).await {
+    if let Err(err) = credentials::store(StoredToken::unconfirmed(token.clone())).await {
         fail(&companion, None, None, format!("{err:#}")).await;
         return;
     }
@@ -216,7 +211,7 @@ pub async fn pair(companion: Arc<Companion>) {
     companion.set_device_code(None);
     companion.set_verification_url(None);
     if approved {
-        run_session(companion, token, false, None).await;
+        run_session(companion, StoredToken::unconfirmed(token)).await;
     }
 }
 
@@ -334,12 +329,9 @@ fn start_integrations(
 /// it carries.
 ///
 /// A session needs Convex, so it opens the connection if it is not open yet.
-pub async fn run_session(
-    companion: Arc<Companion>,
-    token: String,
-    local_confirmed: bool,
-    known_name: Option<String>,
-) {
+/// `stored` is the token as the credential store holds it; the session keeps
+/// that record in step with what Convex answers.
+pub async fn run_session(companion: Arc<Companion>, mut stored: StoredToken) {
     let cloud = match companion.cloud_link.connect().await {
         Ok(cloud) => cloud,
         Err(err) => {
@@ -350,8 +342,9 @@ pub async fn run_session(
         }
     };
     let mut connection = cloud.connection();
-    let mut confirmed = local_confirmed;
-    let mut instance_name = known_name;
+    let token = stored.token.clone();
+    let mut confirmed = stored.confirmed;
+    let mut instance_name = stored.instance_name.clone();
     let mut decided = false;
     let mut integrations: Option<AbortOnDrop> = None;
     if let (true, Some(name)) = (confirmed, &instance_name) {
@@ -389,13 +382,13 @@ pub async fn run_session(
                 match SelfUpdate::from_result(result) {
                     SelfUpdate::Paired(info) => {
                         decided = true;
-                        let newly_confirmed = info.confirmed && !confirmed;
-                        let renamed = instance_name.as_deref() != Some(info.instance_name.as_str());
                         confirmed = confirmed || info.confirmed;
                         instance_name = Some(info.instance_name.clone());
                         if confirmed {
-                            if newly_confirmed || renamed {
-                                remember(&token, &info.instance_name).await;
+                            if let Some(next) = stored.confirmed_for(&info.instance_id, &info.instance_name) {
+                                if remember(next.clone()).await {
+                                    stored = next;
+                                }
                             }
                             if integrations.is_none() {
                                 let session = CloudSession {
@@ -450,16 +443,15 @@ pub async fn run_session(
     }
 }
 
-/// Stores the token as confirmed with the instance's current name, for the
-/// window after a restart.
-async fn remember(token: &str, instance_name: &str) {
-    let stored = StoredToken {
-        token: token.to_string(),
-        confirmed: true,
-        instance_name: Some(instance_name.to_string()),
-    };
-    if let Err(err) = credentials::store(stored).await {
-        eprintln!("[companion] could not update the stored token: {err:#}");
+/// Stores the token's record, for the window and the dashboard after a
+/// restart. False when the credential store refused it.
+async fn remember(stored: StoredToken) -> bool {
+    match credentials::store(stored).await {
+        Ok(()) => true,
+        Err(err) => {
+            eprintln!("[companion] could not update the stored token: {err:#}");
+            false
+        }
     }
 }
 
@@ -484,13 +476,47 @@ pub async fn confirm(companion: Arc<Companion>, instance_name: String) -> Result
         forget_and_unpair(&companion, Some(stored.token), None).await;
         return Err("This pairing is no longer approved. Pair again.".to_string());
     }
-    remember(&stored.token, &instance_name).await;
-    let session = tauri::async_runtime::spawn(run_session(
-        Arc::clone(&companion),
-        stored.token,
-        true,
-        Some(instance_name),
-    ));
+    // The confirm screen names the instance but not its id; the session
+    // stores the id once `companions:self` answers.
+    let confirmed = StoredToken {
+        token: stored.token,
+        confirmed: true,
+        instance_name: Some(instance_name),
+        instance_id: None,
+    };
+    remember(confirmed.clone()).await;
+    let session = tauri::async_runtime::spawn(run_session(Arc::clone(&companion), confirmed));
+    companion.replace_flow(Some(session));
+    Ok(())
+}
+
+/// Makes the token `begin_app_link` handed out this computer's confirmed
+/// pairing, once the signed-in dashboard has had Convex record it as the
+/// instance's companion. Whoever is signed in to the dashboard on this PC
+/// is the person at the PC, so no separate confirmation is asked for.
+///
+/// Any previous pairing is given up first, as unpairing does. The pending
+/// token is kept until it is stored, so a failure here can be retried with
+/// the same one.
+pub async fn finish_app_link(
+    companion: Arc<Companion>,
+    link: FinishAppLinkArgs,
+) -> Result<(), String> {
+    let token = companion
+        .pending_link()
+        .ok_or_else(|| "No link with woofx3 is waiting to finish. Sign in again.".to_string())?;
+    companion.stop_and_forget().await?;
+    let stored = StoredToken {
+        token,
+        confirmed: true,
+        instance_name: Some(link.instance_name),
+        instance_id: Some(link.instance_id),
+    };
+    credentials::store(stored.clone())
+        .await
+        .map_err(|err| format!("{err:#}"))?;
+    companion.clear_pending_link(&stored.token);
+    let session = tauri::async_runtime::spawn(run_session(Arc::clone(&companion), stored));
     companion.replace_flow(Some(session));
     Ok(())
 }
