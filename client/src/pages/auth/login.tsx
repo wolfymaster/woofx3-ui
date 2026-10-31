@@ -1,6 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Loader2, MonitorPlay } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
 import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,11 @@ import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
 import { nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
+
+// The desktop app signs in with Twitch through the system browser, which its
+// window cannot follow. IS_DESKTOP is a build constant, so the web build
+// carries none of it.
+const DesktopTwitchSignIn = IS_DESKTOP ? lazy(() => import("@/desktop/TwitchSignIn")) : null;
 
 function getLoginNextPath(): string {
   return nextPathFromLocation("/");
@@ -71,23 +76,23 @@ export default function Login() {
             <CardDescription>Access your streaming control plane</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Twitch sign-in leaves for twitch.tv and returns to the web app, which the desktop window
-                cannot follow, so the desktop app signs in with a password. */}
-            {!IS_DESKTOP && (
-              <>
-                <Button variant="outline" className="w-full" onClick={handleTwitchLogin} disabled={isLoading}>
-                  <TwitchGlyph className="mr-2" />
-                  Continue with Twitch
-                </Button>
-
-                <div className="relative">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                    or
-                  </span>
-                </div>
-              </>
+            {DesktopTwitchSignIn ? (
+              <Suspense fallback={null}>
+                <DesktopTwitchSignIn nextPath={getLoginNextPath()} />
+              </Suspense>
+            ) : (
+              <Button variant="outline" className="w-full" onClick={handleTwitchLogin} disabled={isLoading}>
+                <TwitchGlyph className="mr-2" />
+                Continue with Twitch
+              </Button>
             )}
+
+            <div className="relative">
+              <Separator />
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                or
+              </span>
+            </div>
 
             <form onSubmit={handlePasswordLogin} className="space-y-3">
               <div>

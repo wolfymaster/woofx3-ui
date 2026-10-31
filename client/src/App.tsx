@@ -1,3 +1,4 @@
+import { DESKTOP_SIGN_IN_PAGE_PATH } from "@convex/lib/twitchSignIn";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
@@ -53,6 +54,7 @@ const Login = lazy(() => import("@/pages/auth/login"));
 const Onboarding = lazy(() => import("@/pages/auth/onboarding"));
 const Register = lazy(() => import("@/pages/auth/register"));
 const TwitchCallback = lazy(() => import("@/pages/auth/twitch-callback"));
+const TwitchDesktopSignIn = lazy(() => import("@/pages/auth/twitch-desktop"));
 const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
@@ -194,6 +196,7 @@ function AppRoutes() {
       <Route path="/auth/login" component={Login} />
       <Route path="/auth/register" component={Register} />
       <Route path="/auth/twitch/callback" component={TwitchCallback} />
+      <Route path={DESKTOP_SIGN_IN_PAGE_PATH} component={TwitchDesktopSignIn} />
       <Route path="/auth/accept-invite" component={AcceptInvite} />
       <Route path="/auth/onboarding">
         <AuthGuard>
