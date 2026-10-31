@@ -5,6 +5,9 @@ dist
 .env*
 docs
 companion
+# The web build loads the desktop app's generated window types while it
+# resolves the desktop entry, even though it drops that code from the bundle.
+!companion/ui/src/generated/window.ts
 .agents
 .claude
 .local
