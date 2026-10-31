@@ -136,6 +136,18 @@ A pass (`convex/lib/userPageFormDelivery.ts`) is scheduled on insert and by a on
 
 Backing off the engine on the queue row means an offline engine costs one probe per interval, however many answers wait. Pending rows never expire. Delivered rows are deleted after 30 days; failed ones stay until the streamer retries them or the instance is deleted. Only managed engines have pages today, and every route to the engine is behind `SubmissionTransport`.
 
+### What can be delivered
+
+The engine refuses a malformed delivery for good (its rules are in woofx3 `docs/services/user-page-forms.md`), so nothing it would refuse is queued. `USER_PAGE_LIMITS` sits at or under each of its limits, and page checks hold ids to `[A-Za-z0-9_-]`.
+
+- **Answers** with NUL or a lone surrogate are refused at submit (`invalid_answers`).
+- **Form titles, questions and choices** with those characters can't be saved. A snapshot also cleans the title and labels and cuts them to 255 characters, since a page published earlier wasn't held to this.
+- **A viewer's display name** comes from the platform, so it is cleaned and cut the same way. Their platform id is identity, so it is never altered: one the engine would refuse fails the submit with `internal`.
+
+### In workflows
+
+The `userpage.form.submitted` trigger takes an optional `form` field, which matches the Form ID. A step reads an answer with `${trigger.data.answers.<fieldId>}`, and the editor shows that reference for each question. A path would read an id of only digits as an array index, so the page checks refuse one for a question. The editor's ids are UUIDs, which always contain hyphens.
+
 ### Setup
 
 | Where | Name | Value |

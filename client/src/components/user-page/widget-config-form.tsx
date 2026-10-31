@@ -21,6 +21,7 @@ import { fieldPath, itemPath, type ProblemIndex } from "@/lib/page-problems";
 import { optionalText } from "@/lib/user-page-editor";
 import {
   FORM_FIELD_TYPES,
+  formAnswerReference,
   formFieldOfType,
   newFormField,
   nudge,
@@ -395,31 +396,31 @@ function ImageForm({ idPrefix, config, onChange, path, problems }: FormProps<Pag
   );
 }
 
-/** The id workflows use to react to this form and no other. */
-function FormIdRow({ formId }: { formId: string }) {
+/** A value a workflow needs from this form, read-only with a copy button. */
+function CopyableValue({ label, value, hint, testId }: { label: string; value: string; hint: string; testId: string }) {
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(formId);
-      toast({ title: "Form ID copied" });
+      await navigator.clipboard.writeText(value);
+      toast({ title: `${label} copied` });
     } catch {
       toast({
-        title: "Couldn't copy the form ID",
+        title: `Couldn't copy ${label}`,
         description: "Select it and copy it by hand.",
         variant: "destructive",
       });
     }
   };
   return (
-    <div className="space-y-1.5" data-testid="form-id">
-      <p className="text-xs font-medium">Form ID</p>
+    <div className="space-y-1.5" data-testid={testId}>
+      <p className="text-xs font-medium">{label}</p>
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{formId}</code>
-        <Button type="button" variant="outline" size="sm" onClick={copy} data-testid="button-copy-form-id">
+        <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{value}</code>
+        <Button type="button" variant="outline" size="sm" onClick={copy} data-testid={`button-copy-${testId}`}>
           <Copy className="mr-1.5 h-3.5 w-3.5" />
           Copy
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">Use this in a workflow to react only to answers from this form.</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
     </div>
   );
 }
@@ -438,7 +439,12 @@ function FormForm({
   const { title: _title, ...withoutTitle } = config;
   return (
     <div className="space-y-4">
-      <FormIdRow formId={formId} />
+      <CopyableValue
+        label="Form ID"
+        value={formId}
+        hint="To react only to this form, paste this into the Form setting of a workflow's "User page form submitted" trigger."
+        testId="form-id"
+      />
       <TextField
         id={`${idPrefix}-title`}
         label="Title"
@@ -516,6 +522,12 @@ function FormFieldEditor({
 }) {
   return (
     <>
+      <CopyableValue
+        label="Answer in a workflow"
+        value={formAnswerReference(field.id)}
+        hint="Paste this into a workflow step to use what a visitor answered here."
+        testId={`answer-reference-${field.id}`}
+      />
       <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
         <TextField
           id={`${idPrefix}-label`}
