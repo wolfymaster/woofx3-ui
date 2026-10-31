@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { TWITCH_INTEGRATION_SCOPES } from "@shared/twitch-integration-scopes";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -12,7 +13,6 @@ import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { openPlatformLinkTokens, platformTokenCipher } from "./lib/platformLinkTokens";
 import { safeRelativePath } from "./lib/safeRedirect";
-import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { type TwitchTokenRequestedResponse, twitchTokenForEngine, twitchTokenGrant } from "./lib/twitchTokenGrant";
 import { claimHandoff } from "./oauthConnectHandoff";

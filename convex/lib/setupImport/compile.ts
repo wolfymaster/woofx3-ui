@@ -1,5 +1,5 @@
+import { catalogAction, type StarterCatalog } from "@shared/starter-packs";
 import type { ActionStep, ConditionConfig, TaskDefinition, WorkflowDefinition } from "@woofx3/api";
-import { catalogAction, type StarterCatalog } from "../starterPacks";
 import { flattenSteps } from "./build";
 import {
   type ImportActionStep,

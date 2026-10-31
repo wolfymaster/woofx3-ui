@@ -1,8 +1,8 @@
+import { isSummaryInProgress, MAX_RECENT_RECAPS } from "@shared/stream-recap";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
-  isSummaryInProgress,
   parseSessionSummary,
   planOpenSnapshotWrite,
   planSummaryWrite,
@@ -13,7 +13,6 @@ import { isInstanceMember } from "./lib/teamAccess";
 import { logger } from "./logger";
 
 const DEFAULT_RECENT_LIMIT = 10;
-const MAX_RECENT_LIMIT = 50;
 
 async function storeSummary(
   ctx: MutationCtx,
@@ -115,7 +114,7 @@ export const listRecent = query({
     if (!(await isInstanceMember(ctx, instanceId))) {
       return [];
     }
-    const take = Math.min(Math.max(Math.floor(limit ?? DEFAULT_RECENT_LIMIT), 1), MAX_RECENT_LIMIT);
+    const take = Math.min(Math.max(Math.floor(limit ?? DEFAULT_RECENT_LIMIT), 1), MAX_RECENT_RECAPS);
     const rows = await ctx.db
       .query("streamSessionSummaries")
       .withIndex("by_instance_started", (q) => q.eq("instanceId", instanceId))

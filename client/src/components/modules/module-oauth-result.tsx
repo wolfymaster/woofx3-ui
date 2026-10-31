@@ -1,8 +1,8 @@
 import { Check, Loader2, X, XCircle } from "lucide-react";
-import type { ModuleOAuthResult } from "@/hooks/use-module-oauth-return";
+import type { ModuleOAuthResult } from "@/lib/marketplace-mode";
 import { cn } from "@/lib/utils";
 
-/** How a module integration's OAuth connect went, from `useModuleOAuthReturn`. */
+/** How a module integration's OAuth connect went, from the marketplace mode's `useOAuthReturn`. */
 export function ModuleOAuthResultBanner({
   result,
   onDismiss,

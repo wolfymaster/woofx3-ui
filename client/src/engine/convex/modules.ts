@@ -1,19 +1,66 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
+  InstalledModule,
   MarketplaceBundleInstall,
   ModuleArchiveInstall,
   ModuleAsset,
   ModuleDetail,
   ModuleId,
+  ModuleProvenance,
   ModuleStorageUsage,
 } from "@/engine/types";
 import { fromModuleId, toModuleId } from "./ids";
-import { useInstanceAction, useInstanceMutation } from "./scope";
+import { useMappedList } from "./mapped";
+import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./scope";
+
+/**
+ * Convex records where a module came from only as the listing it was
+ * installed from or the archive it was uploaded as. It does not record which
+ * modules shipped with the engine.
+ */
+function rowProvenance(row: Doc<"moduleRepository">): ModuleProvenance | null {
+  if (row.marketplaceListingId) {
+    return "marketplace";
+  }
+  return row.archiveKey ? "uploaded" : null;
+}
+
+/** The row keeps the manifest it was given unchecked; only an object is one. */
+function manifestRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function toInstalledModule(row: Doc<"moduleRepository">): InstalledModule {
+  return {
+    id: toModuleId(row._id),
+    name: row.name,
+    description: row.description,
+    version: row.version,
+    tags: row.tags,
+    author: row.author,
+    category: row.category,
+    moduleKey: row.moduleKey,
+    // Every writer records a status; a row without one is not shown as installed.
+    status: row.status ?? "pending",
+    provenance: rowProvenance(row),
+    marketplaceListingId: row.marketplaceListingId,
+    marketplaceEdition: row.marketplaceEdition,
+    manifest: manifestRecord(row.manifest),
+  };
+}
+
+function useInstalled() {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.moduleRepository.list, instanceId ? { instanceId } : "skip");
+  return useMappedList(rows, toInstalledModule);
+}
 
 function toModuleDetail(result: FunctionReturnType<typeof api.moduleDetail.getModuleDetail>): ModuleDetail {
   return {
@@ -164,6 +211,7 @@ function useArchiveInstallRequest() {
 }
 
 export const convexModulesGateway: ModulesGateway = {
+  useInstalled,
   useDetailRequest,
   useSettingsRequest,
   useUpdateSettingRequest,

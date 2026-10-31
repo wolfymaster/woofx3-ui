@@ -1,4 +1,5 @@
 import {
+  MAX_RECENT_RECAPS,
   RECAP_EVENT_LIMIT,
   RECAP_LEADERBOARD_LIMIT,
   toRecapEngineDetail,
@@ -18,28 +19,99 @@ import {
   VIEWER_RECENT_STREAMS,
   VIEWER_STREAM_SCAN,
 } from "@shared/supporters";
+import { readTwitchUserAnswer } from "@shared/twitch-users";
+import { ENGINE_CAPABILITIES, type StreamSession } from "@woofx3/api";
 import type { StreamOpsGateway } from "@/engine/gateway";
 import type {
   EngineTestEvent,
+  OpenSessionRefresh,
   RecapTimelineEvents,
+  StreamRecap,
   StreamRecapEngineDetail,
   Supporter,
   SupporterLeaderboardQuery,
   SupporterStream,
+  TwitchChannel,
+  TwitchViewerLookup,
   ViewerSupportTotals,
 } from "@/engine/types";
-import { toEngineCallFailure, toSupporterReadError } from "./map/stream-ops";
-import { useEngineRequest } from "./query";
+import { directKeys as k } from "./keys";
+import { toEngineCallFailure, toStreamRecap, toSupporterReadError } from "./map/stream-ops";
+import { toTwitchChannel, toTwitchUsersQuery } from "./map/twitch";
+import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
+import { liveStateRead } from "./status";
+import { directTwitch } from "./twitch";
 import { unsupportedRequest } from "./unsupported";
+
+/** The engine's sessions read as recaps, in its order, leaving out any it no longer has totals for. */
+async function readRecaps(runtime: DirectRuntime, sessions: readonly StreamSession[]): Promise<StreamRecap[]> {
+  const [live, totals] = await Promise.all([
+    runtime.queryClient.fetchQuery(liveStateRead(runtime)),
+    Promise.all(
+      sessions.map((session) => runtime.call("getStreamSessionTotals", (api) => api.getStreamSessionTotals(session.id)))
+    ),
+  ]);
+  const readAtMs = runtime.clock.now();
+  const recaps: StreamRecap[] = [];
+  sessions.forEach((session, index) => {
+    const sessionTotals = totals[index];
+    if (sessionTotals !== null && sessionTotals !== undefined) {
+      recaps.push(toStreamRecap(session, sessionTotals, live, readAtMs));
+    }
+  });
+  return recaps;
+}
+
+// An engine without session history has no recaps to show, rather than a
+// failure: there is nothing it could answer on a retry.
+function recentRecapsRead(runtime: DirectRuntime, limit: number): EngineRead<StreamRecap[]> {
+  return {
+    queryKey: k.streamOps.recentRecaps(limit),
+    queryFn: async () => {
+      if (!runtime.supports(ENGINE_CAPABILITIES.analyticsSessions)) {
+        return [];
+      }
+      const page = await runtime.call("listStreamSessions", (api) => api.listStreamSessions({ limit }));
+      return readRecaps(runtime, page.sessions);
+    },
+  };
+}
+
+function recapRead(runtime: DirectRuntime, sessionId: string): EngineRead<StreamRecap | null> {
+  return {
+    queryKey: k.streamOps.recap(sessionId),
+    queryFn: async () => {
+      if (!runtime.supports(ENGINE_CAPABILITIES.analyticsSessions)) {
+        return null;
+      }
+      const session = await runtime.call("getStreamSession", (api) => api.getStreamSession(sessionId));
+      if (session === null) {
+        return null;
+      }
+      const [recap] = await readRecaps(runtime, [session]);
+      return recap ?? null;
+    },
+  };
+}
+
+/** A whole number of recaps from 1 to `MAX_RECENT_RECAPS`, as the hosted list reads them. */
+function recapLimit(limit: number): number {
+  return Math.min(Math.max(Math.floor(limit), 1), MAX_RECENT_RECAPS);
+}
 
 /**
  * What the engine records about the channel's streams and the viewers who
- * support them, read on demand: nothing here is cached, since no engine event
- * reports these figures changing. Recaps resolve with a failure status rather
- * than rejecting, so the page still renders its stored summary.
+ * support them. Recaps are the engine's sessions and totals, cached and read
+ * again on stream and session events and when a page refreshes the open
+ * session, since its totals change with no event to say so. Everything else
+ * is read on demand. The recap detail and events resolve with a failure
+ * status rather than rejecting, so the page still renders the recap. Clips
+ * and markers are Twitch's lists, which the engine has no method for.
  */
 export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway {
+  const twitch = directTwitch(runtime);
+
   const recapEngineDetail = async (sessionId: string): Promise<StreamRecapEngineDetail> => {
     try {
       const [gauges, cheerers, gifters] = await Promise.all([
@@ -70,6 +142,11 @@ export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway
       runtime.logger.warn("stream recap: engine events call failed", { sessionId, status: failure.status });
       return failure;
     }
+  };
+
+  const refreshOpenSession = async (): Promise<OpenSessionRefresh> => {
+    await runtime.queryClient.invalidateQueries({ queryKey: k.streamOps.allRecaps });
+    return { status: "stored" };
   };
 
   /** Runs `read`, rejecting with the Supporters page's words for `what` when it fails. */
@@ -149,6 +226,19 @@ export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway
     };
   };
 
+  // `GET /helix/users` needs no scope, so any link will do.
+  const twitchViewer = async (lookup: TwitchViewerLookup): Promise<TwitchChannel | null> => {
+    const query = toTwitchUsersQuery(lookup);
+    if (query === null) {
+      return null;
+    }
+    await twitch.authorize(null);
+    const user = await readTwitchUserAnswer(
+      await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, "twitchGetUsers", (api) => api.twitchGetUsers(query))
+    );
+    return user ? toTwitchChannel(user) : null;
+  };
+
   const publishEvent = ({ eventType, eventData, triggerId, triggeredBy }: EngineTestEvent) =>
     runtime.call("triggerEvent", (api) =>
       api.triggerEvent(eventType, eventData as Record<string, unknown>, triggerId, triggeredBy)
@@ -160,14 +250,20 @@ export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway
     );
 
   return {
+    support: { recapClips: false, recapMarkers: false },
+    useRecentRecaps: (limit, options) =>
+      useEngineQuery(runtime, recentRecapsRead(runtime, recapLimit(limit)), { enabled: options?.enabled }),
+    useRecap: (sessionId, options) =>
+      useEngineQuery(runtime, recapRead(runtime, sessionId), { enabled: options?.enabled }),
+    useRecapClipsRequest: unsupportedRequest("streamOps.useRecapClipsRequest"),
+    useRecapMarkersRequest: unsupportedRequest("streamOps.useRecapMarkersRequest"),
     useRecapEngineDetailRequest: () => useEngineRequest(recapEngineDetail),
     useRecapTimelineEventsRequest: () => useEngineRequest(recapTimelineEvents),
-    // The stored summary is a Convex record; a directly driven engine's own
-    // `session.summary` is the record there, and nothing stores a snapshot.
-    useOpenSessionRefreshRequest: unsupportedRequest("streamOps.useOpenSessionRefreshRequest"),
+    useOpenSessionRefreshRequest: () => useEngineRequest(refreshOpenSession),
     useSupporterStreamsRequest: () => useEngineRequest(supporterStreams),
     useSupporterLeaderboardRequest: () => useEngineRequest(supporterLeaderboard),
     useViewerSupportTotalsRequest: () => useEngineRequest(viewerSupportTotals),
+    useTwitchViewerRequest: () => useEngineRequest(twitchViewer),
     usePublishEventRequest: () => useEngineRequest(publishEvent),
     useSimulateTwitchEventRequest: () => useEngineRequest(simulateTwitchEvent),
   };

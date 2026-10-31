@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   classifyEngineCallError,
+  isSummaryInProgress,
   type Leaderboard,
   MAX_ENGINE_ERROR_LENGTH,
   RECAP_LEADERBOARD_LIMIT,
@@ -117,5 +118,40 @@ describe("toRecapTimelineEvents", () => {
         { occurredAt: "2026-09-20T00:03:00.000Z", kind: "follow", userName: "Cara", amount: null },
       ],
     });
+  });
+});
+
+describe("isSummaryInProgress", () => {
+  const open = { sessionId: "session-1", session: { status: "open" as const } };
+
+  it("is in progress while the instance is live in that session", () => {
+    expect(isSummaryInProgress(open, { isLive: true, sessionId: "session-1" })).toBe(true);
+  });
+
+  it("is not in progress once the stream goes offline, though the engine keeps the session open", () => {
+    expect(isSummaryInProgress(open, { isLive: false, sessionId: "session-1" })).toBe(false);
+  });
+
+  it("is in progress again when the next broadcast continues the same session", () => {
+    expect(isSummaryInProgress(open, { isLive: false, sessionId: "session-1" })).toBe(false);
+    expect(isSummaryInProgress(open, { isLive: true, sessionId: "session-1" })).toBe(true);
+  });
+
+  it("is not in progress for an open row of an older session while a later one is live", () => {
+    expect(isSummaryInProgress(open, { isLive: true, sessionId: "session-2" })).toBe(false);
+  });
+
+  it("trusts the open status while live when the engine has not announced its session", () => {
+    expect(isSummaryInProgress(open, { isLive: true })).toBe(true);
+  });
+
+  it("is never in progress for a closed session", () => {
+    const closed = { sessionId: "session-1", session: { status: "closed" as const } };
+    expect(isSummaryInProgress(closed, { isLive: true, sessionId: "session-1" })).toBe(false);
+  });
+
+  it("is not in progress without live state or a readable session", () => {
+    expect(isSummaryInProgress(open, null)).toBe(false);
+    expect(isSummaryInProgress({ sessionId: "session-1" }, { isLive: true, sessionId: "session-1" })).toBe(false);
   });
 });

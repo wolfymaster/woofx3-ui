@@ -1,7 +1,7 @@
+import { unescapeDollarKeys } from "@shared/dollar-keys";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { Workflow } from "@/engine/types";
-import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { isCommandsSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
 import {

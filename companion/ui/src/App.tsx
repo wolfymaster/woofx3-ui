@@ -283,12 +283,14 @@ function ErrorView({ message }: { message: string }) {
 }
 
 /** Offered, never forced: the companion restarts only when this is clicked. */
-function UpdateBanner({ version }: { version: string }) {
+function UpdateBanner({ productName, version }: { productName: string; version: string }) {
   const { busy, error, run } = useCommand();
   return (
     <aside className="update-banner">
       <div className="update-row">
-        <p>woofx3 companion {version} is ready</p>
+        <p>
+          {productName} {version} is ready
+        </p>
         <button type="button" className="primary" disabled={busy} onClick={() => run(commands.installUpdate)}>
           Restart to update
         </button>
@@ -321,7 +323,7 @@ export function App() {
   const view = useWindowState();
   return (
     <>
-      {view.update && <UpdateBanner version={view.update.version} />}
+      {view.update && <UpdateBanner productName={view.update.productName} version={view.update.version} />}
       <Screen state={view} />
     </>
   );

@@ -1,10 +1,11 @@
-// A macro pad button. Its `{{name}}` variables live in
-// convex/lib/macroVariables.ts, shared with the remote trigger route.
+// What the macro pad's widget and editor need to show a button. The button
+// itself is the gateway's `Macro`; its `{{name}}` variables live in
+// shared/macro-variables.ts, shared with every place a macro runs.
 
-import type { Id } from "@convex/_generated/dataModel";
-import type { MacroActionStep, MacroActionType, MacroConfig } from "@convex/lib/macroVariables";
+import type { MacroActionStep, MacroConfig } from "@shared/macro-variables";
 import type { ActionNode } from "@/lib/workflow-tree";
 
+export { isHexColor } from "@shared/macro-pad";
 export {
   applyMacroVariables,
   extractMacroVariables,
@@ -13,22 +14,7 @@ export {
   type MacroActionType,
   type MacroConfig,
   type MacroHttpMethod,
-} from "@convex/lib/macroVariables";
-
-/** A macro's editable fields — everything except its server-assigned id. */
-export type MacroInput = Omit<MacroButton, "id">;
-
-export interface MacroButton {
-  /** Macros are kept by the dashboard, so a macro is its Convex row. */
-  id: Id<"macros">;
-  label: string;
-  /** Lucide icon name, resolved through resolveLucideIcon. */
-  icon?: string;
-  /** Six-digit hex (`#rrggbb`). Undefined leaves the tile in the default card style. */
-  color?: string;
-  type: MacroActionType;
-  config: MacroConfig;
-}
+} from "@shared/macro-variables";
 
 /**
  * Default swatches, mid-tone so they stay legible tinting a tile on both the
@@ -47,18 +33,6 @@ export const MACRO_COLOR_PRESETS: ReadonlyArray<{ value: string; label: string }
   { value: "#ec4899", label: "Pink" },
   { value: "#64748b", label: "Slate" },
 ];
-
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-/**
- * Exactly `#rrggbb`. The tile's background wash is built by appending an alpha
- * pair to the stored value, which only produces a valid color for the six-digit
- * form — so anything else is refused at the input rather than rendering as a
- * broken style.
- */
-export function isHexColor(value: string | undefined): value is string {
-  return typeof value === "string" && HEX_COLOR_PATTERN.test(value);
-}
 
 /**
  * A chat-command button's command word and the text after it. `command` is

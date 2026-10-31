@@ -1,35 +1,35 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import type { RecapMarkersResult } from "@convex/streamRecap";
-import { useAction } from "convex/react";
-import { ConvexError } from "convex/values";
 import { useEffect, useState } from "react";
+import { useEngineScope } from "@/engine/context";
+import { useRecapMarkersRequest, useStreamOpsSupport } from "@/engine/hooks/use-stream-recap";
+import type { RecapMarkers } from "@/engine/types";
 
 export type RecapMarkersState =
   | { kind: "loading" }
-  | { kind: "loaded"; result: RecapMarkersResult }
-  | { kind: "error"; message: string };
+  | { kind: "loaded"; result: RecapMarkers }
+  | { kind: "error"; message: string }
+  /** This connection to the engine cannot list markers, so there is nothing to load or show. */
+  | { kind: "unsupported" };
 
-function errorMessage(error: unknown): string {
-  if (error instanceof ConvexError) {
-    return String(error.data);
-  }
-  return error instanceof Error ? error.message : String(error);
-}
+const UNSUPPORTED: RecapMarkersState = { kind: "unsupported" };
 
 /**
  * Loads the stream markers placed during a recapped session, once per visit.
  * Held in component state only, like clips: markers live on Twitch's VODs and
  * the dashboard never stores them.
  */
-export function useRecapMarkers(instanceId: Id<"instances">, sessionId: string) {
-  const loadMarkers = useAction(api.streamRecap.loadMarkers);
+export function useRecapMarkers(sessionId: string): RecapMarkersState {
+  const { instanceId } = useEngineScope();
+  const supported = useStreamOpsSupport().recapMarkers;
+  const loadMarkers = useRecapMarkersRequest();
   const [state, setState] = useState<RecapMarkersState>({ kind: "loading" });
 
   useEffect(() => {
+    if (!supported || !instanceId) {
+      return;
+    }
     let cancelled = false;
     setState({ kind: "loading" });
-    loadMarkers({ instanceId, sessionId })
+    loadMarkers(sessionId)
       .then((result) => {
         if (!cancelled) {
           setState({ kind: "loaded", result });
@@ -37,13 +37,13 @@ export function useRecapMarkers(instanceId: Id<"instances">, sessionId: string) 
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setState({ kind: "error", message: errorMessage(error) });
+          setState({ kind: "error", message: error instanceof Error ? error.message : String(error) });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [instanceId, sessionId, loadMarkers]);
+  }, [instanceId, sessionId, supported, loadMarkers]);
 
-  return state;
+  return supported ? state : UNSUPPORTED;
 }

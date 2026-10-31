@@ -7,7 +7,7 @@
  * mirrors how `marketplace.ts` has always treated module listings.
  */
 
-import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./marketplaceImages";
+import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./marketplace-images";
 
 /**
  * A kind of marketplace listing.

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { type CatalogListing, parseCatalogListing } from "@shared/marketplace-catalog";
 import type {
   MarketplaceInstallResult as EngineModuleInstallResult,
   MarketplaceBundleInstallResult,
@@ -12,7 +13,6 @@ import type { ActionCtx } from "../_generated/server";
 import { type EngineCapabilityReport, LEGACY_ENGINE_REPORT } from "./engineCapabilities";
 import { MarketplaceError } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
-import { type CatalogListing, parseCatalogListing } from "./marketplaceCatalog";
 import {
   buyerTokensConfigured,
   type EngineInstallGate,

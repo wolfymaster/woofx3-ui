@@ -1,6 +1,5 @@
-import type { RecapClip } from "@convex/lib/recapClips";
-import type { RecapMarker } from "@convex/lib/recapMarkers";
 import type { RecapEvent, RecapEventKind, RecapTimelineEvents } from "@shared/stream-recap";
+import type { RecapClip, RecapMarker } from "@/engine/types";
 import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import type { RecapMarkersState } from "@/hooks/use-recap-markers";
 import type { RecapTimelineEventsState } from "@/hooks/use-recap-timeline-events";
@@ -304,6 +303,8 @@ export function clipLayerStatus(state: RecapClipsState): RecapLayerStatus {
       return unavailable("This session never went live.");
     case "error":
       return unavailable(state.message);
+    case "unsupported":
+      return unavailable("Clips come from Twitch's clip list, which this connection to the engine can't read.");
   }
 }
 
@@ -313,6 +314,9 @@ export function markerLayerStatus(state: RecapMarkersState): RecapLayerStatus {
   }
   if (state.kind === "error") {
     return unavailable(state.message);
+  }
+  if (state.kind === "unsupported") {
+    return unavailable("Markers come from Twitch's VODs, which this connection to the engine can't read.");
   }
   switch (state.result.status) {
     case "ok":

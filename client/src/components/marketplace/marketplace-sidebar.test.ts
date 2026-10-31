@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogListing } from "@convex/lib/marketplaceCatalog";
+import type { CatalogListing } from "@shared/marketplace-catalog";
 import { countByType, moduleCategories } from "./marketplace-sidebar";
 
 function listing(id: string, type: CatalogListing["type"], category: string): CatalogListing {

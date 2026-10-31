@@ -19,7 +19,7 @@ export function commandsRead(runtime: DirectRuntime): EngineRead<ChatCommand[]> 
   };
 }
 
-function groupsRead(runtime: DirectRuntime): EngineRead<ChatCommandGroup[]> {
+export function groupsRead(runtime: DirectRuntime): EngineRead<ChatCommandGroup[]> {
   return {
     queryKey: k.commands.groups(),
     queryFn: async () => (await runtime.call("listGroups", (api) => api.listGroups())).map(toChatCommandGroup),

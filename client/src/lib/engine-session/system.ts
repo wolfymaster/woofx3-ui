@@ -1,7 +1,7 @@
-import type { Clock, LogFields, Logger, Random } from "./deps";
+import type { Clock, IdSource, LogFields, Logger, Random } from "./deps";
 
-// The real clock, random source and logger an engine session runs on in the
-// app. Tests pass fakes instead (./testing).
+// The real clock, random source, ids and logger an engine session runs on
+// in the app. Tests pass fakes instead (./testing).
 
 export const systemClock: Clock = {
   now: () => Date.now(),
@@ -12,6 +12,8 @@ export const systemClock: Clock = {
 };
 
 export const systemRandom: Random = Math.random;
+
+export const systemIds: IdSource = () => crypto.randomUUID();
 
 /** The one logger an app process carries, writing to the browser console under `scope`. */
 export function consoleLogger(scope: string): Logger {
