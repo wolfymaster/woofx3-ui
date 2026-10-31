@@ -14,10 +14,10 @@ const LIVE_REFRESH_MS = 60_000;
 const refreshThrottle = createPollThrottle(LIVE_REFRESH_MS / 2);
 
 /**
- * Keeps the stored summary of the engine's open session current while a page
- * showing recaps is open: once on mount, then every minute while the stream
- * is live. The summaries themselves arrive through the usual
- * `streamSessionSummaries` queries; this only asks Convex to take a snapshot.
+ * Keeps the open session's recap current while a page showing recaps is
+ * open: once on mount, then every minute while the stream is live. The recaps
+ * themselves arrive through the recap reads; this only asks for them to be
+ * brought up to date.
  */
 export function useOpenSessionRefresh(): void {
   const { instanceId } = useEngineScope();
@@ -28,7 +28,7 @@ export function useOpenSessionRefresh(): void {
     if (!instanceId || !refreshThrottle.claim(instanceId)) {
       return;
     }
-    // Best effort: a failed snapshot leaves the last stored one on screen, and
+    // Best effort: a failed refresh leaves the last figures on screen, and
     // the engine's own summary arrives when the session ends either way.
     refreshOpenSession().catch(() => undefined);
   }, [instanceId, refreshOpenSession]);

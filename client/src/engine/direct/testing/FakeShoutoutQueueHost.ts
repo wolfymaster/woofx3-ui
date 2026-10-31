@@ -1,5 +1,5 @@
 import type { ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutQueueView } from "@/desktop/host";
-import type { ShoutoutQueueHost } from "../shoutouts";
+import type { ShoutoutQueueHost } from "@/engine/desktop-host";
 
 /** The desktop host's shoutout queue, in memory: it numbers entries, drops one that is gone, and reports each change. */
 export class FakeShoutoutQueueHost implements ShoutoutQueueHost {

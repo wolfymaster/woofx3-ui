@@ -6,7 +6,7 @@ import {
   type StarterPack,
   starterItemKey,
   starterPackDefaults,
-} from "@convex/lib/starterPacks";
+} from "@shared/starter-packs";
 import { starterItemView, starterPackSummary, starterStepLabel } from "./starter-pack-view";
 
 const TWITCH_TRIGGERS = [

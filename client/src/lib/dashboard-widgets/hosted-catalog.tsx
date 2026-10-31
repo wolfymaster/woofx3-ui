@@ -1,11 +1,8 @@
-import { Clapperboard, History, ListChecks, Pin, Rocket } from "lucide-react";
+import { ListChecks, Pin } from "lucide-react";
 import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
-import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
 import { HostedMacroPadWidget } from "@/components/dashboard/widgets/hosted-macro-pad";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
-import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
-import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { useInstance } from "@/hooks/use-instance";
 import type { DashboardCatalog, RailPinnedItem } from "./catalog";
 import {
@@ -13,11 +10,14 @@ import {
   adBreaksWidget,
   announcementWidget,
   eventsWidget,
+  goLiveWidget,
   macroPadWidget,
   moderationWidget,
   notesWidget,
   queueWidget,
+  recentStreamsWidget,
   shoutoutWidget,
+  streamInfoWidget,
   streamPreviewWidget,
   streamStatsWidget,
   streamStatusWidget,
@@ -27,27 +27,8 @@ import {
 import type { DashboardWidgetDefinition } from "./types";
 
 // The hosted app's dashboard: every widget. Those below reach data only
-// Convex keeps (recaps, the go-live checklist, pin history, stream info
-// presets, macros' remote trigger URLs), so only the hosted app may load this
-// module.
-
-const goLiveWidget: DashboardWidgetDefinition = {
-  type: "go-live",
-  label: "Go Live Checklist",
-  description: "Pre-flight checks before you go live: engine, Twitch, overlays, OBS, stream info and workflows.",
-  icon: Rocket,
-  category: "stream",
-  component: GoLiveWidget,
-};
-
-const streamInfoWidget: DashboardWidgetDefinition = {
-  type: "stream-info",
-  label: "Stream Info",
-  description: "Edit your title, category and tags, switch between saved presets, and drop stream markers.",
-  icon: Clapperboard,
-  category: "stream",
-  component: StreamInfoWidget,
-};
+// Convex keeps (pin history, macros' remote trigger URLs), so only the hosted
+// app may load this module.
 
 const pinnedWidget: DashboardWidgetDefinition = {
   type: "pinned",
@@ -56,15 +37,6 @@ const pinnedWidget: DashboardWidgetDefinition = {
   icon: Pin,
   category: "stream",
   component: PinnedWidget,
-};
-
-const recentStreamsWidget: DashboardWidgetDefinition = {
-  type: "recent-streams",
-  label: "Recent Streams",
-  description: "Viewers, follows, subs and bits for each of your last finished streams.",
-  icon: History,
-  category: "utility",
-  component: RecentStreamsWidget,
 };
 
 const hostedMacroPadWidget: DashboardWidgetDefinition = { ...macroPadWidget, component: HostedMacroPadWidget };

@@ -2,36 +2,17 @@ import { SHOUTOUT_SCOPE } from "@shared/twitch-chat";
 import { normalizeTwitchLogin, readTwitchUserAnswer } from "@shared/twitch-users";
 import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { useEffect } from "react";
-import type {
-  ShoutoutEntryId as HostShoutoutEntryId,
-  ShoutoutChannel,
-  ShoutoutEnqueued,
-  ShoutoutQueueView,
-} from "@/desktop/host";
+import type { ShoutoutEntryId as HostShoutoutEntryId, ShoutoutQueueView } from "@/desktop/host";
+import type { ShoutoutQueueHost } from "@/engine/desktop-host";
 import type { ShoutoutsGateway } from "@/engine/gateway";
 import type { ReadOptions, ShoutoutEntryId, TwitchChannel } from "@/engine/types";
 import { fromShoutoutEntryId } from "./ids";
 import { directKeys as k } from "./keys";
 import { fromTwitchChannel, toShoutoutEntries } from "./map/shoutouts";
-import { toTwitchChannel } from "./map/twitch";
+import { canShoutOutOf, toTwitchChannel } from "./map/twitch";
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { directTwitch } from "./twitch";
-
-/**
- * The desktop host's shoutout queue. The host owns the queue and works
- * through it on a schedule; the engine only sends each shoutout, so the
- * queue is not in the engine's data. Passed in rather than imported so the
- * gateway never loads Tauri in a build that has none.
- */
-export interface ShoutoutQueueHost {
-  queue(): Promise<ShoutoutQueueView>;
-  enqueue(channel: ShoutoutChannel): Promise<ShoutoutEnqueued>;
-  remove(entryId: HostShoutoutEntryId): Promise<void>;
-  reorder(entryIds: HostShoutoutEntryId[]): Promise<void>;
-  /** Resolves to the function that stops listening. */
-  onChange(handler: (queue: ShoutoutQueueView) => void): Promise<() => void>;
-}
 
 /** The host rejects with plain text; callers read `Error.message`. */
 async function viaHost<T>(call: Promise<T>): Promise<T> {
@@ -114,6 +95,8 @@ export function directShoutoutsGateway(runtime: DirectRuntime, host: ShoutoutQue
   };
 
   return {
+    useCanShoutOut: ({ enabled = true }: ReadOptions = {}) =>
+      useEngineQuery(runtime, twitch.linkRead, { enabled, select: canShoutOutOf }),
     useQueue,
     useLookupRequest: () => useEngineRequest(lookup),
     useEnqueueRequest: () => useEngineRequest(enqueue),

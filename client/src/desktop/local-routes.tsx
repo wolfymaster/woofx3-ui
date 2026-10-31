@@ -17,6 +17,7 @@ import {
   MARKETPLACE_PATH,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
+import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 
 // The pages local mode serves: those that reach the engine only through its
@@ -30,6 +31,8 @@ export interface LocalRoute {
   render: (params: Record<string, string | undefined>) => ReactNode;
 }
 
+const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
+const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
 const Assets = lazy(() => import("@/pages/assets"));
@@ -37,7 +40,9 @@ const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
 const Dashboard = lazy(() => import("./LocalDashboard"));
+const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
+const Logs = lazy(() => import("@/pages/logs"));
 const Marketplace = lazy(() => import("@/pages/marketplace"));
 const MarketplaceAuthor = lazy(() => import("@/pages/marketplace-author"));
 const MarketplaceListing = lazy(() => import("@/pages/marketplace-listing"));
@@ -45,6 +50,10 @@ const Modules = lazy(() => import("@/pages/modules"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Scenes = lazy(() => import("@/pages/scenes"));
+const StarterPacks = lazy(() => import("@/pages/starter-packs"));
+const StreamRecap = lazy(() => import("@/pages/stream-recap"));
+const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
+const Supporters = lazy(() => import("@/pages/supporters"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -79,20 +88,28 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: COMMAND_EDITOR_ROUTE, render: () => <CommandEditor /> },
   { path: COMMAND_LIST_PATH, render: () => <Commands /> },
   ...resourceKindRoutes(),
+  { path: STREAM_RECAPS_PATH, render: () => <StreamRecaps /> },
+  { path: STREAM_RECAP_ROUTE, render: () => <StreamRecap /> },
   { path: "/stream/scenes", render: () => <Scenes /> },
   { path: "/stream/scenes/:id", render: () => <Scenes /> },
+  { path: "/stream/supporters", render: () => <Supporters /> },
   { path: "/stream/workflows", render: () => <Workflows /> },
   { path: "/stream/workflows/new", render: () => <Workflows /> },
   { path: WORKFLOW_RUN_ROUTE, render: () => <WorkflowRun /> },
   { path: "/stream/workflows/:id", render: () => <Workflows /> },
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
+  { path: "/stream/go-live", render: () => <GoLive /> },
+  { path: "/stream/starter-packs", render: () => <StarterPacks /> },
   { path: MARKETPLACE_AUTHOR_ROUTE, render: () => <MarketplaceAuthor /> },
   { path: MARKETPLACE_LISTING_ROUTE, render: () => <MarketplaceListing /> },
   { path: MARKETPLACE_PATH, render: () => <Marketplace /> },
   { path: MARKETPLACE_INSTALLED_PATH, render: () => <Modules /> },
   { path: MARKETPLACE_INSTALLED_MODULE_ROUTE, render: () => <Modules /> },
   { path: "/help/learning", render: () => <Learning /> },
+  { path: "/help/logs", render: () => <Logs /> },
+  { path: "/admin/appearance", render: () => <AdminAppearance /> },
+  { path: "/admin/integrations", render: () => <AdminIntegrations /> },
 ];
 
 /** Where local mode opens, and where a path it does not serve leads back to. */

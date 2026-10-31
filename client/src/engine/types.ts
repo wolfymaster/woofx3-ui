@@ -1129,6 +1129,96 @@ export type RecapTimelineEvents =
   | { status: "unknown_session" }
   | EngineCallFailure;
 
+export interface StreamRecapSegment {
+  id: string;
+  /** ISO time the stream went live. */
+  startedAt: string;
+  /** ISO time the stream went down; null while it was still live when the figures were taken. */
+  endedAt: string | null;
+}
+
+export interface StreamRecapSession {
+  /** `open` until the engine closes the session, which outlasts a brief offline gap; not the same as live. */
+  status: "open" | "closed";
+  /** ISO time. */
+  startedAt: string;
+  /** ISO time a later session replaced this one; null while open. */
+  endedAt: string | null;
+  /** Oldest first; empty for a session that never went live. */
+  segments: StreamRecapSegment[];
+}
+
+/**
+ * A session's channel totals. `subs` leaves out gifted subs, which are only
+ * in `giftedSubs`, so the two add up. A null viewer figure means no minute
+ * was sampled, not zero viewers.
+ */
+export interface StreamRecapTotals {
+  bits: number;
+  cheers: number;
+  subs: number;
+  giftedSubs: number;
+  follows: number;
+  raids: number;
+  raiders: number;
+  peakViewers: number | null;
+  averageViewers: number | null;
+  viewerSampleMinutes: number;
+}
+
+/** A recap's session and totals, or the schema version of a summary from an engine newer than this dashboard. */
+export type StreamRecapSummary =
+  | { kind: "read"; session: StreamRecapSession; totals: StreamRecapTotals }
+  | { kind: "unreadable"; schemaVersion: number };
+
+/** How one stream session went, as of `generatedAt`: the moment its figures describe. */
+export interface StreamRecap {
+  sessionId: string;
+  /** ISO time. */
+  generatedAt: string;
+  generatedAtMs: number;
+  /** True only while the session's stream is live now. */
+  inProgress: boolean;
+  summary: StreamRecapSummary;
+}
+
+/** A Twitch clip made while a recapped session was live. */
+export interface RecapClip {
+  id: string;
+  url: string;
+  title: string;
+  creatorName: string;
+  viewCount: number;
+  /** ISO time. */
+  createdAt: string;
+  thumbnailUrl: string;
+  durationSeconds: number;
+  /** Milliseconds into the stream; never negative. */
+  offsetMs: number;
+}
+
+/** A recap's clips, most viewed first. */
+export type RecapClips = { status: "ok"; clips: RecapClip[] } | { status: "never_live" };
+
+/** A stream marker placed while a recapped session was live. */
+export interface RecapMarker {
+  id: string;
+  /** ISO time. */
+  createdAt: string;
+  description: string;
+}
+
+/**
+ * A recap's markers. Twitch keeps markers on a broadcast's VOD, so a stream
+ * with none (`no_vod`) has no markers to read, and a Twitch link without a
+ * marker scope (`missing_scope`) cannot read them.
+ */
+export type RecapMarkers =
+  | { status: "ok"; markers: RecapMarker[] }
+  | { status: "never_live" }
+  | { status: "missing_scope" }
+  | { status: "no_vod" };
+
 /** Whether the open session's summary was stored, was fresh already, or could not be. */
 export type OpenSessionRefresh =
   | { status: "stored" }
@@ -1627,6 +1717,9 @@ export interface TwitchChannel {
   broadcasterType: string | null;
 }
 
+/** Whom to look up on Twitch: by login as a person types it (`@SomeOne`), or by user id. */
+export type TwitchViewerLookup = { login: string } | { twitchUserId: string };
+
 /** A channel waiting to be shouted out; the queue paces shoutouts within Twitch's limits. Times are epoch ms. */
 export interface ShoutoutEntry {
   id: ShoutoutEntryId;
@@ -1742,8 +1835,8 @@ export interface GoLiveOverlayFacts {
   hasScene: boolean;
   /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
   browserSourceKeyCount: number;
-  /** The key most recently loaded by a browser source, else the newest one. */
-  featuredKey: string | null;
+  /** The browser-source URL to offer for OBS: the one a browser source loaded most recently, else the newest. */
+  featuredUrl: string | null;
   /** When any browser source last loaded one of those keys, in epoch ms. */
   lastLoadedAt: number | null;
 }

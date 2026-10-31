@@ -5,7 +5,7 @@
  * them, so the two cannot drift. Pure, so it can be tested without a runtime.
  */
 
-import { STARTER_MODULES } from "./starterPacks";
+import { STARTER_MODULES } from "@shared/starter-packs";
 
 export interface SetupInterest {
   id: string;

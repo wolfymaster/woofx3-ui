@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { findStarterPack } from "@shared/starter-packs";
 import { availableInterests, buildDashboardPreset, starterPacksForInterests } from "./setupInterests";
-import { findStarterPack } from "./starterPacks";
 
 const TWITCH = "woofx3_twitch";
 const OBS = "woofx3_obs";

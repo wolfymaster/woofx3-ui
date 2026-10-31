@@ -56,17 +56,7 @@ export const ENGINE_NAMESPACE_MODULES = {
   requests: ["transientEvents", "fieldOptions"],
   workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog", "viewerFacts"],
   macros: ["macros"],
-  streamOps: [
-    // The rest of streamRecap asks Twitch for clips and markers.
-    "streamRecap.loadEngineDetail",
-    "streamRecap.loadTimelineEvents",
-    "streamRecap.refreshOpenSession",
-    // The rest of supporters asks Twitch for a viewer or reads the channel's Twitch link.
-    "supporters.listStreams",
-    "supporters.leaderboard",
-    "supporters.viewerTotals",
-    "debug",
-  ],
+  streamOps: ["streamRecap", "streamSessionSummaries", "supporters", "debug"],
   config: [
     // configBackup.access is the caller's role, read from Convex.
     "configBackup.exportConfig",

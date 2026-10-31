@@ -14,3 +14,8 @@ export function useSupporterLeaderboardRequest() {
 export function useViewerSupportTotalsRequest() {
   return useEngineGateway().streamOps.useViewerSupportTotalsRequest();
 }
+
+/** Looks a viewer up on Twitch by login or id. */
+export function useTwitchViewerRequest() {
+  return useEngineGateway().streamOps.useTwitchViewerRequest();
+}

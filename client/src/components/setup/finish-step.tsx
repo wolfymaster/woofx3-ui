@@ -1,7 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { starterPacksForInterests } from "@convex/lib/setupInterests";
-import { findStarterPack } from "@convex/lib/starterPacks";
 import type { SetupModuleInstall, SetupPackInstall, SetupStatus } from "@convex/setup";
+import { findStarterPack } from "@shared/starter-packs";
 import { AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";

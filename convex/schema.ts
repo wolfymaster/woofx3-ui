@@ -479,7 +479,7 @@ export default defineSchema({
     connectedByUserId: v.optional(v.string()),
     // When Twitch last refused this link's refresh token: the creator revoked
     // the app or changed their password. Cleared by a relink or a successful
-    // refresh. Drives the "Reconnect Twitch" banner (lib/twitchScopeHealth.ts).
+    // refresh. Drives the "Reconnect Twitch" banner (shared/twitch-scope-health.ts).
     authFailedAt: v.optional(v.number()),
   }).index("by_instance", ["instanceId"]),
 
@@ -1105,7 +1105,7 @@ export default defineSchema({
     // See instanceTriggers.by_trigger.
     .index("by_widget", ["widgetId"]),
 
-  // starterPackItems: which starter pack items (convex/lib/starterPacks.ts) an
+  // starterPackItems: which starter pack items (shared/starter-packs.ts) an
   // instance has installed, and the engine workflow or command each became.
   // A row is written as "installing" before the engine call, so a second
   // install racing the first finds it and skips the item instead of creating

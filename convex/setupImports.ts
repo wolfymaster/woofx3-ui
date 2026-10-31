@@ -1,5 +1,6 @@
 import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { COUNTER_KIND } from "@shared/resource-kinds";
+import type { StarterCatalog } from "@shared/starter-packs";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -32,7 +33,6 @@ import {
   type ImportWorkflowSpec,
   itemReadiness,
 } from "./lib/setupImport/types";
-import type { StarterCatalog } from "./lib/starterPacks";
 import { isInstanceMember } from "./lib/teamAccess";
 import { findResourceKind } from "./resourceKinds";
 import { starterCatalog } from "./starterPacks";

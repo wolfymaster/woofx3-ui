@@ -12,7 +12,6 @@ import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import {
   type GettingStartedAction,
   type GettingStartedItem,
@@ -116,7 +115,6 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
   const items = gettingStartedItems({
     setup,
     overlays,
-    browserSourceUrl: overlays.featuredKey ? browserSourceUrlForKey(overlays.featuredKey) : null,
     doneItemIds: state.doneItemIds,
     obsStatus,
   });

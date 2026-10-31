@@ -8,6 +8,18 @@ export const directKeys = {
     all: ["status"] as const,
     liveState: () => ["status", "liveState"] as const,
   },
+  streamOps: {
+    all: ["streamOps"] as const,
+    allRecaps: ["streamOps", "recaps"] as const,
+    recentRecaps: (limit: number) => ["streamOps", "recaps", "recent", limit] as const,
+    recap: (sessionId: string) => ["streamOps", "recaps", "session", sessionId] as const,
+  },
+  eventLog: {
+    all: ["eventLog"] as const,
+    allPages: ["eventLog", "pages"] as const,
+    payload: (logId: string) => ["eventLog", "payload", logId] as const,
+    pages: (eventType: string | null) => ["eventLog", "pages", eventType] as const,
+  },
   alertQueue: {
     all: ["alertQueue"] as const,
     alerts: (limit: number) => ["alertQueue", "alerts", limit] as const,
@@ -28,6 +40,8 @@ export const directKeys = {
     allWidgetThemes: ["scenes", "widgetThemes"] as const,
     widgetThemes: (widgetCanonicalId: string) => ["scenes", "widgetThemes", widgetCanonicalId] as const,
     alertTargetUsage: (engineSceneId: string) => ["scenes", "alertTargetUsage", engineSceneId] as const,
+    /** The scenes' overlay tokens, as the go-live checklist checks them. */
+    browserSources: () => ["scenes", "browserSources"] as const,
   },
   workflows: {
     all: ["workflows"] as const,
@@ -59,6 +73,11 @@ export const directKeys = {
   twitch: {
     all: ["twitch"] as const,
     link: () => ["twitch", "link"] as const,
+  },
+  goLive: {
+    all: ["goLive"] as const,
+    /** Whether a "Stream start" marker waits for the stream to go live; the desktop host's answer, not the engine's. */
+    marker: () => ["goLive", "marker"] as const,
   },
   shoutouts: {
     all: ["shoutouts"] as const,
