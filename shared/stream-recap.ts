@@ -77,6 +77,9 @@ export const RECAP_EVENT_LIMIT = 1000;
 /** Supporters shown per leaderboard on a recap. */
 export const RECAP_LEADERBOARD_LIMIT = 5;
 
+/** The most recaps one list read returns. */
+export const MAX_RECENT_RECAPS = 50;
+
 export interface RecapSupporter {
   platformUserId: string;
   userName: string | null;
