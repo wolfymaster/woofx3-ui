@@ -1,10 +1,11 @@
 import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { useCallback } from "react";
 import type { OverlaysGateway } from "@/engine/gateway";
 import type { SceneId } from "@/engine/types";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { fromSceneId } from "./ids";
+import { useScopeInstanceId } from "./scope";
 
 // The engine mints the overlay token a scene's URL carries; Convex keeps it
 // behind a stable key of its own, served at its /browser-source/<key> route,
@@ -36,7 +37,13 @@ function usePreviewUrlRequest() {
   );
 }
 
+function useKnownPreviewUrl(engineSceneId: string) {
+  const instanceId = useScopeInstanceId();
+  return useQuery(api.scenes.previewUrlByEngineSceneId, instanceId ? { instanceId, engineSceneId } : "skip");
+}
+
 export const convexOverlaysGateway: OverlaysGateway = {
+  useKnownPreviewUrl,
   useBrowserSourceUrlRequest,
   useRotateBrowserSourceUrlRequest,
   usePreviewUrlRequest,
