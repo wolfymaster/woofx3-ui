@@ -32,6 +32,7 @@ import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
+import { $relayLimitation } from "@/lib/relay-limitation";
 import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
@@ -140,18 +141,19 @@ function InstanceBar() {
   );
 }
 
-type EngineConnection = "connected" | "upgrading" | "disconnected";
+type EngineConnection = "connected" | "limited" | "upgrading" | "disconnected";
 
 const ENGINE_CONNECTION: Record<EngineConnection, { label: string; dot: string; text: string }> = {
   connected: { label: "Connected", dot: "bg-green-500", text: "text-green-600 dark:text-green-400" },
+  limited: { label: "Limited", dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
   upgrading: { label: "Upgrading", dot: "bg-blue-500", text: "text-blue-600 dark:text-blue-400" },
   disconnected: { label: "Disconnected", dot: "bg-muted-foreground", text: "text-muted-foreground" },
 };
 
 /** An engine that is down for an upgrade is not a lost connection, so it is named for what it is. */
-function engineConnection(connected: boolean, upgrading: boolean): EngineConnection {
+function engineConnection(connected: boolean, upgrading: boolean, relayLimited: boolean): EngineConnection {
   if (connected) {
-    return "connected";
+    return relayLimited ? "limited" : "connected";
   }
   return upgrading ? "upgrading" : "disconnected";
 }
@@ -160,7 +162,9 @@ function StatusBar() {
   const { connected } = useEngineHealth();
   const engineVersion = useEngineVersion(connected);
   const liveState = useLiveState();
-  const connection = ENGINE_CONNECTION[engineConnection(connected, useEngineUpgrading())];
+  const relayLimitation = useStore($relayLimitation);
+  const connectionState = engineConnection(connected, useEngineUpgrading(), relayLimitation !== null);
+  const connection = ENGINE_CONNECTION[connectionState];
 
   const isLive = liveState?.isLive ?? false;
   const startedAt = isLive ? liveState?.startedAt : undefined;
@@ -169,12 +173,20 @@ function StatusBar() {
     <div className="h-7 bg-card border-t border-border flex items-center px-4 text-xs shrink-0">
       <div className="flex-1 flex items-center gap-2 min-w-0">
         <span className={cn("h-1.5 w-1.5 rounded-full", connection.dot)} />
-        <span
-          className={cn("font-semibold uppercase tracking-wider", connection.text)}
-          data-testid="status-engine-connection"
-        >
-          {connection.label}
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn("font-semibold uppercase tracking-wider", connection.text)}
+              data-testid="status-engine-connection"
+              data-state={connectionState}
+            >
+              {connection.label}
+            </span>
+          </TooltipTrigger>
+          {connectionState === "limited" && relayLimitation && (
+            <TooltipContent>{relayLimitation.detail}</TooltipContent>
+          )}
+        </Tooltip>
         <span className="text-muted-foreground font-mono truncate" data-testid="status-engine-version">
           {formatEngineVersion(engineVersion)}
         </span>
