@@ -1,8 +1,8 @@
-import type { RelayView } from "@desktop-host/window";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { $relayLimitation } from "@/lib/relay-limitation";
-import { integrations, onIntegrationsChange, reconnectRelay } from "./host";
+import { reconnectRelay } from "./host";
 import { RELAY_GRACE_MS, relayCondition, relayDownSince } from "./relay-condition";
+import { useIntegrations } from "./use-integrations";
 
 /**
  * Keeps the status bar's picture of the relay current. It renders nothing:
@@ -10,32 +10,10 @@ import { RELAY_GRACE_MS, relayCondition, relayDownSince } from "./relay-conditio
  * may talk to the host, so the shared status bar reads a store instead.
  */
 export default function RelayWatch() {
-  const [view, setView] = useState<RelayView | null>(null);
+  const { relay: view } = useIntegrations();
   const downSince = useRef<number | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    const unlisten = onIntegrationsChange((next) => setView(next.relay));
-    integrations().then(
-      (current) => {
-        if (!cancelled) {
-          setView(current.relay);
-        }
-      },
-      (err: unknown) => {
-        console.error("Couldn't read the relay's state from the host", err);
-      }
-    );
-    return () => {
-      cancelled = true;
-      void unlisten.then((stop) => stop());
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!view) {
-      return;
-    }
     const publish = () => {
       const condition = relayCondition(view, downSince.current, Date.now());
       $relayLimitation.set(

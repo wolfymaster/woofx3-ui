@@ -18,7 +18,7 @@
       {
         "label": "companion",
         "create": false,
-        "title": "woofx3 local connections",
+        "title": "woofx3 connection status",
         "url": "companion/index.html",
         "width": 480,
         "height": 560,

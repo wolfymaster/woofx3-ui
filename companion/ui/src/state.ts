@@ -41,14 +41,5 @@ export const commands = {
   unpair: () => call(COMMANDS.unpair),
   /** Settles only if installing fails: on success the companion restarts. */
   installUpdate: () => call(COMMANDS.install_update),
-  setEndpointEnabled: (moduleId: string, endpointId: string, enabled: boolean) =>
-    call(COMMANDS.set_endpoint_enabled, { moduleId, endpointId, enabled }),
-  confirmAddress: (moduleId: string, endpointId: string, address: string) =>
-    call(COMMANDS.confirm_address, { moduleId, endpointId, address }),
-  // Not `useDiscovered`, which lint rules would take for a React hook.
-  chooseDiscovered: (moduleId: string, endpointId: string) => call(COMMANDS.use_discovered, { moduleId, endpointId }),
-  setSharePassword: (moduleId: string, endpointId: string, share: boolean) =>
-    call(COMMANDS.set_share_password, { moduleId, endpointId, share }),
-  testEndpoint: (moduleId: string, endpointId: string) => call(COMMANDS.test_endpoint, { moduleId, endpointId }),
   reconnectRelay: () => call(COMMANDS.reconnect_relay),
 };

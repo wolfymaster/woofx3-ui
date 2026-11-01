@@ -20,7 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::future::BoxFuture;
 use futures::StreamExt;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{watch, Notify};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -256,6 +256,49 @@ impl Integrations {
         self.publish();
     }
 
+    /// Asks in a dialog the host draws, for the choices that decide what the
+    /// bridge may dial or what leaves this computer. The dashboard window only
+    /// requests them, so a bug in what it renders can't make them on its own.
+    async fn ask_streamer(&self, title: &str, description: String) -> Result<(), String> {
+        let window = self.app.get_webview_window(crate::DASHBOARD_WINDOW);
+        let title = title.to_string();
+        let confirmed = tauri::async_runtime::spawn_blocking(move || {
+            let mut dialog = rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Warning)
+                .set_title(title)
+                .set_description(description)
+                .set_buttons(rfd::MessageButtons::OkCancel);
+            if let Some(window) = &window {
+                dialog = dialog.set_parent(window);
+            }
+            matches!(dialog.show(), rfd::MessageDialogResult::Ok)
+        })
+        .await
+        .map_err(|err| format!("Could not ask for confirmation: {err}"))?;
+        if confirmed {
+            Ok(())
+        } else {
+            Err("Not confirmed, so nothing changed.".to_string())
+        }
+    }
+
+    /// The module's display name, or its id if it is no longer installed.
+    fn module_name(&self, module_id: &str) -> String {
+        lock(&self.inner)
+            .integrations
+            .as_ref()
+            .and_then(|integrations| {
+                integrations
+                    .modules
+                    .iter()
+                    .find(|module| module.module_id == module_id)
+            })
+            .map_or_else(
+                || module_id.to_string(),
+                |module| module.module_name.clone(),
+            )
+    }
+
     /// The running session and the endpoint as an installed module declares
     /// it, or why the window cannot act on it.
     fn target(
@@ -378,6 +421,17 @@ impl Integrations {
         input: &str,
     ) -> Result<(), String> {
         let address = ConfirmedAddress::confirmed(input).map_err(|err| format!("{err:#}"))?;
+        let (_session, endpoint) = self.target(module_id, endpoint_id)?;
+        self.ask_streamer(
+            "Connect to this address?",
+            format!(
+                "Let {} reach {} at {}?\n\nYour cloud engine will be able to talk to whatever answers at this address, through this computer.",
+                self.module_name(module_id),
+                endpoint.name,
+                address.display(),
+            ),
+        )
+        .await?;
         self.store_address(module_id, endpoint_id, address).await
     }
 
@@ -430,6 +484,18 @@ impl Integrations {
         let (session, endpoint) = self.target(module_id, endpoint_id)?;
         if share && !can_share_password(module_id, &endpoint) {
             return Err("This endpoint has no password the companion can send.".to_string());
+        }
+        if share {
+            self.ask_streamer(
+                "Send this password?",
+                format!(
+                    "Send the {} password found on this computer to woofx3, so {} ({}) on your cloud engine can sign in?\n\nIt is stored in your engine's settings for this module.",
+                    endpoint.name,
+                    self.module_name(module_id),
+                    module_id,
+                ),
+            )
+            .await?;
         }
         let key = endpoint_key(module_id, endpoint_id);
         let entry = self
@@ -1004,6 +1070,8 @@ impl Runner {
                     .discoveries
                     .insert(key.clone(), discovery);
                 if let Some(found) = &found {
+                    self.connect_first_discovery(&snapshot, &module.module_id, endpoint)
+                        .await;
                     self.follow_port(&module.module_id, endpoint, found.port)
                         .await;
                     self.report(&module.module_id, endpoint, found).await;
@@ -1011,6 +1079,40 @@ impl Runner {
             }
         }
         self.integrations.publish();
+    }
+
+    /// Turns on an endpoint found on this computer the first time it is seen.
+    /// Installing the module already approved its local endpoints, and a
+    /// discovered address is loopback. A stored entry means the streamer has
+    /// had a say, so turning it off stays off. The password stays their choice.
+    async fn connect_first_discovery(
+        &self,
+        snapshot: &InstanceIntegrations,
+        module_id: &str,
+        endpoint: &LocalEndpoint,
+    ) {
+        let key = endpoint_key(module_id, &endpoint.id);
+        if !snapshot.relay_available
+            || !endpoint.bridgeable()
+            || self.integrations.store.get(&key).is_some()
+        {
+            return;
+        }
+        let connected = match self
+            .integrations
+            .use_discovered(module_id, &endpoint.id)
+            .await
+        {
+            Ok(()) => {
+                self.integrations
+                    .set_enabled(module_id, &endpoint.id, true)
+                    .await
+            }
+            Err(err) => Err(err),
+        };
+        if let Err(err) = connected {
+            eprintln!("[companion] could not turn on a discovered endpoint: {err}");
+        }
     }
 
     /// OBS's port changed: an enabled endpoint dialling the discovered

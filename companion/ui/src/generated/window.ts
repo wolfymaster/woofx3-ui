@@ -238,6 +238,7 @@ export type OpenTwitchSignInArgs = { nonceHash: string, };
 
 export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
+export const OPEN_LOCAL_CONNECTIONS_EVENT = "companion://open-local-connections";
 export const SHOUTOUT_QUEUE_EVENT = "companion://shoutout-queue";
 export const STREAM_START_MARKER_EVENT = "companion://stream-start-marker";
 

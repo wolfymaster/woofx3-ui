@@ -40,7 +40,8 @@ pub const COMMAND_NAMES: &[&str] = crate::with_command_names!(command_name_list)
 
 /// The commands the dashboard window may call: running the app's local mode,
 /// and in companion mode signing in with Twitch through the system browser
-/// and making this computer the signed-in instance's companion. The companion window may call every other command. Each
+/// and making this computer the signed-in instance's companion, and managing
+/// its local connections. The companion window may call every other command. Each
 /// window's capability grants exactly its set (companion/src-tauri/capabilities).
 pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "local_engine_session",
@@ -56,12 +57,16 @@ pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "begin_app_link",
     "finish_app_link",
     "open_twitch_sign_in",
+    "set_endpoint_enabled",
+    "confirm_address",
+    "use_discovered",
+    "set_share_password",
+    "test_endpoint",
 ];
 
 /// The commands both windows may call, kept apart from
 /// [`DASHBOARD_COMMAND_NAMES`] because that list's commands are denied to the
-/// companion window. The companion window shows the relay in detail, and the
-/// dashboard's status bar reports it too.
+/// companion window. Both windows report the relay.
 pub const SHARED_COMMAND_NAMES: &[&str] = &["get_integrations", "reconnect_relay"];
 
 /// The mode this app runs in, and whether the streamer chose it. Until they
@@ -197,6 +202,9 @@ pub const STATE_EVENT: &str = "companion://state";
 
 /// Carries [`IntegrationsView`] after every change.
 pub const INTEGRATIONS_EVENT: &str = "companion://integrations";
+
+/// Asks the dashboard to show this computer's local connections. No payload.
+pub const OPEN_LOCAL_CONNECTIONS_EVENT: &str = "companion://open-local-connections";
 
 /// Carries the shoutout queue's view after every change. Local mode
 /// only.
