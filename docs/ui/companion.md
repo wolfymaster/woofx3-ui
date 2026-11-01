@@ -72,7 +72,7 @@ Twitch sign-in runs in the system browser, since the window cannot follow twitch
 
 In dev, `bun run dev` in `companion/` starts both dev servers: the dashboard on port 1421 (the app's `devUrl`), which proxies `/companion` to the companion window's server on 1420.
 
-The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin, and frames only from Twitch's player and clips.
+The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin. Frames may come from any `https:` origin or the local engine, because scene and alert previews frame a page served by the engine, whose address differs per deployment. A remote frame holds no capability, so it can't call the app's commands.
 
 ### Twitch sign-in in the desktop app
 
