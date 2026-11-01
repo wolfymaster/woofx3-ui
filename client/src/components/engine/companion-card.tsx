@@ -47,7 +47,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
       await revoke({ companionId });
       setConfirmOpen(false);
     } catch (error) {
-      toast({ title: "Couldn't revoke companion", description: errorMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't revoke the desktop app", description: errorMessage(error), variant: "destructive" });
     } finally {
       setRevoking(false);
     }
@@ -58,9 +58,9 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Companion</CardTitle>
+        <CardTitle>Desktop app</CardTitle>
         <CardDescription>
-          The computer paired with this instance through the woofx3 companion app. Pairing another computer replaces it.
+          The computer paired with this instance through the woofx3 desktop app. Pairing another computer replaces it.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -68,7 +68,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         ) : companion === null ? (
           <p className="text-sm text-muted-foreground" data-testid="text-no-companion">
-            No companion paired. Install the woofx3 companion on your streaming PC to connect OBS and other local apps.
+            No computer paired. Install the woofx3 desktop app on your streaming PC to connect OBS and other local apps.
           </p>
         ) : (
           <div className="flex flex-wrap items-center gap-3" data-testid="row-companion">
@@ -118,9 +118,9 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Revoke companion?</AlertDialogTitle>
+            <AlertDialogTitle>Revoke desktop app?</AlertDialogTitle>
             <AlertDialogDescription>
-              The companion on {companion?.deviceName} stops working at once and must be paired again.
+              The woofx3 desktop app on {companion?.deviceName} stops working at once and must be paired again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

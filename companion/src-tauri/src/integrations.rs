@@ -329,7 +329,7 @@ impl Integrations {
         if enabled {
             if !endpoint.bridgeable() {
                 return Err(format!(
-                    "{} can't be connected through the companion yet.",
+                    "{} can't be connected through the woofx3 desktop app yet.",
                     endpoint.name
                 ));
             }
