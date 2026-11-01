@@ -18,12 +18,11 @@ interface WidgetCardProps {
   canDrag: boolean;
   /** Opens with its settings showing, as a widget just added does. */
   startOpen: boolean;
-  newId: () => string;
   onChange: (widget: PageWidget) => void;
   onRemove: () => void;
 }
 
-export function WidgetCard({ widget, path, problems, canDrag, startOpen, newId, onChange, onRemove }: WidgetCardProps) {
+export function WidgetCard({ widget, path, problems, canDrag, startOpen, onChange, onRemove }: WidgetCardProps) {
   const [open, setOpen] = useState(startOpen);
   const definition = PAGE_WIDGETS[widget.type];
   const problemCount = problems.countUnder(path);
@@ -74,7 +73,6 @@ export function WidgetCard({ widget, path, problems, canDrag, startOpen, newId, 
               onChange={onChange}
               path={fieldPath(path, "config")}
               problems={problems}
-              newId={newId}
             />
           </CollapsibleContent>
         </Collapsible>

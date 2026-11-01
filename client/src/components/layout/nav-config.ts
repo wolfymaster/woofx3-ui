@@ -97,6 +97,7 @@ export const STREAM_ITEMS: NavItem[] = [
       { id: "timers", label: "Timers", icon: STREAM_OBJECT_ICONS.timers, href: "/stream/timers" },
       { id: "queues", label: "Queues", icon: STREAM_OBJECT_ICONS.queues, href: "/stream/queues" },
       { id: "schedules", label: "Schedules", icon: STREAM_OBJECT_ICONS.schedules, href: "/stream/schedules" },
+      { id: "forms", label: "Forms", icon: STREAM_OBJECT_ICONS.forms, href: "/stream/forms" },
       { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
     ],
   },
@@ -163,7 +164,7 @@ export function isNavItemActive(item: NavItem, location: string): boolean {
 
 /**
  * `items` with `extra` nested under Alerts, ahead of Workflows: the resource kinds
- * installed modules declare, beside the built-in counters, timers, queues and schedules.
+ * installed modules declare, beside the built-in counters, timers, queues, schedules and forms.
  * `items` comes back unchanged when it has no Alerts entry.
  */
 export function withAlertsChildren(items: NavItem[], extra: NavItem[]): NavItem[] {

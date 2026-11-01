@@ -1,5 +1,5 @@
 import type { PageContent, PageSection, SectionVisibility } from "./page";
-import type { BindableResourceKind, PageWidget, PageWidgetConfig } from "./widgets";
+import type { BindableResourceKind, FormDefinition, PageWidget, PageWidgetConfig } from "./widgets";
 
 /**
  * A published page as a visitor receives it. Bindings are replaced by the
@@ -11,7 +11,7 @@ import type { BindableResourceKind, PageWidget, PageWidgetConfig } from "./widge
  * A bound resource's current value as the engine stores it (null before it is
  * first written), and only the settings needed to read it: what
  * `counterValue`, `counterGoals` and `timerState` in
- * client/src/lib/resource-values.ts take. Timers are passed through as
+ * client/src/lib/resource-values.ts take, or a form's definition. Timers are passed through as
  * `{ running: true, endsAt }` or `{ running: false, remainingMs }`, so the
  * viewer's browser counts down without Convex writing every second.
  */
@@ -34,7 +34,8 @@ export type PublicPageWidget =
   | {
       id: string;
       type: "form";
-      config: PageWidgetConfig<"form">;
+      /** Null when there is no form to show: it was deleted, or has no questions yet. */
+      form: FormDefinition | null;
       /** False when this viewer could not send it right now: the page's queue is full, or anonymous answers are off. */
       accepting: boolean;
     }

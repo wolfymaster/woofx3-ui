@@ -20,6 +20,7 @@ import {
   runDeliveryPass,
   type SubmissionTransport,
 } from "./lib/userPageFormDelivery";
+import { refreshPageStateSettings } from "./lib/userPageState";
 import { backoffDelayMs, SUBMISSION_DELIVERY } from "./lib/userPageSubmissions";
 import { type Fixture, fixture } from "./lib/userPages.fixtures";
 import { EDGE_SECRET_ENV, EDGE_SECRET_HEADER, EDGE_SECRET_NEXT_ENV } from "./lib/viewerEdgeGate";
@@ -37,13 +38,46 @@ const FIELDS: FormField[] = [
 ];
 const ANSWERS = { song: "Never", mood: "hype", ok: true };
 
-function formSection(visibility: SectionVisibility = { kind: "public" }, fields: FormField[] = FIELDS): PageSection {
+const FORM = "woofx3:form:requests";
+
+function formSection(visibility: SectionVisibility = { kind: "public" }): PageSection {
   return {
     id: "requests",
     region: "main",
     visibility,
-    widgets: [{ id: "form1", type: "form", config: { title: "Requests", submitLabel: "Send", fields } }],
+    widgets: [{ id: "form1", type: "form", config: { resource: FORM } }],
   };
+}
+
+/** Writes the form as the mirror does, so a published page follows it the way it follows a real edit. */
+async function setForm(f: Fixture, fields: FormField[], title = "Requests"): Promise<void> {
+  const settings = { title, submitLabel: "Send", fields };
+  await f.t.run(async (ctx) => {
+    const existing = await ctx.db
+      .query("moduleResourceInstances")
+      .withIndex("by_instance_canonical", (q) => q.eq("instanceId", f.instanceId).eq("canonicalId", FORM))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { settings });
+    } else {
+      const module = await ctx.db.query("moduleRepository").first();
+      if (!module) {
+        throw new Error("fixture has no module");
+      }
+      await ctx.db.insert("moduleResourceInstances", {
+        instanceId: f.instanceId,
+        moduleId: module._id,
+        engineInstanceId: "uuid-form",
+        resourceInstanceId: "requests",
+        moduleName: "woofx3",
+        kind: "form",
+        displayName: "Requests",
+        canonicalId: FORM,
+        settings,
+      });
+    }
+    await refreshPageStateSettings(ctx, f.instanceId, FORM, settings);
+  });
 }
 
 function withSections(sections: PageSection[]): PageContent {
@@ -62,12 +96,13 @@ async function publish(f: Fixture, page: PageContent): Promise<void> {
 
 async function formFixture(section: PageSection = formSection()): Promise<Fixture> {
   const f = await fixture();
+  await setForm(f, FIELDS);
   await publish(f, withSections([section]));
   return f;
 }
 
 function submitBody(overrides: Record<string, unknown> = {}) {
-  return { slug: "wolfy", formId: "form1", idempotencyKey: generateOpaqueToken(), answers: ANSWERS, ...overrides };
+  return { slug: "wolfy", widgetId: "form1", idempotencyKey: generateOpaqueToken(), answers: ANSWERS, ...overrides };
 }
 
 function post(f: Fixture, body: unknown, secret: string | null = EDGE_SECRET): Promise<Response> {
@@ -231,36 +266,66 @@ describe("submitting", () => {
     expect(scheduled.some((job) => job.name.includes("deliverInstance"))).toBe(true);
   });
 
-  test("a later page edit does not change a queued snapshot", async () => {
+  test("a later edit of the form does not change a queued snapshot", async () => {
     const f = await formFixture();
     await post(f, submitBody({ turnstileToken: "t" }));
     const renamed = FIELDS.map((field) => ({ ...field, label: `${field.label} (new)` }));
-    await publish(f, withSections([formSection({ kind: "public" }, renamed)]));
+    await setForm(f, renamed);
     expect((await rows(f))[0].fields[0].label).toBe("Song");
   });
 
-  test("text a page published before the checks holds is cleaned in the snapshot", async () => {
+  test("a delivered row names the form by canonical id, not its place on the page", async () => {
     const f = await formFixture();
-    await f.t.run(async (ctx) => {
-      const page = await ctx.db.query("userPages").first();
-      const revision = page?.publishedRevisionId ? await ctx.db.get(page.publishedRevisionId) : null;
-      if (!revision) {
-        throw new Error("no published revision");
-      }
-      const fields = FIELDS.map((field) => ({ ...field, label: `${field.label}\0` }));
-      await ctx.db.patch(revision._id, {
-        content: withSections([
-          {
-            ...formSection({ kind: "public" }, fields),
-            widgets: [{ id: "form1", type: "form", config: { title: "T\0", submitLabel: "Send", fields } }],
-          },
-        ]),
-      });
+    await post(f, submitBody({ turnstileToken: "t" }));
+    expect((await rows(f))[0].formId).toBe(FORM);
+  });
+
+  test("a form whose stored settings break the rules takes no answers", async () => {
+    const f = await formFixture();
+    await setForm(
+      f,
+      FIELDS.map((field) => ({ ...field, label: `${field.label}\0` }))
+    );
+    expect(await refusal(await post(f, submitBody({ turnstileToken: "t" })))).toEqual({
+      status: 409,
+      code: "form_stale",
     });
-    expect((await post(f, submitBody({ turnstileToken: "t" }))).status).toBe(200);
-    const [row] = await rows(f);
-    expect(row.formTitle).toBe("T");
-    expect(row.fields.map((field) => field.label)).toEqual(["Song", "Mood", "I follow"]);
+  });
+
+  test("a deleted form takes no answers and reads as unavailable", async () => {
+    const f = await formFixture();
+    await f.t.mutation(internal.moduleResourceInstances.deleteFromWebhook, {
+      instanceId: f.instanceId,
+      instance: {
+        id: "uuid-form",
+        moduleId: "m",
+        moduleName: "woofx3",
+        kind: "form",
+        instanceId: "requests",
+        displayName: "Requests",
+        canonicalId: FORM,
+        moduleKey: "",
+      },
+    });
+    expect(await refusal(await post(f, submitBody({ turnstileToken: "t" })))).toEqual({
+      status: 409,
+      code: "form_stale",
+    });
+    const lookup = await f.t.query(api.userPagesPublic.bySlug, { slug: "wolfy" });
+    if (lookup.kind !== "page" || lookup.sections[0].kind !== "open") {
+      throw new Error("expected an open section");
+    }
+    expect(lookup.sections[0].widgets[0]).toMatchObject({ type: "form", form: null });
+  });
+
+  test("the public page carries the definition and no canonical id", async () => {
+    const f = await formFixture();
+    const lookup = await f.t.query(api.userPagesPublic.bySlug, { slug: "wolfy" });
+    if (lookup.kind !== "page" || lookup.sections[0].kind !== "open") {
+      throw new Error("expected an open section");
+    }
+    expect(lookup.sections[0].widgets[0]).toMatchObject({ id: "form1", form: { title: "Requests", fields: FIELDS } });
+    expect(JSON.stringify(lookup)).not.toContain(FORM);
   });
 
   test("a repeated key returns ok, writes one row and spends no second check", async () => {
@@ -287,7 +352,7 @@ describe("submitting", () => {
     const f = await formFixture();
     const attempt = {
       slug: "wolfy",
-      formId: "form1",
+      widgetId: "form1",
       idempotencyKey: generateOpaqueToken(),
       answers: Object.entries(ANSWERS).map(([id, value]) => ({ id, value })),
       sessionToken: null,
@@ -307,9 +372,9 @@ describe("submitting", () => {
     ["a question was removed", "form1", { ...ANSWERS, gone: "x" }],
     ["a question changed type", "form1", { ...ANSWERS, ok: "yes" }],
     ["a choice is no longer offered", "form1", { ...ANSWERS, mood: "sad" }],
-  ])("refuses as stale when %s", async (_name, formId, answers) => {
+  ])("refuses as stale when %s", async (_name, widgetId, answers) => {
     const f = await formFixture();
-    expect(await refusal(await post(f, submitBody({ formId, answers, turnstileToken: "t" })))).toEqual({
+    expect(await refusal(await post(f, submitBody({ widgetId, answers, turnstileToken: "t" })))).toEqual({
       status: 409,
       code: "form_stale",
     });
@@ -485,7 +550,7 @@ describe("Turnstile", () => {
     const f = await formFixture();
     const result = await f.t.mutation(internal.userPageForms.acceptSubmission, {
       slug: "wolfy",
-      formId: "form1",
+      widgetId: "form1",
       idempotencyKey: generateOpaqueToken(),
       answers: Object.entries(ANSWERS).map(([id, value]) => ({ id, value })),
       sessionToken: null,
@@ -534,7 +599,7 @@ async function seedPending(f: Fixture, count: number): Promise<Id<"pageSubmissio
         await ctx.db.insert("pageSubmissions", {
           instanceId: f.instanceId,
           pageId,
-          formId: "form1",
+          formId: FORM,
           idempotencyKey: `seeded-key-${i}-aaaaaaaa`,
           submittedAt: now - 1000 + i,
           viewer: null,
@@ -613,7 +678,7 @@ describe("delivery", () => {
     expect(seen).toMatchObject({
       submissionId: id,
       pageId: await pageIdOf(f),
-      formId: "form1",
+      formId: FORM,
       viewer: null,
       fields: [{ id: "song", label: "Song", type: "text", value: "0" }],
     });
@@ -861,9 +926,10 @@ describe("the dashboard", () => {
   test("a member sees submissions; a stranger sees none", async () => {
     const f = await formFixture();
     await seedPending(f, 2);
-    const args = { instanceId: f.instanceId, paginationOpts: { numItems: 10, cursor: null } };
+    const args = { instanceId: f.instanceId, formId: FORM, paginationOpts: { numItems: 10, cursor: null } };
     const seen = await f.member.query(api.userPageForms.listSubmissions, args);
     expect(seen.page).toHaveLength(2);
+    expect((await f.member.query(api.userPageForms.listSubmissions, { ...args, formId: "other" })).page).toEqual([]);
     expect(seen.page[0].fields[0].value).toBe("1");
     expect((await f.stranger.query(api.userPageForms.listSubmissions, args)).page).toEqual([]);
     expect(await f.stranger.query(api.userPageForms.queueStatus, { instanceId: f.instanceId })).toBeNull();

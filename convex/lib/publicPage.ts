@@ -1,14 +1,15 @@
-import type {
-  PageContent,
-  PageSection,
-  PageWidget,
-  PageWidgetConfig,
-  PublicLiveStatus,
-  PublicPageLookup,
-  PublicPageSection,
-  PublicPageWidget,
-  PublicResourceState,
-  SectionRequirement,
+import {
+  type PageContent,
+  type PageSection,
+  type PageWidget,
+  type PageWidgetConfig,
+  type PublicLiveStatus,
+  type PublicPageLookup,
+  type PublicPageSection,
+  type PublicPageWidget,
+  type PublicResourceState,
+  parseFormDefinition,
+  type SectionRequirement,
 } from "@shared/user-pages";
 import type { Doc } from "../_generated/dataModel";
 import { gatedOnRoles, type PageViewer, type SectionAccess, sectionAccess } from "./sectionAccess";
@@ -53,7 +54,12 @@ function toPublicWidget(widget: PageWidget, sources: PublicPageSources): PublicP
     case "live-status":
       return { ...widget, live: toPublicLiveStatus(widget.config, sources.live) };
     case "form":
-      return { ...widget, accepting: sources.formsAccepting };
+      return {
+        id: widget.id,
+        type: "form",
+        form: parseFormDefinition(sources.states.get(widget.config.resource)?.settings),
+        accepting: sources.formsAccepting,
+      };
     case "text":
     case "links":
     case "image":

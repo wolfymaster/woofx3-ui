@@ -7,6 +7,7 @@ import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
 import { convexDashboardGateway } from "./dashboard";
 import { convexEventLogGateway } from "./event-log";
+import { convexFormSubmissionsGateway } from "./form-submissions";
 import { convexGoLiveGateway } from "./go-live";
 import { convexMacrosGateway } from "./macros";
 import { convexMarketplaceGateway } from "./marketplace";
@@ -65,6 +66,7 @@ export const convexEngineGateway: EngineGateway = {
   shoutouts: convexShoutoutsGateway,
   twitchChat: convexTwitchChatGateway,
   clips: convexClipsGateway,
+  formSubmissions: convexFormSubmissionsGateway,
   streamInfo: convexStreamInfoGateway,
   goLive: convexGoLiveGateway,
   pageIntros: convexPageIntrosGateway,

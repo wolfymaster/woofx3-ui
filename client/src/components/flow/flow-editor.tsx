@@ -1,3 +1,4 @@
+import { FORM_KIND } from "@shared/resource-kinds";
 import {
   ArrowDown,
   ArrowUp,
@@ -18,6 +19,7 @@ import { ObjectActionPicker } from "@/components/flow/object-action-picker";
 import { StepInlineEditor } from "@/components/flow/step-inline-editor";
 import { TriggerConfigPanel } from "@/components/flow/trigger-config-panel";
 import { Button } from "@/components/ui/button";
+import { useResourceInstancesOfKind } from "@/engine/hooks/use-module-resources";
 import type { FlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
@@ -36,6 +38,7 @@ import {
   stepForPick,
   stepNumbers,
 } from "@/lib/flow-tree";
+import { FORM_SUBMITTED_EVENT, formAnswerVariables } from "@/lib/form-kind";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { SceneRow } from "@/lib/scene-field-options";
 import { type StepSummary, stepSummary } from "@/lib/step-summary";
@@ -381,6 +384,9 @@ export function FlowEditor({
     [tree.trigger, catalogTriggers]
   );
 
+  const formRows = useResourceInstancesOfKind(tree.trigger.event === FORM_SUBMITTED_EVENT ? FORM_KIND : null);
+  const formAnswers = useMemo(() => formAnswerVariables(tree.trigger, formRows ?? []), [tree.trigger, formRows]);
+
   const renderEditor = useCallback(
     (step: StepNode) => {
       const availableVariables = computeAvailableVariables(
@@ -388,7 +394,8 @@ export function FlowEditor({
         step.id,
         catalogActions,
         catalogTriggers,
-        triggerVariables
+        triggerVariables,
+        formAnswers
       );
       return (
         <StepInlineEditor
@@ -411,6 +418,7 @@ export function FlowEditor({
       catalogLoading,
       existingStepIds,
       triggerVariables,
+      formAnswers,
       onChange,
       rename,
       triggerRow,
@@ -431,7 +439,14 @@ export function FlowEditor({
         conditionFields:
           step.type === "condition"
             ? conditionSourcesFor(
-                computeAvailableVariables(tree, step.id, catalogActions, catalogTriggers),
+                computeAvailableVariables(
+                  tree,
+                  step.id,
+                  catalogActions,
+                  catalogTriggers,
+                  triggerVariables,
+                  formAnswers
+                ),
                 triggerRow,
                 conditionSupport
               ).fields

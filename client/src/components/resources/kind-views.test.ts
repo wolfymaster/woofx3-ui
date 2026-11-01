@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { COUNTER_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, FORM_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { kindViewFor } from "@/components/resources/kind-views";
 
 describe("kindViewFor", () => {
   test("has a view made for each built-in kind", () => {
-    for (const kind of [COUNTER_KIND, TIMER_KIND, QUEUE_KIND, SCHEDULE_KIND]) {
+    for (const kind of [COUNTER_KIND, TIMER_KIND, QUEUE_KIND, SCHEDULE_KIND, FORM_KIND]) {
       expect(kindViewFor(kind)).not.toBeNull();
     }
   });

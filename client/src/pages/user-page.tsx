@@ -18,12 +18,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageLook } from "@/components/user-page/page-look";
 import { SectionCard } from "@/components/user-page/section-card";
 import { SortableList } from "@/components/user-page/sortable";
-import { SubmissionsPanel } from "@/components/user-page/submissions-panel";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { toast } from "@/hooks/use-toast";
@@ -298,76 +296,57 @@ function UserPageEditor({
         )}
       </div>
 
-      <Tabs defaultValue="page" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="page" data-testid="tab-page-editor">
-            Page
-          </TabsTrigger>
-          <TabsTrigger value="submissions" data-testid="tab-submissions">
-            Submissions
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="submissions">
-          <SubmissionsPanel instanceId={instanceId} />
-        </TabsContent>
-        {/* Stays mounted while hidden, so unsaved edits aren't lost by looking at submissions. */}
-        <TabsContent value="page" forceMount className="data-[state=inactive]:hidden">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="min-w-0 space-y-8">
-              {regions.map((region) => {
-                const sections = sectionsInRegion(state.content, region);
-                return (
-                  <RegionGroup
-                    key={region}
-                    region={region}
-                    count={sections.length}
-                    canAdd={canAddSection}
-                    onAdd={() => dispatch({ type: "addSection", id: newPageId(), region })}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-8">
+          {regions.map((region) => {
+            const sections = sectionsInRegion(state.content, region);
+            return (
+              <RegionGroup
+                key={region}
+                region={region}
+                count={sections.length}
+                canAdd={canAddSection}
+                onAdd={() => dispatch({ type: "addSection", id: newPageId(), region })}
+              >
+                {sections.length > 0 && (
+                  <SortableList
+                    ids={sections.map((section) => section.id)}
+                    onMove={(sectionId, overSectionId) => dispatch({ type: "moveSection", sectionId, overSectionId })}
+                    className="space-y-3"
                   >
-                    {sections.length > 0 && (
-                      <SortableList
-                        ids={sections.map((section) => section.id)}
-                        onMove={(sectionId, overSectionId) =>
-                          dispatch({ type: "moveSection", sectionId, overSectionId })
-                        }
-                        className="space-y-3"
-                      >
-                        {sections.map((section) => (
-                          <SectionCard
-                            key={section.id}
-                            section={section}
-                            layout={state.content.layout}
-                            path={itemPath("sections", sectionIndex(state.content, section.id))}
-                            problems={problems}
-                            canDrag={sections.length > 1}
-                            pageHasRoom={pageHasRoom}
-                            addedWidgetId={addedWidgetId}
-                            newId={newPageId}
-                            onAddWidget={onAddWidget}
-                            dispatch={dispatch}
-                          />
-                        ))}
-                      </SortableList>
-                    )}
-                  </RegionGroup>
-                );
-              })}
-              <PageWideProblems problems={problems} />
-            </div>
+                    {sections.map((section) => (
+                      <SectionCard
+                        key={section.id}
+                        section={section}
+                        layout={state.content.layout}
+                        path={itemPath("sections", sectionIndex(state.content, section.id))}
+                        problems={problems}
+                        canDrag={sections.length > 1}
+                        pageHasRoom={pageHasRoom}
+                        addedWidgetId={addedWidgetId}
+                        onAddWidget={onAddWidget}
+                        dispatch={dispatch}
+                      />
+                    ))}
+                  </SortableList>
+                )}
+              </RegionGroup>
+            );
+          })}
+          <PageWideProblems problems={problems} />
+        </div>
 
-            <aside className="lg:sticky lg:top-6 lg:self-start">
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-base">Look</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <PageLook content={state.content} problems={problems} dispatch={dispatch} />
-                </CardContent>
-              </Card>
-            </aside>
-          </div>
-        </TabsContent>
-      </Tabs>
+        <aside className="lg:sticky lg:top-6 lg:self-start">
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base">Look</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PageLook content={state.content} problems={problems} dispatch={dispatch} />
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }

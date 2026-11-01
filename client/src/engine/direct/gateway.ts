@@ -8,6 +8,7 @@ import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
+import { directFormSubmissionsGateway } from "./form-submissions";
 import { directGoLiveGateway } from "./go-live";
 import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
@@ -84,6 +85,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     shoutouts: directShoutoutsGateway(runtime, host.shoutoutQueue),
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
+    formSubmissions: directFormSubmissionsGateway,
     streamInfo: directStreamInfoGateway(runtime),
     goLive: directGoLiveGateway(runtime, host.streamStartMarkers),
     pageIntros: directPageIntrosGateway(runtime),

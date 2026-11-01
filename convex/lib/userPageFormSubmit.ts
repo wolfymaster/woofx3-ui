@@ -5,6 +5,7 @@ import {
   type FormField,
   type FormRefusalCode,
   hasUndeliverableText,
+  parseFormDefinition,
   USER_PAGE_LIMITS,
 } from "@shared/user-pages";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -20,7 +21,8 @@ import { pageViewerFor, viewerFromSession } from "./viewerSessionAuth";
 /** One submit as the route read it. Answers stay entries here because Convex records refuse some key names. */
 export interface SubmissionAttempt {
   slug: string;
-  formId: string;
+  /** The placed widget's id. Visitors never see a canonical id, so this is how they name a form. */
+  widgetId: string;
   idempotencyKey: string;
   answers: { id: string; value: string | boolean }[];
   sessionToken: string | null;
@@ -31,6 +33,8 @@ export interface FreshSubmission {
   kind: "fresh";
   instanceId: Id<"instances">;
   pageId: Id<"userPages">;
+  /** The form instance's canonical id. */
+  formId: string;
   viewer: Doc<"pageSubmissions">["viewer"];
   formTitle: string | undefined;
   fields: Doc<"pageSubmissions">["fields"];
@@ -42,12 +46,12 @@ function refused(code: FormRefusalCode): SubmissionEvaluation {
   return { kind: "refused", code };
 }
 
-/** The form a published page holds under `formId`, and the section that holds it. */
-function findForm(content: Doc<"userPageRevisions">["content"], formId: string, viewer: PageViewer) {
+/** The form placed at `widgetId` on a published page, and the section that holds it. */
+function findForm(content: Doc<"userPageRevisions">["content"], widgetId: string, viewer: PageViewer) {
   for (const { section, access } of sectionsForViewer(content, viewer)) {
     for (const widget of section.widgets) {
-      if (widget.id === formId && widget.type === "form") {
-        return { config: widget.config, access };
+      if (widget.id === widgetId && widget.type === "form") {
+        return { resource: widget.config.resource, access };
       }
     }
   }
@@ -90,8 +94,8 @@ export async function evaluateSubmission(ctx: QueryCtx, attempt: SubmissionAttem
   }
   const repeat = await ctx.db
     .query("pageSubmissions")
-    .withIndex("by_page_and_form_and_idempotency_key", (q) =>
-      q.eq("pageId", page._id).eq("formId", attempt.formId).eq("idempotencyKey", attempt.idempotencyKey)
+    .withIndex("by_page_and_idempotency_key", (q) =>
+      q.eq("pageId", page._id).eq("idempotencyKey", attempt.idempotencyKey)
     )
     .first();
   if (repeat) {
@@ -108,15 +112,23 @@ export async function evaluateSubmission(ctx: QueryCtx, attempt: SubmissionAttem
   }
   const pageViewer = await pageViewerFor(ctx, instanceId, signedIn);
   const { content } = await requireRevision(ctx, page.publishedRevisionId);
-  const form = findForm(content, attempt.formId, pageViewer);
+  const form = findForm(content, attempt.widgetId, pageViewer);
   if (!form) {
     return refused("form_stale");
   }
   if (form.access.kind === "locked") {
     return refused("section_locked");
   }
+  const state = await ctx.db
+    .query("userPageState")
+    .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", form.resource))
+    .unique();
+  const definition = parseFormDefinition(state?.settings);
+  if (!definition) {
+    return refused("form_stale");
+  }
   const answers: FormAnswers = Object.fromEntries(attempt.answers.map((answer) => [answer.id, answer.value]));
-  const checked = checkFormAnswers(form.config.fields, answers);
+  const checked = checkFormAnswers(definition.fields, answers);
   if (checked.kind === "stale") {
     return refused("form_stale");
   }
@@ -142,6 +154,7 @@ export async function evaluateSubmission(ctx: QueryCtx, attempt: SubmissionAttem
     kind: "fresh",
     instanceId,
     pageId: page._id,
+    formId: form.resource,
     viewer: signedIn
       ? {
           platform: signedIn.platform,
@@ -151,9 +164,9 @@ export async function evaluateSubmission(ctx: QueryCtx, attempt: SubmissionAttem
         }
       : null,
     formTitle:
-      form.config.title === undefined
+      definition.title === undefined
         ? undefined
-        : deliverableText(form.config.title, USER_PAGE_LIMITS.deliveredTextLength),
-    fields: snapshotFields(form.config.fields, answers),
+        : deliverableText(definition.title, USER_PAGE_LIMITS.deliveredTextLength),
+    fields: snapshotFields(definition.fields, answers),
   };
 }

@@ -2280,7 +2280,8 @@ export default defineSchema({
     deliveredAt: v.optional(v.number()),
     receipt: v.optional(v.union(v.literal("recorded"), v.literal("duplicate"))),
   })
-    .index("by_page_and_form_and_idempotency_key", ["pageId", "formId", "idempotencyKey"])
+    .index("by_page_and_idempotency_key", ["pageId", "idempotencyKey"])
+    .index("by_instance_and_form_and_submitted_at", ["instanceId", "formId", "submittedAt"])
     .index("by_instance_and_status_and_next_attempt_at", ["instanceId", "status", "nextAttemptAt"])
     .index("by_instance_and_submitted_at", ["instanceId", "submittedAt"])
     .index("by_status_and_delivered_at", ["status", "deliveredAt"]),

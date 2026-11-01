@@ -57,7 +57,7 @@ export function manifestModuleName(manifest: unknown, fallback: string): string 
 
 /**
  * The kinds the bundled woofx3 module declares, which the first-party Counters,
- * Timers, Queues and Schedules pages show. A kind is identified by its module and its name,
+ * Timers, Queues, Schedules and Forms pages show. A kind is identified by its module and its name,
  * `{module}:{kind}`, because two modules may each declare a kind of the same name.
  */
 export const WOOFX3_MODULE = "woofx3";
@@ -65,6 +65,7 @@ export const COUNTER_KIND = "woofx3:counter";
 export const TIMER_KIND = "woofx3:timer";
 export const QUEUE_KIND = "woofx3:queue";
 export const SCHEDULE_KIND = "woofx3:schedule";
+export const FORM_KIND = "woofx3:form";
 
 /** A `resourceKind` value split: `module` is absent for a bare kind. */
 export interface KindRef {

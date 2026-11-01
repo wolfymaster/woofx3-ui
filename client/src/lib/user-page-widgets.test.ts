@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { checkPageContent, type FormField, USER_PAGE_LIMITS } from "@shared/user-pages";
 import {
-  formAnswerReference,
+  checkFormQuestions,
+  type FormField,
+  type PageProblem,
+  ProblemReport,
+  USER_PAGE_LIMITS,
+} from "@shared/user-pages";
+import {
   formFieldOfType,
   newFormField,
   nudge,
@@ -11,26 +16,12 @@ import {
   widgetSummary,
 } from "@/lib/user-page-widgets";
 
-test("formAnswerReference is the path the form trigger's data takes", () => {
-  expect(formAnswerReference("a-1")).toBe("${trigger.data.answers.a-1}");
-});
-
 describe("newFormField", () => {
   test("passes the shared checks once it has a question", () => {
     const field = { ...newFormField("q1"), label: "Your name?" };
-    const result = checkPageContent({
-      layout: "single",
-      theme: { accent: "violet" },
-      sections: [
-        {
-          id: "s1",
-          region: "main",
-          visibility: { kind: "public" },
-          widgets: [{ id: "w1", type: "form", config: { submitLabel: "Send", fields: [field] } }],
-        },
-      ],
-    });
-    expect(result.ok).toBe(true);
+    const problems: PageProblem[] = [];
+    checkFormQuestions([field], ProblemReport.root(problems));
+    expect(problems).toEqual([]);
   });
 });
 
@@ -111,6 +102,6 @@ describe("widgetSummary", () => {
     expect(widgetSummary({ id: "w", type: "links", config: { links: [{ label: "a", url: "https://a" }] } })).toBe(
       "1 link"
     );
-    expect(widgetSummary({ id: "w", type: "form", config: { submitLabel: "Send", fields: [] } })).toBe("0 questions");
+    expect(widgetSummary({ id: "w", type: "form", config: { resource: "" } })).toBe("Not chosen yet");
   });
 });

@@ -14,12 +14,14 @@ import type { MutationCtx } from "../_generated/server";
 /**
  * The settings a visitor's browser needs to read each kind's value: what
  * `counterValue`, `counterGoals` and `timerState` in
- * client/src/lib/resource-values.ts read, which this must match. Nothing else
- * an instance was created with is published.
+ * client/src/lib/resource-values.ts read, which this must match, and what
+ * parseFormDefinition reads. Nothing else an instance was created with is
+ * published.
  */
 const PUBLIC_SETTING_KEYS: Record<BindableResourceKind, readonly string[]> = {
   "woofx3:counter": ["initialValue", "goals"],
   "woofx3:timer": ["duration"],
+  "woofx3:form": ["title", "submitLabel", "fields"],
 };
 
 export function publicSettings(kind: BindableResourceKind, settings: unknown): Record<string, unknown> {
@@ -125,6 +127,14 @@ export async function refreshPageStateValue(
     return;
   }
   await ctx.db.patch(row._id, { value, updatedAt: Date.now() });
+}
+
+/** A resource was deleted: a published form then reads as unavailable rather than taking answers for it. */
+export async function dropPageState(ctx: MutationCtx, instanceId: Id<"instances">, canonicalId: string): Promise<void> {
+  const row = await stateRow(ctx, instanceId, canonicalId);
+  if (row) {
+    await ctx.db.delete(row._id);
+  }
 }
 
 /** A resource's settings changed: the same, for the settings a visitor sees. */

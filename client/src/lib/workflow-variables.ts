@@ -139,9 +139,12 @@ export function computeAvailableVariables(
   currentNodeId: string,
   catalogActions: CatalogActionRow[],
   catalogTriggers: CatalogTriggerRow[],
-  triggerVariables?: readonly VariableOption[]
+  triggerVariables?: readonly VariableOption[],
+  /** What this particular trigger hands its steps beyond what its catalog entry declares. */
+  extraTriggerVariables: readonly VariableOption[] = []
 ): VariableOption[] {
   const options = triggerVariables ? [...triggerVariables] : catalogTriggerVariables(tree, catalogTriggers);
+  options.push(...extraTriggerVariables);
 
   const predecessors = collectPredecessorSteps(tree.steps, currentNodeId) ?? [];
   for (const step of predecessors) {

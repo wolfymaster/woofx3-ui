@@ -4,7 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
-import { refreshPageStateSettings } from "./lib/userPageState";
+import { dropPageState, refreshPageStateSettings } from "./lib/userPageState";
 import { findResourceKind } from "./resourceKinds";
 
 const resourceInstanceValidator = v.object({
@@ -251,6 +251,7 @@ export const reconcileForModule = internalMutation({
     for (const row of liveRows) {
       if (!seen.has(row.canonicalId)) {
         await ctx.db.delete(row._id);
+        await dropPageState(ctx, instanceId, row.canonicalId);
       }
     }
 
@@ -273,6 +274,7 @@ export const deleteFromWebhook = internalMutation({
     if (existing) {
       await ctx.db.delete(existing._id);
     }
+    await dropPageState(ctx, instanceId, instance.canonicalId);
   },
 });
 

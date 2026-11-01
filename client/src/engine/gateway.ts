@@ -50,6 +50,9 @@ import type {
   EventLogSelection,
   EventLogSettings,
   EventWatch,
+  FormSubmission,
+  FormSubmissionId,
+  FormSubmissionQueueStatus,
   GoLiveCheckId,
   GoLiveChecklistState,
   GoLiveCompletion,
@@ -258,6 +261,7 @@ export interface EngineGateway {
   readonly shoutouts: ShoutoutsGateway;
   readonly twitchChat: TwitchChatGateway;
   readonly clips: ClipsGateway;
+  readonly formSubmissions: FormSubmissionsGateway;
   readonly streamInfo: StreamInfoGateway;
   readonly goLive: GoLiveGateway;
   readonly pageIntros: PageIntrosGateway;
@@ -943,6 +947,17 @@ export interface TwitchChatGateway {
   useSendShoutoutRequest(): (login: string) => Promise<void>;
   /** Everyone in chat now, one page of up to a thousand. */
   useChattersRequest(): () => Promise<Chatter[]>;
+}
+
+/** The answers a page form has received, held in the outbox until the engine confirms each. */
+export interface FormSubmissionsGateway {
+  /** False where forms have no outbox: a local engine has no public page yet. */
+  readonly supported: boolean;
+  /** A form's submissions by its canonical id, newest first. */
+  useList(formId: string, initialNumItems: number): Paginated<FormSubmission>;
+  /** Null when the caller can't see it; undefined while loading. */
+  useQueueStatus(): FormSubmissionQueueStatus | null | undefined;
+  useRetryRequest(): (submissionId: FormSubmissionId) => Promise<void>;
 }
 
 export interface ClipsGateway {

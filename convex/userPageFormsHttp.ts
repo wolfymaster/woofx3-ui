@@ -67,10 +67,10 @@ export function parseSubmitBody(raw: unknown): (SubmissionAttempt & { turnstileT
     return null;
   }
   const body = raw as Record<string, unknown>;
-  const { slug, formId, idempotencyKey, answers, sessionToken, turnstileToken } = body;
+  const { slug, widgetId, idempotencyKey, answers, sessionToken, turnstileToken } = body;
   if (
     !isCleanString(slug, MAX_SLUG_LENGTH) ||
-    !isCleanString(formId, USER_PAGE_LIMITS.idLength) ||
+    !isCleanString(widgetId, USER_PAGE_LIMITS.idLength) ||
     typeof idempotencyKey !== "string" ||
     !isFormIdempotencyKey(idempotencyKey) ||
     typeof answers !== "object" ||
@@ -101,7 +101,7 @@ export function parseSubmitBody(raw: unknown): (SubmissionAttempt & { turnstileT
   }
   return {
     slug,
-    formId,
+    widgetId,
     idempotencyKey,
     answers: parsed,
     sessionToken: sessionToken ?? null,

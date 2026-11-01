@@ -3,6 +3,7 @@ import {
   emptyFormAnswers,
   type FormAnswers,
   type FormAnswerValue,
+  type FormDefinition,
   type FormField,
 } from "@shared/user-pages";
 import { type FormEvent, useCallback, useId, useRef, useState } from "react";
@@ -48,30 +49,33 @@ type FormPhase =
 export function FormWidget({ widget }: { widget: WidgetOf<"form"> }) {
   const viewer = usePageViewer();
   const forms = usePageForms();
+  if (widget.form === null) {
+    return <p className="text-sm text-muted">This form isn't available right now.</p>;
+  }
   const availability = formAvailability(widget.accepting, viewer, forms.turnstileSiteKey);
   return (
     <div>
-      {widget.config.title !== undefined && <h3 className="text-lg font-semibold">{widget.config.title}</h3>}
+      {widget.form.title !== undefined && <h3 className="text-lg font-semibold">{widget.form.title}</h3>}
       {availability === "open" ? (
-        <OpenForm widget={widget} viewer={viewer} forms={forms} />
+        <OpenForm widgetId={widget.id} form={widget.form} viewer={viewer} forms={forms} />
       ) : (
-        <ClosedForm widget={widget} availability={availability} canonicalUrl={viewer.canonicalUrl} />
+        <ClosedForm form={widget.form} availability={availability} canonicalUrl={viewer.canonicalUrl} />
       )}
     </div>
   );
 }
 
 function ClosedForm({
-  widget,
+  form,
   availability,
   canonicalUrl,
 }: {
-  widget: WidgetOf<"form">;
+  form: FormDefinition;
   availability: Exclude<FormAvailability, "open">;
   canonicalUrl: string;
 }) {
   const id = useId();
-  const answers = emptyFormAnswers(widget.config.fields);
+  const answers = emptyFormAnswers(form.fields);
   return (
     <form aria-describedby={`${id}-closed`} onSubmit={(event) => event.preventDefault()}>
       <p id={`${id}-closed`} className="mt-1 text-sm text-muted">
@@ -84,7 +88,7 @@ function ClosedForm({
         )}
       </p>
       <fieldset disabled className="mt-4 flex flex-col gap-4">
-        {widget.config.fields.map((field) => (
+        {form.fields.map((field) => (
           <FormFieldView
             key={field.id}
             field={field}
@@ -94,15 +98,25 @@ function ClosedForm({
             onChange={() => {}}
           />
         ))}
-        <SubmitButton label={widget.config.submitLabel} />
+        <SubmitButton label={form.submitLabel} />
       </fieldset>
     </form>
   );
 }
 
-function OpenForm({ widget, viewer, forms }: { widget: WidgetOf<"form">; viewer: PageViewer; forms: PageForms }) {
+function OpenForm({
+  widgetId,
+  form,
+  viewer,
+  forms,
+}: {
+  widgetId: string;
+  form: FormDefinition;
+  viewer: PageViewer;
+  forms: PageForms;
+}) {
   const id = useId();
-  const { fields } = widget.config;
+  const { fields } = form;
   const [answers, setAnswers] = useState<FormAnswers>(() => emptyFormAnswers(fields));
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
   const [phase, setPhase] = useState<FormPhase>({ kind: "editing" });
@@ -151,7 +165,7 @@ function OpenForm({ widget, viewer, forms }: { widget: WidgetOf<"form">; viewer:
     setPhase({ kind: "sending" });
     const result = await forms.submit({
       slug: forms.slug,
-      formId: widget.id,
+      widgetId,
       idempotencyKey: idempotencyKey.current,
       answers,
       ...(sessionToken !== null ? { sessionToken } : {}),
@@ -195,7 +209,7 @@ function OpenForm({ widget, viewer, forms }: { widget: WidgetOf<"form">; viewer:
         {phase.kind === "failed" && (
           <FormFailureNotice copy={phase.copy} onReload={forms.reload} onSignIn={viewer.signIn} />
         )}
-        <SubmitButton label={sending ? "Sending…" : widget.config.submitLabel} />
+        <SubmitButton label={sending ? "Sending…" : form.submitLabel} />
       </fieldset>
     </form>
   );
