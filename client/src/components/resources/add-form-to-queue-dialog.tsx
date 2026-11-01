@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   useCreateResourceInstanceRequest,
   useResourceInstancesOfKind,
@@ -23,6 +24,7 @@ import {
   formQueueEntryChoices,
   formQueueWorkflowTree,
   QUEUE_ADD_ACTION_REF,
+  reviewQueueFor,
 } from "@/lib/form-kind";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { resourceActions } from "@/lib/resource-actions";
@@ -64,6 +66,7 @@ export function AddFormToQueueDialog({
   const [queueName, setQueueName] = useState("");
   const [entryChoice, setEntryChoice] = useState(choices[0].value);
   const [customEntry, setCustomEntry] = useState("");
+  const [review, setReview] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const creatingQueue = queue === NEW_QUEUE;
@@ -73,7 +76,8 @@ export function AddFormToQueueDialog({
     !loading &&
     workflows !== undefined &&
     queue !== "" &&
-    (!creatingQueue || (newQueueId !== "" && queueKind)) &&
+    (!creatingQueue || newQueueId !== "") &&
+    (!(creatingQueue || review) || queueKind) &&
     entry !== "" &&
     !saving;
 
@@ -105,23 +109,44 @@ export function AddFormToQueueDialog({
           settings: getDefaultConfigValues(parseConfigFields(queueKind?.schema)) as Record<string, unknown>,
         });
       }
+      const chosenQueue = queues?.find((row) => row.canonicalId === queue);
+      const queueLabel = chosenQueue ? resourceName(chosenQueue) : queueName.trim();
+      let entriesGoTo = queueId;
+      if (review) {
+        const reviewQueue = reviewQueueFor(queues ?? [], queueId, queueLabel);
+        if (reviewQueue.kind === "existing") {
+          entriesGoTo = reviewQueue.canonicalId;
+        } else {
+          entriesGoTo = `${WOOFX3_MODULE}:queue:${reviewQueue.resourceInstanceId}`;
+          await createQueue({
+            moduleName: WOOFX3_MODULE,
+            kind: "queue",
+            resourceInstanceId: reviewQueue.resourceInstanceId,
+            displayName: reviewQueue.displayName,
+            settings: {
+              ...(getDefaultConfigValues(parseConfigFields(queueKind?.schema)) as Record<string, unknown>),
+              approveInto: queueId,
+            },
+          });
+        }
+      }
       const tree = formQueueWorkflowTree({
         triggerPreset: trigger.preset,
         conditionFields: conditionFieldsOf(trigger.preset),
         order: nextTriggerOrder(eventTriggers(workflows, FORM_SUBMITTED_EVENT)),
         form: { fieldId: trigger.fieldId, value: formId },
         queueAdd: queueAdd.preset,
-        queue: { fieldId: queueAdd.fieldId, value: queueId },
+        queue: { fieldId: queueAdd.fieldId, value: entriesGoTo },
         entry,
       });
       const { id: _unsaved, ...definition } = treeToDefinition(tree);
-      const chosenQueue = queues?.find((row) => row.canonicalId === queue);
-      const queueLabel = chosenQueue ? resourceName(chosenQueue) : queueName.trim();
       const { engineWorkflowId } = await createWorkflow(
         escapeDollarKeys({ ...definition, name: `${formName} answers join ${queueLabel}` })
       );
       await setEnabled(engineWorkflowId, true);
-      toast({ title: `Answers now join ${queueLabel}` });
+      toast({
+        title: review ? `Answers now wait for review before joining ${queueLabel}` : `Answers now join ${queueLabel}`,
+      });
       onClose();
     } catch (err) {
       toast({
@@ -207,6 +232,21 @@ export function AddFormToQueueDialog({
               </p>
             </div>
           )}
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <Label htmlFor={`${id}-review`}>Review answers first</Label>
+              <p className="text-xs text-muted-foreground">
+                Answers wait in a separate queue until you approve them, so nothing reaches this queue, or a scene
+                showing it, without you seeing it first.
+              </p>
+            </div>
+            <Switch
+              id={`${id}-review`}
+              checked={review}
+              onCheckedChange={setReview}
+              data-testid="switch-form-queue-review"
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

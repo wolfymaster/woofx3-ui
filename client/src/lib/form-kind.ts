@@ -86,3 +86,20 @@ export function formQueueWorkflowTree(options: FormQueueWorkflowOptions): Workfl
     ),
   };
 }
+
+/** The review queue that approves into `queueId`, or how to create one when there is none yet. */
+export function reviewQueueFor(
+  queues: readonly { canonicalId: string; settings?: unknown }[],
+  queueId: string,
+  queueLabel: string
+): { kind: "existing"; canonicalId: string } | { kind: "create"; resourceInstanceId: string; displayName: string } {
+  const existing = queues.find((row) => {
+    const settings = row.settings as Record<string, unknown> | null | undefined;
+    return settings?.approveInto === queueId;
+  });
+  if (existing) {
+    return { kind: "existing", canonicalId: existing.canonicalId };
+  }
+  const instance = queueId.split(":").pop() ?? "";
+  return { kind: "create", resourceInstanceId: `${instance}_review`, displayName: `${queueLabel} review` };
+}
