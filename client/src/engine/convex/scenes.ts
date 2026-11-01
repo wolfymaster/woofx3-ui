@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
+import { useConvex, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback, useEffect, useState } from "react";
 import type { ScenesGateway } from "@/engine/gateway";
@@ -163,6 +163,24 @@ function useRepairRequest() {
   return useCallback((engineSceneId: string) => repairScene({ engineSceneId }), [repairScene]);
 }
 
+function usePrewarmEditor() {
+  const convex = useConvex();
+  const instanceId = useScopeInstanceId();
+  return useCallback(
+    (engineSceneId: string) => {
+      if (!instanceId) {
+        return;
+      }
+      const args = { instanceId, engineSceneId };
+      convex.prewarmQuery({ query: api.scenes.getByEngineSceneId, args });
+      convex.prewarmQuery({ query: api.scenes.previewUrlByEngineSceneId, args });
+      convex.prewarmQuery({ query: api.sceneWidgets.alertTargetUsage, args });
+      convex.prewarmQuery({ query: api.sceneWidgets.listForInstance, args: { instanceId } });
+    },
+    [convex, instanceId]
+  );
+}
+
 export const convexScenesGateway: ScenesGateway = {
   useScenes,
   useScene,
@@ -175,4 +193,5 @@ export const convexScenesGateway: ScenesGateway = {
   useWidgetThemes,
   useEditorSessionRequest,
   useRepairRequest,
+  usePrewarmEditor,
 };

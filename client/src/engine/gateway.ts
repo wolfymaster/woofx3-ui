@@ -572,6 +572,11 @@ export interface ScenesGateway {
    * rest. Needs `scenes.repair`.
    */
   useRepairRequest(): (engineSceneId: string) => Promise<SceneRepairResult>;
+  /**
+   * Starts reading what a scene's editor opens with, for a pointer heading for
+   * the scene, so the editor has it on its first render.
+   */
+  usePrewarmEditor(): (engineSceneId: string) => void;
 }
 
 /**
@@ -810,6 +815,11 @@ export interface TwitchLinkGateway {
 
 /** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
 export interface OverlaysGateway {
+  /**
+   * The scene's preview URL when one is already known, without asking for one
+   * to be made. Null when `usePreviewUrlRequest` has to be asked.
+   */
+  useKnownPreviewUrl(engineSceneId: string): Live<string | null>;
   /**
    * The URL OBS loads the scene from, made on first ask and the same after
    * that until rotated. Rejects for a scene that has not reached the engine.
