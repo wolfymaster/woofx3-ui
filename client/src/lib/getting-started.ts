@@ -1,8 +1,7 @@
 import type { ObsStatus } from "@convex/lib/engineObsStatus";
 import { platformSettingsItemId } from "@convex/lib/gettingStarted";
 import type { SetupStatus } from "@convex/setup";
-import type { GoLiveOverlayFacts } from "@/engine/types";
-import type { CheckFix } from "@/lib/go-live-checks";
+import type { OverlayFacts } from "@/engine/types";
 import { installedModulePath } from "@/lib/marketplace-route";
 import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
 
@@ -28,6 +27,9 @@ export type GettingStartedAction =
   | { kind: "mark-command-done"; label: string }
   | { kind: "mark-platform-settings-done"; label: string; marketplaceModuleId: string };
 
+/** A button on an item: go somewhere, or copy a value. */
+export type CheckFix = { kind: "route"; label: string; href: string } | { kind: "copy"; label: string; text: string };
+
 export interface GettingStartedItem {
   id: GettingStartedItemId;
   title: string;
@@ -48,7 +50,7 @@ export interface GettingStartedFacts {
     | "engineRegistered"
     | "platformsNeedingSettings"
   >;
-  overlays: GoLiveOverlayFacts;
+  overlays: OverlayFacts;
   /** Items the card recorded itself; see MANUAL_GETTING_STARTED_ITEM_IDS. */
   doneItemIds: readonly string[];
   /**
@@ -181,7 +183,7 @@ function twitchItem(setup: GettingStartedFacts["setup"]): GettingStartedItem {
   });
 }
 
-function overlayItem(overlays: GoLiveOverlayFacts): GettingStartedItem {
+function overlayItem(overlays: OverlayFacts): GettingStartedItem {
   const title = "Overlay added to OBS";
   if (overlays.lastLoadedAt !== null) {
     return item("overlay", title, "done", "OBS has loaded your overlay");

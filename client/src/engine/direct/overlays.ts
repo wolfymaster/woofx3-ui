@@ -1,8 +1,10 @@
 import { ENGINE_CAPABILITIES } from "@woofx3/api";
+import { GatewayUnsupportedError } from "@/engine/errors";
 import type { OverlaysGateway } from "@/engine/gateway";
-import type { SceneId } from "@/engine/types";
+import type { OverlayFacts, ReadOptions, SceneId } from "@/engine/types";
 import { fromSceneId } from "./ids";
-import { useEngineRequest } from "./query";
+import { directKeys as k } from "./keys";
+import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 
 /** The engine's status of an overlay token that still opens its scene. */
@@ -56,7 +58,32 @@ export function directOverlaysGateway(runtime: DirectRuntime): OverlaysGateway {
     return browserSourceUrl(sceneId);
   };
 
+  const factsRead: EngineRead<OverlayFacts> = {
+    queryKey: k.scenes.browserSources(),
+    queryFn: async () => {
+      if (!runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
+        throw new GatewayUnsupportedError("overlays.useFacts");
+      }
+      const [{ scenes }, tokens] = await Promise.all([
+        runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots()),
+        runtime.call("listOverlayTokens", (api) => api.listOverlayTokens()),
+      ]);
+      const sceneIds = new Set(scenes.filter((scene) => scene.kind === "scene").map((scene) => scene.id));
+      const active = tokens
+        .filter((token) => token.status === ACTIVE_TOKEN && sceneIds.has(token.sceneId))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return {
+        hasScene: sceneIds.size > 0,
+        browserSourceKeyCount: active.length,
+        featuredUrl: active[0]?.url ?? null,
+        // The engine does not record when a browser source loads its URL.
+        lastLoadedAt: null,
+      };
+    },
+  };
+
   return {
+    useFacts: ({ enabled = true }: ReadOptions = {}) => useEngineQuery(runtime, factsRead, { enabled }),
     // A local engine answers the request itself about as fast as a read.
     useKnownPreviewUrl: () => null,
     useBrowserSourceUrlRequest: () => useEngineRequest(browserSourceUrl),

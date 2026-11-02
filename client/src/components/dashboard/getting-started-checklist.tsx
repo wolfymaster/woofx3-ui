@@ -7,19 +7,19 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useGoLiveOverlayFacts } from "@/engine/hooks/use-go-live";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
+import { useOverlayFacts } from "@/engine/hooks/use-overlays";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
+  type CheckFix,
   type GettingStartedAction,
   type GettingStartedItem,
   type GettingStartedStatus,
   gettingStartedItems,
   gettingStartedProgress,
 } from "@/lib/getting-started";
-import type { CheckFix } from "@/lib/go-live-checks";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
 import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
 import { cn } from "@/lib/utils";
@@ -91,7 +91,7 @@ export interface GettingStarted {
  */
 export function useGettingStarted(instanceId: Id<"instances"> | null): GettingStarted | null {
   const setup = useQuery(api.setup.status, instanceId ? { instanceId } : "skip");
-  const overlays = useGoLiveOverlayFacts();
+  const overlays = useOverlayFacts();
   const state = useQuery(api.gettingStarted.state, instanceId ? { instanceId } : "skip");
   const markDone = useMutation(api.gettingStarted.markDone);
   const dismissMutation = useMutation(api.gettingStarted.dismiss);

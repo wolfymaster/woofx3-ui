@@ -29,7 +29,7 @@ export const dispatch = action({
     } catch (error) {
       // A production deployment replaces a plain Error's message with "Server
       // Error"; the engine's refusal (module not installed, no such field) is
-      // what the picker and the go live OBS check show and tell apart.
+      // what the picker shows and tells apart.
       throw new ConvexError(error instanceof Error ? error.message : String(error));
     }
     return { correlationKey: args.correlationKey };

@@ -69,7 +69,6 @@ settings do (see [Data sources](#data-sources)).
 | Type | Category | Notes |
 |------|----------|-------|
 | `stream-status` | stream | Live/offline, viewers, uptime |
-| `go-live` | stream | Pre-flight checklist before a stream; also a page at `/stream/go-live` — see below |
 | `events` | stream | Everything that happened on stream, with the alerts it played — see below |
 | `activity` | stream | The events feed and saved highlights, as tabs |
 | `stream-info` | stream | Title, category, tags, saved presets and stream markers — see below |
@@ -168,62 +167,6 @@ rather than replacing one, so it is registered once, without types, and pushes
 its fixed set; listeners still take only their own types, and a listener that
 passes `null` (the Events widget on such an engine) takes everything.
 
-## Go live checklist
-
-A pre-flight run just before going live, so a broken setup is found by the
-streamer and not by the viewers. The same component
-(`components/go-live/go-live-checklist.tsx`) is the `go-live` widget and the
-`/stream/go-live` page. Every check starts at once on mount and each row fills
-in as its answer lands; the checks that ask Twitch are separate Convex actions
-in `convex/goLive.ts` for exactly that reason, and the OBS check sends its own
-field-options request.
-
-| Check | Source | Notes |
-|-------|--------|-------|
-| Engine | `$engineConnected` from the transport | No request of its own |
-| Twitch connection | `goLive.checkTwitch` | Validates the token with Twitch and diffs its scopes against `TWITCH_INTEGRATION_SCOPES` |
-| Overlays | `goLive.overlays` | Scenes and OBS browser-source keys. Nothing reports whether an overlay is open in OBS right now, so the best case is a warning with the URL to copy and when a browser source last loaded one |
-| OBS | `fieldOptions.dispatch` | Asks for the options of the OBS platform module's (`woofx3_obs`) `obs.switch_scene` scene field by reference, exactly as the workflow builder's scene picker does, and reads the reply from `transientEvents`. Scenes listed pass with their count; the scene manager's `{ error }` reason (e.g. OBS not connected) warns with that reason; an engine without that field (the OBS module is not installed or lacks the field, or the engine predates field references) warns that OBS can't be checked and asks to install or update the OBS module; no reply within 15 seconds warns that OBS didn't answer. There is no OBS-specific engine call |
-| Stream info | `goLive.checkStreamInfo` | Helix `GET /channels`; warns about no title or category, a title identical to the last completed checklist, or a category unchanged for over a week |
-| Workflows | `goLive.checklist` | Warns when none is enabled; counts enabled workflows only up to 20 through `workflows.by_instance_enabled` |
-
-Whether a fact passes, warns or fails is decided in `lib/go-live-checks.ts`,
-pure and tested, next to the fix each result offers. "Fail" is kept for what
-will visibly break the stream; anything the checklist cannot confirm is a
-warning. A check can be dismissed (an instance without OBS, say): dismissals
-live in `goLiveChecklists`, one row per instance shared by the whole team, and
-never count toward the verdict.
-
-Overlays have their own query because a browser source loading its URL
-rewrites the key's `lastUsedAt`, and only that query should rerun.
-
-Finishing the checklist (`goLive.complete`) optionally posts an editable
-announcement to chat and drops a "Stream start" stream marker. Twitch only
-marks a live broadcast, and the checklist usually runs before going live, so
-an offline request is stored on the `goLiveChecklists` row and claimed by
-whichever writer first flips `instanceLiveState` to live (the STREAM_ONLINE
-webhook or the poll), which schedules `goLive.dropStreamStartMarker`. A
-request older than two hours is dropped unused (`lib/goLiveMarker.ts`). Each
-step reports its own outcome so one refusal does not hide the other. Unless
-every requested step failed, it also records the channel's title and
-category, which is what the next run's "same title as last time" is measured
-against: Twitch keeps no history of either.
-
-### In local mode
-
-The desktop app's local mode runs the same checklist through the direct
-gateway (`client/src/engine/direct/go-live.ts`), with no Convex:
-
-| Check or step | Local source |
-|---|---|
-| Twitch connection | The engine's Twitch link (`getTwitchLink`), read fresh. The engine renews its own token and records a refused renewal, which reads as Twitch no longer accepting the connection; missing scopes come from the same rules (`shared/twitch-scope-health.ts`) |
-| Overlays | The engine's scenes and active overlay tokens; the URL offered is the newest token's, served by the engine itself. The engine does not record when a browser source loads its URL, so the check never says when one last did. Token and scene events refresh it |
-| Stream info | The engine's `twitchGetChannelInformation` |
-| Workflows | The engine's workflows, counted the same way |
-| Dismissals and the last go-live | The engine's local UI settings, namespace `goLiveChecklist`: key `dismissedCheckIds` (the sorted ids) and key `lastGoLive` (when, and the title and category then) |
-| Announcement | The engine's chat send, as the broadcaster |
-| "Stream start" marker | The desktop host (`request_stream_start_marker`), which drops it now when live, else when the stream next goes live. The checklist's "waiting for the stream" note follows the host's marker event |
-
 ## Getting started checklist
 
 The getting started checklist (`client/src/components/dashboard/getting-started-checklist.tsx`) is pinned as the first rail item, above the user's own rail widgets. Its flyout lists the items in one column. While anything is left to do, the rail icon carries a dot, red when an item needs attention (a failed install, say). The rail item cannot be moved or removed in edit mode. `useGettingStarted` is called once, by the hosted catalog's pinned rail entry, and feeds both the icon and the flyout. Local mode has no account setup to finish, so its catalog pins nothing. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
@@ -234,17 +177,15 @@ The getting started checklist (`client/src/components/dashboard/getting-started-
 | Platforms installed | every chosen platform's `moduleInstalls` entry is `installed` | Retry (`setup.retryApply`) on a failure; the module page on a needs-approval |
 | Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
 | Twitch connected | the instance has a Twitch link | Connect Twitch |
-| Overlay added to OBS | a browser source has loaded a browser-source key (`goLive.overlays.lastLoadedAt`) | Copy browser-source URL, Open scenes |
+| Overlay added to OBS | a browser source has loaded a browser-source key (`browserSource.overlayFacts`, `lastLoadedAt`) | Copy browser-source URL, Open scenes |
 | Fire a test follow | the checklist fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
 | Run your first chat command | the streamer says so | See your commands, **I've tried it** |
 
 - **Items the checklist records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
 - **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the checklist (`platform-settings:<id>`).
 - **OBS connection.** On an engine with the `obs.status` capability, "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
-- **When it hides.** The rail item disappears once every item is done, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
+- **When it hides.** The rail item disappears once every item is done, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance.
 - **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
-
-Help → **Setup** reopens the setup wizard (`/setup`). Once setup is finished, it opens on the All set page.
 
 ## Notes
 
@@ -824,7 +765,6 @@ data has its own UI settings namespace (`client/src/engine/direct/dashboard.ts`,
 | `dashboardHighlights` | One per highlight id | The saved row: kind, name, detail, amount, time |
 | `macros` | One per macro id | `{ label, icon?, color?, type, config, sortOrder }`; the pad is sorted by `sortOrder`, then id |
 | `streamInfoPresets` | One per preset name | `{ title, category, tags }`; saving under a name replaces that preset |
-| `goLiveChecklist` | `dismissedCheckIds`, `lastGoLive` | See [Go live checklist in local mode](#in-local-mode) |
 
 A layout edit is a read-modify-write that writes only if no other write landed
 since the read (`updateUISetting` with the engine's `expectedRevision`), so a

@@ -77,4 +77,10 @@ describe("buildDashboardPreset", () => {
     const controls = widgets.filter((w) => w.zoneId === "0-2");
     expect(controls.length).toBe(3);
   });
+
+  test("never places the retired go-live widget", () => {
+    const widgets = buildDashboardPreset(["manage-stream"]);
+    expect(widgets.map((w) => w.type)).not.toContain("go-live");
+    expect(widgets.map((w) => w.type)).toContain("moderation");
+  });
 });
