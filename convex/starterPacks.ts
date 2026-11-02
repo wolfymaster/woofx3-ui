@@ -11,6 +11,7 @@ import {
   type StarterCatalog,
   type StarterCommandItem,
   type StarterItem,
+  type StarterPack,
   starterFeaturesFrom,
   starterItemKey,
   validateStarterValues,
@@ -141,7 +142,9 @@ type ItemClaim =
 
 /**
  * Reserve an item for installing. Runs as one transaction, so of two installs
- * racing for the same item exactly one gets `claimed`.
+ * racing for the same item exactly one gets `claimed`. With `seedOnce` an item
+ * installed once stays installed in the ledger's eyes after its engine object
+ * is deleted: what the streamer deleted must not come back.
  */
 export const claimItem = internalMutation({
   args: {
@@ -151,14 +154,21 @@ export const claimItem = internalMutation({
     kind: v.union(v.literal("workflow"), v.literal("command")),
     commandName: v.optional(v.string()),
     correlationKey: v.optional(v.string()),
+    seedOnce: v.optional(v.boolean()),
   },
-  handler: async (ctx, { instanceId, packId, itemId, kind, commandName, correlationKey }): Promise<ItemClaim> => {
+  handler: async (
+    ctx,
+    { instanceId, packId, itemId, kind, commandName, correlationKey, seedOnce }
+  ): Promise<ItemClaim> => {
     const now = Date.now();
     const existing = await ctx.db
       .query("starterPackItems")
       .withIndex("by_instance_item", (q) => q.eq("instanceId", instanceId).eq("packId", packId).eq("itemId", itemId))
       .first();
     if (existing) {
+      if (seedOnce === true && existing.status === "installed") {
+        return { state: "installed" };
+      }
       const state = await rowState(ctx, existing, now);
       if (state === "installed") {
         return { state: "installed" };
@@ -269,7 +279,7 @@ export const install = action({
     if (!bundle) {
       throw new Error("Not authorized or instance not found");
     }
-    return { results: await installStarterPack(ctx, instanceId, bundle, packId, values) };
+    return { results: await installStarterPack(ctx, instanceId, bundle, requirePack(packId), values) };
   },
 });
 
@@ -289,25 +299,48 @@ export async function installStarterPackWithDefaults(
   if (!bundle) {
     throw new Error("Instance not found");
   }
-  return installStarterPack(ctx, instanceId, bundle, packId, {});
+  return installStarterPack(ctx, instanceId, bundle, requirePack(packId), {});
+}
+
+/**
+ * Installs the seeded alerts: `installStarterPackWithDefaults` for a pack the
+ * catalog does not list, whose items are never installed twice.
+ */
+export async function installSeedPack(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  pack: StarterPack
+): Promise<StarterInstallOutcome[]> {
+  const bundle: CatalogBundle | null = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForInstance, {
+    instanceId,
+  });
+  if (!bundle) {
+    throw new Error("Instance not found");
+  }
+  return installStarterPack(ctx, instanceId, bundle, pack, {}, true);
+}
+
+function requirePack(packId: string): StarterPack {
+  const pack = findStarterPack(packId);
+  if (!pack) {
+    throw new Error(`Unknown starter pack "${packId}"`);
+  }
+  return pack;
 }
 
 async function installStarterPack(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
   bundle: CatalogBundle,
-  packId: string,
-  values: Record<string, string | number>
+  pack: StarterPack,
+  values: Record<string, string | number>,
+  seedOnce = false
 ): Promise<StarterInstallOutcome[]> {
   if (!bundle.clientId || !bundle.clientSecret) {
     throw new Error("Instance is not registered with the engine");
   }
   const instance = { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret };
 
-  const pack = findStarterPack(packId);
-  if (!pack) {
-    throw new Error(`Unknown starter pack "${packId}"`);
-  }
   const capabilities = await fetchEngineCapabilities(instance);
   const checked = validateStarterValues(pack, values, starterFeaturesFrom(capabilities.capabilities));
   if (!checked.ok) {
@@ -352,6 +385,7 @@ async function installStarterPack(
       kind: item.kind,
       commandName: item.kind === "command" ? item.command : undefined,
       correlationKey,
+      seedOnce,
     });
     if (claim.state === "installed") {
       return { itemId: item.id, outcome: "already-installed" };

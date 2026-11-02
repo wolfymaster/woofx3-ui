@@ -43,11 +43,12 @@ CONVEX_DEPLOY_KEY=<preview deploy key> bunx convex run --preview-name pr-<n> see
 
 ## Setup without Twitch
 
-A preview can be onboarded with a password account, so automated tests can get through setup without signing in to Twitch. The workflow sets `PREVIEW_DEPLOYMENT=true` on the preview deployment (`convex/lib/previewDeployment.ts`), and with it setup changes in three ways:
+A preview can be onboarded with a password account, so automated tests can get through setup without signing in to Twitch. The workflow sets `PREVIEW_DEPLOYMENT=true` on the preview deployment (`convex/lib/previewDeployment.ts`), and with it setup changes in four ways:
 
 - No platform is required. Twitch is still selected by default on **Choose your platforms**, but it can be unchecked.
 - With Twitch left out, **Connect Twitch** shows **Skip for now**, `setup.complete` does not ask for a Twitch link, and the onboarding guard does not send the user back to setup for one (`SetupStatus.twitchRequired`).
 - With Twitch chosen, it must be connected, as in production.
+- Applying setup installs the Twitch module even with Twitch left out, approving what its build asks for (`platformsToApply`). The default alerts need its triggers, and test events work without a linked account.
 
 Nothing else changes: features that act on Twitch, such as chat commands and the go-live checklist, still need a link. Production never sets the variable, so its setup is unchanged.
 
