@@ -4,8 +4,9 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, action, internalMutation, internalQuery, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { roleSatisfies } from "./lib/instanceRoles";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
-import { isInstanceMember } from "./lib/teamAccess";
+import { getInstanceMembership } from "./lib/teamAccess";
 
 const MAX_SOURCE_KEYS_READ = 500;
 
@@ -474,7 +475,9 @@ export const rotateBrowserSourceKey = action({
 export const overlayFacts = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<OverlayFacts | null> => {
-    if (!(await isInstanceMember(ctx, args.instanceId))) {
+    const userId = await getAuthUserId(ctx);
+    const membership = userId ? await getInstanceMembership(ctx, args.instanceId, userId) : null;
+    if (!membership) {
       return null;
     }
 
@@ -500,7 +503,8 @@ export const overlayFacts = query({
     return {
       hasScene: scene !== null,
       browserSourceKeyCount: sourceKeys.length,
-      featuredKey: featured?.key ?? null,
+      // The key is the overlay's whole credential, and only admins read it here.
+      featuredKey: roleSatisfies(membership.role, "admin") ? (featured?.key ?? null) : null,
       lastLoadedAt: featured?.lastUsedAt ?? null,
     };
   },
