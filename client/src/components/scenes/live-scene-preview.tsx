@@ -1,9 +1,10 @@
 import type { PreviewLayoutMessage } from "@woofx3/scene/editor";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useOverlayPreviewUrlRequest } from "@/engine/hooks/use-overlays";
+import { useCallback, useEffect, useRef } from "react";
+import { useScenePreviewUrl } from "@/engine/hooks/use-overlays";
 import type { SceneId } from "@/engine/types";
 
 interface LiveScenePreviewProps {
+  engineSceneId: string;
   sceneId: SceneId | undefined;
   width: number;
   height: number;
@@ -43,15 +44,15 @@ interface LiveScenePreviewProps {
  * saved (see docs/ui/scenes.md).
  */
 export function LiveScenePreview({
+  engineSceneId,
   sceneId,
   width,
   height,
   layoutMessage,
   followDraft = false,
 }: LiveScenePreviewProps) {
-  const getPreviewUrl = useOverlayPreviewUrlRequest();
   // undefined = loading; null = not ready yet (scene not synced, or mint failed).
-  const [overlayUrl, setOverlayUrl] = useState<string | null | undefined>(undefined);
+  const overlayUrl = useScenePreviewUrl(engineSceneId, sceneId);
   const frameRef = useRef<HTMLIFrameElement>(null);
   // Read by the frame's load handler, which must post the layout current at
   // load time rather than the one from the render that attached it.
@@ -74,23 +75,6 @@ export function LiveScenePreview({
   useEffect(() => {
     postLayout(layoutMessage);
   }, [layoutMessage, postLayout]);
-
-  useEffect(() => {
-    if (!sceneId) {
-      setOverlayUrl(undefined);
-      return;
-    }
-    let cancelled = false;
-    setOverlayUrl(undefined);
-    getPreviewUrl(sceneId).then((url) => {
-      if (!cancelled) {
-        setOverlayUrl(url);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [sceneId, getPreviewUrl]);
 
   if (!overlayUrl) {
     return (

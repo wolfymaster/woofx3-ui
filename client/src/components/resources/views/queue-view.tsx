@@ -1,4 +1,4 @@
-import { ChevronsRight, ListOrdered, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronsRight, ListOrdered, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { KindView } from "@/components/resources/kind-views";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
@@ -30,6 +30,7 @@ function QueuePanel(props: ResourceDetailProps) {
   const [entry, setEntry] = useState("");
 
   const entries = queueEntries(value);
+  const approveInto = typeof settings.approveInto === "string" ? settings.approveInto : "";
   const capacity = queueCapacity(settings);
   const trimmed = entry.trim();
   const refusal = trimmed === "" ? null : queueAddRefusal(entries, settings, trimmed);
@@ -74,13 +75,26 @@ function QueuePanel(props: ResourceDetailProps) {
             <li key={`${index}:${item}`} className="flex items-center gap-3 px-3 py-2">
               <span className="w-8 shrink-0 text-right text-sm tabular-nums text-muted-foreground">{index + 1}</span>
               <span className={index === 0 ? "flex-1 break-all font-medium" : "flex-1 break-all"}>{item}</span>
+              {approveInto !== "" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  disabled={pending !== null}
+                  onClick={() => void run("queue.move", { destination: approveInto, entry: item })}
+                  aria-label={`Approve ${item}`}
+                  data-testid={`button-queue-approve-${index}`}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 shrink-0"
                 disabled={pending !== null}
                 onClick={() => void run("queue.remove", { entry: item })}
-                aria-label={`Remove ${item}`}
+                aria-label={`${approveInto !== "" ? "Reject" : "Remove"} ${item}`}
                 data-testid={`button-queue-remove-${index}`}
               >
                 <X className="h-3.5 w-3.5" />

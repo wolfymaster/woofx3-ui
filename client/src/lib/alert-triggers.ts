@@ -25,7 +25,8 @@ import { definitionToTree, type StepNode, treeToDefinition, type WorkflowTree } 
  * ones carrying `trigger.order` run one after another, lowest first, each starting
  * once the one before it finishes or pauses at a wait (docs/workflow/execution.md in
  * the engine), which is what makes the list's order the order their alerts queue in.
- * A workflow without an order runs alongside them as soon as the event arrives.
+ * The engine gives each of the streamer's workflows an order, ahead of any module's on
+ * the same trigger, so what a card lists is what happens.
  */
 export interface EventTrigger {
   row: Workflow;
@@ -67,8 +68,8 @@ export function eventTriggers(workflows: readonly Workflow[], event: string): Ev
 
 /**
  * Workflows that start on the same event under the same conditions, shown as one trigger.
- * They stay separate workflows so one module's failure or wait can't stop another's steps;
- * the group is only how they read. `members` are in the order they run.
+ * Modules' stay separate workflows so one module's failure or wait can't stop another's
+ * steps; the streamer's are merged by the engine. `members` are in the order they run.
  */
 export interface TriggerGroup {
   key: string;
@@ -103,14 +104,46 @@ function conditionsKey(conditions: readonly ConditionConfig[]): string {
   return `conditions:${Array.from(new Set(written)).sort().join("|")}`;
 }
 
-/** Who a workflow's steps came from: the module's own name for them, or the streamer. */
-export function triggerSourceLabel(trigger: EventTrigger): string {
-  if (!trigger.row.projectionKey) {
-    return "Your steps";
-  }
-  // Barkloader names a module's workflow `{module}/{manifest name}`.
+/** What a module calls its steps on this trigger. Barkloader names its workflows `{module}/{manifest name}`. */
+export function moduleStepsName(trigger: EventTrigger): string {
   const name = trigger.definition.name ?? "";
   return name.slice(name.indexOf("/") + 1) || name;
+}
+
+/** A trigger's workflows by the part each plays on its card. */
+export interface TriggerParts {
+  /** The streamer's switched-on workflow whose steps the card edits. */
+  steps: EventTrigger | undefined;
+  /** The streamer's paused workflows, which merge into `steps` when resumed. */
+  paused: EventTrigger[];
+  /** The streamer's switched-on workflows the engine couldn't merge into `steps`. */
+  apart: EventTrigger[];
+  modules: EventTrigger[];
+}
+
+export function triggerParts(group: TriggerGroup): TriggerParts {
+  const own = group.members.filter((member) => !member.row.projectionKey);
+  const running = own.filter((member) => member.row.isEnabled);
+  return {
+    steps: running[0],
+    paused: own.filter((member) => !member.row.isEnabled),
+    apart: running.slice(1),
+    modules: group.members.filter((member) => member.row.projectionKey),
+  };
+}
+
+/** A closed card's line: "Play Confetti alert, Say thanks, and 2 modules", or the modules' names alone. */
+export function triggerSummary(stepTitles: readonly string[], moduleNames: readonly string[]): string {
+  if (stepTitles.length === 0) {
+    return moduleNames.join(", ");
+  }
+  const moduleCount = moduleNames.length;
+  const items =
+    moduleCount === 0 ? [...stepTitles] : [...stepTitles, moduleCount === 1 ? "1 module" : `${moduleCount} modules`];
+  if (items.length < 2 || moduleCount === 0) {
+    return items.join(", ");
+  }
+  return items.length === 2 ? items.join(" and ") : `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 const OPERATOR_WORDS: Partial<Record<ConditionConfig["operator"], string>> = {
@@ -251,6 +284,8 @@ export interface NewTriggerOptions {
   /** Its place among the event's other workflows; a workflow made on its own has none. */
   order?: number;
   pin?: TriggerPin;
+  /** Conditions it starts with instead of the fields' defaults, when joining a trigger that has them. */
+  conditions?: ConditionConfig[];
   /** A step the trigger starts with, aimed by `aim` when given. */
   seed?: ActionPreset;
   aim?: TriggerPin;
@@ -265,7 +300,7 @@ export const SEED_STEP_ID = "step_1";
  * no condition, so they read as missing in the sentence until they are chosen.
  */
 export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
-  const { triggerPreset, conditionFields, order, pin, seed, aim } = options;
+  const { triggerPreset, conditionFields, order, pin, conditions, seed, aim } = options;
   const values = {
     ...getDefaultConfigValues(conditionFields),
     ...(pin ? { [pin.fieldId]: pin.value } : {}),
@@ -287,7 +322,7 @@ export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
       type: "event",
       event: triggerPreset.event ?? "",
       ...(triggerPreset.canonicalRef ? { $ref: triggerPreset.canonicalRef } : {}),
-      conditions: fieldValuesToConditions(conditionFields, values),
+      conditions: conditions ?? fieldValuesToConditions(conditionFields, values),
       ...(order === undefined ? {} : { order }),
     },
     tasks,

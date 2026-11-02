@@ -2,7 +2,7 @@ import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import type { WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { ExternalLink } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { TriggerWhenCard } from "@/components/alerts/trigger-when-card";
 import { FlowEditor } from "@/components/flow/flow-editor";
@@ -54,6 +54,8 @@ interface TriggerEditorProps {
   /** A new trigger's workflow now exists in the engine. */
   onCreated: (engineWorkflowId: string) => void;
   onDeleted: () => void;
+  /** What else runs on this trigger, shown under the steps. Delete then says it takes only the steps. */
+  alsoRuns?: ReactNode;
 }
 
 const LAST_STEP_REASON = "A trigger needs at least one step. Delete the trigger instead, or add another step first.";
@@ -81,6 +83,7 @@ export function TriggerEditor({
   optionLabels,
   onCreated,
   onDeleted,
+  alsoRuns,
 }: TriggerEditorProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -296,6 +299,7 @@ export function TriggerEditor({
           />
         }
       />
+      {alsoRuns}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
         <Button
           variant="ghost"
@@ -309,7 +313,9 @@ export function TriggerEditor({
         </Button>
         {confirmingDelete ? (
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-muted-foreground">Delete this trigger?</span>
+            <span className="text-[13px] text-muted-foreground">
+              {alsoRuns ? "Delete your steps?" : "Delete this trigger?"}
+            </span>
             <Button variant="ghost" className="h-11 sm:h-9" onClick={() => setConfirmingDelete(false)}>
               Keep it
             </Button>
@@ -330,7 +336,7 @@ export function TriggerEditor({
             onClick={() => setConfirmingDelete(true)}
             data-testid="delete-trigger"
           >
-            Delete trigger
+            {alsoRuns ? "Delete your steps" : "Delete trigger"}
           </Button>
         )}
       </div>

@@ -22,6 +22,8 @@ import { readAllWorkflows } from "./workflow-pages";
  * Throws for an engine that cannot hand over whole scenes: its scene list
  * leaves out what the screens draw, so there is nothing true to show.
  */
+const noPrewarm = (): void => {};
+
 function requireSnapshots(runtime: DirectRuntime, member: string): void {
   if (!runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
     throw new GatewayUnsupportedError(member);
@@ -201,5 +203,7 @@ export function directScenesGateway(runtime: DirectRuntime): ScenesGateway {
     useWidgetThemes: (widgetCanonicalId) => useEngineQuery(runtime, widgetThemesRead(runtime, widgetCanonicalId)),
     useEditorSessionRequest: () => useEngineRequest(editorSession),
     useRepairRequest: () => useEngineRequest(repair),
+    // A local engine has no round trip worth saving.
+    usePrewarmEditor: () => noPrewarm,
   };
 }

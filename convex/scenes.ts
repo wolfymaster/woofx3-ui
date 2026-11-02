@@ -11,6 +11,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
 import { deleteAlertCompositionRow, upsertAlertComposition } from "./alertCompositions";
 import { deleteSceneAndChildren, purgeSceneChildren } from "./lib/sceneCascade";
+import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 
 // Scenes are engine-authoritative. The engine is the source of truth; this table
 // is a read cache populated exclusively by webhook callbacks (upsertFromWebhook /
@@ -108,6 +109,29 @@ export const getByEngineSceneId = query({
     }
 
     return toSceneCache(scene);
+  },
+});
+
+// The editor's preview URL, read beside the scene itself so the frame can start
+// in the same round trip. Null until `browserSource.getOrCreatePreviewUrl` has
+// minted a URL still in the current shape; only that action mints, since a query
+// cannot call the engine.
+export const previewUrlByEngineSceneId = query({
+  args: { instanceId: v.id("instances"), engineSceneId: v.string() },
+  handler: async (ctx, args): Promise<string | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId || !(await membershipFor(ctx, args.instanceId, userId))) {
+      return null;
+    }
+    const scene = await findScene(ctx, args.instanceId, args.engineSceneId);
+    if (!scene) {
+      return null;
+    }
+    const key = await ctx.db
+      .query("browserSourceKeys")
+      .withIndex("by_scene_purpose", (q) => q.eq("sceneId", scene._id).eq("purpose", "preview"))
+      .first();
+    return isCurrentSceneUrl(key?.overlayUrl, args.engineSceneId) ? key.overlayUrl : null;
   },
 });
 

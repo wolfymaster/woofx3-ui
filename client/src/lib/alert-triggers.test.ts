@@ -7,13 +7,15 @@ import {
   eventTriggers,
   groupEventTriggers,
   isPinnedTo,
+  moduleStepsName,
   newTriggerTree,
   nextTriggerOrder,
   SEED_STEP_ID,
   storedStepsGained,
   storedTriggerCount,
   triggerAimsAt,
-  triggerSourceLabel,
+  triggerParts,
+  triggerSummary,
   unownedConditionPhrases,
   withFieldConditions,
 } from "@/lib/alert-triggers";
@@ -311,22 +313,46 @@ describe("groupEventTriggers", () => {
   });
 });
 
-describe("triggerSourceLabel", () => {
-  const [mine, theirs] = eventTriggers(
-    [
-      row("mine", cheer({ order: 0 })),
-      {
-        ...row("theirs", cheer({ order: 1 })),
-        projectionKey: "hype:workflow:cheers",
-        definition: { id: "theirs", name: "hype/Hype Board: count cheers", trigger: cheer({ order: 1 }), tasks: [] },
-      } as unknown as Workflow,
-    ],
-    "channel.cheer"
+describe("triggerParts", () => {
+  const module = (id: string, name: string, order: number) =>
+    ({
+      ...row(id, cheer({ order })),
+      projectionKey: `hype:workflow:${id}`,
+      definition: { id, name, trigger: cheer({ order }), tasks: [] },
+    }) as unknown as Workflow;
+  const paused = { ...row("paused", cheer({ order: 1 })), isEnabled: false } as Workflow;
+  const [group] = groupEventTriggers(
+    eventTriggers(
+      [
+        { ...row("mine", cheer({ order: 0 })), isEnabled: true } as Workflow,
+        paused,
+        { ...row("stuck", cheer({ order: 2 })), isEnabled: true } as Workflow,
+        module("theirs", "hype/Hype Board: count cheers", 3),
+      ],
+      "channel.cheer"
+    )
   );
+  const ids = (triggers: { row: Workflow }[]) => triggers.map((trigger) => trigger.row.engineWorkflowId);
 
-  test("names the streamer's steps and a module's", () => {
-    expect(triggerSourceLabel(mine)).toBe("Your steps");
-    expect(triggerSourceLabel(theirs)).toBe("Hype Board: count cheers");
+  test("sorts a trigger's workflows by the part each plays", () => {
+    const parts = triggerParts(group);
+    expect(parts.steps?.row.engineWorkflowId).toBe("mine");
+    expect(ids(parts.paused)).toEqual(["paused"]);
+    expect(ids(parts.apart)).toEqual(["stuck"]);
+    expect(ids(parts.modules)).toEqual(["theirs"]);
+    expect(moduleStepsName(parts.modules[0])).toBe("Hype Board: count cheers");
+  });
+});
+
+describe("triggerSummary", () => {
+  test.each([
+    [["Play alert"], [], "Play alert"],
+    [["Play alert", "Say thanks"], [], "Play alert, Say thanks"],
+    [["Play alert"], ["A"], "Play alert and 1 module"],
+    [["Play alert", "Say thanks"], ["A", "B"], "Play alert, Say thanks, and 2 modules"],
+    [[], ["A", "B"], "A, B"],
+  ])("%j with modules %j reads %s", (steps, modules, want) => {
+    expect(triggerSummary(steps, modules)).toBe(want);
   });
 });
 
