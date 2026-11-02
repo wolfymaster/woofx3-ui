@@ -87,6 +87,7 @@ const Workflows = lazy(() => import("@/pages/workflows"));
 // In the desktop app, signing in makes the computer the instance's companion.
 // IS_DESKTOP is a build constant, so the web build carries none of it.
 const DesktopAppLink = IS_DESKTOP ? lazy(() => import("@/desktop/AppLink")) : null;
+const DesktopRelayWatch = IS_DESKTOP ? lazy(() => import("@/desktop/RelayWatch")) : null;
 
 function SplashScreen() {
   return (
@@ -398,6 +399,11 @@ function App() {
                 {DesktopAppLink && (
                   <Suspense fallback={null}>
                     <DesktopAppLink />
+                  </Suspense>
+                )}
+                {DesktopRelayWatch && (
+                  <Suspense fallback={null}>
+                    <DesktopRelayWatch />
                   </Suspense>
                 )}
                 <Toaster />

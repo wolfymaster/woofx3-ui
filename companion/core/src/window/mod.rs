@@ -58,6 +58,12 @@ pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "open_twitch_sign_in",
 ];
 
+/// The commands both windows may call, kept apart from
+/// [`DASHBOARD_COMMAND_NAMES`] because that list's commands are denied to the
+/// companion window. The companion window shows the relay in detail, and the
+/// dashboard's status bar reports it too.
+pub const SHARED_COMMAND_NAMES: &[&str] = &["get_integrations", "reconnect_relay"];
+
 /// The mode this app runs in, and whether the streamer chose it. Until they
 /// have, it runs its build's default and the dashboard asks.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
