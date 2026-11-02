@@ -57,6 +57,8 @@ export function directOverlaysGateway(runtime: DirectRuntime): OverlaysGateway {
   };
 
   return {
+    // A local engine answers the request itself about as fast as a read.
+    useKnownPreviewUrl: () => null,
     useBrowserSourceUrlRequest: () => useEngineRequest(browserSourceUrl),
     useRotateBrowserSourceUrlRequest: () => useEngineRequest(rotateBrowserSourceUrl),
     usePreviewUrlRequest: () => useEngineRequest(previewUrl),

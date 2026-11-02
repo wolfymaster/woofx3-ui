@@ -15,6 +15,10 @@ const convexReact = await import("convex/react");
 
 mock.module("convex/react", () => ({
   ...convexReact,
+  useQuery: (query: Parameters<typeof getFunctionName>[0], args: unknown) => {
+    calls.push({ name: getFunctionName(query), args });
+    return answers[getFunctionName(query)];
+  },
   useAction: (action: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
     const name = getFunctionName(action);
     calls.push({ name, args });
@@ -45,6 +49,20 @@ afterEach(() => {
 });
 
 describe("overlays", () => {
+  test("a known preview URL is read by the engine's scene id, with no scene row needed", () => {
+    answers["scenes:previewUrlByEngineSceneId"] = "https://engine.example/scene/s1?token=t";
+    const url = renderInScope(() => convexOverlaysGateway.useKnownPreviewUrl("s1"));
+    expect(url).toBe("https://engine.example/scene/s1?token=t");
+    expect(calls).toEqual([
+      { name: "scenes:previewUrlByEngineSceneId", args: { instanceId: "instance-1", engineSceneId: "s1" } },
+    ]);
+  });
+
+  test("with no instance the known preview URL is not read", () => {
+    renderInScope(() => convexOverlaysGateway.useKnownPreviewUrl("s1"), null);
+    expect(calls).toEqual([{ name: "scenes:previewUrlByEngineSceneId", args: "skip" }]);
+  });
+
   test("a browser source is the URL for the scene's key", async () => {
     answers["browserSource:getOrCreateBrowserSourceKey"] = "key-1";
     const getUrl = renderInScope(() => convexOverlaysGateway.useBrowserSourceUrlRequest());

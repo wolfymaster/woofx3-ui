@@ -15,6 +15,11 @@ const convexReact = await import("convex/react");
 
 mock.module("convex/react", () => ({
   ...convexReact,
+  useConvex: () => ({
+    prewarmQuery: ({ query, args }: { query: Parameters<typeof getFunctionName>[0]; args: unknown }) => {
+      calls.push({ name: getFunctionName(query), args });
+    },
+  }),
   useAction: (action: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
     calls.push({ name: getFunctionName(action), args });
     return Promise.resolve(result);
@@ -26,6 +31,24 @@ const { convexScenesGateway } = await import("./scenes");
 beforeEach(() => {
   calls.length = 0;
   result = null;
+});
+
+describe("scenes.usePrewarmEditor", () => {
+  test("reads what the editor's first render needs", () => {
+    renderInScope(() => convexScenesGateway.usePrewarmEditor())("s1");
+    const scoped = { instanceId: TEST_INSTANCE_ID, engineSceneId: "s1" };
+    expect(calls).toEqual([
+      { name: "scenes:getByEngineSceneId", args: scoped },
+      { name: "scenes:previewUrlByEngineSceneId", args: scoped },
+      { name: "sceneWidgets:alertTargetUsage", args: scoped },
+      { name: "sceneWidgets:listForInstance", args: { instanceId: TEST_INSTANCE_ID } },
+    ]);
+  });
+
+  test("with no instance reads nothing", () => {
+    renderInScope(() => convexScenesGateway.usePrewarmEditor(), null)("s1");
+    expect(calls).toEqual([]);
+  });
 });
 
 describe("scenes.useRepairRequest", () => {
