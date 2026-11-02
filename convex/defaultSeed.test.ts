@@ -146,6 +146,7 @@ class FakeEngine extends RpcTarget {
   readonly workflows = new Map<string, boolean>();
   readonly enableCalls: string[] = [];
   createsFailing = 0;
+  enablesFailing = 0;
   modulesFailing = false;
 
   constructor(
@@ -203,6 +204,10 @@ class FakeEngine extends RpcTarget {
 
   async setWorkflowEnabled(id: string, isEnabled: boolean, correlationKey: string) {
     this.enableCalls.push(id);
+    if (this.enablesFailing > 0) {
+      this.enablesFailing -= 1;
+      throw new Error("the engine is restarting");
+    }
     this.workflows.set(id, isEnabled);
     await this.echo(id, { name: id }, isEnabled, correlationKey, "update");
     return { id, isEnabled };
@@ -225,9 +230,9 @@ class FakeEngine extends RpcTarget {
   }
 }
 
-/** Stops at the deadline so a condition that never holds fails its test rather than hanging it. */
+/** Gives up before bun's own test timeout, so a condition that never holds says which it was. */
 async function until(condition: () => boolean | Promise<boolean>, what: string): Promise<void> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 2_000;
   while (!(await condition())) {
     if (Date.now() > deadline) {
       throw new Error(`timed out waiting until ${what}`);
@@ -285,6 +290,12 @@ describe("applying the seed on a real engine connection", () => {
     return { t, instanceId, ownerId, engine, status };
   }
 
+  /** Lets the enables a run scheduled finish here, not on the next test's fake engine. */
+  async function enablesSettled(t: Backend, engine: FakeEngine) {
+    await until(() => engine.enableCalls.length === DEFAULT_ALERT_ITEMS.length, "every alert is enabled");
+    await t.finishInProgressScheduledFunctions();
+  }
+
   afterEach(() => {
     globalThis.fetch = realFetch;
   });
@@ -299,5 +310,71 @@ describe("applying the seed on a real engine connection", () => {
     expect(seeded?.alerts.map((alert) => alert.status)).toEqual(DEFAULT_ALERT_ITEMS.map(() => "installed"));
     expect(seeded?.alertImagesOmitted).toBe(false);
     expect(engine.workflows.size).toBe(DEFAULT_ALERT_ITEMS.length);
+    await enablesSettled(t, engine);
+  });
+
+  const scheduledEnables = (t: Backend) =>
+    t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter((job) =>
+        job.name.includes("applyEnabledAfterCreate")
+      )
+    );
+
+  test("switches on each seeded alert once, and never one the streamer paused", async () => {
+    const { t, instanceId, engine } = await firstRunEngine();
+    await t.action(internal.setupApply.run, { instanceId });
+    const alertCount = DEFAULT_ALERT_ITEMS.length;
+    await until(() => engine.enableCalls.length === alertCount, "every alert is enabled");
+    await until(
+      async () =>
+        await t.run(async (ctx) => {
+          const rows = await ctx.db
+            .query("workflows")
+            .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId))
+            .collect();
+          return rows.length === alertCount && rows.every((row) => row.isEnabled);
+        }),
+      "the mirror shows every alert on"
+    );
+
+    engine.workflows.set("workflow-1", false);
+    await t.action(internal.setupApply.run, { instanceId });
+    const correlationKey = await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("starterPackItems")
+        .withIndex("by_instance_item", (q) =>
+          q.eq("instanceId", instanceId).eq("packId", DEFAULT_ALERTS_PACK_ID).eq("itemId", "follow")
+        )
+        .first();
+      return row?.correlationKey ?? "";
+    });
+    await t.mutation(internal.workflowInternal.resolveCorrelation, {
+      correlationKey,
+      engineWorkflowId: "workflow-1",
+      op: "create",
+    });
+
+    expect((await scheduledEnables(t)).length).toBe(alertCount);
+    expect(engine.enableCalls.length).toBe(alertCount);
+    expect(engine.workflows.get("workflow-1")).toBe(false);
+  });
+
+  test("an enable the engine refuses is asked again, then given up on", async () => {
+    const { t, instanceId, engine } = await firstRunEngine();
+    engine.workflows.set("w", false);
+    engine.enablesFailing = 4;
+    const enable = (failedAttempts: number) =>
+      t.action(internal.workflowActions.applyEnabledAfterCreate, {
+        instanceId,
+        engineWorkflowId: "w",
+        isEnabled: true,
+        failedAttempts,
+      });
+
+    await enable(0);
+    const [retry] = await scheduledEnables(t);
+    expect(retry?.args[0]).toMatchObject({ engineWorkflowId: "w", isEnabled: true, failedAttempts: 1 });
+
+    await expect(enable(3)).rejects.toThrow("the engine is restarting");
   });
 });

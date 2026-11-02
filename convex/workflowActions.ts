@@ -393,6 +393,13 @@ export async function setWorkflowEnabledInEngine(
 }
 
 /**
+ * Delays before asking again when an enable fails. A new engine may still be
+ * settling after its first module installs, and nothing else would ever turn
+ * these workflows on: the ledger already counts them as installed.
+ */
+const ENABLE_RETRY_DELAYS_MS = [5_000, 30_000, 2 * 60_000] as const;
+
+/**
  * Give a workflow that a starter pack or an import just created the enabled
  * state it should have. The engine creates every workflow off, so this runs
  * from the ledger that records the create's echo (lib/starterPackLedger.ts,
@@ -401,8 +408,13 @@ export async function setWorkflowEnabledInEngine(
  * and its echo updates the mirror when it lands.
  */
 export const applyEnabledAfterCreate = internalAction({
-  args: { instanceId: v.id("instances"), engineWorkflowId: v.string(), isEnabled: v.boolean() },
-  handler: async (ctx, { instanceId, engineWorkflowId, isEnabled }): Promise<void> => {
+  args: {
+    instanceId: v.id("instances"),
+    engineWorkflowId: v.string(),
+    isEnabled: v.boolean(),
+    failedAttempts: v.optional(v.number()),
+  },
+  handler: async (ctx, { instanceId, engineWorkflowId, isEnabled, failedAttempts = 0 }): Promise<void> => {
     const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, { instanceId });
     if (!bundle) {
       throw new Error(`Instance ${instanceId} is not registered with an engine`);
@@ -418,7 +430,22 @@ export const applyEnabledAfterCreate = internalAction({
         });
         return;
       }
-      throw err;
+      const delay = ENABLE_RETRY_DELAYS_MS[failedAttempts];
+      if (delay === undefined) {
+        throw err;
+      }
+      logger.warn("workflowActions: setting a created workflow's enabled state failed; retrying", {
+        instanceId,
+        engineWorkflowId,
+        isEnabled,
+        failedAttempts,
+      });
+      await ctx.scheduler.runAfter(delay, internal.workflowActions.applyEnabledAfterCreate, {
+        instanceId,
+        engineWorkflowId,
+        isEnabled,
+        failedAttempts: failedAttempts + 1,
+      });
     }
   },
 });
