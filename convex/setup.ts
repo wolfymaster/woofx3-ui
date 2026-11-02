@@ -9,7 +9,7 @@ import { readMemberRole } from "./instances";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { isMaintenanceConfigured } from "./lib/maintenanceClient";
 import { isPreviewDeployment } from "./lib/previewDeployment";
-import { availableInterests, buildDashboardPreset, PRESET_LAYOUT_ID } from "./lib/setupInterests";
+import { buildDashboardPreset, PRESET_LAYOUT_ID } from "./lib/setupInterests";
 import {
   type ChosenSetupPlatform,
   curatedForDeployment,
@@ -36,16 +36,10 @@ export type SetupModuleInstall = NonNullable<Doc<"instanceSetup">["moduleInstall
 export type SetupPackInstall = NonNullable<Doc<"instanceSetup">["packInstalls"]>[number];
 
 export interface SetupStatus {
-  /** The name of the account the instance belongs to, shown as the wizard's heading. */
-  workspaceName: string | null;
   platforms: ChosenSetupPlatform[];
-  platformsChosenAt: number | null;
-  /** When the "bring your setup" question was answered, by importing or skipping. */
-  importChosenAt: number | null;
   /** Marketplace ids of the platforms setup cannot finish without. */
   requiredModuleIds: string[];
   interests: string[];
-  interestsChosenAt: number | null;
   completedAt: number | null;
   /** The instance's Twitch link, whether or not its tokens still work. */
   twitchUsername: string | null;
@@ -145,7 +139,6 @@ export const status = query({
         .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
         .first(),
     ]);
-    const account = instance ? await ctx.db.get(instance.accountId) : null;
     const platformsNeedingSettings: string[] = [];
     for (const install of row?.moduleInstalls ?? []) {
       if (install.status !== "installed" || !install.moduleKey) {
@@ -161,14 +154,10 @@ export const status = query({
       }
     }
     return {
-      workspaceName: account?.name ?? null,
       platforms: row?.platforms ?? [],
       platformsNeedingSettings,
-      platformsChosenAt: row?.platformsChosenAt ?? null,
-      importChosenAt: row?.importChosenAt ?? null,
       requiredModuleIds: curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId),
       interests: row?.interests ?? [],
-      interestsChosenAt: row?.interestsChosenAt ?? null,
       completedAt: row?.completedAt ?? null,
       twitchUsername: twitchLink?.platformUsername ?? null,
       twitchRequired: twitchRequiredFor(row),
@@ -213,50 +202,6 @@ export const choosePlatforms = mutation({
       return;
     }
     await ctx.db.insert("instanceSetup", { instanceId, platforms, platformsChosenAt: now, updatedAt: now });
-  },
-});
-
-/**
- * Records that the "bring your setup" question was answered. Whatever was
- * imported is in setupImports; this only moves the wizard on.
- */
-export const chooseImport = mutation({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
-    await requireInstanceRole(ctx, instanceId, "admin");
-    const row = await readSetupRow(ctx, instanceId);
-    if (!row?.platformsChosenAt) {
-      throw new Error("Choose your platforms first");
-    }
-    const now = Date.now();
-    await ctx.db.patch(row._id, { importChosenAt: now, updatedAt: now });
-  },
-});
-
-/**
- * Saves what the streamer wants woofx3 to do. Only interests offered for the
- * chosen platforms are accepted; skipping the question saves none.
- */
-export const chooseInterests = mutation({
-  args: { instanceId: v.id("instances"), interestIds: v.array(v.string()) },
-  handler: async (ctx, { instanceId, interestIds }) => {
-    await requireInstanceRole(ctx, instanceId, "admin");
-    const row = await readSetupRow(ctx, instanceId);
-    if (!row?.platformsChosenAt) {
-      throw new Error("Choose your platforms first");
-    }
-    const offered = new Set(
-      availableInterests(row.platforms.map((platform) => platform.marketplaceModuleId)).map((interest) => interest.id)
-    );
-    const unknown = interestIds.filter((id) => !offered.has(id));
-    if (unknown.length > 0) {
-      throw new Error(`Not offered for the chosen platforms: ${unknown.join(", ")}`);
-    }
-    const now = Date.now();
-    await ctx.db.patch(row._id, { interests: [...new Set(interestIds)], interestsChosenAt: now, updatedAt: now });
-    if (row.completedAt) {
-      await scheduleApplyIfRegistered(ctx, instanceId);
-    }
   },
 });
 
