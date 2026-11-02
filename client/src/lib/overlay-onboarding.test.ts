@@ -12,7 +12,9 @@ import {
   SEED_SLOW_AFTER_MS,
   seedHasRecordedError,
   seedIsSlow,
+  showsOverlayLink,
   TEST_UNCONFIRMED_AFTER_MS,
+  testFailureMessage,
   testOutcomeOf,
   waitingHelp,
 } from "./overlay-onboarding";
@@ -22,6 +24,7 @@ const READY: OverlayFacts = {
   scene: "found",
   follow: "ready",
   seedError: false,
+  alreadyFinished: false,
   presence: "closed",
   test: { kind: "none" },
 };
@@ -187,6 +190,56 @@ describe("overlayReducer: the test", () => {
   });
 });
 
+describe("overlayReducer: coming back after finishing", () => {
+  const finishedBefore = { alreadyFinished: true };
+  const returned = run(INITIAL_OVERLAY_STATE, observe(finishedBefore));
+
+  test("a refresh lands on finished, whether or not the overlay is open", () => {
+    expect(returned.phase.name).toBe("finished");
+    expect(run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, presence: "open" })).phase.name).toBe("finished");
+    expect(run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, presence: undefined })).phase.name).toBe("finished");
+  });
+
+  test("still shows a build or a seed that is not there yet", () => {
+    const building = run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, engine: "building" }));
+    expect(building.phase.name).toBe("building");
+    const preparing = run(building, observe({ ...finishedBefore, scene: "loading" }));
+    expect(preparing.phase.name).toBe("preparing");
+    expect(run(preparing, observe(finishedBefore)).phase.name).toBe("finished");
+  });
+
+  test("a new overlay made after finishing asks for the new link to be added", () => {
+    const noScene = run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, scene: "none" }));
+    expect(run(noScene, observe(finishedBefore)).phase.name).toBe("waiting");
+  });
+
+  test("another test can be sent, and must complete by itself to finish again", () => {
+    const finished = run(playing, observe({ presence: "open", test: { kind: "completed" } }, 1500));
+    const again = run(finished, { type: "send" });
+    expect(again.phase.name).toBe("sending");
+    expect(again.triggerIds).toEqual([]);
+    const sent = run(again, { type: "sent", triggerId: "t2", at: 2000 });
+    expect(run(sent, observe({ presence: "open", alreadyFinished: true }, 2500)).phase.name).toBe("playing");
+    expect(run(sent, observe({ presence: "open", test: { kind: "completed" } }, 3000)).phase.name).toBe("finished");
+  });
+});
+
+describe("showsOverlayLink", () => {
+  test.each([
+    [{ name: "connected" }, true],
+    [{ name: "sending" }, true],
+    [{ name: "playing", sentAt: 0 }, true],
+    [{ name: "unconfirmed" }, true],
+    [{ name: "test-failed", reason: null }, true],
+    [{ name: "finished" }, true],
+    [{ name: "waiting", since: 0, dropped: false }, false],
+    [{ name: "preparing" }, false],
+    [{ name: "no-scene" }, false],
+  ] as const)("%o: %s", (phase, shown) => {
+    expect(showsOverlayLink(phase)).toBe(shown);
+  });
+});
+
 describe("overlayReducer: the follow alert", () => {
   test("absent is missing only after the grace; never seeded at once", () => {
     const first = run(connected, observe({ presence: "open", follow: "absent" }, 100));
@@ -216,6 +269,23 @@ describe("waitingHelp", () => {
 function alertFor(triggerId: string, status: EngineAlert["status"], error?: string): EngineAlert {
   return { status, error, payload: JSON.stringify({ event: { triggerId } }) } as EngineAlert;
 }
+
+describe("testFailureMessage", () => {
+  test.each([
+    'no alert widget named "default" on a running scene',
+    'alert cannot be published: no alert widget named "default" on a running scene',
+  ])("says the overlay isn't ready for: %s", (reason) => {
+    expect(testFailureMessage(reason)).toContain("overlay isn't ready");
+    expect(testFailureMessage(reason)).not.toContain("target");
+  });
+
+  test.each([[null], ["layout must be an object, got nothing"], ["something else"]])(
+    "stays plain for: %s",
+    (reason) => {
+      expect(testFailureMessage(reason)).toBe("We couldn't play the test. Check that your overlay is still open.");
+    }
+  );
+});
 
 describe("testOutcomeOf", () => {
   test("nothing yet", () => {

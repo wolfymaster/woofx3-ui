@@ -1,6 +1,7 @@
 import { alertWidgetNamesOf, DEFAULT_ALERT_WIDGET_NAME, placedWidgetsOf } from "@shared/alert-widgets";
 import type { DefaultSeedStatus, EngineAlert, OverlayPresence, SceneRecord } from "@/engine/types";
 import { alertOfTestEvent } from "@/lib/alert-envelope";
+import { isMissingAlertTarget } from "@/lib/alert-failure";
 
 // The overlay page's state machine. What the server knows decides most of it,
 // so a refresh lands in the right place; only a test in flight lives here, and
@@ -34,6 +35,8 @@ export interface OverlayFacts {
   follow: FollowFact;
   /** A seed item failed an attempt and is still waiting on another; see `seedHasRecordedError`. */
   seedError: boolean;
+  /** A test played here before, on this visit or an earlier one. */
+  alreadyFinished: boolean;
   /** Undefined before the first answer, which is no moment to say "waiting" to a refresh. */
   presence: OverlayPresence | undefined;
   test: TestOutcome;
@@ -90,7 +93,18 @@ const BLOCKED_PHASES: ReadonlySet<OverlayPhase["name"]> = new Set([
   "seed-failed",
   "no-scene",
 ]);
-const CAN_SEND: ReadonlySet<OverlayPhase["name"]> = new Set(["connected", "unconfirmed", "test-failed"]);
+const CAN_SEND: ReadonlySet<OverlayPhase["name"]> = new Set(["connected", "unconfirmed", "test-failed", "finished"]);
+/** Where a page load starts. A new overlay made from `no-scene` goes on to its link, not back to finished. */
+const LOADING_PHASES: ReadonlySet<OverlayPhase["name"]> = new Set(["building", "preparing"]);
+/** Past the link's own phase. A stale presence can reach these with a new link not yet added anywhere. */
+const LINK_STAYS_UP: ReadonlySet<OverlayPhase["name"]> = new Set([
+  "connected",
+  "sending",
+  "playing",
+  "unconfirmed",
+  "test-failed",
+  "finished",
+]);
 
 /** Whether the phase can still learn how the test it sent went. */
 function isAwaitingTest(phase: OverlayPhase): boolean {
@@ -157,6 +171,10 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
     return { ...base, phase: blocked, triggerIds: [] };
   }
 
+  if (facts.alreadyFinished && LOADING_PHASES.has(phase.name)) {
+    return { ...base, phase: { name: "finished" } };
+  }
+
   const wasBlocked = BLOCKED_PHASES.has(phase.name);
   if (facts.presence === undefined && wasBlocked) {
     return { ...base, phase: { name: "preparing" } };
@@ -193,7 +211,15 @@ export function overlayReducer(state: OverlayState, event: OverlayEvent): Overla
     case "observe":
       return observe(state, event.facts, event.at);
     case "send":
-      return CAN_SEND.has(state.phase.name) ? { ...state, phase: { name: "sending" } } : state;
+      if (!CAN_SEND.has(state.phase.name)) {
+        return state;
+      }
+      // The test that finished would otherwise count for this one the moment it is sent.
+      return {
+        ...state,
+        phase: { name: "sending" },
+        triggerIds: state.phase.name === "finished" ? [] : state.triggerIds,
+      };
     case "sent":
       // Anywhere else, the overlay dropped while the send was on its way.
       return state.phase.name === "sending"
@@ -210,6 +236,11 @@ export function overlayReducer(state: OverlayState, event: OverlayEvent): Overla
     case "seed-retried":
       return { ...state, seedErrorSince: null };
   }
+}
+
+/** Whether the phase keeps the overlay's link on the page below its own controls. */
+export function showsOverlayLink(phase: OverlayPhase): boolean {
+  return LINK_STAYS_UP.has(phase.name);
 }
 
 /** Whether an attempt at a seed item failed with retries still to come. A settled item is "failed" instead. */
@@ -232,6 +263,17 @@ export function waitingHelp(since: number, now: number): "none" | "hint" | "trou
     return "troubleshoot";
   }
   return waited >= OVERLAY_HINT_AFTER_MS ? "hint" : "none";
+}
+
+/**
+ * What to tell a streamer whose test failed. They have touched neither the
+ * alert nor its target yet, so the fixes the Alerts screen offers (re-saving a
+ * step, changing its target) are nothing they could act on here.
+ */
+export function testFailureMessage(reason: string | null): string {
+  return reason !== null && isMissingAlertTarget(reason)
+    ? "Your overlay isn't ready yet. Check that it's open in your streaming app or browser tab, then try again."
+    : "We couldn't play the test. Check that your overlay is still open.";
 }
 
 /**
