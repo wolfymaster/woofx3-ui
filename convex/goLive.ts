@@ -19,7 +19,6 @@ import type {
   GoLiveCompletion,
   GoLiveStepOutcome,
   LastGoLive,
-  OverlayFacts,
   StreamInfoFacts,
   TwitchLinkFacts,
   WorkflowFacts,
@@ -49,7 +48,6 @@ const TWITCH_VALIDATE_URL = "https://id.twitch.tv/oauth2/validate";
 const SEND_SCOPE = "user:write:chat";
 const MARKER_SCOPE = "channel:manage:broadcast";
 const MARKER_DESCRIPTION = "Stream start";
-const MAX_SOURCE_KEYS_READ = 500;
 /** Past this many enabled workflows the checklist just says "20+". */
 const WORKFLOW_COUNT_CAP = 20;
 
@@ -126,45 +124,6 @@ export const checklist = query({
         enabled: Math.min(enabled.length, WORKFLOW_COUNT_CAP),
         enabledCapped: enabled.length > WORKFLOW_COUNT_CAP,
       },
-    };
-  },
-});
-
-/**
- * Kept apart from `checklist` because a browser source loading its URL
- * rewrites the key's lastUsedAt; only this query reruns when that happens.
- */
-export const overlays = query({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<OverlayFacts | null> => {
-    if (!(await isInstanceMember(ctx, args.instanceId))) {
-      return null;
-    }
-
-    const scene = await ctx.db
-      .query("scenes")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .first();
-
-    // Preview keys belong to the scene editor's own canvas; only the others
-    // are what a streamer pastes into OBS.
-    const sourceKeys = (
-      await ctx.db
-        .query("browserSourceKeys")
-        .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-        .take(MAX_SOURCE_KEYS_READ)
-    ).filter((key) => key.purpose !== "preview");
-
-    const byRecentUse = [...sourceKeys].sort(
-      (a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || b.createdAt - a.createdAt
-    );
-    const featured = byRecentUse[0] ?? null;
-
-    return {
-      hasScene: scene !== null,
-      browserSourceKeyCount: sourceKeys.length,
-      featuredKey: featured?.key ?? null,
-      lastLoadedAt: featured?.lastUsedAt ?? null,
     };
   },
 });

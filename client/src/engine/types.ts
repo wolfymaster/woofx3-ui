@@ -1863,7 +1863,8 @@ export interface GoLiveChecklistState {
   workflows: GoLiveWorkflowFacts;
 }
 
-export interface GoLiveOverlayFacts {
+/** What Getting Started needs to know about the instance's overlays. */
+export interface OverlayFacts {
   hasScene: boolean;
   /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
   browserSourceKeyCount: number;

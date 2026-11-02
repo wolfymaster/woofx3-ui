@@ -33,16 +33,6 @@ export interface LastGoLive {
   categoryName: string | null;
 }
 
-export interface OverlayFacts {
-  hasScene: boolean;
-  /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
-  browserSourceKeyCount: number;
-  /** The key most recently loaded by a browser source, else the newest one. */
-  featuredKey: string | null;
-  /** When any browser source last loaded one of those keys. */
-  lastLoadedAt: number | null;
-}
-
 export interface WorkflowFacts {
   /** Whether the instance has any workflow at all, enabled or not. */
   any: boolean;

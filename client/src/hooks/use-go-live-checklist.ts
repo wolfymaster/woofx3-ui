@@ -6,12 +6,12 @@ import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import {
   useCompleteGoLiveRequest,
   useGoLiveChecklistState,
-  useGoLiveOverlayFacts,
   useGoLiveStreamInfoCheckRequest,
   useGoLiveTwitchCheckRequest,
   useSetGoLiveCheckDismissedRequest,
 } from "@/engine/hooks/use-go-live";
 import { useLiveState } from "@/engine/hooks/use-live-state";
+import { useOverlayFacts } from "@/engine/hooks/use-overlays";
 import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
 import type {
   EventWatch,
@@ -122,7 +122,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   const { connected } = useEngineHealth();
   const liveState = useLiveState();
   const local = useGoLiveChecklistState();
-  const overlays = useGoLiveOverlayFacts();
+  const overlays = useOverlayFacts();
   const presets = useStreamInfoPresets();
 
   const checkTwitch = useGoLiveTwitchCheckRequest();

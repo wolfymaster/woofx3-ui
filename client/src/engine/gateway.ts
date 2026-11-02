@@ -57,7 +57,6 @@ import type {
   GoLiveChecklistState,
   GoLiveCompletion,
   GoLiveFinish,
-  GoLiveOverlayFacts,
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
   HostedStorageUsage,
@@ -99,6 +98,7 @@ import type {
   NotRunningWorkflow,
   ObsStatus,
   OpenSessionRefresh,
+  OverlayFacts,
   Paginated,
   PinHistoryEntry,
   PinHistoryEntryId,
@@ -815,6 +815,8 @@ export interface TwitchLinkGateway {
 
 /** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
 export interface OverlaysGateway {
+  /** The instance's scenes and browser sources; null when the caller cannot see the instance. */
+  useFacts(options?: ReadOptions): Live<OverlayFacts | null>;
   /**
    * The scene's preview URL when one is already known, without asking for one
    * to be made. Null when `usePreviewUrlRequest` has to be asked.
@@ -1000,7 +1002,6 @@ export interface GoLiveGateway {
   /** Null when the caller cannot see the instance. */
   useChecklist(options?: ReadOptions): Live<GoLiveChecklistState | null>;
   /** The instance's scenes and browser sources; null when the caller cannot see the instance. */
-  useOverlays(options?: ReadOptions): Live<GoLiveOverlayFacts | null>;
   /** Hides a check from the checklist, or shows it again. */
   useSetCheckDismissedRequest(): (checkId: GoLiveCheckId, dismissed: boolean) => Promise<void>;
   /** Whether Twitch still accepts the link and it holds every required scope. */

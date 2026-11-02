@@ -9,13 +9,11 @@ import type {
   GoLiveChecklistState,
   GoLiveCompletion,
   GoLiveFinish,
-  GoLiveOverlayFacts,
   GoLiveStepOutcome,
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
   ReadOptions,
 } from "@/engine/types";
-import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { withPlainError } from "./errors";
 import { useMappedValue } from "./mapped";
 import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./scope";
@@ -26,7 +24,6 @@ import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./sc
 // advertises `twitch.chat`.
 
 type ChecklistRow = NonNullable<FunctionReturnType<typeof api.goLive.checklist>>;
-type OverlaysRow = NonNullable<FunctionReturnType<typeof api.goLive.overlays>>;
 type TwitchFactsRow = FunctionReturnType<typeof api.goLive.checkTwitch>;
 type StreamInfoFactsRow = FunctionReturnType<typeof api.goLive.checkStreamInfo>;
 type CompletionRow = FunctionReturnType<typeof api.goLive.complete>;
@@ -50,15 +47,6 @@ export function toGoLiveChecklistState(row: ChecklistRow): GoLiveChecklistState 
       enabled: row.workflows.enabled,
       enabledCapped: row.workflows.enabledCapped,
     },
-  };
-}
-
-export function toGoLiveOverlayFacts(row: OverlaysRow): GoLiveOverlayFacts {
-  return {
-    hasScene: row.hasScene,
-    browserSourceKeyCount: row.browserSourceKeyCount,
-    featuredUrl: row.featuredKey ? browserSourceUrlForKey(row.featuredKey) : null,
-    lastLoadedAt: row.lastLoadedAt,
   };
 }
 
@@ -117,12 +105,6 @@ function useChecklist({ enabled = true }: ReadOptions = {}) {
   return useMappedValue(row, toGoLiveChecklistState);
 }
 
-function useOverlays({ enabled = true }: ReadOptions = {}) {
-  const instanceId = useScopeInstanceId();
-  const row = useQuery(api.goLive.overlays, enabled && instanceId ? { instanceId } : "skip");
-  return useMappedValue(row, toGoLiveOverlayFacts);
-}
-
 function useSetCheckDismissedRequest() {
   const setCheckDismissed = useInstanceMutation(api.goLive.setCheckDismissed);
   return useCallback(
@@ -157,7 +139,6 @@ function useCompleteRequest() {
 
 export const convexGoLiveGateway: GoLiveGateway = {
   useChecklist,
-  useOverlays,
   useSetCheckDismissedRequest,
   useCheckTwitchRequest,
   useCheckStreamInfoRequest,

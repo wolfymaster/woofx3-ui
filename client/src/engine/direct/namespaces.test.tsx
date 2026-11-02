@@ -2363,7 +2363,7 @@ describe("goLive", () => {
 
   test("the overlay facts offer the newest active token of a scene that still exists, refreshed as tokens change", async () => {
     const { runtime, state, engine } = await connected();
-    const overlays = renderDirect(() => directGoLiveGateway(runtime, new FakeStreamStartMarkers()).useOverlays());
+    const overlays = renderDirect(() => directOverlaysGateway(runtime).useFacts());
     expect(await overlays.until((value) => value !== undefined, "the overlay facts")).toEqual({
       hasScene: false,
       browserSourceKeyCount: 0,

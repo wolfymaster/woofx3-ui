@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LastGoLive, StreamInfoFacts } from "@convex/lib/goLiveFacts";
-import type { GoLiveOverlayFacts } from "@/engine/types";
+import type { OverlayFacts } from "@/engine/types";
 import {
   applicablePresets,
   type CheckResult,
@@ -48,7 +48,7 @@ function lastGoLive(overrides: Partial<LastGoLive> = {}): LastGoLive {
 
 const FEATURED_URL = "https://site.example/browser-source/abc";
 
-function overlays(overrides: Partial<GoLiveOverlayFacts> = {}): GoLiveOverlayFacts {
+function overlays(overrides: Partial<OverlayFacts> = {}): OverlayFacts {
   return {
     hasScene: true,
     browserSourceKeyCount: 1,

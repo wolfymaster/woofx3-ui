@@ -6,14 +6,12 @@ import { ENGINE_CAPABILITIES, type UISetting } from "@woofx3/api";
 import { useEffect, useMemo } from "react";
 import { z } from "zod";
 import type { StreamStartMarkerRequest, StreamStartMarkers } from "@/engine/desktop-host";
-import { GatewayUnsupportedError } from "@/engine/errors";
 import type { GoLiveGateway } from "@/engine/gateway";
 import type {
   GoLiveCheckId,
   GoLiveChecklistState,
   GoLiveCompletion,
   GoLiveFinish,
-  GoLiveOverlayFacts,
   GoLiveStepOutcome,
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
@@ -23,7 +21,6 @@ import type {
   Workflow,
 } from "@/engine/types";
 import { directKeys as k } from "./keys";
-import { ACTIVE_TOKEN } from "./overlays";
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { directTwitch } from "./twitch";
@@ -114,30 +111,6 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
     dismissedCheckIds: readDismissed(findKey(settings, DISMISSED_KEY)),
     lastGoLive: readLastGoLive(findKey(settings, LAST_GO_LIVE_KEY)),
   });
-
-  const browserSourcesRead: EngineRead<GoLiveOverlayFacts> = {
-    queryKey: k.scenes.browserSources(),
-    queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
-        throw new GatewayUnsupportedError("goLive.useOverlays");
-      }
-      const [{ scenes }, tokens] = await Promise.all([
-        runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots()),
-        runtime.call("listOverlayTokens", (api) => api.listOverlayTokens()),
-      ]);
-      const sceneIds = new Set(scenes.filter((scene) => scene.kind === "scene").map((scene) => scene.id));
-      const active = tokens
-        .filter((token) => token.status === ACTIVE_TOKEN && sceneIds.has(token.sceneId))
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      return {
-        hasScene: sceneIds.size > 0,
-        browserSourceKeyCount: active.length,
-        featuredUrl: active[0]?.url ?? null,
-        // The engine does not record when a browser source loads its URL.
-        lastLoadedAt: null,
-      };
-    },
-  };
 
   /**
    * Keeps the cached marker read current with the host's changes until the
@@ -324,7 +297,6 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
 
   return {
     useChecklist,
-    useOverlays: ({ enabled = true }: ReadOptions = {}) => useEngineQuery(runtime, browserSourcesRead, { enabled }),
     useSetCheckDismissedRequest: () => useEngineRequest(setCheckDismissed),
     useCheckTwitchRequest: () => useEngineRequest(checkTwitch),
     useCheckStreamInfoRequest: () => useEngineRequest(checkStreamInfo),

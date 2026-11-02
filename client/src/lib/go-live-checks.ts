@@ -1,7 +1,7 @@
 import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import type { LastGoLive, StreamInfoFacts, TwitchLinkFacts, WorkflowFacts } from "@convex/lib/goLiveFacts";
 import { GO_LIVE_CHECK_IDS, type GoLiveCheckId } from "@shared/go-live-check-ids";
-import type { GoLiveOverlayFacts, StreamInfo, StreamInfoPresetId } from "@/engine/types";
+import type { OverlayFacts, StreamInfo, StreamInfoPresetId } from "@/engine/types";
 import { parseFieldOptionsReply } from "@/lib/field-options";
 import { comparePreset } from "@/lib/stream-info-edit";
 import { formatTimeAgo } from "@/lib/time-ago";
@@ -148,7 +148,7 @@ export function twitchCheck(facts: TwitchLinkFacts): CheckResult {
  * this can confirm is that one exists to open. A browser source loading its
  * URL is recorded, which says the URL has worked, not that it is loaded now.
  */
-export function overlaysCheck(facts: GoLiveOverlayFacts, now: number): CheckResult {
+export function overlaysCheck(facts: OverlayFacts, now: number): CheckResult {
   if (!facts.hasScene) {
     return result("overlays", "fail", "There are no scenes yet, so OBS has no overlay to show", {
       fixes: [{ kind: "route", label: "Create a scene", href: SCENES_PATH }],

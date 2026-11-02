@@ -95,6 +95,7 @@ const { convexShoutoutsGateway, reorderQueueOptimistically } = await import("./s
 const { convexTwitchChatGateway } = await import("./twitch-chat");
 const { convexClipsGateway } = await import("./clips");
 const { convexStreamInfoGateway, removePresetOptimistically, toStreamInfo } = await import("./stream-info");
+const { convexOverlaysGateway } = await import("./overlays");
 const { convexGoLiveGateway, toGoLiveCompletion, toGoLiveStreamInfoFacts, toGoLiveTwitchFacts } = await import(
   "./go-live"
 );
@@ -395,9 +396,9 @@ describe("reads", () => {
       query: "goLive:checklist",
     },
     {
-      name: "go-live overlays",
-      read: (enabled) => convexGoLiveGateway.useOverlays({ enabled }),
-      query: "goLive:overlays",
+      name: "overlay facts",
+      read: (enabled) => convexOverlaysGateway.useFacts({ enabled }),
+      query: "browserSource:overlayFacts",
     },
   ];
 

@@ -6,11 +6,6 @@ export function useGoLiveChecklistState(options?: ReadOptions) {
   return useEngineGateway().goLive.useChecklist(options);
 }
 
-/** The instance's scenes and browser sources, as the checklist checks them. */
-export function useGoLiveOverlayFacts(options?: ReadOptions) {
-  return useEngineGateway().goLive.useOverlays(options);
-}
-
 export function useSetGoLiveCheckDismissedRequest() {
   return useEngineGateway().goLive.useSetCheckDismissedRequest();
 }
