@@ -18,6 +18,7 @@ import { useBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import { useCreateSceneRequest, useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import type { SceneId } from "@/engine/types";
+import { useExpiringFlag } from "@/hooks/use-expiring-flag";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { describeAlertFailure } from "@/lib/alert-failure";
@@ -39,6 +40,7 @@ import { cn } from "@/lib/utils";
 const TICK_MS = 1_000;
 const RECENT_ALERTS_LIMIT = 20;
 const ALERT_SURFACE = "alert";
+const SCENE_ARRIVAL_TIMEOUT_MS = 30_000;
 const FLOW_STEPS = ["Add to your streaming app", "Send a test", "You're ready"];
 
 /** Phases where the page has just put the streamer's next move in front of them. */
@@ -321,8 +323,9 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
   }
 
   // The new scene reaches the reads a moment after the engine makes it; the
-  // button stays away until then so a second press makes no second scene.
-  const [sceneRequested, setSceneRequested] = useState(false);
+  // button stays away until then so a second press makes no second scene, and
+  // comes back if the scene never arrives.
+  const [sceneRequested, markSceneRequested] = useExpiringFlag(SCENE_ARRIVAL_TIMEOUT_MS);
   const alertWidget = catalog?.find((row) => row.hostsSurface === ALERT_SURFACE);
   const otherAlertFailed = seed?.alerts.some((alert) => alert.status === "failed" && alert.itemId !== "follow");
   const alreadyDone = Boolean(seed?.overlayDone);
@@ -396,7 +399,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
               testId="button-overlay-new-scene"
               onRetry={async () => {
                 await createScene(defaultSceneInput({ id: alertWidget.widgetId, name: alertWidget.name }));
-                setSceneRequested(true);
+                markSceneRequested();
               }}
             />
           ) : (
