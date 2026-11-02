@@ -82,11 +82,7 @@ export function ProvisioningBar({ instanceId }: { instanceId: Id<"instances"> })
       {!isFailed && <Progress value={percent} className="h-1.5" />}
       {isFailed && <p className="text-xs text-muted-foreground">This usually clears up with a retry.</p>}
       {retryFailed && <p className="text-xs text-destructive">That didn&apos;t work. Try again in a moment.</p>}
-      {!isFailed && !isDone && (
-        <p className="text-xs text-muted-foreground">
-          This can take a few minutes. It keeps going if you close this tab.
-        </p>
-      )}
+      {!isFailed && !isDone && <p className="text-xs text-muted-foreground">It keeps going if you close this tab.</p>}
     </div>
   );
 }
