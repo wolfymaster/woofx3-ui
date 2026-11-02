@@ -50,7 +50,7 @@ A preview can be onboarded with a password account, so automated tests can get t
 - With Twitch chosen, it must be connected, as in production.
 - Applying setup installs the Twitch module even with Twitch left out, approving what its build asks for (`platformsToApply`). The default alerts need its triggers, and test events work without a linked account.
 
-Nothing else changes: features that act on Twitch, such as chat commands and the go-live checklist, still need a link. Production never sets the variable, so its setup is unchanged.
+Nothing else changes: features that act on Twitch, such as chat commands, still need a link. Production never sets the variable, so its setup is unchanged.
 
 ## Choosing an engine
 

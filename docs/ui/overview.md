@@ -27,7 +27,7 @@ The menu is declared in one place — `client/src/components/layout/nav-config.t
 | Dashboard | `/` | — |
 | Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Supporters, Media, Workflows |
 | Marketplace | `/marketplace` | — (the page renders its own category sidebar) |
-| Help | `/help` | Learning, Setup, Logs, Feedback |
+| Help | `/help` | Learning, Logs, Feedback |
 | Admin | `/admin` | Engine, Integrations, Storage, Appearance |
 
 Admin and Team are not in the primary nav — they are the icon buttons in the header's utility cluster (`UTILITY_SECTIONS`), but Admin renders the same section sidebar as Stream and Help.

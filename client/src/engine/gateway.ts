@@ -54,13 +54,6 @@ import type {
   FormSubmission,
   FormSubmissionId,
   FormSubmissionQueueStatus,
-  GoLiveCheckId,
-  GoLiveChecklistState,
-  GoLiveCompletion,
-  GoLiveFinish,
-  GoLiveOverlayFacts,
-  GoLiveStreamInfoFacts,
-  GoLiveTwitchFacts,
   HostedStorageUsage,
   InstalledModule,
   InstanceLiveState,
@@ -100,6 +93,7 @@ import type {
   NotRunningWorkflow,
   ObsStatus,
   OpenSessionRefresh,
+  OverlayFacts,
   Paginated,
   PinHistoryEntry,
   PinHistoryEntryId,
@@ -265,7 +259,6 @@ export interface EngineGateway {
   readonly clips: ClipsGateway;
   readonly formSubmissions: FormSubmissionsGateway;
   readonly streamInfo: StreamInfoGateway;
-  readonly goLive: GoLiveGateway;
   readonly pageIntros: PageIntrosGateway;
   readonly dashboard: DashboardGateway;
 }
@@ -817,6 +810,8 @@ export interface TwitchLinkGateway {
 
 /** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
 export interface OverlaysGateway {
+  /** The instance's scenes and browser sources; null when the caller cannot see the instance. */
+  useFacts(options?: ReadOptions): Live<OverlayFacts | null>;
   /**
    * The scene's preview URL when one is already known, without asking for one
    * to be made. Null when `usePreviewUrlRequest` has to be asked.
@@ -1003,23 +998,4 @@ export interface StreamInfoGateway {
   usePresets(options?: ReadOptions): Live<StreamInfoPreset[]>;
   useSavePresetRequest(): (preset: NewStreamInfoPreset) => Promise<StreamInfoPresetId>;
   useRemovePresetRequest(): (presetId: StreamInfoPresetId) => Promise<void>;
-}
-
-/**
- * The go-live checklist run just before a stream: each check that asks
- * Twitch is its own request so the checks run side by side, and finishing it
- * posts the announcement and drops the start marker.
- */
-export interface GoLiveGateway {
-  /** Null when the caller cannot see the instance. */
-  useChecklist(options?: ReadOptions): Live<GoLiveChecklistState | null>;
-  /** The instance's scenes and browser sources; null when the caller cannot see the instance. */
-  useOverlays(options?: ReadOptions): Live<GoLiveOverlayFacts | null>;
-  /** Hides a check from the checklist, or shows it again. */
-  useSetCheckDismissedRequest(): (checkId: GoLiveCheckId, dismissed: boolean) => Promise<void>;
-  /** Whether Twitch still accepts the link and it holds every required scope. */
-  useCheckTwitchRequest(): () => Promise<GoLiveTwitchFacts>;
-  useCheckStreamInfoRequest(): () => Promise<GoLiveStreamInfoFacts>;
-  /** Each step reports its own outcome rather than rejecting. */
-  useCompleteRequest(): (finish: GoLiveFinish) => Promise<GoLiveCompletion>;
 }

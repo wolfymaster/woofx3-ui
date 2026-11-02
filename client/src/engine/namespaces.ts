@@ -90,7 +90,6 @@ export const ENGINE_NAMESPACE_MODULES = {
   twitchChat: ["twitchBroadcast", "shoutouts.listChatters"],
   clips: ["twitchClips"],
   streamInfo: ["streamInfo"],
-  goLive: ["goLive"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type EngineNamespace = keyof typeof ENGINE_NAMESPACE_MODULES;

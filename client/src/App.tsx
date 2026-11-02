@@ -65,7 +65,6 @@ const Feedback = lazy(() => import("@/pages/feedback"));
 const FeedbackNew = lazy(() => import("@/pages/feedback-new"));
 const FeedbackPost = lazy(() => import("@/pages/feedback-post"));
 const FeedbackEdit = lazy(() => import("@/pages/feedback-edit"));
-const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
 const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
@@ -233,7 +232,6 @@ function AppRoutes() {
                     <Route path="/stream">
                       <Redirect to="/stream/alerts" />
                     </Route>
-                    <Route path="/stream/go-live" component={GoLive} />
                     <Route path="/stream/alerts" component={Alerts} />
                     <Route path="/stream/alerts/*" component={Alerts} />
                     <Route path={ALERT_LIBRARY_EDITOR_ROUTE} component={LibraryAlertEditor} />
