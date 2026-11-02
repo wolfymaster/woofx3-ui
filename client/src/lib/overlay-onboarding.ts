@@ -62,7 +62,7 @@ export type FollowState = "pending" | "ready" | "failed" | "missing";
 export interface OverlayState {
   phase: OverlayPhase;
   follow: FollowState;
-  /** Every test sent since the overlay connected, so a late answer to an earlier one still counts. */
+  /** Every test sent on this visit, so a late answer to an earlier one still counts, even across a disconnect. */
   triggerIds: readonly string[];
   sceneAbsentSince: number | null;
   followAbsentSince: number | null;
@@ -192,7 +192,9 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
     if (phase.name === "waiting" || phase.name === "test-failed") {
       return base;
     }
-    return { ...base, phase: { name: "waiting", since: at, dropped: !wasBlocked }, triggerIds: [] };
+    // triggerIds stays: the engine holds an alert for an overlay it has not noticed
+    // closing, so a test sent just before the drop can still play when it comes back.
+    return { ...base, phase: { name: "waiting", since: at, dropped: !wasBlocked } };
   }
 
   if (facts.presence === "open") {
@@ -225,14 +227,13 @@ export function overlayReducer(state: OverlayState, event: OverlayEvent): Overla
         triggerIds: state.phase.name === "finished" ? [] : state.triggerIds,
       };
     case "sent":
-      // Anywhere else, the overlay dropped while the send was on its way.
-      return state.phase.name === "sending"
-        ? {
-            ...state,
-            phase: { name: "playing", sentAt: event.at },
-            triggerIds: [...state.triggerIds, event.triggerId],
-          }
-        : state;
+      // Anywhere else, the overlay dropped while the send was on its way: nothing to
+      // watch for now, but the test went out and may still play when it comes back.
+      return {
+        ...state,
+        phase: state.phase.name === "sending" ? { name: "playing", sentAt: event.at } : state.phase,
+        triggerIds: [...state.triggerIds, event.triggerId],
+      };
     case "send-refused":
       return state.phase.name === "sending" ? { ...state, phase: { name: "test-failed", reason: null } } : state;
     case "confirmed-seen":
