@@ -34,7 +34,8 @@ export interface RunRecord {
  * That distinction only works because the engine announces `workflow.run.started`
  * as well as the terminal events: a run that matched says so immediately, so
  * continued silence really does mean nothing was listening, rather than a slow
- * workflow still working.
+ * workflow still working. It also only works for a record that was never seen:
+ * rows expire, so callers keep the last one with `useLastRunRecord`.
  */
 export function describeTestEventOutcome(record: RunRecord | null | undefined, waitElapsed: boolean): TestEventOutcome {
   if (record === undefined || record === null) {
