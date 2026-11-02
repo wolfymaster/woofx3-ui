@@ -171,7 +171,7 @@ function RelayRow({ relay }: { relay: RelayView }) {
       );
       break;
     case "displaced":
-      text = "Relay: another companion connection for this instance took over";
+      text = "Relay: another connection for this instance took over";
       action = reconnect;
       break;
     case "refused":

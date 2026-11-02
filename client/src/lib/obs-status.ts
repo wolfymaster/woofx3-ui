@@ -16,7 +16,7 @@ export function describeObsStatus(status: ObsStatus): ObsStatusDescription {
   if (status.state === "connected") {
     // Through the bridge, `address` is the relay's hostname, which says nothing useful to the streamer.
     if (status.route === "companion") {
-      return { tone: "ok", text: "Connected to OBS through the companion" };
+      return { tone: "ok", text: "Connected to OBS through the woofx3 desktop app" };
     }
     return { tone: "ok", text: `Connected to OBS${where}` };
   }
@@ -35,7 +35,7 @@ export function describeObsStatus(status: ObsStatus): ObsStatusDescription {
   if (status.failure === "relay") {
     return {
       tone: "problem",
-      text: "Your companion isn't connected, so the engine can't reach OBS. Open the woofx3 companion on your PC.",
+      text: "The woofx3 desktop app isn't connected, so the engine can't reach OBS. Open it on your PC.",
     };
   }
   if (status.failure === "unreachable") {
