@@ -1,6 +1,7 @@
 import type { EngineInfo, EngineModuleSummary } from "@woofx3/api";
 import { alertWidgetNamesOf, DEFAULT_ALERT_WIDGET_NAME, placedWidgetsOf } from "./alert-widgets";
 import { STARTER_ACTION_REFS, type StarterPack, type StarterWorkflowItem } from "./starter-packs";
+import { stableWidgetId, widgetCanonicalKey } from "./widget-key";
 
 /**
  * What a brand new streamer starts with, so an alert plays on their overlay
@@ -274,7 +275,9 @@ export const DEFAULT_ALERT_ITEMS: readonly Pick<StarterWorkflowItem, "id" | "tri
 export interface DefaultSeedEngine {
   getEngineInfo(): PromiseLike<Pick<EngineInfo, "overlayPublicUrl">>;
   listEngineModules(): PromiseLike<Pick<EngineModuleSummary, "moduleId" | "moduleKey">[]>;
-  getAvailableWidgets(): PromiseLike<{ widgets: { id: string; name: string; hostsSurface: string }[] }>;
+  getAvailableWidgets(): PromiseLike<{
+    widgets: { id: string; manifestId: string; createdByRef: string; name: string; hostsSurface: string }[];
+  }>;
   getScenes(query: { pageSize: number }): PromiseLike<{ scenes: { id: string; widgets: readonly unknown[] }[] }>;
   createScene(scene: { name: string; widgetsJson: string; layoutJson: string }): PromiseLike<{ id: string }>;
 }
@@ -288,8 +291,12 @@ export interface DefaultSceneOutcome {
   error?: string;
 }
 
-/** The default scene as the engine's create takes it, around the engine's alert widget. */
-export function defaultSceneInput(alertWidget: { id: string; name: string }): {
+/**
+ * The default scene as the engine's create takes it, around the engine's alert
+ * widget. `canonicalId` is what the scene manager parses a placement by; a
+ * widget's database row id is not one, and a placement holding it is dropped.
+ */
+export function defaultSceneInput(alertWidget: { canonicalId: string; name: string }): {
   name: string;
   widgetsJson: string;
   layoutJson: string;
@@ -300,7 +307,7 @@ export function defaultSceneInput(alertWidget: { id: string; name: string }): {
     widgetsJson: JSON.stringify([
       {
         id: "w-default-alerts",
-        widgetCanonicalId: alertWidget.id,
+        widgetCanonicalId: alertWidget.canonicalId,
         name: alertWidget.name,
         position: { x, y },
         size: { width, height },
@@ -324,12 +331,15 @@ export function defaultSceneInput(alertWidget: { id: string; name: string }): {
  */
 export async function seedDefaultScene(engine: DefaultSeedEngine): Promise<DefaultSceneOutcome> {
   const { widgets } = await engine.getAvailableWidgets();
-  const alertWidgets = widgets.filter((widget) => widget.hostsSurface === "alert");
+  const alertWidgets = widgets
+    .filter((widget) => widget.hostsSurface === "alert")
+    .map((widget) => ({ canonicalId: widgetCanonicalKey(widget), name: widget.name }))
+    .filter((widget) => stableWidgetId(widget.canonicalId) !== undefined);
   const alertWidget = alertWidgets[0];
   if (alertWidget === undefined) {
     return { status: "pending", error: "The engine has not registered its alert widget yet." };
   }
-  const alertWidgetIds = new Set(alertWidgets.map((widget) => widget.id));
+  const alertWidgetIds = new Set(alertWidgets.map((widget) => widget.canonicalId));
   const { scenes } = await engine.getScenes({ pageSize: SCENE_SEARCH_PAGE_SIZE });
   const existing = scenes.find((scene) =>
     alertWidgetNamesOf(placedWidgetsOf(scene.widgets), alertWidgetIds).has(DEFAULT_ALERT_WIDGET_NAME)

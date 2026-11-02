@@ -117,13 +117,23 @@ describe("default alerts", () => {
 });
 
 describe("default scene", () => {
+  // As the engine's getAvailableWidgets answers: `id` is the database row's, and
+  // only `createdByRef` and `manifestId` name the widget a placement can store.
+  const ALERT_WIDGET_ROW = {
+    id: "cae7619f-41f4-4a6e-9f3a-0d5be1c7a2d1",
+    manifestId: "alert",
+    createdByRef: "woofx3:0.45.0:abc1234",
+    name: "Alert",
+    hostsSurface: "alert",
+  };
+
   function engineWith(scenes: { id: string; widgets: unknown[] }[], hasWidget = true) {
     const created: { name: string; widgetsJson: string; layoutJson: string }[] = [];
     const engine: DefaultSeedEngine = {
       getEngineInfo: async () => ({ overlayPublicUrl: "" }),
       listEngineModules: async () => [],
       getAvailableWidgets: async () => ({
-        widgets: hasWidget ? [{ id: "woofx3:widget:alert", name: "Alert", hostsSurface: "alert" }] : [],
+        widgets: hasWidget ? [ALERT_WIDGET_ROW] : [],
       }),
       getScenes: async () => ({ scenes }),
       createScene: async (scene) => {
@@ -153,6 +163,24 @@ describe("default scene", () => {
       { id: "mine", widgets: [{ widgetCanonicalId: "woofx3:widget:alert", settings: {} }] },
     ]);
     expect(await seedDefaultScene(engine)).toEqual({ status: "installed", engineSceneId: "mine" });
+    expect(created).toEqual([]);
+  });
+
+  test("finds the scene it created when a run dies before recording the id", async () => {
+    const first = engineWith([]);
+    await seedDefaultScene(first.engine);
+    const widgets = JSON.parse(first.created[0]?.widgetsJson ?? "");
+    const second = engineWith([{ id: "made-earlier", widgets }]);
+    expect(await seedDefaultScene(second.engine)).toEqual({ status: "installed", engineSceneId: "made-earlier" });
+    expect(second.created).toEqual([]);
+  });
+
+  test("waits rather than store a widget row that has no canonical id", async () => {
+    const { engine, created } = engineWith([]);
+    engine.getAvailableWidgets = async () => ({
+      widgets: [{ ...ALERT_WIDGET_ROW, createdByRef: "", manifestId: "" }],
+    });
+    expect((await seedDefaultScene(engine)).status).toBe("pending");
     expect(created).toEqual([]);
   });
 

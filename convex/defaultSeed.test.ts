@@ -176,7 +176,17 @@ class FakeEngine extends RpcTarget {
   }
 
   getAvailableWidgets() {
-    return { widgets: [{ id: "alert-widget", name: "Alert", hostsSurface: "alert" }] };
+    return {
+      widgets: [
+        {
+          id: "cae7619f-41f4-4a6e-9f3a-0d5be1c7a2d1",
+          manifestId: "alert",
+          createdByRef: "woofx3:0.45.0:abc1234",
+          name: "Alert",
+          hostsSurface: "alert",
+        },
+      ],
+    };
   }
 
   getScenes() {

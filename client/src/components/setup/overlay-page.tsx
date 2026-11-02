@@ -414,7 +414,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
               label="Make a new overlay"
               testId="button-overlay-new-scene"
               onRetry={async () => {
-                await createScene(defaultSceneInput({ id: alertWidget.widgetId, name: alertWidget.name }));
+                await createScene(defaultSceneInput({ canonicalId: alertWidget.widgetId, name: alertWidget.name }));
                 markSceneRequested();
               }}
             />

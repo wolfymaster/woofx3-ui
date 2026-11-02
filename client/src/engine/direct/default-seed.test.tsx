@@ -16,7 +16,15 @@ async function connected(): Promise<DirectHarness> {
   const harness = createDirectHarness();
   harnesses.push(harness);
   await harness.connect();
-  harness.state.widgets = [{ id: "woofx3:widget:alert", name: "Alert", hostsSurface: "alert" }] as never;
+  harness.state.widgets = [
+    {
+      id: "cae7619f-41f4-4a6e-9f3a-0d5be1c7a2d1",
+      manifestId: "alert",
+      createdByRef: "woofx3:0.45.0:abc1234",
+      name: "Alert",
+      hostsSurface: "alert",
+    },
+  ] as never;
   harness.state.modules = [{ moduleId: "woofx3", moduleKey: "woofx3:0.45.0:abc1234" }] as never;
   harness.state.workflowCatalog = {
     triggers: ["channel.follow", "channel.subscribe", "channel.resub", "channel.subscriptionGift", "channel.cheer"].map(
@@ -86,6 +94,8 @@ describe("the direct default seed", () => {
     expect(state.callsOf("setUISetting").map(([, key]) => key)).toContain(ledgerKey);
 
     expect(state.callsOf("createScene")).toHaveLength(1);
+    const [scene] = state.callsOf("createScene")[0] as [{ widgetsJson: string }];
+    expect(JSON.parse(scene.widgetsJson)[0].widgetCanonicalId).toBe("woofx3:widget:alert");
 
     state.workflows = [];
     state.scenes = [];
