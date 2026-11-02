@@ -131,6 +131,54 @@ describe("testEventFields", () => {
     expect(field.initial).toBe("2000");
   });
 
+  // The Twitch module's "Gifted subs" filter is a select whose "any" choice has
+  // the value "", which would fail a real `isGift eq false` condition.
+  test("starts a boolean at false whatever choices a config select offers for its path", () => {
+    const [field] = testEventFields(
+      preset(
+        [{ path: "isGift", type: "boolean" }],
+        [
+          {
+            id: "isGift",
+            label: "Gifted subs",
+            type: "select",
+            eventPath: "isGift",
+            defaultValue: "",
+            options: [
+              { value: "", label: "Any subscription" },
+              { value: "false", label: "Only subs the viewer bought" },
+              { value: "true", label: "Only gifted subs" },
+            ],
+          },
+        ]
+      )
+    );
+    expect(field.initial).toBe(false);
+    expect(field.options).toBeUndefined();
+  });
+
+  test.each([
+    ["an example", { path: "isGift", type: "boolean", example: "" }, []],
+    [
+      "an example payload",
+      { path: "isGift", type: "boolean" },
+      [{ id: "x", label: "X", type: "text", examplePayload: '{"isGift":"true"}' }],
+    ],
+  ] as [string, DataShapeField, ConfigField[]][])("ignores %s that is not a boolean", (_, emit, config) => {
+    expect(testEventFields(preset([emit], config))[0].initial).toBe(false);
+  });
+
+  test("keeps a boolean's real example and example payload value", () => {
+    expect(testEventFields(preset([{ path: "live", type: "boolean", example: true }]))[0].initial).toBe(true);
+    const [field] = testEventFields(
+      preset(
+        [{ path: "isGift", type: "boolean" }],
+        [{ id: "x", label: "X", type: "text", examplePayload: '{"isGift":true}' }]
+      )
+    );
+    expect(field.initial).toBe(true);
+  });
+
   test("binds a config field to a path by eventPath before its id", () => {
     const [field] = testEventFields(
       preset(

@@ -46,7 +46,8 @@ export function testEventFields(preset: TriggerPreset): TestEventField[] {
     .filter((field) => !isDescribedByItsChildren(field, emits))
     .map((field) => {
       const config = configByPath.get(field.path);
-      const options = config?.type === "select" ? config.options : undefined;
+      // A select on a boolean path is a workflow filter, whose "any" choice is no value the event can carry.
+      const options = config?.type === "select" && field.type !== "boolean" ? config.options : undefined;
       return {
         path: field.path,
         label: humanize(field.path),
@@ -121,6 +122,9 @@ function isDescribedByItsChildren(field: DataShapeField, emits: readonly DataSha
  * A `null` example counts as no example. The engine stores an undeclared one as
  * null, and a form that opens on `null` asks the user to fill in what the
  * declaration was supposed to supply.
+ *
+ * A boolean only ever starts as a boolean. Its control is a switch, which shows
+ * anything else as off and fires it as it is, failing a condition on the value.
  */
 function seedValue(
   field: DataShapeField,
@@ -128,6 +132,10 @@ function seedValue(
   options: ConfigFieldOption[] | undefined,
   config: ConfigField | undefined
 ): unknown {
+  if (field.type === "boolean") {
+    const declared = [field.example, ...samples.map((sample) => readPath(sample, field.path))];
+    return declared.find((value) => typeof value === "boolean") ?? false;
+  }
   if (field.example !== undefined && field.example !== null) {
     return field.example;
   }
