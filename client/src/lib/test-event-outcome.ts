@@ -27,6 +27,18 @@ export interface RunRecord {
 }
 
 /**
+ * The row that says how the run under one key went, from its rows oldest first:
+ * the last settled one, else the last. Reading only the newest row is not enough
+ * because the engine can write `progress` just after the terminal row.
+ */
+export function runRecordOf<Row extends RunRecord>(rows: readonly Row[] | undefined): Row | null | undefined {
+  if (rows === undefined) {
+    return undefined;
+  }
+  return rows.findLast((row) => row.status !== "progress") ?? rows.at(-1) ?? null;
+}
+
+/**
  * `record` is undefined while the subscription is loading and null when no row
  * exists yet. Those are the same thing -- nothing has arrived -- until the
  * caller's wait elapses, at which point the absence becomes the answer.

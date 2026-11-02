@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   describeTestEventOutcome,
+  type RunRecord,
+  runRecordOf,
   settleTestEventOutcome,
   TestEventTimeoutError,
   withinTimeout,
@@ -58,6 +60,29 @@ describe("describeTestEventOutcome", () => {
     const outcome = describeTestEventOutcome({ status: "error" }, false);
     expect(outcome).toMatchObject({ kind: "failed", detail: "No reason was reported." });
   });
+});
+
+describe("runRecordOf", () => {
+  const cases: { name: string; rows: RunRecord[] | undefined; expected: RunRecord | null | undefined }[] = [
+    { name: "still loading", rows: undefined, expected: undefined },
+    { name: "no rows yet", rows: [], expected: null },
+    { name: "only started", rows: [{ status: "progress" }], expected: { status: "progress" } },
+    {
+      name: "progress written after the success",
+      rows: [{ status: "success" }, { status: "progress" }],
+      expected: { status: "success" },
+    },
+    {
+      name: "the last settled row wins",
+      rows: [{ status: "error", message: "a" }, { status: "success" }],
+      expected: { status: "success" },
+    },
+  ];
+  for (const { name, rows, expected } of cases) {
+    test(name, () => {
+      expect(runRecordOf(rows)).toEqual(expected);
+    });
+  }
 });
 
 describe("settleTestEventOutcome", () => {

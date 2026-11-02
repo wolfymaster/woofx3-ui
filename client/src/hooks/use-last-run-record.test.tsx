@@ -52,6 +52,16 @@ describe("useLastRunRecord", () => {
     ]);
   });
 
+  test("a progress row written after the success does not undo it", () => {
+    expect(
+      outcomesOf(
+        { key: "t1", record: SUCCESS },
+        { key: "t1", record: { status: "progress" } },
+        { key: "t1", record: null }
+      )
+    ).toEqual(["succeeded", "succeeded", "succeeded"]);
+  });
+
   test("a newer row replaces the one kept", () => {
     expect(outcomesOf({ key: "t1", record: { status: "progress" } }, { key: "t1", record: SUCCESS })).toEqual([
       "running",
