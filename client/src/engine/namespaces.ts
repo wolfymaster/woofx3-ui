@@ -68,6 +68,7 @@ export const ENGINE_NAMESPACE_MODULES = {
   moduleOAuth: ["moduleOAuth"],
   setupImports: ["setupImports"],
   starterPacks: ["starterPacks"],
+  defaultSeed: ["defaultSeed"],
   twitchLink: [
     "instances.getPlatformLinks",
     // finishConnect completes Convex's own OAuth redirect on the callback page,

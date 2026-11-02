@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { DEFAULT_DASHBOARD_LAYOUT_ID, DEFAULT_DASHBOARD_WIDGETS } from "@shared/default-seed";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -248,14 +249,16 @@ export const chooseInterests = mutation({
 });
 
 /**
- * Gives the user a first dashboard panel built from the interests, unless they
- * already have one: a dashboard they have arranged is never replaced.
+ * Gives the user a first dashboard panel, unless they already have one: a
+ * dashboard they have arranged is never replaced. Setup that asked about
+ * interests builds it from the answer, which is what the wizard previewed;
+ * otherwise it is the default panel.
  */
 async function seedDashboard(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   userId: Id<"users">,
-  interests: readonly string[]
+  row: Doc<"instanceSetup">
 ) {
   const existing = await ctx.db
     .query("dashboardLayouts")
@@ -264,9 +267,11 @@ async function seedDashboard(
   if (existing && (existing.panels ?? []).length > 0) {
     return;
   }
-  const panels = [
-    { id: crypto.randomUUID(), name: "Main", layoutId: PRESET_LAYOUT_ID, widgets: buildDashboardPreset(interests) },
-  ];
+  const panel =
+    row.interestsChosenAt === undefined
+      ? { layoutId: DEFAULT_DASHBOARD_LAYOUT_ID, widgets: DEFAULT_DASHBOARD_WIDGETS.map((widget) => ({ ...widget })) }
+      : { layoutId: PRESET_LAYOUT_ID, widgets: buildDashboardPreset(row.interests ?? []) };
+  const panels = [{ id: crypto.randomUUID(), name: "Main", ...panel }];
   if (existing) {
     await ctx.db.patch(existing._id, { panels });
     return;
@@ -296,7 +301,7 @@ export const complete = mutation({
     }
     const now = Date.now();
     await ctx.db.patch(row._id, { completedAt: now, completedByUserId: userId, updatedAt: now });
-    await seedDashboard(ctx, instanceId, userId, row.interests ?? []);
+    await seedDashboard(ctx, instanceId, userId, row);
     await scheduleApplyIfRegistered(ctx, instanceId);
     // An import queued during setup waits for setup to finish before applying.
     await ctx.scheduler.runAfter(0, internal.setupImports.resumeQueued, { instanceId });
@@ -309,8 +314,8 @@ export const retryApply = mutation({
   handler: async (ctx, { instanceId }) => {
     await requireInstanceRole(ctx, instanceId, "admin");
     const row = await readSetupRow(ctx, instanceId);
-    if (!row?.completedAt) {
-      throw new Error("Setup is not finished");
+    if (!row?.platformsChosenAt) {
+      throw new Error("Setup has nothing to apply yet");
     }
     await ctx.db.patch(row._id, { applyAttempts: 0, updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });

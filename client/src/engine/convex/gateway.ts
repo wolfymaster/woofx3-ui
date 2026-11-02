@@ -6,6 +6,7 @@ import { convexClipsGateway } from "./clips";
 import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
 import { convexDashboardGateway } from "./dashboard";
+import { convexDefaultSeedGateway } from "./default-seed";
 import { convexEventLogGateway } from "./event-log";
 import { convexFormSubmissionsGateway } from "./form-submissions";
 import { convexMacrosGateway } from "./macros";
@@ -59,6 +60,7 @@ export const convexEngineGateway: EngineGateway = {
   moduleOAuth: convexModuleOAuthGateway,
   setupImports: convexSetupImportsGateway,
   starterPacks: convexStarterPacksGateway,
+  defaultSeed: convexDefaultSeedGateway,
   adBreaks: convexAdBreaksGateway,
   moderation: convexModerationGateway,
   pins: convexPinsGateway,

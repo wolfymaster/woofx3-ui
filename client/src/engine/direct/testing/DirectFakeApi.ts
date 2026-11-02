@@ -6,6 +6,7 @@ import type {
   AvailableFunction,
   CommandSnapshot,
   CreateCommandInput,
+  EngineInfo,
   EngineModuleSummary,
   EventLogPage,
   EventLogQuery,
@@ -27,6 +28,7 @@ import type {
   PaginatedWorkflows,
   ResourceInstanceDefinition,
   RunActionsInput,
+  Scene,
   SceneSnapshot,
   StreamEventFrame,
   StreamEventSubscriber,
@@ -108,6 +110,9 @@ type DirectFakeSurface = Pick<
   | "listSceneSnapshots"
   | "getSceneSnapshot"
   | "getAvailableWidgets"
+  | "createScene"
+  | "getEngineInfo"
+  | "getScenes"
   | "listWidgetThemes"
   | "listUISettings"
   | "getUISetting"
@@ -482,6 +487,37 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async getAvailableWidgets(): Promise<{ widgets: AvailableWidget[] }> {
     this.state.record("getAvailableWidgets");
     return { widgets: this.state.widgets };
+  }
+
+  async createScene(data: { name: string; widgetsJson?: string; layoutJson?: string }): Promise<never> {
+    this.state.record("createScene", data);
+    const id = `scene-${this.state.scenes.length + 1}`;
+    this.state.scenes = [
+      ...this.state.scenes,
+      {
+        id,
+        name: data.name,
+        widgetsJson: data.widgetsJson ?? "[]",
+        layoutJson: data.layoutJson ?? "{}",
+      } as SceneSnapshot,
+    ];
+    return { id } as never;
+  }
+
+  async getEngineInfo(): Promise<EngineInfo> {
+    this.state.record("getEngineInfo");
+    return { engineSceneOverlayBaseUrl: "", overlayPublicUrl: "https://overlay.test", version: "dev" };
+  }
+
+  async getScenes(): Promise<{ scenes: Scene[]; total: number; page: number; pageSize: number }> {
+    this.state.record("getScenes");
+    const scenes = this.state.scenes.map((scene) => ({
+      id: scene.id,
+      name: scene.name,
+      widgets: JSON.parse(scene.widgetsJson),
+      createdAt: "",
+    }));
+    return { scenes, total: scenes.length, page: 1, pageSize: scenes.length };
   }
 
   async listUISettings(namespace: string): Promise<UISetting[]> {
