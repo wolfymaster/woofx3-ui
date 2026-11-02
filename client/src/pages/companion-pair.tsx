@@ -262,7 +262,7 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
             <p>You need to be an admin of an instance to pair a companion.</p>
             <p className="text-muted-foreground">
               No instance yet?{" "}
-              <Link href="/setup" className="text-primary hover:underline">
+              <Link href="/auth/onboarding" className="text-primary hover:underline">
                 Set one up
               </Link>
               .
