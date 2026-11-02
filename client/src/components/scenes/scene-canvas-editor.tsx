@@ -770,6 +770,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       onRefused={reportRefused}
       preview={
         <LiveScenePreview
+          engineSceneId={engineSceneId}
           sceneId={sceneId}
           width={canvasSettings.width}
           height={canvasSettings.height}

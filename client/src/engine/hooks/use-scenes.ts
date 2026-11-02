@@ -26,6 +26,11 @@ export function useAlertTargetUsage(engineSceneId: string) {
   return useEngineGateway().scenes.useAlertTargetUsage(engineSceneId);
 }
 
+/** Call when a pointer heads for a scene, so its editor opens with what it needs. */
+export function usePrewarmSceneEditor() {
+  return useEngineGateway().scenes.usePrewarmEditor();
+}
+
 export function useCreateSceneRequest() {
   return useEngineGateway().scenes.useCreateRequest();
 }

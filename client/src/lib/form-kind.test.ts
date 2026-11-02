@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { FormField } from "@shared/user-pages";
-import { FORM_SUBMITTED_EVENT, formAnswerReference, formAnswerVariables, formQueueEntryChoices } from "@/lib/form-kind";
+import {
+  FORM_SUBMITTED_EVENT,
+  formAnswerReference,
+  formAnswerVariables,
+  formQueueEntryChoices,
+  reviewQueueFor,
+} from "@/lib/form-kind";
 import type { TriggerNode } from "@/lib/workflow-tree";
 
 const FIELDS: FormField[] = [
@@ -45,4 +51,25 @@ test("formQueueEntryChoices leaves out checkboxes and always offers the viewer's
     { value: "${trigger.data.answers.song}", label: "Song" },
     { value: "${trigger.data.viewer.displayName}", label: "The viewer's name" },
   ]);
+});
+
+describe("reviewQueueFor", () => {
+  const target = "woofx3:queue:songs";
+
+  test("reuses the queue that already approves into the target", () => {
+    const queues = [
+      { canonicalId: target, settings: {} },
+      { canonicalId: "woofx3:queue:held", settings: { approveInto: target } },
+    ];
+    expect(reviewQueueFor(queues, target, "Songs")).toEqual({ kind: "existing", canonicalId: "woofx3:queue:held" });
+  });
+
+  test("names a new one after the target when none does", () => {
+    const queues = [{ canonicalId: "woofx3:queue:other", settings: { approveInto: "woofx3:queue:elsewhere" } }];
+    expect(reviewQueueFor(queues, target, "Songs")).toEqual({
+      kind: "create",
+      resourceInstanceId: "songs_review",
+      displayName: "Songs review",
+    });
+  });
 });

@@ -25,7 +25,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
-import { useDeleteSceneRequest, useScenes } from "@/engine/hooks/use-scenes";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useDeleteSceneRequest, usePrewarmSceneEditor, useScenes } from "@/engine/hooks/use-scenes";
 import type { SceneRecord } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 
@@ -103,6 +104,9 @@ function SceneListScreen() {
 
   const scenesRaw = useScenes();
   const deleteScene = useDeleteSceneRequest();
+  const prewarmEditor = usePrewarmSceneEditor();
+  // Asked here so the editor knows how it edits as it opens; the answer is shared.
+  useEngineCapabilities();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -215,6 +219,11 @@ function SceneListScreen() {
                       key={scene.id}
                       className={isSyncing ? undefined : "cursor-pointer"}
                       onClick={() => openScene(scene)}
+                      onPointerEnter={() => {
+                        if (scene.engineSceneId) {
+                          prewarmEditor(scene.engineSceneId);
+                        }
+                      }}
                       data-testid={`row-scene-${scene.id}`}
                     >
                       <TableCell className="font-medium max-w-[420px]">

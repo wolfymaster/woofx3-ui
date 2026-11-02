@@ -154,6 +154,8 @@ The `userpage.form.submitted` trigger's `form` field picks a form instance, so a
 
 "Add to a queue", on the form's page and on the page editor's form widget, writes an ordinary workflow: this form submitted, then `queue.add` with the chosen question, the viewer's name or a template. It can make the queue too. Nothing else routes answers, so the result edits like any other workflow.
 
+Its "Review answers first" switch, off by default, sends answers to a review queue instead: a queue whose `approveInto` setting names the chosen queue, reused if one already exists. A queue with that setting shows Approve on each entry, which runs `queue.move`, and Reject, which runs `queue.remove`. If the destination is full or already holds the entry, it stays in review.
+
 A path would read an id of only digits as an array index, so the page checks refuse one for a question. The editor's ids are UUIDs, which always contain hyphens.
 
 ### Setup

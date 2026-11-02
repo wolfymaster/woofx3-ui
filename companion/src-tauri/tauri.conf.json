@@ -40,7 +40,7 @@
         "img-src": "'self' data: blob: https:",
         "font-src": "'self' data:",
         "media-src": "'self' blob: https:",
-        "frame-src": "https://player.twitch.tv https://clips.twitch.tv",
+        "frame-src": "https: http://127.0.0.1:* http://localhost:*",
         "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
       },
       "devCsp": {
@@ -50,7 +50,7 @@
         "img-src": "'self' data: blob: https:",
         "font-src": "'self' data:",
         "media-src": "'self' blob: https:",
-        "frame-src": "https://player.twitch.tv https://clips.twitch.tv",
+        "frame-src": "https: http://127.0.0.1:* http://localhost:*",
         "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
       }
     }
