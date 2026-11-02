@@ -10,7 +10,6 @@ import {
   adBreaksWidget,
   announcementWidget,
   eventsWidget,
-  goLiveWidget,
   macroPadWidget,
   moderationWidget,
   notesWidget,
@@ -60,7 +59,6 @@ function useGettingStartedRailItem(): RailPinnedItem | null {
 export const hostedDashboardCatalog: DashboardCatalog = {
   widgets: [
     streamStatusWidget,
-    goLiveWidget,
     eventsWidget,
     activityWidget,
     streamInfoWidget,

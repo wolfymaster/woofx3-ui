@@ -23,7 +23,6 @@ export const CREATE_GROUP = "Create";
  */
 const PAGE_KEYWORDS: Record<string, readonly string[]> = {
   dashboard: ["home", "widgets", "panels"],
-  "go-live": ["checklist", "start stream", "preflight"],
   alerts: ["notifications", "follows", "subs", "raids", "cheers", "test event", "overlay"],
   commands: ["chat commands", "!"],
   counters: ["count", "deaths"],

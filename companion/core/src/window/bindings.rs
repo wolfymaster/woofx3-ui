@@ -14,11 +14,11 @@ use super::{
     ModuleView, OpenTwitchSignInArgs, ReadyUpdate, RelayView, RemoveShoutoutArgs,
     ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
     TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES, INTEGRATIONS_EVENT,
-    OPEN_LOCAL_CONNECTIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT, STREAM_START_MARKER_EVENT,
+    OPEN_LOCAL_CONNECTIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT,
 };
 use crate::host::{
-    HostModeKind, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry,
-    ShoutoutEntryId, ShoutoutQueueView, StreamStartMarker,
+    HostModeKind, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
+    ShoutoutQueueView,
 };
 use crate::AddressOrigin;
 
@@ -92,8 +92,6 @@ pub fn window_bindings() -> String {
         declaration::<ShoutoutEntry>(&cfg),
         declaration::<ShoutoutQueueView>(&cfg),
         declaration::<ShoutoutEnqueued>(&cfg),
-        declaration::<StreamStartMarker>(&cfg),
-        declaration::<MarkerRequestOutcome>(&cfg),
         declaration::<HostModeKind>(&cfg),
         declaration::<HostModeView>(&cfg),
         declaration::<LinkedInstance>(&cfg),
@@ -116,7 +114,6 @@ pub fn window_bindings() -> String {
         ("INTEGRATIONS_EVENT", INTEGRATIONS_EVENT),
         ("OPEN_LOCAL_CONNECTIONS_EVENT", OPEN_LOCAL_CONNECTIONS_EVENT),
         ("SHOUTOUT_QUEUE_EVENT", SHOUTOUT_QUEUE_EVENT),
-        ("STREAM_START_MARKER_EVENT", STREAM_START_MARKER_EVENT),
     ];
 
     let mut out = String::from(HEADER);

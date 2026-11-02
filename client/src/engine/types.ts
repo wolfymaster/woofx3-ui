@@ -1832,36 +1832,7 @@ export interface NewStreamInfoPreset {
   info: StreamInfo;
 }
 
-// ==================== Go live ====================
-
-/** Every check the go-live checklist runs. Dismissals are kept by these ids. */
-export type GoLiveCheckId = "engine" | "twitch" | "overlays" | "obs" | "stream-info" | "workflows";
-
-/** The channel as it stood when the checklist was last completed. Epoch ms. */
-export interface LastGoLive {
-  completedAt: number;
-  title: string | null;
-  categoryId: string | null;
-  categoryName: string | null;
-}
-
-export interface GoLiveWorkflowFacts {
-  /** Whether the instance has any workflow at all, enabled or not. */
-  any: boolean;
-  /** Enabled workflows, counted up to a cap. */
-  enabled: number;
-  /** True when there are more enabled workflows than `enabled` says. */
-  enabledCapped: boolean;
-}
-
-/** What the checklist keeps between runs, and the workflow facts it checks. */
-export interface GoLiveChecklistState {
-  dismissedCheckIds: GoLiveCheckId[];
-  lastGoLive: LastGoLive | null;
-  /** A "Stream start" marker is waiting for the stream to go live. */
-  markerPending: boolean;
-  workflows: GoLiveWorkflowFacts;
-}
+// ==================== Overlays ====================
 
 /** What Getting Started needs to know about the instance's overlays. */
 export interface OverlayFacts {
@@ -1872,48 +1843,6 @@ export interface OverlayFacts {
   featuredUrl: string | null;
   /** When any browser source last loaded one of those keys, in epoch ms. */
   lastLoadedAt: number | null;
-}
-
-export type GoLiveTwitchFacts =
-  | { linked: false }
-  | {
-      linked: true;
-      login: string;
-      /** False when Twitch refused the token and it could not be refreshed. */
-      tokenValid: boolean;
-      tokenProblem: string | null;
-      /** Scopes of required Twitch capabilities the link was never granted. */
-      missingScopes: string[];
-    };
-
-export type GoLiveStreamInfoFacts =
-  | { kind: "unlinked" }
-  | {
-      kind: "ok";
-      login: string;
-      title: string;
-      categoryId: string;
-      categoryName: string;
-      tags: string[];
-    };
-
-export interface GoLiveFinish {
-  /** Posted to chat as the broadcaster when present. */
-  announcement?: string;
-  /** Dropped now when live, else when the stream next goes live. */
-  dropMarker: boolean;
-}
-
-export type GoLiveStepOutcome =
-  | { status: "done" }
-  /** Waiting on something outside the request, such as the stream going live. */
-  | { status: "queued"; reason: string }
-  | { status: "skipped"; reason: string }
-  | { status: "failed"; message: string };
-
-export interface GoLiveCompletion {
-  announcement: GoLiveStepOutcome;
-  marker: GoLiveStepOutcome;
 }
 
 // ==================== Dashboard ====================

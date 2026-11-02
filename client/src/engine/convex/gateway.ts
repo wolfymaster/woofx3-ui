@@ -8,7 +8,6 @@ import { convexConfigGateway } from "./config";
 import { convexDashboardGateway } from "./dashboard";
 import { convexEventLogGateway } from "./event-log";
 import { convexFormSubmissionsGateway } from "./form-submissions";
-import { convexGoLiveGateway } from "./go-live";
 import { convexMacrosGateway } from "./macros";
 import { convexMarketplaceGateway } from "./marketplace";
 import { convexModerationGateway } from "./moderation";
@@ -68,7 +67,6 @@ export const convexEngineGateway: EngineGateway = {
   clips: convexClipsGateway,
   formSubmissions: convexFormSubmissionsGateway,
   streamInfo: convexStreamInfoGateway,
-  goLive: convexGoLiveGateway,
   pageIntros: convexPageIntrosGateway,
   dashboard: convexDashboardGateway,
 };

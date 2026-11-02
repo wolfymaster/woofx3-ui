@@ -49,7 +49,7 @@ A preview can be onboarded with a password account, so automated tests can get t
 - With Twitch left out, **Connect Twitch** shows **Skip for now**, `setup.complete` does not ask for a Twitch link, and the onboarding guard does not send the user back to setup for one (`SetupStatus.twitchRequired`).
 - With Twitch chosen, it must be connected, as in production.
 
-Nothing else changes: features that act on Twitch, such as chat commands and the go-live checklist, still need a link. Production never sets the variable, so its setup is unchanged.
+Nothing else changes: features that act on Twitch, such as chat commands, still need a link. Production never sets the variable, so its setup is unchanged.
 
 ## Choosing an engine
 

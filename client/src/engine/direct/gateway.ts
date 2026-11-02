@@ -9,7 +9,6 @@ import { directDashboardGateway } from "./dashboard";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
 import { directFormSubmissionsGateway } from "./form-submissions";
-import { directGoLiveGateway } from "./go-live";
 import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
@@ -87,7 +86,6 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     clips: directClipsGateway(runtime),
     formSubmissions: directFormSubmissionsGateway,
     streamInfo: directStreamInfoGateway(runtime),
-    goLive: directGoLiveGateway(runtime, host.streamStartMarkers),
     pageIntros: directPageIntrosGateway(runtime),
     dashboard: directDashboardGateway(runtime),
   };
