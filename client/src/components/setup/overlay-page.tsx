@@ -30,6 +30,7 @@ import {
   overlaySceneOf,
   seedHasRecordedError,
   seedIsSlow,
+  showsOverlayLink,
   type TestOutcome,
   testFailureMessage,
   testOutcomeOf,
@@ -203,6 +204,46 @@ function WaitingHelp({ help }: { help: "none" | "hint" | "troubleshoot" }) {
   );
 }
 
+function OverlayLinkOrRetry({
+  url,
+  failed,
+  onRetry,
+}: {
+  url: string | null | undefined;
+  failed: boolean;
+  onRetry: () => Promise<void>;
+}) {
+  if (url) {
+    return <OverlayLink url={url} />;
+  }
+  if (failed) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-destructive">We couldn&apos;t get your link.</p>
+        <RetryButton onRetry={onRetry} testId="button-overlay-url-retry" />
+      </div>
+    );
+  }
+  return <p className="text-sm text-muted-foreground">Getting your link…</p>;
+}
+
+function NewTabLink({ url }: { url: string }) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Don&apos;t have a streaming app open?{" "}
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-primary underline-offset-4 hover:underline"
+        data-testid="link-overlay-new-tab"
+      >
+        Try it in a new tab
+      </a>
+    </p>
+  );
+}
+
 /** The overlay's link, asked for once per scene. The engine answers the same link every time until it is rotated. */
 function useOverlayUrl(sceneId: SceneId | undefined) {
   const request = useBrowserSourceUrlRequest();
@@ -273,6 +314,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
   const { url, failed: urlFailed, retry: retryUrl } = useOverlayUrl(scene?.id);
   const presence = useOverlayOpen({ enabled: engineReady && sceneFact === "found" });
   const seedError = seedHasRecordedError(seed);
+  const alreadyFinished = seed?.overlayDone?.outcome === "finished";
 
   const [state, dispatch] = useReducer(overlayReducer, INITIAL_OVERLAY_STATE);
   const [now, setNow] = useState(clock);
@@ -292,9 +334,9 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
     dispatch({
       type: "observe",
       at: now,
-      facts: { engine: engine.stage, scene: sceneFact, follow: followFact, seedError, presence, test },
+      facts: { engine: engine.stage, scene: sceneFact, follow: followFact, seedError, alreadyFinished, presence, test },
     });
-  }, [engine.stage, sceneFact, followFact, seedError, presence, outcomeKind, outcomeReason, now]);
+  }, [engine.stage, sceneFact, followFact, seedError, alreadyFinished, presence, outcomeKind, outcomeReason, now]);
 
   const heading = useRef<HTMLHeadingElement>(null);
   const previousPhase = useRef<OverlayPhase["name"] | null>(null);
@@ -337,6 +379,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
   // button stays away until then so a second press makes no second scene, and
   // comes back if the scene never arrives.
   const [sceneRequested, markSceneRequested] = useExpiringFlag(SCENE_ARRIVAL_TIMEOUT_MS);
+  const [madeNewOverlay, setMadeNewOverlay] = useState(false);
   const alertWidget = catalog?.find((row) => row.hostsSurface === ALERT_SURFACE);
   const otherAlertFailed = seed?.alerts.some((alert) => alert.status === "failed" && alert.itemId !== "follow");
   const alreadyDone = Boolean(seed?.overlayDone);
@@ -416,6 +459,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
               onRetry={async () => {
                 await createScene(defaultSceneInput({ canonicalId: alertWidget.widgetId, name: alertWidget.name }));
                 markSceneRequested();
+                setMadeNewOverlay(true);
               }}
             />
           ) : (
@@ -426,32 +470,10 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
 
         {phase.name === "waiting" && (
           <>
-            {url ? (
-              <OverlayLink url={url} />
-            ) : urlFailed ? (
-              <div className="space-y-2">
-                <p className="text-sm text-destructive">We couldn&apos;t get your link.</p>
-                <RetryButton onRetry={retryUrl} testId="button-overlay-url-retry" />
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Getting your link…</p>
-            )}
+            <OverlayLinkOrRetry url={url} failed={urlFailed} onRetry={retryUrl} />
             <SetupInstructions />
             <WaitingHelp help={waitingHelp(phase.since, now)} />
-            {url && (
-              <p className="text-sm text-muted-foreground">
-                Don&apos;t have a streaming app open?{" "}
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                  data-testid="link-overlay-new-tab"
-                >
-                  Try it in a new tab
-                </a>
-              </p>
-            )}
+            {url && <NewTabLink url={url} />}
           </>
         )}
 
@@ -487,7 +509,6 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
                 to make one.
               </p>
             )}
-            {url && <OverlayLink url={url} />}
           </>
         )}
 
@@ -510,6 +531,30 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
             <Button className="self-start" onClick={() => void sendTest()} data-testid="button-overlay-test-retry">
               Try again
             </Button>
+          </>
+        )}
+
+        {phase.name === "finished" && follow === "ready" && (
+          <Button
+            variant="outline"
+            className="self-start"
+            disabled={!followPreset}
+            onClick={() => void sendTest()}
+            data-testid="button-overlay-send-another"
+          >
+            Send another test
+          </Button>
+        )}
+
+        {showsOverlayLink(phase) && (
+          <>
+            {madeNewOverlay && (
+              <p className="text-sm text-muted-foreground" data-testid="text-overlay-new-link">
+                This is your new overlay&apos;s link. Your streaming app needs it in place of the old one.
+              </p>
+            )}
+            <OverlayLinkOrRetry url={url} failed={urlFailed} onRetry={retryUrl} />
+            {url && <NewTabLink url={url} />}
           </>
         )}
 

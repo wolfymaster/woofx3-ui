@@ -70,15 +70,15 @@ After it come the [overlay page](#the-overlay-page) and [the wait for a build](#
 | `seed-failed` | The seed gave up on the scene | **Try again** (`defaultSeed.useApplyRequest`) puts failed items back to pending and runs the apply now; the ledger and the scene search keep it from creating anything twice |
 | `no-scene` | The seeded scene is gone, or the setup was never seeded | **Make a new overlay** creates the seed's scene |
 | `waiting` | There is a scene and nothing is connected | Link, per-app steps and a test tab. A hint at 60 s, a troubleshooting list at 3 min |
-| `connected` | An overlay is open | **Send a test alert** |
+| `connected` | An overlay is open | **Send a test alert**. The link and test tab stay up, since a just-closed overlay can read as open for a few seconds |
 | `sending`, `playing` | A test is on its way | |
 | `unconfirmed` | 60 s with no answer | **Yes, it played** or **Send again** |
-| `test-failed` | The alert failed or the send was refused | The reason through `describeAlertFailure`, or plain copy for one it does not recognise, **Try again**. It outranks a closed overlay, so the reason stays up |
-| `finished` | The alert completed, or the streamer saw it play | **Open Dashboard** |
+| `test-failed` | The alert failed or the send was refused | Plain copy: the overlay isn't ready when no running scene has the widget, a generic line otherwise (`testFailureMessage`), **Try again**. It outranks a closed overlay, so the reason stays up |
+| `finished` | The alert completed, the streamer saw it play, or a page load finds `overlayDone` recorded as `finished` | **Open Dashboard**, **Send another test** and the link |
 
 An overlay closing during a test goes back to `waiting`. `finished` stays through a closing overlay, because a test in a plain browser tab counts and that tab may well be closed next.
 
-**What the state comes from.** Everything but a test in flight comes from the server, so a refresh lands in the right place; a refresh during a test returns to `connected`. The scene is the seed's `engineSceneId`, or any scene with the default alert widget (`overlaySceneOf`). A deleted scene or follow alert keeps its stored `installed` status, so its existence is read from the scenes and workflows reads. Since those reads fill by webhook, something absent counts as deleted only after 20 seconds. With the follow alert gone the link still works, and the page points to the Alerts screen instead of offering a test.
+**What the state comes from.** Everything but a test in flight comes from the server, so a refresh lands in the right place; a refresh during a test returns to `connected`, or to `finished` once one has finished. The scene is the seed's `engineSceneId`, or any scene with the default alert widget (`overlaySceneOf`). A deleted scene or follow alert keeps its stored `installed` status, so its existence is read from the scenes and workflows reads. Since those reads fill by webhook, something absent counts as deleted only after 20 seconds. With the follow alert gone the link still works, and the page points to the Alerts screen instead of offering a test.
 
 **The URL is a credential.** It is masked until **Show**, and the page says to treat it like a password. It always comes from `overlays.useBrowserSourceUrlRequest` for the scene above.
 

@@ -12,6 +12,7 @@ import {
   SEED_SLOW_AFTER_MS,
   seedHasRecordedError,
   seedIsSlow,
+  showsOverlayLink,
   TEST_UNCONFIRMED_AFTER_MS,
   testFailureMessage,
   testOutcomeOf,
@@ -23,6 +24,7 @@ const READY: OverlayFacts = {
   scene: "found",
   follow: "ready",
   seedError: false,
+  alreadyFinished: false,
   presence: "closed",
   test: { kind: "none" },
 };
@@ -185,6 +187,56 @@ describe("overlayReducer: the test", () => {
       { type: "sent", triggerId: "t2", at: 70_000 }
     );
     expect(again.triggerIds).toEqual(["t1", "t2"]);
+  });
+});
+
+describe("overlayReducer: coming back after finishing", () => {
+  const finishedBefore = { alreadyFinished: true };
+  const returned = run(INITIAL_OVERLAY_STATE, observe(finishedBefore));
+
+  test("a refresh lands on finished, whether or not the overlay is open", () => {
+    expect(returned.phase.name).toBe("finished");
+    expect(run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, presence: "open" })).phase.name).toBe("finished");
+    expect(run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, presence: undefined })).phase.name).toBe("finished");
+  });
+
+  test("still shows a build or a seed that is not there yet", () => {
+    const building = run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, engine: "building" }));
+    expect(building.phase.name).toBe("building");
+    const preparing = run(building, observe({ ...finishedBefore, scene: "loading" }));
+    expect(preparing.phase.name).toBe("preparing");
+    expect(run(preparing, observe(finishedBefore)).phase.name).toBe("finished");
+  });
+
+  test("a new overlay made after finishing asks for the new link to be added", () => {
+    const noScene = run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, scene: "none" }));
+    expect(run(noScene, observe(finishedBefore)).phase.name).toBe("waiting");
+  });
+
+  test("another test can be sent, and must complete by itself to finish again", () => {
+    const finished = run(playing, observe({ presence: "open", test: { kind: "completed" } }, 1500));
+    const again = run(finished, { type: "send" });
+    expect(again.phase.name).toBe("sending");
+    expect(again.triggerIds).toEqual([]);
+    const sent = run(again, { type: "sent", triggerId: "t2", at: 2000 });
+    expect(run(sent, observe({ presence: "open", alreadyFinished: true }, 2500)).phase.name).toBe("playing");
+    expect(run(sent, observe({ presence: "open", test: { kind: "completed" } }, 3000)).phase.name).toBe("finished");
+  });
+});
+
+describe("showsOverlayLink", () => {
+  test.each([
+    [{ name: "connected" }, true],
+    [{ name: "sending" }, true],
+    [{ name: "playing", sentAt: 0 }, true],
+    [{ name: "unconfirmed" }, true],
+    [{ name: "test-failed", reason: null }, true],
+    [{ name: "finished" }, true],
+    [{ name: "waiting", since: 0, dropped: false }, false],
+    [{ name: "preparing" }, false],
+    [{ name: "no-scene" }, false],
+  ] as const)("%o: %s", (phase, shown) => {
+    expect(showsOverlayLink(phase)).toBe(shown);
   });
 });
 
