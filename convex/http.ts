@@ -348,6 +348,7 @@ http.route({
         twitch: {
           platformUserId: twitchUser.id,
           platformUsername: twitchUser.display_name || twitchUser.login,
+          login: twitchUser.login,
           profileImageUrl: twitchUser.profile_image_url ?? undefined,
           ...sealed,
           expiresAt: Date.now() + tokenData.expires_in * 1000,

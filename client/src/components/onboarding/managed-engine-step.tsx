@@ -1,22 +1,15 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { slugFormatError, USERNAME_PREFIX, usernameAddress } from "@shared/engine-slug";
 import { useAction } from "convex/react";
 import { Check, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { HelpTip } from "@/components/common/help-tip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { engineHostname, slugFormatError, USERNAME_PREFIX, usernameAddress } from "@/lib/engine-slug";
 
 interface ManagedEngineStepProps {
-  accountId: Id<"accounts">;
-  /** Prefill, from the Twitch login or the workspace name. */
-  suggestedSlug: string;
-  /** Called once the maintenance API has accepted the request and a run exists. */
-  onStarted: (instanceId: Id<"instances">) => void;
-  /** Shows today's "paste your engine URL" form instead. */
-  onConnectExisting: () => void;
+  instanceId: Id<"instances">;
 }
 
 /** Availability is asked for after the typing stops, not on every keystroke. */
@@ -29,16 +22,16 @@ type Availability =
   | { state: "unavailable"; reason: string };
 
 /**
- * The default first step of onboarding: pick a username, and woofx3 creates
- * the engine. The username is also the engine's subdomain, so it is checked
- * against the maintenance API while the user types — finding out it was taken
- * only after pressing Create would mean starting over.
+ * The connect screen's last resort, when no username could be derived from the
+ * Twitch login. The username is also the engine's subdomain, so it is checked
+ * against the maintenance API while the user types. Asking for the engine moves
+ * setup on by itself, through its status.
  */
-export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConnectExisting }: ManagedEngineStepProps) {
+export function ManagedEngineStep({ instanceId }: ManagedEngineStepProps) {
   const checkSlug = useAction(api.provisioning.checkSlug);
   const startManagedEngine = useAction(api.provisioning.startManagedEngine);
 
-  const [slug, setSlug] = useState(suggestedSlug);
+  const [slug, setSlug] = useState("");
   const [availability, setAvailability] = useState<Availability>({ state: "idle" });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,8 +78,7 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
     setError(null);
     setCreating(true);
     try {
-      const { instanceId } = await startManagedEngine({ accountId, slug });
-      onStarted(instanceId);
+      await startManagedEngine({ instanceId, slug });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setCreating(false);
@@ -98,12 +90,7 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <div className="flex items-center gap-1.5">
-          <Label htmlFor="engine-slug">Choose your username</Label>
-          <HelpTip term="engine">
-            <p>We run your engine for you at {slug && !formatError ? engineHostname(slug) : "this address"}.</p>
-          </HelpTip>
-        </div>
+        <Label htmlFor="engine-slug">Pick your woofx3 name</Label>
         <div className="mt-1 flex items-center gap-1">
           <span className="text-sm text-muted-foreground font-mono shrink-0">{USERNAME_PREFIX}</span>
           <Input
@@ -149,17 +136,8 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
 
       <Button type="submit" className="w-full" disabled={!canCreate} data-testid="button-create-engine">
         {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-        {creating ? "Creating…" : "Create my engine"}
+        {creating ? "Saving…" : "Use this name"}
       </Button>
-
-      <button
-        type="button"
-        onClick={onConnectExisting}
-        className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
-        data-testid="button-connect-existing-engine"
-      >
-        Already have an engine? Connect it
-      </button>
     </form>
   );
 }

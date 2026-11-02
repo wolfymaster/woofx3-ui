@@ -4,8 +4,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
+import { ensureOwnAccount } from "./accounts";
 import { readMemberRole } from "./instances";
 import { requireInstanceRole } from "./lib/instanceAccess";
+import { isMaintenanceConfigured } from "./lib/maintenanceClient";
 import { isPreviewDeployment } from "./lib/previewDeployment";
 import { availableInterests, buildDashboardPreset, PRESET_LAYOUT_ID } from "./lib/setupInterests";
 import {
@@ -16,10 +18,12 @@ import {
   setupNeedsTwitch,
 } from "./lib/setupPlatforms";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
+import { findOrCreateManagedInstance } from "./provisioningInternal";
 
 // Bounds for reads of tables that hold a handful of rows per key.
 const MAX_SETUP_PLATFORMS = 50;
 const MAX_PLATFORM_LINKS = 20;
+const MAX_ACCOUNT_INSTANCES = 50;
 
 const chosenPlatformValidator = v.object({
   marketplaceModuleId: v.string(),
@@ -47,10 +51,14 @@ export interface SetupStatus {
   twitchUsername: string | null;
   /**
    * Whether setup cannot finish, and the app sends an admin back to setup, until
-   * Twitch is connected. Always true except on a preview deployment whose chosen
-   * platforms leave Twitch out (`setupNeedsTwitch`).
+   * Twitch is connected. Always true except on a preview deployment where the
+   * connection was skipped (`setupNeedsTwitch`).
    */
   twitchRequired: boolean;
+  /** Whether the connect screen offers "Skip for now": a preview deployment only. */
+  canSkipTwitch: boolean;
+  /** Whether the engine waits on the user naming it: no derived username was usable, or it was deleted. */
+  usernameNeeded: boolean;
   /** Whether the viewer may choose platforms and connect Twitch: only an owner or admin can. */
   canManageSetup: boolean;
   /** Whether the setup wizard has opened for the viewer before. */
@@ -89,10 +97,7 @@ async function readCuratedPlatforms(ctx: QueryCtx): Promise<Doc<"setupPlatforms"
 }
 
 function twitchRequiredFor(row: Doc<"instanceSetup"> | null): boolean {
-  return setupNeedsTwitch(
-    (row?.platforms ?? []).map((platform) => platform.marketplaceModuleId),
-    isPreviewDeployment()
-  );
+  return setupNeedsTwitch(row?.twitchSkippedAt !== undefined, isPreviewDeployment());
 }
 
 /**
@@ -126,7 +131,7 @@ export const status = query({
     if (!role) {
       return null;
     }
-    const [row, twitchLink, seen, instance, curated] = await Promise.all([
+    const [row, twitchLink, seen, instance, curated, provisioning] = await Promise.all([
       readSetupRow(ctx, instanceId),
       readTwitchLink(ctx, instanceId),
       ctx.db
@@ -135,6 +140,10 @@ export const status = query({
         .first(),
       ctx.db.get(instanceId),
       readCuratedPlatforms(ctx),
+      ctx.db
+        .query("engineProvisioning")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+        .first(),
     ]);
     const account = instance ? await ctx.db.get(instance.accountId) : null;
     const platformsNeedingSettings: string[] = [];
@@ -163,6 +172,9 @@ export const status = query({
       completedAt: row?.completedAt ?? null,
       twitchUsername: twitchLink?.platformUsername ?? null,
       twitchRequired: twitchRequiredFor(row),
+      canSkipTwitch: isPreviewDeployment(),
+      usernameNeeded:
+        !instance?.clientId && (row?.usernameNeededAt !== undefined || provisioning?.status === "deleted"),
       canManageSetup: canManageTwitchLink(role),
       setupSeen: seen !== null,
       engineRegistered: Boolean(instance?.clientId),
@@ -280,11 +292,45 @@ async function seedDashboard(
 }
 
 /**
- * Finishes setup: seeds the caller's dashboard, and installs the chosen
- * modules and starter packs, now if the engine is registered, otherwise when
- * it registers. Refused until platforms are chosen and, where it is required
- * (`SetupStatus.twitchRequired`), Twitch is connected.
+ * Asks for the instance's first engine, when it is a managed one with none
+ * requested. Registered and external instances have what they need.
  */
+async function scheduleFirstEngine(ctx: MutationCtx, instanceId: Id<"instances">) {
+  const instance = await ctx.db.get(instanceId);
+  if (!instance || instance.clientId || instance.hosting !== "managed") {
+    return;
+  }
+  const provisioning = await ctx.db
+    .query("engineProvisioning")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .first();
+  if (!provisioning) {
+    await ctx.scheduler.runAfter(0, internal.provisioning.startFirstEngine, { instanceId });
+  }
+}
+
+/**
+ * Everything that follows connecting the streaming platform: setup is marked
+ * finished, the caller gets their dashboard, and the choices are applied now if
+ * the engine is registered, otherwise when it registers. An engine is asked for
+ * if there is none. It all happens at once, so leaving the app any time after
+ * connecting never strands an account half set up. Safe to run again.
+ */
+export async function finishFirstRun(ctx: MutationCtx, row: Doc<"instanceSetup">, userId: Id<"users">) {
+  const { instanceId } = row;
+  await scheduleFirstEngine(ctx, instanceId);
+  if (row.completedAt) {
+    return;
+  }
+  const now = Date.now();
+  await ctx.db.patch(row._id, { completedAt: now, completedByUserId: userId, updatedAt: now });
+  await seedDashboard(ctx, instanceId, userId, row);
+  await scheduleApplyIfRegistered(ctx, instanceId);
+  // An import queued during setup waits for setup to finish before applying.
+  await ctx.scheduler.runAfter(0, internal.setupImports.resumeQueued, { instanceId });
+}
+
+/** Refused until platforms are chosen and, where it is required, Twitch is connected. */
 export const complete = mutation({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
@@ -296,15 +342,64 @@ export const complete = mutation({
     if (twitchRequiredFor(row) && !(await readTwitchLink(ctx, instanceId))) {
       throw new Error("Connect Twitch before finishing setup");
     }
-    if (row.completedAt) {
-      return;
+    await finishFirstRun(ctx, row, userId);
+  },
+});
+
+/**
+ * A preview deployment's way past the connect screen for an account that cannot
+ * link Twitch. `platforms` is what the screen listed, so the module still
+ * installs and its triggers can be tested.
+ */
+export const skipTwitch = mutation({
+  args: { instanceId: v.id("instances"), platforms: v.array(chosenPlatformValidator) },
+  handler: async (ctx, { instanceId, platforms }) => {
+    if (!isPreviewDeployment()) {
+      throw new Error("Twitch cannot be skipped here");
     }
+    const userId = await requireInstanceRole(ctx, instanceId, "admin");
     const now = Date.now();
-    await ctx.db.patch(row._id, { completedAt: now, completedByUserId: userId, updatedAt: now });
-    await seedDashboard(ctx, instanceId, userId, row);
-    await scheduleApplyIfRegistered(ctx, instanceId);
-    // An import queued during setup waits for setup to finish before applying.
-    await ctx.scheduler.runAfter(0, internal.setupImports.resumeQueued, { instanceId });
+    const choice = { platforms, platformsChosenAt: now, twitchSkippedAt: now, updatedAt: now };
+    const existing = await readSetupRow(ctx, instanceId);
+    if (existing) {
+      await ctx.db.patch(existing._id, choice);
+    } else {
+      await ctx.db.insert("instanceSetup", { instanceId, ...choice });
+    }
+    const row = await readSetupRow(ctx, instanceId);
+    if (!row) {
+      throw new Error("The setup just saved cannot be read");
+    }
+    await finishFirstRun(ctx, row, userId);
+  },
+});
+
+/**
+ * The account and instance a new user's connect screen works on, so Twitch can
+ * link before anything has a real name: both start under the placeholder, and
+ * connecting renames them. A registration that failed on the form for a
+ * bring-your-own engine leaves a row with no engine, which is taken over.
+ */
+export const ensureFirstRun = mutation({
+  args: {},
+  handler: async (ctx): Promise<Id<"instances">> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    if (!isMaintenanceConfigured()) {
+      throw new Error("Managed engines are not configured");
+    }
+    const account = await ensureOwnAccount(ctx, userId);
+    const instances = await ctx.db
+      .query("instances")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .take(MAX_ACCOUNT_INSTANCES);
+    const abandoned = instances.find((instance) => !instance.clientId && instance.hosting !== "managed");
+    if (abandoned) {
+      await ctx.db.patch(abandoned._id, { hosting: "managed", url: "" });
+    }
+    return findOrCreateManagedInstance(ctx, account, userId);
   },
 });
 
