@@ -197,7 +197,10 @@ function twitchProblem(setup: GettingStartedFacts["setup"]): GettingStartedItem[
 function overlayItem(finished: boolean): GettingStartedItem {
   const title = "Add your overlay to your streaming app";
   if (finished) {
-    return item("overlay", title, "done", "Your streaming app has your overlay");
+    return item("overlay", title, "done", "Your overlay is working", {
+      fixes: [{ kind: "route", label: "Open your overlay", href: OVERLAY_PAGE_PATH }],
+      actions: [{ kind: "copy-overlay-link", label: "Copy link" }],
+    });
   }
   return item("overlay", title, "todo", "Alerts only show on stream once your streaming app has your overlay", {
     fixes: [{ kind: "route", label: "Show me how", href: OVERLAY_PAGE_PATH }],
@@ -272,6 +275,11 @@ function yourPageItem(done: boolean): GettingStartedItem {
 
 const STATUS_ORDER: Record<GettingStartedStatus, number> = { problem: 0, todo: 1, done: 2 };
 
+/** The overlay item stays with what is left once done: it is how a streamer gets back to the link. */
+function rankOf(entry: GettingStartedItem): number {
+  return entry.id === "overlay" ? STATUS_ORDER.todo : STATUS_ORDER[entry.status];
+}
+
 /**
  * The card's items: problems first, then what is left with the overlay leading,
  * then what is done, so the first few are the ones that matter. Dismissed
@@ -291,7 +299,7 @@ export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedI
     optionalPlatformsItem(facts.installedModuleIds.some((id) => OPTIONAL_PLATFORM_MODULE_IDS.includes(id))),
     yourPageItem(facts.pagePublished),
   ].filter((entry) => entry.status === "done" || !dismissed(entry.id));
-  return items.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+  return items.sort((a, b) => rankOf(a) - rankOf(b));
 }
 
 export function gettingStartedProgress(items: readonly GettingStartedItem[]): { done: number; total: number } {

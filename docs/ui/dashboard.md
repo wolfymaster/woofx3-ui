@@ -178,7 +178,7 @@ Onboarding ends at the dashboard, so the panel holds what comes after it. Items 
 | Twitch connected (problem only) | the instance has a Twitch link; hidden otherwise | Connect Twitch (`/setup/connect`) |
 | Platforms installed (problem only) | hidden unless a chosen platform's `moduleInstalls` entry is `failed` or `needs_approval` | Retry (`setup.retryApply`); the module page on a needs-approval |
 | Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
-| Add your overlay to your streaming app | the overlay page recorded a finished test (`defaultSeed.useStatus().overlayDone.outcome === "finished"`); left out for an instance that was never seeded | **Copy link** (the seeded scene's link, from `overlays.useBrowserSourceUrlRequest`), Show me how (`/setup/overlay`) |
+| Add your overlay to your streaming app | the overlay page recorded a finished test (`defaultSeed.useStatus().overlayDone.outcome === "finished"`); left out for an instance that was never seeded | **Copy link** (the seeded scene's link, from `overlays.useBrowserSourceUrlRequest`), Show me how (`/setup/overlay`). Done, it keeps both, with the page as Open your overlay, and stays ahead of what is left; the panel can hide, so the Scenes page also links to `/setup/overlay` |
 | Send a test alert | same record as the overlay item | Send a test alert (`/setup/overlay`, which matches the test to its alert) |
 | Make the alerts yours | the streamer says so (`alerts`) | Open alerts, **Done** |
 | Bring your setup from Firebot or Streamer.bot | the instance has a setup import | Import (`/admin/backup`), **Not for me** |

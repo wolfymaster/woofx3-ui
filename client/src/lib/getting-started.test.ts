@@ -68,12 +68,17 @@ describe("gettingStartedItems", () => {
     expect(items["your-page"].actions).toEqual([{ kind: "dismiss-item", label: "Not for me", itemId: "your-page" }]);
   });
 
-  test("shows a problem before anything to do, and done items last", () => {
+  test("shows a problem before anything to do, and done items last but the overlay", () => {
     const items = gettingStartedItems(facts({ overlayFinished: true }, { twitchUsername: null }));
     expect(items[0].id).toBe("twitch");
     expect(items[0].status).toBe("problem");
     expect(items[items.length - 1].status).toBe("done");
-    expect(items.slice(0, VISIBLE_ITEM_COUNT).some((entry) => entry.status === "done")).toBe(false);
+    expect(
+      items
+        .slice(0, VISIBLE_ITEM_COUNT)
+        .filter((entry) => entry.status === "done")
+        .map((entry) => entry.id)
+    ).toEqual(["overlay"]);
   });
 
   test("has no item for twitch or platforms unless something is wrong", () => {
@@ -129,6 +134,17 @@ describe("gettingStartedItems", () => {
     const items = byId(facts({ overlayFinished: true }));
     expect(items.overlay.status).toBe("done");
     expect(items["test-alert"].status).toBe("done");
+  });
+
+  test("a finished overlay item stays in reach, ahead of what is left, with its page and link", () => {
+    const items = gettingStartedItems(facts({ overlayFinished: true }));
+    const overlay = items[0];
+    expect(overlay?.id).toBe("overlay");
+    expect(overlay?.status).toBe("done");
+    expect(overlay?.summary).toBe("Your overlay is working");
+    expect(overlay?.fixes).toEqual([{ kind: "route", label: "Open your overlay", href: "/setup/overlay" }]);
+    expect(overlay?.actions).toEqual([{ kind: "copy-overlay-link", label: "Copy link" }]);
+    expect(items.indexOf(overlay as (typeof items)[number])).toBeLessThan(VISIBLE_ITEM_COUNT);
   });
 
   test("sends the test alert to the overlay page, where it can be matched to its alert", () => {
