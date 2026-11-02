@@ -15,7 +15,7 @@ export const DEFAULT_OVERLAY_SCENE_NAME = "Default Browser Overlay";
 export const DEFAULT_OVERLAY_CANVAS = { width: 1920, height: 1080 } as const;
 
 /** The scene's alert widget: the top right corner of the canvas. */
-const DEFAULT_ALERT_WIDGET_BOX = { x: 1240, y: 40, width: 640, height: 360 } as const;
+export const DEFAULT_ALERT_WIDGET_BOX = { x: 1240, y: 40, width: 640, height: 360 } as const;
 
 export const DEFAULT_ALERTS_PACK_ID = "default-alerts";
 
@@ -288,6 +288,34 @@ export interface DefaultSceneOutcome {
   error?: string;
 }
 
+/** The default scene as the engine's create takes it, around the engine's alert widget. */
+export function defaultSceneInput(alertWidget: { id: string; name: string }): {
+  name: string;
+  widgetsJson: string;
+  layoutJson: string;
+} {
+  const { x, y, width, height } = DEFAULT_ALERT_WIDGET_BOX;
+  return {
+    name: DEFAULT_OVERLAY_SCENE_NAME,
+    widgetsJson: JSON.stringify([
+      {
+        id: "w-default-alerts",
+        widgetCanonicalId: alertWidget.id,
+        name: alertWidget.name,
+        position: { x, y },
+        size: { width, height },
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        locked: false,
+        visible: true,
+        settings: { name: DEFAULT_ALERT_WIDGET_NAME },
+      },
+    ]),
+    layoutJson: JSON.stringify({ ...DEFAULT_OVERLAY_CANVAS, backgroundColor: "transparent" }),
+  };
+}
+
 /**
  * Puts the default scene on the engine, or finds what stands in for it: a
  * scene that already has the default alert widget, whether the streamer made
@@ -309,26 +337,7 @@ export async function seedDefaultScene(engine: DefaultSeedEngine): Promise<Defau
   if (existing !== undefined) {
     return { status: "installed", engineSceneId: existing.id };
   }
-  const { x, y, width, height } = DEFAULT_ALERT_WIDGET_BOX;
-  const created = await engine.createScene({
-    name: DEFAULT_OVERLAY_SCENE_NAME,
-    widgetsJson: JSON.stringify([
-      {
-        id: "w-default-alerts",
-        widgetCanonicalId: alertWidget.id,
-        name: alertWidget.name,
-        position: { x, y },
-        size: { width, height },
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        locked: false,
-        visible: true,
-        settings: { name: DEFAULT_ALERT_WIDGET_NAME },
-      },
-    ]),
-    layoutJson: JSON.stringify({ ...DEFAULT_OVERLAY_CANVAS, backgroundColor: "transparent" }),
-  });
+  const created = await engine.createScene(defaultSceneInput(alertWidget));
   return { status: "installed", engineSceneId: created.id };
 }
 

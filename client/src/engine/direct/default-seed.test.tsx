@@ -40,6 +40,20 @@ async function connected(): Promise<DirectHarness> {
 }
 
 describe("the direct default seed", () => {
+  test("remembers passing the overlay page, and a finish outranks a later skip", async () => {
+    const { runtime } = await connected();
+    const seed = directDefaultSeedGateway(runtime);
+    const status = renderDirect(() => seed.useStatus());
+    await status.until((value) => value?.overlayDone === null, "nothing recorded");
+    const mark = renderDirect(() => seed.useMarkOverlayDoneRequest()).current();
+    await mark("skipped");
+    await status.until((value) => value?.overlayDone?.outcome === "skipped", "the skip");
+    await mark("finished");
+    await status.until((value) => value?.overlayDone?.outcome === "finished", "the finish");
+    await mark("skipped");
+    await status.until((value) => value?.overlayDone?.outcome === "finished", "the finish kept");
+  });
+
   test("seeds text-only alerts on a module too old to have the images, and reports it", async () => {
     const { runtime, state } = await connected();
     state.modules = [{ moduleId: "woofx3", moduleKey: "woofx3:0.44.0:abc1234" }] as never;

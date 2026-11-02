@@ -2,6 +2,7 @@ import type {
   AlertComposition,
   AlertListPage,
   AlertListQuery,
+  AlertQueueState,
   AlertSnapshot,
   AvailableFunction,
   CommandSnapshot,
@@ -95,6 +96,7 @@ type DirectFakeSurface = Pick<
   | "getStreamSession"
   | "getStreamSessionTotals"
   | "listAlerts"
+  | "getAlertQueue"
   | "subscribeStreamEvents"
   | "dispatchFieldOptionsRequest"
   | "listAlertCompositions"
@@ -282,6 +284,7 @@ export class FakeEngineState {
   });
   /** Every call the fake served, by method, with its arguments. */
   readonly calls: Array<{ method: keyof DirectFakeSurface; args: unknown[] }> = [];
+  alertQueue: AlertQueueState = { ok: false, playing: [], waiting: [], reason: "no overlay is open" };
   /** The latest stream subscription of each session, in the order they were made. */
   readonly streamSubscriptions: StreamSubscription[] = [];
 
@@ -386,6 +389,11 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     this.state.record("listAlerts", query);
     const limit = query?.limit ?? 50;
     return { alerts: this.state.alerts.slice(0, limit), totalCount: this.state.alerts.length, limit, offset: 0 };
+  }
+
+  async getAlertQueue(): Promise<AlertQueueState> {
+    this.state.record("getAlertQueue");
+    return this.state.alertQueue;
   }
 
   async subscribeStreamEvents(callback: StreamEventSubscriber, types?: string[]): Promise<void> {

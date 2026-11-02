@@ -17,3 +17,9 @@ export const defaultSeedValidator = v.object({
   // Whether the module had the images when the alerts were seeded.
   alertImages: v.optional(v.union(v.literal("included"), v.literal("omitted"))),
 });
+
+/** How a setup passed the overlay page. Seeing an alert play is never overwritten by a later skip. */
+export const overlayDoneValidator = v.object({
+  outcome: v.union(v.literal("finished"), v.literal("skipped")),
+  at: v.number(),
+});

@@ -372,6 +372,12 @@ export type EngineAlertStatus =
   | "dispatched"
   | "unknown";
 
+/**
+ * Whether an overlay page is open on the engine. "unknown" is a failed or
+ * unanswered read, which says nothing about the overlay.
+ */
+export type OverlayPresence = "open" | "closed" | "unknown";
+
 /** One alert the engine dispatched, kept current by its `alert.*` callbacks. */
 export interface EngineAlert {
   /** The gateway's id of the record, for keys. */
@@ -1618,7 +1624,13 @@ export interface DefaultSeedStatus {
   }[];
   /** The engine's woofx3 module predates the images, so the alerts were seeded with text alone. */
   alertImagesOmitted: boolean;
+  /** Set up before the seed existed, so nothing was or will be seeded. */
+  neverSeeded: boolean;
+  overlayDone: { outcome: OverlayDoneOutcome } | null;
 }
+
+/** How setup passed the overlay page: an alert was seen to play, or the streamer skipped. */
+export type OverlayDoneOutcome = "finished" | "skipped";
 
 export type StarterPackItemState = "installed" | "installing" | "conflict" | "available";
 
@@ -1857,9 +1869,6 @@ export interface NewStreamInfoPreset {
 }
 
 // ==================== Overlays ====================
-
-/** A first-run fact the overlay page confirms, which the Todo panel's items rest on. */
-export type OverlayMilestone = "overlay-added" | "test-alert";
 
 /** What Getting Started needs to know about the instance's overlays. */
 export interface OverlayFacts {

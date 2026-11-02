@@ -118,4 +118,16 @@ describe("the first dashboard panel", () => {
     const [panel] = await completedPanels({ interestsChosenAt: 1 });
     expect(panel?.widgets.map((widget) => widget.type)).toContain("stream-status");
   });
+
+  test("a finish outranks a skip either way round, and needs an admin", async () => {
+    const t = newBackend();
+    const { instanceId, ownerId } = await instanceWithOwner(t);
+    const owner = t.withIdentity({ subject: `${ownerId}|session` });
+    await owner.mutation(api.defaultSeed.markOverlayDone, { instanceId, outcome: "skipped" });
+    expect((await owner.query(api.defaultSeed.status, { instanceId }))?.overlayDone).toEqual({ outcome: "skipped" });
+    await owner.mutation(api.defaultSeed.markOverlayDone, { instanceId, outcome: "finished" });
+    await owner.mutation(api.defaultSeed.markOverlayDone, { instanceId, outcome: "skipped" });
+    expect((await owner.query(api.defaultSeed.status, { instanceId }))?.overlayDone).toEqual({ outcome: "finished" });
+    await expect(t.mutation(api.defaultSeed.markOverlayDone, { instanceId, outcome: "skipped" })).rejects.toThrow();
+  });
 });

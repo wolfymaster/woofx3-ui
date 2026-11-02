@@ -24,6 +24,7 @@ export const directKeys = {
     all: ["alertQueue"] as const,
     alerts: (limit: number) => ["alertQueue", "alerts", limit] as const,
     overview: (hourStart: number) => ["alertQueue", "overview", hourStart] as const,
+    overlayPresence: () => ["alertQueue", "overlayPresence"] as const,
   },
   alertLibrary: {
     all: ["alertLibrary"] as const,

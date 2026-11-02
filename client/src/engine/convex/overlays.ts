@@ -1,10 +1,9 @@
 import { api } from "@convex/_generated/api";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { OverlaysGateway } from "@/engine/gateway";
-import { NoInstanceSelectedError } from "@/engine/scope";
-import type { OverlayFacts, OverlayMilestone, ReadOptions, SceneId } from "@/engine/types";
+import type { OverlayFacts, ReadOptions, SceneId } from "@/engine/types";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { fromSceneId } from "./ids";
 import { useMappedValue } from "./mapped";
@@ -45,25 +44,6 @@ function useKnownPreviewUrl(engineSceneId: string) {
   return useQuery(api.scenes.previewUrlByEngineSceneId, instanceId ? { instanceId, engineSceneId } : "skip");
 }
 
-const MILESTONE_ITEM_IDS = { "overlay-added": "overlay", "test-alert": "test-alert" } as const satisfies Record<
-  OverlayMilestone,
-  string
->;
-
-function useRecordMilestoneRequest() {
-  const instanceId = useScopeInstanceId();
-  const markDone = useMutation(api.gettingStarted.markDone);
-  return useCallback(
-    async (milestone: OverlayMilestone) => {
-      if (!instanceId) {
-        throw new NoInstanceSelectedError();
-      }
-      await markDone({ instanceId, itemId: MILESTONE_ITEM_IDS[milestone] });
-    },
-    [instanceId, markDone]
-  );
-}
-
 type FactsRow = NonNullable<FunctionReturnType<typeof api.browserSource.overlayFacts>>;
 
 export function toOverlayFacts(row: FactsRow): OverlayFacts {
@@ -87,5 +67,4 @@ export const convexOverlaysGateway: OverlaysGateway = {
   useBrowserSourceUrlRequest,
   useRotateBrowserSourceUrlRequest,
   usePreviewUrlRequest,
-  useRecordMilestoneRequest,
 };
