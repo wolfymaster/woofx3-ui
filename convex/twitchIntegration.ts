@@ -3,10 +3,18 @@ import { TWITCH_INTEGRATION_SCOPES } from "@shared/twitch-integration-scopes";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import {
+  type ActionCtx,
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
 import { readMemberRole } from "./instances";
 import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { linkedNames } from "./lib/firstRun";
 import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
@@ -17,6 +25,7 @@ import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { type TwitchTokenRequestedResponse, twitchTokenForEngine, twitchTokenGrant } from "./lib/twitchTokenGrant";
 import { claimHandoff } from "./oauthConnectHandoff";
 import { freshTwitchToken } from "./platformRealtime";
+import { finishFirstRun } from "./setup";
 
 /** The signed-in caller, when they may connect or disconnect this instance's Twitch link. */
 async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
@@ -76,6 +85,26 @@ export type FinishConnectResult = { ok: true; redirectTo: string } | ConnectRefu
 
 type CompletedConnect = { ok: true; redirectTo: string; instanceId: Id<"instances"> };
 
+/** The names onboarding could not know before Twitch was connected (`linkedNames`). */
+async function applyLinkedNames(ctx: MutationCtx, instanceId: Id<"instances">, userId: Id<"users">, display: string) {
+  const instance = await ctx.db.get(instanceId);
+  const account = instance ? await ctx.db.get(instance.accountId) : null;
+  const user = await ctx.db.get(userId);
+  if (!instance || !account || !user) {
+    throw new Error(`Twitch linked to instance ${instanceId} with no account or user behind it`);
+  }
+  const names = linkedNames({ account: account.name, instance: instance.name, user: user.name }, display);
+  if (names.account !== undefined) {
+    await ctx.db.patch(account._id, { name: names.account });
+  }
+  if (names.instance !== undefined) {
+    await ctx.db.patch(instance._id, { name: names.instance });
+  }
+  if (names.user !== undefined) {
+    await ctx.db.patch(user._id, { name: names.user });
+  }
+}
+
 /**
  * Claims the Twitch result the OAuth callback stored under `codeHash` and
  * writes the instance's link. Claiming, the role check, the relink check and
@@ -111,6 +140,7 @@ export const completeConnect = internalMutation({
       platform: "twitch",
       platformUserId: twitch.platformUserId,
       platformUsername: twitch.platformUsername,
+      platformLogin: twitch.login,
       profileImageUrl: twitch.profileImageUrl,
       channelId: twitch.platformUserId,
       sealedAccessToken: twitch.sealedAccessToken,
@@ -124,6 +154,15 @@ export const completeConnect = internalMutation({
       await ctx.db.patch(existing._id, { ...link, authFailedAt: undefined });
     } else {
       await ctx.db.insert("platformLinks", link);
+    }
+
+    await applyLinkedNames(ctx, instanceId, userId, twitch.platformUsername);
+    const setup = await ctx.db
+      .query("instanceSetup")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (setup?.platformsChosenAt) {
+      await finishFirstRun(ctx, setup, userId);
     }
     return { ok: true, redirectTo, instanceId };
   },

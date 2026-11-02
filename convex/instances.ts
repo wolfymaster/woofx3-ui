@@ -118,7 +118,18 @@ export const create = mutation({
       .query("instances")
       .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
       .take(50);
-    const unregistered = existing.find((instance) => !instance.clientId && instance.hosting !== "managed");
+    let unregistered = existing.find((instance) => !instance.clientId && instance.hosting !== "managed");
+    // Onboarding's managed placeholder has no engine behind it until a
+    // provisioning row exists, so it can become this engine's row too.
+    for (const instance of existing) {
+      if (!unregistered && instance.hosting === "managed" && !instance.clientId) {
+        const provisioning = await ctx.db
+          .query("engineProvisioning")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
+          .first();
+        unregistered = provisioning ? undefined : instance;
+      }
+    }
     if (unregistered) {
       await ctx.db.patch(unregistered._id, { name: args.name, url: args.url, hosting: "external" });
       await ensureInstanceMember(ctx, unregistered._id, userId, "owner");

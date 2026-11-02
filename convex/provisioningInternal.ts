@@ -41,6 +41,9 @@ const stepValidator = v.object({
   detail: v.optional(v.string()),
 });
 
+// Bounds the read of an instance's platform links, a handful per instance.
+const MAX_PLATFORM_LINKS = 20;
+
 /**
  * Registration is attempted right after the engine reports ready. A managed
  * engine can answer `/ready` a moment before its api accepts RPC, so the first
@@ -56,6 +59,13 @@ const REGISTRATION_RETRY_DELAYS_MS = [10_000, 30_000, 120_000];
  * given the row its id long before.
  */
 const UPGRADE_REQUEST_DEADLINE_MS = 15 * 60 * 1000;
+
+/**
+ * How long a row stays `requested` before another request may take it over.
+ * Outlasts the action asking the maintenance API, so two requests cannot race
+ * for one row; a request that died leaves the row usable after this.
+ */
+const REQUEST_IN_FLIGHT_MS = 15 * 60 * 1000;
 
 /** Callback ids are kept only long enough to cover redelivery, which the sender stops after a day. */
 const EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -100,6 +110,14 @@ export const reserveManagedInstance = internalMutation({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .first();
 
+    const setup = await ctx.db
+      .query("instanceSetup")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (setup?.usernameNeededAt !== undefined) {
+      await ctx.db.patch(setup._id, { usernameNeededAt: undefined });
+    }
+
     const now = Date.now();
     if (existing) {
       const inFlight =
@@ -107,7 +125,8 @@ export const reserveManagedInstance = internalMutation({
         existing.status !== "failed" &&
         existing.status !== "deleted" &&
         existing.status !== "registered";
-      if (inFlight) {
+      const beingRequested = existing.status === "requested" && now - existing.updatedAt < REQUEST_IN_FLIGHT_MS;
+      if (inFlight || beingRequested) {
         throw new Error("An engine is already being created for this workspace");
       }
       if (existing.status === "registered") {
@@ -145,7 +164,7 @@ export const reserveManagedInstance = internalMutation({
   },
 });
 
-async function findOrCreateManagedInstance(
+export async function findOrCreateManagedInstance(
   ctx: MutationCtx,
   account: Doc<"accounts">,
   userId: Id<"users">
@@ -182,6 +201,40 @@ async function findOrCreateManagedInstance(
   }
   return instanceId;
 }
+
+/** What a first engine is derived from: whose it is, and the Twitch login that names it. */
+export const firstEngineFacts = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const instance = await ctx.db.get(instanceId);
+    const account = instance ? await ctx.db.get(instance.accountId) : null;
+    if (!account) {
+      throw new Error(`Instance ${instanceId} has no account`);
+    }
+    const links = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .take(MAX_PLATFORM_LINKS);
+    const login = links.find((link) => link.platform === "twitch")?.platformLogin ?? null;
+    return { accountId: account._id, ownerId: account.ownerId, login };
+  },
+});
+
+/** Sends the connect screen to asking for a username, none of the derived ones being usable. */
+export const markUsernameNeeded = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const setup = await ctx.db
+      .query("instanceSetup")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (!setup) {
+      throw new Error(`Instance ${instanceId} has no setup to ask a username for`);
+    }
+    const now = Date.now();
+    await ctx.db.patch(setup._id, { usernameNeededAt: now, updatedAt: now });
+  },
+});
 
 /** The engine the maintenance API created, and the run whose steps the progress screen follows. */
 export const recordEngineRequested = internalMutation({
