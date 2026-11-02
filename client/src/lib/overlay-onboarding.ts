@@ -10,6 +10,8 @@ export const OVERLAY_HINT_AFTER_MS = 60_000;
 export const OVERLAY_TROUBLESHOOT_AFTER_MS = 180_000;
 /** No engine service reports an alert that never played in time, so the page gives up by itself. */
 export const TEST_UNCONFIRMED_AFTER_MS = 60_000;
+/** How long a seed item may sit on a recorded error before the page stops presenting it as ordinary progress. */
+export const SEED_SLOW_AFTER_MS = 60_000;
 /**
  * Seeded scenes and workflows reach the reads by webhook, a moment after the
  * seed records their ids, so one absent for less than this has not been deleted.
@@ -30,6 +32,8 @@ export interface OverlayFacts {
   engine: EngineStage;
   scene: SceneFact;
   follow: FollowFact;
+  /** A seed item failed an attempt and is still waiting on another; see `seedHasRecordedError`. */
+  seedError: boolean;
   /** Undefined before the first answer, which is no moment to say "waiting" to a refresh. */
   presence: OverlayPresence | undefined;
   test: TestOutcome;
@@ -59,6 +63,7 @@ export interface OverlayState {
   triggerIds: readonly string[];
   sceneAbsentSince: number | null;
   followAbsentSince: number | null;
+  seedErrorSince: number | null;
 }
 
 export const INITIAL_OVERLAY_STATE: OverlayState = {
@@ -67,6 +72,7 @@ export const INITIAL_OVERLAY_STATE: OverlayState = {
   triggerIds: [],
   sceneAbsentSince: null,
   followAbsentSince: null,
+  seedErrorSince: null,
 };
 
 export type OverlayEvent =
@@ -74,7 +80,8 @@ export type OverlayEvent =
   | { type: "send" }
   | { type: "sent"; triggerId: string; at: number }
   | { type: "send-refused" }
-  | { type: "confirmed-seen" };
+  | { type: "confirmed-seen" }
+  | { type: "seed-retried" };
 
 const BLOCKED_PHASES: ReadonlySet<OverlayPhase["name"]> = new Set([
   "building",
@@ -131,6 +138,7 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
     ...state,
     sceneAbsentSince,
     followAbsentSince,
+    seedErrorSince: facts.seedError ? (state.seedErrorSince ?? at) : null,
     follow: followState(facts.follow, followAbsentSince, at),
   };
   const { phase } = state;
@@ -153,8 +161,13 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
   if (facts.presence === undefined && wasBlocked) {
     return { ...base, phase: { name: "preparing" } };
   }
+  // Before the presence check: the engine's failure says why, where "disconnected"
+  // would only guess. The reason stays up until Try again, even with the overlay gone.
+  if (isAwaitingTest(phase) && facts.test.kind === "failed") {
+    return { ...base, phase: { name: "test-failed", reason: facts.test.reason } };
+  }
   if (facts.presence === "closed") {
-    if (phase.name === "waiting") {
+    if (phase.name === "waiting" || phase.name === "test-failed") {
       return base;
     }
     return { ...base, phase: { name: "waiting", since: at, dropped: !wasBlocked }, triggerIds: [] };
@@ -168,9 +181,6 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
     return { ...base, phase: { name: "waiting", since: at, dropped: false } };
   }
 
-  if (isAwaitingTest(phase) && facts.test.kind === "failed") {
-    return { ...base, phase: { name: "test-failed", reason: facts.test.reason } };
-  }
   if (phase.name === "playing" && at - phase.sentAt >= TEST_UNCONFIRMED_AFTER_MS) {
     return { ...base, phase: { name: "unconfirmed" } };
   }
@@ -197,7 +207,22 @@ export function overlayReducer(state: OverlayState, event: OverlayEvent): Overla
       return state.phase.name === "sending" ? { ...state, phase: { name: "test-failed", reason: null } } : state;
     case "confirmed-seen":
       return state.phase.name === "unconfirmed" ? { ...state, phase: { name: "finished" } } : state;
+    case "seed-retried":
+      return { ...state, seedErrorSince: null };
   }
+}
+
+/** Whether an attempt at a seed item failed with retries still to come. A settled item is "failed" instead. */
+export function seedHasRecordedError(seed: DefaultSeedStatus | null | undefined): boolean {
+  if (!seed) {
+    return false;
+  }
+  return [seed.scene, ...seed.alerts].some((item) => item.status === "pending" && item.error !== undefined);
+}
+
+/** Whether to say the seed is taking longer than usual and offer to try it now. */
+export function seedIsSlow(state: OverlayState, at: number): boolean {
+  return state.seedErrorSince !== null && at - state.seedErrorSince >= SEED_SLOW_AFTER_MS;
 }
 
 /** How much help the waiting phase offers after `now - since` of nothing connecting. */

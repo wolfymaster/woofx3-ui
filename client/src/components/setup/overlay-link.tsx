@@ -36,13 +36,13 @@ export function OverlayLink({ url }: { url: string }) {
 
   return (
     <div className="space-y-2">
+      <code
+        className="block break-all rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs"
+        data-testid="text-overlay-url"
+      >
+        {shown ? url : maskedUrl(url)}
+      </code>
       <div className="flex flex-wrap items-center gap-2">
-        <code
-          className="min-w-0 flex-1 basis-full truncate rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs sm:basis-0"
-          data-testid="text-overlay-url"
-        >
-          {shown ? url : maskedUrl(url)}
-        </code>
         <Button onClick={copy} data-testid="button-overlay-copy">
           {copyState === "copied" ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
           {copyState === "copied" ? "Copied" : copyState === "failed" ? "Couldn't copy" : "Copy link"}

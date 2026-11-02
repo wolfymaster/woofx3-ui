@@ -9,6 +9,9 @@ import {
   overlayReducer,
   overlaySceneOf,
   SEED_MIRROR_GRACE_MS,
+  SEED_SLOW_AFTER_MS,
+  seedHasRecordedError,
+  seedIsSlow,
   TEST_UNCONFIRMED_AFTER_MS,
   testOutcomeOf,
   waitingHelp,
@@ -18,6 +21,7 @@ const READY: OverlayFacts = {
   engine: "ready",
   scene: "found",
   follow: "ready",
+  seedError: false,
   presence: "closed",
   test: { kind: "none" },
 };
@@ -299,5 +303,80 @@ describe("followAlertOf", () => {
     expect(
       followAlertOf(seedWith({ alerts: [{ itemId: "follow", event: "e", status: "installed" }] }), workflows).fact
     ).toBe("pending");
+  });
+});
+
+describe("a seed attempt that failed", () => {
+  const erring = observe({ scene: "pending", seedError: true }, 1000);
+  const started = run(INITIAL_OVERLAY_STATE, erring);
+
+  test("reads as ordinary progress for the first minute, then as slow", () => {
+    expect(started.phase.name).toBe("preparing");
+    expect(seedIsSlow(started, 1000 + SEED_SLOW_AFTER_MS - 1)).toBe(false);
+    expect(seedIsSlow(started, 1000 + SEED_SLOW_AFTER_MS)).toBe(true);
+  });
+
+  test("keeps its clock across attempts that fail the same way", () => {
+    const later = run(started, observe({ scene: "pending", seedError: true }, 40_000));
+    expect(later.seedErrorSince).toBe(1000);
+  });
+
+  test("Try again starts the clock over", () => {
+    const retried = run(started, { type: "seed-retried" });
+    const next = run(retried, observe({ scene: "pending", seedError: true }, 90_000));
+    expect(seedIsSlow(next, 90_000)).toBe(false);
+    expect(next.seedErrorSince).toBe(90_000);
+  });
+
+  test("clears once the error does", () => {
+    expect(run(started, observe({ scene: "pending" }, 2000)).seedErrorSince).toBeNull();
+  });
+});
+
+describe("seedHasRecordedError", () => {
+  test.each([
+    ["nothing wrong", seedWith({}), false],
+    ["no status yet", null, false],
+    ["pending with no error", seedWith({ scene: { status: "pending" } }), false],
+    ["a pending scene with an error", seedWith({ scene: { status: "pending", error: "x" } }), true],
+    [
+      "a pending alert with an error",
+      seedWith({ alerts: [{ itemId: "sub", event: "e", status: "pending", error: "x" }] }),
+      true,
+    ],
+    ["settled as failed", seedWith({ scene: { status: "failed", error: "x" } }), false],
+  ])("%s", (_name, seed, expected) => {
+    expect(seedHasRecordedError(seed)).toBe(expected);
+  });
+});
+
+describe("a test sent to an overlay the engine has not noticed closing", () => {
+  const stillOpen = { presence: "open" } as const;
+  const sent = run(run(connected, { type: "send" }), { type: "sent", triggerId: "t1", at: 1000 });
+  const failure = { kind: "failed", reason: "no overlay" } as const;
+
+  test("fails with the engine's reason, not Did you see it?", () => {
+    expect(run(sent, observe({ ...stillOpen, test: failure }, 5000)).phase).toEqual({
+      name: "test-failed",
+      reason: "no overlay",
+    });
+  });
+
+  test("a failure after the unconfirmed limit still wins", () => {
+    const unconfirmed = run(sent, observe(stillOpen, 1000 + TEST_UNCONFIRMED_AFTER_MS));
+    expect(unconfirmed.phase.name).toBe("unconfirmed");
+    expect(run(unconfirmed, observe({ ...stillOpen, test: failure })).phase.name).toBe("test-failed");
+  });
+
+  test("a failure arriving with the closed presence keeps its reason", () => {
+    const failed = run(sent, observe({ presence: "closed", test: failure }, 70_000));
+    expect(failed.phase).toEqual({ name: "test-failed", reason: "no overlay" });
+    expect(run(failed, observe({ presence: "closed", test: failure }, 71_000)).phase.name).toBe("test-failed");
+  });
+
+  test("Try again with the overlay gone goes back to waiting for it", () => {
+    const failed = run(sent, observe({ presence: "closed", test: failure }, 70_000));
+    const resent = run(failed, { type: "send" });
+    expect(run(resent, observe({ presence: "closed" }, 72_000)).phase.name).toBe("waiting");
   });
 });
