@@ -15,11 +15,6 @@
     "allow-unpair",
     "allow-install-update",
     "allow-get-integrations",
-    "allow-set-endpoint-enabled",
-    "allow-confirm-address",
-    "allow-use-discovered",
-    "allow-set-share-password",
-    "allow-test-endpoint",
     "allow-reconnect-relay"
   ]
 }

@@ -3,13 +3,20 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { AlertTriangle, Download, Laptop, Unplug } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
+import { IS_DESKTOP } from "@/lib/desktop";
 import { companionDownloadUrl, type LocalEndpointSituation, localEndpointSituation } from "@/lib/local-endpoints";
 import { cn } from "@/lib/utils";
 
 type ModuleLocalEndpoints = NonNullable<FunctionReturnType<typeof api.companionIntegrations.forModule>>;
 type EndpointView = ModuleLocalEndpoints["endpoints"][number];
+
+// IS_DESKTOP is a build constant, so the web build carries none of the host's code.
+const ModuleLocalConnections = IS_DESKTOP
+  ? lazy(() => import("@/desktop/LocalConnections").then((module) => ({ default: module.ModuleLocalConnections })))
+  : null;
 
 /**
  * How the engine reaches each of a module's local endpoints, above its
@@ -17,9 +24,26 @@ type EndpointView = ModuleLocalEndpoints["endpoints"][number];
  * companion at all. Generic over the module's `local[]` declaration, so it
  * names the endpoint, never a particular app. Renders nothing for a module
  * without local endpoints, or where the engine or this deployment cannot use
- * the companion's bridge.
+ * the companion's bridge. In the desktop app that is linked to this instance,
+ * the controls themselves appear instead, because addresses exist only on that
+ * computer.
  */
 export function LocalEndpointPanel({ instanceId, moduleId }: { instanceId: Id<"instances">; moduleId: string }) {
+  if (ModuleLocalConnections) {
+    return (
+      <Suspense fallback={null}>
+        <ModuleLocalConnections
+          instanceId={instanceId}
+          moduleId={moduleId}
+          elsewhere={<EndpointSituations instanceId={instanceId} moduleId={moduleId} />}
+        />
+      </Suspense>
+    );
+  }
+  return <EndpointSituations instanceId={instanceId} moduleId={moduleId} />;
+}
+
+function EndpointSituations({ instanceId, moduleId }: { instanceId: Id<"instances">; moduleId: string }) {
   const view = useQuery(api.companionIntegrations.forModule, moduleId ? { instanceId, moduleId } : "skip");
   const capability = useEngineCapabilities().support("modules.localEndpoints");
   const now = useMinuteClock();
@@ -81,8 +105,8 @@ function LocalEndpointRow({ endpoint, situation }: { endpoint: EndpointView; sit
   }
   if (situation.kind === "companionNothingFound") {
     const next = endpoint.hasDiscovery
-      ? "then turn it on in the app's Integrations tab."
-      : "then enter its address in the app's Integrations tab.";
+      ? "then open this page in the app on that computer to turn it on."
+      : "then open this page in the app on that computer to enter its address.";
     return (
       <section className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
         <Unplug className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />

@@ -270,7 +270,7 @@ impl Companion {
 
 /// The window that shows the dashboard. Must match tauri.conf.json.
 pub const DASHBOARD_WINDOW: &str = "main";
-/// The window that shows pairing and local connections. Must match
+/// The window that shows pairing and connection status. Must match
 /// tauri.conf.json and capabilities/companion.json, which grants the
 /// companion's commands to it alone.
 pub const COMPANION_WINDOW: &str = "companion";
@@ -697,7 +697,7 @@ pub fn run() {
                 }
                 // Someone looking at the local connections may just have
                 // started OBS.
-                WindowEvent::Focused(true) if window.label() == COMPANION_WINDOW => {
+                WindowEvent::Focused(true) => {
                     if let Some(companion) = window.try_state::<Arc<Companion>>() {
                         companion.integrations.rediscover();
                     }

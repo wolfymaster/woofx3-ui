@@ -9,6 +9,7 @@ import {
   type IntegrationsView,
   type LocalEngineSession,
   type MarkerRequestOutcome,
+  OPEN_LOCAL_CONNECTIONS_EVENT,
   SHOUTOUT_QUEUE_EVENT,
   type ShoutoutChannel,
   type ShoutoutEnqueued,
@@ -16,6 +17,7 @@ import {
   type ShoutoutQueueView,
   STREAM_START_MARKER_EVENT,
   type StreamStartMarker,
+  type TestResult,
 } from "@desktop-host/window";
 import { listen } from "@tauri-apps/api/event";
 import { call } from "./invoke";
@@ -23,17 +25,23 @@ import { call } from "./invoke";
 export type {
   AppLinkStart,
   CompanionLinkStatus,
+  DiscoveryView,
+  EndpointView,
   FinishAppLinkArgs,
   HostModeKind,
   HostModeView,
+  IntegrationsView,
   LocalEngineSession,
   MarkerRequestOutcome,
+  ModuleView,
+  RelayView,
   ShoutoutChannel,
   ShoutoutEnqueued,
   ShoutoutEntry,
   ShoutoutEntryId,
   ShoutoutQueueView,
   StreamStartMarker,
+  TestResult,
 } from "@desktop-host/window";
 
 // Calls into the desktop app's Rust host, for the dashboard window. The
@@ -113,6 +121,37 @@ export function onIntegrationsChange(handler: (view: IntegrationsView) => void):
 /** Connects again after another connection displaced the relay or woofx3 refused it. */
 export async function reconnectRelay(): Promise<void> {
   await call(COMMANDS.reconnect_relay);
+}
+
+// ==================== Local connections ====================
+// The host holds the addresses and decides what the bridge dials. It asks the
+// streamer itself before accepting a typed address or sending a password, and
+// these reject when they decline.
+
+export async function setEndpointEnabled(moduleId: string, endpointId: string, enabled: boolean): Promise<void> {
+  await call(COMMANDS.set_endpoint_enabled, { moduleId, endpointId, enabled });
+}
+
+export async function confirmAddress(moduleId: string, endpointId: string, address: string): Promise<void> {
+  await call(COMMANDS.confirm_address, { moduleId, endpointId, address });
+}
+
+export async function chooseDiscovered(moduleId: string, endpointId: string): Promise<void> {
+  await call(COMMANDS.use_discovered, { moduleId, endpointId });
+}
+
+export async function setSharePassword(moduleId: string, endpointId: string, share: boolean): Promise<void> {
+  await call(COMMANDS.set_share_password, { moduleId, endpointId, share });
+}
+
+/** One handshake with the stored address, whether or not the endpoint is on. */
+export async function testEndpoint(moduleId: string, endpointId: string): Promise<TestResult> {
+  return call(COMMANDS.test_endpoint, { moduleId, endpointId });
+}
+
+/** The tray's "Local connections" item. */
+export function onOpenLocalConnections(handler: () => void): Promise<() => void> {
+  return listen(OPEN_LOCAL_CONNECTIONS_EVENT, handler);
 }
 
 // ==================== Linking the companion ====================

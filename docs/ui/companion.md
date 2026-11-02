@@ -8,7 +8,9 @@
 The woofx3 app (Tauri 2), the desktop build of woofx3, runs on the streamer's PC and lives in the tray. It has two windows:
 
 - **The dashboard** (`main`): the same dashboard as the web app, built for the desktop (`bun run build:desktop`). It opens at launch and from the tray's **Open woofx3**.
-- **The companion window** (`companion`): pairing and local connections. It opens from the tray's **Local connections…**, and by itself when pairing needs the streamer (a code to approve, a pairing to confirm, an error).
+- **The companion window** (`companion`): pairing and connection status. It opens from the tray's **Connection status…**, and by itself when pairing needs the streamer (a code to approve, a pairing to confirm, an error).
+
+The tray's **Local connections…** opens the dashboard's Integrations page (`OPEN_LOCAL_CONNECTIONS_EVENT`).
 
 The companion part holds outbound connections from that PC to woofx3, so it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC. Its window shows its state and little else: a Status tab and an [Integrations](#integrations) tab, with Engine and Configuration tabs laid out but disabled until they have something to show.
 
@@ -111,20 +113,22 @@ The Marketplace tab is served too: the Installed view, a module's page, the stor
 
 ## Integrations
 
-A module that controls something on the streamer's network declares it in `local[]` (an endpoint with a protocol, the settings holding its host, port and password, and optionally how to discover it). The Integrations tab is generated from those entries for the modules installed on the companion's instance; nothing in it is written per integration. The Rust side (`companion/src-tauri/src/integrations.rs`) runs while the pairing is paired and confirmed, and stops with it.
+A module that controls something on the streamer's network declares it in `local[]` (an endpoint with a protocol, the settings holding its host, port and password, and optionally how to discover it). The dashboard's controls are generated from those entries for the modules installed on the linked instance; nothing in them is written per integration. They appear in two places, both from `client/src/desktop/LocalConnections.tsx`: on a module's Settings tab (`ModuleLocalConnections`, replacing the status text of `LocalEndpointPanel`) and under **On this computer** on Admin > Integrations (`ThisComputerConnections`). They show only in the desktop app on the instance's linked computer, because addresses exist only there; anywhere else `LocalEndpointPanel` says what it can see from Convex. `LocalConnectionsGuide` asks once per endpoint nobody has set up, since the relay stays off until one is on. The Rust side (`companion/src-tauri/src/integrations.rs`) runs while the pairing is paired and confirmed, and stops with it.
 
-It subscribes to `companionIntegrations.forCompanion` with the companion's token, and subscribes again with backoff if that fails or ends. The query lists each installed module's endpoints with their setting keys (never values), the copy Convex keeps of what the companion recorded, `manualKeys` (settings the streamer saved by hand), and `relayAvailable`. A deployment without these functions answers "Could not find public function", and the tab says "Integrations need a newer woofx3". Any other error text from Convex is replaced with a fixed message before it is logged or shown, since Convex's own messages can quote a function's arguments, the token among them.
+It subscribes to `companionIntegrations.forCompanion` with the companion's token, and subscribes again with backoff if that fails or ends. The query lists each installed module's endpoints with their setting keys (never values), the copy Convex keeps of what the companion recorded, `manualKeys` (settings the streamer saved by hand), and `relayAvailable`. A deployment without these functions answers "Could not find public function", and the controls say "Local connections need a newer woofx3". Any other error text from Convex is replaced with a fixed message before it is logged or shown, since Convex's own messages can quote a function's arguments, the token among them.
 
 ### Discoverers
 
 A discoverer is built into the companion and named by `discover.known`. Each one serves only the modules listed for it in the `DISCOVERERS` table in `integrations.rs`; today that is `obs-websocket` for `woofx3_obs`. A discoverer can read secrets on the PC, so a module that merely declares `known: "obs-websocket"` gets "Discovery not available for this module" and manual entry only, and can never receive the OBS password. Convex enforces the same table (`convex/lib/knownDiscoverers.ts`) when the companion reports values. The table also lists the subprotocols the Test button offers, and the window keys discoverer-specific hints (such as where to switch OBS's WebSocket server on) by the discoverer's id, so nothing else in the tab names a particular integration.
 
-For each endpoint the tab shows:
+For each endpoint the controls show:
 
-- **Discovery.** For an endpoint the `obs-websocket` discoverer serves, the companion reads obs-websocket's own config file (`%APPDATA%\obs-studio\plugin_config\obs-websocket\config.json`, OBS 30 and later, at most 64 KiB) every minute and whenever the window gains focus: found on this PC with its port, switched off, or not found. Endpoints with `mdns` discovery, or none, take a typed address.
+- **Discovery.** For an endpoint the `obs-websocket` discoverer serves, the companion reads obs-websocket's own config file (`%APPDATA%\obs-studio\plugin_config\obs-websocket\config.json`, OBS 30 and later, at most 64 KiB) every minute and whenever an app window gains focus: found on this PC with its port, switched off, or not found. Endpoints with `mdns` discovery, or none, take a typed address.
 - **The address it dials,** as `host:port`, marked "found on this PC" or "you entered it". **Use a different address** asks for `host:port` and saves it only on **Confirm address**. An enabled endpoint dialling a discovered address follows OBS when its port changes.
-- **The enable switch,** disabled until there is an address.
+- **The enable switch,** disabled until there is an address. An endpoint with no stored entry that discovery finds turns on by itself (`connect_first_discovery`): installing the module approved its local endpoints and the address is loopback. Turning it off stores an entry, so it stays off. An address the streamer typed never turns on by itself.
 - **The password opt-in,** off by default, naming the endpoint and the module (display name and id) the password would go to. Only with it on does the password read from OBS's file leave the PC.
+
+The dashboard window renders hosted data, so it only requests the two choices that decide what the bridge dials or what leaves the PC. `Integrations::ask_streamer` puts a typed address and the password opt-in to the streamer in a native dialog the host draws, and refuses if they decline.
 - **The connection state** from the relay, and **Test**, which makes one WebSocket handshake with the stored address (offering `obswebsocket.json` and `obswebsocket.msgpack` to an OBS endpoint) and reports whether it answered within 3 seconds.
 
 ### What the companion dials
@@ -135,7 +139,7 @@ The companion's own store, `integrations.json` in its app data directory, is the
 { "companionId": "…", "instanceId": "…", "endpoints": { "woofx3_obs/obs": { "enabled": true, "address": { "host": "127.0.0.1", "port": 4455, "origin": "discovered" }, "sharePassword": false, "sentPasswordSha256": null } } }
 ```
 
-An address gets there only from discovery on this PC or from the streamer confirming it in the window. The relay names a module and an endpoint, never an address, and the bridge answers only for an endpoint that is enabled in the store, belongs to a module `forCompanion` lists as installed, and uses the `websocket` protocol. Anything else is refused with 4403 and nothing is dialled. Convex receives a copy of each address through `companionIntegrations.setEndpoint` to show in the browser, and the companion never reads one back.
+An address gets there only from discovery on this PC or from the streamer confirming it in the host's native dialog. The relay names a module and an endpoint, never an address, and the bridge answers only for an endpoint that is enabled in the store, belongs to a module `forCompanion` lists as installed, and uses the `websocket` protocol. Anything else is refused with 4403 and nothing is dialled. Convex receives a copy of each address through `companionIntegrations.setEndpoint` to show in the browser, and the companion never reads one back.
 
 A stream already open is checked again whenever the store or the installed modules change. Turning the endpoint off, confirming another address, using the discovered one instead, or uninstalling its module closes every stream whose endpoint no longer resolves to the address it dialled, with 4403.
 
@@ -321,9 +325,9 @@ OBS <-ws 127.0.0.1:4455- Companion ==(outbound WSS)== Relay DO <==wss /bridge/<m
 ### The flow
 
 1. The companion subscribes to `companionIntegrations.forCompanion({ token })`: each installed module's endpoints, the setting keys they name (never values), what the companion last recorded, which keys the streamer set by hand (`manualKeys`), and `relayAvailable`. Null unless the token is a confirmed companion's.
-2. It discovers what it can (OBS's port from obs-websocket's own config file) or the streamer confirms an address in the companion window, and records it with `companionIntegrations.setEndpoint`. The companion keeps the address it dials in its own store; the copy in `companionEndpoints` is for display. Enabling needs an address.
+2. It discovers what it can (OBS's port from obs-websocket's own config file) or the streamer confirms an address in the host's native dialog, and records it with `companionIntegrations.setEndpoint`. The companion keeps the address it dials in its own store; the copy in `companionEndpoints` is for display. Enabling needs an address.
 3. It fills in the module's settings with `companionIntegrationsActions.reportDiscovered`: only keys `local[]` names, only on modules installed on its instance, never a `manual` key, and nothing when the report is unchanged, since every setting write makes the engine reconnect. Provenance is read again right before each key is written, so a key the streamer saves by hand meanwhile is skipped. Convex never stores the password, and refuses one unless all of these hold:
-   - the streamer opted in on the Integrations tab (`sharesPassword`);
+   - the streamer opted in through the dashboard and the host's native dialog (`sharesPassword`);
    - the endpoint is turned on;
    - the endpoint's discoverer may hand this module a secret. The allowlist is in `convex/lib/knownDiscoverers.ts`; `obs-websocket` serves only `woofx3_obs`. Another module that declares the same discoverer still gets the host and port, never the password. The companion enforces the same table.
 4. Turning an endpoint on or off schedules `companionRelayActions.syncEngine`, which tells the engine with `setRelayConfig({ bridgeOrigin, endpoints })`, or `setRelayConfig(null)` when nothing is bridged. At most 50 endpoints are bridged (`MAX_BRIDGED_ENDPOINTS`, the engine's limit), and `setEndpoint` refuses to turn on a 51st.

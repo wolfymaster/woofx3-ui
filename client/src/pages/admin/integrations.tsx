@@ -1,10 +1,17 @@
 import { Key } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { TwitchIntegrationCard } from "@/components/settings/twitch-integration-card";
 import { TwitchScopeStatus } from "@/components/settings/twitch-scope-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
+import { IS_DESKTOP } from "@/lib/desktop";
+
+// IS_DESKTOP is a build constant, so the web build carries none of the host's code.
+const ThisComputerConnections = IS_DESKTOP
+  ? lazy(() => import("@/desktop/LocalConnections").then((module) => ({ default: module.ThisComputerConnections })))
+  : null;
 
 export default function AdminIntegrations() {
   const { isConnected, twitchLink, isLoading: twitchLoading, health } = useTwitchIntegration();
@@ -56,6 +63,11 @@ export default function AdminIntegrations() {
           </div>
         </CardContent>
       </Card>
+      {ThisComputerConnections && (
+        <Suspense fallback={null}>
+          <ThisComputerConnections />
+        </Suspense>
+      )}
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>API Keys</CardTitle>
