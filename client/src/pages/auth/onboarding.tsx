@@ -77,7 +77,10 @@ export default function Onboarding() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: each route starts once, guarded by `started`.
   useEffect(() => {
     if (route === "setup" && instances) {
-      const current = instances.find((instance) => instance.clientId) ?? instances[0];
+      const current =
+        instances.find((instance) => instance.clientId) ??
+        instances.find((instance) => instance.hosting === "managed") ??
+        instances[0];
       $currentInstanceId.set(current._id);
       navigate("/setup", { replace: true });
       return;

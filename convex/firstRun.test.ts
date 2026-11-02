@@ -228,6 +228,21 @@ describe("first run", () => {
     await settleScheduled(t);
   });
 
+  test("the managed path leaves an unregistered engine the user runs alone", async () => {
+    const t = newBackend();
+    const userId = await newUser(t);
+    const asUser = t.withIdentity({ subject: `${userId}|session` });
+    const accountId = await asUser.mutation(api.accounts.ensureMyAccount, {});
+    const external = await asUser.mutation(api.instances.create, { accountId, name: "Mine", url: "engine.test" });
+
+    const managed = await asUser.mutation(api.setup.ensureFirstRun, {});
+
+    expect(managed).not.toBe(external);
+    const instance = await t.run((ctx) => ctx.db.get(external));
+    expect(instance?.hosting).toBe("external");
+    expect(instance?.url).toBe("engine.test");
+  });
+
   test("the user's own engine form takes over the empty managed row", async () => {
     const t = newBackend();
     const userId = await newUser(t);

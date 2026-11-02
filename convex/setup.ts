@@ -23,7 +23,6 @@ import { findOrCreateManagedInstance, markFirstRun } from "./provisioningInterna
 // Bounds for reads of tables that hold a handful of rows per key.
 const MAX_SETUP_PLATFORMS = 50;
 const MAX_PLATFORM_LINKS = 20;
-const MAX_ACCOUNT_INSTANCES = 50;
 
 const chosenPlatformValidator = v.object({
   marketplaceModuleId: v.string(),
@@ -369,8 +368,8 @@ export const skipTwitch = mutation({
 /**
  * The account and instance a new user's connect screen works on, so Twitch can
  * link before anything has a real name: both start under the placeholder, and
- * connecting renames them. A registration that failed on the form for a
- * bring-your-own engine leaves a row with no engine, which is taken over.
+ * connecting renames them. An engine the user runs is left alone, even one that
+ * has not registered yet: its address is still theirs to retry.
  */
 export const ensureFirstRun = mutation({
   args: {},
@@ -383,14 +382,6 @@ export const ensureFirstRun = mutation({
       throw new Error("Managed engines are not configured");
     }
     const account = await ensureOwnAccount(ctx, userId);
-    const instances = await ctx.db
-      .query("instances")
-      .withIndex("by_account", (q) => q.eq("accountId", account._id))
-      .take(MAX_ACCOUNT_INSTANCES);
-    const abandoned = instances.find((instance) => !instance.clientId && instance.hosting !== "managed");
-    if (abandoned) {
-      await ctx.db.patch(abandoned._id, { hosting: "managed", url: "" });
-    }
     const { instanceId, created } = await findOrCreateManagedInstance(ctx, account, userId);
     if (created) {
       await markFirstRun(ctx, instanceId);
