@@ -18,12 +18,11 @@ import {
   setupNeedsTwitch,
 } from "./lib/setupPlatforms";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
-import { findOrCreateManagedInstance } from "./provisioningInternal";
+import { findOrCreateManagedInstance, markFirstRun } from "./provisioningInternal";
 
 // Bounds for reads of tables that hold a handful of rows per key.
 const MAX_SETUP_PLATFORMS = 50;
 const MAX_PLATFORM_LINKS = 20;
-const MAX_ACCOUNT_INSTANCES = 50;
 
 const chosenPlatformValidator = v.object({
   marketplaceModuleId: v.string(),
@@ -52,16 +51,19 @@ export interface SetupStatus {
   canSkipTwitch: boolean;
   /** Whether the engine waits on the user naming it: no derived username was usable, or it was deleted. */
   usernameNeeded: boolean;
+  /** Whether the viewer owns the account, the only one who can name and be billed for its engine. */
+  ownsAccount: boolean;
   /** Whether the viewer may choose platforms and connect Twitch: only an owner or admin can. */
   canManageSetup: boolean;
   /** Whether the setup wizard has opened for the viewer before. */
   setupSeen: boolean;
   /** Whether the engine has answered the registration handshake. */
   engineRegistered: boolean;
+  /** Whether woofx3 builds this instance's engine, rather than the user running their own. */
+  managedEngine: boolean;
   /**
-   * Whether finished setup still owes the overlay page: it was seeded, and
-   * nobody has seen an alert play or skipped. A setup from before the seed
-   * never owes it.
+   * Whether finished setup still owes the overlay page: it is a first run, and
+   * nobody has seen an alert play or skipped. An established instance never owes it.
    */
   overlayPending: boolean;
   /**
@@ -103,7 +105,7 @@ function twitchRequiredFor(row: Doc<"instanceSetup"> | null): boolean {
  * Applies the setup's choices now if the engine is registered. Otherwise
  * registration applies them (instances.applyRegistration).
  */
-async function scheduleApplyIfRegistered(ctx: MutationCtx, instanceId: Id<"instances">) {
+export async function scheduleApplyIfRegistered(ctx: MutationCtx, instanceId: Id<"instances">) {
   const instance = await ctx.db.get(instanceId);
   if (instance?.clientId) {
     await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
@@ -144,6 +146,7 @@ export const status = query({
         .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
         .first(),
     ]);
+    const account = instance ? await ctx.db.get(instance.accountId) : null;
     const platformsNeedingSettings: string[] = [];
     for (const install of row?.moduleInstalls ?? []) {
       if (install.status !== "installed" || !install.moduleKey) {
@@ -168,9 +171,11 @@ export const status = query({
       canSkipTwitch: isPreviewDeployment(),
       usernameNeeded:
         !instance?.clientId && (row?.usernameNeededAt !== undefined || provisioning?.status === "deleted"),
+      ownsAccount: account?.ownerId === userId,
       canManageSetup: canManageTwitchLink(role),
       setupSeen: seen !== null,
       engineRegistered: Boolean(instance?.clientId),
+      managedEngine: instance?.hosting === "managed",
       overlayPending: Boolean(row?.completedAt) && row?.overlayDone === undefined && row !== null && seedsDefaults(row),
       moduleInstalls: row?.moduleInstalls ?? [],
       packInstalls: row?.packInstalls ?? [],
@@ -178,37 +183,56 @@ export const status = query({
   },
 });
 
+/** Every required platform in the curated list must be included. */
+async function assertValidChoice(ctx: QueryCtx, platforms: ChosenSetupPlatform[]) {
+  const curated = await readCuratedPlatforms(ctx);
+  if (curated.length === 0) {
+    throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
+  }
+  const requiredIds = curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId);
+  const error = setupChoiceError(platforms, requiredIds);
+  if (error) {
+    throw new Error(error);
+  }
+}
+
 /**
- * Saves the platforms chosen at setup and the permissions approved for each.
- * Every required platform in the curated list must be included.
+ * Holds what the connect card lists while the streamer is away at Twitch, for
+ * `recordLinkConsent` once they approve. Only an unfinished first run has a
+ * choice to make: elsewhere connecting is a reconnect, which changes nothing.
  */
-export const choosePlatforms = mutation({
+export const prepareConnect = mutation({
   args: { instanceId: v.id("instances"), platforms: v.array(chosenPlatformValidator) },
   handler: async (ctx, { instanceId, platforms }) => {
     await requireInstanceRole(ctx, instanceId, "admin");
-
-    const curated = await readCuratedPlatforms(ctx);
-    if (curated.length === 0) {
-      throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
-    }
-    const requiredIds = curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId);
-    const error = setupChoiceError(platforms, requiredIds);
-    if (error) {
-      throw new Error(error);
-    }
-
-    const now = Date.now();
     const row = await readSetupRow(ctx, instanceId);
-    if (row) {
-      await ctx.db.patch(row._id, { platforms, platformsChosenAt: now, updatedAt: now });
-      if (row.completedAt) {
-        await scheduleApplyIfRegistered(ctx, instanceId);
-      }
+    if (row?.firstRunAt === undefined || row.platformsChosenAt !== undefined) {
       return;
     }
-    await ctx.db.insert("instanceSetup", { instanceId, platforms, platformsChosenAt: now, updatedAt: now });
+    await assertValidChoice(ctx, platforms);
+    await ctx.db.patch(row._id, { pendingPlatforms: platforms, updatedAt: Date.now() });
   },
 });
+
+/**
+ * Turns what the card listed into consent, now that Twitch has approved. Returns
+ * the row as it then stands. A link made elsewhere has nothing held, so the
+ * connect screen's Continue asks instead.
+ */
+export async function recordLinkConsent(ctx: MutationCtx, row: Doc<"instanceSetup">): Promise<Doc<"instanceSetup">> {
+  if (row.platformsChosenAt !== undefined || row.pendingPlatforms === undefined) {
+    return row;
+  }
+  const now = Date.now();
+  const consent = {
+    platforms: row.pendingPlatforms,
+    platformsChosenAt: now,
+    pendingPlatforms: undefined,
+    updatedAt: now,
+  };
+  await ctx.db.patch(row._id, consent);
+  return { ...row, ...consent };
+}
 
 /**
  * Gives the user a first dashboard panel, unless they already have one: a
@@ -276,17 +300,34 @@ export async function finishFirstRun(ctx: MutationCtx, row: Doc<"instanceSetup">
   await ctx.scheduler.runAfter(0, internal.setupImports.resumeQueued, { instanceId });
 }
 
-/** Refused until platforms are chosen and, where it is required, Twitch is connected. */
+/**
+ * The connect screen's Continue, for a Twitch link already there. `platforms` is
+ * what the screen listed, taken as the choice only if none was made: an existing
+ * one is never overwritten. Refused where Twitch is required and not connected.
+ */
 export const complete = mutation({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
+  args: { instanceId: v.id("instances"), platforms: v.array(chosenPlatformValidator) },
+  handler: async (ctx, { instanceId, platforms }) => {
     const userId = await requireInstanceRole(ctx, instanceId, "admin");
-    const row = await readSetupRow(ctx, instanceId);
-    if (!row?.platformsChosenAt) {
-      throw new Error("Choose your platforms before finishing setup");
-    }
-    if (twitchRequiredFor(row) && !(await readTwitchLink(ctx, instanceId))) {
+    const existing = await readSetupRow(ctx, instanceId);
+    if (twitchRequiredFor(existing) && !(await readTwitchLink(ctx, instanceId))) {
       throw new Error("Connect Twitch before finishing setup");
+    }
+    if (existing?.platformsChosenAt) {
+      await finishFirstRun(ctx, existing, userId);
+      return;
+    }
+    await assertValidChoice(ctx, platforms);
+    const now = Date.now();
+    const choice = { platforms, platformsChosenAt: now, pendingPlatforms: undefined, updatedAt: now };
+    if (existing) {
+      await ctx.db.patch(existing._id, choice);
+    } else {
+      await ctx.db.insert("instanceSetup", { instanceId, platforms, platformsChosenAt: now, updatedAt: now });
+    }
+    const row = await readSetupRow(ctx, instanceId);
+    if (!row) {
+      throw new Error("The setup just saved cannot be read");
     }
     await finishFirstRun(ctx, row, userId);
   },
@@ -305,12 +346,20 @@ export const skipTwitch = mutation({
     }
     const userId = await requireInstanceRole(ctx, instanceId, "admin");
     const now = Date.now();
-    const choice = { platforms, platformsChosenAt: now, twitchSkippedAt: now, updatedAt: now };
     const existing = await readSetupRow(ctx, instanceId);
+    const choice = existing?.platformsChosenAt
+      ? { twitchSkippedAt: now, updatedAt: now }
+      : { platforms, platformsChosenAt: now, twitchSkippedAt: now, updatedAt: now };
     if (existing) {
       await ctx.db.patch(existing._id, choice);
     } else {
-      await ctx.db.insert("instanceSetup", { instanceId, ...choice });
+      await ctx.db.insert("instanceSetup", {
+        instanceId,
+        platforms,
+        platformsChosenAt: now,
+        twitchSkippedAt: now,
+        updatedAt: now,
+      });
     }
     const row = await readSetupRow(ctx, instanceId);
     if (!row) {
@@ -323,8 +372,8 @@ export const skipTwitch = mutation({
 /**
  * The account and instance a new user's connect screen works on, so Twitch can
  * link before anything has a real name: both start under the placeholder, and
- * connecting renames them. A registration that failed on the form for a
- * bring-your-own engine leaves a row with no engine, which is taken over.
+ * connecting renames them. An engine the user runs is left alone, even one that
+ * has not registered yet: its address is still theirs to retry.
  */
 export const ensureFirstRun = mutation({
   args: {},
@@ -337,15 +386,11 @@ export const ensureFirstRun = mutation({
       throw new Error("Managed engines are not configured");
     }
     const account = await ensureOwnAccount(ctx, userId);
-    const instances = await ctx.db
-      .query("instances")
-      .withIndex("by_account", (q) => q.eq("accountId", account._id))
-      .take(MAX_ACCOUNT_INSTANCES);
-    const abandoned = instances.find((instance) => !instance.clientId && instance.hosting !== "managed");
-    if (abandoned) {
-      await ctx.db.patch(abandoned._id, { hosting: "managed", url: "" });
+    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account, userId);
+    if (created) {
+      await markFirstRun(ctx, instanceId);
     }
-    return findOrCreateManagedInstance(ctx, account, userId);
+    return instanceId;
   },
 });
 
@@ -357,6 +402,9 @@ export const retryApply = mutation({
     const row = await readSetupRow(ctx, instanceId);
     if (!row?.platformsChosenAt) {
       throw new Error("Setup has nothing to apply yet");
+    }
+    if (twitchRequiredFor(row) && !(await readTwitchLink(ctx, instanceId))) {
+      throw new Error("Connect Twitch before applying setup");
     }
     await ctx.db.patch(row._id, { applyAttempts: 0, updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });

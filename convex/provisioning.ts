@@ -28,6 +28,7 @@ import {
 import { isUpgrade } from "./lib/releaseVersion";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { performRegistration } from "./registration";
 
 /**
  * Managed engines: the public surface onboarding and the admin page call.
@@ -193,13 +194,13 @@ export const checkSlug = action({
  *
  * The provisioning row is written before the call, and `externalRef` carries
  * the Convex instance id, which is how callbacks find their way back to it.
- * Every attempt mints its own idempotency key: the maintenance API stores
- * refusals under a key and refuses a key reused with a different request, so a
- * second slug or a fresh registration token under one key could never succeed.
  *
- * shortcut: a response lost after the maintenance API committed leaves an engine
- * no row knows about, holding the slug; the owner's next attempt moves to
- * another slug. Reconcile through listing the owner's engines if this is seen.
+ * The idempotency key and body stay the same until the outcome is known, so a
+ * response lost after the maintenance API committed gets the same engine back
+ * rather than leaving one holding the streamer's own login. A definite refusal
+ * ends the request: the maintenance API stores it under the key, so the next
+ * attempt needs a new one. Another slug or channel is another key, since the
+ * API refuses a key reused with a different body.
  */
 async function requestEngine(
   ctx: ActionCtx,
@@ -216,12 +217,12 @@ async function requestEngine(
   }
 
   const normalizedSlug = normalizeSlug(slug);
-  const registrationToken = generateRegistrationToken();
   const reserved = await ctx.runMutation(internal.provisioningInternal.reserveManagedInstance, {
     accountId,
     userId,
     slug: normalizedSlug,
-    registrationToken,
+    newRegistrationToken: generateRegistrationToken(),
+    newCreateRequestId: crypto.randomUUID(),
   });
 
   try {
@@ -230,11 +231,11 @@ async function requestEngine(
         slug: normalizedSlug,
         owner: { type: MAINTENANCE_OWNER_TYPE, ref: accountId },
         externalRef: reserved.instanceId,
-        registrationToken,
+        registrationToken: reserved.registrationToken,
         callbackUrl: `${siteUrl}/api/webhooks/maintenance`,
         ...(twitchChannel ? { twitchChannel } : {}),
       },
-      crypto.randomUUID()
+      `${reserved.createRequestId}:${normalizedSlug}:${twitchChannel ?? ""}`
     );
     await ctx.runMutation(internal.provisioningInternal.recordEngineRequested, {
       provisioningId: reserved.provisioningId,
@@ -248,6 +249,9 @@ async function requestEngine(
     await ctx.runMutation(internal.provisioningInternal.recordProvisioningError, {
       provisioningId: reserved.provisioningId,
       error: userFacingError(error),
+      // Below 500 the API answered and created nothing. Anything else may have
+      // committed, so the request stays open for a retry to learn how it went.
+      requestSettled: error instanceof MaintenanceApiError && error.status < 500,
     });
     throw error;
   }
@@ -265,16 +269,24 @@ function isSlugRefused(error: unknown): boolean {
  * availability check that cannot run does not rule a candidate out, since the
  * create call answers the same question; any other failure is on the row, where
  * the provisioning bar offers Try again.
+ *
+ * A request whose outcome is unknown goes first and skips the check, since the
+ * engine it may have created is what would make its slug read as taken.
  */
 async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
-  const { accountId, ownerId, login } = await ctx.runQuery(internal.provisioningInternal.firstEngineFacts, {
-    instanceId,
-  });
-  for (const slug of slugCandidates(login)) {
-    const available = await slugAvailability(slug).catch((error: unknown) => {
-      logger.warn("provisioning: slug check failed", { slug, error: userFacingError(error) });
-      return { available: true };
-    });
+  const { accountId, ownerId, login, unsettledSlug } = await ctx.runQuery(
+    internal.provisioningInternal.firstEngineFacts,
+    { instanceId }
+  );
+  const derived = slugCandidates(login).filter((slug) => slug !== unsettledSlug);
+  for (const slug of unsettledSlug === null ? derived : [unsettledSlug, ...derived]) {
+    const available =
+      slug === unsettledSlug
+        ? { available: true }
+        : await slugAvailability(slug).catch((error: unknown) => {
+            logger.warn("provisioning: slug check failed", { slug, error: userFacingError(error) });
+            return { available: true };
+          });
     if (!available.available) {
       continue;
     }
@@ -317,17 +329,35 @@ export const startManagedEngine = action({
  * came up. Which one it is depends on how far the row got: an engine that
  * already published a URL does not need provisioning again, unless what failed
  * was a later redeploy, which is resumed like any other run.
+ *
+ * With no maintenance engine to resume, the request itself is made again, which
+ * covers one that died before making a row or before it was answered. An engine
+ * the user runs themselves has only its registration to try again.
  */
 export const retry = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ retried: RetryKind }> => {
-    const { row } = await requireManagedRow(ctx, instanceId);
-    // Never accepted by the maintenance API, so there is no run to resume.
-    if (row.status === "failed" && !row.maintenanceEngineId) {
-      await startDerivedEngine(ctx, instanceId);
-      return { retried: "provisioning" };
+    await requireEngineManager(ctx, instanceId);
+    const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
+    if (row?.maintenanceEngineId) {
+      return retryManagedEngineRow(ctx, row);
     }
-    return retryManagedEngineRow(ctx, row);
+    if (row && row.status !== "failed" && row.status !== "requested") {
+      throw new Error("This engine has nothing to try again");
+    }
+    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+    if (!instance || instance.clientId) {
+      throw new Error("This workspace has no engine to build");
+    }
+    if (instance.hosting !== "managed") {
+      const registered = await performRegistration(ctx, { instanceId });
+      if (!registered.ok) {
+        throw new Error(registered.error);
+      }
+      return { retried: "registration" };
+    }
+    await startDerivedEngine(ctx, instanceId);
+    return { retried: "provisioning" };
   },
 });
 
@@ -359,6 +389,11 @@ const RENAME_REFUSALS: Readonly<Record<string, string>> = {
 /**
  * Change the engine's public name, for its owner. Nothing about the running
  * engine changes and overlays stay up, so this is safe mid-stream.
+ *
+ * Each attempt has its own idempotency key, because the maintenance API stores
+ * refusals under a key and would repeat "too soon" or "taken" for as long as it
+ * keeps it. Asking again after a lost response is safe without one: it answers a
+ * rename to the name the engine already has with success.
  */
 export const renameManagedEngine = action({
   args: { instanceId: v.id("instances"), slug: v.string() },
@@ -373,7 +408,7 @@ export const renameManagedEngine = action({
     }
     const next = normalizeSlug(slug);
     try {
-      await renameEngine(row.maintenanceEngineId, next, `${row._id}:rename:${row.slug}:${next}`);
+      await renameEngine(row.maintenanceEngineId, next, crypto.randomUUID());
     } catch (error) {
       const reason = error instanceof MaintenanceApiError ? RENAME_REFUSALS[error.code] : undefined;
       if (reason === undefined) {
@@ -391,11 +426,7 @@ function withoutRequester<T extends { requestedBy?: unknown }>(upgrade: T): Omit
   return shown;
 }
 
-/** Owner or admin of the instance, and a provisioning row to act on. */
-async function requireManagedRow(
-  ctx: ActionCtx,
-  instanceId: Id<"instances">
-): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
+async function requireEngineManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Not authenticated");
@@ -404,6 +435,15 @@ async function requireManagedRow(
   if (!membership || membership.role === "member") {
     throw new Error("Not authorized");
   }
+  return userId;
+}
+
+/** Owner or admin of the instance, and a provisioning row to act on. */
+async function requireManagedRow(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
+  const userId = await requireEngineManager(ctx, instanceId);
   const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
   if (!row) {
     throw new Error("This workspace has no managed engine");

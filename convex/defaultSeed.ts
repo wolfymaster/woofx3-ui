@@ -110,7 +110,7 @@ export interface DefaultSeedStatus {
     error?: string;
   }[];
   alertImagesOmitted: boolean;
-  /** Set up before the seed existed, so nothing was or will be seeded. */
+  /** Not a first run, so nothing was or will be seeded. */
   neverSeeded: boolean;
   overlayDone: { outcome: "finished" | "skipped" } | null;
 }
@@ -150,7 +150,7 @@ export const status = query({
       scene: seed?.scene ?? { status: "pending" },
       alerts,
       alertImagesOmitted: seed?.alertImages === "omitted",
-      neverSeeded: row !== null && !seedsDefaults(row),
+      neverSeeded: row === null || !seedsDefaults(row),
       overlayDone: row?.overlayDone ? { outcome: row.overlayDone.outcome } : null,
     };
   },

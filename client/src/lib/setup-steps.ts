@@ -67,6 +67,14 @@ export function allowedSetupStep(requested: SetupStepId, progress: SetupProgress
   return requested;
 }
 
+/** The overlay page links here when there is no follow alert to test, to make one. */
+export const ALERTS_PATH = "/stream/alerts";
+
+/** Whether the guard sends the user to the overlay page from `path`. */
+export function overlayPageRedirects(overlayPending: boolean, path: string): boolean {
+  return overlayPending && path !== ALERTS_PATH;
+}
+
 /** A navigation the wizard should make: forward to the next step, or back to one the user may be on. */
 export interface SetupRedirect {
   step: SetupStepId;

@@ -271,8 +271,7 @@ export default defineSchema({
   // Names a managed engine answered to before a rename. The maintenance API
   // keeps each one routed to the engine and out of anyone else's reach until
   // the engine is deleted, so /u/<old name> keeps showing the same page. Rows
-  // outlive a torn-down engine only as dead ends: `instanceHoldingSlug` checks
-  // the engine still holds the name.
+  // go when the engine does, since the instance's next engine does not hold them.
   engineHeldSlugs: defineTable({
     slug: v.string(),
     instanceId: v.id("instances"),
@@ -327,6 +326,11 @@ export default defineSchema({
     reportedVersion: v.optional(v.string()),
     error: v.optional(v.string()),
     registrationToken: v.string(),
+    // Names the create request while its outcome may be unknown: with the slug
+    // and channel it makes the idempotency key, so asking again after a lost
+    // response returns the same engine. The body must match, which is why the
+    // registration token above is kept with it. Cleared by a definite refusal.
+    createRequestId: v.optional(v.string()),
     // Registration is retried on a backoff after the engine reports ready;
     // this counts the attempts made so far so the schedule can advance.
     registrationAttempts: v.optional(v.number()),
@@ -599,6 +603,23 @@ export default defineSchema({
       })
     ),
     platformsChosenAt: v.optional(v.number()),
+    // What the connect card listed when Connect was pressed. Not consent until
+    // Twitch approves: linking moves it to `platforms`, and a denial leaves
+    // `platforms` as it was.
+    pendingPlatforms: v.optional(
+      v.array(
+        v.object({
+          marketplaceModuleId: v.string(),
+          name: v.optional(v.string()),
+          approvedPermissions: v.array(v.string()),
+          approvedLocalEndpoints: v.optional(v.array(v.string())),
+        })
+      )
+    ),
+    // Written only when the first-run path makes the instance. It alone says the
+    // instance started empty: without it, applying never seeds default alerts,
+    // which would play beside a streamer's own, and no overlay page is owed.
+    firstRunAt: v.optional(v.number()),
     // When the "bring your setup" question was answered: an import queued, or skipped.
     importChosenAt: v.optional(v.number()),
     // SETUP_INTERESTS ids (convex/lib/setupInterests.ts). Skipping saves none.

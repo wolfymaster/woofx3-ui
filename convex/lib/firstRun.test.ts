@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { slugFormatError } from "@shared/engine-slug";
-import { type FirstRunNames, linkedNames, PLACEHOLDER_NAME, slugCandidates } from "./firstRun";
+import {
+  ENGINE_REQUEST_GRACE_MS,
+  engineBuildStalled,
+  type FirstRunNames,
+  linkedNames,
+  PLACEHOLDER_NAME,
+  REQUEST_IN_FLIGHT_MS,
+  slugCandidates,
+} from "./firstRun";
 
 /** The first candidate a maintenance API holding `refused` would accept, the way provisioning walks them. */
 function firstAccepted(login: string, refused: readonly string[]): string | null {
@@ -125,5 +133,31 @@ describe("linkedNames", () => {
     { name: "ignores a blank display name", current: placeholders, display: "  ", expected: {} },
   ])("$name", ({ current, display, expected }) => {
     expect(linkedNames(current, display)).toEqual(expected);
+  });
+});
+
+describe("engineBuildStalled", () => {
+  const NOW = 10_000_000;
+  const facts = { provisioning: null, managedEngine: true, completedAt: NOW, now: NOW };
+
+  test.each([
+    { name: "a failed row", over: { provisioning: { status: "failed", updatedAt: NOW } }, stalled: true },
+    { name: "a fresh requested row", over: { provisioning: { status: "requested", updatedAt: NOW } }, stalled: false },
+    {
+      name: "a requested row past the in-flight limit",
+      over: { provisioning: { status: "requested", updatedAt: NOW - REQUEST_IN_FLIGHT_MS } },
+      stalled: true,
+    },
+    {
+      name: "an old row being built",
+      over: { provisioning: { status: "provisioning", updatedAt: 0 } },
+      stalled: false,
+    },
+    { name: "no row just after setup finished", over: {}, stalled: false },
+    { name: "no row past the grace period", over: { completedAt: NOW - ENGINE_REQUEST_GRACE_MS }, stalled: true },
+    { name: "no row and setup never finished", over: { completedAt: null }, stalled: true },
+    { name: "no row on an engine the user runs", over: { managedEngine: false }, stalled: true },
+  ])("$name", ({ over, stalled }) => {
+    expect(engineBuildStalled({ ...facts, ...over })).toBe(stalled);
   });
 });

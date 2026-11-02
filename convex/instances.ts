@@ -12,6 +12,7 @@ import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
+import { markFirstRun } from "./provisioningInternal";
 
 /**
  * An instance row as members may see it. `webhookSecret` authenticates the
@@ -130,9 +131,15 @@ export const create = mutation({
         unregistered = provisioning ? undefined : instance;
       }
     }
+    // This form is how an account with no engine yet starts: its own server or
+    // a preview's paired engine are first runs just as a managed engine is.
+    const firstEngine = !existing.some((instance) => instance.clientId);
     if (unregistered) {
       await ctx.db.patch(unregistered._id, { name: args.name, url: args.url, hosting: "external" });
       await ensureInstanceMember(ctx, unregistered._id, userId, "owner");
+      if (firstEngine) {
+        await markFirstRun(ctx, unregistered._id);
+      }
       return unregistered._id;
     }
 
@@ -159,6 +166,9 @@ export const create = mutation({
         continue;
       }
       await ensureInstanceMember(ctx, instanceId, m.userId, mapAccountRoleToInstanceRole(m.role));
+    }
+    if (firstEngine) {
+      await markFirstRun(ctx, instanceId);
     }
 
     return instanceId;

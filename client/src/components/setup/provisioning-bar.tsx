@@ -1,10 +1,12 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { engineBuildStalled } from "@convex/lib/firstRun";
 import { useAction, useQuery } from "convex/react";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
 
 const HEADLINES: Record<string, string> = {
   requested: "Getting started on your setup…",
@@ -28,12 +30,14 @@ export function ProvisioningBar({ instanceId }: { instanceId: Id<"instances"> })
   const retry = useAction(api.provisioning.retry);
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
+  const now = useMinuteClock();
 
   if (!provisioning) {
     return null;
   }
 
-  const isFailed = provisioning.status === "failed";
+  // A request that died never reports failing, so the row's age has to say it.
+  const isFailed = engineBuildStalled({ provisioning, managedEngine: true, completedAt: null, now });
   const isDone = provisioning.status === "registered";
   const steps = provisioning.steps;
   const doneSteps = steps.filter((step) => step.status === "succeeded" || step.status === "skipped").length;
@@ -63,7 +67,7 @@ export function ProvisioningBar({ instanceId }: { instanceId: Id<"instances"> })
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
         )}
         <output className="font-medium flex-1" aria-live="polite" data-testid="text-provisioning-bar-status">
-          {HEADLINES[provisioning.status] ?? "Setting things up for you…"}
+          {isFailed ? HEADLINES.failed : (HEADLINES[provisioning.status] ?? "Setting things up for you…")}
         </output>
         {isFailed && (
           <Button

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { onboardingRoute } from "@/lib/onboarding-route";
+import { type OnboardingRoute, onboardingRoute } from "@/lib/onboarding-route";
 import { $currentInstanceId } from "@/lib/stores";
 
 /**
@@ -37,7 +37,8 @@ export default function Onboarding() {
   const [connecting, setConnecting] = useState(false);
   const [pairingFailed, setPairingFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const started = useRef(false);
+  const [choseManaged, setChoseManaged] = useState(false);
+  const started = useRef<OnboardingRoute | null>(null);
 
   const route =
     !isAuthenticated || instances === undefined || managedEngines === undefined || previewEngine === undefined
@@ -45,6 +46,7 @@ export default function Onboarding() {
       : onboardingRoute({
           instances,
           wantsOwnEngine: new URLSearchParams(search).has("external"),
+          choseManaged,
           hasPreviewEngine: previewEngine !== null,
           managedAvailable: managedEngines.available,
         });
@@ -72,18 +74,21 @@ export default function Onboarding() {
     }
   }
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: connectEngine only runs once, guarded by `started`.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each route starts once, guarded by `started`.
   useEffect(() => {
     if (route === "setup" && instances) {
-      const current = instances.find((instance) => instance.clientId) ?? instances[0];
+      const current =
+        instances.find((instance) => instance.clientId) ??
+        instances.find((instance) => instance.hosting === "managed") ??
+        instances[0];
       $currentInstanceId.set(current._id);
       navigate("/setup", { replace: true });
       return;
     }
-    if (started.current || route === null || route === "own-engine-form") {
+    if (started.current === route || route === null || route === "own-engine-form") {
       return;
     }
-    started.current = true;
+    started.current = route;
     if (route === "paired-engine" && previewEngine) {
       setInstanceUrl(previewEngine.url);
       void connectEngine(previewEngine.url).then((connected) => setPairingFailed(!connected));
@@ -109,7 +114,7 @@ export default function Onboarding() {
     return null;
   }
 
-  const showForm = route === "own-engine-form" || pairingFailed;
+  const showForm = route === "own-engine-form" || (route === "paired-engine" && pairingFailed);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -171,7 +176,10 @@ export default function Onboarding() {
                 {managedEngines?.available && (
                   <button
                     type="button"
-                    onClick={() => navigate("/auth/onboarding", { replace: true })}
+                    onClick={() => {
+                      setError(null);
+                      setChoseManaged(true);
+                    }}
                     className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
                     data-testid="button-create-managed-engine"
                   >

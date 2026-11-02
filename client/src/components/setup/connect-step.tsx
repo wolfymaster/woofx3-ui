@@ -7,7 +7,7 @@ import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ManagedEngineStep } from "@/components/onboarding/managed-engine-step";
-import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
+import { AskAdminToConnectTwitch, AskOwnerToChooseUsername } from "@/components/setup/twitch-step";
 import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
@@ -32,9 +32,10 @@ function chosenFrom(load: Load) {
 /**
  * Setup's first page. Connecting Twitch is separate from signing in with it: it
  * grants the scopes the engine uses on the channel, and only an owner or admin
- * may grant them. Pressing Connect is also the consent to what the card lists:
- * the permissions shown are saved as what the module's install later accepts,
- * and a build asking for more is brought back for approval.
+ * may grant them. Connecting is also the consent to what the card lists: once
+ * Twitch approves, the permissions shown are saved as what the module's install
+ * later accepts, and a build asking for more is brought back for approval. A
+ * reconnect only restores the link.
  *
  * Coming back from Twitch finishes setup on the server (`setup.finishFirstRun`)
  * and setup's routing moves on from here by itself. A preview deployment can
@@ -42,7 +43,7 @@ function chosenFrom(load: Load) {
  */
 export function ConnectStep({ instanceId, status }: ConnectStepProps) {
   const listForSetup = useAction(api.setupPlatformsActions.listForSetup);
-  const choosePlatforms = useMutation(api.setup.choosePlatforms);
+  const prepareConnect = useMutation(api.setup.prepareConnect);
   const skipTwitch = useMutation(api.setup.skipTwitch);
   const complete = useMutation(api.setup.complete);
   const { connect, starting, error: connectError } = useTwitchConnect();
@@ -69,7 +70,7 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
   }
 
   if (status.usernameNeeded) {
-    return <ManagedEngineStep instanceId={instanceId} />;
+    return status.ownsAccount ? <ManagedEngineStep instanceId={instanceId} /> : <AskOwnerToChooseUsername />;
   }
 
   const twitch = chosenFrom(load);
@@ -112,12 +113,7 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
         <Button
           className="w-full"
           disabled={busy || twitch === null}
-          onClick={() =>
-            void run(async () => {
-              await choosePlatforms({ instanceId, platforms: consent });
-              await complete({ instanceId });
-            })
-          }
+          onClick={() => void run(() => complete({ instanceId, platforms: consent }))}
           data-testid="button-twitch-continue"
         >
           Continue
@@ -181,7 +177,7 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
           disabled={busy || twitch === null}
           onClick={() =>
             void run(async () => {
-              await choosePlatforms({ instanceId, platforms: consent });
+              await prepareConnect({ instanceId, platforms: consent });
               await connect(setupStepPath("connect"));
             })
           }

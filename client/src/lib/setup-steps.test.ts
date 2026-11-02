@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgress, setupRedirect } from "./setup-steps";
+import {
+  ALERTS_PATH,
+  allowedSetupStep,
+  firstIncompleteStep,
+  isSetupStepId,
+  overlayPageRedirects,
+  type SetupProgress,
+  setupRedirect,
+} from "./setup-steps";
 
 const fresh: SetupProgress = {
   twitchUsername: null,
@@ -26,6 +34,14 @@ describe("the overlay page", () => {
   test("waits for the record before going on", () => {
     expect(setupRedirect("overlay", "finish", connected)).toBeNull();
     expect(setupRedirect("overlay", "finish", passedOverlay)).toEqual({ step: "finish", replace: false });
+  });
+});
+
+describe("overlayPageRedirects", () => {
+  test("holds a pending overlay page everywhere except the alerts page it links to", () => {
+    expect(overlayPageRedirects(true, "/")).toBe(true);
+    expect(overlayPageRedirects(true, ALERTS_PATH)).toBe(false);
+    expect(overlayPageRedirects(false, "/")).toBe(false);
   });
 });
 
