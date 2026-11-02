@@ -11,6 +11,8 @@ export type OnboardingRoute =
 export interface OnboardingFacts {
   instances: ReadonlyArray<{ clientId?: string; hosting?: "managed" | "external" }>;
   wantsOwnEngine: boolean;
+  /** Pressed "Let woofx3 run it for you", which outranks the form and a paired engine that would not connect. */
+  choseManaged: boolean;
   hasPreviewEngine: boolean;
   managedAvailable: boolean;
 }
@@ -19,11 +21,14 @@ export function onboardingRoute(facts: OnboardingFacts): OnboardingRoute {
   if (facts.instances.some((instance) => instance.clientId)) {
     return "setup";
   }
-  if (facts.wantsOwnEngine) {
+  if (facts.wantsOwnEngine && !facts.choseManaged) {
     return "own-engine-form";
   }
   if (facts.instances.some((instance) => instance.hosting === "managed")) {
     return "setup";
+  }
+  if (facts.choseManaged) {
+    return "managed";
   }
   if (facts.hasPreviewEngine) {
     return "paired-engine";
