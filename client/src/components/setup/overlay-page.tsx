@@ -136,7 +136,7 @@ function statusOf(phase: OverlayPhase, engine: EngineBuild, seedSlow: boolean): 
     case "test-failed":
       return "Nothing played on your overlay.";
     case "finished":
-      return "Your overlay will show follows, subs and bits as they happen.";
+      return "Your overlay will show follows, subs and bits as they happen. Real ones appear in Events too; tests don't.";
   }
 }
 
