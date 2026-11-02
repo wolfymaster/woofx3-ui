@@ -258,6 +258,30 @@ export const recordEngineRequested = internalMutation({
   },
 });
 
+/** The maintenance API accepted a rename. Repeating it after a lost response changes nothing. */
+export const recordEngineRenamed = internalMutation({
+  args: { provisioningId: v.id("engineProvisioning"), slug: v.string() },
+  handler: async (ctx, { provisioningId, slug }) => {
+    const row = await ctx.db.get(provisioningId);
+    if (!row) {
+      throw new Error("A rename was recorded for a row that no longer exists");
+    }
+    if (row.slug === slug) {
+      return;
+    }
+    const held = await ctx.db
+      .query("engineHeldSlugs")
+      .withIndex("by_instance", (q) => q.eq("instanceId", row.instanceId))
+      .collect();
+    const takenBack = held.find((candidate) => candidate.slug === slug);
+    if (takenBack) {
+      await ctx.db.delete(takenBack._id);
+    }
+    await ctx.db.insert("engineHeldSlugs", { slug: row.slug, instanceId: row.instanceId });
+    await ctx.db.patch(provisioningId, { slug, updatedAt: Date.now() });
+  },
+});
+
 export const recordProvisioningError = internalMutation({
   args: { provisioningId: v.id("engineProvisioning"), error: v.string() },
   handler: async (ctx, { provisioningId, error }) => {

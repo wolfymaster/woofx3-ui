@@ -268,6 +268,18 @@ export default defineSchema({
   // it, so a public engine cannot be claimed by whoever reaches it first. It
   // is sent to the maintenance API at create time and replayed to the engine
   // at registration; no public query may return it.
+  // Names a managed engine answered to before a rename. The maintenance API
+  // keeps each one routed to the engine and out of anyone else's reach until
+  // the engine is deleted, so /u/<old name> keeps showing the same page. Rows
+  // outlive a torn-down engine only as dead ends: `instanceHoldingSlug` checks
+  // the engine still holds the name.
+  engineHeldSlugs: defineTable({
+    slug: v.string(),
+    instanceId: v.id("instances"),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_instance", ["instanceId"]),
+
   engineProvisioning: defineTable({
     instanceId: v.id("instances"),
     accountId: v.id("accounts"),

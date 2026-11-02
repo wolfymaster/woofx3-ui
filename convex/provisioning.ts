@@ -12,6 +12,7 @@ import {
   MAINTENANCE_OWNER_TYPE,
   MaintenanceApiError,
   normalizeSlug,
+  renameEngine,
   slugAvailability,
 } from "./lib/maintenanceClient";
 import {
@@ -97,7 +98,11 @@ export const forInstance = query({
     const { registrationToken: _registrationToken, upgrade, ...rest } = row;
     // Who asked is not the customer's to see: an operator's upgrade shows
     // exactly as one a member started.
-    return { ...rest, upgrade: upgrade ? withoutRequester(upgrade) : undefined };
+    return {
+      ...rest,
+      upgrade: upgrade ? withoutRequester(upgrade) : undefined,
+      canRename: membership.role === "owner" && row.status === "registered",
+    };
   },
 });
 
@@ -337,6 +342,47 @@ export const deleteManagedEngine = action({
   handler: async (ctx, { instanceId }): Promise<{ deprovisioning: boolean }> => {
     const { row } = await requireManagedRow(ctx, instanceId);
     return deleteManagedEngineRow(ctx, row);
+  },
+});
+
+export type RenameResult = { ok: true; slug: string } | { ok: false; reason: string };
+
+/** What each refusal the maintenance API can give a rename means to the person asking. */
+const RENAME_REFUSALS: Readonly<Record<string, string>> = {
+  slug_taken: "That name is taken. Try another.",
+  slug_invalid: "Names are 3 to 30 lowercase letters, numbers or single hyphens, and some are reserved.",
+  rename_too_soon: "You can change your name once every 30 days.",
+  engine_not_ready: "Your engine is busy right now. Try again once it's back to running.",
+  run_in_progress: "Your engine is busy right now. Try again in a few minutes.",
+};
+
+/**
+ * Change the engine's public name, for its owner. Nothing about the running
+ * engine changes and overlays stay up, so this is safe mid-stream.
+ */
+export const renameManagedEngine = action({
+  args: { instanceId: v.id("instances"), slug: v.string() },
+  handler: async (ctx, { instanceId, slug }): Promise<RenameResult> => {
+    const { row, userId } = await requireManagedRow(ctx, instanceId);
+    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    if (membership?.role !== "owner") {
+      throw new Error("Not authorized");
+    }
+    if (!row.maintenanceEngineId || row.status !== "registered") {
+      return { ok: false, reason: "Your engine has to be up and running before you can change its name." };
+    }
+    const next = normalizeSlug(slug);
+    try {
+      await renameEngine(row.maintenanceEngineId, next, `${row._id}:rename:${row.slug}:${next}`);
+    } catch (error) {
+      const reason = error instanceof MaintenanceApiError ? RENAME_REFUSALS[error.code] : undefined;
+      if (reason === undefined) {
+        throw error;
+      }
+      return { ok: false, reason };
+    }
+    await ctx.runMutation(internal.provisioningInternal.recordEngineRenamed, { provisioningId: row._id, slug: next });
+    return { ok: true, slug: next };
   },
 });
 
