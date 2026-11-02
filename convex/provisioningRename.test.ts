@@ -51,7 +51,7 @@ describe("renaming a managed engine", () => {
       {
         url: "https://maintenance.test/v1/engines/eng_1/rename",
         slug: "new-name",
-        key: expect.stringContaining(":rename:wolfy:new-name"),
+        key: expect.any(String),
       },
     ]);
     expect((await provisioningOf(f))?.slug).toBe("new-name");
@@ -95,6 +95,18 @@ describe("renaming a managed engine", () => {
     expect((await provisioningOf(f))?.slug).toBe("wolfy");
   });
 
+  test("a refused name can be asked for again, since each attempt has its own key", async () => {
+    const f = await fixture();
+    refusal = "rename_too_soon";
+    const args = { instanceId: f.instanceId, slug: "new-name" };
+    await f.owner.action(api.provisioning.renameManagedEngine, args);
+    refusal = null;
+
+    expect(await f.owner.action(api.provisioning.renameManagedEngine, args)).toEqual({ ok: true, slug: "new-name" });
+
+    expect(requests[0].key).not.toBe(requests[1].key);
+  });
+
   test("is refused for anyone but the owner, and offered only to the owner", async () => {
     const f = await fixture();
     await expect(
@@ -117,5 +129,6 @@ describe("renaming a managed engine", () => {
 
     expect(result.ok).toBe(false);
     expect(requests).toEqual([]);
+    expect((await f.owner.query(api.provisioning.forInstance, { instanceId: f.instanceId }))?.canRename).toBe(false);
   });
 });

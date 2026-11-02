@@ -359,6 +359,11 @@ const RENAME_REFUSALS: Readonly<Record<string, string>> = {
 /**
  * Change the engine's public name, for its owner. Nothing about the running
  * engine changes and overlays stay up, so this is safe mid-stream.
+ *
+ * Each attempt has its own idempotency key, because the maintenance API stores
+ * refusals under a key and would repeat "too soon" or "taken" for as long as it
+ * keeps it. Asking again after a lost response is safe without one: it answers a
+ * rename to the name the engine already has with success.
  */
 export const renameManagedEngine = action({
   args: { instanceId: v.id("instances"), slug: v.string() },
@@ -373,7 +378,7 @@ export const renameManagedEngine = action({
     }
     const next = normalizeSlug(slug);
     try {
-      await renameEngine(row.maintenanceEngineId, next, `${row._id}:rename:${row.slug}:${next}`);
+      await renameEngine(row.maintenanceEngineId, next, crypto.randomUUID());
     } catch (error) {
       const reason = error instanceof MaintenanceApiError ? RENAME_REFUSALS[error.code] : undefined;
       if (reason === undefined) {
