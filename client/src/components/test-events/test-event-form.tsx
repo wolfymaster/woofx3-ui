@@ -2,12 +2,13 @@ import { AlertCircle, CheckCircle2, Loader2, Zap } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
+import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useLastRunRecord } from "@/hooks/use-last-run-record";
 import {
   describeTestEventOutcome,
   type RunRecord,
+  runRecordOf,
   settleTestEventOutcome,
   TEST_EVENT_SETTLE_TIMEOUT_MS,
 } from "@/lib/test-event-outcome";
@@ -70,7 +71,7 @@ export function useTestEventWaits(): { waitElapsed: boolean; gaveUp: boolean } {
 /** The latest run under `triggerId`, kept past its row's expiry. Keyed by it, so a new fire starts a new wait. */
 function DefaultTestEventOutcome({ triggerId }: { triggerId: string }) {
   const { waitElapsed, gaveUp } = useTestEventWaits();
-  const record = useLastRunRecord(triggerId, useTransientEvent(triggerId));
+  const record = useLastRunRecord(triggerId, runRecordOf(useTransientEvents(triggerId)));
 
   return <TestEventOutcome record={record} waitElapsed={waitElapsed} gaveUp={gaveUp} />;
 }
