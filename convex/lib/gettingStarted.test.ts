@@ -3,9 +3,8 @@ import { dismissedItemId, isDismissedDismissibleItemId, isFixedManualItemId } fr
 
 describe("getting started item ids", () => {
   test.each([
-    ["overlay", true],
-    ["test-alert", true],
     ["alerts", true],
+    ["overlay", false],
     ["import", false],
     ["test-follow", false],
   ])("%s as a recorded item is %p", (id, expected) => {

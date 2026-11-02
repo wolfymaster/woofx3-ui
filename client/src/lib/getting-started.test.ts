@@ -18,12 +18,8 @@ function facts(overrides: Partial<GettingStartedFacts> = {}, setup: Partial<Gett
       engineRegistered: true,
       platformsNeedingSettings: [],
     },
-    overlays: {
-      hasScene: true,
-      browserSourceKeyCount: 1,
-      featuredUrl: "https://example.test/browser-source/k",
-      lastLoadedAt: null,
-    },
+    overlayFinished: false,
+    overlaySeeded: true,
     doneItemIds: [],
     obsStatus: null,
     hasImport: false,
@@ -55,7 +51,8 @@ describe("gettingStartedItems", () => {
   test("is all done once everything was done or dismissed", () => {
     const items = gettingStartedItems(
       facts({
-        doneItemIds: ["overlay", "test-alert", "alerts", "dismissed:import", "dismissed:your-page"],
+        overlayFinished: true,
+        doneItemIds: ["alerts", "dismissed:import", "dismissed:your-page"],
         hasStarterPack: true,
         installedModuleIds: ["woofx3_obs"],
       })
@@ -72,10 +69,10 @@ describe("gettingStartedItems", () => {
   });
 
   test("shows a problem before anything to do, and done items last", () => {
-    const items = gettingStartedItems(facts({ doneItemIds: ["overlay"] }, { twitchUsername: null }));
+    const items = gettingStartedItems(facts({ overlayFinished: true }, { twitchUsername: null }));
     expect(items[0].id).toBe("twitch");
     expect(items[0].status).toBe("problem");
-    expect(items[items.length - 1].id).toBe("overlay");
+    expect(items[items.length - 1].status).toBe("done");
     expect(items.slice(0, VISIBLE_ITEM_COUNT).some((entry) => entry.status === "done")).toBe(false);
   });
 
@@ -121,36 +118,29 @@ describe("gettingStartedItems", () => {
     expect(item.fixes).toEqual([{ kind: "route", label: "Connect Twitch", href: "/setup/connect" }]);
   });
 
-  test("offers the overlay link and the overlay page until the page recorded the overlay", () => {
+  test("offers the overlay link and the overlay page until a test finished", () => {
     const item = byId(facts()).overlay;
     expect(item.status).toBe("todo");
-    expect(item.fixes).toEqual([
-      { kind: "copy", label: "Copy link", text: "https://example.test/browser-source/k" },
-      { kind: "route", label: "Show me how", href: "/setup/overlay" },
-    ]);
-  });
-
-  test("counts the overlay done once recorded, or once a browser source loaded it", () => {
-    expect(byId(facts({ doneItemIds: ["overlay"] })).overlay.status).toBe("done");
-    expect(
-      byId(
-        facts({
-          overlays: { hasScene: true, browserSourceKeyCount: 1, featuredUrl: null, lastLoadedAt: 5 },
-        })
-      ).overlay.status
-    ).toBe("done");
-  });
-
-  test("still offers the overlay page when there is no link to copy yet", () => {
-    const item = byId(
-      facts({ overlays: { hasScene: false, browserSourceKeyCount: 0, featuredUrl: null, lastLoadedAt: null } })
-    ).overlay;
+    expect(item.actions).toEqual([{ kind: "copy-overlay-link", label: "Copy link" }]);
     expect(item.fixes).toEqual([{ kind: "route", label: "Show me how", href: "/setup/overlay" }]);
   });
 
-  test("keeps the test alert to do until it is recorded", () => {
-    expect(byId(facts())["test-alert"].actions).toEqual([{ kind: "fire-test-alert", label: "Send a test alert" }]);
-    expect(byId(facts({ doneItemIds: ["test-alert"] }))["test-alert"].status).toBe("done");
+  test("counts the overlay and the test alert done once the overlay page finished", () => {
+    const items = byId(facts({ overlayFinished: true }));
+    expect(items.overlay.status).toBe("done");
+    expect(items["test-alert"].status).toBe("done");
+  });
+
+  test("sends the test alert to the overlay page, where it can be matched to its alert", () => {
+    const item = byId(facts())["test-alert"];
+    expect(item.actions).toEqual([]);
+    expect(item.fixes).toEqual([{ kind: "route", label: "Send a test alert", href: "/setup/overlay" }]);
+  });
+
+  test("leaves out the overlay items for an instance that was never seeded", () => {
+    const items = byId(facts({ overlaySeeded: false }));
+    expect(items.overlay).toBeUndefined();
+    expect(items["test-alert"]).toBeUndefined();
   });
 
   test("finishes the optional items from what exists", () => {

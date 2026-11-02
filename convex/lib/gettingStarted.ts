@@ -1,11 +1,9 @@
 /**
  * Getting started items the app cannot see happen, so the checklist records
- * them itself: the overlay page confirming the overlay is in the streaming
- * app, a test alert fired from the checklist or the overlay page, the
- * streamer saying they looked at their alerts, and finishing a platform's
- * settings (they are kept on the engine).
+ * them itself: the streamer saying they looked at their alerts, and finishing
+ * a platform's settings (they are kept on the engine).
  */
-export const MANUAL_GETTING_STARTED_ITEM_IDS = ["overlay", "test-alert", "alerts"] as const;
+export const MANUAL_GETTING_STARTED_ITEM_IDS = ["alerts"] as const;
 
 /** Optional items a streamer can wave away for good, so the checklist can finish. */
 export const DISMISSIBLE_GETTING_STARTED_ITEM_IDS = [

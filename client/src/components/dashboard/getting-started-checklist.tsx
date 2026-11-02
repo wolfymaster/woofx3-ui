@@ -3,18 +3,18 @@ import type { Id } from "@convex/_generated/dataModel";
 import { dismissedItemId, platformSettingsItemId } from "@convex/lib/gettingStarted";
 import { useMutation, useQuery } from "convex/react";
 import { Circle, CircleCheck, CircleX, Copy, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useDefaultSeedStatus } from "@/engine/hooks/use-default-seed";
 import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
-import { useOverlayFacts } from "@/engine/hooks/use-overlays";
+import { useBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
+import { useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useLatestSetupImport } from "@/engine/hooks/use-setup-imports";
 import { useStarterPackStatus } from "@/engine/hooks/use-starter-packs";
-import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
   type CheckFix,
   type GettingStartedAction,
@@ -25,10 +25,8 @@ import {
   VISIBLE_ITEM_COUNT,
 } from "@/lib/getting-started";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
-import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
+import { overlaySceneOf } from "@/lib/overlay-onboarding";
 import { cn } from "@/lib/utils";
-
-const FOLLOW_EVENT = "channel.follow";
 
 function StatusIcon({ status }: { status: GettingStartedStatus }) {
   if (status === "done") {
@@ -95,7 +93,10 @@ export interface GettingStarted {
  */
 export function useGettingStarted(instanceId: Id<"instances"> | null): GettingStarted | null {
   const setup = useQuery(api.setup.status, instanceId ? { instanceId } : "skip");
-  const overlays = useOverlayFacts();
+  const seed = useDefaultSeedStatus();
+  const scenes = useScenes();
+  const sceneCatalog = useSceneWidgetCatalog();
+  const requestOverlayUrl = useBrowserSourceUrlRequest();
   const state = useQuery(api.gettingStarted.state, instanceId ? { instanceId } : "skip");
   const markDone = useMutation(api.gettingStarted.markDone);
   const dismissMutation = useMutation(api.gettingStarted.dismiss);
@@ -104,20 +105,16 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
   const starterPacks = useStarterPackStatus();
   const installedModules = useInstalledModules();
   const page = useQuery(api.userPages.forEditing, instanceId ? { instanceId } : "skip");
-  const { triggerPresets } = useWorkflowCatalog();
-  const fireTestEvent = useFireTestEvent();
   const { toast } = useToast();
   const [busyAction, setBusyAction] = useState<GettingStartedAction["kind"] | null>(null);
 
   const watchesObs = Boolean(state && !state.dismissed && setup?.platformsNeedingSettings.includes(OBS_MODULE_ID));
   const { status: obsStatus } = useObsStatus(watchesObs);
 
-  const followPreset = useMemo(() => triggerPresets.find((preset) => preset.event === FOLLOW_EVENT), [triggerPresets]);
-
   if (
     !instanceId ||
     !setup ||
-    !overlays ||
+    !seed ||
     !state ||
     state.dismissed ||
     latestImport === undefined ||
@@ -132,7 +129,8 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
 
   const items = gettingStartedItems({
     setup,
-    overlays,
+    overlayFinished: seed.overlayDone?.outcome === "finished",
+    overlaySeeded: !seed.neverSeeded,
     doneItemIds: state.doneItemIds,
     obsStatus,
     hasImport: latestImport !== null,
@@ -157,15 +155,12 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
       } else if (action.kind === "mark-platform-settings-done") {
         await markDone({ instanceId: selectedInstanceId, itemId: platformSettingsItemId(action.marketplaceModuleId) });
       } else {
-        if (!followPreset) {
+        const { scene } = overlaySceneOf(seed, scenes, sceneCatalog);
+        if (!scene) {
           return;
         }
-        const fields = testEventFields(followPreset);
-        const key = await fireTestEvent(followPreset, payloadFromValues(fields, initialValues(fields)));
-        if (key !== null) {
-          await markDone({ instanceId: selectedInstanceId, itemId: "test-alert" });
-          toast({ title: "Test alert sent", description: "Watch your overlay for it." });
-        }
+        await navigator.clipboard.writeText(await requestOverlayUrl(scene.id));
+        toast({ title: "Copied", description: "Paste it into your streaming app as a browser source." });
       }
     } catch (err) {
       toast({
@@ -179,13 +174,10 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
   }
 
   function actionUnavailable(action: GettingStartedAction): string | null {
-    if (action.kind !== "fire-test-alert") {
+    if (action.kind !== "copy-overlay-link") {
       return null;
     }
-    if (!setup?.engineRegistered) {
-      return "Available once your engine is ready";
-    }
-    return followPreset ? null : "Available once the Twitch module is installed";
+    return overlaySceneOf(seed, scenes, sceneCatalog).scene ? null : "Available once your overlay is ready";
   }
 
   return {

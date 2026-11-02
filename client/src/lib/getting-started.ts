@@ -1,7 +1,6 @@
 import type { ObsStatus } from "@convex/lib/engineObsStatus";
 import { dismissedItemId, platformSettingsItemId } from "@convex/lib/gettingStarted";
 import type { SetupStatus } from "@convex/setup";
-import type { OverlayFacts } from "@/engine/types";
 import { installedModulePath, MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
 import { setupStepPath } from "@/lib/setup-steps";
@@ -28,7 +27,7 @@ export type GettingStartedStatus = "done" | "todo" | "problem";
 /** Buttons the card handles itself, beyond links and copying. */
 export type GettingStartedAction =
   | { kind: "retry-installs"; label: string }
-  | { kind: "fire-test-alert"; label: string }
+  | { kind: "copy-overlay-link"; label: string }
   | { kind: "mark-alerts-done"; label: string }
   | { kind: "mark-platform-settings-done"; label: string; marketplaceModuleId: string }
   | { kind: "dismiss-item"; label: string; itemId: GettingStartedItemId };
@@ -50,7 +49,6 @@ export interface GettingStartedFacts {
     SetupStatus,
     "platforms" | "moduleInstalls" | "twitchUsername" | "engineRegistered" | "platformsNeedingSettings"
   >;
-  overlays: OverlayFacts;
   /** Items the card recorded itself, and the optional ones dismissed; see convex/lib/gettingStarted.ts. */
   doneItemIds: readonly string[];
   /**
@@ -58,6 +56,14 @@ export interface GettingStartedFacts {
    * OBS is done once OBS is connected rather than when the streamer says so.
    */
   obsStatus: ObsStatus | null;
+  /**
+   * Whether the overlay page recorded a finished test (an alert played, or the
+   * streamer saw it play). Live presence is not used: it only exists while the
+   * overlay page is open and polling.
+   */
+  overlayFinished: boolean;
+  /** False for an instance set up before the default overlay existed: it has no overlay page to send anyone to. */
+  overlaySeeded: boolean;
   /** Whether the instance has run an import. */
   hasImport: boolean;
   /** Whether any starter pack item is installed. */
@@ -185,33 +191,24 @@ function twitchProblem(setup: GettingStartedFacts["setup"]): GettingStartedItem[
   ];
 }
 
-/**
- * Done once the overlay page recorded that the overlay reached the streaming
- * app, or a browser source has loaded it. Live presence is not used: it only
- * exists while the overlay page is open and polling.
- */
-function overlayItem(overlays: OverlayFacts, recorded: boolean): GettingStartedItem {
+function overlayItem(finished: boolean): GettingStartedItem {
   const title = "Add your overlay to your streaming app";
-  if (recorded || overlays.lastLoadedAt !== null) {
+  if (finished) {
     return item("overlay", title, "done", "Your streaming app has your overlay");
   }
-  const fixes: CheckFix[] = [];
-  if (overlays.featuredUrl) {
-    fixes.push({ kind: "copy", label: "Copy link", text: overlays.featuredUrl });
-  }
-  fixes.push({ kind: "route", label: "Show me how", href: OVERLAY_PAGE_PATH });
   return item("overlay", title, "todo", "Alerts only show on stream once your streaming app has your overlay", {
-    fixes,
+    fixes: [{ kind: "route", label: "Show me how", href: OVERLAY_PAGE_PATH }],
+    actions: [{ kind: "copy-overlay-link", label: "Copy link" }],
   });
 }
 
-function testAlertItem(done: boolean): GettingStartedItem {
+function testAlertItem(finished: boolean): GettingStartedItem {
   const title = "Send a test alert";
-  if (done) {
+  if (finished) {
     return item("test-alert", title, "done", "You've seen a test alert");
   }
   return item("test-alert", title, "todo", "See an alert the way your viewers will", {
-    actions: [{ kind: "fire-test-alert", label: "Send a test alert" }],
+    fixes: [{ kind: "route", label: "Send a test alert", href: OVERLAY_PAGE_PATH }],
   });
 }
 
@@ -283,8 +280,7 @@ export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedI
     ...twitchProblem(facts.setup),
     ...platformsProblem(facts.setup),
     ...platformSettingsItems(facts.setup, done, facts.obsStatus),
-    overlayItem(facts.overlays, done.has("overlay")),
-    testAlertItem(done.has("test-alert")),
+    ...(facts.overlaySeeded ? [overlayItem(facts.overlayFinished), testAlertItem(facts.overlayFinished)] : []),
     alertsItem(done.has("alerts")),
     importItem(facts.hasImport),
     starterPacksItem(facts.hasStarterPack),
