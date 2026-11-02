@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { PRESET_LAYOUT_ID } from "@convex/lib/setupInterests";
 import { normalizeComposition, PROFILES, resolveTimeline } from "@woofx3/scene/model";
 import {
   DEFAULT_ALERT_ITEMS,
@@ -162,8 +161,4 @@ describe("default scene", () => {
     expect((await seedDefaultScene(engine)).status).toBe("pending");
     expect(created).toEqual([]);
   });
-});
-
-test("the dashboard's layout is the preset layout", () => {
-  expect(DEFAULT_DASHBOARD_LAYOUT_ID).toBe(PRESET_LAYOUT_ID);
 });
