@@ -57,7 +57,7 @@ Row statuses: `requested` → `provisioning` → `registering` → `registered`,
 - **Linked some other way** before setup finished, such as from the integrations page, the screen shows "Connected as @name" with Continue, which records the same consent and calls `setup.complete`.
 - **Errors.** OAuth errors show on the callback page with the fixed text from `convex/lib/oauthErrors.ts`, and its Back link returns here.
 
-After it come the [overlay page](#the-overlay-page) and [the wait for a build](#the-wait-for-a-build). The older wizard pages are no longer routed.
+After it come the [overlay page](#the-overlay-page) and [the wait for a build](#the-wait-for-a-build). Setup asks nothing else. Importing from Firebot or Streamer.bot, ready-made commands, optional platforms such as OBS and Spotify, and publishing a page are offered afterwards by the dashboard's [Todo panel](/ui/dashboard#getting-started-checklist). The old platform, import, interests and dashboard pages are gone, and `setup.chooseImport` and `setup.chooseInterests` with them. The stored `importChosenAt` and `interestsChosenAt` fields stay optional in the schema so existing rows still validate.
 
 ### The overlay page
 

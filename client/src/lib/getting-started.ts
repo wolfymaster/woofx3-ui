@@ -1,21 +1,25 @@
 import type { ObsStatus } from "@convex/lib/engineObsStatus";
-import { platformSettingsItemId } from "@convex/lib/gettingStarted";
+import { dismissedItemId, platformSettingsItemId } from "@convex/lib/gettingStarted";
 import type { SetupStatus } from "@convex/setup";
-import type { OverlayFacts } from "@/engine/types";
-import { installedModulePath } from "@/lib/marketplace-route";
+import { installedModulePath, MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
+import { setupStepPath } from "@/lib/setup-steps";
 
-// The dashboard's getting started checklist: a short first-session list, from
-// finishing setup to seeing woofx3 react to a follow. Pure, so which items are
-// done and what each offers is testable without Convex or an engine.
+// The dashboard's getting started checklist: what is left after onboarding,
+// from getting the overlay into the streaming app to the optional extras.
+// Pure, so which items are done and what each offers is testable without
+// Convex or an engine.
 
 export type GettingStartedItemId =
-  | "setup"
-  | "platforms"
   | "twitch"
+  | "platforms"
   | "overlay"
-  | "test-follow"
-  | "chat-command"
+  | "test-alert"
+  | "alerts"
+  | "import"
+  | "starter-packs"
+  | "optional-platforms"
+  | "your-page"
   | `platform-settings:${string}`;
 
 export type GettingStartedStatus = "done" | "todo" | "problem";
@@ -23,9 +27,10 @@ export type GettingStartedStatus = "done" | "todo" | "problem";
 /** Buttons the card handles itself, beyond links and copying. */
 export type GettingStartedAction =
   | { kind: "retry-installs"; label: string }
-  | { kind: "fire-test-follow"; label: string }
-  | { kind: "mark-command-done"; label: string }
-  | { kind: "mark-platform-settings-done"; label: string; marketplaceModuleId: string };
+  | { kind: "copy-overlay-link"; label: string }
+  | { kind: "mark-alerts-done"; label: string }
+  | { kind: "mark-platform-settings-done"; label: string; marketplaceModuleId: string }
+  | { kind: "dismiss-item"; label: string; itemId: GettingStartedItemId };
 
 /** A button on an item: go somewhere, or copy a value. */
 export type CheckFix = { kind: "route"; label: string; href: string } | { kind: "copy"; label: string; text: string };
@@ -42,26 +47,44 @@ export interface GettingStartedItem {
 export interface GettingStartedFacts {
   setup: Pick<
     SetupStatus,
-    | "platformsChosenAt"
-    | "completedAt"
-    | "platforms"
-    | "moduleInstalls"
-    | "twitchUsername"
-    | "engineRegistered"
-    | "platformsNeedingSettings"
+    "platforms" | "moduleInstalls" | "twitchUsername" | "engineRegistered" | "platformsNeedingSettings"
   >;
-  overlays: OverlayFacts;
-  /** Items the card recorded itself; see MANUAL_GETTING_STARTED_ITEM_IDS. */
+  /** Items the card recorded itself, and the optional ones dismissed; see convex/lib/gettingStarted.ts. */
   doneItemIds: readonly string[];
   /**
    * The engine's OBS connection, when it can report one. With it, setting up
    * OBS is done once OBS is connected rather than when the streamer says so.
    */
   obsStatus: ObsStatus | null;
+  /**
+   * Whether the overlay page recorded a finished test (an alert played, or the
+   * streamer saw it play). Live presence is not used: it only exists while the
+   * overlay page is open and polling.
+   */
+  overlayFinished: boolean;
+  /** False for an instance set up before the default overlay existed: it has no overlay page to send anyone to. */
+  overlaySeeded: boolean;
+  /** Whether the instance has run an import. */
+  hasImport: boolean;
+  /** Whether any starter pack item is installed. */
+  hasStarterPack: boolean;
+  /** Ids of the modules installed on the engine. */
+  installedModuleIds: readonly string[];
+  /** Whether the instance's public page is live. */
+  pagePublished: boolean;
 }
 
-const SCENES_PATH = "/stream/scenes";
-const COMMANDS_PATH = "/stream/commands";
+/** Modules the optional platforms item offers; installing either finishes it. */
+const OPTIONAL_PLATFORM_MODULE_IDS: readonly string[] = [OBS_MODULE_ID, "woofx3_spotify"];
+
+export const OVERLAY_PAGE_PATH = "/setup/overlay";
+const ALERTS_PATH = "/stream/alerts";
+const STARTER_PACKS_PATH = "/stream/starter-packs";
+const IMPORT_PATH = "/admin/backup";
+const YOUR_PAGE_PATH = "/stream/page";
+
+/** Items shown before "Show more". */
+export const VISIBLE_ITEM_COUNT = 5;
 
 function item(
   id: GettingStartedItemId,
@@ -73,22 +96,13 @@ function item(
   return { id, title, status, summary, fixes: extras.fixes ?? [], actions: extras.actions ?? [] };
 }
 
-function setupItem(setup: GettingStartedFacts["setup"]): GettingStartedItem {
-  if (setup.completedAt !== null) {
-    return item("setup", "Finish setting up", "done", "Setup is finished");
-  }
-  return item("setup", "Finish setting up", "todo", "Pick what woofx3 should do and get a dashboard to start from", {
-    fixes: [{ kind: "route", label: "Continue setup", href: "/setup" }],
-  });
+function dismissAction(itemId: GettingStartedItemId): GettingStartedAction {
+  return { kind: "dismiss-item", label: "Not for me", itemId };
 }
 
-function platformsItem(setup: GettingStartedFacts["setup"]): GettingStartedItem {
+/** Shown only when something went wrong installing a platform. */
+function platformsProblem(setup: GettingStartedFacts["setup"]): GettingStartedItem[] {
   const title = "Platforms installed";
-  if (setup.platformsChosenAt === null) {
-    return item("platforms", title, "todo", "Choose the platforms woofx3 works with", {
-      fixes: [{ kind: "route", label: "Choose platforms", href: "/setup/platforms" }],
-    });
-  }
   const installs = new Map(setup.moduleInstalls.map((entry) => [entry.marketplaceModuleId, entry]));
   const nameOf = (id: string) => setup.platforms.find((p) => p.marketplaceModuleId === id)?.name ?? id;
 
@@ -96,44 +110,35 @@ function platformsItem(setup: GettingStartedFacts["setup"]): GettingStartedItem 
     (platform) => installs.get(platform.marketplaceModuleId)?.status === "needs_approval"
   );
   if (needsApproval.length > 0) {
-    return item(
-      "platforms",
-      title,
-      "problem",
-      `${needsApproval.map((platform) => nameOf(platform.marketplaceModuleId)).join(", ")} now asks for more permissions`,
-      {
-        fixes: needsApproval.map((platform) => ({
-          kind: "route" as const,
-          label: `Review ${nameOf(platform.marketplaceModuleId)}`,
-          href: installedModulePath(platform.marketplaceModuleId),
-        })),
-      }
-    );
+    return [
+      item(
+        "platforms",
+        title,
+        "problem",
+        `${needsApproval.map((platform) => nameOf(platform.marketplaceModuleId)).join(", ")} now asks for more permissions`,
+        {
+          fixes: needsApproval.map((platform) => ({
+            kind: "route" as const,
+            label: `Review ${nameOf(platform.marketplaceModuleId)}`,
+            href: installedModulePath(platform.marketplaceModuleId),
+          })),
+        }
+      ),
+    ];
   }
   const failed = setup.platforms.filter((platform) => installs.get(platform.marketplaceModuleId)?.status === "failed");
   if (failed.length > 0) {
-    return item(
-      "platforms",
-      title,
-      "problem",
-      `${failed.map((platform) => nameOf(platform.marketplaceModuleId)).join(", ")} did not install`,
-      { actions: [{ kind: "retry-installs", label: "Retry" }] }
-    );
+    return [
+      item(
+        "platforms",
+        title,
+        "problem",
+        `${failed.map((platform) => nameOf(platform.marketplaceModuleId)).join(", ")} did not install`,
+        { actions: [{ kind: "retry-installs", label: "Retry" }] }
+      ),
+    ];
   }
-  const installed = setup.platforms.filter(
-    (platform) => installs.get(platform.marketplaceModuleId)?.status === "installed"
-  ).length;
-  if (installed === setup.platforms.length) {
-    return item("platforms", title, "done", `${installed} of ${setup.platforms.length} installed`);
-  }
-  return item(
-    "platforms",
-    title,
-    "todo",
-    setup.engineRegistered
-      ? `Installing: ${installed} of ${setup.platforms.length} done`
-      : "They install as soon as your engine is ready"
-  );
+  return [];
 }
 
 /**
@@ -174,66 +179,115 @@ function obsSettingsItem(id: GettingStartedItemId, name: string, status: ObsStat
   });
 }
 
-function twitchItem(setup: GettingStartedFacts["setup"]): GettingStartedItem {
+/** Shown only while Twitch is not connected. */
+function twitchProblem(setup: GettingStartedFacts["setup"]): GettingStartedItem[] {
   if (setup.twitchUsername !== null) {
-    return item("twitch", "Twitch connected", "done", `Connected as @${setup.twitchUsername}`);
+    return [];
   }
-  return item("twitch", "Twitch connected", "problem", "Twitch isn't connected", {
-    fixes: [{ kind: "route", label: "Connect Twitch", href: "/setup/twitch" }],
+  return [
+    item("twitch", "Twitch connected", "problem", "Twitch isn't connected", {
+      fixes: [{ kind: "route", label: "Connect Twitch", href: setupStepPath("connect") }],
+    }),
+  ];
+}
+
+function overlayItem(finished: boolean): GettingStartedItem {
+  const title = "Add your overlay to your streaming app";
+  if (finished) {
+    return item("overlay", title, "done", "Your streaming app has your overlay");
+  }
+  return item("overlay", title, "todo", "Alerts only show on stream once your streaming app has your overlay", {
+    fixes: [{ kind: "route", label: "Show me how", href: OVERLAY_PAGE_PATH }],
+    actions: [{ kind: "copy-overlay-link", label: "Copy link" }],
   });
 }
 
-function overlayItem(overlays: OverlayFacts): GettingStartedItem {
-  const title = "Overlay added to OBS";
-  if (overlays.lastLoadedAt !== null) {
-    return item("overlay", title, "done", "OBS has loaded your overlay");
+function testAlertItem(finished: boolean): GettingStartedItem {
+  const title = "Send a test alert";
+  if (finished) {
+    return item("test-alert", title, "done", "You've seen a test alert");
   }
-  if (!overlays.hasScene || overlays.browserSourceKeyCount === 0) {
-    return item("overlay", title, "todo", "Create a scene, then add its browser-source URL to OBS", {
-      fixes: [{ kind: "route", label: "Open scenes", href: SCENES_PATH }],
-    });
-  }
-  const fixes: CheckFix[] = [];
-  if (overlays.featuredUrl) {
-    fixes.push({ kind: "copy", label: "Copy browser-source URL", text: overlays.featuredUrl });
-  }
-  fixes.push({ kind: "route", label: "Open scenes", href: SCENES_PATH });
-  return item("overlay", title, "todo", "In OBS, add a Browser source and paste your scene's URL", { fixes });
+  return item("test-alert", title, "todo", "See an alert the way your viewers will", {
+    fixes: [{ kind: "route", label: "Send a test alert", href: OVERLAY_PAGE_PATH }],
+  });
 }
 
-function testFollowItem(done: boolean): GettingStartedItem {
-  const title = "Fire a test follow";
+function alertsItem(done: boolean): GettingStartedItem {
+  const title = "Make the alerts yours";
   if (done) {
-    return item("test-follow", title, "done", "Sent a test follow to your engine");
+    return item("alerts", title, "done", "You've had a look at your alerts");
   }
-  return item("test-follow", title, "todo", "See woofx3 react the way it will to a real follower", {
-    actions: [{ kind: "fire-test-follow", label: "Send a test follow" }],
+  return item("alerts", title, "todo", "Change the look, sound and message of your alerts", {
+    fixes: [{ kind: "route", label: "Open alerts", href: ALERTS_PATH }],
+    actions: [{ kind: "mark-alerts-done", label: "Done" }],
   });
 }
 
-function chatCommandItem(done: boolean): GettingStartedItem {
-  const title = "Run your first chat command";
+function importItem(done: boolean): GettingStartedItem {
+  const title = "Bring your setup from Firebot or Streamer.bot";
   if (done) {
-    return item("chat-command", title, "done", "You've tried a chat command");
+    return item("import", title, "done", "You've brought your setup over");
   }
-  return item("chat-command", title, "todo", "Type one of your commands, like !lurk, in your Twitch chat", {
-    fixes: [{ kind: "route", label: "See your commands", href: COMMANDS_PATH }],
-    actions: [{ kind: "mark-command-done", label: "I've tried it" }],
+  return item("import", title, "todo", "Move your commands and alerts across instead of starting again", {
+    fixes: [{ kind: "route", label: "Import", href: IMPORT_PATH }],
+    actions: [dismissAction("import")],
   });
 }
 
-/** The card's items, in the order a new streamer is likely to do them. */
+function starterPacksItem(done: boolean): GettingStartedItem {
+  const title = "Add chat commands and thank-yous";
+  if (done) {
+    return item("starter-packs", title, "done", "You've added ready-made commands");
+  }
+  return item("starter-packs", title, "todo", "Pick ready-made commands and thank-yous to start with", {
+    fixes: [{ kind: "route", label: "Browse starter packs", href: STARTER_PACKS_PATH }],
+    actions: [dismissAction("starter-packs")],
+  });
+}
+
+function optionalPlatformsItem(done: boolean): GettingStartedItem {
+  const title = "Using OBS scenes or Spotify? Connect them";
+  if (done) {
+    return item("optional-platforms", title, "done", "You've added a platform");
+  }
+  return item("optional-platforms", title, "todo", "Add OBS scene control or Spotify song requests", {
+    fixes: [{ kind: "route", label: "Open the marketplace", href: MARKETPLACE_PATH }],
+    actions: [dismissAction("optional-platforms")],
+  });
+}
+
+function yourPageItem(done: boolean): GettingStartedItem {
+  const title = "Publish your page";
+  if (done) {
+    return item("your-page", title, "done", "Your page is live");
+  }
+  return item("your-page", title, "todo", "Give viewers a page of their own at woofx3.tv", {
+    fixes: [{ kind: "route", label: "Your page", href: YOUR_PAGE_PATH }],
+    actions: [dismissAction("your-page")],
+  });
+}
+
+const STATUS_ORDER: Record<GettingStartedStatus, number> = { problem: 0, todo: 1, done: 2 };
+
+/**
+ * The card's items: problems first, then what is left, then what is done, so
+ * the first few are the ones that matter. Dismissed optional items are left out.
+ */
 export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedItem[] {
   const done = new Set(facts.doneItemIds);
-  return [
-    setupItem(facts.setup),
-    platformsItem(facts.setup),
+  const dismissed = (id: GettingStartedItemId) => done.has(dismissedItemId(id));
+  const items = [
+    ...twitchProblem(facts.setup),
+    ...platformsProblem(facts.setup),
     ...platformSettingsItems(facts.setup, done, facts.obsStatus),
-    twitchItem(facts.setup),
-    overlayItem(facts.overlays),
-    testFollowItem(done.has("test-follow")),
-    chatCommandItem(done.has("chat-command")),
-  ];
+    ...(facts.overlaySeeded ? [overlayItem(facts.overlayFinished), testAlertItem(facts.overlayFinished)] : []),
+    alertsItem(done.has("alerts")),
+    importItem(facts.hasImport),
+    starterPacksItem(facts.hasStarterPack),
+    optionalPlatformsItem(facts.installedModuleIds.some((id) => OPTIONAL_PLATFORM_MODULE_IDS.includes(id))),
+    yourPageItem(facts.pagePublished),
+  ].filter((entry) => entry.status === "done" || !dismissed(entry.id));
+  return items.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 }
 
 export function gettingStartedProgress(items: readonly GettingStartedItem[]): { done: number; total: number } {

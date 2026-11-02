@@ -1,17 +1,20 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { platformSettingsItemId } from "@convex/lib/gettingStarted";
+import { dismissedItemId, platformSettingsItemId } from "@convex/lib/gettingStarted";
 import { useMutation, useQuery } from "convex/react";
 import { Circle, CircleCheck, CircleX, Copy, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useDefaultSeedStatus } from "@/engine/hooks/use-default-seed";
+import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
-import { useOverlayFacts } from "@/engine/hooks/use-overlays";
-import { useFireTestEvent } from "@/hooks/use-fire-test-event";
+import { useBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
+import { useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
+import { useLatestSetupImport } from "@/engine/hooks/use-setup-imports";
+import { useStarterPackStatus } from "@/engine/hooks/use-starter-packs";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
   type CheckFix,
   type GettingStartedAction,
@@ -19,12 +22,11 @@ import {
   type GettingStartedStatus,
   gettingStartedItems,
   gettingStartedProgress,
+  VISIBLE_ITEM_COUNT,
 } from "@/lib/getting-started";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
-import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
+import { overlaySceneOf } from "@/lib/overlay-onboarding";
 import { cn } from "@/lib/utils";
-
-const FOLLOW_EVENT = "channel.follow";
 
 function StatusIcon({ status }: { status: GettingStartedStatus }) {
   if (status === "done") {
@@ -54,7 +56,7 @@ function FixLink({ fix }: { fix: CheckFix }) {
         className={className}
         onClick={() => {
           navigator.clipboard.writeText(fix.text).then(
-            () => toast({ title: "Copied", description: "Paste it into an OBS browser source." }),
+            () => toast({ title: "Copied", description: "Paste it into your streaming app as a browser source." }),
             () => toast({ title: "Couldn't copy", variant: "destructive" })
           );
         }}
@@ -80,33 +82,46 @@ export interface GettingStarted {
 }
 
 /**
- * The first-session checklist: finish setup, get the platforms installed and
- * the overlay into OBS, and see woofx3 react to a test follow. Null while
- * loading, once every item is done, or once someone dismissed it; both are
- * per instance, so the whole team sees the same list. Null too while no
- * instance is selected.
+ * The Todo panel: get the overlay into the streaming app, see a test alert,
+ * make the alerts yours, and the optional extras. Null while loading, once
+ * every item is done or dismissed, or once someone dismissed the whole panel;
+ * both are per instance, so the whole team sees the same list. Null too while
+ * no instance is selected.
  *
  * Called once by the dashboard and handed to both the rail icon and its
  * flyout, so the OBS status poll behind it runs once.
  */
 export function useGettingStarted(instanceId: Id<"instances"> | null): GettingStarted | null {
   const setup = useQuery(api.setup.status, instanceId ? { instanceId } : "skip");
-  const overlays = useOverlayFacts();
+  const seed = useDefaultSeedStatus();
+  const scenes = useScenes();
+  const sceneCatalog = useSceneWidgetCatalog();
+  const requestOverlayUrl = useBrowserSourceUrlRequest();
   const state = useQuery(api.gettingStarted.state, instanceId ? { instanceId } : "skip");
   const markDone = useMutation(api.gettingStarted.markDone);
   const dismissMutation = useMutation(api.gettingStarted.dismiss);
   const retryApply = useMutation(api.setup.retryApply);
-  const { triggerPresets } = useWorkflowCatalog();
-  const fireTestEvent = useFireTestEvent();
+  const latestImport = useLatestSetupImport();
+  const starterPacks = useStarterPackStatus();
+  const installedModules = useInstalledModules();
+  const page = useQuery(api.userPages.forEditing, instanceId ? { instanceId } : "skip");
   const { toast } = useToast();
   const [busyAction, setBusyAction] = useState<GettingStartedAction["kind"] | null>(null);
 
   const watchesObs = Boolean(state && !state.dismissed && setup?.platformsNeedingSettings.includes(OBS_MODULE_ID));
   const { status: obsStatus } = useObsStatus(watchesObs);
 
-  const followPreset = useMemo(() => triggerPresets.find((preset) => preset.event === FOLLOW_EVENT), [triggerPresets]);
-
-  if (!instanceId || !setup || !overlays || !state || state.dismissed) {
+  if (
+    !instanceId ||
+    !setup ||
+    !seed ||
+    !state ||
+    state.dismissed ||
+    latestImport === undefined ||
+    !starterPacks ||
+    !installedModules ||
+    page === undefined
+  ) {
     return null;
   }
   // Narrowed once here, so the actions below keep it non-null.
@@ -114,9 +129,14 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
 
   const items = gettingStartedItems({
     setup,
-    overlays,
+    overlayFinished: seed.overlayDone?.outcome === "finished",
+    overlaySeeded: !seed.neverSeeded,
     doneItemIds: state.doneItemIds,
     obsStatus,
+    hasImport: latestImport !== null,
+    hasStarterPack: Object.values(starterPacks).includes("installed"),
+    installedModuleIds: installedModules.map((module) => module.id),
+    pagePublished: page !== null && page.published !== null,
   });
   const progress = gettingStartedProgress(items);
   if (progress.done === progress.total) {
@@ -128,20 +148,19 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
     try {
       if (action.kind === "retry-installs") {
         await retryApply({ instanceId: selectedInstanceId });
-      } else if (action.kind === "mark-command-done") {
-        await markDone({ instanceId: selectedInstanceId, itemId: "chat-command" });
+      } else if (action.kind === "mark-alerts-done") {
+        await markDone({ instanceId: selectedInstanceId, itemId: "alerts" });
+      } else if (action.kind === "dismiss-item") {
+        await markDone({ instanceId: selectedInstanceId, itemId: dismissedItemId(action.itemId) });
       } else if (action.kind === "mark-platform-settings-done") {
         await markDone({ instanceId: selectedInstanceId, itemId: platformSettingsItemId(action.marketplaceModuleId) });
       } else {
-        if (!followPreset) {
+        const { scene } = overlaySceneOf(seed, scenes, sceneCatalog);
+        if (!scene) {
           return;
         }
-        const fields = testEventFields(followPreset);
-        const key = await fireTestEvent(followPreset, payloadFromValues(fields, initialValues(fields)));
-        if (key !== null) {
-          await markDone({ instanceId: selectedInstanceId, itemId: "test-follow" });
-          toast({ title: "Test follow sent", description: "Watch your chat and overlay for woofx3's reaction." });
-        }
+        await navigator.clipboard.writeText(await requestOverlayUrl(scene.id));
+        toast({ title: "Copied", description: "Paste it into your streaming app as a browser source." });
       }
     } catch (err) {
       toast({
@@ -155,13 +174,10 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
   }
 
   function actionUnavailable(action: GettingStartedAction): string | null {
-    if (action.kind !== "fire-test-follow") {
+    if (action.kind !== "copy-overlay-link") {
       return null;
     }
-    if (!setup?.engineRegistered) {
-      return "Available once your engine is ready";
-    }
-    return followPreset ? null : "Available once the Twitch module is installed";
+    return overlaySceneOf(seed, scenes, sceneCatalog).scene ? null : "Available once your overlay is ready";
   }
 
   return {
@@ -178,6 +194,8 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
 /** The checklist as one column, sized for the rail's flyout. */
 export function GettingStartedChecklist({ gettingStarted }: { gettingStarted: GettingStarted }) {
   const { items, progress, busyAction, runAction, actionUnavailable, dismiss } = gettingStarted;
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? items : items.slice(0, VISIBLE_ITEM_COUNT);
 
   return (
     <div className="flex h-full flex-col">
@@ -188,7 +206,7 @@ export function GettingStartedChecklist({ gettingStarted }: { gettingStarted: Ge
         <Progress value={(progress.done / progress.total) * 100} className="h-1.5" />
       </div>
       <ul className="flex-1 min-h-0 space-y-2 overflow-y-auto p-3" data-testid="list-getting-started">
-        {items.map((entry: GettingStartedItem) => (
+        {shown.map((entry: GettingStartedItem) => (
           <li
             key={entry.id}
             className={cn(
@@ -235,6 +253,19 @@ export function GettingStartedChecklist({ gettingStarted }: { gettingStarted: Ge
             </div>
           </li>
         ))}
+        {items.length > VISIBLE_ITEM_COUNT && (
+          <li className="list-none">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-full text-xs"
+              onClick={() => setShowAll(!showAll)}
+              data-testid="button-getting-started-show-more"
+            >
+              {showAll ? "Show less" : `Show ${items.length - VISIBLE_ITEM_COUNT} more`}
+            </Button>
+          </li>
+        )}
       </ul>
       <div className="shrink-0 border-t border-border px-3 py-2">
         <Button
