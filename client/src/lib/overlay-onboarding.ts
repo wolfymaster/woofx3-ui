@@ -177,7 +177,11 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
 
   const wasBlocked = BLOCKED_PHASES.has(phase.name);
   if (facts.presence === undefined && wasBlocked) {
-    return { ...base, phase: { name: "preparing" } };
+    // An overlay made from no-scene is in no streaming app yet, whatever presence goes on to say.
+    return {
+      ...base,
+      phase: phase.name === "no-scene" ? { name: "waiting", since: at, dropped: false } : { name: "preparing" },
+    };
   }
   // Before the presence check: the engine's failure says why, where "disconnected"
   // would only guess. The reason stays up until Try again, even with the overlay gone.

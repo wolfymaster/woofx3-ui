@@ -213,6 +213,13 @@ describe("overlayReducer: coming back after finishing", () => {
     expect(run(noScene, observe(finishedBefore)).phase.name).toBe("waiting");
   });
 
+  test("a new overlay goes to its link while presence has yet to answer, as it does at first", () => {
+    const noScene = run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, scene: "none" }));
+    const made = run(noScene, observe({ ...finishedBefore, presence: undefined }, 500));
+    expect(made.phase).toEqual({ name: "waiting", since: 500, dropped: false });
+    expect(run(made, observe(finishedBefore, 600)).phase).toEqual({ name: "waiting", since: 500, dropped: false });
+  });
+
   test("another test can be sent, and must complete by itself to finish again", () => {
     const finished = run(playing, observe({ presence: "open", test: { kind: "completed" } }, 1500));
     const again = run(finished, { type: "send" });
