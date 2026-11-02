@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { engineHostname, slugFormatError, suggestSlug, usernameAddress } from "@/lib/engine-slug";
+import { engineHostname, slugFormatError, suggestSlug, usernameAddress } from "@shared/engine-slug";
 
 describe("suggestSlug", () => {
   test("turns a display name into something usable", () => {

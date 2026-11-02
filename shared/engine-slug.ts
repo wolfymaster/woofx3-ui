@@ -10,6 +10,9 @@
  * `validateSlug` in the maintenance API's `src/engines/slug.ts`.
  */
 
+/** The maintenance API refuses a longer slug. */
+export const MAX_SLUG_LENGTH = 30;
+
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
 
 export const ENGINE_DOMAIN = "woofx3.tv";
@@ -42,7 +45,7 @@ export function suggestSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
-    .slice(0, 30)
+    .slice(0, MAX_SLUG_LENGTH)
     // Slicing can leave a trailing hyphen, which the pattern rejects.
     .replace(/-$/, "");
   return SLUG_PATTERN.test(slug) ? slug : "";
