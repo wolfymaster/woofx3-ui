@@ -349,3 +349,34 @@ describe("seedHasRecordedError", () => {
     expect(seedHasRecordedError(seed)).toBe(expected);
   });
 });
+
+describe("a test sent to an overlay the engine has not noticed closing", () => {
+  const stillOpen = { presence: "open" } as const;
+  const sent = run(run(connected, { type: "send" }), { type: "sent", triggerId: "t1", at: 1000 });
+  const failure = { kind: "failed", reason: "no overlay" } as const;
+
+  test("fails with the engine's reason, not Did you see it?", () => {
+    expect(run(sent, observe({ ...stillOpen, test: failure }, 5000)).phase).toEqual({
+      name: "test-failed",
+      reason: "no overlay",
+    });
+  });
+
+  test("a failure after the unconfirmed limit still wins", () => {
+    const unconfirmed = run(sent, observe(stillOpen, 1000 + TEST_UNCONFIRMED_AFTER_MS));
+    expect(unconfirmed.phase.name).toBe("unconfirmed");
+    expect(run(unconfirmed, observe({ ...stillOpen, test: failure })).phase.name).toBe("test-failed");
+  });
+
+  test("a failure arriving with the closed presence keeps its reason", () => {
+    const failed = run(sent, observe({ presence: "closed", test: failure }, 70_000));
+    expect(failed.phase).toEqual({ name: "test-failed", reason: "no overlay" });
+    expect(run(failed, observe({ presence: "closed", test: failure }, 71_000)).phase.name).toBe("test-failed");
+  });
+
+  test("Try again with the overlay gone goes back to waiting for it", () => {
+    const failed = run(sent, observe({ presence: "closed", test: failure }, 70_000));
+    const resent = run(failed, { type: "send" });
+    expect(run(resent, observe({ presence: "closed" }, 72_000)).phase.name).toBe("waiting");
+  });
+});

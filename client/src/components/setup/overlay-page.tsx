@@ -543,14 +543,15 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
 }
 
 function TestFailure({ reason }: { reason: string | null }) {
-  if (reason === null) {
-    return <p className="text-sm">We couldn&apos;t send the test. Check that your overlay is still open.</p>;
+  // An unrecognised reason is written for operators, and is no more use here than none.
+  const copy = reason === null ? null : describeAlertFailure(reason);
+  if (copy === null) {
+    return <p className="text-sm">We couldn&apos;t play the test. Check that your overlay is still open.</p>;
   }
-  const copy = describeAlertFailure(reason);
   return (
     <div className="space-y-1 text-sm" data-testid="text-overlay-test-failure">
-      <p className="font-medium">{copy?.title ?? reason}</p>
-      {copy && <p className="text-muted-foreground">{copy.hint}</p>}
+      <p className="font-medium">{copy.title}</p>
+      <p className="text-muted-foreground">{copy.hint}</p>
     </div>
   );
 }

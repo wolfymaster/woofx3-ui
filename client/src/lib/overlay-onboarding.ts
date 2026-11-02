@@ -161,8 +161,13 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
   if (facts.presence === undefined && wasBlocked) {
     return { ...base, phase: { name: "preparing" } };
   }
+  // Before the presence check: the engine's failure says why, where "disconnected"
+  // would only guess. The reason stays up until Try again, even with the overlay gone.
+  if (isAwaitingTest(phase) && facts.test.kind === "failed") {
+    return { ...base, phase: { name: "test-failed", reason: facts.test.reason } };
+  }
   if (facts.presence === "closed") {
-    if (phase.name === "waiting") {
+    if (phase.name === "waiting" || phase.name === "test-failed") {
       return base;
     }
     return { ...base, phase: { name: "waiting", since: at, dropped: !wasBlocked }, triggerIds: [] };
@@ -176,9 +181,6 @@ function observe(state: OverlayState, facts: OverlayFacts, at: number): OverlayS
     return { ...base, phase: { name: "waiting", since: at, dropped: false } };
   }
 
-  if (isAwaitingTest(phase) && facts.test.kind === "failed") {
-    return { ...base, phase: { name: "test-failed", reason: facts.test.reason } };
-  }
   if (phase.name === "playing" && at - phase.sentAt >= TEST_UNCONFIRMED_AFTER_MS) {
     return { ...base, phase: { name: "unconfirmed" } };
   }
