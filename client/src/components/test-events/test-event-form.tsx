@@ -104,7 +104,7 @@ function TestEventOutcome({
       return (
         <p className="flex items-center gap-2 text-xs text-green-500" data-testid="test-event-outcome-succeeded">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          The workflow completed.
+          The workflow ran, and any alert it sent is on its way to your overlay.
         </p>
       );
     case "nothingMatched":
