@@ -1,6 +1,7 @@
 import { alertWidgetNamesOf, DEFAULT_ALERT_WIDGET_NAME, placedWidgetsOf } from "@shared/alert-widgets";
 import type { DefaultSeedStatus, EngineAlert, OverlayPresence, SceneRecord } from "@/engine/types";
 import { alertOfTestEvent } from "@/lib/alert-envelope";
+import { isMissingAlertTarget } from "@/lib/alert-failure";
 
 // The overlay page's state machine. What the server knows decides most of it,
 // so a refresh lands in the right place; only a test in flight lives here, and
@@ -232,6 +233,17 @@ export function waitingHelp(since: number, now: number): "none" | "hint" | "trou
     return "troubleshoot";
   }
   return waited >= OVERLAY_HINT_AFTER_MS ? "hint" : "none";
+}
+
+/**
+ * What to tell a streamer whose test failed. They have touched neither the
+ * alert nor its target yet, so the fixes the Alerts screen offers (re-saving a
+ * step, changing its target) are nothing they could act on here.
+ */
+export function testFailureMessage(reason: string | null): string {
+  return reason !== null && isMissingAlertTarget(reason)
+    ? "Your overlay isn't ready yet. Check that it's open in your streaming app or browser tab, then try again."
+    : "We couldn't play the test. Check that your overlay is still open.";
 }
 
 /**

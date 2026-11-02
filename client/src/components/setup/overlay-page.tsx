@@ -21,7 +21,6 @@ import type { SceneId } from "@/engine/types";
 import { useExpiringFlag } from "@/hooks/use-expiring-flag";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { describeAlertFailure } from "@/lib/alert-failure";
 import type { EngineBuild } from "@/lib/engine-build";
 import {
   followAlertOf,
@@ -32,6 +31,7 @@ import {
   seedHasRecordedError,
   seedIsSlow,
   type TestOutcome,
+  testFailureMessage,
   testOutcomeOf,
   waitingHelp,
 } from "@/lib/overlay-onboarding";
@@ -504,7 +504,9 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
 
         {phase.name === "test-failed" && (
           <>
-            <TestFailure reason={phase.reason} />
+            <p className="text-sm" data-testid="text-overlay-test-failure">
+              {testFailureMessage(phase.reason)}
+            </p>
             <Button className="self-start" onClick={() => void sendTest()} data-testid="button-overlay-test-retry">
               Try again
             </Button>
@@ -539,19 +541,5 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
         </div>
       </div>
     </main>
-  );
-}
-
-function TestFailure({ reason }: { reason: string | null }) {
-  // An unrecognised reason is written for operators, and is no more use here than none.
-  const copy = reason === null ? null : describeAlertFailure(reason);
-  if (copy === null) {
-    return <p className="text-sm">We couldn&apos;t play the test. Check that your overlay is still open.</p>;
-  }
-  return (
-    <div className="space-y-1 text-sm" data-testid="text-overlay-test-failure">
-      <p className="font-medium">{copy.title}</p>
-      <p className="text-muted-foreground">{copy.hint}</p>
-    </div>
   );
 }

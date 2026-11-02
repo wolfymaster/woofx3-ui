@@ -13,6 +13,7 @@ import {
   seedHasRecordedError,
   seedIsSlow,
   TEST_UNCONFIRMED_AFTER_MS,
+  testFailureMessage,
   testOutcomeOf,
   waitingHelp,
 } from "./overlay-onboarding";
@@ -216,6 +217,23 @@ describe("waitingHelp", () => {
 function alertFor(triggerId: string, status: EngineAlert["status"], error?: string): EngineAlert {
   return { status, error, payload: JSON.stringify({ event: { triggerId } }) } as EngineAlert;
 }
+
+describe("testFailureMessage", () => {
+  test.each([
+    'no alert widget named "default" on a running scene',
+    'alert cannot be published: no alert widget named "default" on a running scene',
+  ])("says the overlay isn't ready for: %s", (reason) => {
+    expect(testFailureMessage(reason)).toContain("overlay isn't ready");
+    expect(testFailureMessage(reason)).not.toContain("target");
+  });
+
+  test.each([[null], ["layout must be an object, got nothing"], ["something else"]])(
+    "stays plain for: %s",
+    (reason) => {
+      expect(testFailureMessage(reason)).toBe("We couldn't play the test. Check that your overlay is still open.");
+    }
+  );
+});
 
 describe("testOutcomeOf", () => {
   test("nothing yet", () => {
