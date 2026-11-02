@@ -128,6 +128,7 @@ export const reserveManagedInstance = internalMutation({
       if (existing.status === "registered") {
         throw new Error("This workspace already has a managed engine");
       }
+      await deleteHeldSlugs(ctx, instanceId);
       const open = requestStillOpen(existing);
       const registrationToken = open ? existing.registrationToken : newRegistrationToken;
       const createRequestId = open ? (existing.createRequestId as string) : newCreateRequestId;
@@ -168,6 +169,17 @@ export const reserveManagedInstance = internalMutation({
 /** A create request no answer has closed: the maintenance API may hold an engine for it. */
 function requestStillOpen(row: Doc<"engineProvisioning">): boolean {
   return row.createRequestId !== undefined && row.maintenanceEngineId === undefined && row.status !== "deleted";
+}
+
+/** An engine's old names die with it: the maintenance API can then issue them to anyone. */
+async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
+  const held = await ctx.db
+    .query("engineHeldSlugs")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .collect();
+  for (const row of held) {
+    await ctx.db.delete(row._id);
+  }
 }
 
 export async function findOrCreateManagedInstance(
@@ -636,6 +648,7 @@ export const applyCallbackEvent = internalMutation({
       case "engine.deleted": {
         // The instance row stays: it still owns the account's scenes, workflows
         // and members. Removing it is the account owner's decision.
+        await deleteHeldSlugs(ctx, row.instanceId);
         await ctx.db.patch(row._id, { status: "deleted", error: undefined, updatedAt: Date.now() });
         return { handled: true, duplicate: false };
       }

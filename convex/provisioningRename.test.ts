@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { fixture } from "./lib/userPages.fixtures";
 
 describe("renaming a managed engine", () => {
@@ -93,6 +93,50 @@ describe("renaming a managed engine", () => {
       reason,
     });
     expect((await provisioningOf(f))?.slug).toBe("wolfy");
+  });
+
+  test("an old name is released with the engine, so the next engine does not answer to it", async () => {
+    const f = await fixture();
+    await f.owner.action(api.provisioning.renameManagedEngine, { instanceId: f.instanceId, slug: "new-name" });
+    await f.t.mutation(internal.provisioningInternal.applyCallbackEvent, {
+      eventId: "deleted-1",
+      eventType: "engine.deleted",
+      maintenanceEngineId: "eng_1",
+    });
+    expect(await f.t.run((ctx) => ctx.db.query("engineHeldSlugs").collect())).toEqual([]);
+
+    const row = await provisioningOf(f);
+    await f.t.run((ctx) =>
+      ctx.db.patch(row?._id as NonNullable<typeof row>["_id"], { status: "registered", slug: "next" })
+    );
+
+    expect((await f.t.query(api.userPagesPublic.bySlug, { slug: "wolfy" })).kind).toBe("unclaimed");
+  });
+
+  test("a new engine requested for the instance clears names an old one left", async () => {
+    const f = await fixture();
+    await f.owner.action(api.provisioning.renameManagedEngine, { instanceId: f.instanceId, slug: "new-name" });
+    const row = await provisioningOf(f);
+    const { accountId, ownerId } = await f.t.run(async (ctx) => {
+      await ctx.db.patch(row?._id as NonNullable<typeof row>["_id"], { status: "deleted" });
+      await ctx.db.patch(f.instanceId, { clientId: undefined, hosting: "managed" });
+      const instance = await ctx.db.get(f.instanceId);
+      const account = await ctx.db.get(instance?.accountId as NonNullable<typeof instance>["accountId"]);
+      return {
+        accountId: account?._id as NonNullable<typeof account>["_id"],
+        ownerId: account?.ownerId as NonNullable<typeof account>["ownerId"],
+      };
+    });
+
+    await f.t.mutation(internal.provisioningInternal.reserveManagedInstance, {
+      accountId,
+      userId: ownerId,
+      slug: "next",
+      newRegistrationToken: "token",
+      newCreateRequestId: "request",
+    });
+
+    expect(await f.t.run((ctx) => ctx.db.query("engineHeldSlugs").collect())).toEqual([]);
   });
 
   test("a refused name can be asked for again, since each attempt has its own key", async () => {

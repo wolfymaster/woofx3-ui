@@ -271,8 +271,7 @@ export default defineSchema({
   // Names a managed engine answered to before a rename. The maintenance API
   // keeps each one routed to the engine and out of anyone else's reach until
   // the engine is deleted, so /u/<old name> keeps showing the same page. Rows
-  // outlive a torn-down engine only as dead ends: `instanceHoldingSlug` checks
-  // the engine still holds the name.
+  // go when the engine does, since the instance's next engine does not hold them.
   engineHeldSlugs: defineTable({
     slug: v.string(),
     instanceId: v.id("instances"),
