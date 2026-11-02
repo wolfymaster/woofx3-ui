@@ -128,7 +128,7 @@ export function ManagedEngineStep({ instanceId }: ManagedEngineStepProps) {
         </div>
 
         <p className="text-xs text-muted-foreground mt-1">
-          Your username is your address on woofx3. It cannot be changed later.
+          Your username is your address on woofx3. You can change it later, once every 30 days.
         </p>
       </div>
 
