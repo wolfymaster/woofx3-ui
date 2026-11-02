@@ -33,8 +33,8 @@ import {
   testOutcomeOf,
   waitingHelp,
 } from "@/lib/overlay-onboarding";
-import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
 import { ALERTS_PATH } from "@/lib/setup-steps";
+import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
 import { cn } from "@/lib/utils";
 
 const TICK_MS = 1_000;
