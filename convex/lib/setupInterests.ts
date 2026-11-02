@@ -49,7 +49,7 @@ export const SETUP_INTERESTS: readonly SetupInterest[] = [
   {
     id: "manage-stream",
     label: "Manage my stream from here",
-    description: "Change your title and category, moderate chat and go live from the dashboard.",
+    description: "Change your title and category and moderate chat from the dashboard.",
     needs: [STARTER_MODULES.twitch],
     packIds: [],
   },
@@ -127,7 +127,7 @@ export function buildDashboardPreset(interestIds: readonly string[]): PresetWidg
   }
   controls.push("stream-info");
   if (wants("manage-stream")) {
-    controls.push("go-live", "moderation");
+    controls.push("moderation");
   }
   if (wants("switch-obs-scenes")) {
     controls.push("stream-preview");
