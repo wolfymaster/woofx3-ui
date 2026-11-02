@@ -1596,6 +1596,30 @@ export interface MarketplaceBundleInstall {
 }
 
 /** Whether a starter-pack item is in place on the engine. */
+export type DefaultSeedItemStatus = "installed" | "pending" | "failed";
+
+/** Where an instance's default overlay scene and alerts stand. */
+export interface DefaultSeedStatus {
+  scene: {
+    status: DefaultSeedItemStatus;
+    /** Matches `SceneRecord.engineSceneId`. Kept after the streamer deletes the scene, which is then not in the scenes read. */
+    engineSceneId?: string;
+    error?: string;
+  };
+  alerts: {
+    /** `DEFAULT_ALERT_ITEMS` id: follow, sub, resub, gift or bits. */
+    itemId: string;
+    /** The event its workflow listens for, e.g. `channel.follow`. */
+    event: string;
+    status: DefaultSeedItemStatus;
+    /** Kept after the streamer deletes the workflow, which is then not in the workflows read. */
+    engineWorkflowId?: string;
+    error?: string;
+  }[];
+  /** The engine's woofx3 module predates the images, so the alerts were seeded with text alone. */
+  alertImagesOmitted: boolean;
+}
+
 export type StarterPackItemState = "installed" | "installing" | "conflict" | "available";
 
 /** How installing one starter-pack item went. */

@@ -37,6 +37,7 @@ import type {
   DashboardPanelWidget,
   DashboardRailWidget,
   DeclaredResourceKind,
+  DefaultSeedStatus,
   EngineAlert,
   EngineCapabilityReport,
   EngineConnectionTest,
@@ -255,6 +256,7 @@ export interface EngineGateway {
   readonly moduleOAuth: ModuleOAuthGateway;
   readonly setupImports: SetupImportsGateway;
   readonly starterPacks: StarterPacksGateway;
+  readonly defaultSeed: DefaultSeedGateway;
   readonly adBreaks: AdBreaksGateway;
   readonly moderation: ModerationGateway;
   readonly pins: PinsGateway;
@@ -879,6 +881,18 @@ export interface StarterPacksGateway {
   useStatus(): Live<Record<string, StarterPackItemState> | null>;
   /** Installs a pack's items and resolves with how each went; an item can still be pending on the engine. */
   useInstallRequest(): (install: StarterPackInstall) => Promise<StarterPackInstallOutcome[]>;
+}
+
+/**
+ * The overlay scene and alerts a new engine starts with
+ * (`shared/default-seed.ts`). Each is seeded once: what the streamer deleted
+ * is not recreated by applying again.
+ */
+export interface DefaultSeedGateway {
+  /** Where the seed stands; null when the caller cannot see the instance. */
+  useStatus(): Live<DefaultSeedStatus | null>;
+  /** Applies the seed again, for what is pending or failed. Resolves once it has been asked for, not once it is done. */
+  useApplyRequest(): () => Promise<void>;
 }
 
 // The namespaces below act on the linked Twitch channel as its broadcaster.

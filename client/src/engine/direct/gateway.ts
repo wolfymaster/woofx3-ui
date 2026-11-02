@@ -6,6 +6,7 @@ import { directAlertQueueGateway } from "./alert-queue";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
+import { directDefaultSeedGateway } from "./default-seed";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
 import { directFormSubmissionsGateway } from "./form-submissions";
@@ -79,6 +80,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     moduleOAuth,
     setupImports,
     starterPacks: directStarterPacksGateway(runtime),
+    defaultSeed: directDefaultSeedGateway(runtime),
     adBreaks: directAdBreaksGateway(runtime),
     moderation: directModerationGateway(runtime),
     pins: directPinsGateway(runtime),

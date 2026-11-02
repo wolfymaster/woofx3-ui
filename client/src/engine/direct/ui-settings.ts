@@ -17,6 +17,7 @@ import type { DirectRuntime } from "./runtime";
 export const UI_SETTING_NAMESPACES = {
   pageIntros: "pageIntros",
   starterPacks: "starterPacks",
+  defaultSeed: "defaultSeed",
   dashboardLayouts: "dashboardLayouts",
   dashboardNotes: "dashboardNotes",
   dashboardCounters: "dashboardCounters",
