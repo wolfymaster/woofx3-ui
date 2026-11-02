@@ -5,7 +5,7 @@ import { newBackend } from "./lib/convexTest.testing";
 
 const ITEM = { packId: DEFAULT_ALERTS_PACK_ID, itemId: "follow", kind: "workflow" as const };
 
-async function instanceWithOwner(t: ReturnType<typeof newBackend>, setup: { interestsChosenAt?: number } = {}) {
+async function instanceWithOwner(t: ReturnType<typeof newBackend>) {
   return t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", { name: "Owner" });
     const accountId = await ctx.db.insert("accounts", { name: "Acct", ownerId, createdAt: 1 });
@@ -28,7 +28,7 @@ async function instanceWithOwner(t: ReturnType<typeof newBackend>, setup: { inte
       expiresAt: 1,
       scopes: [],
     });
-    await ctx.db.insert("instanceSetup", { instanceId, platforms: [], platformsChosenAt: 1, updatedAt: 1, ...setup });
+    await ctx.db.insert("instanceSetup", { instanceId, platforms: [], platformsChosenAt: 1, updatedAt: 1 });
     return { instanceId, ownerId };
   });
 }
@@ -95,9 +95,9 @@ describe("the status read", () => {
 });
 
 describe("the first dashboard panel", () => {
-  async function completedPanels(setup: { interestsChosenAt?: number }) {
+  async function completedPanels() {
     const t = newBackend();
-    const { instanceId, ownerId } = await instanceWithOwner(t, setup);
+    const { instanceId, ownerId } = await instanceWithOwner(t);
     await t.withIdentity({ subject: `${ownerId}|session` }).mutation(api.setup.complete, { instanceId });
     return t.run(async (ctx) => {
       const layout = await ctx.db
@@ -108,15 +108,10 @@ describe("the first dashboard panel", () => {
     });
   }
 
-  test("is the default panel when setup asked no question", async () => {
-    const [panel] = await completedPanels({});
+  test("is the default panel", async () => {
+    const [panel] = await completedPanels();
     expect(panel?.layoutId).toBe("dock-activity-controls");
     expect(panel?.widgets).toEqual(DEFAULT_DASHBOARD_WIDGETS.map((widget) => ({ ...widget })));
-  });
-
-  test("follows the interests when the wizard asked them", async () => {
-    const [panel] = await completedPanels({ interestsChosenAt: 1 });
-    expect(panel?.widgets.map((widget) => widget.type)).toContain("stream-status");
   });
 
   test("a finish outranks a skip either way round, and needs an admin", async () => {

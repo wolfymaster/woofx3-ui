@@ -10,7 +10,6 @@ import { requireInstanceRole } from "./lib/instanceAccess";
 import { isMaintenanceConfigured } from "./lib/maintenanceClient";
 import { isPreviewDeployment } from "./lib/previewDeployment";
 import { seedsDefaults } from "./lib/setupApply";
-import { buildDashboardPreset, PRESET_LAYOUT_ID } from "./lib/setupInterests";
 import {
   type ChosenSetupPlatform,
   curatedForDeployment,
@@ -40,7 +39,6 @@ export interface SetupStatus {
   platforms: ChosenSetupPlatform[];
   /** Marketplace ids of the platforms setup cannot finish without. */
   requiredModuleIds: string[];
-  interests: string[];
   completedAt: number | null;
   /** The instance's Twitch link, whether or not its tokens still work. */
   twitchUsername: string | null;
@@ -164,7 +162,6 @@ export const status = query({
       platforms: row?.platforms ?? [],
       platformsNeedingSettings,
       requiredModuleIds: curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId),
-      interests: row?.interests ?? [],
       completedAt: row?.completedAt ?? null,
       twitchUsername: twitchLink?.platformUsername ?? null,
       twitchRequired: twitchRequiredFor(row),
@@ -215,16 +212,9 @@ export const choosePlatforms = mutation({
 
 /**
  * Gives the user a first dashboard panel, unless they already have one: a
- * dashboard they have arranged is never replaced. Setup that asked about
- * interests builds it from the answer, which is what the wizard previewed;
- * otherwise it is the default panel.
+ * dashboard they have arranged is never replaced.
  */
-async function seedDashboard(
-  ctx: MutationCtx,
-  instanceId: Id<"instances">,
-  userId: Id<"users">,
-  row: Doc<"instanceSetup">
-) {
+async function seedDashboard(ctx: MutationCtx, instanceId: Id<"instances">, userId: Id<"users">) {
   const existing = await ctx.db
     .query("dashboardLayouts")
     .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
@@ -232,11 +222,14 @@ async function seedDashboard(
   if (existing && (existing.panels ?? []).length > 0) {
     return;
   }
-  const panel =
-    row.interestsChosenAt === undefined
-      ? { layoutId: DEFAULT_DASHBOARD_LAYOUT_ID, widgets: DEFAULT_DASHBOARD_WIDGETS.map((widget) => ({ ...widget })) }
-      : { layoutId: PRESET_LAYOUT_ID, widgets: buildDashboardPreset(row.interests ?? []) };
-  const panels = [{ id: crypto.randomUUID(), name: "Main", ...panel }];
+  const panels = [
+    {
+      id: crypto.randomUUID(),
+      name: "Main",
+      layoutId: DEFAULT_DASHBOARD_LAYOUT_ID,
+      widgets: DEFAULT_DASHBOARD_WIDGETS.map((widget) => ({ ...widget })),
+    },
+  ];
   if (existing) {
     await ctx.db.patch(existing._id, { panels });
     return;
@@ -277,7 +270,7 @@ export async function finishFirstRun(ctx: MutationCtx, row: Doc<"instanceSetup">
   }
   const now = Date.now();
   await ctx.db.patch(row._id, { completedAt: now, completedByUserId: userId, updatedAt: now });
-  await seedDashboard(ctx, instanceId, userId, row);
+  await seedDashboard(ctx, instanceId, userId);
   await scheduleApplyIfRegistered(ctx, instanceId);
   // An import queued during setup waits for setup to finish before applying.
   await ctx.scheduler.runAfter(0, internal.setupImports.resumeQueued, { instanceId });
