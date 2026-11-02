@@ -2,13 +2,15 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type ActionCtx, action, query } from "./_generated/server";
+import { type ActionCtx, action, internalAction, query } from "./_generated/server";
+import { slugCandidates } from "./lib/firstRun";
 import {
   createEngine,
   currentRelease,
   getEngine,
   isMaintenanceConfigured,
   MAINTENANCE_OWNER_TYPE,
+  MaintenanceApiError,
   normalizeSlug,
   slugAvailability,
 } from "./lib/maintenanceClient";
@@ -24,6 +26,7 @@ import {
 } from "./lib/managedEngineActions";
 import { isUpgrade } from "./lib/releaseVersion";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { logger } from "./logger";
 
 /**
  * Managed engines: the public surface onboarding and the admin page call.
@@ -181,63 +184,126 @@ export const checkSlug = action({
 });
 
 /**
- * Create a managed engine for an account.
+ * Asks the maintenance API for an engine under `slug`.
  *
- * The provisioning row is written before the maintenance API is called, so its
- * id can be the idempotency key: a retried action returns the original run
- * rather than provisioning a second engine. `externalRef` carries the Convex
- * instance id, which is how callbacks find their way back to this row.
+ * The provisioning row is written before the call, and `externalRef` carries
+ * the Convex instance id, which is how callbacks find their way back to it.
+ * Every attempt mints its own idempotency key: the maintenance API stores
+ * refusals under a key and refuses a key reused with a different request, so a
+ * second slug or a fresh registration token under one key could never succeed.
+ *
+ * shortcut: a response lost after the maintenance API committed leaves an engine
+ * no row knows about, holding the slug; the owner's next attempt moves to
+ * another slug. Reconcile through listing the owner's engines if this is seen.
  */
+async function requestEngine(
+  ctx: ActionCtx,
+  {
+    accountId,
+    userId,
+    slug,
+    twitchChannel,
+  }: { accountId: Id<"accounts">; userId: Id<"users">; slug: string; twitchChannel: string | null }
+): Promise<{ instanceId: Id<"instances">; engineId: string }> {
+  const siteUrl = process.env.CONVEX_SITE_URL;
+  if (!siteUrl) {
+    throw new Error("CONVEX_SITE_URL is not configured");
+  }
+
+  const normalizedSlug = normalizeSlug(slug);
+  const registrationToken = generateRegistrationToken();
+  const reserved = await ctx.runMutation(internal.provisioningInternal.reserveManagedInstance, {
+    accountId,
+    userId,
+    slug: normalizedSlug,
+    registrationToken,
+  });
+
+  try {
+    const created = await createEngine(
+      {
+        slug: normalizedSlug,
+        owner: { type: MAINTENANCE_OWNER_TYPE, ref: accountId },
+        externalRef: reserved.instanceId,
+        registrationToken,
+        callbackUrl: `${siteUrl}/api/webhooks/maintenance`,
+        ...(twitchChannel ? { twitchChannel } : {}),
+      },
+      crypto.randomUUID()
+    );
+    await ctx.runMutation(internal.provisioningInternal.recordEngineRequested, {
+      provisioningId: reserved.provisioningId,
+      maintenanceEngineId: created.engine.id,
+      runId: created.run.id,
+      steps: stepsOf(created.run),
+      publicUrl: created.engine.publicUrl ?? undefined,
+    });
+    return { instanceId: reserved.instanceId, engineId: created.engine.id };
+  } catch (error) {
+    await ctx.runMutation(internal.provisioningInternal.recordProvisioningError, {
+      provisioningId: reserved.provisioningId,
+      error: userFacingError(error),
+    });
+    throw error;
+  }
+}
+
+/** A slug someone else got to first, or one the maintenance API will never accept. */
+function isSlugRefused(error: unknown): boolean {
+  return error instanceof MaintenanceApiError && (error.code === "slug_taken" || error.code === "slug_invalid");
+}
+
+/**
+ * Starts the instance's engine under a username derived from its Twitch login.
+ * The create call decides each candidate, so one lost to a race moves to the
+ * next. With no candidate left, the connect screen asks the user for a name. An
+ * availability check that cannot run does not rule a candidate out, since the
+ * create call answers the same question; any other failure is on the row, where
+ * the provisioning bar offers Try again.
+ */
+async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
+  const { accountId, ownerId, login } = await ctx.runQuery(internal.provisioningInternal.firstEngineFacts, {
+    instanceId,
+  });
+  for (const slug of slugCandidates(login)) {
+    const available = await slugAvailability(slug).catch((error: unknown) => {
+      logger.warn("provisioning: slug check failed", { slug, error: userFacingError(error) });
+      return { available: true };
+    });
+    if (!available.available) {
+      continue;
+    }
+    try {
+      await requestEngine(ctx, { accountId, userId: ownerId, slug, twitchChannel: login });
+      return;
+    } catch (error) {
+      if (!isSlugRefused(error)) {
+        throw error;
+      }
+    }
+  }
+  await ctx.runMutation(internal.provisioningInternal.markUsernameNeeded, { instanceId });
+}
+
+/** Scheduled when setup finishes on a managed instance with no engine yet (`setup.finishFirstRun`). */
+export const startFirstEngine = internalAction({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    await startDerivedEngine(ctx, instanceId);
+  },
+});
+
+/** Create a managed engine under a username the user chose, the connect screen's last resort. */
 export const startManagedEngine = action({
-  args: { accountId: v.id("accounts"), slug: v.string() },
-  handler: async (ctx, { accountId, slug }): Promise<{ instanceId: Id<"instances">; engineId: string }> => {
+  args: { instanceId: v.id("instances"), slug: v.string() },
+  handler: async (ctx, { instanceId, slug }): Promise<{ instanceId: Id<"instances">; engineId: string }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const siteUrl = process.env.CONVEX_SITE_URL;
-    if (!siteUrl) {
-      throw new Error("CONVEX_SITE_URL is not configured");
-    }
-
-    const normalizedSlug = normalizeSlug(slug);
-    const registrationToken = generateRegistrationToken();
-    const reserved = await ctx.runMutation(internal.provisioningInternal.reserveManagedInstance, {
-      accountId,
-      userId,
-      slug: normalizedSlug,
-      registrationToken,
-    });
-
-    const twitchChannel = await ctx.runQuery(internal.users.twitchChannelForUser, { userId });
-
-    try {
-      const created = await createEngine(
-        {
-          slug: normalizedSlug,
-          owner: { type: MAINTENANCE_OWNER_TYPE, ref: accountId },
-          externalRef: reserved.instanceId,
-          registrationToken,
-          callbackUrl: `${siteUrl}/api/webhooks/maintenance`,
-          ...(twitchChannel ? { twitchChannel } : {}),
-        },
-        reserved.provisioningId
-      );
-      await ctx.runMutation(internal.provisioningInternal.recordEngineRequested, {
-        provisioningId: reserved.provisioningId,
-        maintenanceEngineId: created.engine.id,
-        runId: created.run.id,
-        steps: stepsOf(created.run),
-        publicUrl: created.engine.publicUrl ?? undefined,
-      });
-      return { instanceId: reserved.instanceId, engineId: created.engine.id };
-    } catch (error) {
-      await ctx.runMutation(internal.provisioningInternal.recordProvisioningError, {
-        provisioningId: reserved.provisioningId,
-        error: userFacingError(error),
-      });
-      throw error;
-    }
+    const { accountId, login } = await ctx.runQuery(internal.provisioningInternal.firstEngineFacts, { instanceId });
+    const twitchChannel = login ?? (await ctx.runQuery(internal.users.twitchChannelForUser, { userId }));
+    return requestEngine(ctx, { accountId, userId, slug, twitchChannel });
   },
 });
 
@@ -251,6 +317,11 @@ export const retry = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ retried: RetryKind }> => {
     const { row } = await requireManagedRow(ctx, instanceId);
+    // Never accepted by the maintenance API, so there is no run to resume.
+    if (row.status === "failed" && !row.maintenanceEngineId) {
+      await startDerivedEngine(ctx, instanceId);
+      return { retried: "provisioning" };
+    }
     return retryManagedEngineRow(ctx, row);
   },
 });

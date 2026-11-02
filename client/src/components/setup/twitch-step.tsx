@@ -50,7 +50,7 @@ export function TwitchStep({ status, onContinue }: TwitchStepProps) {
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button
         className="w-full"
-        onClick={() => void connect(setupStepPath("twitch"))}
+        onClick={() => void connect(setupStepPath("connect"))}
         disabled={starting}
         data-testid="button-connect-twitch"
       >

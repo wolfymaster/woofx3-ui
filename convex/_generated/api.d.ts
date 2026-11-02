@@ -95,6 +95,7 @@ import type * as lib_featureFlagAccess from "../lib/featureFlagAccess.js";
 import type * as lib_featureFlags from "../lib/featureFlags.js";
 import type * as lib_feedback from "../lib/feedback.js";
 import type * as lib_fieldOptions from "../lib/fieldOptions.js";
+import type * as lib_firstRun from "../lib/firstRun.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
 import type * as lib_hostedStorage from "../lib/hostedStorage.js";
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
@@ -384,6 +385,7 @@ declare const fullApi: ApiFromModules<{
   "lib/featureFlags": typeof lib_featureFlags;
   "lib/feedback": typeof lib_feedback;
   "lib/fieldOptions": typeof lib_fieldOptions;
+  "lib/firstRun": typeof lib_firstRun;
   "lib/gettingStarted": typeof lib_gettingStarted;
   "lib/hostedStorage": typeof lib_hostedStorage;
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;

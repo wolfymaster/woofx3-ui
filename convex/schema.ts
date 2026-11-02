@@ -472,6 +472,9 @@ export default defineSchema({
     platform: v.string(),
     platformUserId: v.string(),
     platformUsername: v.string(),
+    // The account's login, unlike platformUsername, which is its display name
+    // and may hold characters a URL cannot. Absent on links made before it was kept.
+    platformLogin: v.optional(v.string()),
     profileImageUrl: v.optional(v.string()),
     channelId: v.string(),
     sealedAccessToken: v.string(),
@@ -591,6 +594,11 @@ export default defineSchema({
     interestsChosenAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     completedByUserId: v.optional(v.id("users")),
+    // A preview deployment's "Skip for now" on the Twitch connection.
+    twitchSkippedAt: v.optional(v.number()),
+    // No username could be derived for the engine, so the connect screen asks
+    // for one. Cleared when an engine is requested.
+    usernameNeededAt: v.optional(v.number()),
     // What applying the choices has done so far (convex/setupApply.ts): one
     // entry per chosen module and per starter pack. Applying runs once the
     // setup is complete and the engine is registered, and again on retry.
@@ -1327,6 +1335,7 @@ export default defineSchema({
       v.object({
         platformUserId: v.string(),
         platformUsername: v.string(),
+        login: v.optional(v.string()),
         profileImageUrl: v.optional(v.string()),
         // Sealed like platformLinks, which they are copied into.
         sealedAccessToken: v.string(),

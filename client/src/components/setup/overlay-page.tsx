@@ -106,7 +106,7 @@ function headingOf(phase: OverlayPhase): string {
 function statusOf(phase: OverlayPhase, engine: EngineBuild): string {
   switch (phase.name) {
     case "building":
-      return engine.stage === "building" ? `${engine.message}. This takes a few minutes.` : "";
+      return engine.stage === "building" ? `${engine.message}. You can close this tab; it keeps going.` : "";
     case "preparing":
       return "Adding your alerts for follows, subs and bits.";
     case "build-failed":

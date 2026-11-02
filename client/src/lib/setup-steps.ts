@@ -3,11 +3,7 @@
 // on the page the user was on.
 
 export const SETUP_STEPS = [
-  { id: "platforms", title: "Choose your platforms" },
-  { id: "twitch", title: "Connect Twitch" },
-  { id: "import", title: "Bring your setup" },
-  { id: "interests", title: "What do you want woofx3 to do?" },
-  { id: "dashboard", title: "Your dashboard" },
+  { id: "connect", title: "Connect Your Streaming Platform" },
   { id: "overlay", title: "Your overlay" },
   { id: "finish", title: "All set" },
 ] as const;
@@ -28,50 +24,47 @@ export function setupStepIndex(step: SetupStepId): number {
 
 /** The parts of setup status that decide which step is next. */
 export interface SetupProgress {
-  platformsChosenAt: number | null;
   twitchUsername: string | null;
-  /** False only on a preview deployment whose chosen platforms leave Twitch out. */
+  /** False only on a preview deployment where the connection was skipped. */
   twitchRequired: boolean;
-  importChosenAt: number | null;
-  interestsChosenAt: number | null;
+  /** No username could be derived, so the connect page asks for one. */
+  usernameNeeded: boolean;
   completedAt: number | null;
   overlayPending: boolean;
 }
 
 /**
- * The first step not done yet. Steps are done in order, so a user sent to a
- * later step before they got there lands here instead. Skipping the import or
- * the interests question records that it was passed, and the dashboard step is
- * done by finishing setup, so every step has a record of being passed.
+ * Whether the connect page has nothing left to do. Connecting finishes setup
+ * on the server, so no later page can leave the account half set up.
  */
+function isConnected(progress: SetupProgress): boolean {
+  const twitchSettled = !progress.twitchRequired || progress.twitchUsername !== null;
+  return twitchSettled && progress.completedAt !== null && !progress.usernameNeeded;
+}
+
+/** Where a user with no particular page in mind belongs. */
 export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
-  if (progress.platformsChosenAt === null) {
-    return "platforms";
-  }
-  // Where Twitch is optional its page can be skipped, and leaves no record.
-  if (progress.twitchRequired && progress.twitchUsername === null) {
-    return "twitch";
-  }
-  // Answering the interests question passes the import question too, so a
-  // setup that got past it before it was asked does not go back to it.
-  if (progress.importChosenAt === null && progress.interestsChosenAt === null) {
-    return "import";
-  }
-  if (progress.interestsChosenAt === null) {
-    return "interests";
-  }
-  if (progress.completedAt === null) {
-    return "dashboard";
+  if (!isConnected(progress)) {
+    return "connect";
   }
   // Past the overlay page, the last page opens the dashboard once the engine is
   // registered, so a skip made during the build comes back to the wait.
   return progress.overlayPending ? "overlay" : "finish";
 }
 
-/** `requested` when the user may be on it, otherwise the first step still to do. */
+/**
+ * `requested` when the user may be on it. Nothing comes before connecting, and
+ * the connect page moves on by itself once it is done, which is how returning
+ * from Twitch continues with no click.
+ */
 export function allowedSetupStep(requested: SetupStepId, progress: SetupProgress): SetupStepId {
-  const firstIncomplete = firstIncompleteStep(progress);
-  return setupStepIndex(requested) <= setupStepIndex(firstIncomplete) ? requested : firstIncomplete;
+  if (!isConnected(progress)) {
+    return "connect";
+  }
+  if (requested === "connect" || (requested === "finish" && progress.overlayPending)) {
+    return firstIncompleteStep(progress);
+  }
+  return requested;
 }
 
 /** A navigation the wizard should make: forward to the next step, or back to one the user may be on. */

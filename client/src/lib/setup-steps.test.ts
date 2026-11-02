@@ -1,97 +1,92 @@
 import { describe, expect, test } from "bun:test";
 import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgress, setupRedirect } from "./setup-steps";
 
-const nothingDone: SetupProgress = {
-  platformsChosenAt: null,
+const fresh: SetupProgress = {
   twitchUsername: null,
   twitchRequired: true,
-  importChosenAt: null,
-  interestsChosenAt: null,
+  usernameNeeded: false,
   completedAt: null,
   overlayPending: false,
 };
-const platformsChosen: SetupProgress = { ...nothingDone, platformsChosenAt: 1 };
-const twitchConnected: SetupProgress = { ...platformsChosen, twitchUsername: "streamer" };
-const importChosen: SetupProgress = { ...twitchConnected, importChosenAt: 2 };
-const interestsChosen: SetupProgress = { ...importChosen, interestsChosenAt: 2 };
-const completed: SetupProgress = { ...interestsChosen, completedAt: 3 };
-const owesOverlay: SetupProgress = { ...completed, overlayPending: true };
+const connected: SetupProgress = { ...fresh, twitchUsername: "streamer", completedAt: 1, overlayPending: true };
+const skipped: SetupProgress = { ...fresh, twitchRequired: false, completedAt: 1, overlayPending: true };
+const passedOverlay: SetupProgress = { ...connected, overlayPending: false };
+
+describe("the overlay page", () => {
+  test("is owed before the last page, which a passed setup returns to", () => {
+    expect(firstIncompleteStep(passedOverlay)).toBe("finish");
+    expect(allowedSetupStep("finish", connected)).toBe("overlay");
+    expect(allowedSetupStep("finish", passedOverlay)).toBe("finish");
+  });
+
+  test("stays open after it has been passed", () => {
+    expect(allowedSetupStep("overlay", passedOverlay)).toBe("overlay");
+  });
+
+  test("waits for the record before going on", () => {
+    expect(setupRedirect("overlay", "finish", connected)).toBeNull();
+    expect(setupRedirect("overlay", "finish", passedOverlay)).toEqual({ step: "finish", replace: false });
+  });
+});
 
 describe("firstIncompleteStep", () => {
-  test("walks the steps in order", () => {
-    expect(firstIncompleteStep(nothingDone)).toBe("platforms");
-    expect(firstIncompleteStep(platformsChosen)).toBe("twitch");
-    expect(firstIncompleteStep(twitchConnected)).toBe("import");
-    expect(firstIncompleteStep(importChosen)).toBe("interests");
-    expect(firstIncompleteStep(interestsChosen)).toBe("dashboard");
-    expect(firstIncompleteStep(owesOverlay)).toBe("overlay");
-    expect(firstIncompleteStep(completed)).toBe("finish");
-  });
-
-  test("does not send a setup back to the import question once interests are answered", () => {
-    expect(firstIncompleteStep({ ...twitchConnected, interestsChosenAt: 2 })).toBe("dashboard");
-  });
-
-  test("passes the Twitch page unconnected where Twitch is optional", () => {
-    expect(firstIncompleteStep({ ...platformsChosen, twitchRequired: false })).toBe("import");
-    expect(allowedSetupStep("finish", { ...platformsChosen, twitchRequired: false })).toBe("import");
-  });
-
-  test("asks for platforms before Twitch even when Twitch is already connected", () => {
-    expect(firstIncompleteStep({ ...nothingDone, twitchUsername: "streamer" })).toBe("platforms");
+  test.each<{ name: string; progress: SetupProgress; step: "connect" | "overlay" | "finish" }>([
+    { name: "a new user connects", progress: fresh, step: "connect" },
+    { name: "a connected user is on the overlay", progress: connected, step: "overlay" },
+    { name: "a preview that skipped is on the overlay", progress: skipped, step: "overlay" },
+    { name: "a link alone does not finish setup", progress: { ...fresh, twitchUsername: "streamer" }, step: "connect" },
+    {
+      name: "a username still needed holds connect",
+      progress: { ...connected, usernameNeeded: true },
+      step: "connect",
+    },
+    { name: "a lost link goes back to connect", progress: { ...connected, twitchUsername: null }, step: "connect" },
+  ])("$name", ({ progress, step }) => {
+    expect(firstIncompleteStep(progress)).toBe(step);
   });
 });
 
 describe("allowedSetupStep", () => {
-  test("keeps a step at or before the first incomplete one", () => {
-    expect(allowedSetupStep("platforms", completed)).toBe("platforms");
-    expect(allowedSetupStep("twitch", platformsChosen)).toBe("twitch");
-    expect(allowedSetupStep("interests", completed)).toBe("interests");
-    expect(allowedSetupStep("overlay", completed)).toBe("overlay");
+  test("nothing comes before connecting", () => {
+    expect(allowedSetupStep("overlay", fresh)).toBe("connect");
+    expect(allowedSetupStep("finish", fresh)).toBe("connect");
   });
 
-  test("moves a step past the first incomplete one back to it", () => {
-    expect(allowedSetupStep("finish", platformsChosen)).toBe("twitch");
-    expect(allowedSetupStep("twitch", nothingDone)).toBe("platforms");
-    expect(allowedSetupStep("finish", interestsChosen)).toBe("dashboard");
-    expect(allowedSetupStep("overlay", interestsChosen)).toBe("dashboard");
+  test("the connect page moves on once it is done", () => {
+    expect(allowedSetupStep("connect", connected)).toBe("overlay");
+  });
+
+  test("later pages stay where they are, so a refresh keeps the place", () => {
+    expect(allowedSetupStep("overlay", connected)).toBe("overlay");
+    expect(allowedSetupStep("finish", passedOverlay)).toBe("finish");
   });
 });
 
 describe("isSetupStepId", () => {
-  test("recognizes step ids only", () => {
-    expect(isSetupStepId("twitch")).toBe(true);
-    expect(isSetupStepId("nope")).toBe(false);
+  test("knows the steps and no others", () => {
+    expect(isSetupStepId("connect")).toBe(true);
+    expect(isSetupStepId("twitch")).toBe(false);
     expect(isSetupStepId(undefined)).toBe(false);
   });
 });
 
 describe("setupRedirect", () => {
-  test("stays on an allowed step", () => {
-    expect(setupRedirect("interests", null, importChosen)).toBeNull();
-    expect(setupRedirect("platforms", null, completed)).toBeNull();
+  test("a retired page's URL, read as no step, lands where the user belongs", () => {
+    expect(setupRedirect(null, null, fresh)).toEqual({ step: "connect", replace: true });
+    expect(setupRedirect(null, null, connected)).toEqual({ step: "overlay", replace: true });
   });
 
-  test("sends a missing or too-early step to the first one still to do, replacing it in the history", () => {
-    expect(setupRedirect(null, null, platformsChosen)).toEqual({ step: "twitch", replace: true });
-    expect(setupRedirect("finish", null, interestsChosen)).toEqual({ step: "dashboard", replace: true });
+  test("returning from Twitch moves on with no click, leaving no history entry", () => {
+    expect(setupRedirect("connect", null, connected)).toEqual({ step: "overlay", replace: true });
   });
 
-  test("waits on the finished step until the progress records it", () => {
-    expect(setupRedirect("platforms", "twitch", nothingDone)).toBeNull();
-    expect(setupRedirect("interests", "dashboard", importChosen)).toBeNull();
-    expect(setupRedirect("dashboard", "overlay", interestsChosen)).toBeNull();
+  test("stays on an allowed page", () => {
+    expect(setupRedirect("connect", null, fresh)).toBeNull();
+    expect(setupRedirect("overlay", null, connected)).toBeNull();
   });
 
-  test("goes on, as a new history entry, once the progress records the finished step", () => {
-    expect(setupRedirect("platforms", "twitch", platformsChosen)).toEqual({ step: "twitch", replace: false });
-    expect(setupRedirect("import", "interests", importChosen)).toEqual({ step: "interests", replace: false });
-    expect(setupRedirect("interests", "dashboard", interestsChosen)).toEqual({ step: "dashboard", replace: false });
-    expect(setupRedirect("dashboard", "overlay", completed)).toEqual({ step: "overlay", replace: false });
-    expect(setupRedirect("overlay", "finish", completed)).toEqual({ step: "finish", replace: false });
-  });
-
-  test("stays once it has arrived", () => {
-    expect(setupRedirect("dashboard", "dashboard", interestsChosen)).toBeNull();
+  test("a finished page goes on once progress allows it", () => {
+    expect(setupRedirect("overlay", "finish", passedOverlay)).toEqual({ step: "finish", replace: false });
+    expect(setupRedirect("connect", "overlay", fresh)).toBeNull();
   });
 });
