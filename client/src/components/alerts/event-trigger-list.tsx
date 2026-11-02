@@ -2,6 +2,7 @@ import { ChevronRight, ExternalLink, Plus, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { type SavedTrigger, TriggerEditor } from "@/components/alerts/trigger-editor";
+import { TriggerGroupCard } from "@/components/alerts/trigger-group-card";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,6 @@ import { useEngineScope } from "@/engine/context";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
 import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertSectionAnchor } from "@/lib/alert-groups";
 import {
@@ -25,19 +25,15 @@ import {
   newTriggerTree,
   nextTriggerOrder,
   storedTriggerCount,
-  type TriggerGroup,
   type TriggerPin,
   triggerAimsAt,
   triggerFieldValues,
-  triggerSourceLabel,
   unownedConditionPhrases,
 } from "@/lib/alert-triggers";
 import { type OptionLabels, type SentencePart, sentenceParts, sentenceText } from "@/lib/condition-sentence";
 import { isInternalSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
-import { stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
-import { resolveCatalogAction } from "@/lib/workflow-node-label";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 import { definitionToTree, type WorkflowTree } from "@/lib/workflow-tree";
 
@@ -81,9 +77,10 @@ const NEW_TRIGGER = "new";
 /**
  * Every trigger for one event, as cards in the order they run.
  *
- * Each trigger is a workflow of its own (lib/alert-triggers.ts). A card reads as the
- * trigger's sentence and its steps; opening it shows the step editor, with the sentence as
- * the "When" card. Every trigger whose sentence holds runs, top to bottom.
+ * A card is one trigger, however many workflows start on it (lib/alert-triggers.ts). It reads
+ * as the sentence and what runs; opening it shows the step editor, with the sentence as the
+ * "When" card, and the modules' workflows after it. Every trigger whose sentence holds runs,
+ * top to bottom.
  *
  * A workflow the step editor can't read is still listed and still opens, saying why it
  * can't be edited here. One holding several triggers, a condition task each, is one card
@@ -141,13 +138,14 @@ export function EventTriggerList({
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   const startDraft = useCallback(
-    (seed?: ActionPreset) => {
+    (seed?: ActionPreset, conditions?: EventTrigger["conditions"]) => {
       setDraft(
         newTriggerTree({
           triggerPreset,
           conditionFields,
           order: nextTriggerOrder(all),
           pin,
+          conditions,
           seed,
           aim: seed && actionScope ? aimFor(seed, actionScope) : undefined,
         })
@@ -174,6 +172,7 @@ export function EventTriggerList({
     }
   }, [draftArrived, createdId]);
 
+  const toggleCard = (id: string) => setExpandedId(expandedId === id ? null : id);
   const Heading = headingLevel;
   const ListHeading = headingLevel === "h1" ? "h2" : "h3";
   const count = groups.length;
@@ -188,36 +187,30 @@ export function EventTriggerList({
       (phrase): SentencePart => ({ kind: "text", text: ` and ${phrase}` })
     ),
   ];
-  const memberCard = (trigger: EventTrigger, sentence: SentencePart[], source?: string) => (
-    <TriggerCard
-      key={trigger.row.engineWorkflowId}
-      trigger={trigger}
-      triggerPreset={triggerPreset}
-      sentence={sentence}
-      source={source}
-      isExpanded={expandedId === trigger.row.engineWorkflowId}
-      onToggle={() => setExpandedId(expandedId === trigger.row.engineWorkflowId ? null : trigger.row.engineWorkflowId)}
-      editor={(read) => (
-        <TriggerEditor
-          triggerPreset={triggerPreset}
-          conditionFields={conditionFields}
-          saved={
-            {
-              engineWorkflowId: trigger.row.engineWorkflowId,
-              definition: trigger.definition,
-              revision: trigger.row.revision,
-            } as SavedTrigger
-          }
-          initialTree={read}
-          pin={pin}
-          loadedOptions={loadedOptions}
-          optionLabels={optionLabels}
-          onCreated={() => undefined}
-          onDeleted={() => setExpandedId(null)}
-        />
-      )}
-    />
-  );
+  const stepEditor = (steps: EventTrigger, alsoRuns: ReactNode) => {
+    const read = definitionToTree(steps.definition);
+    return read.editable ? (
+      <TriggerEditor
+        key={steps.row.engineWorkflowId}
+        triggerPreset={triggerPreset}
+        conditionFields={conditionFields}
+        saved={
+          {
+            engineWorkflowId: steps.row.engineWorkflowId,
+            definition: steps.definition,
+            revision: steps.row.revision,
+          } as SavedTrigger
+        }
+        initialTree={read.tree}
+        pin={pin}
+        loadedOptions={loadedOptions}
+        optionLabels={optionLabels}
+        onCreated={() => undefined}
+        onDeleted={() => setExpandedId(null)}
+        alsoRuns={alsoRuns}
+      />
+    ) : null;
+  };
 
   return (
     <section
@@ -322,18 +315,36 @@ export function EventTriggerList({
         ) : null}
 
         {instanceId &&
-          groups.map((group) =>
-            group.members.length === 1 ? (
-              memberCard(group.members[0], sentenceFor(group.conditions), sourceOfModule(group.members[0]))
-            ) : (
+          groups.map((group) => {
+            const sentence = sentenceFor(group.conditions);
+            const only = group.members[0];
+            if (group.members.length === 1 && !definitionToTree(only.definition).editable) {
+              return (
+                <UnreadableTriggerCard
+                  key={group.key}
+                  trigger={only}
+                  triggerPreset={triggerPreset}
+                  sentence={sentence}
+                  isExpanded={expandedId === only.row.engineWorkflowId}
+                  onToggle={() => toggleCard(only.row.engineWorkflowId)}
+                />
+              );
+            }
+            const held = group.members.map((member) => member.row.engineWorkflowId);
+            return (
               <TriggerGroupCard
-                key={group.key}
+                // The streamer's id, so changing When moves the open card rather than remounting its editor.
+                key={group.members.find((member) => !member.row.projectionKey)?.row.engineWorkflowId ?? group.key}
                 group={group}
-                sentence={sentenceFor(group.conditions)}
-                renderMember={(member) => memberCard(member, [], triggerSourceLabel(member))}
+                sentence={<SentenceText sentence={sentence} />}
+                title={sentenceText(sentence)}
+                isOpen={expandedId !== null && held.includes(expandedId)}
+                onToggle={() => setExpandedId(expandedId !== null && held.includes(expandedId) ? null : held[0])}
+                editor={stepEditor}
+                onAddSteps={() => startDraft(undefined, group.conditions)}
               />
-            )
-          )}
+            );
+          })}
 
         {instanceId && draft && (
           <article
@@ -367,11 +378,6 @@ function aimFor(seed: ActionPreset, scope: TriggerActionScope): TriggerPin | und
   return aimed ? { fieldId: aimed.fieldId, value: scope.value } : undefined;
 }
 
-/** A lone trigger only names its source when a module brought it; "Your steps" adds nothing there. */
-function sourceOfModule(trigger: EventTrigger): string | undefined {
-  return trigger.row.projectionKey ? triggerSourceLabel(trigger) : undefined;
-}
-
 function SentenceText({ sentence }: { sentence: SentencePart[] }) {
   return (
     <>
@@ -391,74 +397,18 @@ function SentenceText({ sentence }: { sentence: SentencePart[] }) {
   );
 }
 
-interface TriggerGroupCardProps {
-  group: TriggerGroup;
-  sentence: SentencePart[];
-  renderMember: (member: EventTrigger) => ReactNode;
-}
-
-/** One trigger several workflows share: its sentence, opening onto each source's steps in run order. */
-function TriggerGroupCard({ group, sentence, renderMember }: TriggerGroupCardProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const allOrdered = group.members.every((member) => member.order !== undefined);
-  return (
-    <article
-      className={cn("rounded-2xl border bg-card", isOpen && "border-foreground/20")}
-      data-testid={`trigger-group-${group.members[0].row.engineWorkflowId}`}
-    >
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
-        className="flex w-full items-center gap-2 py-2.5 pl-2 pr-2.5 text-left"
-      >
-        <span className="flex h-[52px] w-9 shrink-0 items-center justify-center">
-          <ChevronRight
-            className={cn("h-4 w-4 transition-transform duration-150", isOpen && "rotate-90")}
-            aria-hidden="true"
-          />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
-          <span className="text-base font-medium leading-snug">
-            <SentenceText sentence={sentence} />
-          </span>
-          <span className="truncate text-[13px] text-muted-foreground">
-            {Array.from(new Set(group.members.map(triggerSourceLabel))).join("  →  ")}
-          </span>
-        </span>
-      </button>
-      {isOpen && (
-        <div className="flex flex-col gap-3 border-t p-4 sm:p-5">
-          <p className="text-xs text-muted-foreground">
-            {allOrdered
-              ? "These run top to bottom. If one fails, the next still runs."
-              : "These run top to bottom, except the ones marked as running alongside, which start straight away."}
-          </p>
-          {group.members.map(renderMember)}
-        </div>
-      )}
-    </article>
-  );
-}
-
-interface TriggerCardProps {
+interface UnreadableTriggerCardProps {
   trigger: EventTrigger;
   triggerPreset: TriggerPreset;
-  /** The trigger's sentence; empty when a group's card already says it. */
   sentence: SentencePart[];
-  /** Whose steps these are, under a group's sentence or beside a module's own trigger. */
-  source?: string;
   isExpanded: boolean;
   onToggle: () => void;
-  /** The step editor for a workflow it can read. */
-  editor: (tree: WorkflowTree) => ReactNode;
 }
 
-/** One trigger: its sentence and steps on one card, opening onto its editor. */
-function TriggerCard({ trigger, triggerPreset, sentence, source, isExpanded, onToggle, editor }: TriggerCardProps) {
+/** A workflow the step editor can't read: its sentence and switch, opening onto why. */
+function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, onToggle }: UnreadableTriggerCardProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { catalogActions } = useWorkflowCatalog();
   const { byId: notRunning } = useNotRunningWorkflows();
   const setEnabled = useSetWorkflowEnabledRequest();
   const [isSwitching, setIsSwitching] = useState(false);
@@ -466,25 +416,10 @@ function TriggerCard({ trigger, triggerPreset, sentence, source, isExpanded, onT
 
   const read = useMemo(() => definitionToTree(trigger.definition), [trigger.definition]);
   const storedTogether = read.editable ? 0 : storedTriggerCount(trigger.definition);
-
   const title =
     storedTogether > 1
       ? `${storedTogether} ${triggerPreset.name.toLowerCase()} triggers saved together`
-      : sentence.length === 0
-        ? (source ?? triggerPreset.name)
-        : sentenceText(sentence);
-  const summary = read.editable
-    ? read.tree.steps.length === 0
-      ? "No steps yet"
-      : read.tree.steps
-          .map(
-            (step) =>
-              stepSummary(step, {
-                action: step.type === "action" ? resolveCatalogAction(step, catalogActions) : undefined,
-              }).title
-          )
-          .join("  →  ")
-    : "Can't be edited here";
+      : sentenceText(sentence);
   const health = row.isEnabled ? notRunning.get(row.engineWorkflowId) : undefined;
 
   async function toggleEnabled() {
@@ -523,7 +458,7 @@ function TriggerCard({ trigger, triggerPreset, sentence, source, isExpanded, onT
         </button>
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
           <span className="text-base font-medium leading-snug">
-            {storedTogether > 1 || sentence.length === 0 ? title : <SentenceText sentence={sentence} />}
+            {storedTogether > 1 ? title : <SentenceText sentence={sentence} />}
           </span>
           <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
             {!row.isEnabled && (
@@ -534,13 +469,7 @@ function TriggerCard({ trigger, triggerPreset, sentence, source, isExpanded, onT
                 <NotRunningBadge health={health} />
               </span>
             )}
-            {trigger.order === undefined && sentence.length === 0 && (
-              <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">
-                Runs alongside
-              </span>
-            )}
-            {source && sentence.length > 0 && <span className="shrink-0">{source} ·</span>}
-            <span className="truncate">{summary}</span>
+            <span className="truncate">Can't be edited here</span>
           </span>
         </div>
         <div className="relative z-10 flex h-11 w-14 shrink-0 items-center justify-center">
@@ -556,9 +485,7 @@ function TriggerCard({ trigger, triggerPreset, sentence, source, isExpanded, onT
 
       {isExpanded && (
         <div className="border-t p-4 sm:p-5">
-          {read.editable ? (
-            editor(read.tree)
-          ) : (
+          {!read.editable && (
             <div className="flex flex-col gap-3">
               {storedTogether > 1 ? (
                 <p className="text-sm text-muted-foreground" data-testid="text-triggers-saved-together">
