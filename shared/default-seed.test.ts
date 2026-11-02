@@ -77,7 +77,9 @@ describe("default alerts", () => {
     const layout = layoutOf(defaultAlertsPack(BASE).items.find((item) => item.id === "bits"));
     expect(layout.layout).toEqual({ width: 640, height: 360 });
     const widgets = layout.widgets as Record<string, { settings: Record<string, unknown> }>;
-    expect(String(widgets.text?.settings.text)).toContain("${trigger.data.amount} bits");
+    expect(widgets.text?.settings.text).toBe(
+      "${trigger.data.isAnonymous ? 'An anonymous cheerer' : trigger.data.userName} cheered ${trigger.data.amount} ${trigger.data.amount > 1 ? 'bits' : 'bit'}!"
+    );
     expect(widgets.image?.settings).toEqual({
       src: { source: "url", name: "bits.webp", url: `${BASE}/bits.webp`, type: "image" },
       fit: "contain",
@@ -102,6 +104,17 @@ describe("default alerts", () => {
         expect(timeline.finishMs).toBe(5400);
       }
     }
+  });
+
+  // The engine evaluates these; workflow/internal/expression/compound_test.go pins this exact form.
+  test.each([
+    ["resub", "${trigger.data.cumulativeMonths} ${trigger.data.cumulativeMonths > 1 ? 'months' : 'month'}"],
+    ["gift", "${trigger.data.amount} ${trigger.data.amount > 1 ? 'subs' : 'sub'}"],
+    ["bits", "${trigger.data.amount} ${trigger.data.amount > 1 ? 'bits' : 'bit'}"],
+  ])("the %s alert picks its noun by the count, so it reads right at 1", (id, phrase) => {
+    const layout = layoutOf(defaultAlertsPack(null).items.find((item) => item.id === id));
+    const widgets = layout.widgets as Record<string, { settings: Record<string, unknown> }>;
+    expect(String(widgets.text?.settings.text)).toContain(phrase);
   });
 
   test("without images there is no image layer", () => {

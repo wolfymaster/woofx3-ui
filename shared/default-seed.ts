@@ -223,8 +223,12 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
     name: "Resub alert",
     description: "Shows resubs shared in chat on your overlay.",
     trigger: { event: "channel.resub", label: "Someone shares a resub" },
-    tokens: { user: "${trigger.data.chatterName}", months: "${trigger.data.cumulativeMonths}" },
-    text: "{user} resubscribed for {months} months!",
+    tokens: {
+      user: "${trigger.data.chatterName}",
+      months: "${trigger.data.cumulativeMonths}",
+      monthUnit: "${trigger.data.cumulativeMonths > 1 ? 'months' : 'month'}",
+    },
+    text: "{user} resubscribed for {months} {monthUnit}!",
     art: "subs",
   },
   {
@@ -235,8 +239,9 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
     tokens: {
       user: "${trigger.data.isAnonymous ? 'An anonymous gifter' : trigger.data.gifterName}",
       count: "${trigger.data.amount}",
+      subUnit: "${trigger.data.amount > 1 ? 'subs' : 'sub'}",
     },
-    text: "{user} gifted {count} subs!",
+    text: "{user} gifted {count} {subUnit}!",
     art: "subs",
   },
   {
@@ -247,8 +252,9 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
     tokens: {
       user: "${trigger.data.isAnonymous ? 'An anonymous cheerer' : trigger.data.userName}",
       bits: "${trigger.data.amount}",
+      bitUnit: "${trigger.data.amount > 1 ? 'bits' : 'bit'}",
     },
-    text: "{user} cheered {bits} bits!",
+    text: "{user} cheered {bits} {bitUnit}!",
     art: "bits",
   },
 ];
