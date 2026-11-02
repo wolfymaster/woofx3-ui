@@ -33,11 +33,11 @@ import {
   waitingHelp,
 } from "@/lib/overlay-onboarding";
 import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
+import { ALERTS_PATH } from "@/lib/setup-steps";
 import { cn } from "@/lib/utils";
 
 const TICK_MS = 1_000;
 const RECENT_ALERTS_LIMIT = 20;
-const ALERTS_PATH = "/stream/alerts";
 const ALERT_SURFACE = "alert";
 const FLOW_STEPS = ["Add to your streaming app", "Send a test", "You're ready"];
 

@@ -8,7 +8,7 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
-import { firstIncompleteStep, setupStepPath } from "@/lib/setup-steps";
+import { firstIncompleteStep, overlayPageRedirects, setupStepPath } from "@/lib/setup-steps";
 import { $dashboardLayoutHint } from "@/lib/stores";
 
 /**
@@ -68,13 +68,14 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  * A finished setup that was seeded sends an owner or admin to the overlay page
  * until one of them has seen a test alert play or skipped it
  * (`SetupStatus.overlayPending`), so someone who left midway comes back to it
- * and someone who passed it never does.
+ * and someone who passed it never does. The alerts page is exempt, since the
+ * overlay page sends them there to make the follow alert it needs.
  */
 export function OnboardingGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
   const { instance, instances, isLoading: instancesLoading } = useInstance();
   const setup = useQuery(api.setup.status, instance ? { instanceId: instance._id } : "skip");
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [onDashboard] = useRoute("/");
   const hasRegisteredInstance = instances.some((candidate) => Boolean(candidate?.clientId));
   const isChecking = instancesLoading || (instance !== null && setup === undefined);
@@ -101,10 +102,10 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
       navigate("/setup");
       return;
     }
-    if (setup.overlayPending) {
+    if (overlayPageRedirects(setup.overlayPending, location)) {
       navigate(setupStepPath("overlay"));
     }
-  }, [isAuthenticated, isChecking, needsOnboarding, needsTwitch, setup, navigate]);
+  }, [isAuthenticated, isChecking, needsOnboarding, needsTwitch, setup, location, navigate]);
 
   let content: ReactNode = children;
   if (isChecking) {
