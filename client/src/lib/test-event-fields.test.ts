@@ -3,6 +3,7 @@ import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
 import {
   initialValues,
   payloadFromValues,
+  SAMPLE_VIEWER_NAME,
   type TestEventField,
   testEventFields,
   valuesFromPayload,
@@ -177,6 +178,27 @@ describe("testEventFields", () => {
       )
     );
     expect(field.initial).toBe(true);
+  });
+
+  test("starts the name of who the event is about at a sample viewer", () => {
+    const fields = testEventFields(
+      preset([
+        { path: "gifterId", type: "string", identity: "viewer", displayName: "gifterName" },
+        { path: "gifterName", type: "string" },
+        { path: "tier", type: "string" },
+      ])
+    );
+    expect(seeds(fields)).toEqual({ "Gifter id": "", "Gifter name": SAMPLE_VIEWER_NAME, Tier: "" });
+  });
+
+  test("a declared example beats the sample viewer", () => {
+    const fields = testEventFields(
+      preset([
+        { path: "userId", type: "string", identity: "viewer", displayName: "userName" },
+        { path: "userName", type: "string", example: "raider99" },
+      ])
+    );
+    expect(seeds(fields)["User name"]).toBe("raider99");
   });
 
   test("binds a config field to a path by eventPath before its id", () => {
