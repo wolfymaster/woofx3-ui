@@ -8,12 +8,14 @@ const nothingDone: SetupProgress = {
   importChosenAt: null,
   interestsChosenAt: null,
   completedAt: null,
+  overlayPending: false,
 };
 const platformsChosen: SetupProgress = { ...nothingDone, platformsChosenAt: 1 };
 const twitchConnected: SetupProgress = { ...platformsChosen, twitchUsername: "streamer" };
 const importChosen: SetupProgress = { ...twitchConnected, importChosenAt: 2 };
 const interestsChosen: SetupProgress = { ...importChosen, interestsChosenAt: 2 };
 const completed: SetupProgress = { ...interestsChosen, completedAt: 3 };
+const owesOverlay: SetupProgress = { ...completed, overlayPending: true };
 
 describe("firstIncompleteStep", () => {
   test("walks the steps in order", () => {
@@ -22,6 +24,7 @@ describe("firstIncompleteStep", () => {
     expect(firstIncompleteStep(twitchConnected)).toBe("import");
     expect(firstIncompleteStep(importChosen)).toBe("interests");
     expect(firstIncompleteStep(interestsChosen)).toBe("dashboard");
+    expect(firstIncompleteStep(owesOverlay)).toBe("overlay");
     expect(firstIncompleteStep(completed)).toBe("finish");
   });
 

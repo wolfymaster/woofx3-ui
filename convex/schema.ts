@@ -2,7 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { defaultSeedValidator } from "./lib/defaultSeedValidator";
+import { defaultSeedValidator, overlayDoneValidator } from "./lib/defaultSeedValidator";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
@@ -622,6 +622,9 @@ export default defineSchema({
     // applying has tried them. An installed entry is never seeded again, so
     // deleting a seeded scene or alert keeps it deleted.
     defaultSeed: v.optional(defaultSeedValidator),
+    // That first-run setup passed the overlay page, by seeing an alert play or
+    // by skipping. Unset on a setup still owed the page.
+    overlayDone: v.optional(overlayDoneValidator),
     applyAttempts: v.optional(v.number()),
     // Held while an apply runs, so two scheduled at once do not both install.
     applyClaimedAt: v.optional(v.number()),

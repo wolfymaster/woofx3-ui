@@ -12,7 +12,7 @@ import { ENGINE_CAPABILITIES, type UISetting } from "@woofx3/api";
 import { useMemo } from "react";
 import { z } from "zod";
 import type { DefaultSeedGateway } from "@/engine/gateway";
-import type { DefaultSeedStatus } from "@/engine/types";
+import type { DefaultSeedStatus, OverlayDoneOutcome } from "@/engine/types";
 import { directKeys as k } from "./keys";
 import { useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
@@ -25,7 +25,9 @@ import { parseSetting, putUISetting, toSettingValue, UI_SETTING_NAMESPACES, uiSe
 // the streamer deleted from coming back.
 
 const RECORD_KEY = "state";
+const OVERLAY_DONE_KEY = "overlay-done";
 const MEMBER = "defaultSeed.useApplyRequest";
+const MARK_MEMBER = "defaultSeed.useMarkOverlayDoneRequest";
 
 const statusSchema = z.enum(["installed", "pending", "failed"]);
 const recordSchema = z.object({
@@ -38,6 +40,7 @@ const recordSchema = z.object({
   alertImagesOmitted: z.boolean(),
 });
 type SeedRecord = z.infer<typeof recordSchema>;
+const overlayDoneSchema = z.object({ outcome: z.enum(["finished", "skipped"]) });
 
 function seedEngine(runtime: DirectRuntime): DefaultSeedEngine {
   return {
@@ -54,8 +57,14 @@ function errorMessage(error: unknown): string {
 }
 
 /** The gateway's status from the seed's record and the ledger's settings. */
-export function defaultSeedStatus(record: SeedRecord | null, ledger: readonly UISetting[]): DefaultSeedStatus {
+export function defaultSeedStatus(
+  record: SeedRecord | null,
+  ledger: readonly UISetting[],
+  overlayDone: DefaultSeedStatus["overlayDone"] = null
+): DefaultSeedStatus {
   return {
+    neverSeeded: false,
+    overlayDone,
     scene: record?.scene ?? { status: "pending" },
     alerts: DEFAULT_ALERT_ITEMS.map((item) => {
       const engineWorkflowId = ledgerEngineId(ledger, starterItemKey(DEFAULT_ALERTS_PACK_ID, item.id));
@@ -82,6 +91,11 @@ export function directDefaultSeedGateway(runtime: DirectRuntime): DefaultSeedGat
     return setting === undefined ? null : parseSetting(runtime.logger, recordSchema, setting);
   };
 
+  const readOverlayDone = (settings: readonly UISetting[]): DefaultSeedStatus["overlayDone"] => {
+    const setting = settings.find((entry) => entry.key === OVERLAY_DONE_KEY);
+    return setting === undefined ? null : parseSetting(runtime.logger, overlayDoneSchema, setting);
+  };
+
   const useStatus: DefaultSeedGateway["useStatus"] = () => {
     const record = useEngineQuery(runtime, recordRead);
     const ledger = useEngineQuery(runtime, ledgerRead);
@@ -89,7 +103,7 @@ export function directDefaultSeedGateway(runtime: DirectRuntime): DefaultSeedGat
       if (record === undefined || ledger === undefined) {
         return undefined;
       }
-      return defaultSeedStatus(readRecord(record), ledger);
+      return defaultSeedStatus(readRecord(record), ledger, readOverlayDone(record));
     }, [record, ledger]);
   };
 
@@ -136,5 +150,19 @@ export function directDefaultSeedGateway(runtime: DirectRuntime): DefaultSeedGat
     await runtime.queryClient.invalidateQueries({ queryKey: k.scenes.all });
   };
 
-  return { useStatus, useApplyRequest: () => useEngineRequest(apply) };
+  const markOverlayDone = async (outcome: OverlayDoneOutcome) => {
+    const recorded = readOverlayDone(
+      await runtime.call("listUISettings", (api) => api.listUISettings(UI_SETTING_NAMESPACES.defaultSeed))
+    );
+    if (recorded?.outcome === "finished" || recorded?.outcome === outcome) {
+      return;
+    }
+    await putUISetting(runtime, UI_SETTING_NAMESPACES.defaultSeed, OVERLAY_DONE_KEY, { outcome }, MARK_MEMBER);
+  };
+
+  return {
+    useStatus,
+    useApplyRequest: () => useEngineRequest(apply),
+    useMarkOverlayDoneRequest: () => useEngineRequest(markOverlayDone),
+  };
 }

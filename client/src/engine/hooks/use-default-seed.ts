@@ -9,3 +9,8 @@ export function useDefaultSeedStatus() {
 export function useApplyDefaultSeedRequest() {
   return useEngineGateway().defaultSeed.useApplyRequest();
 }
+
+/** Records that setup passed the overlay page, so its owner is not sent back there. */
+export function useMarkOverlayDoneRequest() {
+  return useEngineGateway().defaultSeed.useMarkOverlayDoneRequest();
+}

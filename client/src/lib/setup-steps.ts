@@ -35,6 +35,7 @@ export interface SetupProgress {
   importChosenAt: number | null;
   interestsChosenAt: number | null;
   completedAt: number | null;
+  overlayPending: boolean;
 }
 
 /**
@@ -62,9 +63,9 @@ export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
   if (progress.completedAt === null) {
     return "dashboard";
   }
-  // The overlay page is optional and leaves no record, so a finished setup
-  // resumes on the summary.
-  return "finish";
+  // Past the overlay page, the last page opens the dashboard once the engine is
+  // registered, so a skip made during the build comes back to the wait.
+  return progress.overlayPending ? "overlay" : "finish";
 }
 
 /** `requested` when the user may be on it, otherwise the first step still to do. */

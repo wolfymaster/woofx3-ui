@@ -7,6 +7,7 @@ import { type MutationCtx, mutation, type QueryCtx, query } from "./_generated/s
 import { readMemberRole } from "./instances";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { isPreviewDeployment } from "./lib/previewDeployment";
+import { seedsDefaults } from "./lib/setupApply";
 import { availableInterests, buildDashboardPreset, PRESET_LAYOUT_ID } from "./lib/setupInterests";
 import {
   type ChosenSetupPlatform,
@@ -57,6 +58,12 @@ export interface SetupStatus {
   setupSeen: boolean;
   /** Whether the engine has answered the registration handshake. */
   engineRegistered: boolean;
+  /**
+   * Whether finished setup still owes the overlay page: it was seeded, and
+   * nobody has seen an alert play or skipped. A setup from before the seed
+   * never owes it.
+   */
+  overlayPending: boolean;
   /**
    * Chosen platforms whose installed module declares settings, such as an
    * account to authorize. Installing is not enough for these to work.
@@ -166,6 +173,7 @@ export const status = query({
       canManageSetup: canManageTwitchLink(role),
       setupSeen: seen !== null,
       engineRegistered: Boolean(instance?.clientId),
+      overlayPending: Boolean(row?.completedAt) && row?.overlayDone === undefined && row !== null && seedsDefaults(row),
       moduleInstalls: row?.moduleInstalls ?? [],
       packInstalls: row?.packInstalls ?? [],
     };
