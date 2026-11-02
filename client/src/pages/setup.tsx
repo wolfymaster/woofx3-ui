@@ -1,16 +1,18 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Loader2, MonitorPlay } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { DashboardStep } from "@/components/setup/dashboard-step";
-import { FinishStep } from "@/components/setup/finish-step";
+import { EngineSplash } from "@/components/setup/engine-splash";
 import { ImportStep } from "@/components/setup/import-step";
 import { InterestsStep } from "@/components/setup/interests-step";
-import { OverlayStep } from "@/components/setup/overlay-step";
+import { OverlayPage } from "@/components/setup/overlay-page";
 import { PlatformsStep } from "@/components/setup/platforms-step";
 import { ProvisioningBar } from "@/components/setup/provisioning-bar";
 import { AskAdminToConnectTwitch, TwitchStep } from "@/components/setup/twitch-step";
+import { useEngineBuild } from "@/components/setup/use-engine-build";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
@@ -23,6 +25,7 @@ import {
   setupStepIndex,
   setupStepPath,
 } from "@/lib/setup-steps";
+import { $currentInstanceId } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 interface SetupShellProps {
@@ -72,6 +75,25 @@ function SetupShell({ activeStep, workspaceName, children }: SetupShellProps) {
       </div>
     </div>
   );
+}
+
+interface HostedStepProps {
+  instanceId: Id<"instances">;
+  engineRegistered: boolean;
+}
+
+function HostedOverlayPage({ instanceId, engineRegistered, onExit }: HostedStepProps & { onExit: () => void }) {
+  return <OverlayPage engine={useEngineBuild(instanceId, engineRegistered)} onExit={onExit} />;
+}
+
+/** The last stop: the wait for a build still running, and straight through to the dashboard otherwise. */
+function HostedSplash({ instanceId, engineRegistered }: HostedStepProps) {
+  const [, navigate] = useLocation();
+  const openDashboard = useCallback(() => {
+    $currentInstanceId.set(instanceId);
+    navigate("/");
+  }, [instanceId, navigate]);
+  return <EngineSplash build={useEngineBuild(instanceId, engineRegistered)} onReady={openDashboard} />;
 }
 
 /**
@@ -152,6 +174,19 @@ export default function Setup() {
     );
   }
 
+  if (step === "overlay") {
+    return (
+      <HostedOverlayPage
+        instanceId={instanceId}
+        engineRegistered={status.engineRegistered}
+        onExit={() => goTo("finish")}
+      />
+    );
+  }
+  if (step === "finish") {
+    return <HostedSplash instanceId={instanceId} engineRegistered={status.engineRegistered} />;
+  }
+
   const title = SETUP_STEPS[setupStepIndex(step)].title;
 
   return (
@@ -175,8 +210,6 @@ export default function Setup() {
           {step === "dashboard" && (
             <DashboardStep instanceId={instanceId} status={status} onContinue={() => goTo("overlay")} />
           )}
-          {step === "overlay" && <OverlayStep status={status} onContinue={() => goTo("finish")} />}
-          {step === "finish" && <FinishStep instanceId={instanceId} status={status} />}
         </CardContent>
       </Card>
     </SetupShell>

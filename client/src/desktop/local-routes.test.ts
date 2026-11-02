@@ -102,6 +102,11 @@ describe("local mode", () => {
     expect(convexPaths(join(import.meta.dir, "LocalApp.tsx"))).toEqual([]);
   });
 
+  test("the overlay page can be adopted: it reaches nothing of Convex's", () => {
+    expect(convexPaths(join(CLIENT_SRC, "components", "setup", "overlay-page.tsx"))).toEqual([]);
+    expect(convexPaths(join(CLIENT_SRC, "components", "setup", "engine-splash.tsx"))).toEqual([]);
+  });
+
   test("the check finds a page that reaches Convex", () => {
     expect(convexPaths(join(CLIENT_SRC, "pages", "team.tsx"))).not.toEqual([]);
   });
