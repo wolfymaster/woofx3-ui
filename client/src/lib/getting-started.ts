@@ -188,7 +188,7 @@ function twitchProblem(setup: GettingStartedFacts["setup"]): GettingStartedItem[
     return [];
   }
   return [
-    item("twitch", "Twitch connected", "problem", "Twitch isn't connected", {
+    item("twitch", "Connect Twitch", "problem", "Twitch isn't connected", {
       fixes: [{ kind: "route", label: "Connect Twitch", href: setupStepPath("connect") }],
     }),
   ];

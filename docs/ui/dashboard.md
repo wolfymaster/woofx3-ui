@@ -175,7 +175,7 @@ Onboarding ends at the dashboard, so the panel holds what comes after it. Items 
 
 | Item | Done when | Offers |
 |---|---|---|
-| Twitch connected (problem only) | the instance has a Twitch link; hidden otherwise | Connect Twitch (`/setup/connect`) |
+| Connect Twitch (problem only) | the instance has a Twitch link; hidden otherwise | Connect Twitch (`/setup/connect`) |
 | Platforms installed (problem only) | hidden unless a chosen platform's `moduleInstalls` entry is `failed` or `needs_approval` | Retry (`setup.retryApply`); the module page on a needs-approval |
 | Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
 | Add your overlay to your streaming app | the overlay page recorded a finished test (`defaultSeed.useStatus().overlayDone.outcome === "finished"`); left out for an instance that was never seeded | **Copy link** (the seeded scene's link, from `overlays.useBrowserSourceUrlRequest`), Show me how (`/setup/overlay`). Done, it keeps both, with the page as Open your overlay, and stays ahead of what is left; the panel can hide, so the Scenes page also links to `/setup/overlay` |

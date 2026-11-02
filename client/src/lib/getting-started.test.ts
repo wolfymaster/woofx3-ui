@@ -120,6 +120,7 @@ describe("gettingStartedItems", () => {
 
   test("sends Twitch back to the connect page when it is not linked", () => {
     const item = byId(facts({}, { twitchUsername: null })).twitch;
+    expect(item.title).toBe("Connect Twitch");
     expect(item.fixes).toEqual([{ kind: "route", label: "Connect Twitch", href: "/setup/connect" }]);
   });
 
