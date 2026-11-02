@@ -45,19 +45,22 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  * only uses another account's instance, such as a moderator who does not
  * stream, never owns an account or an instance and is never sent there.
  *
- * An instance row alone is not onboarding done: a managed engine has one from
- * the moment provisioning starts, and a failed bring-your-own registration
- * leaves one behind too. Only `clientId` says the handshake happened, which is
- * what every screen past this point depends on, so anything short of that goes
- * back to onboarding, which hands over to setup while the engine is built.
+ * An instance row alone is not onboarding done: a new user has one before
+ * Twitch is connected, a managed engine has one from the moment provisioning
+ * starts, and a failed bring-your-own registration leaves one behind too. Only
+ * `clientId` says the handshake happened, which is what every screen past this
+ * point depends on, so anything short of that goes back to onboarding, which
+ * passes the user on to wherever setup is: connecting, or the overlay page while
+ * the engine is built. That holds across a refresh or a return days later,
+ * because all of it is read from the server.
  *
  * The app also depends on Twitch, so an instance with no Twitch link goes to
  * setup until one exists. Only an owner or admin can connect it; anyone else
  * is told to ask one rather than sent somewhere they cannot act. The check is
  * that a link exists, not that it still works: a revoked or under-scoped link
  * is the reconnect banner's job, and must never bounce an established user
- * into setup. A preview deployment set up without Twitch does not need a link
- * (`SetupStatus.twitchRequired`).
+ * into setup. A preview deployment where Twitch was skipped does not need a
+ * link (`SetupStatus.twitchRequired`).
  *
  * Setup also opens by itself once per user while the instance's setup is
  * unfinished, so a returning user is not sent back to it on every visit.
