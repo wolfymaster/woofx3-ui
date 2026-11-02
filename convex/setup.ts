@@ -58,6 +58,8 @@ export interface SetupStatus {
   setupSeen: boolean;
   /** Whether the engine has answered the registration handshake. */
   engineRegistered: boolean;
+  /** Whether woofx3 builds this instance's engine, rather than the user running their own. */
+  managedEngine: boolean;
   /**
    * Whether finished setup still owes the overlay page: it is a first run, and
    * nobody has seen an alert play or skipped. An established instance never owes it.
@@ -170,6 +172,7 @@ export const status = query({
       canManageSetup: canManageTwitchLink(role),
       setupSeen: seen !== null,
       engineRegistered: Boolean(instance?.clientId),
+      managedEngine: instance?.hosting === "managed",
       overlayPending: Boolean(row?.completedAt) && row?.overlayDone === undefined && row !== null && seedsDefaults(row),
       moduleInstalls: row?.moduleInstalls ?? [],
       packInstalls: row?.packInstalls ?? [],

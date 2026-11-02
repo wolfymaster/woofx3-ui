@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
 import {
   decideRedeployEvent,
   mergeRunSnapshot,
@@ -59,13 +60,6 @@ const REGISTRATION_RETRY_DELAYS_MS = [10_000, 30_000, 120_000];
  * given the row its id long before.
  */
 const UPGRADE_REQUEST_DEADLINE_MS = 15 * 60 * 1000;
-
-/**
- * How long a row stays `requested` before another request may take it over.
- * Outlasts the action asking the maintenance API, so two requests cannot race
- * for one row; a request that died leaves the row usable after this.
- */
-const REQUEST_IN_FLIGHT_MS = 15 * 60 * 1000;
 
 /** Callback ids are kept only long enough to cover redelivery, which the sender stops after a day. */
 const EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;

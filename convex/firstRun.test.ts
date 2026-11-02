@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
-import { PLACEHOLDER_NAME, slugCandidates } from "./lib/firstRun";
+import { PLACEHOLDER_NAME, REQUEST_IN_FLIGHT_MS, slugCandidates } from "./lib/firstRun";
 import { hashOpaqueToken } from "./lib/oauthHandoff";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -341,6 +341,141 @@ describe("first run", () => {
 
     expect(await setupOf(t, instanceId)).toBeNull();
     expect((await setupOf(t, established))?.firstRunAt).toBeUndefined();
+  });
+
+  describe("a first engine request that died", () => {
+    async function ownerWithInstance(t: Backend) {
+      const userId = await newUser(t);
+      const asUser = t.withIdentity({ subject: `${userId}|session` });
+      const instanceId = await asUser.mutation(api.setup.ensureFirstRun, {});
+      await t.run((ctx) =>
+        ctx.db.insert("platformLinks", {
+          instanceId,
+          platform: "twitch",
+          platformUserId: "T1",
+          platformUsername: "Wolfy_Master",
+          platformLogin: "wolfy_master",
+          channelId: "T1",
+          sealedAccessToken: "sealed",
+          sealedRefreshToken: "sealed",
+          expiresAt: 1,
+          scopes: [],
+        })
+      );
+      return { asUser, instanceId };
+    }
+
+    test("with no row, Try again makes one", async () => {
+      const t = newBackend();
+      const { asUser, instanceId } = await ownerWithInstance(t);
+
+      await asUser.action(api.provisioning.retry, { instanceId });
+
+      const row = await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId });
+      expect(row?.status).toBe("provisioning");
+      expect(creates.map((create) => create.slug)).toEqual(["wolfy-master"]);
+    });
+
+    test("with a stale requested row, Try again takes it over; a fresh one is still in flight", async () => {
+      const t = newBackend();
+      const { asUser, instanceId } = await ownerWithInstance(t);
+      const insertRequested = (updatedAt: number) =>
+        t.run(async (ctx) => {
+          const instance = await ctx.db.get(instanceId);
+          if (!instance) {
+            throw new Error("the instance should exist");
+          }
+          await ctx.db.insert("engineProvisioning", {
+            instanceId,
+            accountId: instance.accountId,
+            requestedBy: (await ctx.db.get(instance.accountId))?.ownerId as Id<"users">,
+            slug: "wolfy-master",
+            status: "requested",
+            steps: [],
+            registrationToken: "token",
+            registrationAttempts: 0,
+            createdAt: updatedAt,
+            updatedAt,
+          });
+        });
+
+      await insertRequested(Date.now());
+      await expect(asUser.action(api.provisioning.retry, { instanceId })).rejects.toThrow("already being created");
+      await t.run(async (ctx) => {
+        const row = await ctx.db
+          .query("engineProvisioning")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+          .first();
+        await ctx.db.patch(row?._id as Id<"engineProvisioning">, { updatedAt: Date.now() - REQUEST_IN_FLIGHT_MS });
+      });
+
+      await asUser.action(api.provisioning.retry, { instanceId });
+
+      const row = await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId });
+      expect(row?.status).toBe("provisioning");
+    });
+
+    test("an engine the user runs has its registration tried again, with the reason it failed", async () => {
+      const t = newBackend();
+      const { asUser, instanceId } = await ownerWithInstance(t);
+      await t.run((ctx) => ctx.db.patch(instanceId, { hosting: "external" }));
+
+      await expect(asUser.action(api.provisioning.retry, { instanceId })).rejects.toThrow("The engine has no URL yet");
+    });
+  });
+
+  describe("an apply run that died holding its claim", () => {
+    async function claimed(t: Backend, applyAttempts: number) {
+      const userId = await newUser(t);
+      const instanceId = await t.withIdentity({ subject: `${userId}|session` }).mutation(api.setup.ensureFirstRun, {});
+      await t.run(async (ctx) => {
+        const row = await ctx.db
+          .query("instanceSetup")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+          .first();
+        await ctx.db.patch(row?._id as Id<"instanceSetup">, { applyClaimedAt: 5, applyAttempts });
+      });
+      return instanceId;
+    }
+
+    const scheduledRuns = (t: Backend) =>
+      t.run(async (ctx) =>
+        (await ctx.db.system.query("_scheduled_functions").collect()).filter((job) => job.name.includes("setupApply"))
+      );
+
+    test("another run is scheduled while tries remain", async () => {
+      const t = newBackend();
+      const instanceId = await claimed(t, 1);
+
+      await t.mutation(internal.setupApply.recoverDiedRun, { instanceId, claimedAt: 5 });
+
+      expect((await scheduledRuns(t)).length).toBe(1);
+    });
+
+    test("with no tries left the seed fails, so the overlay page offers Try again", async () => {
+      const t = newBackend();
+      const instanceId = await claimed(t, 99);
+
+      await t.mutation(internal.setupApply.recoverDiedRun, { instanceId, claimedAt: 5 });
+
+      const setup = await t.run((ctx) =>
+        ctx.db
+          .query("instanceSetup")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+          .first()
+      );
+      expect(setup?.defaultSeed?.scene.status).toBe("failed");
+      expect(setup?.applyClaimedAt).toBeUndefined();
+    });
+
+    test("a run that finished, or a later claim, is left alone", async () => {
+      const t = newBackend();
+      const instanceId = await claimed(t, 1);
+
+      await t.mutation(internal.setupApply.recoverDiedRun, { instanceId, claimedAt: 4 });
+
+      expect((await scheduledRuns(t)).length).toBe(0);
+    });
   });
 
   test("skipping Twitch is refused outside a preview", async () => {

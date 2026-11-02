@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { SetupStatus } from "@convex/setup";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Loader2, MonitorPlay } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -72,21 +73,21 @@ function SetupShell({ activeStep, children }: SetupShellProps) {
 
 interface HostedStepProps {
   instanceId: Id<"instances">;
-  engineRegistered: boolean;
+  status: SetupStatus;
 }
 
-function HostedOverlayPage({ instanceId, engineRegistered, onExit }: HostedStepProps & { onExit: () => void }) {
-  return <OverlayPage engine={useEngineBuild(instanceId, engineRegistered)} onExit={onExit} />;
+function HostedOverlayPage({ instanceId, status, onExit }: HostedStepProps & { onExit: () => void }) {
+  return <OverlayPage engine={useEngineBuild(instanceId, status)} onExit={onExit} />;
 }
 
 /** The last stop: the wait for a build still running, and straight through to the dashboard otherwise. */
-function HostedSplash({ instanceId, engineRegistered }: HostedStepProps) {
+function HostedSplash({ instanceId, status }: HostedStepProps) {
   const [, navigate] = useLocation();
   const openDashboard = useCallback(() => {
     $currentInstanceId.set(instanceId);
     navigate("/");
   }, [instanceId, navigate]);
-  return <EngineSplash build={useEngineBuild(instanceId, engineRegistered)} onReady={openDashboard} />;
+  return <EngineSplash build={useEngineBuild(instanceId, status)} onReady={openDashboard} />;
 }
 
 /**
@@ -167,16 +168,10 @@ export default function Setup() {
   }
 
   if (step === "overlay") {
-    return (
-      <HostedOverlayPage
-        instanceId={instanceId}
-        engineRegistered={status.engineRegistered}
-        onExit={() => goTo("finish")}
-      />
-    );
+    return <HostedOverlayPage instanceId={instanceId} status={status} onExit={() => goTo("finish")} />;
   }
   if (step === "finish") {
-    return <HostedSplash instanceId={instanceId} engineRegistered={status.engineRegistered} />;
+    return <HostedSplash instanceId={instanceId} status={status} />;
   }
 
   const title = SETUP_STEPS[setupStepIndex(step)].title;

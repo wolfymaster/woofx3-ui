@@ -1,3 +1,4 @@
+import { DEFAULT_ALERT_ITEMS } from "@shared/default-seed";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -84,6 +85,10 @@ export const claim = internalMutation({
     }
     const attempts = (row.applyAttempts ?? 0) + 1;
     await ctx.db.patch(row._id, { applyClaimedAt: now, applyAttempts: attempts, updatedAt: now });
+    await ctx.scheduler.runAfter(APPLY_CLAIM_TTL_MS, internal.setupApply.recoverDiedRun, {
+      instanceId,
+      claimedAt: now,
+    });
 
     // A module the engine already has, e.g. on an instance set up before this
     // wizard existed, counts as installed rather than being installed again.
@@ -159,6 +164,43 @@ export const record = internalMutation({
     if (delay !== null) {
       await ctx.scheduler.runAfter(delay, internal.setupApply.run, { instanceId });
     }
+  },
+});
+
+/**
+ * Scheduled with every claim, because a run that dies records nothing and so
+ * schedules nothing, which would leave the overlay page preparing for good. A
+ * claim still held at its limit gets another run while tries remain; after that
+ * the seed settles as failed, for the page to offer Try again.
+ */
+export const recoverDiedRun = internalMutation({
+  args: { instanceId: v.id("instances"), claimedAt: v.number() },
+  handler: async (ctx, { instanceId, claimedAt }) => {
+    const row = await ctx.db
+      .query("instanceSetup")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (row?.applyClaimedAt !== claimedAt) {
+      return;
+    }
+    logger.warn("setup: apply run died holding its claim", { instanceId, attempts: row.applyAttempts });
+    if (nextApplyDelay(row.applyAttempts ?? 1) !== null) {
+      await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
+      return;
+    }
+    const seed: DefaultSeedRecord = row.defaultSeed ?? {
+      scene: { status: "pending" },
+      alerts: DEFAULT_ALERT_ITEMS.map((item) => ({ itemId: item.id, status: "pending" })),
+    };
+    await ctx.db.patch(row._id, {
+      applyClaimedAt: undefined,
+      updatedAt: Date.now(),
+      ...(seedsDefaults(row)
+        ? {
+            defaultSeed: { ...seed, scene: settlePending(seed.scene), alerts: seed.alerts.map(settlePending) },
+          }
+        : {}),
+    });
   },
 });
 

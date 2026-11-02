@@ -28,6 +28,7 @@ import {
 import { isUpgrade } from "./lib/releaseVersion";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { performRegistration } from "./registration";
 
 /**
  * Managed engines: the public surface onboarding and the admin page call.
@@ -317,17 +318,35 @@ export const startManagedEngine = action({
  * came up. Which one it is depends on how far the row got: an engine that
  * already published a URL does not need provisioning again, unless what failed
  * was a later redeploy, which is resumed like any other run.
+ *
+ * With no maintenance engine to resume, the request itself is made again, which
+ * covers one that died before making a row or before it was answered. An engine
+ * the user runs themselves has only its registration to try again.
  */
 export const retry = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ retried: RetryKind }> => {
-    const { row } = await requireManagedRow(ctx, instanceId);
-    // Never accepted by the maintenance API, so there is no run to resume.
-    if (row.status === "failed" && !row.maintenanceEngineId) {
-      await startDerivedEngine(ctx, instanceId);
-      return { retried: "provisioning" };
+    await requireEngineManager(ctx, instanceId);
+    const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
+    if (row?.maintenanceEngineId) {
+      return retryManagedEngineRow(ctx, row);
     }
-    return retryManagedEngineRow(ctx, row);
+    if (row && row.status !== "failed" && row.status !== "requested") {
+      throw new Error("This engine has nothing to try again");
+    }
+    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+    if (!instance || instance.clientId) {
+      throw new Error("This workspace has no engine to build");
+    }
+    if (instance.hosting !== "managed") {
+      const registered = await performRegistration(ctx, { instanceId });
+      if (!registered.ok) {
+        throw new Error(registered.error);
+      }
+      return { retried: "registration" };
+    }
+    await startDerivedEngine(ctx, instanceId);
+    return { retried: "provisioning" };
   },
 });
 
@@ -396,11 +415,7 @@ function withoutRequester<T extends { requestedBy?: unknown }>(upgrade: T): Omit
   return shown;
 }
 
-/** Owner or admin of the instance, and a provisioning row to act on. */
-async function requireManagedRow(
-  ctx: ActionCtx,
-  instanceId: Id<"instances">
-): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
+async function requireEngineManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Not authenticated");
@@ -409,6 +424,15 @@ async function requireManagedRow(
   if (!membership || membership.role === "member") {
     throw new Error("Not authorized");
   }
+  return userId;
+}
+
+/** Owner or admin of the instance, and a provisioning row to act on. */
+async function requireManagedRow(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
+  const userId = await requireEngineManager(ctx, instanceId);
   const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
   if (!row) {
     throw new Error("This workspace has no managed engine");
