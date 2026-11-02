@@ -66,14 +66,14 @@ After it come the [overlay page](#the-overlay-page) and [the wait for a build](#
 | Phase | Shown when | Next |
 |---|---|---|
 | `building`, `build-failed` | The engine has not registered, or its build failed | Registering moves on; **Try again** runs `provisioning.retry` |
-| `preparing` | The seed is still running, or the first presence answer has not come | |
-| `seed-failed` | The seed gave up on the scene | **Try again** (`defaultSeed.useApplyRequest`) |
+| `preparing` | The seed is still running, or the first presence answer has not come |. After a seed item has held a recorded error for a minute (`seedIsSlow`), it says this is taking longer than usual and offers **Try again** |
+| `seed-failed` | The seed gave up on the scene | **Try again** (`defaultSeed.useApplyRequest`) puts failed items back to pending and runs the apply now; the ledger and the scene search keep it from creating anything twice |
 | `no-scene` | The seeded scene is gone, or the setup was never seeded | **Make a new overlay** creates the seed's scene |
 | `waiting` | There is a scene and nothing is connected | Link, per-app steps and a test tab. A hint at 60 s, a troubleshooting list at 3 min |
 | `connected` | An overlay is open | **Send a test alert** |
 | `sending`, `playing` | A test is on its way | |
 | `unconfirmed` | 60 s with no answer | **Yes, it played** or **Send again** |
-| `test-failed` | The alert failed or the send was refused | The reason through `describeAlertFailure`, **Try again** |
+| `test-failed` | The alert failed or the send was refused | The reason through `describeAlertFailure`, or plain copy for one it does not recognise, **Try again**. It outranks a closed overlay, so the reason stays up |
 | `finished` | The alert completed, or the streamer saw it play | **Open Dashboard** |
 
 An overlay closing during a test goes back to `waiting`. `finished` stays through a closing overlay, because a test in a plain browser tab counts and that tab may well be closed next.
