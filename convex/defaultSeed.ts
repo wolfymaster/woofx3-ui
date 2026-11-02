@@ -3,6 +3,7 @@ import {
   DEFAULT_ALERT_ITEMS,
   DEFAULT_ALERTS_PACK_ID,
   type DefaultSceneOutcome,
+  type DefaultSeedEngine,
   defaultAlertStatus,
   defaultAlertsPack,
   readDefaultAlertImages,
@@ -31,7 +32,22 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-async function applyScene(engine: EngineApi, previous: DefaultSceneOutcome | undefined): Promise<DefaultSceneOutcome> {
+/** Each call opens its own session, because an HTTP batch session ends at its first await. */
+function seedEngine(bundle: { url: string; clientId: string; clientSecret: string }): DefaultSeedEngine {
+  const session = () => createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+  return {
+    getEngineInfo: () => session().getEngineInfo(),
+    listEngineModules: () => session().listEngineModules(),
+    getAvailableWidgets: () => session().getAvailableWidgets(),
+    getScenes: (query) => session().getScenes(query),
+    createScene: (scene) => session().createScene(scene),
+  };
+}
+
+async function applyScene(
+  engine: DefaultSeedEngine,
+  previous: DefaultSceneOutcome | undefined
+): Promise<DefaultSceneOutcome> {
   if (previous?.engineSceneId !== undefined) {
     return previous;
   }
@@ -45,7 +61,7 @@ async function applyScene(engine: EngineApi, previous: DefaultSceneOutcome | und
 async function applyAlerts(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
-  engine: EngineApi,
+  engine: DefaultSeedEngine,
   bundle: { url: string; clientId: string; clientSecret: string },
   previous: DefaultSeedRecord | undefined
 ): Promise<Pick<DefaultSeedRecord, "alerts" | "alertImages">> {
@@ -92,7 +108,7 @@ export async function applyDefaultSeed(
       alerts: DEFAULT_ALERT_ITEMS.map((item) => ({ itemId: item.id, status: "pending", error })),
     };
   }
-  const engine = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+  const engine = seedEngine(bundle);
   const scene = await applyScene(engine, previous?.scene);
   const alerts = await applyAlerts(ctx, instanceId, engine, bundle, previous);
   return { scene, ...alerts };
