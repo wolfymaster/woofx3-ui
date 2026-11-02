@@ -7,7 +7,7 @@ import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ManagedEngineStep } from "@/components/onboarding/managed-engine-step";
-import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
+import { AskAdminToConnectTwitch, AskOwnerToChooseUsername } from "@/components/setup/twitch-step";
 import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
@@ -70,7 +70,7 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
   }
 
   if (status.usernameNeeded) {
-    return <ManagedEngineStep instanceId={instanceId} />;
+    return status.ownsAccount ? <ManagedEngineStep instanceId={instanceId} /> : <AskOwnerToChooseUsername />;
   }
 
   const twitch = chosenFrom(load);

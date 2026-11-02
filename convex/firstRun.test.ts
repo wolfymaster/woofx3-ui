@@ -694,6 +694,22 @@ describe("first run", () => {
     });
   });
 
+  test("the status says who can choose the username: the owner, not an invited admin", async () => {
+    const t = newBackend();
+    const userId = await newUser(t);
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+    const instanceId = await asOwner.mutation(api.setup.ensureFirstRun, {});
+    const adminId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("users", { email: "admin@example.com" });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: id, role: "admin" });
+      return id;
+    });
+
+    expect((await asOwner.query(api.setup.status, { instanceId }))?.ownsAccount).toBe(true);
+    const asAdmin = t.withIdentity({ subject: `${adminId}|session` });
+    expect((await asAdmin.query(api.setup.status, { instanceId }))?.ownsAccount).toBe(false);
+  });
+
   test("skipping Twitch is refused outside a preview", async () => {
     const t = newBackend();
     const userId = await newUser(t);

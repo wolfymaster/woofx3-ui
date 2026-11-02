@@ -51,6 +51,8 @@ export interface SetupStatus {
   canSkipTwitch: boolean;
   /** Whether the engine waits on the user naming it: no derived username was usable, or it was deleted. */
   usernameNeeded: boolean;
+  /** Whether the viewer owns the account, the only one who can name and be billed for its engine. */
+  ownsAccount: boolean;
   /** Whether the viewer may choose platforms and connect Twitch: only an owner or admin can. */
   canManageSetup: boolean;
   /** Whether the setup wizard has opened for the viewer before. */
@@ -144,6 +146,7 @@ export const status = query({
         .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
         .first(),
     ]);
+    const account = instance ? await ctx.db.get(instance.accountId) : null;
     const platformsNeedingSettings: string[] = [];
     for (const install of row?.moduleInstalls ?? []) {
       if (install.status !== "installed" || !install.moduleKey) {
@@ -168,6 +171,7 @@ export const status = query({
       canSkipTwitch: isPreviewDeployment(),
       usernameNeeded:
         !instance?.clientId && (row?.usernameNeededAt !== undefined || provisioning?.status === "deleted"),
+      ownsAccount: account?.ownerId === userId,
       canManageSetup: canManageTwitchLink(role),
       setupSeen: seen !== null,
       engineRegistered: Boolean(instance?.clientId),
