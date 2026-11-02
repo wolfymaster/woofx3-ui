@@ -599,6 +599,10 @@ export default defineSchema({
       })
     ),
     platformsChosenAt: v.optional(v.number()),
+    // Written only when the first-run path makes the instance. It alone says the
+    // instance started empty: without it, applying never seeds default alerts,
+    // which would play beside a streamer's own, and no overlay page is owed.
+    firstRunAt: v.optional(v.number()),
     // When the "bring your setup" question was answered: an import queued, or skipped.
     importChosenAt: v.optional(v.number()),
     // SETUP_INTERESTS ids (convex/lib/setupInterests.ts). Skipping saves none.

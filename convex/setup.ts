@@ -18,7 +18,7 @@ import {
   setupNeedsTwitch,
 } from "./lib/setupPlatforms";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
-import { findOrCreateManagedInstance } from "./provisioningInternal";
+import { findOrCreateManagedInstance, markFirstRun } from "./provisioningInternal";
 
 // Bounds for reads of tables that hold a handful of rows per key.
 const MAX_SETUP_PLATFORMS = 50;
@@ -59,9 +59,8 @@ export interface SetupStatus {
   /** Whether the engine has answered the registration handshake. */
   engineRegistered: boolean;
   /**
-   * Whether finished setup still owes the overlay page: it was seeded, and
-   * nobody has seen an alert play or skipped. A setup from before the seed
-   * never owes it.
+   * Whether finished setup still owes the overlay page: it is a first run, and
+   * nobody has seen an alert play or skipped. An established instance never owes it.
    */
   overlayPending: boolean;
   /**
@@ -345,7 +344,11 @@ export const ensureFirstRun = mutation({
     if (abandoned) {
       await ctx.db.patch(abandoned._id, { hosting: "managed", url: "" });
     }
-    return findOrCreateManagedInstance(ctx, account, userId);
+    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account, userId);
+    if (created) {
+      await markFirstRun(ctx, instanceId);
+    }
+    return instanceId;
   },
 });
 

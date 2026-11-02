@@ -35,6 +35,20 @@ async function linkTwitch(t: Backend, userId: Id<"users">, instanceId: Id<"insta
   return t.mutation(internal.twitchIntegration.completeConnect, { codeHash, userId });
 }
 
+/** The choice the connect screen saves on the row `ensureFirstRun` made. */
+async function chooseTwitchFor(t: Backend, instanceId: Id<"instances">) {
+  await t.run(async (ctx) => {
+    const row = await ctx.db
+      .query("instanceSetup")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (!row) {
+      throw new Error("ensureFirstRun should make the setup row");
+    }
+    await ctx.db.patch(row._id, { platformsChosenAt: 1 });
+  });
+}
+
 describe("first run", () => {
   const ENV_NAMES = ["MAINTENANCE_API_URL", "MAINTENANCE_API_KEY", "CONVEX_SITE_URL"] as const;
   const saved = ENV_NAMES.map((name) => [name, process.env[name]] as const);
@@ -95,9 +109,7 @@ describe("first run", () => {
     const userId = await newUser(t);
     const asUser = t.withIdentity({ subject: `${userId}|session` });
     const instanceId = await asUser.mutation(api.setup.ensureFirstRun, {});
-    await t.run((ctx) =>
-      ctx.db.insert("instanceSetup", { instanceId, platforms: [], platformsChosenAt: 1, updatedAt: 1 })
-    );
+    await chooseTwitchFor(t, instanceId);
     await linkTwitch(t, userId, instanceId);
     await settleScheduled(t);
     return instanceId;
@@ -178,9 +190,7 @@ describe("first run", () => {
     const userId = await newUser(t);
     const asUser = t.withIdentity({ subject: `${userId}|session` });
     const instanceId = await asUser.mutation(api.setup.ensureFirstRun, {});
-    await t.run((ctx) =>
-      ctx.db.insert("instanceSetup", { instanceId, platforms: [], platformsChosenAt: 1, updatedAt: 1 })
-    );
+    await chooseTwitchFor(t, instanceId);
 
     expect((await linkTwitch(t, userId, instanceId)).ok).toBe(true);
 
@@ -224,6 +234,113 @@ describe("first run", () => {
     expect(created).toBe(instanceId);
     const instance = await t.run((ctx) => ctx.db.get(instanceId));
     expect(instance?.hosting).toBe("external");
+  });
+
+  /** A long-running engine whose setup was never finished: the row an abandoned wizard left. */
+  async function establishedInstance(t: Backend, setup: { platformsChosenAt?: number } = { platformsChosenAt: 1 }) {
+    return t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: "streamer@example.com", name: "Streamer" });
+      const accountId = await ctx.db.insert("accounts", { name: "Streamer", ownerId: userId, createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", {
+        accountId,
+        name: "Streamer's Instance",
+        url: "https://engine.example",
+        hosting: "managed",
+        clientId: "client",
+        clientSecret: "secret",
+        createdAt: 1,
+      });
+      await ctx.db.insert("instanceMembers", { instanceId, userId, role: "owner" });
+      await ctx.db.insert("instanceSetup", { instanceId, platforms: [], updatedAt: 1, ...setup });
+      return { userId, instanceId };
+    });
+  }
+
+  function setupOf(t: Backend, instanceId: Id<"instances">) {
+    return t.run((ctx) =>
+      ctx.db
+        .query("instanceSetup")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+        .first()
+    );
+  }
+
+  test("reconnecting Twitch on an established instance leaves setup unfinished and unseeded", async () => {
+    const t = newBackend();
+    const { userId, instanceId } = await establishedInstance(t);
+
+    expect((await linkTwitch(t, userId, instanceId)).ok).toBe(true);
+
+    expect((await setupOf(t, instanceId))?.completedAt).toBeUndefined();
+    const status = await t.withIdentity({ subject: `${userId}|session` }).query(api.setup.status, { instanceId });
+    expect(status?.overlayPending).toBe(false);
+  });
+
+  test("finishing an established instance's setup by hand neither seeds nor owes the overlay page", async () => {
+    const t = newBackend();
+    const { userId, instanceId } = await establishedInstance(t);
+    await linkTwitch(t, userId, instanceId);
+    const asUser = t.withIdentity({ subject: `${userId}|session` });
+
+    await asUser.mutation(api.setup.complete, { instanceId });
+
+    expect((await asUser.query(api.setup.status, { instanceId }))?.overlayPending).toBe(false);
+    expect((await t.mutation(internal.setupApply.claim, { instanceId }))?.seedsDefaults).toBe(false);
+  });
+
+  test("a new managed instance seeds and owes the overlay page once it finishes", async () => {
+    const t = newBackend();
+    const userId = await newUser(t);
+    const asUser = t.withIdentity({ subject: `${userId}|session` });
+    const instanceId = await asUser.mutation(api.setup.ensureFirstRun, {});
+    await chooseTwitchFor(t, instanceId);
+
+    await linkTwitch(t, userId, instanceId);
+    await t.run((ctx) => ctx.db.patch(instanceId, { clientId: "client", clientSecret: "secret" }));
+
+    expect((await asUser.query(api.setup.status, { instanceId }))?.overlayPending).toBe(true);
+    expect((await t.mutation(internal.setupApply.claim, { instanceId }))?.seedsDefaults).toBe(true);
+    await settleScheduled(t);
+  });
+
+  test("an account's first engine through the form is a first run, as a preview's paired engine is", async () => {
+    const t = newBackend();
+    const userId = await newUser(t);
+    const asUser = t.withIdentity({ subject: `${userId}|session` });
+    const accountId = await asUser.mutation(api.accounts.ensureMyAccount, {});
+
+    const instanceId = await asUser.mutation(api.instances.create, { accountId, name: "Mine", url: "engine.test" });
+
+    expect((await setupOf(t, instanceId))?.firstRunAt).toBeDefined();
+  });
+
+  test("the form's takeover of the managed placeholder stays a first run", async () => {
+    const t = newBackend();
+    const userId = await newUser(t);
+    const asUser = t.withIdentity({ subject: `${userId}|session` });
+    const placeholder = await asUser.mutation(api.setup.ensureFirstRun, {});
+    const accountId = await asUser.mutation(api.accounts.ensureMyAccount, {});
+
+    const instanceId = await asUser.mutation(api.instances.create, { accountId, name: "Mine", url: "engine.test" });
+
+    expect(instanceId).toBe(placeholder);
+    expect((await setupOf(t, instanceId))?.firstRunAt).toBeDefined();
+  });
+
+  test("another instance beside a registered one is not a first run", async () => {
+    const t = newBackend();
+    const { userId, instanceId: established } = await establishedInstance(t);
+    const account = await t.run(async (ctx) => (await ctx.db.get(established))?.accountId);
+    if (!account) {
+      throw new Error("the established instance should have an account");
+    }
+
+    const instanceId = await t
+      .withIdentity({ subject: `${userId}|session` })
+      .mutation(api.instances.create, { accountId: account, name: "Second", url: "second.test" });
+
+    expect(await setupOf(t, instanceId)).toBeNull();
+    expect((await setupOf(t, established))?.firstRunAt).toBeUndefined();
   });
 
   test("skipping Twitch is refused outside a preview", async () => {

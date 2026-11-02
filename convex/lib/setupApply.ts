@@ -74,13 +74,12 @@ export interface ImplicitPlatform {
 }
 
 /**
- * Whether applying seeds the defaults. A setup applied before they existed has
- * a streamer's own scenes and alerts, which default ones would play on top of,
- * so an apply that has already run without seeding never starts to. A
- * re-registering engine and a retry both reach here for such a setup.
+ * Whether applying seeds the defaults. Only an instance the first-run path made
+ * is known to be empty; any other may hold a streamer's own scenes and alerts,
+ * which default ones would play on top of, however its setup row looks.
  */
-export function seedsDefaults(row: { moduleInstalls?: unknown; defaultSeed?: unknown }): boolean {
-  return row.defaultSeed !== undefined || row.moduleInstalls === undefined;
+export function seedsDefaults(row: { firstRunAt?: number }): boolean {
+  return row.firstRunAt !== undefined;
 }
 
 /** Settles what a run leaves pending once no retry is left, as a failure with the reason it was waiting. */

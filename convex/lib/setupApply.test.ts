@@ -79,12 +79,11 @@ describe("settlePending", () => {
 });
 
 describe("seedsDefaults", () => {
-  test("a setup not yet applied is seeded, and one already seeding keeps going", () => {
-    expect(seedsDefaults({})).toBe(true);
-    expect(seedsDefaults({ moduleInstalls: [], defaultSeed: {} })).toBe(true);
+  test("an instance the first-run path made is seeded", () => {
+    expect(seedsDefaults({ firstRunAt: 1 })).toBe(true);
   });
 
-  test("a setup applied before the seed existed is left alone", () => {
-    expect(seedsDefaults({ moduleInstalls: [] })).toBe(false);
+  test("anything else is left alone, including a setup that never applied", () => {
+    expect(seedsDefaults({})).toBe(false);
   });
 });

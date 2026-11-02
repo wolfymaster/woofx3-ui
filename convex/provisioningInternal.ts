@@ -104,7 +104,7 @@ export const reserveManagedInstance = internalMutation({
       throw new Error("Not authorized");
     }
 
-    const instanceId = await findOrCreateManagedInstance(ctx, account, userId);
+    const { instanceId } = await findOrCreateManagedInstance(ctx, account, userId);
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -168,14 +168,14 @@ export async function findOrCreateManagedInstance(
   ctx: MutationCtx,
   account: Doc<"accounts">,
   userId: Id<"users">
-): Promise<Id<"instances">> {
+): Promise<{ instanceId: Id<"instances">; created: boolean }> {
   const instances = await ctx.db
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", account._id))
     .take(50);
   const reusable = instances.find((instance) => instance.hosting === "managed" && !instance.clientId);
   if (reusable) {
-    return reusable._id;
+    return { instanceId: reusable._id, created: false };
   }
 
   // A managed engine has no URL until the maintenance API publishes one, so
@@ -199,7 +199,24 @@ export async function findOrCreateManagedInstance(
     }
     await ensureInstanceMember(ctx, instanceId, teammate.userId, mapAccountRoleToInstanceRole(teammate.role));
   }
-  return instanceId;
+  return { instanceId, created: true };
+}
+
+/**
+ * Records that a brand new instance is on its first run, which is what lets
+ * applying seed it (`seedsDefaults`). An instance with a setup row keeps what
+ * the row says: a marker is never added to one that was not made this way.
+ */
+export async function markFirstRun(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
+  const setup = await ctx.db
+    .query("instanceSetup")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .first();
+  if (setup) {
+    return;
+  }
+  const now = Date.now();
+  await ctx.db.insert("instanceSetup", { instanceId, platforms: [], firstRunAt: now, updatedAt: now });
 }
 
 /** What a first engine is derived from: whose it is, and the Twitch login that names it. */

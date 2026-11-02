@@ -161,7 +161,9 @@ export const completeConnect = internalMutation({
       .query("instanceSetup")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .first();
-    if (setup?.platformsChosenAt) {
+    // Only a first run finishes here. On any other instance this is a reconnect,
+    // which restores the link and leaves setup as it stands.
+    if (setup?.firstRunAt !== undefined && setup.platformsChosenAt) {
       await finishFirstRun(ctx, setup, userId);
     }
     return { ok: true, redirectTo, instanceId };
