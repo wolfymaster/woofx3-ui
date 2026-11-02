@@ -245,6 +245,13 @@ export const deleteInstanceData = internalMutation({
     if (provisioning) {
       await ctx.db.delete(provisioning._id);
     }
+    const heldSlugs = await ctx.db
+      .query("engineHeldSlugs")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const held of heldSlugs) {
+      await ctx.db.delete(held._id);
+    }
 
     const companions = await ctx.db
       .query("companions")
