@@ -6,7 +6,12 @@ describe("overlayFacts", () => {
   test("gives the overlay's key to an admin, and only the facts to a member", async () => {
     const f = await fixture();
     await f.t.run(async (ctx) => {
-      const sceneId = await ctx.db.insert("scenes", { instanceId: f.instanceId, name: "Scene", createdAt: 1, updatedAt: 1 });
+      const sceneId = await ctx.db.insert("scenes", {
+        instanceId: f.instanceId,
+        name: "Scene",
+        createdAt: 1,
+        updatedAt: 1,
+      });
       await ctx.db.insert("browserSourceKeys", {
         instanceId: f.instanceId,
         sceneId,
