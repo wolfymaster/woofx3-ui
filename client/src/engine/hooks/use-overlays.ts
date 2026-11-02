@@ -49,6 +49,11 @@ export function useOverlayPreviewUrlRequest() {
   return useEngineGateway().overlays.usePreviewUrlRequest();
 }
 
+/** Records an overlay milestone the overlay page confirmed, for the Todo panel. */
+export function useRecordOverlayMilestoneRequest() {
+  return useEngineGateway().overlays.useRecordMilestoneRequest();
+}
+
 /** The instance's scenes and browser sources, as Getting Started checks them. */
 export function useOverlayFacts(options?: ReadOptions) {
   return useEngineGateway().overlays.useFacts(options);

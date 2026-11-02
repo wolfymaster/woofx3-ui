@@ -10,6 +10,8 @@ import type { DirectRuntime } from "./runtime";
 /** The engine's status of an overlay token that still opens its scene. */
 export const ACTIVE_TOKEN = "active";
 
+const recordNothing = async (): Promise<void> => {};
+
 /**
  * A scene's overlay URLs, straight from the engine's overlay tokens. The
  * editor and OBS run on the same machine as a directly driven engine, so a
@@ -89,5 +91,7 @@ export function directOverlaysGateway(runtime: DirectRuntime): OverlaysGateway {
     useBrowserSourceUrlRequest: () => useEngineRequest(browserSourceUrl),
     useRotateBrowserSourceUrlRequest: () => useEngineRequest(rotateBrowserSourceUrl),
     usePreviewUrlRequest: () => useEngineRequest(previewUrl),
+    // A directly driven engine has no Todo panel to count the milestone.
+    useRecordMilestoneRequest: () => useEngineRequest(recordNothing),
   };
 }

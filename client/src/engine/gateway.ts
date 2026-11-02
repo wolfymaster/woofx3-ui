@@ -94,6 +94,7 @@ import type {
   ObsStatus,
   OpenSessionRefresh,
   OverlayFacts,
+  OverlayMilestone,
   Paginated,
   PinHistoryEntry,
   PinHistoryEntryId,
@@ -829,6 +830,12 @@ export interface OverlaysGateway {
    * Null when the scene has not reached the engine or the caller cannot see it.
    */
   usePreviewUrlRequest(): (sceneId: SceneId) => Promise<string | null>;
+  /**
+   * Records that the overlay page confirmed a milestone, so the Todo panel
+   * counts it done after the page is closed. Recording twice changes nothing.
+   * A gateway with no Todo panel resolves without recording.
+   */
+  useRecordMilestoneRequest(): (milestone: OverlayMilestone) => Promise<void>;
 }
 
 /**

@@ -1858,6 +1858,9 @@ export interface NewStreamInfoPreset {
 
 // ==================== Overlays ====================
 
+/** A first-run fact the overlay page confirms, which the Todo panel's items rest on. */
+export type OverlayMilestone = "overlay-added" | "test-alert";
+
 /** What Getting Started needs to know about the instance's overlays. */
 export interface OverlayFacts {
   hasScene: boolean;

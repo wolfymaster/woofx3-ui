@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
+import { NoInstanceSelectedError } from "@/engine/scope";
 import type { SceneId } from "@/engine/types";
 import { renderInScope } from "./render-in-scope";
 
@@ -18,6 +19,10 @@ mock.module("convex/react", () => ({
   useQuery: (query: Parameters<typeof getFunctionName>[0], args: unknown) => {
     calls.push({ name: getFunctionName(query), args });
     return answers[getFunctionName(query)];
+  },
+  useMutation: (mutation: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
+    calls.push({ name: getFunctionName(mutation), args });
+    return Promise.resolve();
   },
   useAction: (action: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
     const name = getFunctionName(action);
@@ -83,5 +88,20 @@ describe("overlays", () => {
     expect(await getPreview(sceneId)).toBe("https://engine.example/overlay?token=t");
     answers["browserSource:getOrCreatePreviewUrl"] = null;
     expect(await getPreview(sceneId)).toBeNull();
+  });
+
+  test.each([
+    ["overlay-added", "overlay"],
+    ["test-alert", "test-alert"],
+  ] as const)("the %s milestone is recorded as the %s checklist item", async (milestone, itemId) => {
+    const record = renderInScope(() => convexOverlaysGateway.useRecordMilestoneRequest());
+    await record(milestone);
+    expect(calls).toEqual([{ name: "gettingStarted:markDone", args: { instanceId: "instance-1", itemId } }]);
+  });
+
+  test("a milestone needs an instance", async () => {
+    const record = renderInScope(() => convexOverlaysGateway.useRecordMilestoneRequest(), null);
+    await expect(record("overlay-added")).rejects.toBeInstanceOf(NoInstanceSelectedError);
+    expect(calls).toEqual([]);
   });
 });

@@ -171,21 +171,27 @@ passes `null` (the Events widget on such an engine) takes everything.
 
 The getting started checklist (`client/src/components/dashboard/getting-started-checklist.tsx`) is pinned as the first rail item, above the user's own rail widgets. Its flyout lists the items in one column. While anything is left to do, the rail icon carries a dot, red when an item needs attention (a failed install, say). The rail item cannot be moved or removed in edit mode. `useGettingStarted` is called once, by the hosted catalog's pinned rail entry, and feeds both the icon and the flyout. Local mode has no account setup to finish, so its catalog pins nothing. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
 
+Onboarding ends at the dashboard, so the panel holds what comes after it. Items are ordered problems first, then to do, then done, and the flyout shows five with a **Show more** button.
+
 | Item | Done when | Offers |
 |---|---|---|
-| Finish setting up | `instanceSetup.completedAt` is set | Continue setup (`/setup`) |
-| Platforms installed | every chosen platform's `moduleInstalls` entry is `installed` | Retry (`setup.retryApply`) on a failure; the module page on a needs-approval |
+| Twitch connected (problem only) | the instance has a Twitch link; hidden otherwise | Connect Twitch (`/setup/connect`) |
+| Platforms installed (problem only) | hidden unless a chosen platform's `moduleInstalls` entry is `failed` or `needs_approval` | Retry (`setup.retryApply`); the module page on a needs-approval |
 | Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
-| Twitch connected | the instance has a Twitch link | Connect Twitch |
-| Overlay added to OBS | a browser source has loaded a browser-source key (`browserSource.overlayFacts`, `lastLoadedAt`) | Copy browser-source URL, Open scenes |
-| Fire a test follow | the checklist fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
-| Run your first chat command | the streamer says so | See your commands, **I've tried it** |
+| Add your overlay to your streaming app | the overlay page recorded it (`overlay`), or a browser source has loaded a key (`browserSource.overlayFacts`, `lastLoadedAt`) | **Copy link**, Show me how (`/setup/overlay`) |
+| Send a test alert | recorded (`test-alert`) by this item or by the overlay page | **Send a test alert**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
+| Make the alerts yours | the streamer says so (`alerts`) | Open alerts, **Done** |
+| Bring your setup from Firebot or Streamer.bot | the instance has a setup import | Import (`/admin/backup`), **Not for me** |
+| Add chat commands and thank-yous | any starter pack item is installed | Browse starter packs, **Not for me** |
+| Using OBS scenes or Spotify? Connect them | the OBS or Spotify module is installed | Open the marketplace, **Not for me** |
+| Publish your page | the instance's page is published | Your page, **Not for me** |
 
-- **Items the checklist records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
+- **Items the checklist records itself.** Live overlay presence only exists while the overlay page polls, and a test alert is only known to have been sent. So `overlay`, `test-alert`, `alerts` and the platform settings are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). The overlay page records its milestones through `overlays.useRecordMilestoneRequest`. Everything else is read from existing data.
+- **Dismissing optional items.** **Not for me** records `dismissed:<id>` in the same list, and the item leaves the panel, so the panel can finish and hide.
 - **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the checklist (`platform-settings:<id>`).
 - **OBS connection.** On an engine with the `obs.status` capability, "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
-- **When it hides.** The rail item disappears once every item is done, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance.
-- **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
+- **When it hides.** The rail item disappears once every item is done or dismissed, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance.
+- **Test alert availability.** Sending a test alert needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
 
 ## Notes
 
