@@ -377,4 +377,62 @@ describe("applying the seed on a real engine connection", () => {
 
     await expect(enable(3)).rejects.toThrow("the engine is restarting");
   });
+
+  describe("Try again", () => {
+    async function settledFailed() {
+      const backend = await firstRunEngine();
+      await backend.t.run(async (ctx) => {
+        const row = await ctx.db
+          .query("instanceSetup")
+          .withIndex("by_instance", (q) => q.eq("instanceId", backend.instanceId))
+          .first();
+        if (row === null) {
+          throw new Error("no setup row");
+        }
+        // Past the last retry delay, so the run settles and leaves no timer behind.
+        await ctx.db.patch(row._id, { applyAttempts: 99 });
+      });
+      return backend;
+    }
+
+    test("recovers a seed that settled as failed, keeping what worked and creating nothing twice", async () => {
+      const { t, instanceId, ownerId, engine, status } = await settledFailed();
+      engine.createsFailing = 3;
+      await t.action(internal.setupApply.run, { instanceId });
+      const failed = await status();
+      expect(failed?.scene.status).toBe("installed");
+      expect(failed?.alerts.filter((alert) => alert.status === "failed").length).toBe(3);
+      expect(failed?.alerts.filter((alert) => alert.status === "installed").length).toBe(2);
+      await until(() => engine.enableCalls.length === 2, "the two that worked are enabled");
+
+      await t.withIdentity({ subject: `${ownerId}|session` }).mutation(api.setup.retryApply, { instanceId });
+      expect((await status())?.alerts.some((alert) => alert.status === "failed")).toBe(false);
+      await until(
+        async () => (await status())?.alerts.every((alert) => alert.status === "installed") === true,
+        "every alert is installed"
+      );
+
+      expect(engine.scenes.length).toBe(1);
+      expect(engine.workflows.size).toBe(DEFAULT_ALERT_ITEMS.length);
+      await enablesSettled(t, engine);
+    });
+
+    test("recovers from an engine that was failing the reads, once it answers", async () => {
+      const { t, instanceId, ownerId, engine, status } = await settledFailed();
+      engine.modulesFailing = true;
+      await t.action(internal.setupApply.run, { instanceId });
+      expect((await status())?.alerts[0]?.status).toBe("failed");
+      expect((await status())?.alerts[0]?.error).toBe("the engine is restarting");
+
+      engine.modulesFailing = false;
+      await t.withIdentity({ subject: `${ownerId}|session` }).mutation(api.setup.retryApply, { instanceId });
+      await until(
+        async () => (await status())?.alerts.every((alert) => alert.status === "installed") === true,
+        "every alert is installed"
+      );
+
+      expect(engine.workflows.size).toBe(DEFAULT_ALERT_ITEMS.length);
+      await enablesSettled(t, engine);
+    });
+  });
 });

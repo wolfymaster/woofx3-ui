@@ -89,6 +89,11 @@ export function settlePending<T extends { status: "installed" | "pending" | "fai
     : entry;
 }
 
+/** Undoes `settlePending` for a retry, keeping the reason until the new attempt replaces it. */
+export function reopenFailed<T extends { status: "installed" | "pending" | "failed" }>(entry: T): T {
+  return entry.status === "failed" ? { ...entry, status: "pending" } : entry;
+}
+
 /**
  * Delays before each retry of packs still pending, in milliseconds. After the
  * last one a pack that is still pending is marked failed, with the reason it

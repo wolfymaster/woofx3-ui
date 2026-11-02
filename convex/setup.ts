@@ -9,7 +9,7 @@ import { readMemberRole } from "./instances";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { isMaintenanceConfigured } from "./lib/maintenanceClient";
 import { isPreviewDeployment } from "./lib/previewDeployment";
-import { seedsDefaults } from "./lib/setupApply";
+import { reopenFailed, seedsDefaults } from "./lib/setupApply";
 import {
   type ChosenSetupPlatform,
   curatedForDeployment,
@@ -406,7 +406,15 @@ export const retryApply = mutation({
     if (twitchRequiredFor(row) && !(await readTwitchLink(ctx, instanceId))) {
       throw new Error("Connect Twitch before applying setup");
     }
-    await ctx.db.patch(row._id, { applyAttempts: 0, updatedAt: Date.now() });
+    // Failed items go back to pending so the page shows the attempt, not the failure it replaces.
+    const seed = row.defaultSeed;
+    await ctx.db.patch(row._id, {
+      applyAttempts: 0,
+      updatedAt: Date.now(),
+      ...(seed
+        ? { defaultSeed: { ...seed, scene: reopenFailed(seed.scene), alerts: seed.alerts.map(reopenFailed) } }
+        : {}),
+    });
     await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
   },
 });

@@ -29,6 +29,8 @@ import {
   type OverlayPhase,
   overlayReducer,
   overlaySceneOf,
+  seedHasRecordedError,
+  seedIsSlow,
   type TestOutcome,
   testOutcomeOf,
   waitingHelp,
@@ -78,11 +80,12 @@ function moodOf(phase: OverlayPhase) {
   }
 }
 
-function headingOf(phase: OverlayPhase): string {
+function headingOf(phase: OverlayPhase, seedSlow: boolean): string {
   switch (phase.name) {
     case "building":
-    case "preparing":
       return "Getting your overlay ready";
+    case "preparing":
+      return seedSlow ? "This is taking longer than usual" : "Getting your overlay ready";
     case "build-failed":
       return "We couldn't finish setting up";
     case "seed-failed":
@@ -105,12 +108,14 @@ function headingOf(phase: OverlayPhase): string {
   }
 }
 
-function statusOf(phase: OverlayPhase, engine: EngineBuild): string {
+function statusOf(phase: OverlayPhase, engine: EngineBuild, seedSlow: boolean): string {
   switch (phase.name) {
     case "building":
       return engine.stage === "building" ? `${engine.message}. You can close this tab; it keeps going.` : "";
     case "preparing":
-      return "Adding your alerts for follows, subs and bits.";
+      return seedSlow
+        ? "We keep trying by ourselves, or you can try again now."
+        : "Adding your alerts for follows, subs and bits.";
     case "build-failed":
       return "This usually clears up with a retry.";
     case "seed-failed":
@@ -267,6 +272,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
   const followPreset = triggerPresets.find((preset) => preset.event === followEvent);
   const { url, failed: urlFailed, retry: retryUrl } = useOverlayUrl(scene?.id);
   const presence = useOverlayOpen({ enabled: engineReady && sceneFact === "found" });
+  const seedError = seedHasRecordedError(seed);
 
   const [state, dispatch] = useReducer(overlayReducer, INITIAL_OVERLAY_STATE);
   const [now, setNow] = useState(clock);
@@ -286,9 +292,9 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
     dispatch({
       type: "observe",
       at: now,
-      facts: { engine: engine.stage, scene: sceneFact, follow: followFact, presence, test },
+      facts: { engine: engine.stage, scene: sceneFact, follow: followFact, seedError, presence, test },
     });
-  }, [engine.stage, sceneFact, followFact, presence, outcomeKind, outcomeReason, now]);
+  }, [engine.stage, sceneFact, followFact, seedError, presence, outcomeKind, outcomeReason, now]);
 
   const heading = useRef<HTMLHeadingElement>(null);
   const previousPhase = useRef<OverlayPhase["name"] | null>(null);
@@ -317,6 +323,11 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
     dispatch(triggerId === null ? { type: "send-refused" } : { type: "sent", triggerId, at: clock() });
   }
 
+  async function retrySeed() {
+    await applySeed();
+    dispatch({ type: "seed-retried" });
+  }
+
   async function leave() {
     await markDone(phase.name === "finished" ? "finished" : "skipped");
     onExit();
@@ -330,6 +341,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
   const otherAlertFailed = seed?.alerts.some((alert) => alert.status === "failed" && alert.itemId !== "follow");
   const alreadyDone = Boolean(seed?.overlayDone);
   const flowStep = flowStepOf(phase);
+  const seedSlow = seedIsSlow(state, now);
 
   return (
     <main className="min-h-screen bg-background lg:grid lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
@@ -370,13 +382,13 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
             className="text-balance text-3xl font-bold tracking-tight outline-none"
             data-testid="text-overlay-heading"
           >
-            {headingOf(phase)}
+            {headingOf(phase, seedSlow)}
           </h1>
           <output className="flex items-center gap-2 text-muted-foreground" data-testid="text-overlay-status">
-            {(phase.name === "waiting" || phase.name === "preparing") && (
+            {(phase.name === "waiting" || (phase.name === "preparing" && !seedSlow)) && (
               <Loader2 className="h-4 w-4 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
             )}
-            {statusOf(phase, engine)}
+            {statusOf(phase, engine, seedSlow)}
           </output>
         </div>
 
@@ -388,7 +400,11 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
           <RetryButton onRetry={engine.retry} testId="button-overlay-build-retry" />
         )}
 
-        {phase.name === "seed-failed" && <RetryButton onRetry={applySeed} testId="button-overlay-seed-retry" />}
+        {phase.name === "seed-failed" && <RetryButton onRetry={retrySeed} testId="button-overlay-seed-retry" />}
+
+        {phase.name === "preparing" && seedSlow && (
+          <RetryButton onRetry={retrySeed} testId="button-overlay-seed-slow-retry" />
+        )}
 
         {phase.name === "no-scene" &&
           (sceneRequested ? (
@@ -459,7 +475,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
             {follow === "failed" && (
               <div className="space-y-2">
                 <p className="text-sm">Your follow alert didn&apos;t get set up.</p>
-                <RetryButton onRetry={applySeed} testId="button-overlay-follow-retry" />
+                <RetryButton onRetry={retrySeed} testId="button-overlay-follow-retry" />
               </div>
             )}
             {follow === "missing" && (
@@ -498,7 +514,14 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
         {otherAlertFailed && phase.name !== "seed-failed" && (
           <div className="space-y-2 rounded-md border p-3 text-sm" data-testid="text-overlay-alerts-failed">
             <p>Some of your other alerts didn&apos;t get set up.</p>
-            <RetryButton variant="outline" onRetry={applySeed} testId="button-overlay-alerts-retry" />
+            <RetryButton variant="outline" onRetry={retrySeed} testId="button-overlay-alerts-retry" />
+          </div>
+        )}
+
+        {seedSlow && phase.name !== "preparing" && phase.name !== "seed-failed" && (
+          <div className="space-y-2 rounded-md border p-3 text-sm" data-testid="text-overlay-alerts-slow">
+            <p>Adding your alerts is taking longer than usual.</p>
+            <RetryButton variant="outline" onRetry={retrySeed} testId="button-overlay-alerts-slow-retry" />
           </div>
         )}
 

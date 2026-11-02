@@ -9,6 +9,9 @@ import {
   overlayReducer,
   overlaySceneOf,
   SEED_MIRROR_GRACE_MS,
+  SEED_SLOW_AFTER_MS,
+  seedHasRecordedError,
+  seedIsSlow,
   TEST_UNCONFIRMED_AFTER_MS,
   testOutcomeOf,
   waitingHelp,
@@ -18,6 +21,7 @@ const READY: OverlayFacts = {
   engine: "ready",
   scene: "found",
   follow: "ready",
+  seedError: false,
   presence: "closed",
   test: { kind: "none" },
 };
@@ -299,5 +303,49 @@ describe("followAlertOf", () => {
     expect(
       followAlertOf(seedWith({ alerts: [{ itemId: "follow", event: "e", status: "installed" }] }), workflows).fact
     ).toBe("pending");
+  });
+});
+
+describe("a seed attempt that failed", () => {
+  const erring = observe({ scene: "pending", seedError: true }, 1000);
+  const started = run(INITIAL_OVERLAY_STATE, erring);
+
+  test("reads as ordinary progress for the first minute, then as slow", () => {
+    expect(started.phase.name).toBe("preparing");
+    expect(seedIsSlow(started, 1000 + SEED_SLOW_AFTER_MS - 1)).toBe(false);
+    expect(seedIsSlow(started, 1000 + SEED_SLOW_AFTER_MS)).toBe(true);
+  });
+
+  test("keeps its clock across attempts that fail the same way", () => {
+    const later = run(started, observe({ scene: "pending", seedError: true }, 40_000));
+    expect(later.seedErrorSince).toBe(1000);
+  });
+
+  test("Try again starts the clock over", () => {
+    const retried = run(started, { type: "seed-retried" });
+    const next = run(retried, observe({ scene: "pending", seedError: true }, 90_000));
+    expect(seedIsSlow(next, 90_000)).toBe(false);
+    expect(next.seedErrorSince).toBe(90_000);
+  });
+
+  test("clears once the error does", () => {
+    expect(run(started, observe({ scene: "pending" }, 2000)).seedErrorSince).toBeNull();
+  });
+});
+
+describe("seedHasRecordedError", () => {
+  test.each([
+    ["nothing wrong", seedWith({}), false],
+    ["no status yet", null, false],
+    ["pending with no error", seedWith({ scene: { status: "pending" } }), false],
+    ["a pending scene with an error", seedWith({ scene: { status: "pending", error: "x" } }), true],
+    [
+      "a pending alert with an error",
+      seedWith({ alerts: [{ itemId: "sub", event: "e", status: "pending", error: "x" }] }),
+      true,
+    ],
+    ["settled as failed", seedWith({ scene: { status: "failed", error: "x" } }), false],
+  ])("%s", (_name, seed, expected) => {
+    expect(seedHasRecordedError(seed)).toBe(expected);
   });
 });
