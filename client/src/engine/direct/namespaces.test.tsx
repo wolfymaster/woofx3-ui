@@ -201,6 +201,24 @@ describe("alertQueue", () => {
     expect(state.callsOf("listAlerts")).toEqual([[{ limit: 500 }]]);
     read.unmount();
   });
+
+  test("overlay presence reads the engine's queue, and nothing while disabled", async () => {
+    const { runtime, state } = await connected();
+    const gateway = directAlertQueueGateway(runtime);
+    const disabled = renderDirect(() => gateway.useOverlayOpen({ enabled: false }));
+    expect(disabled.current()).toBeUndefined();
+    disabled.unmount();
+    const read = renderDirect(() => gateway.useOverlayOpen());
+    await read.until((value) => value !== undefined, "the presence");
+    expect(read.current()).toBe("closed");
+    expect(state.callsOf("getAlertQueue").length).toBeGreaterThan(0);
+    read.unmount();
+    await runtime.queryClient.invalidateQueries();
+    state.alertQueue = { ok: false, playing: [], waiting: [], reason: "the scene manager did not answer: timeout" };
+    const unanswered = renderDirect(() => gateway.useOverlayOpen());
+    await unanswered.until((value) => value === "unknown", "an unanswered read");
+    unanswered.unmount();
+  });
 });
 
 describe("eventLog", () => {
