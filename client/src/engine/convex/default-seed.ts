@@ -3,7 +3,7 @@ import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { DefaultSeedGateway } from "@/engine/gateway";
-import type { DefaultSeedStatus } from "@/engine/types";
+import type { DefaultSeedStatus, OverlayDoneOutcome } from "@/engine/types";
 import { useMappedValue } from "./mapped";
 import { useInstanceMutation, useScopeInstanceId } from "./scope";
 
@@ -20,6 +20,8 @@ export function toDefaultSeedStatus(row: StatusRow): DefaultSeedStatus {
       error: alert.error,
     })),
     alertImagesOmitted: row.alertImagesOmitted,
+    neverSeeded: row.neverSeeded,
+    overlayDone: row.overlayDone,
   };
 }
 
@@ -36,4 +38,14 @@ function useApplyRequest() {
   }, [retry]);
 }
 
-export const convexDefaultSeedGateway: DefaultSeedGateway = { useStatus, useApplyRequest };
+function useMarkOverlayDoneRequest() {
+  const markOverlayDone = useInstanceMutation(api.defaultSeed.markOverlayDone);
+  return useCallback(
+    async (outcome: OverlayDoneOutcome) => {
+      await markOverlayDone({ outcome });
+    },
+    [markOverlayDone]
+  );
+}
+
+export const convexDefaultSeedGateway: DefaultSeedGateway = { useStatus, useApplyRequest, useMarkOverlayDoneRequest };

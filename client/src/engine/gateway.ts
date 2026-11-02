@@ -93,7 +93,9 @@ import type {
   NotRunningWorkflow,
   ObsStatus,
   OpenSessionRefresh,
+  OverlayDoneOutcome,
   OverlayFacts,
+  OverlayPresence,
   Paginated,
   PinHistoryEntry,
   PinHistoryEntryId,
@@ -354,6 +356,13 @@ export interface AlertQueueGateway {
   useSkipCurrentRequest(): () => Promise<AlertSkipResult>;
   /** Drops every alert still waiting; the one playing keeps playing. */
   useClearQueueRequest(): () => Promise<AlertClearResult>;
+  /**
+   * Whether any overlay page is open on the engine, asked every
+   * OVERLAY_PRESENCE_POLL_MS while mounted. Undefined until the first answer.
+   * Any scene counts, and so does the scene editor's preview, because the
+   * engine cannot tell them from a browser source.
+   */
+  useOverlayOpen(options?: ReadOptions): Live<OverlayPresence>;
 }
 
 /**
@@ -888,6 +897,8 @@ export interface DefaultSeedGateway {
   useStatus(): Live<DefaultSeedStatus | null>;
   /** Applies the seed again, for what is pending or failed. Resolves once it has been asked for, not once it is done. */
   useApplyRequest(): () => Promise<void>;
+  /** Records that setup passed the overlay page. A "finished" stays, whatever is recorded after it. */
+  useMarkOverlayDoneRequest(): (outcome: OverlayDoneOutcome) => Promise<void>;
 }
 
 // The namespaces below act on the linked Twitch channel as its broadcaster.

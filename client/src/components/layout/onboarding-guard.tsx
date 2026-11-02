@@ -64,6 +64,11 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  *
  * Setup also opens by itself once per user while the instance's setup is
  * unfinished, so a returning user is not sent back to it on every visit.
+ *
+ * A finished setup that was seeded sends an owner or admin to the overlay page
+ * until one of them has seen a test alert play or skipped it
+ * (`SetupStatus.overlayPending`), so someone who left midway comes back to it
+ * and someone who passed it never does.
  */
 export function OnboardingGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
@@ -94,6 +99,10 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     }
     if (setup.completedAt === null && !setup.setupSeen) {
       navigate("/setup");
+      return;
+    }
+    if (setup.overlayPending) {
+      navigate(setupStepPath("overlay"));
     }
   }, [isAuthenticated, isChecking, needsOnboarding, needsTwitch, setup, navigate]);
 

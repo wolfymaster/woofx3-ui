@@ -1,4 +1,5 @@
 import { useEngineGateway } from "@/engine/context";
+import type { ReadOptions } from "@/engine/types";
 
 /** The engine's most recent alerts, newest first. */
 export function useEngineAlerts(limit: number) {
@@ -18,4 +19,9 @@ export function useSkipCurrentAlertRequest() {
 /** Drops every alert still waiting in the overlay queue. */
 export function useClearAlertQueueRequest() {
   return useEngineGateway().alertQueue.useClearQueueRequest();
+}
+
+/** Whether an overlay page is open on the engine; asked repeatedly while mounted. */
+export function useOverlayOpen(options?: ReadOptions) {
+  return useEngineGateway().alertQueue.useOverlayOpen(options);
 }

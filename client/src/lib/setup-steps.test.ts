@@ -1,12 +1,36 @@
 import { describe, expect, test } from "bun:test";
 import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgress, setupRedirect } from "./setup-steps";
 
-const fresh: SetupProgress = { twitchUsername: null, twitchRequired: true, usernameNeeded: false, completedAt: null };
-const connected: SetupProgress = { ...fresh, twitchUsername: "streamer", completedAt: 1 };
-const skipped: SetupProgress = { ...fresh, twitchRequired: false, completedAt: 1 };
+const fresh: SetupProgress = {
+  twitchUsername: null,
+  twitchRequired: true,
+  usernameNeeded: false,
+  completedAt: null,
+  overlayPending: false,
+};
+const connected: SetupProgress = { ...fresh, twitchUsername: "streamer", completedAt: 1, overlayPending: true };
+const skipped: SetupProgress = { ...fresh, twitchRequired: false, completedAt: 1, overlayPending: true };
+const passedOverlay: SetupProgress = { ...connected, overlayPending: false };
+
+describe("the overlay page", () => {
+  test("is owed before the last page, which a passed setup returns to", () => {
+    expect(firstIncompleteStep(passedOverlay)).toBe("finish");
+    expect(allowedSetupStep("finish", connected)).toBe("overlay");
+    expect(allowedSetupStep("finish", passedOverlay)).toBe("finish");
+  });
+
+  test("stays open after it has been passed", () => {
+    expect(allowedSetupStep("overlay", passedOverlay)).toBe("overlay");
+  });
+
+  test("waits for the record before going on", () => {
+    expect(setupRedirect("overlay", "finish", connected)).toBeNull();
+    expect(setupRedirect("overlay", "finish", passedOverlay)).toEqual({ step: "finish", replace: false });
+  });
+});
 
 describe("firstIncompleteStep", () => {
-  test.each<{ name: string; progress: SetupProgress; step: "connect" | "overlay" }>([
+  test.each<{ name: string; progress: SetupProgress; step: "connect" | "overlay" | "finish" }>([
     { name: "a new user connects", progress: fresh, step: "connect" },
     { name: "a connected user is on the overlay", progress: connected, step: "overlay" },
     { name: "a preview that skipped is on the overlay", progress: skipped, step: "overlay" },
@@ -34,7 +58,7 @@ describe("allowedSetupStep", () => {
 
   test("later pages stay where they are, so a refresh keeps the place", () => {
     expect(allowedSetupStep("overlay", connected)).toBe("overlay");
-    expect(allowedSetupStep("finish", connected)).toBe("finish");
+    expect(allowedSetupStep("finish", passedOverlay)).toBe("finish");
   });
 });
 
@@ -62,7 +86,7 @@ describe("setupRedirect", () => {
   });
 
   test("a finished page goes on once progress allows it", () => {
-    expect(setupRedirect("overlay", "finish", connected)).toEqual({ step: "finish", replace: false });
+    expect(setupRedirect("overlay", "finish", passedOverlay)).toEqual({ step: "finish", replace: false });
     expect(setupRedirect("connect", "overlay", fresh)).toBeNull();
   });
 });

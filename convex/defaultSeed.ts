@@ -11,9 +11,12 @@ import {
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type ActionCtx, query } from "./_generated/server";
+import { type ActionCtx, mutation, query } from "./_generated/server";
+import { overlayDoneValidator } from "./lib/defaultSeedValidator";
 import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRole } from "./lib/instanceAccess";
+import { seedsDefaults } from "./lib/setupApply";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { installSeedPack } from "./starterPacks";
 
@@ -107,6 +110,9 @@ export interface DefaultSeedStatus {
     error?: string;
   }[];
   alertImagesOmitted: boolean;
+  /** Set up before the seed existed, so nothing was or will be seeded. */
+  neverSeeded: boolean;
+  overlayDone: { outcome: "finished" | "skipped" } | null;
 }
 
 /** Where the instance's default seed stands; null for a non-member. */
@@ -144,6 +150,28 @@ export const status = query({
       scene: seed?.scene ?? { status: "pending" },
       alerts,
       alertImagesOmitted: seed?.alertImages === "omitted",
+      neverSeeded: row !== null && !seedsDefaults(row),
+      overlayDone: row?.overlayDone ? { outcome: row.overlayDone.outcome } : null,
     };
+  },
+});
+
+/** Records that setup passed the overlay page. Seeing an alert play outranks a skip, before or after it. */
+export const markOverlayDone = mutation({
+  args: { instanceId: v.id("instances"), outcome: overlayDoneValidator.fields.outcome },
+  handler: async (ctx, { instanceId, outcome }) => {
+    await requireInstanceRole(ctx, instanceId, "admin");
+    const row = await ctx.db
+      .query("instanceSetup")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (row === null) {
+      throw new Error("This instance has no setup to record against");
+    }
+    if (row.overlayDone?.outcome === "finished" || row.overlayDone?.outcome === outcome) {
+      return;
+    }
+    const now = Date.now();
+    await ctx.db.patch(row._id, { overlayDone: { outcome, at: now }, updatedAt: now });
   },
 });

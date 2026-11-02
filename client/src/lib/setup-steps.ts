@@ -30,6 +30,7 @@ export interface SetupProgress {
   /** No username could be derived, so the connect page asks for one. */
   usernameNeeded: boolean;
   completedAt: number | null;
+  overlayPending: boolean;
 }
 
 /**
@@ -43,7 +44,12 @@ function isConnected(progress: SetupProgress): boolean {
 
 /** Where a user with no particular page in mind belongs. */
 export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
-  return isConnected(progress) ? "overlay" : "connect";
+  if (!isConnected(progress)) {
+    return "connect";
+  }
+  // Past the overlay page, the last page opens the dashboard once the engine is
+  // registered, so a skip made during the build comes back to the wait.
+  return progress.overlayPending ? "overlay" : "finish";
 }
 
 /**
@@ -55,7 +61,10 @@ export function allowedSetupStep(requested: SetupStepId, progress: SetupProgress
   if (!isConnected(progress)) {
     return "connect";
   }
-  return requested === "connect" ? "overlay" : requested;
+  if (requested === "connect" || (requested === "finish" && progress.overlayPending)) {
+    return firstIncompleteStep(progress);
+  }
+  return requested;
 }
 
 /** A navigation the wizard should make: forward to the next step, or back to one the user may be on. */
