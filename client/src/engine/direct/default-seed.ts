@@ -47,7 +47,7 @@ function seedEngine(runtime: DirectRuntime): DefaultSeedEngine {
     getEngineInfo: () => runtime.call("getEngineInfo", (api) => api.getEngineInfo()),
     listEngineModules: () => runtime.call("listEngineModules", (api) => api.listEngineModules()),
     getAvailableWidgets: () => runtime.call("getAvailableWidgets", (api) => api.getAvailableWidgets()),
-    getScenes: (query) => runtime.call("getScenes", (api) => api.getScenes(query)),
+    listSceneSnapshots: () => runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots()),
     createScene: (scene) => runtime.call("createScene", (api) => api.createScene(scene)),
   };
 }

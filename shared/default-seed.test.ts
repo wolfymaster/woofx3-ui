@@ -3,6 +3,7 @@ import { normalizeComposition, PROFILES, resolveTimeline } from "@woofx3/scene/m
 import {
   DEFAULT_ALERT_ITEMS,
   DEFAULT_DASHBOARD_LAYOUT_ID,
+  DEFAULT_OVERLAY_SCENE_NAME,
   type DefaultSeedEngine,
   defaultAlertImagesBaseUrl,
   defaultAlertImageUrl,
@@ -140,7 +141,14 @@ describe("default scene", () => {
     hostsSurface: "alert",
   };
 
-  function engineWith(scenes: { id: string; widgets: unknown[] }[], hasWidget = true) {
+  /** As listSceneSnapshots answers: each scene's stored widgets as JSON, verbatim. */
+  const stored = (id: string, widgets: unknown[], name = `scene ${id}`) => ({
+    id,
+    name,
+    widgetsJson: JSON.stringify(widgets),
+  });
+
+  function engineWith(scenes: { id: string; name: string; widgetsJson: string }[], hasWidget = true) {
     const created: { name: string; widgetsJson: string; layoutJson: string }[] = [];
     const engine: DefaultSeedEngine = {
       getEngineInfo: async () => ({ overlayPublicUrl: "" }),
@@ -148,7 +156,7 @@ describe("default scene", () => {
       getAvailableWidgets: async () => ({
         widgets: hasWidget ? [ALERT_WIDGET_ROW] : [],
       }),
-      getScenes: async () => ({ scenes }),
+      listSceneSnapshots: async () => ({ scenes }),
       createScene: async (scene) => {
         created.push(scene);
         return { id: "new-scene" };
@@ -172,8 +180,8 @@ describe("default scene", () => {
 
   test("takes a renamed scene that already has the default alert widget instead of adding another", async () => {
     const { engine, created } = engineWith([
-      { id: "other", widgets: [{ widgetCanonicalId: "woofx3:widget:image" }] },
-      { id: "mine", widgets: [{ widgetCanonicalId: "woofx3:widget:alert", settings: {} }] },
+      stored("other", [{ widgetCanonicalId: "woofx3:widget:image" }]),
+      stored("mine", [{ widgetCanonicalId: "woofx3:widget:alert", settings: {} }]),
     ]);
     expect(await seedDefaultScene(engine)).toEqual({ status: "installed", engineSceneId: "mine" });
     expect(created).toEqual([]);
@@ -183,9 +191,28 @@ describe("default scene", () => {
     const first = engineWith([]);
     await seedDefaultScene(first.engine);
     const widgets = JSON.parse(first.created[0]?.widgetsJson ?? "");
-    const second = engineWith([{ id: "made-earlier", widgets }]);
+    const second = engineWith([stored("made-earlier", widgets, DEFAULT_OVERLAY_SCENE_NAME)]);
     expect(await seedDefaultScene(second.engine)).toEqual({ status: "installed", engineSceneId: "made-earlier" });
     expect(second.created).toEqual([]);
+  });
+
+  test.each([
+    ["an empty scene", []],
+    ["another kind of widget", [{ widgetCanonicalId: "woofx3:widget:image", settings: { name: "default" } }]],
+    ["an alert widget under another name", [{ widgetCanonicalId: "woofx3:widget:alert", settings: { name: "side" } }]],
+  ])("takes the next free name when the default name is on %s", async (_case, widgets) => {
+    const { engine, created } = engineWith([
+      stored("theirs", widgets, DEFAULT_OVERLAY_SCENE_NAME),
+      stored("older", [], `${DEFAULT_OVERLAY_SCENE_NAME} 2`),
+    ]);
+    expect(await seedDefaultScene(engine)).toEqual({ status: "installed", engineSceneId: "new-scene" });
+    expect(created[0]?.name).toBe(`${DEFAULT_OVERLAY_SCENE_NAME} 3`);
+  });
+
+  test("a scene with unreadable widgets is passed over, not fatal", async () => {
+    const { engine, created } = engineWith([{ id: "broken", name: "broken", widgetsJson: "{not json" }]);
+    expect((await seedDefaultScene(engine)).status).toBe("installed");
+    expect(created[0]?.name).toBe(DEFAULT_OVERLAY_SCENE_NAME);
   });
 
   test("waits rather than store a widget row that has no canonical id", async () => {
