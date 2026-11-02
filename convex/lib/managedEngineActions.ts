@@ -161,6 +161,7 @@ export async function retryManagedEngineRow(
     await ctx.runMutation(internal.provisioningInternal.recordProvisioningError, {
       provisioningId: row._id,
       error: userFacingError(error),
+      requestSettled: false,
     });
     throw error;
   }

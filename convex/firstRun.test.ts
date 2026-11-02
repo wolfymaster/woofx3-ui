@@ -54,7 +54,9 @@ describe("first run", () => {
   const saved = ENV_NAMES.map((name) => [name, process.env[name]] as const);
   const realFetch = globalThis.fetch;
   /** Create calls the fake maintenance API saw. */
-  let creates: { slug: string; key: string | null; twitchChannel?: string }[] = [];
+  let creates: { slug: string; key: string | null; twitchChannel?: string; registrationToken: string }[] = [];
+  /** Slugs whose next create commits and then loses its response, as a dropped connection would. */
+  let lostResponses: string[] = [];
   /** Slugs the availability check clears but the create call refuses, as when another signup wins the race. */
   let lostRaces: string[] = [];
   let unavailable: string[] = [];
@@ -66,6 +68,7 @@ describe("first run", () => {
     creates = [];
     lostRaces = [];
     unavailable = [];
+    lostResponses = [];
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/v1/slugs/")) {
@@ -77,7 +80,12 @@ describe("first run", () => {
         slug: body.slug,
         key: new Headers(init?.headers).get("Idempotency-Key"),
         twitchChannel: body.twitchChannel,
+        registrationToken: body.registrationToken,
       });
+      if (lostResponses.includes(body.slug)) {
+        lostResponses = lostResponses.filter((slug) => slug !== body.slug);
+        throw new Error("connection lost");
+      }
       if (lostRaces.includes(body.slug)) {
         return Response.json({ error: { code: "slug_taken", message: "taken" } }, { status: 409 });
       }
@@ -421,6 +429,104 @@ describe("first run", () => {
       await t.run((ctx) => ctx.db.patch(instanceId, { hosting: "external" }));
 
       await expect(asUser.action(api.provisioning.retry, { instanceId })).rejects.toThrow("The engine has no URL yet");
+    });
+  });
+
+  describe("a create response that was lost", () => {
+    async function linkedAfterLoss(t: Backend) {
+      lostResponses = ["wolfy-master"];
+      const instanceId = await linkedInstance(t).catch(() => undefined);
+      if (!instanceId) {
+        throw new Error("the failure belongs on the row, not the link");
+      }
+      const ownerId = await t.run(async (ctx) => {
+        const instance = await ctx.db.get(instanceId);
+        return instance ? (await ctx.db.get(instance.accountId))?.ownerId : undefined;
+      });
+      return { instanceId, owner: t.withIdentity({ subject: `${ownerId}|session` }) };
+    }
+
+    test("Try again asks with the same key and body, though the slug now reads as taken", async () => {
+      const t = newBackend();
+      const { instanceId, owner } = await linkedAfterLoss(t);
+      expect((await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId }))?.status).toBe("failed");
+      unavailable = ["wolfy-master"];
+
+      await owner.action(api.provisioning.retry, { instanceId });
+
+      expect(creates.map((create) => create.slug)).toEqual(["wolfy-master", "wolfy-master"]);
+      expect(creates[1].key).toBe(creates[0].key);
+      expect(creates[1].registrationToken).toBe(creates[0].registrationToken);
+      const row = await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId });
+      expect(row?.status).toBe("provisioning");
+      expect(row?.registrationToken).toBe(creates[0].registrationToken);
+    });
+
+    test("a refusal on asking again moves to the next candidate under a new key", async () => {
+      const t = newBackend();
+      const { instanceId, owner } = await linkedAfterLoss(t);
+      lostRaces = ["wolfy-master"];
+
+      await owner.action(api.provisioning.retry, { instanceId });
+
+      expect(creates.map((create) => create.slug)).toEqual(["wolfy-master", "wolfy-master", "wolfy-master-tv"]);
+      expect(creates[2].key).not.toBe(creates[0].key);
+    });
+
+    test("a slug refused earlier can be asked for afresh, since the refusal closed its request", async () => {
+      const t = newBackend();
+      lostRaces = ["wolfy-master"];
+      unavailable = slugCandidates("wolfy_master").slice(1);
+      const instanceId = await linkedInstance(t);
+      lostRaces = [];
+      const ownerId = await t.run(async (ctx) => {
+        const instance = await ctx.db.get(instanceId);
+        return instance ? (await ctx.db.get(instance.accountId))?.ownerId : undefined;
+      });
+
+      await t
+        .withIdentity({ subject: `${ownerId}|session` })
+        .action(api.provisioning.startManagedEngine, { instanceId, slug: "wolfy-master" });
+
+      expect(creates.map((create) => create.slug)).toEqual(["wolfy-master", "wolfy-master"]);
+      expect(creates[1].key).not.toBe(creates[0].key);
+    });
+
+    test("the engine's own callback finds the row without any retry", async () => {
+      const t = newBackend();
+      const { instanceId } = await linkedAfterLoss(t);
+
+      await t.mutation(internal.provisioningInternal.applyCallbackEvent, {
+        eventId: "event-1",
+        eventType: "engine.run.step",
+        maintenanceEngineId: "engine-lost",
+        externalRef: instanceId,
+        runKind: "provision",
+        step: "database",
+        stepStatus: "running",
+      });
+
+      const row = await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId });
+      expect(row?.maintenanceEngineId).toBe("engine-lost");
+      expect(row?.status).toBe("provisioning");
+      expect(row?.steps.map((step) => step.key)).toEqual(["database"]);
+    });
+
+    test("a teardown of some older engine is not taken for the open request's", async () => {
+      const t = newBackend();
+      const { instanceId } = await linkedAfterLoss(t);
+
+      await t.mutation(internal.provisioningInternal.applyCallbackEvent, {
+        eventId: "event-1",
+        eventType: "engine.deleted",
+        maintenanceEngineId: "engine-old",
+        externalRef: instanceId,
+        runKind: "deprovision",
+      });
+
+      const row = await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId });
+      expect(row?.maintenanceEngineId).toBeUndefined();
+      expect(row?.status).toBe("failed");
     });
   });
 

@@ -88,9 +88,11 @@ export const reserveManagedInstance = internalMutation({
     accountId: v.id("accounts"),
     userId: v.id("users"),
     slug: v.string(),
-    registrationToken: v.string(),
+    // Used unless the row has a request still open, whose values must not change.
+    newRegistrationToken: v.string(),
+    newCreateRequestId: v.string(),
   },
-  handler: async (ctx, { accountId, userId, slug, registrationToken }) => {
+  handler: async (ctx, { accountId, userId, slug, newRegistrationToken, newCreateRequestId }) => {
     // The account owner only: an engine is a resource the account is billed
     // for, which is a narrower question than who may manage its team.
     const account = await ctx.db.get(accountId);
@@ -126,11 +128,15 @@ export const reserveManagedInstance = internalMutation({
       if (existing.status === "registered") {
         throw new Error("This workspace already has a managed engine");
       }
+      const open = requestStillOpen(existing);
+      const registrationToken = open ? existing.registrationToken : newRegistrationToken;
+      const createRequestId = open ? (existing.createRequestId as string) : newCreateRequestId;
       await ctx.db.patch(existing._id, {
         slug,
         status: "requested",
         steps: [],
         registrationToken,
+        createRequestId,
         registrationAttempts: 0,
         maintenanceEngineId: undefined,
         runId: undefined,
@@ -139,7 +145,7 @@ export const reserveManagedInstance = internalMutation({
         upgrade: undefined,
         updatedAt: now,
       });
-      return { instanceId, provisioningId: existing._id };
+      return { instanceId, provisioningId: existing._id, registrationToken, createRequestId };
     }
 
     const provisioningId = await ctx.db.insert("engineProvisioning", {
@@ -149,14 +155,20 @@ export const reserveManagedInstance = internalMutation({
       slug,
       status: "requested",
       steps: [],
-      registrationToken,
+      registrationToken: newRegistrationToken,
+      createRequestId: newCreateRequestId,
       registrationAttempts: 0,
       createdAt: now,
       updatedAt: now,
     });
-    return { instanceId, provisioningId };
+    return { instanceId, provisioningId, registrationToken: newRegistrationToken, createRequestId: newCreateRequestId };
   },
 });
+
+/** A create request no answer has closed: the maintenance API may hold an engine for it. */
+function requestStillOpen(row: Doc<"engineProvisioning">): boolean {
+  return row.createRequestId !== undefined && row.maintenanceEngineId === undefined && row.status !== "deleted";
+}
 
 export async function findOrCreateManagedInstance(
   ctx: MutationCtx,
@@ -227,7 +239,12 @@ export const firstEngineFacts = internalQuery({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .take(MAX_PLATFORM_LINKS);
     const login = links.find((link) => link.platform === "twitch")?.platformLogin ?? null;
-    return { accountId: account._id, ownerId: account.ownerId, login };
+    const provisioning = await ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    const unsettledSlug = provisioning && requestStillOpen(provisioning) ? provisioning.slug : null;
+    return { accountId: account._id, ownerId: account.ownerId, login, unsettledSlug };
   },
 });
 
@@ -257,6 +274,16 @@ export const recordEngineRequested = internalMutation({
     publicUrl: v.optional(v.string()),
   },
   handler: async (ctx, { provisioningId, maintenanceEngineId, runId, steps, publicUrl }) => {
+    const row = await ctx.db.get(provisioningId);
+    // The run's callbacks can get here first and have moved the row on.
+    if (row?.maintenanceEngineId === maintenanceEngineId) {
+      await ctx.db.patch(provisioningId, {
+        runId,
+        steps: mergeRunSnapshot(row.steps, steps),
+        publicUrl: row.publicUrl ?? publicUrl,
+      });
+      return;
+    }
     await ctx.db.patch(provisioningId, {
       maintenanceEngineId,
       runId,
@@ -294,9 +321,14 @@ export const recordEngineRenamed = internalMutation({
 });
 
 export const recordProvisioningError = internalMutation({
-  args: { provisioningId: v.id("engineProvisioning"), error: v.string() },
-  handler: async (ctx, { provisioningId, error }) => {
-    await ctx.db.patch(provisioningId, { status: "failed", error, updatedAt: Date.now() });
+  args: { provisioningId: v.id("engineProvisioning"), error: v.string(), requestSettled: v.boolean() },
+  handler: async (ctx, { provisioningId, error, requestSettled }) => {
+    await ctx.db.patch(provisioningId, {
+      status: "failed",
+      error,
+      updatedAt: Date.now(),
+      ...(requestSettled ? { createRequestId: undefined } : {}),
+    });
   },
 });
 
@@ -475,6 +507,7 @@ export const applyCallbackEvent = internalMutation({
     eventId: v.string(),
     eventType: v.string(),
     maintenanceEngineId: v.string(),
+    externalRef: v.optional(v.string()),
     step: v.optional(v.string()),
     label: v.optional(v.string()),
     stepStatus: v.optional(
@@ -517,10 +550,11 @@ export const applyCallbackEvent = internalMutation({
       receivedAt: Date.now(),
     });
 
-    const row = await ctx.db
+    const known = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_maintenance_engine", (q) => q.eq("maintenanceEngineId", args.maintenanceEngineId))
       .first();
+    const row = known ?? (await adoptEngineOfOpenRequest(ctx, args));
     if (!row) {
       logger.warn("maintenance webhook: event for an unknown engine", {
         maintenanceEngineId: args.maintenanceEngineId,
@@ -612,6 +646,35 @@ export const applyCallbackEvent = internalMutation({
     }
   },
 });
+
+/**
+ * The row a provisioning event belongs to when its create response was lost, or
+ * has not arrived yet. Dropping these would leave the row behind a run that has
+ * moved on. A teardown or redeploy is never the open request's engine.
+ */
+async function adoptEngineOfOpenRequest(
+  ctx: MutationCtx,
+  args: { eventType: string; maintenanceEngineId: string; externalRef?: string; runKind?: string }
+): Promise<Doc<"engineProvisioning"> | null> {
+  const instanceId = args.externalRef ? ctx.db.normalizeId("instances", args.externalRef) : null;
+  if (!instanceId || args.eventType === "engine.deleted" || (args.runKind && args.runKind !== "provision")) {
+    return null;
+  }
+  const row = await ctx.db
+    .query("engineProvisioning")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .first();
+  if (!row || !requestStillOpen(row)) {
+    return null;
+  }
+  await ctx.db.patch(row._id, {
+    maintenanceEngineId: args.maintenanceEngineId,
+    status: "provisioning",
+    error: undefined,
+    updatedAt: Date.now(),
+  });
+  return ctx.db.get(row._id);
+}
 
 export const cleanupOldEvents = internalMutation({
   args: {},

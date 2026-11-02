@@ -327,6 +327,11 @@ export default defineSchema({
     reportedVersion: v.optional(v.string()),
     error: v.optional(v.string()),
     registrationToken: v.string(),
+    // Names the create request while its outcome may be unknown: with the slug
+    // and channel it makes the idempotency key, so asking again after a lost
+    // response returns the same engine. The body must match, which is why the
+    // registration token above is kept with it. Cleared by a definite refusal.
+    createRequestId: v.optional(v.string()),
     // Registration is retried on a backoff after the engine reports ready;
     // this counts the attempts made so far so the schedule can advance.
     registrationAttempts: v.optional(v.number()),

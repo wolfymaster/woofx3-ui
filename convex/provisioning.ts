@@ -194,13 +194,13 @@ export const checkSlug = action({
  *
  * The provisioning row is written before the call, and `externalRef` carries
  * the Convex instance id, which is how callbacks find their way back to it.
- * Every attempt mints its own idempotency key: the maintenance API stores
- * refusals under a key and refuses a key reused with a different request, so a
- * second slug or a fresh registration token under one key could never succeed.
  *
- * shortcut: a response lost after the maintenance API committed leaves an engine
- * no row knows about, holding the slug; the owner's next attempt moves to
- * another slug. Reconcile through listing the owner's engines if this is seen.
+ * The idempotency key and body stay the same until the outcome is known, so a
+ * response lost after the maintenance API committed gets the same engine back
+ * rather than leaving one holding the streamer's own login. A definite refusal
+ * ends the request: the maintenance API stores it under the key, so the next
+ * attempt needs a new one. Another slug or channel is another key, since the
+ * API refuses a key reused with a different body.
  */
 async function requestEngine(
   ctx: ActionCtx,
@@ -217,12 +217,12 @@ async function requestEngine(
   }
 
   const normalizedSlug = normalizeSlug(slug);
-  const registrationToken = generateRegistrationToken();
   const reserved = await ctx.runMutation(internal.provisioningInternal.reserveManagedInstance, {
     accountId,
     userId,
     slug: normalizedSlug,
-    registrationToken,
+    newRegistrationToken: generateRegistrationToken(),
+    newCreateRequestId: crypto.randomUUID(),
   });
 
   try {
@@ -231,11 +231,11 @@ async function requestEngine(
         slug: normalizedSlug,
         owner: { type: MAINTENANCE_OWNER_TYPE, ref: accountId },
         externalRef: reserved.instanceId,
-        registrationToken,
+        registrationToken: reserved.registrationToken,
         callbackUrl: `${siteUrl}/api/webhooks/maintenance`,
         ...(twitchChannel ? { twitchChannel } : {}),
       },
-      crypto.randomUUID()
+      `${reserved.createRequestId}:${normalizedSlug}:${twitchChannel ?? ""}`
     );
     await ctx.runMutation(internal.provisioningInternal.recordEngineRequested, {
       provisioningId: reserved.provisioningId,
@@ -249,6 +249,9 @@ async function requestEngine(
     await ctx.runMutation(internal.provisioningInternal.recordProvisioningError, {
       provisioningId: reserved.provisioningId,
       error: userFacingError(error),
+      // Below 500 the API answered and created nothing. Anything else may have
+      // committed, so the request stays open for a retry to learn how it went.
+      requestSettled: error instanceof MaintenanceApiError && error.status < 500,
     });
     throw error;
   }
@@ -266,16 +269,24 @@ function isSlugRefused(error: unknown): boolean {
  * availability check that cannot run does not rule a candidate out, since the
  * create call answers the same question; any other failure is on the row, where
  * the provisioning bar offers Try again.
+ *
+ * A request whose outcome is unknown goes first and skips the check, since the
+ * engine it may have created is what would make its slug read as taken.
  */
 async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
-  const { accountId, ownerId, login } = await ctx.runQuery(internal.provisioningInternal.firstEngineFacts, {
-    instanceId,
-  });
-  for (const slug of slugCandidates(login)) {
-    const available = await slugAvailability(slug).catch((error: unknown) => {
-      logger.warn("provisioning: slug check failed", { slug, error: userFacingError(error) });
-      return { available: true };
-    });
+  const { accountId, ownerId, login, unsettledSlug } = await ctx.runQuery(
+    internal.provisioningInternal.firstEngineFacts,
+    { instanceId }
+  );
+  const derived = slugCandidates(login).filter((slug) => slug !== unsettledSlug);
+  for (const slug of unsettledSlug === null ? derived : [unsettledSlug, ...derived]) {
+    const available =
+      slug === unsettledSlug
+        ? { available: true }
+        : await slugAvailability(slug).catch((error: unknown) => {
+            logger.warn("provisioning: slug check failed", { slug, error: userFacingError(error) });
+            return { available: true };
+          });
     if (!available.available) {
       continue;
     }
