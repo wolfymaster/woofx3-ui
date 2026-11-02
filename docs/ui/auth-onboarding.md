@@ -33,7 +33,7 @@ Which path step 2 opens on depends on `provisioning.isAvailable`. It is true onl
    - asks the maintenance API to create the engine, passing the instance id as `externalRef`, the account as owner, the user's Twitch channel when known, and `<CONVEX_SITE_URL>/api/webhooks/maintenance` as the callback URL.
 3. **Progress.** Once the engine is requested, onboarding hands over to [setup](#setup), which shows the `engineProvisioning` row in `ProvisioningBar` above its pages: a headline per status, a progress bar, and the run's steps under **Details**. It polls nothing. The maintenance API posts every step transition to `/api/webhooks/maintenance`, which is signed with `MAINTENANCE_WEBHOOK_SECRET`, deduplicated by event id, and applied by `provisioningInternal.applyCallbackEvent`.
 4. **Registration.** On `engine.ready`, Convex stores the engine's public URL on the instance, sets the row to `registering`, and schedules `runRegistration`. That runs the same handshake as the external path (see `CLAUDE.md`), plus the registration token. A managed engine refuses to register anyone who cannot present it. Failed handshakes are retried after 10 s, 30 s and 2 min before the row is marked `failed`.
-5. **Done.** When the row reaches `registered` and setup is finished, setup's last page sets **`$currentInstanceId`** and navigates home.
+5. **Done.** When the row reaches `registered` and the overlay page has been passed, setup's last page sets **`$currentInstanceId`** and navigates home.
 
 Row statuses: `requested` → `provisioning` → `registering` → `registered`, with `upgrading`, `failed`, `deprovisioning` and `deleted` off the main line. A registered row goes to `upgrading` and back when its engine changes release (see [Admin and team](admin-team.md)). `engine.ready` moves a row straight to `registering`. `ready` is in the schema, but nothing currently writes it.
 
@@ -58,12 +58,49 @@ The form takes an instance name and the engine's API URL. It creates the instanc
 3. **Bring your setup** (`ImportStep`, skippable): offers to import a Firebot or Streamer.bot setup with the same panel as the Backup page (see [Importing from Firebot and Streamer.bot](/ui/setup-imports)). The import is reviewed here and queued; it is created once setup has finished and installed the platforms. **Skip** or **Continue** records `importChosenAt` with `setup.chooseImport`. A setup that answered the interests question before this step existed is not sent back to it.
 4. **What do you want woofx3 to do?** (`InterestsStep`): the interests the chosen platforms can deliver (`SETUP_INTERESTS` in `convex/lib/setupInterests.ts`). Each installs starter packs with their default wording, and shapes the dashboard. Saved with `setup.chooseInterests`; **Skip** saves none.
 5. **Your dashboard** (`DashboardStep`): a preview of the first panel `buildDashboardPreset` makes from the interests. Every zone gets a widget even with no interests, so a skipped question still gives a usable dashboard. "Use this dashboard" calls `setup.complete`. That marks setup finished and gives the caller that panel, unless they already have panels, which are never replaced. Setup that never asked about interests gets the fixed panel in `shared/default-seed.ts` instead: macro pad, Events, then Pinned, Shoutout and Announcement. It is refused until platforms are chosen and Twitch is linked.
-6. **Your overlay** (`OverlayStep`, skippable): the browser-source URL for OBS, with a copy button and the steps to add it.
-   - It uses the instance's oldest scene. With no scene, **Create my overlay** makes "Main overlay" (1920×1080) with the catalog's alert widget over the whole canvas, named `default`, so alerts play in OBS right away (`client/src/lib/setup-overlay.ts`).
-   - Scenes live on the engine, so before the engine is ready the page only says the URL will appear in the Getting started list.
-7. **All set** (`FinishStep`): what will be installed and set up, with each item's progress. The dashboard opens when the engine registers, or from "Open your dashboard" when it already has.
+6. **Your overlay** (`OverlayPage`, [below](#the-overlay-page)): add the overlay to a streaming app, see it connect and play a test alert. **Skip for now** is there from the start.
+7. **Last stop** (`EngineSplash`, [below](#the-wait-for-a-build)): opens the dashboard, waiting first if the engine is still being built.
 
 The first two pages cannot be skipped, except **Connect Twitch** in a preview set up without Twitch. Opening a later page's URL early lands on the first page still to do (`client/src/lib/setup-steps.ts`).
+
+### The overlay page
+
+`/setup/overlay` (`client/src/components/setup/overlay-page.tsx`) is a state machine in `client/src/lib/overlay-onboarding.ts` with the UI over it. It uses gateway hooks only, and `local-routes.test.ts` holds it to that, so local mode can adopt it. The two things it needs from the hosted app are props: `engine` (the build, from `useEngineBuild`) and `onExit`.
+
+| Phase | Shown when | Next |
+|---|---|---|
+| `building`, `build-failed` | The engine has not registered, or its build failed | Registering moves on; **Try again** runs `provisioning.retry` |
+| `preparing` | The seed is still running, or the first presence answer has not come | |
+| `seed-failed` | The seed gave up on the scene | **Try again** (`defaultSeed.useApplyRequest`) |
+| `no-scene` | The seeded scene is gone, or the setup was never seeded | **Make a new overlay** creates the seed's scene |
+| `waiting` | There is a scene and nothing is connected | Link, per-app steps and a test tab. A hint at 60 s, a troubleshooting list at 3 min |
+| `connected` | An overlay is open | **Send a test alert** |
+| `sending`, `playing` | A test is on its way | |
+| `unconfirmed` | 60 s with no answer | **Yes, it played** or **Send again** |
+| `test-failed` | The alert failed or the send was refused | The reason through `describeAlertFailure`, **Try again** |
+| `finished` | The alert completed, or the streamer saw it play | **Open Dashboard** |
+
+An overlay closing during a test goes back to `waiting`. `finished` stays through a closing overlay, because a test in a plain browser tab counts and that tab may well be closed next.
+
+**What the state comes from.** Everything but a test in flight comes from the server, so a refresh lands in the right place; a refresh during a test returns to `connected`. The scene is the seed's `engineSceneId`, or any scene with the default alert widget (`overlaySceneOf`). A deleted scene or follow alert keeps its stored `installed` status, so its existence is read from the scenes and workflows reads. Since those reads fill by webhook, something absent counts as deleted only after 20 seconds. With the follow alert gone the link still works, and the page points to the Alerts screen instead of offering a test.
+
+**The URL is a credential.** It is masked until **Show**, and the page says to treat it like a password. It always comes from `overlays.useBrowserSourceUrlRequest` for the scene above.
+
+**Presence** is `alertQueue.useOverlayOpen`, which asks the engine's `getAlertQueue` every 3 seconds while the page has a scene. `overlayPresenceOf` reads the answer: only the reason "no overlay is open" means closed. Any other `ok: false`, such as a scene manager that did not answer, or a failed call, is `unknown`, which neither connects nor disconnects. The signal is any open connection to any scene, so these also count as open: the scene editor's preview (it holds the same event stream as a browser source), and a scene with no alert widget. A test played then simply fails with the reason.
+
+**Correlating a test.** `useFireTestEvent` returns a `triggerId`, and `alertOfTestEvent` finds the alert carrying it. Do not match on the seeded workflow id: an alert's `workflowId` is its run's id.
+
+### Passing the overlay page
+
+`instanceSetup.overlayDone` records it, per instance, through `defaultSeed.useMarkOverlayDoneRequest`: `finished` when an alert played or was seen to, `skipped` from **Skip for now**. `finished` is never overwritten. `defaultSeed.useStatus` returns it as `overlayDone`.
+
+`setup.status` gives `overlayPending`: setup finished, seeded, and nothing recorded. While it is true, `OnboardingGuard` sends an owner or admin from the app to the overlay page, and `/setup` opens there. Once recorded nobody is sent back. A setup from before the seed existed never owes the page. The page stays open to anyone able to manage setup, from any later link; there the exit reads **Back to dashboard**.
+
+### The wait for a build
+
+`/setup/finish` is where the overlay page leaves to (`EngineSplash`). With a registered engine it opens the dashboard at once. Otherwise it stays full screen with silly messages (`client/src/lib/loading-messages.ts`, picked with an injected random source and never repeating immediately) and opens the dashboard by itself on registration. The messages are hidden from assistive technology behind one steady status line, and reduced motion stops the animation. A failed build stops the messages and shows plain copy with **Try again**.
+
+A refresh stays on the route. Opening the app from anywhere else also returns here while the build runs: `OnboardingGuard` requires a registered instance, onboarding hands an unregistered managed instance to `/setup`, and `/setup` opens the overlay page or, once it has been passed, this one.
 
 ### Applying the choices
 
@@ -72,7 +109,7 @@ The first two pages cannot be skipped, except **Connect Twitch** in a preview se
 - **Modules first.** Each chosen platform is installed with `marketplace.installApprovedModule` and the permissions approved on the platforms page. A build asking for more is recorded as `needs_approval` and is not installed.
 - **Then the default seed** (`shared/default-seed.ts`, `convex/defaultSeed.ts`): the "Default Browser Overlay" scene with an alert widget in the top right corner, then one alert workflow each for follows, subs, resubs, gifted subs and bits. The scene's engine id is recorded on `instanceSetup.defaultSeed`; a scene that already has the default alert widget stands in for it. The workflows go through the `starterPackItems` ledger under the pack id `default-alerts`, with `seedOnce`: an installed row stays installed after its workflow is deleted, so what the streamer deleted never comes back. An alert's image comes from the engine's bundled woofx3 module; below module 0.45.0 the alerts are text only, and `alertImages` records it. `defaultSeed.useStatus` (a gateway namespace) reads all of this. A setup that was applied before the seed existed is never seeded (`seedsDefaults`).
 - **Then starter packs.** The packs for the chosen interests whose modules installed, with default wording, through the same `starterPackItems` ledger as the Starter packs page. A module's triggers reach Convex by webhook shortly after it installs, so an item can be unavailable at first. Such a pack is retried after 15 s, 30 s, 1 min, 2 min and 5 min, then marked failed with the reason, and so is anything pending in the default seed.
-- **Results** are stored on `instanceSetup` (`moduleInstalls`, `packInstalls`, `defaultSeed`) and shown on the All set page.
+- **Results** are stored on `instanceSetup` (`moduleInstalls`, `packInstalls`, `defaultSeed`) and read by the overlay page and the install banner.
 - **Required platform problems.** A required platform that failed or needs approval shows `SetupInstallBanner` under the shell header, with **Retry** (`setup.retryApply`) or **Allow and install** (`setup.approveModulePermissions`). Nothing else is blocked.
 - **Safe to run again.** Installed modules and packs are skipped, and a claim on the row keeps two runs from overlapping.
 - **Then a queued import.** `setup.complete` schedules `setupImports.resumeQueued`, which starts any import queued during setup. It waits while modules install or starter packs are pending, as described in [Applying an import](/ui/setup-imports#applying-an-import).
@@ -88,5 +125,6 @@ The wizard records that it opened for the signed-in user (`setup.markSeen`, per 
 - **No Twitch link:** an owner or admin is sent to setup's first unfinished page. Anyone else sees "Ask an owner or admin to connect Twitch" in the content area, not a redirect.
 - **Link health:** the guard checks only that a link exists. A revoked or under-scoped link is left to the reconnect banner, so an established user is never sent back into setup.
 - **Unfinished setup:** while the instance's setup is unfinished, the guard also opens setup once for an owner or admin who has not seen it.
+- **Overlay page not passed:** see [Passing the overlay page](#passing-the-overlay-page).
 
 A managed engine's later lifecycle (its flag, upgrades, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `upgradeInfo`, `upgradeManagedEngine`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members. Deleting the instance from the Danger Zone (`instances.deleteInstance`) deprovisions its managed engine first, which removes the edge route and releases the slug, and refuses to delete the instance if the maintenance API can't start that teardown.
