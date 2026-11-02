@@ -171,6 +171,37 @@ describe("gettingStartedItems", () => {
     expect(done.status).toBe("done");
   });
 
+  test("puts the overlay above per-platform settings, unless a platform has a real problem", () => {
+    const spotify = { marketplaceModuleId: "woofx3_spotify", name: "Spotify Platform", approvedPermissions: [] };
+    const setup = { platforms: [twitch, spotify, obs], platformsNeedingSettings: ["woofx3_spotify", "woofx3_obs"] };
+    const todo = gettingStartedItems(facts({}, setup));
+    expect(todo.slice(0, 3).map((entry) => entry.id)).toEqual([
+      "overlay",
+      "test-alert",
+      "platform-settings:woofx3_spotify",
+    ]);
+    const obsRefused = facts(
+      { obsStatus: { state: "retrying", failure: "authentication", address: "obs.lan:4455" } },
+      setup
+    );
+    expect(gettingStartedItems(obsRefused)[0]?.id).toBe("platform-settings:woofx3_obs");
+  });
+
+  test("drops the word Platform from a module's name", () => {
+    const spotify = { marketplaceModuleId: "woofx3_spotify", name: "Spotify Platform", approvedPermissions: [] };
+    const setup = { platforms: [spotify], platformsNeedingSettings: ["woofx3_spotify"] };
+    expect(byId(facts({}, setup))["platform-settings:woofx3_spotify"].title).toBe("Set up Spotify");
+  });
+
+  test("never asks to set up Twitch: connecting it is the setup", () => {
+    const named = { ...twitch, name: "Twitch Platform" };
+    const setup = { platforms: [named], platformsNeedingSettings: ["woofx3_twitch"] };
+    expect(byId(facts({}, setup))["platform-settings:woofx3_twitch"]).toBeUndefined();
+    const unlinked = byId(facts({}, { ...setup, twitchUsername: null }));
+    expect(unlinked["platform-settings:woofx3_twitch"]).toBeUndefined();
+    expect(unlinked.twitch?.status).toBe("problem");
+  });
+
   test("completes setting up OBS once the engine reports it connected", () => {
     const setup = { platforms: [twitch, obs], platformsNeedingSettings: ["woofx3_obs"] };
     const connected = byId(facts({ obsStatus: { state: "connected", failure: null, address: "obs.lan:4455" } }, setup))[

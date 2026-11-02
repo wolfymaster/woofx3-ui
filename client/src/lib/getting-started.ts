@@ -1,5 +1,6 @@
 import type { ObsStatus } from "@convex/lib/engineObsStatus";
 import { dismissedItemId, platformSettingsItemId } from "@convex/lib/gettingStarted";
+import { TWITCH_SETUP_MODULE_ID } from "@convex/lib/setupPlatforms";
 import type { SetupStatus } from "@convex/setup";
 import { installedModulePath, MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
@@ -144,16 +145,18 @@ function platformsProblem(setup: GettingStartedFacts["setup"]): GettingStartedIt
 /**
  * One item per installed platform that needs its settings filled in, such as
  * an account to authorize. Its settings live on the engine, so the item is
- * done when the streamer says so.
+ * done when the streamer says so. Twitch has none: connecting it is its setup,
+ * which `twitchProblem` asks for while it is missing.
  */
 function platformSettingsItems(
   setup: GettingStartedFacts["setup"],
   done: ReadonlySet<string>,
   obsStatus: ObsStatus | null
 ): GettingStartedItem[] {
-  return setup.platformsNeedingSettings.map((marketplaceModuleId) => {
-    const name =
-      setup.platforms.find((p) => p.marketplaceModuleId === marketplaceModuleId)?.name ?? marketplaceModuleId;
+  const needing = setup.platformsNeedingSettings.filter((id) => id !== TWITCH_SETUP_MODULE_ID);
+  return needing.map((marketplaceModuleId) => {
+    const listed = setup.platforms.find((p) => p.marketplaceModuleId === marketplaceModuleId)?.name;
+    const name = listed?.replace(/ Platform$/, "") ?? marketplaceModuleId;
     const id = platformSettingsItemId(marketplaceModuleId) as GettingStartedItemId;
     if (marketplaceModuleId === OBS_MODULE_ID && obsStatus !== null) {
       return obsSettingsItem(id, name, obsStatus);
@@ -270,8 +273,9 @@ function yourPageItem(done: boolean): GettingStartedItem {
 const STATUS_ORDER: Record<GettingStartedStatus, number> = { problem: 0, todo: 1, done: 2 };
 
 /**
- * The card's items: problems first, then what is left, then what is done, so
- * the first few are the ones that matter. Dismissed optional items are left out.
+ * The card's items: problems first, then what is left with the overlay leading,
+ * then what is done, so the first few are the ones that matter. Dismissed
+ * optional items are left out.
  */
 export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedItem[] {
   const done = new Set(facts.doneItemIds);
@@ -279,8 +283,8 @@ export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedI
   const items = [
     ...twitchProblem(facts.setup),
     ...platformsProblem(facts.setup),
-    ...platformSettingsItems(facts.setup, done, facts.obsStatus),
     ...(facts.overlaySeeded ? [overlayItem(facts.overlayFinished), testAlertItem(facts.overlayFinished)] : []),
+    ...platformSettingsItems(facts.setup, done, facts.obsStatus),
     alertsItem(done.has("alerts")),
     importItem(facts.hasImport),
     starterPacksItem(facts.hasStarterPack),
