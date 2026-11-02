@@ -142,7 +142,7 @@ type Backend = ReturnType<typeof newBackend>;
  * first await fails here as it does in production, with "Batch RPC request ended".
  */
 class FakeEngine extends RpcTarget {
-  readonly scenes: { id: string; widgets: unknown[] }[] = [];
+  readonly scenes: { id: string; name: string; widgetsJson: string }[] = [];
   readonly workflows = new Map<string, boolean>();
   readonly enableCalls: string[] = [];
   createsFailing = 0;
@@ -189,14 +189,18 @@ class FakeEngine extends RpcTarget {
     };
   }
 
-  getScenes() {
+  /** As the engine's: the stored JSON columns, verbatim. */
+  listSceneSnapshots() {
     return { scenes: this.scenes };
   }
 
+  /** The refusal is the db service's requireUniqueName. */
   createScene(scene: { name: string; widgetsJson: string }) {
-    expect(scene.name).toBe(DEFAULT_OVERLAY_SCENE_NAME);
+    if (this.scenes.some((existing) => existing.name === scene.name)) {
+      throw new Error(`a scene named ${JSON.stringify(scene.name)} already exists`);
+    }
     const id = `scene-${this.scenes.length + 1}`;
-    this.scenes.push({ id, widgets: JSON.parse(scene.widgetsJson) });
+    this.scenes.push({ id, name: scene.name, widgetsJson: scene.widgetsJson });
     return { id };
   }
 
@@ -320,6 +324,39 @@ describe("applying the seed on a real engine connection", () => {
     expect(seeded?.alerts.map((alert) => alert.status)).toEqual(DEFAULT_ALERT_ITEMS.map(() => "installed"));
     expect(seeded?.alertImagesOmitted).toBe(false);
     expect(engine.workflows.size).toBe(DEFAULT_ALERT_ITEMS.length);
+    await enablesSettled(t, engine);
+  });
+
+  test("adopts the scene of a run that died before recording its id, rather than wedging on its name", async () => {
+    const { t, instanceId, engine, status } = await firstRunEngine();
+    await t.action(internal.setupApply.run, { instanceId });
+    const firstScene = (await status())?.scene.engineSceneId;
+    await enablesSettled(t, engine);
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("instanceSetup")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+        .first();
+      if (row === null || row.defaultSeed === undefined) {
+        throw new Error("no seed recorded");
+      }
+      await ctx.db.patch(row._id, { defaultSeed: { ...row.defaultSeed, scene: { status: "pending" } } });
+    });
+
+    await t.action(internal.setupApply.run, { instanceId });
+
+    expect((await status())?.scene).toEqual({ status: "installed", engineSceneId: firstScene });
+    expect(engine.scenes.length).toBe(1);
+  });
+
+  test("works around a streamer's own scene holding the name, with no widget to adopt", async () => {
+    const { t, instanceId, engine, status } = await firstRunEngine();
+    engine.scenes.push({ id: "theirs", name: DEFAULT_OVERLAY_SCENE_NAME, widgetsJson: "[]" });
+
+    await t.action(internal.setupApply.run, { instanceId });
+
+    expect((await status())?.scene).toEqual({ status: "installed", engineSceneId: "scene-2" });
+    expect(engine.scenes[1]?.name).toBe(`${DEFAULT_OVERLAY_SCENE_NAME} 2`);
     await enablesSettled(t, engine);
   });
 

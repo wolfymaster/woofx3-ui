@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
+import { useLastRunRecord } from "@/hooks/use-last-run-record";
 import {
   describeTestEventOutcome,
   type RunRecord,
@@ -66,10 +67,10 @@ export function useTestEventWaits(): { waitElapsed: boolean; gaveUp: boolean } {
   return { waitElapsed, gaveUp };
 }
 
-/** The latest run under `triggerId`. Keyed by it, so a new fire starts a new wait. */
+/** The latest run under `triggerId`, kept past its row's expiry. Keyed by it, so a new fire starts a new wait. */
 function DefaultTestEventOutcome({ triggerId }: { triggerId: string }) {
   const { waitElapsed, gaveUp } = useTestEventWaits();
-  const record = useTransientEvent(triggerId);
+  const record = useLastRunRecord(triggerId, useTransientEvent(triggerId));
 
   return <TestEventOutcome record={record} waitElapsed={waitElapsed} gaveUp={gaveUp} />;
 }
@@ -103,7 +104,7 @@ function TestEventOutcome({
       return (
         <p className="flex items-center gap-2 text-xs text-green-500" data-testid="test-event-outcome-succeeded">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          The workflow completed.
+          The workflow ran, and any alert it sent is on its way to your overlay.
         </p>
       );
     case "nothingMatched":

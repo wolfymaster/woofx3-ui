@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useReplayWorkflowRunRequest } from "@/engine/hooks/use-workflows";
+import { useLastRunRecord } from "@/hooks/use-last-run-record";
 import { useToast } from "@/hooks/use-toast";
 import { describeTestEventOutcome } from "@/lib/test-event-outcome";
 
@@ -40,7 +41,7 @@ export function ReplayControls({ engineRunId, failedStepTaskId, origin = UNRECOR
   const [triggerId, setTriggerId] = useState<string | null>(null);
   const [waitElapsed, setWaitElapsed] = useState(false);
 
-  const record = useTransientEvent(triggerId || null);
+  const record = useLastRunRecord(triggerId || null, useTransientEvent(triggerId || null));
 
   // A different run was selected: the previous replay's outcome is not this run's.
   // biome-ignore lint/correctness/useExhaustiveDependencies: engineRunId is the trigger, not a value read inside

@@ -1,5 +1,6 @@
 import type { EngineInfo, EngineModuleSummary } from "@woofx3/api";
 import { alertWidgetNamesOf, DEFAULT_ALERT_WIDGET_NAME, placedWidgetsOf } from "./alert-widgets";
+import { parseSceneWidgets } from "./scene-serialization";
 import { STARTER_ACTION_REFS, type StarterPack, type StarterWorkflowItem } from "./starter-packs";
 import { stableWidgetId, widgetCanonicalKey } from "./widget-key";
 
@@ -24,9 +25,6 @@ export const DEFAULT_ALERTS_PACK_ID = "default-alerts";
 const FIRST_MODULE_WITH_IMAGES = { major: 0, minor: 45 } as const;
 
 const WOOFX3_MODULE_ID = "woofx3";
-
-/** Scenes read when looking for one already there, newest first. */
-const SCENE_SEARCH_PAGE_SIZE = 100;
 
 /** Must be a widget of the bundled woofx3 module's alert surface. */
 const IMAGE_WIDGET_ID = "woofx3:widget:image";
@@ -284,7 +282,11 @@ export interface DefaultSeedEngine {
   getAvailableWidgets(): PromiseLike<{
     widgets: { id: string; manifestId: string; createdByRef: string; name: string; hostsSurface: string }[];
   }>;
-  getScenes(query: { pageSize: number }): PromiseLike<{ scenes: { id: string; widgets: readonly unknown[] }[] }>;
+  /**
+   * The whole stored scenes. `getScenes` will not do: it answers each widget as
+   * an id and a box, without the canonical id and settings that identify it.
+   */
+  listSceneSnapshots(): PromiseLike<{ scenes: { id: string; name: string; widgetsJson: string }[] }>;
   createScene(scene: { name: string; widgetsJson: string; layoutJson: string }): PromiseLike<{ id: string }>;
 }
 
@@ -302,14 +304,17 @@ export interface DefaultSceneOutcome {
  * widget. `canonicalId` is what the scene manager parses a placement by; a
  * widget's database row id is not one, and a placement holding it is dropped.
  */
-export function defaultSceneInput(alertWidget: { canonicalId: string; name: string }): {
+export function defaultSceneInput(
+  alertWidget: { canonicalId: string; name: string },
+  name: string = DEFAULT_OVERLAY_SCENE_NAME
+): {
   name: string;
   widgetsJson: string;
   layoutJson: string;
 } {
   const { x, y, width, height } = DEFAULT_ALERT_WIDGET_BOX;
   return {
-    name: DEFAULT_OVERLAY_SCENE_NAME,
+    name,
     widgetsJson: JSON.stringify([
       {
         id: "w-default-alerts",
@@ -330,6 +335,24 @@ export function defaultSceneInput(alertWidget: { canonicalId: string; name: stri
 }
 
 /**
+ * The default scene's name, numbered past any scene already holding it: the
+ * engine refuses a second scene of one name, and a streamer's own scene called
+ * this has no widget for the seed to adopt, so retrying would never get past it.
+ */
+export function freeDefaultSceneName(sceneNames: readonly string[]): string {
+  const taken = new Set(sceneNames);
+  if (!taken.has(DEFAULT_OVERLAY_SCENE_NAME)) {
+    return DEFAULT_OVERLAY_SCENE_NAME;
+  }
+  for (let n = 2; ; n++) {
+    const candidate = `${DEFAULT_OVERLAY_SCENE_NAME} ${n}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/**
  * Puts the default scene on the engine, or finds what stands in for it: a
  * scene that already has the default alert widget, whether the streamer made
  * it or a run died after creating it and before recording the id. Finds it
@@ -346,14 +369,17 @@ export async function seedDefaultScene(engine: DefaultSeedEngine): Promise<Defau
     return { status: "pending", error: "The engine has not registered its alert widget yet." };
   }
   const alertWidgetIds = new Set(alertWidgets.map((widget) => widget.canonicalId));
-  const { scenes } = await engine.getScenes({ pageSize: SCENE_SEARCH_PAGE_SIZE });
+  const { scenes } = await engine.listSceneSnapshots();
   const existing = scenes.find((scene) =>
-    alertWidgetNamesOf(placedWidgetsOf(scene.widgets), alertWidgetIds).has(DEFAULT_ALERT_WIDGET_NAME)
+    alertWidgetNamesOf(placedWidgetsOf(parseSceneWidgets(scene.widgetsJson)), alertWidgetIds).has(
+      DEFAULT_ALERT_WIDGET_NAME
+    )
   );
   if (existing !== undefined) {
     return { status: "installed", engineSceneId: existing.id };
   }
-  const created = await engine.createScene(defaultSceneInput(alertWidget));
+  const name = freeDefaultSceneName(scenes.map((scene) => scene.name));
+  const created = await engine.createScene(defaultSceneInput(alertWidget, name));
   return { status: "installed", engineSceneId: created.id };
 }
 

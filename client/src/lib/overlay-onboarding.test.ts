@@ -107,16 +107,27 @@ describe("overlayReducer: presence", () => {
     expect(run(playing, observe({ presence: "unknown" }, 1001)).phase.name).toBe("playing");
   });
 
-  test("a drop mid-test abandons the test", () => {
+  test("a test that plays after a drop and a reopen still finishes", () => {
     const dropped = run(playing, observe({ presence: "closed" }, 2000));
     expect(dropped.phase.name).toBe("waiting");
-    expect(dropped.triggerIds).toEqual([]);
+    const reopened = run(dropped, observe({ presence: "open" }, 3000));
+    expect(reopened.phase.name).toBe("connected");
+    expect(run(reopened, observe({ presence: "open", test: { kind: "completed" } }, 4000)).phase.name).toBe("finished");
   });
 
-  test("a send landing after a drop does not resurrect the test", () => {
+  test("a send landing after a drop stays waiting, and its test still counts", () => {
     const sending = run(connected, { type: "send" });
     const dropped = run(sending, observe({ presence: "closed" }, 500));
-    expect(run(dropped, { type: "sent", triggerId: "late", at: 600 })).toBe(dropped);
+    const landed = run(dropped, { type: "sent", triggerId: "late", at: 600 });
+    expect(landed.phase).toEqual(dropped.phase);
+    expect(landed.triggerIds).toEqual(["late"]);
+    expect(run(landed, observe({ presence: "open", test: { kind: "completed" } }, 700)).phase.name).toBe("finished");
+  });
+
+  test("a failure of a test that outlived a drop does not disturb the wait", () => {
+    const dropped = run(playing, observe({ presence: "closed" }, 2000));
+    const failed = run(dropped, observe({ presence: "closed", test: { kind: "failed", reason: "x" } }, 3000));
+    expect(failed.phase.name).toBe("waiting");
   });
 
   test("the seed disappearing mid-test blocks the page", () => {
@@ -211,6 +222,13 @@ describe("overlayReducer: coming back after finishing", () => {
   test("a new overlay made after finishing asks for the new link to be added", () => {
     const noScene = run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, scene: "none" }));
     expect(run(noScene, observe(finishedBefore)).phase.name).toBe("waiting");
+  });
+
+  test("a new overlay goes to its link while presence has yet to answer, as it does at first", () => {
+    const noScene = run(INITIAL_OVERLAY_STATE, observe({ ...finishedBefore, scene: "none" }));
+    const made = run(noScene, observe({ ...finishedBefore, presence: undefined }, 500));
+    expect(made.phase).toEqual({ name: "waiting", since: 500, dropped: false });
+    expect(run(made, observe(finishedBefore, 600)).phase).toEqual({ name: "waiting", since: 500, dropped: false });
   });
 
   test("another test can be sent, and must complete by itself to finish again", () => {

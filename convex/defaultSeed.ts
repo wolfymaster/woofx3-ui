@@ -39,7 +39,7 @@ function seedEngine(bundle: { url: string; clientId: string; clientSecret: strin
     getEngineInfo: () => session().getEngineInfo(),
     listEngineModules: () => session().listEngineModules(),
     getAvailableWidgets: () => session().getAvailableWidgets(),
-    getScenes: (query) => session().getScenes(query),
+    listSceneSnapshots: () => session().listSceneSnapshots(),
     createScene: (scene) => session().createScene(scene),
   };
 }

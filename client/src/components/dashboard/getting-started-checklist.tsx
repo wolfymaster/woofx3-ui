@@ -219,7 +219,7 @@ export function GettingStartedChecklist({ gettingStarted }: { gettingStarted: Ge
             <div className="min-w-0 flex-1 space-y-1">
               <p className={cn("text-sm font-medium", entry.status === "done" && "line-through")}>{entry.title}</p>
               <p className="text-xs text-muted-foreground">{entry.summary}</p>
-              {entry.status !== "done" && (entry.fixes.length > 0 || entry.actions.length > 0) && (
+              {(entry.fixes.length > 0 || entry.actions.length > 0) && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {entry.fixes.map((fix) => (
                     <FixLink key={`${fix.kind}-${fix.label}`} fix={fix} />
@@ -243,7 +243,7 @@ export function GettingStartedChecklist({ gettingStarted }: { gettingStarted: Ge
                 </div>
               )}
               {entry.actions.map((action) => {
-                const unavailable = entry.status === "done" ? null : actionUnavailable(action);
+                const unavailable = actionUnavailable(action);
                 return unavailable ? (
                   <p key={action.kind} className="text-[11px] text-muted-foreground">
                     {unavailable}
