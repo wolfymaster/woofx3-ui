@@ -25,7 +25,7 @@ import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { type TwitchTokenRequestedResponse, twitchTokenForEngine, twitchTokenGrant } from "./lib/twitchTokenGrant";
 import { claimHandoff } from "./oauthConnectHandoff";
 import { freshTwitchToken } from "./platformRealtime";
-import { finishFirstRun } from "./setup";
+import { finishFirstRun, recordLinkConsent, scheduleApplyIfRegistered } from "./setup";
 
 /** The signed-in caller, when they may connect or disconnect this instance's Twitch link. */
 async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
@@ -161,10 +161,17 @@ export const completeConnect = internalMutation({
       .query("instanceSetup")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .first();
-    // Only a first run finishes here. On any other instance this is a reconnect,
-    // which restores the link and leaves setup as it stands.
-    if (setup?.firstRunAt !== undefined && setup.platformsChosenAt) {
-      await finishFirstRun(ctx, setup, userId);
+    // Only a first run finishes here, and this approval is its consent. On any
+    // other instance this is a reconnect, which restores the link and leaves the
+    // choices as they stand. An apply that waited for the link can go ahead.
+    if (setup?.firstRunAt !== undefined) {
+      const consented = await recordLinkConsent(ctx, setup);
+      if (consented.platformsChosenAt) {
+        await finishFirstRun(ctx, consented, userId);
+      }
+    }
+    if (setup?.completedAt && setup.moduleInstalls === undefined) {
+      await scheduleApplyIfRegistered(ctx, instanceId);
     }
     return { ok: true, redirectTo, instanceId };
   },

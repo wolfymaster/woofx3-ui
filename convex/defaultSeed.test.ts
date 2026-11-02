@@ -98,7 +98,7 @@ describe("the first dashboard panel", () => {
   async function completedPanels() {
     const t = newBackend();
     const { instanceId, ownerId } = await instanceWithOwner(t);
-    await t.withIdentity({ subject: `${ownerId}|session` }).mutation(api.setup.complete, { instanceId });
+    await t.withIdentity({ subject: `${ownerId}|session` }).mutation(api.setup.complete, { instanceId, platforms: [] });
     return t.run(async (ctx) => {
       const layout = await ctx.db
         .query("dashboardLayouts")

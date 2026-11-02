@@ -104,7 +104,7 @@ function twitchRequiredFor(row: Doc<"instanceSetup"> | null): boolean {
  * Applies the setup's choices now if the engine is registered. Otherwise
  * registration applies them (instances.applyRegistration).
  */
-async function scheduleApplyIfRegistered(ctx: MutationCtx, instanceId: Id<"instances">) {
+export async function scheduleApplyIfRegistered(ctx: MutationCtx, instanceId: Id<"instances">) {
   const instance = await ctx.db.get(instanceId);
   if (instance?.clientId) {
     await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
@@ -180,37 +180,56 @@ export const status = query({
   },
 });
 
+/** Every required platform in the curated list must be included. */
+async function assertValidChoice(ctx: QueryCtx, platforms: ChosenSetupPlatform[]) {
+  const curated = await readCuratedPlatforms(ctx);
+  if (curated.length === 0) {
+    throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
+  }
+  const requiredIds = curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId);
+  const error = setupChoiceError(platforms, requiredIds);
+  if (error) {
+    throw new Error(error);
+  }
+}
+
 /**
- * Saves the platforms chosen at setup and the permissions approved for each.
- * Every required platform in the curated list must be included.
+ * Holds what the connect card lists while the streamer is away at Twitch, for
+ * `recordLinkConsent` once they approve. Only an unfinished first run has a
+ * choice to make: elsewhere connecting is a reconnect, which changes nothing.
  */
-export const choosePlatforms = mutation({
+export const prepareConnect = mutation({
   args: { instanceId: v.id("instances"), platforms: v.array(chosenPlatformValidator) },
   handler: async (ctx, { instanceId, platforms }) => {
     await requireInstanceRole(ctx, instanceId, "admin");
-
-    const curated = await readCuratedPlatforms(ctx);
-    if (curated.length === 0) {
-      throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
-    }
-    const requiredIds = curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId);
-    const error = setupChoiceError(platforms, requiredIds);
-    if (error) {
-      throw new Error(error);
-    }
-
-    const now = Date.now();
     const row = await readSetupRow(ctx, instanceId);
-    if (row) {
-      await ctx.db.patch(row._id, { platforms, platformsChosenAt: now, updatedAt: now });
-      if (row.completedAt) {
-        await scheduleApplyIfRegistered(ctx, instanceId);
-      }
+    if (row?.firstRunAt === undefined || row.platformsChosenAt !== undefined) {
       return;
     }
-    await ctx.db.insert("instanceSetup", { instanceId, platforms, platformsChosenAt: now, updatedAt: now });
+    await assertValidChoice(ctx, platforms);
+    await ctx.db.patch(row._id, { pendingPlatforms: platforms, updatedAt: Date.now() });
   },
 });
+
+/**
+ * Turns what the card listed into consent, now that Twitch has approved. Returns
+ * the row as it then stands. A link made elsewhere has nothing held, so the
+ * connect screen's Continue asks instead.
+ */
+export async function recordLinkConsent(ctx: MutationCtx, row: Doc<"instanceSetup">): Promise<Doc<"instanceSetup">> {
+  if (row.platformsChosenAt !== undefined || row.pendingPlatforms === undefined) {
+    return row;
+  }
+  const now = Date.now();
+  const consent = {
+    platforms: row.pendingPlatforms,
+    platformsChosenAt: now,
+    pendingPlatforms: undefined,
+    updatedAt: now,
+  };
+  await ctx.db.patch(row._id, consent);
+  return { ...row, ...consent };
+}
 
 /**
  * Gives the user a first dashboard panel, unless they already have one: a
@@ -278,17 +297,34 @@ export async function finishFirstRun(ctx: MutationCtx, row: Doc<"instanceSetup">
   await ctx.scheduler.runAfter(0, internal.setupImports.resumeQueued, { instanceId });
 }
 
-/** Refused until platforms are chosen and, where it is required, Twitch is connected. */
+/**
+ * The connect screen's Continue, for a Twitch link already there. `platforms` is
+ * what the screen listed, taken as the choice only if none was made: an existing
+ * one is never overwritten. Refused where Twitch is required and not connected.
+ */
 export const complete = mutation({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
+  args: { instanceId: v.id("instances"), platforms: v.array(chosenPlatformValidator) },
+  handler: async (ctx, { instanceId, platforms }) => {
     const userId = await requireInstanceRole(ctx, instanceId, "admin");
-    const row = await readSetupRow(ctx, instanceId);
-    if (!row?.platformsChosenAt) {
-      throw new Error("Choose your platforms before finishing setup");
-    }
-    if (twitchRequiredFor(row) && !(await readTwitchLink(ctx, instanceId))) {
+    const existing = await readSetupRow(ctx, instanceId);
+    if (twitchRequiredFor(existing) && !(await readTwitchLink(ctx, instanceId))) {
       throw new Error("Connect Twitch before finishing setup");
+    }
+    if (existing?.platformsChosenAt) {
+      await finishFirstRun(ctx, existing, userId);
+      return;
+    }
+    await assertValidChoice(ctx, platforms);
+    const now = Date.now();
+    const choice = { platforms, platformsChosenAt: now, pendingPlatforms: undefined, updatedAt: now };
+    if (existing) {
+      await ctx.db.patch(existing._id, choice);
+    } else {
+      await ctx.db.insert("instanceSetup", { instanceId, platforms, platformsChosenAt: now, updatedAt: now });
+    }
+    const row = await readSetupRow(ctx, instanceId);
+    if (!row) {
+      throw new Error("The setup just saved cannot be read");
     }
     await finishFirstRun(ctx, row, userId);
   },
@@ -307,12 +343,20 @@ export const skipTwitch = mutation({
     }
     const userId = await requireInstanceRole(ctx, instanceId, "admin");
     const now = Date.now();
-    const choice = { platforms, platformsChosenAt: now, twitchSkippedAt: now, updatedAt: now };
     const existing = await readSetupRow(ctx, instanceId);
+    const choice = existing?.platformsChosenAt
+      ? { twitchSkippedAt: now, updatedAt: now }
+      : { platforms, platformsChosenAt: now, twitchSkippedAt: now, updatedAt: now };
     if (existing) {
       await ctx.db.patch(existing._id, choice);
     } else {
-      await ctx.db.insert("instanceSetup", { instanceId, ...choice });
+      await ctx.db.insert("instanceSetup", {
+        instanceId,
+        platforms,
+        platformsChosenAt: now,
+        twitchSkippedAt: now,
+        updatedAt: now,
+      });
     }
     const row = await readSetupRow(ctx, instanceId);
     if (!row) {
@@ -363,6 +407,9 @@ export const retryApply = mutation({
     const row = await readSetupRow(ctx, instanceId);
     if (!row?.platformsChosenAt) {
       throw new Error("Setup has nothing to apply yet");
+    }
+    if (twitchRequiredFor(row) && !(await readTwitchLink(ctx, instanceId))) {
+      throw new Error("Connect Twitch before applying setup");
     }
     await ctx.db.patch(row._id, { applyAttempts: 0, updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });

@@ -17,6 +17,7 @@ import {
   settlePending,
 } from "./lib/setupApply";
 import { starterPacksForInterests } from "./lib/setupInterests";
+import { setupNeedsTwitch } from "./lib/setupPlatforms";
 import { logger } from "./logger";
 import type { MarketplaceInstallResult } from "./marketplace";
 import type { SetupModuleInstall, SetupPackInstall } from "./setup";
@@ -33,6 +34,8 @@ import { installStarterPackWithDefaults } from "./starterPacks";
 
 // Bounds the read of the instance's installed modules.
 const MAX_INSTALLED_MODULES = 200;
+// Bounds the read of an instance's platform links, a handful per instance.
+const MAX_PLATFORM_LINKS = 20;
 
 const moduleInstallValidator = v.object({
   marketplaceModuleId: v.string(),
@@ -63,7 +66,8 @@ type ApplyPlan = {
 
 /**
  * Reserves the instance's setup for one apply run, or returns null when there
- * is nothing to apply yet (platforms not chosen, engine unregistered) or another
+ * is nothing to apply yet (platforms not chosen, no Twitch link where one is
+ * required, engine unregistered) or another
  * run holds it.
  */
 export const claim = internalMutation({
@@ -77,6 +81,16 @@ export const claim = internalMutation({
       ctx.db.get(instanceId),
     ]);
     if (!row?.platformsChosenAt || !instance?.clientId) {
+      return null;
+    }
+    const links = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .take(MAX_PLATFORM_LINKS);
+    if (
+      setupNeedsTwitch(row.twitchSkippedAt !== undefined, isPreviewDeployment()) &&
+      !links.some((link) => link.platform === "twitch")
+    ) {
       return null;
     }
     const now = Date.now();

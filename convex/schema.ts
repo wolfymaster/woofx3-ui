@@ -604,6 +604,19 @@ export default defineSchema({
       })
     ),
     platformsChosenAt: v.optional(v.number()),
+    // What the connect card listed when Connect was pressed. Not consent until
+    // Twitch approves: linking moves it to `platforms`, and a denial leaves
+    // `platforms` as it was.
+    pendingPlatforms: v.optional(
+      v.array(
+        v.object({
+          marketplaceModuleId: v.string(),
+          name: v.optional(v.string()),
+          approvedPermissions: v.array(v.string()),
+          approvedLocalEndpoints: v.optional(v.array(v.string())),
+        })
+      )
+    ),
     // Written only when the first-run path makes the instance. It alone says the
     // instance started empty: without it, applying never seeds default alerts,
     // which would play beside a streamer's own, and no overlay page is owed.

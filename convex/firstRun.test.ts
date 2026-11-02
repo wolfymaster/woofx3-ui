@@ -35,7 +35,9 @@ async function linkTwitch(t: Backend, userId: Id<"users">, instanceId: Id<"insta
   return t.mutation(internal.twitchIntegration.completeConnect, { codeHash, userId });
 }
 
-/** The choice the connect screen saves on the row `ensureFirstRun` made. */
+const TWITCH_CONSENT = { marketplaceModuleId: "woofx3_twitch", approvedPermissions: ["chat:read"] };
+
+/** What the connect screen holds on the row `ensureFirstRun` made, as Connect is pressed. */
 async function chooseTwitchFor(t: Backend, instanceId: Id<"instances">) {
   await t.run(async (ctx) => {
     const row = await ctx.db
@@ -45,7 +47,7 @@ async function chooseTwitchFor(t: Backend, instanceId: Id<"instances">) {
     if (!row) {
       throw new Error("ensureFirstRun should make the setup row");
     }
-    await ctx.db.patch(row._id, { platformsChosenAt: 1 });
+    await ctx.db.patch(row._id, { pendingPlatforms: [TWITCH_CONSENT] });
   });
 }
 
@@ -290,7 +292,7 @@ describe("first run", () => {
     await linkTwitch(t, userId, instanceId);
     const asUser = t.withIdentity({ subject: `${userId}|session` });
 
-    await asUser.mutation(api.setup.complete, { instanceId });
+    await asUser.mutation(api.setup.complete, { instanceId, platforms: [] });
 
     expect((await asUser.query(api.setup.status, { instanceId }))?.overlayPending).toBe(false);
     expect((await t.mutation(internal.setupApply.claim, { instanceId }))?.seedsDefaults).toBe(false);
@@ -349,6 +351,99 @@ describe("first run", () => {
 
     expect(await setupOf(t, instanceId)).toBeNull();
     expect((await setupOf(t, established))?.firstRunAt).toBeUndefined();
+  });
+
+  describe("consent", () => {
+    test("pressing Connect records nothing until Twitch approves", async () => {
+      const t = newBackend();
+      const userId = await newUser(t);
+      const instanceId = await t.withIdentity({ subject: `${userId}|session` }).mutation(api.setup.ensureFirstRun, {});
+
+      await chooseTwitchFor(t, instanceId);
+      const denied = await setupOf(t, instanceId);
+      expect(denied?.platformsChosenAt).toBeUndefined();
+      expect(denied?.platforms).toEqual([]);
+
+      await linkTwitch(t, userId, instanceId);
+      const approved = await setupOf(t, instanceId);
+      expect(approved?.platforms).toEqual([TWITCH_CONSENT]);
+      expect(approved?.platformsChosenAt).toBeDefined();
+      expect(approved?.pendingPlatforms).toBeUndefined();
+      await settleScheduled(t);
+    });
+
+    test("reconnecting a finished setup keeps every chosen platform and applies nothing", async () => {
+      const t = newBackend();
+      const { userId, instanceId } = await establishedInstance(t);
+      const platforms = [TWITCH_CONSENT, { marketplaceModuleId: "other", approvedPermissions: [] }];
+      await t.run(async (ctx) => {
+        const row = await ctx.db
+          .query("instanceSetup")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+          .first();
+        await ctx.db.patch(row?._id as Id<"instanceSetup">, { platforms, completedAt: 1, moduleInstalls: [] });
+      });
+      const asUser = t.withIdentity({ subject: `${userId}|session` });
+
+      await asUser.mutation(api.setup.prepareConnect, { instanceId, platforms: [TWITCH_CONSENT] });
+      await linkTwitch(t, userId, instanceId);
+
+      expect((await setupOf(t, instanceId))?.platforms).toEqual(platforms);
+      const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+      expect(scheduled.filter((job) => job.name.includes("setupApply"))).toEqual([]);
+    });
+
+    test("a setup that waited on the link applies when it comes back", async () => {
+      const t = newBackend();
+      const { userId, instanceId } = await establishedInstance(t);
+      await t.run(async (ctx) => {
+        const row = await ctx.db
+          .query("instanceSetup")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+          .first();
+        await ctx.db.patch(row?._id as Id<"instanceSetup">, { completedAt: 1 });
+      });
+
+      await linkTwitch(t, userId, instanceId);
+
+      const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+      expect(scheduled.filter((job) => job.name.includes("setupApply")).length).toBe(1);
+    });
+
+    test("nothing applies without the link, by retry or by claim", async () => {
+      const t = newBackend();
+      const { userId, instanceId } = await establishedInstance(t);
+
+      await expect(
+        t.withIdentity({ subject: `${userId}|session` }).mutation(api.setup.retryApply, { instanceId })
+      ).rejects.toThrow("Connect Twitch");
+      expect(await t.mutation(internal.setupApply.claim, { instanceId })).toBeNull();
+    });
+
+    test("a preview's skip applies without a link and keeps a choice already made", async () => {
+      process.env.PREVIEW_DEPLOYMENT = "true";
+      try {
+        const t = newBackend();
+        const { userId, instanceId } = await establishedInstance(t);
+        const platforms = [TWITCH_CONSENT];
+        await t.run(async (ctx) => {
+          const row = await ctx.db
+            .query("instanceSetup")
+            .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+            .first();
+          await ctx.db.patch(row?._id as Id<"instanceSetup">, { platforms });
+        });
+
+        await t
+          .withIdentity({ subject: `${userId}|session` })
+          .mutation(api.setup.skipTwitch, { instanceId, platforms: [] });
+
+        expect((await setupOf(t, instanceId))?.platforms).toEqual(platforms);
+        expect(await t.mutation(internal.setupApply.claim, { instanceId })).not.toBeNull();
+      } finally {
+        delete process.env.PREVIEW_DEPLOYMENT;
+      }
+    });
   });
 
   describe("a first engine request that died", () => {
