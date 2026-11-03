@@ -1,0 +1,14 @@
+id: WUI-ABS-001
+language: typescript
+severity: warning
+message: A Convex query reads the wall clock.
+rule:
+  any:
+    - pattern: Date.now()
+    - pattern: new Date()
+  inside:
+    stopBy: end
+    kind: call_expression
+    has:
+      field: function
+      regex: ^(query|internalQuery)$

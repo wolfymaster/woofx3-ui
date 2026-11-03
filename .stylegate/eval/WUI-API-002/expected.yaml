@@ -1,0 +1,10 @@
+reviewed: false
+findings:
+  - file: bad/convex/notesBoard.ts
+    line_start: 6
+    line_end: 14
+    note: A public query is registered with no args key.
+  - file: bad/convex/notesBoard.ts
+    line_start: 16
+    line_end: 17
+    note: An internal mutation is registered with a bare handler and no validator.

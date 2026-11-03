@@ -1,0 +1,69 @@
+id: WUI-ABS-001
+title: Convex queries do not read the wall clock
+lang: typescript
+scope:
+  include: ["convex/**/*.ts"]
+  exclude: ["convex/_generated/**"]
+  skip_tests: true
+category: abstraction
+severity: warn
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-abs-001.yml
+statement: >
+  Code inside a `query({...})` or `internalQuery({...})` definition reads
+  the wall clock with `Date.now()` or a zero-argument `new Date()`. Pass the
+  time in as an argument the client refreshes, or keep time-based state in
+  a field that a scheduled mutation updates. Mutations and actions may read
+  the clock; `new Date(value)` with an argument is a conversion, not a
+  clock read.
+rationale: >
+  Convex reruns a query only when the data it read changes, not when time
+  passes, so an answer derived from the clock (an invitation's expiry, a
+  "pending for 5 minutes" flag, today's date) goes stale on screen and stays
+  wrong until an unrelated write. Clock reads also defeat the query cache
+  (`convex/_generated/ai/guidelines.md`, Query guidelines).
+violation_examples:
+  - note: The expiry is judged against the clock inside a query.
+    code: |
+      export const byToken = query({
+        args: { token: v.string() },
+        handler: async (ctx, args) => {
+          const inv = await ctx.db.query("invitations").withIndex("by_token", (q) => q.eq("token", args.token)).first();
+          if (!inv || inv.expiresAt <= Date.now()) {
+            return null;
+          }
+          return inv;
+        },
+      });
+non_violation_examples:
+  - note: The client passes the time it renders for.
+    code: |
+      export const byToken = query({
+        args: { token: v.string(), now: v.number() },
+        handler: async (ctx, args) => {
+          const inv = await ctx.db.query("invitations").withIndex("by_token", (q) => q.eq("token", args.token)).first();
+          return inv && inv.expiresAt > args.now ? inv : null;
+        },
+      });
+  - note: Near miss. A mutation stamps the time it wrote.
+    code: |
+      export const accept = mutation({
+        args: { invitationId: v.id("invitations") },
+        handler: async (ctx, args) => {
+          await ctx.db.patch(args.invitationId, { status: "accepted", acceptedAt: Date.now() });
+        },
+      });
+  - note: Near miss. new Date with an argument converts a stored timestamp.
+    code: |
+      export const summary = query({
+        args: { instanceId: v.id("instances") },
+        handler: async (ctx, args) => {
+          const row = await latestSession(ctx, args.instanceId);
+          return row ? { startedOn: new Date(row.startedAt).toISOString().slice(0, 10) } : null;
+        },
+      });
+context_needs: [enclosing_decl]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

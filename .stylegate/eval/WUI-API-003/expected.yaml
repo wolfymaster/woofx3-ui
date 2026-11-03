@@ -1,0 +1,22 @@
+reviewed: false
+findings:
+  - file: bad/convex/overlaySettings.ts
+    line_start: 5
+    line_end: 16
+    note: Signed in is checked, but not membership of the instance, before its settings are read.
+  - file: bad/convex/overlaySettings.ts
+    line_start: 20
+    line_end: 30
+    note: The mutation writes another instance's settings with no authentication or membership check.
+  - file: bad/convex/blockedTerms.ts
+    line_start: 9
+    line_end: 13
+    note: The action calls any instance's engine with no check that the caller is a member.
+  - file: bad/convex/runHistory.ts
+    line_start: 14
+    line_end: 14
+    note: The run is fetched by its engine id and returned without checking it belongs to the authorized instance.
+  - file: bad/convex/runHistory.ts
+    line_start: 21
+    line_end: 25
+    note: Membership is checked for a userId taken from the arguments rather than getAuthUserId(ctx).

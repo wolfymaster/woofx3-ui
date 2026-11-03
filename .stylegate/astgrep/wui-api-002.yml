@@ -1,0 +1,36 @@
+id: WUI-API-002
+language: typescript
+severity: error
+message: A Convex function is registered without an args validator.
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: ^(query|mutation|action|internalQuery|internalMutation|internalAction)$
+  inside:
+    kind: variable_declarator
+  any:
+    - has:
+        field: arguments
+        has:
+          any:
+            - kind: arrow_function
+            - kind: function_expression
+    - has:
+        field: arguments
+        has:
+          kind: object
+          all:
+            - not:
+                has:
+                  kind: pair
+                  has:
+                    field: key
+                    regex: ^args$
+            - not:
+                has:
+                  kind: shorthand_property_identifier
+                  regex: ^args$
+            - not:
+                has:
+                  kind: spread_element

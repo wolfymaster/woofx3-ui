@@ -1,0 +1,54 @@
+id: WUI-LAY-002
+title: A "use node" file registers only actions
+lang: typescript
+scope:
+  include: ["convex/**/*.ts"]
+  exclude: ["convex/_generated/**"]
+  skip_tests: true
+category: layering
+severity: error
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-lay-002.yml
+statement: >
+  A file under `convex/` that starts with the `"use node";` directive
+  registers a `query`, `mutation`, `internalQuery` or `internalMutation`.
+  Only actions run in the Node.js runtime; queries and mutations stay in a
+  file without the directive, and the Node action calls them through
+  `ctx.runQuery` / `ctx.runMutation`. A Node file that registers only
+  `action` and `internalAction` is fine, and `fetch()` needs no
+  `"use node"` at all.
+rationale: >
+  Convex refuses to push a Node file that defines a query or mutation, so
+  the mistake surfaces only at `bunx convex dev` or deploy time, after the
+  change looks finished. The repository keeps the split by name:
+  `fooActions.ts` beside `foo.ts`.
+violation_examples:
+  - note: A Node action file also defines the query its action reads.
+    code: |
+      "use node";
+      import { action, internalQuery } from "./_generated/server";
+
+      export const getCredential = internalQuery({ args: { instanceId: v.id("instances") }, handler: async (ctx, args) => ctx.db.get(args.instanceId) });
+      export const sign = action({ args: { instanceId: v.id("instances") }, handler: async (ctx, args) => signRelay(ctx, args.instanceId) });
+non_violation_examples:
+  - note: The Node file holds only actions and calls the query by reference.
+    code: |
+      "use node";
+      import { internal } from "./_generated/api";
+      import { action } from "./_generated/server";
+
+      export const sign = action({
+        args: { instanceId: v.id("instances") },
+        handler: async (ctx, args) => signRelay(await ctx.runQuery(internal.companionRelay.getCredential, args)),
+      });
+  - note: Near miss. A default-runtime file defines a query and an action that uses fetch.
+    code: |
+      import { action, query } from "./_generated/server";
+
+      export const status = query({ args: {}, handler: async () => "ok" });
+      export const ping = action({ args: { url: v.string() }, handler: async (_ctx, args) => (await fetch(args.url)).ok });
+context_needs: [enclosing_decl]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

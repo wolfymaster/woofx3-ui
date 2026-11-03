@@ -1,0 +1,79 @@
+# An HTTP batch session sends its batch on the first await and is spent after
+# it. Three shapes spend it before the real call: awaiting the bare session
+# (with or without type arguments, which tree-sitter parses as a call on an
+# await expression), returning it from an async function, and using one
+# session variable in two statements when the first of them awaits.
+id: WUI-API-001
+language: typescript
+severity: error
+message: An engine HTTP batch session is awaited or used past its first await.
+rule:
+  any:
+    - kind: await_expression
+      has:
+        kind: call_expression
+        has:
+          field: function
+          regex: ^(createEngineRpcSession|newHttpBatchRpcSession)$
+    - kind: call_expression
+      has:
+        field: function
+        kind: await_expression
+        has:
+          kind: identifier
+          regex: ^(createEngineRpcSession|newHttpBatchRpcSession)$
+      not:
+        inside:
+          kind: member_expression
+          field: object
+    - kind: return_statement
+      has:
+        kind: call_expression
+        has:
+          field: function
+          regex: ^(createEngineRpcSession|newHttpBatchRpcSession)$
+      inside:
+        stopBy:
+          any:
+            - kind: function_declaration
+            - kind: arrow_function
+            - kind: function_expression
+            - kind: method_definition
+        any:
+          - kind: function_declaration
+          - kind: arrow_function
+          - kind: function_expression
+          - kind: method_definition
+        regex: ^async\b
+    - kind: lexical_declaration
+      has:
+        kind: variable_declarator
+        all:
+          - has: {field: name, pattern: $SESSION}
+          - has:
+              field: value
+              kind: call_expression
+              has:
+                field: function
+                regex: ^(createEngineRpcSession|newHttpBatchRpcSession)$
+      precedes:
+        stopBy: end
+        any:
+          - kind: expression_statement
+          - kind: lexical_declaration
+          - kind: return_statement
+        has:
+          stopBy: end
+          kind: await_expression
+          has:
+            stopBy: end
+            pattern: $SESSION
+        precedes:
+          stopBy: end
+          any:
+            - kind: expression_statement
+            - kind: lexical_declaration
+            - kind: return_statement
+          has:
+            stopBy: end
+            pattern: $SESSION

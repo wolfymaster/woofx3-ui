@@ -1,0 +1,106 @@
+id: WUI-API-003
+title: Public Convex functions authorize the caller on the instance they touch
+lang: typescript
+scope:
+  include: ["convex/**/*.ts"]
+  exclude: ["convex/_generated/**", "convex/migrations/**", "convex/seeds/**"]
+  skip_tests: true
+category: api
+severity: error
+enforcement: llm
+statement: >
+  A public Convex function (`query`, `mutation` or `action`; also an
+  `httpAction` route that is not the Bearer-authenticated engine webhook)
+  that takes an `instanceId`, `accountId` or the id of a row scoped to one
+  reads or changes that instance's data, or calls its engine, without
+  first establishing that the signed-in caller is a member with enough
+  role. The check is one of the access helpers (`requireInstanceRole`,
+  `requireInstanceRoleInAction` in `convex/lib/instanceAccess.ts`,
+  `getInstanceMembership` / `isInstanceMember` in `convex/lib/teamAccess.ts`,
+  `canAccessAccount`, or a local helper in the same file that calls one of
+  them, such as `requireMember`, `canRead` or `requireInstanceContext`) and
+  it runs before the read, write or engine call. Also a violation: taking a
+  `userId` argument and trusting it for authorization instead of
+  `getAuthUserId(ctx)`; looking a row up by its own id (`ctx.db.get(id)`,
+  an engine id index) and returning or changing it without checking that
+  its `instanceId` is the one the caller was authorized for; and a change
+  that replaces instance-wide settings, credentials or the platform link
+  with only a member check where the rest of the file requires an owner or
+  admin. Internal functions (`internal*`), functions whose caller
+  authenticates with a companion, viewer or macro trigger token through
+  that flow's helper, and reads of the caller's own rows by
+  `getAuthUserId(ctx)` are not violations.
+rationale: >
+  An instance id is not a secret: it travels in URLs and query args, so
+  being signed in proves nothing about access to it. Missing checks here
+  are cross-tenant holes, and the history has several: an unauthenticated
+  route that let anyone bind an instance to their own Twitch account, a
+  mutation that let any signed-in user overwrite another instance's tokens,
+  and instance-wide settings writable by any member.
+violation_examples:
+  - note: The mutation trusts the instance id and writes with no membership check.
+    code: |
+      export const setOverlayPublicUrl = mutation({
+        args: { instanceId: v.id("instances"), value: v.string() },
+        handler: async (ctx, args) => {
+          await ctx.db.patch(args.instanceId, { overlayPublicUrl: args.value });
+        },
+      });
+  - note: The action calls the engine for any instance id it is given.
+    code: |
+      export const listBlockedTerms = action({
+        args: { instanceId: v.id("instances") },
+        handler: async (ctx, args) => {
+          const engine = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
+          return await createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret).listBlockedTerms();
+        },
+      });
+  - note: The caller is a member of the instance, but the run is fetched by its engine id and returned without checking it belongs to that instance.
+    code: |
+      export const runWithSteps = query({
+        args: { instanceId: v.id("instances"), engineRunId: v.string() },
+        handler: async (ctx, { instanceId, engineRunId }) => {
+          await requireInstanceRole(ctx, instanceId);
+          return ctx.db.query("workflowRuns").withIndex("by_engine_id", (q) => q.eq("engineRunId", engineRunId)).first();
+        },
+      });
+non_violation_examples:
+  - note: The role check runs before the write; instance-wide settings need an admin.
+    code: |
+      export const setOverlayPublicUrl = mutation({
+        args: { instanceId: v.id("instances"), value: v.string() },
+        handler: async (ctx, args) => {
+          await requireInstanceRole(ctx, args.instanceId, "admin");
+          await ctx.db.patch(args.instanceId, { overlayPublicUrl: args.value });
+        },
+      });
+  - note: Near miss. A local helper in the file performs the membership check, and a non-member gets an empty answer.
+    code: |
+      async function canRead(ctx: QueryCtx, instanceId: Id<"instances">): Promise<boolean> {
+        const userId = await getAuthUserId(ctx);
+        return userId !== null && (await getInstanceMembership(ctx, instanceId, userId)) !== null;
+      }
+
+      export const listForInstance = query({
+        args: { instanceId: v.id("instances") },
+        handler: async (ctx, { instanceId }) => {
+          if (!(await canRead(ctx, instanceId))) {
+            return [];
+          }
+          return ctx.db.query("engineAlerts").withIndex("by_instance", (q) => q.eq("instanceId", instanceId)).take(50);
+        },
+      });
+  - note: Near miss. An internal mutation called by the authenticated webhook does no user check.
+    code: |
+      export const upsertFromWebhook = internalMutation({
+        args: { instanceId: v.id("instances"), engineCommandId: v.string(), command: v.string() },
+        handler: async (ctx, args) => upsertCommand(ctx, args),
+      });
+context_needs: [enclosing_decl, package_decls, imports]
+trigger:
+  - '\b(query|mutation|action|httpAction)\('
+  - 'instanceId|accountId|userId|engineRunId|Id<'
+  - 'ctx\.db\.(get|query|patch|replace|insert|delete)|runQuery|runMutation|runAction'
+  - 'createEngineRpcSession|requireInstance|Membership|isInstanceMember|requireMember|canAccessAccount|getAuthUserId'
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

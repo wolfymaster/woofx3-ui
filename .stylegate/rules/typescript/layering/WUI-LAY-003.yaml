@@ -1,0 +1,50 @@
+id: WUI-LAY-003
+title: Dashboard widgets open secondary content in a WidgetOverlay
+lang: typescript
+scope:
+  include: ["client/src/components/dashboard/widgets/**/*.tsx", "client/src/components/dashboard/widgets/**/*.ts"]
+  skip_tests: true
+category: layering
+severity: warn
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-lay-003.yml
+statement: >
+  A dashboard widget under `client/src/components/dashboard/widgets/`
+  imports a fold-in-place primitive, `Collapsible` or `Accordion` (from
+  `@/components/ui/collapsible`, `@/components/ui/accordion` or their
+  Radix packages), to show a history, queue, full list or extra settings
+  inside the widget. A widget keeps one layout while it is on screen;
+  secondary content opens over the dashboard through `WidgetOverlay`
+  (`client/src/components/dashboard/widget-overlay.tsx`), whose trigger is
+  one fixed row carrying the count. See `docs/patterns/dashboard-widgets.md`.
+rationale: >
+  A widget's zone has a fixed size set by the panel layout, never by its
+  content. Unfolding a section pushes the rest of the widget, usually the
+  control the user came for, out of view, and the layout changes on every
+  click. The pinned, shoutout and blocked-terms widgets all shipped with a
+  `Collapsible` before they moved to `WidgetOverlay`.
+violation_examples:
+  - note: The pinned widget unfolds its history under the pin box.
+    code: |
+      import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+      <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+        <CollapsibleTrigger>History · {history.length}</CollapsibleTrigger>
+        <CollapsibleContent>{history.map(renderPin)}</CollapsibleContent>
+      </Collapsible>
+non_violation_examples:
+  - note: The history opens in an overlay; the trigger is one row with the count.
+    code: |
+      import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
+
+      <WidgetOverlay trigger={`History · ${history.length}`} title="Pinned history" testId="pinned-history">
+        {history.map(renderPin)}
+      </WidgetOverlay>
+  - note: Near miss. A dialog the widget opens for an editor, as the macro pad does.
+    code: |
+      import { Dialog, DialogContent } from "@/components/ui/dialog";
+context_needs: [imports]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

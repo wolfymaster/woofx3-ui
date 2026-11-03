@@ -1,0 +1,11 @@
+id: WUI-LAY-001
+language: typescript
+severity: warning
+message: Code in shared/ imports Convex, React or client code.
+rule:
+  any:
+    - kind: import_statement
+    - kind: export_statement
+  has:
+    field: source
+    regex: ^['"](convex|react|react-dom|@convex|@/|(\.\./)+(convex|client))(/|['"])

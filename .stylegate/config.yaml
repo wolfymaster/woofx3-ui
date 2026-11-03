@@ -1,0 +1,58 @@
+# stylegate configuration for woofx3-ui. Run it through scripts/stylegate.sh,
+# which layers these rules over stylegate's own. Keys left out take
+# stylegate's defaults.
+
+# stylegate runs locally only, on the logged-in claude CLI's subscription.
+provider: claude_code
+
+# Generated Convex bindings, generated desktop host types and vendored
+# shadcn components (extended by composition, never edited).
+exclude:
+  - "convex/_generated/**"
+  - "companion/ui/src/generated/**"
+  - "client/src/components/ui/**"
+  - "**/target/**"
+
+project_context: >
+  woofx3-ui is the multi-tenant control plane for woofx3 engines: a React 18
+  + Vite client, a Convex backend (convex/), shared pure code (shared/) and a
+  Tauri desktop app (companion/). Each engine is single-tenant; the Convex
+  _id of an instance is its instanceId, and engine calls carry no tenant id.
+  The browser never calls the engine directly: Convex actions call it over
+  capnweb HTTP batch sessions, which are single-use, so authenticate and the
+  API call are chained in one await. The engine calls back on one webhook,
+  authenticated by a per-instance Bearer token and idempotent by entity id.
+  Twitch app secrets and refresh tokens never leave Convex. Public Convex
+  functions are internet-facing and validate every argument; queries use
+  indexes, not .filter(), and bounded reads (.take). Screens reach the
+  engine through the engine gateway hooks. Nanostores hold UI-only state;
+  Convex holds persisted data. Path aliases (@/, @shared/, @convex/,
+  @woofx3/*) replace relative imports that cross top-level directories.
+
+# Where this app's general conventions live, for the base rules.
+rules:
+  TS-LAY-003:
+    # Generated bindings sit two levels up from convex/lib/<area>/, inside the
+    # same area; the static check cannot tell that from a cross-area climb.
+    scope:
+      exclude: ["convex/**"]
+  TS-LAY-001:
+    notes: >
+      Convex code logs through logger from convex/logger.ts; the browser
+      client has no logger.
+    scope:
+      exclude: ["convex/logger.ts"]
+  ANY-API-004:
+    notes: >
+      /api/webhooks/woofx3 in convex/http.ts resolves the instance from the
+      Bearer token (instances.getByWebhookSecret) before processing; webhook
+      writes go through upsertFromWebhook internal mutations keyed by the
+      engine entity id.
+  ANY-API-006:
+    notes: >
+      Engine webhook writes are upserts keyed by the engine entity id, so
+      duplicate deliveries create nothing new.
+  ANY-ABS-005:
+    notes: >
+      Convex mutations and actions read Date.now() directly as the platform
+      convention; queries must not read the clock at all (WUI-ABS-001).
