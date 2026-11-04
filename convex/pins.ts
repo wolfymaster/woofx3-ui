@@ -12,14 +12,7 @@ import {
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import {
-  action,
-  internalMutation,
-  internalQuery,
-  mutation,
-  type QueryCtx,
-  query,
-} from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { planRepin, type RepinPlan } from "./lib/pinStrategy";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
