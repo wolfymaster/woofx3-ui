@@ -1,8 +1,8 @@
 import { ENGINE_CAPABILITIES_SCHEMA, type Woofx3EngineApi } from "@woofx3/api";
 import type { EngineBrowserSession } from "@woofx3/api/client";
+import { isAuthenticationRefused } from "@woofx3/api/rpc";
 import { EngineDisconnectedError, EngineTimeoutError } from "@/engine/errors";
 import { createReconnectBackoff, type ReconnectBackoff } from "@/lib/reconnect-backoff";
-import { isAuthenticationRefused } from "./authentication";
 import { type EngineSessionConfig, validateEngineSessionConfig } from "./config";
 import { type Cancel, type Clock, type Logger, notifyAll, type Random } from "./deps";
 import { describeTargetIssues, type EngineTarget, type EngineTargetSource, engineTargetSchema } from "./target";

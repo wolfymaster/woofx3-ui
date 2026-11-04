@@ -79,7 +79,7 @@ class FakeGateway extends RpcTarget {
   authenticate(clientId: string, clientSecret: string): FakeApi {
     if (clientId !== this.engine.clientId || clientSecret !== this.engine.clientSecret) {
       // The engine's own refusal, word for word (woofx3 api/src/gateway.ts).
-      throw new Error("Invalid client credentials");
+      throw new Error("AuthenticationRefused: Invalid client credentials");
     }
     const api = this.engine.createApi(this.engine);
     this.engine.sessions.push(api);
