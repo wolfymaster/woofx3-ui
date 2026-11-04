@@ -19,12 +19,14 @@ import {
   ScrollText,
   Server,
   Settings,
+  ShieldCheck,
   Store,
   Users,
   Workflow,
 } from "lucide-react";
 import { ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
+import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import { FEEDBACK_PATH } from "@/lib/feedback";
 import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
@@ -102,6 +104,7 @@ export const STREAM_ITEMS: NavItem[] = [
     ],
   },
   { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands" },
+  { id: "moderation", label: "Moderation", icon: ShieldCheck, href: MODERATION_PATH },
   { id: "scenes", label: "Scenes", icon: STREAM_OBJECT_ICONS.scenes, href: "/stream/scenes" },
   { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
   { id: "supporters", label: "Supporters", icon: HandHeart, href: "/stream/supporters" },

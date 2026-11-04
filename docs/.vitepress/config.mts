@@ -26,6 +26,7 @@ export default defineConfig({
             { text: "Feedback", link: "/ui/feedback" },
             { text: "Notifications", link: "/ui/notifications" },
             { text: "Chat commands", link: "/ui/commands" },
+            { text: "Chat moderation", link: "/ui/chat-moderation" },
             { text: "Marketplace", link: "/ui/marketplace" },
             { text: "Modules", link: "/ui/modules" },
             { text: "Workflows", link: "/ui/workflows" },
