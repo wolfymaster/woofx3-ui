@@ -1970,6 +1970,17 @@ export default defineSchema({
   // JSON string of the raw, unescaped event data — never structured v.any(),
   // since the engine embeds $ref keys that Convex rejects on structured
   // fields (see shared/dollar-keys.ts).
+  // One row per engine event applied, so a redelivered envelope is answered
+  // `duplicate` instead of applied twice. Kept RECEIPT_RETENTION_MS, longer
+  // than any sender keeps retrying.
+  engineEventReceipts: defineTable({
+    instanceId: v.id("instances"),
+    envelopeId: v.string(),
+    receivedAt: v.number(),
+  })
+    .index("by_instance_envelope", ["instanceId", "envelopeId"])
+    .index("by_received_at", ["receivedAt"]),
+
   engineEventLog: defineTable({
     instanceId: v.id("instances"),
     eventType: v.string(),

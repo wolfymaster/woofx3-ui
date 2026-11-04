@@ -26,6 +26,8 @@ crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engine
 // however many were written, instead of one scheduled delete per row.
 crons.interval("transient event sweep", { minutes: 1 }, internal.transientEvents.sweepExpired, {});
 
+crons.interval("engine event receipt cleanup", { hours: 24 }, internal.engineEvents.cleanupOldReceipts, {});
+
 crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLog.cleanupOld);
 
 // Alerts carry viewer names and messages; past the engine's detail retention
