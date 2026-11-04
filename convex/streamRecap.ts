@@ -101,9 +101,7 @@ export const loadEngineDetail = action({
 
 /**
  * The session's counted events in time order, for the recap timeline. Kept
- * apart from `loadEngineDetail` because it needs a newer engine
- * (`analytics.sessionEvents`): the page calls it only when the engine lists
- * that capability, and the rest of the recap does not wait on it.
+ * apart from `loadEngineDetail` so the rest of the recap does not wait on it.
  */
 export const loadTimelineEvents = action({
   args: {

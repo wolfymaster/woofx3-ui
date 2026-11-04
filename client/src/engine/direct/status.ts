@@ -1,8 +1,6 @@
 import type { StatusGateway } from "@/engine/gateway";
 import type { EngineConnectionTest, EngineInfo, InstanceLiveState } from "@/engine/types";
-import { readEngineCapabilities } from "@/lib/engine-session/capabilities";
 import { directKeys as k } from "./keys";
-import { toCapabilityReport } from "./map/capabilities";
 import { toInstanceLiveState } from "./map/live-state";
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
@@ -26,16 +24,6 @@ export function liveStateRead(runtime: DirectRuntime): EngineRead<InstanceLiveSt
  * and session events. No mirror stands between, so there is nothing to sync.
  */
 export function directStatusGateway(runtime: DirectRuntime): StatusGateway {
-  const capabilities = async () => {
-    const reading = readEngineCapabilities(
-      await runtime.call("getEngineCapabilities", (api) => api.getEngineCapabilities())
-    );
-    if (!reading.ok) {
-      throw new Error(`Couldn't ask the engine what it supports: ${reading.error}`);
-    }
-    return toCapabilityReport(reading.capabilities);
-  };
-
   // Null when the engine did not answer, as the contract has it; the reason
   // goes to the log, since the caller cannot act on it.
   const engineInfo = async (): Promise<EngineInfo | null> => {
@@ -78,7 +66,6 @@ export function directStatusGateway(runtime: DirectRuntime): StatusGateway {
   };
 
   return {
-    useCapabilitiesRequest: () => useEngineRequest(capabilities),
     useEngineInfoRequest: () => useEngineRequest(engineInfo),
     useSetOverlayPublicUrlRequest: () => useEngineRequest(setOverlayPublicUrl),
     useConnectionTestRequest: () => testConnection,

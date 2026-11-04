@@ -52,7 +52,10 @@ export class FakeApi extends RpcTarget implements FakeEngineSurface {
 
   async getEngineCapabilities(): Promise<EngineCapabilities> {
     await this.engine.answering("getEngineCapabilities");
-    return { schema: ENGINE_CAPABILITIES_SCHEMA, capabilities: [...this.engine.capabilities] };
+    return {
+      schema: this.engine.capabilitySchema as typeof ENGINE_CAPABILITIES_SCHEMA,
+      capabilities: supportedEngineCapabilities("local"),
+    };
   }
 
   async subscribeEngineEvents(callback: EngineEventSubscriber): Promise<void> {
@@ -93,7 +96,8 @@ export class FakeEngine {
   readonly url = "http://engine.test";
   readonly clientId = "fake-client";
   clientSecret = "ab".repeat(32);
-  capabilities: string[] = supportedEngineCapabilities("local");
+  /** The schema its capability report claims; another than the client reads makes it incompatible. */
+  capabilitySchema: number = ENGINE_CAPABILITIES_SCHEMA;
   /** False makes every new session break before it answers, as an engine that is down does. */
   reachable = true;
   /** Methods that never answer, as an engine that hangs does. */

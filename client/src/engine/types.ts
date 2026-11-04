@@ -158,58 +158,6 @@ export interface EngineScope {
 
 // ==================== Status ====================
 
-/** The engine features this UI knows how to detect. */
-export type EngineCapability =
-  | "alerts.compositionLayout"
-  | "alerts.queueControls"
-  | "analytics.aggregates"
-  | "analytics.gauges"
-  | "analytics.sessionEvents"
-  | "analytics.sessions"
-  | "assets.sizedUploads"
-  | "compositions.alerts"
-  | "compositions.preview"
-  | "config.bundles"
-  | "events.log"
-  | "modules.files"
-  | "modules.localEndpoints"
-  | "modules.marketplaceInstall"
-  | "modules.oauth"
-  | "modules.storageUsage"
-  | "obs.control"
-  | "obs.status"
-  | "scenes.behaviors"
-  | "scenes.editorSessions"
-  | "scenes.editorSync"
-  | "scenes.repair"
-  | "twitch.ads"
-  | "twitch.chat"
-  | "twitch.clips"
-  | "twitch.dashboardTokens"
-  | "twitch.moderation"
-  | "twitch.pins"
-  | "twitch.streamInfo"
-  | "userPages.formSubmissions"
-  | "widgets.themes"
-  | "workflow.conditionListReferences"
-  | "workflow.delayWait"
-  | "workflow.dryRun"
-  | "workflow.expressionFunctions"
-  | "workflow.health"
-  | "workflow.realCancel"
-  | "workflow.testRunOptions"
-  | "workflow.viewerFacts";
-
-/**
- * What an engine supports, as far as this UI cares. `legacy` is an engine
- * that predates capability reports and so supports none of them.
- */
-export interface EngineCapabilityReport {
-  legacy: boolean;
-  /** Known ids only, sorted and unique. */
-  capabilities: EngineCapability[];
-}
-
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export interface InstanceLiveState {
   isLive: boolean;

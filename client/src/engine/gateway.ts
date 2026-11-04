@@ -38,7 +38,6 @@ import type {
   DashboardRailWidget,
   DeclaredResourceKind,
   EngineAlert,
-  EngineCapabilityReport,
   EngineConnectionTest,
   EngineInfo,
   EngineSyncRequest,
@@ -268,10 +267,8 @@ export interface EngineGateway {
   readonly dashboard: DashboardGateway;
 }
 
-/** Engine reachability, version, features and stream state. */
+/** Engine reachability, version and stream state. */
 export interface StatusGateway {
-  /** Rejects when the caller is not a member, the instance has no engine, or the engine cannot be asked. */
-  useCapabilitiesRequest(): () => Promise<EngineCapabilityReport>;
   /** Null when the engine is not registered or did not answer. */
   useEngineInfoRequest(): () => Promise<EngineInfo | null>;
   useSetOverlayPublicUrlRequest(): (value: string) => Promise<{ success: boolean }>;

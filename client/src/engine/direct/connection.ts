@@ -1,4 +1,4 @@
-import { type CallbackEnvelope, ENGINE_CAPABILITIES, type RequestEnvelope, type Woofx3EngineApi } from "@woofx3/api";
+import type { CallbackEnvelope, RequestEnvelope, Woofx3EngineApi } from "@woofx3/api";
 import type { RpcTarget } from "@woofx3/api/client";
 import { type Clock, type Logger, notifyAll, type Random } from "@/lib/engine-session/deps";
 import { EngineSession, type OpenEngineSession } from "@/lib/engine-session/EngineSession";
@@ -10,13 +10,6 @@ import { TransientEventStore } from "./TransientEventStore";
 
 /** The engine's whole RPC surface, with no local additions: a method the engine lacks is an engine change. */
 export type DirectEngineApi = RpcTarget & Woofx3EngineApi;
-
-/**
- * Without the event stream nothing would tell the gateway that what it read
- * has changed, and it would show stale data without knowing, so an engine
- * without it is refused.
- */
-const DIRECT_REQUIRED_CAPABILITIES = [ENGINE_CAPABILITIES.engineEventStream] as const;
 
 /**
  * Why everything read from the engine may be stale: a new session (whatever
@@ -77,7 +70,6 @@ export function createDirectConnection(deps: DirectConnectionDeps): DirectConnec
   const session = new EngineSession<DirectEngineApi>({
     targets: deps.targets,
     open: deps.open,
-    required: DIRECT_REQUIRED_CAPABILITIES,
     clock,
     random: deps.random,
     logger,

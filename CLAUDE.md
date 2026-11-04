@@ -94,7 +94,7 @@ Engine → POST <webhookUrl> (read from engine settings table at call time)
 Engine endpoint dialer → wss://<companion hostname>/bridge/<moduleId>/<endpointId> → edge relay → companion's outbound WSS → 127.0.0.1 on the streamer's PC
 ```
 
-- A cloud engine reaches a module's local endpoint (OBS) through the companion when Convex routes that endpoint there with `setRelayConfig` (capability `modules.localEndpoints`).
+- A cloud engine reaches a module's local endpoint (OBS) through the companion when Convex routes that endpoint there with `setRelayConfig`.
 - Convex only mints the short-lived relay credentials (signed with `RELAY_SIGNING_KEY`, which never leaves Convex) and tells the engine which endpoints use the bridge. The engine asks for its credential with the `relay.credential.requested` callback; bridged traffic never passes through Convex.
 - The companion decides what it dials: only addresses it discovered or the streamer confirmed, for modules installed on its instance. The engine never sends it an address.
 

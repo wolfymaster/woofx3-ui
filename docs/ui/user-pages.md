@@ -97,7 +97,7 @@ A visitor's answers go through the edge to Convex, wait in an outbox and reach t
 ```
 page → POST woofx3.tv/u/_/forms/submit (edge: per-address limit)
      → POST <site>/api/user-page-forms/submit (Convex: edge secret, checks, outbox)
-     → deliverUserPageSubmission on the engine (capability userPages.formSubmissions)
+     → deliverUserPageSubmission on the engine
 ```
 
 ### Submitting
@@ -128,7 +128,7 @@ The page mints an idempotency key and keeps it until an answer changes, so resen
 
 `pageSubmissions` holds each answer as `pending`, `delivered` or `failed`. `pageSubmissionQueues` holds, per instance, the pending count the cap checks (`USER_PAGE_LIMITS.pendingSubmissionsPerPage`) and when the engine is next worth contacting. Tunables are in `SUBMISSION_DELIVERY` (`convex/lib/userPageSubmissions.ts`).
 
-A pass (`convex/lib/userPageFormDelivery.ts`) is scheduled on insert and by a one-minute sweep. It takes the queue's lease, asks the engine whether it has the capability, sends the oldest due rows and saves each outcome as it arrives.
+A pass (`convex/lib/userPageFormDelivery.ts`) is scheduled on insert and by a one-minute sweep. It takes the queue's lease, checks the engine answers (`getEngineInfo`), sends the oldest due rows and saves each outcome as it arrives.
 
 | What happened | Row | Queue |
 |---------------|-----|-------|
@@ -136,7 +136,7 @@ A pass (`convex/lib/userPageFormDelivery.ts`) is scheduled on insert and by a on
 | The engine refused it as malformed (`UserPageSubmissionRefused: …`) | `failed`, with the reason | |
 | Any other error from the call | Pending, backs off alone | |
 | A timeout or failed connection during a send | Pending, backs off | Engine backs off, pass stops |
-| The capability check fails or lacks the id, or the instance has no engine credentials | Untouched | Engine backs off |
+| The engine does not answer that check, or the instance has no engine credentials | Untouched | Engine backs off |
 
 Backing off the engine on the queue row means an offline engine costs one probe per interval, however many answers wait. Pending rows never expire. Delivered rows are deleted after 30 days; failed ones stay until the streamer retries them or the instance is deleted. Only managed engines have pages today, and every route to the engine is behind `SubmissionTransport`.
 

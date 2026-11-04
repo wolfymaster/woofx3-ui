@@ -130,11 +130,8 @@ built by `mergeActivity` in `client/src/lib/activity-feed.ts`:
   `enabled` changes, and again on every reconnect because the push is not
   gapless; pushed events of the enabled types go on top, deduplicated by event
   id (`engine/hooks/use-event-log.ts`). Alerts come from `engineAlerts.listForInstance`.
-- **Older engines.** An engine without the `events.log` capability has no
-  selection and no log. The widget shows a "Live only" badge, disables the
-  filter with a tooltip to update the engine, and shows alerts plus whatever the
-  engine pushes (its fixed set: follows, subs, gifts, cheers, raids, stream
-  online/offline, ad breaks).
+- **A failed read.** When the engine's log cannot be read, the widget shows a
+  "Live only" badge until the next reconnect reads it again.
 - **A row** shows its summary, details, time and module. A row with an alert adds
   the newest alert's status, its failure reason, **Open run**
   (`/stream/alert-run/:engineRunId`) and **Replay** (`alertActions.replay`). An
@@ -161,12 +158,6 @@ mounting together cost one call) and after every reconnect. Each listener
 receives only frames of its own types. Events asks for its `enabled` types,
 Stream Stats for the five it counts (`STREAM_TALLY_EVENTS`) and Ad Breaks for
 the three ad-break events.
-
-On connect the transport asks the engine for its capabilities over the same
-session. An engine without `events.log` adds a subscription on every call
-rather than replacing one, so it is registered once, without types, and pushes
-its fixed set; listeners still take only their own types, and a listener that
-passes `null` (the Events widget on such an engine) takes everything.
 
 ## Go live checklist
 
@@ -240,7 +231,7 @@ The getting started checklist (`client/src/components/dashboard/getting-started-
 
 - **Items the checklist records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
 - **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the checklist (`platform-settings:<id>`).
-- **OBS connection.** On an engine with the `obs.status` capability, "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
+- **OBS connection.** "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
 - **When it hides.** The rail item disappears once every item is done, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
 - **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
 
@@ -606,13 +597,13 @@ accepted runs bump `lastUsedAt` / `useCount`, refused or failed ones set
 
 ## Helix calls through the engine
 
-The widgets below call Twitch Helix from Convex with the broadcaster's link
-token. An engine that advertises a `twitch.*` capability can make the same
-calls itself, with the same link's token, and answer with Twitch's own status
-and body. `convex/lib/twitchEngineHelix.ts` is the one place that chooses:
+The widgets below call Twitch Helix through the instance's engine, which
+makes the calls with the broadcaster's link token and answers with Twitch's
+own status and body. `convex/lib/twitchEngineHelix.ts` is the one place that
+chooses:
 
-- `twitchHelixRoute` picks the engine only when it is registered and lists the
-  capability (asked once per action, with a 3s limit).
+- `twitchHelixRoute` picks the engine whenever the instance is registered with
+  one, and calls Helix from Convex with the link token otherwise.
 - `helixResponse` hands the engine's answer back as a `Response`, so each
   module's status checks, parsers and error sentences are the same on both
   paths.

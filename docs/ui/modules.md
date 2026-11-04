@@ -27,7 +27,7 @@ The id is an installed module's bare key or a marketplace id. A module that is n
 - What the Settings tab shows above a module's own settings comes from the app's marketplace mode (`MarketplaceMode` in `client/src/lib/marketplace-mode.tsx`), which each app root mounts: the hosted app's (`client/src/lib/hosted-marketplace-mode.tsx`) shows the webhook endpoints and the companion routing below; the desktop app's local mode shows neither (see [Local mode](#local-mode)).
 - For an installed module with webhook triggers, the **Settings** tab lists each trigger's public URL with its last delivery (`api.inboundWebhooks.listForInstanceModule`, rendered by `client/src/components/modules/module-webhook-endpoints.tsx`). The handler's answer is relayed from this deployment's site origin, which also serves sign-in and OAuth callbacks, so it is sent inert (`Content-Security-Policy: sandbox; default-src 'none'`, `nosniff`) and an HTML, SVG or XML answer becomes a 502 (`convex/lib/inboundWebhookRelay.ts`).
 - Settings declared `type: "secret"` render as write-only password fields: the engine never returns a secret's value, only whether one is set.
-- A setting button with `action: { kind: "integration", integration: "<id>" }` connects an account. When the manifest declares that id under `oauth[]`, it is the module's own integration, connected through the engine (`convex/moduleOAuth.ts`, engine capability `modules.oauth`): `moduleOAuth.start` sends the member to the provider with the module's client id (or, on a managed instance, the app woofx3 provides for that provider when the declaration fits it; see [Auth and onboarding](./auth-onboarding.md)) and PKCE; the callback (`/api/integrations/oauth/callback`, signed state forwarded like every OAuth callback) stores the authorization as a one-time handoff and returns to the module page with `?integration=<id>&oauth_code=…`; `moduleOAuth.finish` lets only the member who started it hand the code to the engine (`completeModuleOAuth`), which exchanges it and keeps the tokens where neither the dashboard nor module code can read them. A button naming an integration the manifest does not declare is shown disabled.
+- A setting button with `action: { kind: "integration", integration: "<id>" }` connects an account. When the manifest declares that id under `oauth[]`, it is the module's own integration, connected through the engine (`convex/moduleOAuth.ts`): `moduleOAuth.start` sends the member to the provider with the module's client id (or, on a managed instance, the app woofx3 provides for that provider when the declaration fits it; see [Auth and onboarding](./auth-onboarding.md)) and PKCE; the callback (`/api/integrations/oauth/callback`, signed state forwarded like every OAuth callback) stores the authorization as a one-time handoff and returns to the module page with `?integration=<id>&oauth_code=…`; `moduleOAuth.finish` lets only the member who started it hand the code to the engine (`completeModuleOAuth`), which exchanges it and keeps the tokens where neither the dashboard nor module code can read them. A button naming an integration the manifest does not declare is shown disabled.
 - Settings declared `type: "url"` render as URL inputs. The engine lets the module's code reach the origin of the URL entered there, and only the streamer can set it.
 
 ## Local mode
@@ -91,7 +91,7 @@ A manifest may declare `local[]`: things on the streamer's own network the modul
 
 - **Install review.** LAN reach is fixed at install, like permissions. The Details tab and the upload page show **This module connects to devices on your network:** with one line per endpoint (`ModuleLocalEndpointsSection`), and `ApproveModulePermissionsDialog` lists the endpoints a fresh install declares, or an update adds (`localEndpointsToApprove`, keyed by endpoint id). `moduleDetail.getModuleDetail` returns `localEndpoints` and `latestLocalEndpoints`, read from the same manifest as the permissions. The setup platform cards list them too.
 - **Server-side check.** As with permissions, `api.marketplace.installModule` and `installApprovedModule` take `approvedLocalEndpoints` (endpoint ids). They refuse a build whose archive declares an endpoint outside that list. Endpoints that could not be read are approved as "none new". ZIP uploads are not re-checked on the server. Beyond install, the companion limits what is actually reached: it dials only addresses it found itself or the streamer confirmed in a dialog the app draws.
-- **How the endpoint is reached.** On the Settings tab, `LocalEndpointPanel` (`client/src/components/modules/local-endpoint-panel.tsx`) explains each endpoint, from `companionIntegrations.forModule` and the engine's capabilities (`localEndpointSituation` in `client/src/lib/local-endpoints.ts`). It names the endpoint by its declared `name`, never a particular app:
+- **How the endpoint is reached.** On the Settings tab, `LocalEndpointPanel` (`client/src/components/modules/local-endpoint-panel.tsx`) explains each endpoint, from `companionIntegrations.forModule` (`localEndpointSituation` in `client/src/lib/local-endpoints.ts`). It names the endpoint by its declared `name`, never a particular app:
 
   | Situation | Shown |
   |---|---|
@@ -106,9 +106,8 @@ A manifest may declare `local[]`: things on the streamer's own network the modul
 
 On the OBS module's Settings tab (`woofx3_obs`), `ObsConnectionStatus` shows whether the engine is connected to OBS, above the address, port and password.
 
-- **Where it comes from:** `obsStatus.get` calls the engine's `getObsStatus()` (capability `obs.status`). The engine answers from its connection's own state, so it's cheap to poll. `useObsStatus` asks every 5 s while the tab is visible.
+- **Where it comes from:** `obsStatus.get` calls the engine's `getObsStatus()`. The engine answers from its connection's own state, so it's cheap to poll. `useObsStatus` asks every 5 s while the tab is visible.
 - **What it says:** "Connected to OBS at host:port" ("Connected to OBS through the woofx3 desktop app" when the engine's `route` is `companion`), "OBS refused the password", "Can't reach OBS at host:port", or, for the `relay` failure, that the woofx3 desktop app isn't connected. An engine whose scene manager did not answer shows "Can't check OBS right now", which is not a verdict on OBS.
-- **Older engines:** those without the capability show nothing.
 - **Local types:** the response shape is declared in `convex/lib/engineObsStatus.ts` and must match `ObsStatus` in the engine's shared API types.
 
 ## Setup platforms
@@ -139,8 +138,8 @@ Module storage is what modules keep with `ctx.storage`. A managed engine keeps i
 
 The limit is soft. The engine never refuses a write, and nothing in the dashboard does either: an owner over the limit is told that what their modules store beyond it could be lost.
 
-- `api.moduleStorage.usage` asks the engine for `getModuleStorageUsage` (capability `modules.storageUsage`) and compares it with the limit. It answers null for an engine someone else hosts and for an engine too old to report it.
-- The engine page shows a **Module storage** card for a managed engine: a meter against the limit, or a note to update the engine when it cannot report usage.
+- `api.moduleStorage.usage` asks the engine for `getModuleStorageUsage` and compares it with the limit. It answers null for an engine someone else hosts.
+- The engine page shows a **Module storage** card for a managed engine: a meter against the limit.
 - The Modules page shows a warning above the catalog while the engine is over its limit.
 
 Operators see the same figure from the other side: the maintenance API's daily usage collection reads the size of the engine's module storage replica, and the backoffice flags engines over their limit.

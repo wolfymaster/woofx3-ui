@@ -155,8 +155,7 @@ export const listWidgetThemes = action({
 /**
  * A token to open sceneManager's editor socket for one scene, and the socket's
  * path relative to sceneManager's public URL. Null when the engine does not
- * know the scene or cannot reach sceneManager. Requires the
- * `scenes.editorSync` capability; the token is short-lived, so a
+ * know the scene or cannot reach sceneManager. The token is short-lived, so a
  * reconnecting editor asks again.
  */
 export const getSceneEditorSession = action({
@@ -178,8 +177,7 @@ export const getSceneEditorSession = action({
 /**
  * Make a scene or alert whose stored data the engine cannot read editable
  * again. The engine copies what it cannot read into its `scene_backups` table
- * first, then writes back the readable rest. Requires the `scenes.repair`
- * capability.
+ * first, then writes back the readable rest.
  */
 export const repairScene = action({
   args: {
