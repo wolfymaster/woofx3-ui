@@ -614,3 +614,10 @@ describe("envelope receipts", () => {
     expect(left.map((row) => row.envelopeId)).toEqual(["new"]);
   });
 });
+
+test("an invalid event leaves no receipt", async () => {
+  const t = await backendWithInstance();
+  const body = envelope({ type: EngineEventType.ALERT_RECORDED, alert: {} });
+  await t.mutation(internal.engineEvents.applyFromWebhook, { webhookSecret: SECRET, body: JSON.stringify(body) });
+  expect(await count(t, "engineEventReceipts")).toBe(0);
+});

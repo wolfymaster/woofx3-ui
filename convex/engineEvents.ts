@@ -14,10 +14,22 @@ export type ReceivedEventOutcome = EngineEventOutcome | { kind: "duplicate" };
 export type WebhookEventResult = ReceivedEventOutcome | { kind: "unauthorized" };
 
 /**
- * Logs, applies and records activity for one event, all in this transaction,
- * unless its envelope id was already applied for this instance. Shared by
- * every path an engine event arrives on, so they cannot drift. An envelope
- * without an id (an engine too old to send one) applies without a receipt.
+ * Records that the engine called Convex, which the engine sync sweep reads as
+ * the instance being active; throttled by engineActivityPatch.
+ */
+export async function recordEngineActivityIfDue(ctx: MutationCtx, instance: Doc<"instances">): Promise<void> {
+  const activity = engineActivityPatch(instance.lastEngineActivityAt, Date.now());
+  if (activity) {
+    await ctx.db.patch(instance._id, activity);
+  }
+}
+
+/**
+ * Logs and applies one event in this transaction, unless its envelope id was
+ * already applied for this instance. Shared by every path an engine event
+ * arrives on, so they cannot drift. An envelope without an id (an engine too
+ * old to send one) applies without a receipt, and so does an invalid event,
+ * so that sending it again once fixed is not taken for a duplicate.
  */
 export async function receiveEngineEvent(
   ctx: MutationCtx,
@@ -33,13 +45,6 @@ export async function receiveEngineEvent(
     if (receipt) {
       return { kind: "duplicate" };
     }
-    await ctx.db.insert("engineEventReceipts", { instanceId: instance._id, envelopeId, receivedAt: Date.now() });
-  }
-  // Any event shows the engine is running and may hold changes a scheduled
-  // sync would mirror.
-  const activity = engineActivityPatch(instance.lastEngineActivityAt, Date.now());
-  if (activity) {
-    await ctx.db.patch(instance._id, activity);
   }
   await recordEngineEvent(ctx, {
     instanceId: instance._id,
@@ -49,7 +54,11 @@ export async function receiveEngineEvent(
     envelopeId: envelopeId ?? undefined,
     engineEventTime: typeof envelope.time === "string" ? envelope.time : undefined,
   });
-  return applyEngineEvent(ctx, instance, envelope);
+  const outcome = await applyEngineEvent(ctx, instance, envelope);
+  if (envelopeId !== null && outcome.kind !== "invalid") {
+    await ctx.db.insert("engineEventReceipts", { instanceId: instance._id, envelopeId, receivedAt: Date.now() });
+  }
+  return outcome;
 }
 
 /**
@@ -71,6 +80,9 @@ export const applyFromWebhook = internalMutation({
     }
     const envelope = JSON.parse(body) as CallbackEnvelope;
     logger.info("webhook: event received", { instanceId: instance._id, type: envelope.type, payload: body });
+    // Any event shows the engine is running and may hold changes a scheduled
+    // sync would mirror.
+    await recordEngineActivityIfDue(ctx, instance);
     return receiveEngineEvent(ctx, instance, envelope);
   },
 });
