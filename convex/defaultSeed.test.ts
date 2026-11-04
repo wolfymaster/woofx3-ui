@@ -217,7 +217,11 @@ class FakeEngine extends RpcTarget {
   getWorkflows({ page = 1 }: { page?: number } = {}) {
     const workflows =
       page === 1
-        ? [...this.workflows].map(([id, isEnabled]) => ({ id, isEnabled, definition: this.definitions.get(id) ?? null }))
+        ? [...this.workflows].map(([id, isEnabled]) => ({
+            id,
+            isEnabled,
+            definition: this.definitions.get(id) ?? null,
+          }))
         : [];
     return { workflows, total: this.workflows.size, page, pageSize: 100 };
   }
