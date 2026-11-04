@@ -5,15 +5,17 @@ import {
   ProblemReport,
   parseFormFields,
 } from "@shared/user-pages";
-import { ListPlus, Loader2 } from "lucide-react";
+import { ListPlus, Loader2, Table2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AddFormToQueueDialog } from "@/components/resources/add-form-to-queue-dialog";
 import type { KindView } from "@/components/resources/kind-views";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
+import { SaveFormToDatabaseDialog } from "@/components/resources/save-form-to-database-dialog";
 import { FormQuestionsEditor } from "@/components/resources/views/form-questions-editor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SubmissionsPanel } from "@/components/user-page/submissions-panel";
+import { useDatabasesSupported } from "@/engine/hooks/use-databases";
 import { useFormSubmissionsSupported } from "@/engine/hooks/use-form-submissions";
 import { useUpdateResourceInstanceRequest } from "@/engine/hooks/use-module-resources";
 import { toast } from "@/hooks/use-toast";
@@ -47,10 +49,23 @@ function FormPanel(props: ResourceDetailProps) {
   const { instance, settings } = props;
   const submissionsSupported = useFormSubmissionsSupported();
   const [addingToQueue, setAddingToQueue] = useState(false);
+  const databasesSupported = useDatabasesSupported() === true;
+  const [savingToDatabase, setSavingToDatabase] = useState(false);
   return (
     <div className="space-y-6">
       <QuestionsCard instance={instance} settings={settings} />
-      <div>
+      <div className="flex flex-wrap gap-2">
+        {databasesSupported && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSavingToDatabase(true)}
+            data-testid="button-save-form-to-database"
+          >
+            <Table2 className="mr-1.5 h-3.5 w-3.5" />
+            Save answers to a database
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -61,6 +76,14 @@ function FormPanel(props: ResourceDetailProps) {
           Add to a queue
         </Button>
       </div>
+      {savingToDatabase && (
+        <SaveFormToDatabaseDialog
+          formId={instance.canonicalId}
+          formName={resourceName(instance)}
+          settings={settings}
+          onClose={() => setSavingToDatabase(false)}
+        />
+      )}
       {addingToQueue && (
         <AddFormToQueueDialog
           formId={instance.canonicalId}
