@@ -175,7 +175,8 @@ async function snapshotOpenSession(
   const session = () => createEngineRpcSession<EngineApi>(url, clientId, clientSecret);
 
   try {
-    // At most one session is open, and it is always the newest.
+    // The engine lists only sessions that have been live, so while the stream
+    // is down the newest is usually closed and there is nothing to snapshot.
     const page = await session().listStreamSessions({ limit: 1 });
     const open = page.sessions[0];
     if (!open || open.status !== "open") {
@@ -227,8 +228,8 @@ export const refreshOpenSession = action({
 
 /**
  * Snapshots the open session once its stream has gone offline. The engine
- * keeps the session open until the next broadcast decides whether to continue
- * it, so without this the stored row would keep the figures and still-live
+ * keeps the session open through its grace window and only then sends its
+ * summary, so without this the stored row would keep the figures and still-live
  * segment of the last snapshot taken while live, or none at all if nobody had
  * a recap open. Scheduled by instanceLiveState on the live-to-offline
  * transition; skips the freshness check because a snapshot taken moments

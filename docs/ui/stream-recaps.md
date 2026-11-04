@@ -41,11 +41,16 @@ ones on screen while it does.
 
 ## When a session is in progress
 
-The engine keeps a session open after its stream goes offline: the next
-`stream.online` either continues it (back within the engine's grace window, a
-dropout) or closes it and starts another, and only then does the engine send
-its summary. So a stored `status: "open"` means the engine has not closed the
-session yet, not that the stream is live.
+The engine keeps a session open for its grace window after the stream goes
+offline. A stream back within that window continues the session, a dropout. If it
+stays down, the engine ends the session at the moment the stream went down, then
+sends its summary, about ten minutes after the stream ended. So a stored
+`status: "open"` means the engine has not closed the session yet, not that the
+stream is live.
+
+Follows, subs and other activity while offline are still recorded, in an idle
+session of the engine's own. `listStreamSessions` does not list it, so it has no
+recap, and that activity appears in no stream's totals or timeline.
 
 `listRecent` and `get` add `inProgress` to each row instead
 (`isSummaryInProgress` in `shared/stream-recap.ts`): true only while the
