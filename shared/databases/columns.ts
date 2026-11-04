@@ -13,7 +13,8 @@ import { type PageProblem, ProblemReport } from "../user-pages/problems";
 // problem before a save. The engine checks the same rules on every write and
 // is the authority: these must match db/app/services/database_columns.go.
 
-const COLUMN_ID = /^[A-Za-z0-9_-]{1,64}$/;
+/** What a column id and a select option value may be. */
+export const COLUMN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const ALL_DIGITS = /^[0-9]+$/;
 /** Room left under the 64-character id limit for a "_<n>" suffix. */
 const GENERATED_ID_BASE_LENGTH = 48;
