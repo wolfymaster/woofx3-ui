@@ -1,4 +1,7 @@
+import { parseDatabaseColumns } from "@shared/databases/columns";
+import { DATABASE_KIND } from "@shared/resource-kinds";
 import { type BindableResourceKind, type PageContent, pageBindings, USER_PAGE_LIMITS } from "@shared/user-pages";
+import { DATABASE_COLUMNS_SETTING } from "@woofx3/api/databases";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
@@ -22,6 +25,8 @@ const PUBLIC_SETTING_KEYS: Record<BindableResourceKind, readonly string[]> = {
   "woofx3:counter": ["initialValue", "goals"],
   "woofx3:timer": ["duration"],
   "woofx3:form": ["title", "submitLabel", "fields"],
+  // Filtered to the public columns below: a private column's name is not the visitor's to see.
+  "woofx3:database": ["columns"],
 };
 
 export function publicSettings(kind: BindableResourceKind, settings: unknown): Record<string, unknown> {
@@ -34,6 +39,9 @@ export function publicSettings(kind: BindableResourceKind, settings: unknown): R
     if (key in source && source[key] !== undefined) {
       picked[key] = source[key];
     }
+  }
+  if (kind === DATABASE_KIND) {
+    picked[DATABASE_COLUMNS_SETTING] = parseDatabaseColumns(source).filter((column) => column.public);
   }
   return picked;
 }

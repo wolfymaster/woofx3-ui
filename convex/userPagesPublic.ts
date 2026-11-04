@@ -1,14 +1,16 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
+import { DATABASE_KIND } from "@shared/resource-kinds";
 import { type PageSection, type PublicPageLookup, type PublicResourceState, pageBindings } from "@shared/user-pages";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { action, type QueryCtx, query } from "./_generated/server";
 import { slugAvailability } from "./lib/maintenanceClient";
 import { openSections, type PublicPageSources, toPublicPage } from "./lib/publicPage";
 import { turnstileSecret } from "./lib/turnstile";
 import { instanceAllowsUserPages, instanceForPageSlug, requireRevision, userPageForInstance } from "./lib/userPages";
 import { pageViewerFor, viewerFromSession } from "./lib/viewerSessionAuth";
+import { PUBLIC_DATABASE_RECORDS } from "./userPageDatabases";
 
 // The visitor's side of a user page, open to anyone. It reads only Convex:
 // nothing a visitor does reaches the engine. What it returns is the published
@@ -32,6 +34,35 @@ async function sectionStates(
     }
   }
   return states;
+}
+
+/**
+ * The projected rows of each database `sections` bind, read only for a
+ * database whose state row exists: one the published page binds.
+ */
+async function sectionDatabaseRows(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  sections: readonly PageSection[],
+  states: ReadonlyMap<string, PublicResourceState>
+): Promise<PublicPageSources["databaseRows"]> {
+  const rows = new Map<string, Doc<"userPageDatabaseRecords">[]>();
+  for (const binding of pageBindings(sections)) {
+    if (binding.kind !== DATABASE_KIND || !states.has(binding.canonicalId) || rows.has(binding.canonicalId)) {
+      continue;
+    }
+    rows.set(
+      binding.canonicalId,
+      await ctx.db
+        .query("userPageDatabaseRecords")
+        .withIndex("by_instance_database_created", (q) =>
+          q.eq("instanceId", instanceId).eq("databaseId", binding.canonicalId)
+        )
+        .order("desc")
+        .take(PUBLIC_DATABASE_RECORDS)
+    );
+  }
+  return rows;
 }
 
 async function sectionLive(
@@ -85,9 +116,15 @@ export const bySlug = query({
       sectionStates(ctx, instanceId, shown),
       sectionLive(ctx, instanceId, shown),
     ]);
+    const databaseRows = await sectionDatabaseRows(ctx, instanceId, shown, states);
     const formsAccepting =
       page.formsAtCapacity !== true && (viewer.kind === "signed_in" || turnstileSecret(process.env) !== null);
-    return toPublicPage(slug, content, page.publishedAt, viewer, { states, live, formsAccepting });
+    return toPublicPage(slug, content, page.publishedAt, viewer, {
+      states,
+      live,
+      formsAccepting,
+      databaseRows,
+    });
   },
 });
 
