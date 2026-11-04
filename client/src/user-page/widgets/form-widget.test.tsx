@@ -3,6 +3,8 @@ import type { FormField, PublicPageWidget } from "@shared/user-pages";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
+import { createAppLogger } from "@/lib/logger";
+import { LoggerProvider } from "@/lib/logger-context";
 import { type PageViewer, PageViewerProvider } from "../viewer/page-viewer";
 import { type PageForms, PageFormsProvider } from "./form-environment";
 import type { FormSubmitRequest, FormSubmitResult } from "./form-submit";
@@ -75,9 +77,11 @@ function fakeForms(answers: FormSubmitResult[] = [{ ok: true }], siteKey: string
 
 function wrap(element: ReactElement, forms: PageForms, viewer: PageViewer) {
   return (
-    <PageViewerProvider viewer={viewer}>
-      <PageFormsProvider forms={forms}>{element}</PageFormsProvider>
-    </PageViewerProvider>
+    <LoggerProvider logger={createAppLogger([])}>
+      <PageViewerProvider viewer={viewer}>
+        <PageFormsProvider forms={forms}>{element}</PageFormsProvider>
+      </PageViewerProvider>
+    </LoggerProvider>
   );
 }
 

@@ -17,14 +17,9 @@ export type Random = () => number;
 /** Returns a new id, unique among every id it has returned and will return. */
 export type IdSource = () => string;
 
-export type LogFields = Record<string, unknown>;
+import type { Logger } from "../logger";
 
-export interface Logger {
-  debug(message: string, fields?: LogFields): void;
-  info(message: string, fields?: LogFields): void;
-  warn(message: string, fields?: LogFields): void;
-  error(message: string, fields?: LogFields): void;
-}
+export type { LogFields, Logger } from "../logger";
 
 /** Throws unless `value` is a positive integer, so a bad tunable stops construction instead of misbehaving later. */
 export function requirePositiveInteger(owner: string, name: string, value: number): void {

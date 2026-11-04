@@ -15,7 +15,6 @@ interface PlanGateProps {
  * Renders `children` only when the account's plan includes the entitlement,
  * and otherwise says it is not on the plan. The Convex functions behind the
  * feature check the same entitlement; this only spares the viewer a refusal.
- * For an engine feature, nest an EngineFeatureGate inside it.
  */
 export function PlanGate({ entitlement, feature, children }: PlanGateProps) {
   const entitled = useEntitlement(entitlement);

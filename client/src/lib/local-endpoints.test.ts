@@ -10,7 +10,6 @@ const NOW = 1_700_000_000_000;
 
 function input(overrides: Partial<LocalEndpointSituationInput> = {}): LocalEndpointSituationInput {
   return {
-    capability: "supported",
     bridgeAvailable: true,
     companion: { deviceName: "STREAM-PC", lastSeenAt: NOW - 30_000, confirmed: true },
     state: { enabled: true, address: { host: "127.0.0.1", port: 4455 } },
@@ -20,9 +19,7 @@ function input(overrides: Partial<LocalEndpointSituationInput> = {}): LocalEndpo
 }
 
 describe("localEndpointSituation", () => {
-  test("is unsupported without the engine capability or the deployment's bridge", () => {
-    expect(localEndpointSituation(input({ capability: "unsupported" }))).toEqual({ kind: "unsupported" });
-    expect(localEndpointSituation(input({ capability: "checking" }))).toEqual({ kind: "unsupported" });
+  test("is unsupported without the deployment's bridge", () => {
     expect(localEndpointSituation(input({ bridgeAvailable: false }))).toEqual({ kind: "unsupported" });
   });
 

@@ -9,8 +9,7 @@ const TWITCH_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
 
 /**
  * Posts `text` to chat, pinning it in the same request when asked, and
- * returns the new message id. `route` decides whether the engine sends it; a
- * pinned send needs a route to an engine with twitch.pins.
+ * returns the new message id. `route` decides whether the engine sends it.
  */
 export async function sendChatMessage(
   twitch: AuthorizedTwitchCall,

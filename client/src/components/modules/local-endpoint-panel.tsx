@@ -4,7 +4,6 @@ import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { AlertTriangle, Download, Laptop, Unplug } from "lucide-react";
 import { lazy, Suspense } from "react";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { companionDownloadUrl, type LocalEndpointSituation, localEndpointSituation } from "@/lib/local-endpoints";
@@ -45,7 +44,6 @@ export function LocalEndpointPanel({ instanceId, moduleId }: { instanceId: Id<"i
 
 function EndpointSituations({ instanceId, moduleId }: { instanceId: Id<"instances">; moduleId: string }) {
   const view = useQuery(api.companionIntegrations.forModule, moduleId ? { instanceId, moduleId } : "skip");
-  const capability = useEngineCapabilities().support("modules.localEndpoints");
   const now = useMinuteClock();
   if (!view || view.endpoints.length === 0) {
     return null;
@@ -53,7 +51,6 @@ function EndpointSituations({ instanceId, moduleId }: { instanceId: Id<"instance
   const rows = view.endpoints.map((endpoint) => ({
     endpoint,
     situation: localEndpointSituation({
-      capability,
       bridgeAvailable: view.bridgeAvailable,
       companion: view.companion,
       state: endpoint.state,

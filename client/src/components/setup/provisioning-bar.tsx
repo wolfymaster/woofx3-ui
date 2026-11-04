@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
+import { useLogger } from "@/lib/logger-context";
 
 const HEADLINES: Record<string, string> = {
   requested: "Getting started on your setup…",
@@ -26,6 +27,7 @@ const HEADLINES: Record<string, string> = {
  * Renders nothing for an engine this app did not build.
  */
 export function ProvisioningBar({ instanceId }: { instanceId: Id<"instances"> }) {
+  const logger = useLogger();
   const provisioning = useQuery(api.provisioning.forInstance, { instanceId });
   const retry = useAction(api.provisioning.retry);
   const [retrying, setRetrying] = useState(false);
@@ -49,7 +51,7 @@ export function ProvisioningBar({ instanceId }: { instanceId: Id<"instances"> })
     try {
       await retry({ instanceId });
     } catch (err) {
-      console.error("[provisioning-bar] retry failed", String(err));
+      logger.error("Retry failed", { error: err });
       setRetryFailed(true);
     } finally {
       setRetrying(false);

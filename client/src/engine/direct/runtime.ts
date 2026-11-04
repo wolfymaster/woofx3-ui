@@ -1,5 +1,4 @@
 import { QueryClient } from "@tanstack/react-query";
-import type { EngineCapability } from "@woofx3/api";
 import { EngineDisconnectedError, EngineTimeoutError, GatewayUnsupportedError } from "@/engine/errors";
 import type { Clock, IdSource, Logger } from "@/lib/engine-session/deps";
 import type { DirectGatewayConfig } from "./config";
@@ -45,8 +44,6 @@ export interface DirectRuntime {
   call<T>(name: Extract<keyof DirectEngineApi, string>, invoke: (api: DirectEngineApi) => PromiseLike<T>): Promise<T>;
   /** `DirectRuntimeDeps.ping` with the session's connect deadline. */
   ping(url: string): Promise<void>;
-  /** Whether the connected engine lists `capability`; false while disconnected. */
-  supports(capability: EngineCapability): boolean;
   /** Connects and keeps the connection up until `stop`; does nothing while started. */
   start(): void;
   /** Disconnects, then resolves once the attempt in flight has settled. */
@@ -109,10 +106,6 @@ export function createDirectRuntime(deps: DirectRuntimeDeps): DirectRuntime {
     newId: deps.newId,
     call: (name, invoke) => connection.session.call(name, invoke),
     ping: (url) => withDeadline(clock, "ping", config.session.connectTimeoutMs, deps.ping(url)),
-    supports: (capability) => {
-      const state = connection.session.state;
-      return state.status === "connected" && state.capabilities.includes(capability);
-    },
     start: () => {
       if (stopStreamEvents !== null) {
         return;

@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { RefreshRolesResult } from "@convex/viewerRoles";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLogger } from "@/lib/logger-context";
 import { useClock } from "../clock";
 import { ROLE_REFRESH_RETRY, roleRefreshRetryDelay, roleRefreshStep, roleRenewalDelay } from "./role-refresh";
 import { type SignInFailure, type SignInOutcome, signInStartUrl, type ViewerStorage } from "./sign-in";
@@ -50,6 +51,7 @@ export interface ViewerSessionControls {
 
 /** The viewer signed in on this origin, and the actions that change it. */
 export function useViewerSession(env: ViewerEnvironment): ViewerSessionControls {
+  const logger = useLogger();
   const [sessionToken, setSessionToken] = useState<string | null>(() => env.storage.sessionToken());
   const [signingIn, setSigningIn] = useState(env.pendingSignIn !== null);
   const [failure, setFailure] = useState<SignInFailure | null>(null);
@@ -103,9 +105,9 @@ export function useViewerSession(env: ViewerEnvironment): ViewerSessionControls 
     // The token is already gone from this browser, so a failed call leaves
     // only a session row nobody holds the token for, deleted at its expiry.
     signOutMutation({ sessionToken }).catch((error: unknown) => {
-      console.warn("Could not end the viewer session on the server", error);
+      logger.warn("Could not end the viewer session on the server", { error });
     });
-  }, [forgetSession, sessionToken, signOutMutation]);
+  }, [forgetSession, sessionToken, signOutMutation, logger]);
 
   let session: ViewerSession;
   if (sessionToken !== null) {
@@ -143,6 +145,7 @@ export function useRoleCheck(
   roles: { rolesStale: boolean; rolesRenewAt: number | null },
   onSignedOut: () => void
 ): RoleCheck {
+  const logger = useLogger();
   const refresh = useAction(api.viewerRoles.refresh);
   const clock = useClock();
   const [check, setCheck] = useState<RoleCheck>("idle");
@@ -182,7 +185,7 @@ export function useRoleCheck(
     setCheck(attempts.current === 0 ? "checking" : "retrying");
     refresh({ sessionToken, slug })
       .catch((error: unknown): "error" => {
-        console.warn("Could not refresh the viewer's roles", error);
+        logger.warn("Could not refresh the viewer's roles", { error });
         return "error";
       })
       .then((result: RefreshRolesResult | "error") => {

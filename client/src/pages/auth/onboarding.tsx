@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useLogger } from "@/lib/logger-context";
 import { type OnboardingRoute, onboardingRoute } from "@/lib/onboarding-route";
 import { $currentInstanceId } from "@/lib/stores";
 
@@ -21,6 +22,7 @@ import { $currentInstanceId } from "@/lib/stores";
  * wherever setup is.
  */
 export default function Onboarding() {
+  const logger = useLogger();
   const [, navigate] = useLocation();
   const search = useSearch();
   const { isAuthenticated } = useConvexAuth();
@@ -66,7 +68,7 @@ export default function Onboarding() {
       navigate("/setup", { replace: true });
       return true;
     } catch (err) {
-      console.error("[onboarding] could not connect the engine", String(err));
+      logger.error("Could not connect the engine", { error: err });
       setError("We couldn't connect to that server. Check the address and try again.");
       return false;
     } finally {
@@ -100,10 +102,10 @@ export default function Onboarding() {
         navigate("/setup/connect", { replace: true });
       })
       .catch((err: unknown) => {
-        console.error("[onboarding] could not prepare setup", String(err));
+        logger.error("Could not prepare setup", { error: err });
         setError("Something went wrong getting you set up. Reload the page to try again.");
       });
-  }, [route, instances, previewEngine, ensureFirstRun, navigate]);
+  }, [route, instances, previewEngine, ensureFirstRun, navigate, logger]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();

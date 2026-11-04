@@ -27,7 +27,6 @@ import {
 } from "@/engine/hooks/use-workflows";
 import type { RecordedWorkflowRun } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
-import { useTestRunSupport } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { formatTimeAgo } from "@/lib/time-ago";
@@ -59,7 +58,6 @@ export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) 
   const runs = useWorkflowRuns(engineWorkflowId, RUN_LIMIT);
   const replay = useReplayWorkflowRunRequest();
   const cancelRun = useCancelWorkflowRunRequest();
-  const realCancel = useTestRunSupport().realCancel;
 
   const [now, setNow] = useState(() => Date.now());
   const hasActiveRun = runs?.some(isActiveRun) ?? false;
@@ -285,9 +283,8 @@ export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) 
           <AlertDialogHeader>
             <AlertDialogTitle>Stop this run?</AlertDialogTitle>
             <AlertDialogDescription>
-              {realCancel === "supported"
-                ? "The engine stops the run: the step in flight is abandoned, though an effect it already sent stands, and no further step runs."
-                : "Stopping a run requires the engine test-runs update; on older engines the remaining steps still run, and the run is only marked stopped until it finishes."}
+              The engine stops the run: the step in flight is abandoned, though an effect it already sent stands, and no
+              further step runs.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

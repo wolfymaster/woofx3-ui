@@ -1,6 +1,8 @@
 import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
+import { appLogger } from "@/lib/app-logger";
 import { IS_DESKTOP } from "@/lib/desktop";
+import { LoggerProvider } from "@/lib/logger-context";
 import { startThemeSync } from "@/lib/theme/sync";
 import "./index.css";
 
@@ -16,7 +18,9 @@ if (container === null) {
 
 startThemeSync();
 createRoot(container).render(
-  <Suspense fallback={null}>
-    <Root />
-  </Suspense>
+  <LoggerProvider logger={appLogger}>
+    <Suspense fallback={null}>
+      <Root />
+    </Suspense>
+  </LoggerProvider>
 );

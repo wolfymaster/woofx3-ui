@@ -9,8 +9,10 @@ import { createDirectRuntime, type DirectRuntime } from "@/engine/direct/runtime
 import type { EngineGateway } from "@/engine/gateway";
 import { EngineScopeProvider } from "@/engine/scope";
 import type { EngineScope, InstanceId } from "@/engine/types";
-import { consoleLogger, systemClock, systemIds, systemRandom } from "@/lib/engine-session/system";
+import { systemClock, systemIds, systemRandom } from "@/lib/engine-session/system";
 import type { EngineTargetSource } from "@/lib/engine-session/target";
+import type { Logger } from "@/lib/logger";
+import { useLogger } from "@/lib/logger-context";
 
 /**
  * The scope's id for the one engine local mode runs. A lone engine has no
@@ -32,9 +34,9 @@ interface LocalEngine {
 
 /**
  * The direct gateway over the engine `targets` names, on the browser's own
- * clock, randomness, ids and console, with the UI state `host` keeps.
+ * clock, randomness and ids, logging to `logger`, with the UI state `host` keeps.
  */
-function createLocalEngine(targets: EngineTargetSource, host: DesktopHostState): LocalEngine {
+function createLocalEngine(targets: EngineTargetSource, host: DesktopHostState, logger: Logger): LocalEngine {
   const runtime = createDirectRuntime({
     targets,
     open: (target) => createEngineBrowserSession<DirectEngineApi>(target.url, target.clientId, target.clientSecret),
@@ -44,7 +46,7 @@ function createLocalEngine(targets: EngineTargetSource, host: DesktopHostState):
     clock: systemClock,
     random: systemRandom,
     newId: systemIds,
-    logger: consoleLogger("engine"),
+    logger,
     config: DEFAULT_DIRECT_GATEWAY_CONFIG,
   });
   return { runtime, gateway: createDirectEngineGateway(runtime, host) };
@@ -65,7 +67,8 @@ export function LocalEngineGatewayProvider({
   host: DesktopHostState;
   children: ReactNode;
 }) {
-  const [engine] = useState(() => createLocalEngine(targets, host));
+  const logger = useLogger();
+  const [engine] = useState(() => createLocalEngine(targets, host, logger.scoped("engine")));
   useEffect(() => {
     engine.runtime.start();
     return () => {

@@ -10,7 +10,6 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, action, internalMutation } from "./_generated/server";
 import { readMemberRole } from "./instances";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { chooseIntegrationClientId, type IntegrationClientId } from "./lib/integrationClientId";
 import { oauthCallbackUrl } from "./lib/oauthCallback";
@@ -109,9 +108,6 @@ export const start = action({
     const engine = engineCredentials(instance);
     if (!instance || !engine) {
       throw new ConvexError("This instance is not connected to its engine yet.");
-    }
-    if (!hasEngineCapability(await fetchEngineCapabilities(engine), "modules.oauth")) {
-      throw new ConvexError("Update this engine to connect this module's account.");
     }
 
     const resolved = await resolveConnect(ctx, instance, engine, moduleId, integration);

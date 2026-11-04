@@ -8,7 +8,7 @@ import {
   seedDefaultScene,
 } from "@shared/default-seed";
 import { starterItemKey } from "@shared/starter-packs";
-import { ENGINE_CAPABILITIES, type UISetting } from "@woofx3/api";
+import type { UISetting } from "@woofx3/api";
 import { useMemo } from "react";
 import { z } from "zod";
 import type { DefaultSeedGateway } from "@/engine/gateway";
@@ -82,8 +82,8 @@ export function defaultSeedStatus(
 }
 
 export function directDefaultSeedGateway(runtime: DirectRuntime): DefaultSeedGateway {
-  const recordRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.defaultSeed, "defaultSeed.useStatus");
-  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks, "defaultSeed.useStatus");
+  const recordRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.defaultSeed);
+  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks);
   const claimed = new Set<string>();
 
   const readRecord = (settings: readonly UISetting[]): SeedRecord | null => {
@@ -122,9 +122,6 @@ export function directDefaultSeedGateway(runtime: DirectRuntime): DefaultSeedGat
     let alerts: SeedRecord["alerts"];
     let alertImagesOmitted = previous?.alertImagesOmitted ?? false;
     try {
-      if (!runtime.supports(ENGINE_CAPABILITIES.alertsCompositionLayout)) {
-        throw new Error("Requires engine update");
-      }
       const imagesBaseUrl = await readDefaultAlertImages(engine);
       alertImagesOmitted = imagesBaseUrl === null;
       const outcomes = await installPackItems(runtime, defaultAlertsPack(imagesBaseUrl), {}, claimed, true);

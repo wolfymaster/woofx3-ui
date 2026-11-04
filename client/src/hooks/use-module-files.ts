@@ -1,10 +1,8 @@
 import type { ModuleFileContent, ModuleFileList } from "@woofx3/api/api";
 import { useCallback, useRef, useState } from "react";
 import { useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useModuleFileRequest, useModuleFilesRequest } from "@/engine/hooks/use-modules";
 import { actionErrorMessage } from "@/lib/action-error";
-import type { CapabilitySupport } from "@/lib/engine-capabilities";
 
 export type ModuleFileListState =
   | { status: "idle" }
@@ -18,13 +16,6 @@ export type ModuleFileState =
   | { status: "error"; message: string };
 
 export interface ModuleFiles {
-  /**
-   * Whether the files can be browsed. An installed module's files come from
-   * its engine, which needs `modules.files`; a marketplace module's come from
-   * its archive and always can.
-   */
-  support: CapabilitySupport;
-  retrySupport: () => void;
   list: ModuleFileListState;
   /** Fetches the file list unless it is loaded or loading. */
   loadList: () => void;
@@ -60,7 +51,6 @@ export function useModuleFiles({ moduleId, isInstalled, version }: UseModuleFile
   const { instanceId } = useEngineScope();
   const listAction = useModuleFilesRequest();
   const readAction = useModuleFileRequest();
-  const capabilities = useEngineCapabilities({ enabled: isInstalled });
 
   const key = instanceId && moduleId ? `${instanceId}|${moduleId}|${isInstalled}|${version}` : null;
   // Stamped with the module it belongs to, so switching modules shows nothing
@@ -71,14 +61,13 @@ export function useModuleFiles({ moduleId, isInstalled, version }: UseModuleFile
   const requested = useRef(new Set<string>());
 
   const current = loaded.key === key ? loaded : emptyLoaded(key);
-  const support: CapabilitySupport = isInstalled ? capabilities.support("modules.files") : "supported";
 
   const update = useCallback((forKey: string, change: (state: LoadedFiles) => LoadedFiles) => {
     setLoaded((prev) => change(prev.key === forKey ? prev : emptyLoaded(forKey)));
   }, []);
 
   const loadList = useCallback(() => {
-    if (!key || !instanceId || !moduleId || support !== "supported") {
+    if (!key || !instanceId || !moduleId) {
       return;
     }
     const requestId = `${key}#list`;
@@ -96,11 +85,11 @@ export function useModuleFiles({ moduleId, isInstalled, version }: UseModuleFile
         update(key, (state) => ({ ...state, list: { status: "error", message: actionErrorMessage(err) } }));
       }
     );
-  }, [key, instanceId, moduleId, support, listAction, update]);
+  }, [key, instanceId, moduleId, listAction, update]);
 
   const loadFile = useCallback(
     (path: string) => {
-      if (!key || !instanceId || !moduleId || support !== "supported") {
+      if (!key || !instanceId || !moduleId) {
         return;
       }
       const requestId = `${key}#file:${path}`;
@@ -122,11 +111,11 @@ export function useModuleFiles({ moduleId, isInstalled, version }: UseModuleFile
         }
       );
     },
-    [key, instanceId, moduleId, support, readAction, update]
+    [key, instanceId, moduleId, readAction, update]
   );
 
   const currentFiles = current.files;
   const file = useCallback((path: string) => currentFiles.get(path), [currentFiles]);
 
-  return { support, retrySupport: capabilities.refresh, list: current.list, loadList, file, loadFile };
+  return { list: current.list, loadList, file, loadFile };
 }

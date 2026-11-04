@@ -39,7 +39,6 @@ import type {
   DeclaredResourceKind,
   DefaultSeedStatus,
   EngineAlert,
-  EngineCapabilityReport,
   EngineConnectionTest,
   EngineInfo,
   EngineSyncRequest,
@@ -265,10 +264,8 @@ export interface EngineGateway {
   readonly dashboard: DashboardGateway;
 }
 
-/** Engine reachability, version, features and stream state. */
+/** Engine reachability, version and stream state. */
 export interface StatusGateway {
-  /** Rejects when the caller is not a member, the instance has no engine, or the engine cannot be asked. */
-  useCapabilitiesRequest(): () => Promise<EngineCapabilityReport>;
   /** Null when the engine is not registered or did not answer. */
   useEngineInfoRequest(): () => Promise<EngineInfo | null>;
   useSetOverlayPublicUrlRequest(): (value: string) => Promise<{ success: boolean }>;
@@ -324,17 +321,11 @@ export interface EventLogGateway {
   useWebhookPayload(logId: WebhookEventId): Live<string | null>;
   /** Fires a logged event's type and payload at the engine again. */
   useRetriggerRequest(): (logId: WebhookEventId) => Promise<{ success: boolean; message: string }>;
-  /**
-   * Subscribes to pushed events of `types` (null: every type the engine
-   * pushes); returns the unsubscribe. Throws while the scope has no instance.
-   */
-  useStreamEventsSubscription(): (
-    types: readonly string[] | null,
-    onFrame: (frame: StreamEventFrame) => void
-  ) => () => void;
-  /** A page of the engine's event log. Needs `events.log`. */
+  /** Subscribes to pushed events of `types`; returns the unsubscribe. Throws while the scope has no instance. */
+  useStreamEventsSubscription(): (types: readonly string[], onFrame: (frame: StreamEventFrame) => void) => () => void;
+  /** A page of the engine's event log. */
   useEventsRequest(): (query?: EventLogQuery) => Promise<EventLogPage>;
-  /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
+  /** Which event types the engine logs and pushes, and which it offers. */
   useSettingsRequest(): () => Promise<EventLogSettings>;
   /** Replaces the engine's selection and resolves with the settings it results in. */
   useSetSelectionRequest(): (selection: EventLogSelection) => Promise<EventLogSettings>;
@@ -567,13 +558,13 @@ export interface ScenesGateway {
   /**
    * A short-lived token for sceneManager's editor socket for one scene, and
    * the socket's path. Null when the engine does not know the scene or cannot
-   * reach sceneManager. Needs `scenes.editorSync`.
+   * reach sceneManager.
    */
   useEditorSessionRequest(): (engineSceneId: string) => Promise<SceneEditorGrant | null>;
   /**
    * Repair a scene or alert whose stored data the engine cannot read: the
    * engine keeps a copy of what it cannot read, then writes back the readable
-   * rest. Needs `scenes.repair`.
+   * rest.
    */
   useRepairRequest(): (engineSceneId: string) => Promise<SceneRepairResult>;
   /**
@@ -622,7 +613,7 @@ export interface WorkflowsGateway {
   useSetEnabledRequest(): (engineWorkflowId: string, isEnabled: boolean) => Promise<{ isEnabled: boolean }>;
   /** Starts a manual run and resolves at once with its key; the run's progress arrives in transient events. */
   useTriggerRequest(): (run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
-  /** The values `${viewer.*}` resolves on the engine. Needs `workflow.viewerFacts`. */
+  /** The values `${viewer.*}` resolves on the engine. */
   useViewerFactsRequest(): () => Promise<ViewerFact[]>;
   /** Runs a recorded run again and resolves at once with its key, like a manual run. */
   useReplayRequest(): (replay: WorkflowReplay) => Promise<{ triggerId: string }>;
@@ -740,8 +731,8 @@ export interface StreamOpsGateway {
    */
   useRecapEngineDetailRequest(): (sessionId: string) => Promise<StreamRecapEngineDetail>;
   /**
-   * A recapped session's counted events in time order. Needs
-   * `analytics.sessionEvents`; resolves with the failure like the detail.
+   * A recapped session's counted events in time order; resolves with the
+   * failure like the detail.
    */
   useRecapTimelineEventsRequest(): (sessionId: string) => Promise<RecapTimelineEvents>;
   /**

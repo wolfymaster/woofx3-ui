@@ -1,5 +1,3 @@
-import type { CapabilitySupport } from "@/lib/engine-capabilities";
-
 /** A companion heartbeats every 60 s, so three missed beats reads as offline. */
 export const COMPANION_ONLINE_WINDOW_MS = 3 * 60_000;
 
@@ -12,8 +10,7 @@ export function isCompanionOnline(lastSeenAt: number | null, now: number): boole
  * page explains it. Decided from the module's declaration and the companion's
  * state, so a module needs no flag of its own.
  *
- * - `unsupported`: the engine cannot use the bridge, or this deployment does
- *   not offer it. The settings page shows the plain settings form.
+ * - `unsupported`: this deployment does not offer the bridge. The settings page shows the plain settings form.
  * - `viaCompanion`: the companion has the endpoint turned on; `address` is
  *   what it dials.
  * - `companionNothingFound`: a confirmed companion, but the endpoint is off
@@ -27,8 +24,6 @@ export type LocalEndpointSituation =
   | { kind: "noCompanion" };
 
 export interface LocalEndpointSituationInput {
-  /** Support for `modules.localEndpoints` on the instance's engine. */
-  capability: CapabilitySupport;
   /** Whether this deployment offers the bridge (relay and maintenance API configured). */
   bridgeAvailable: boolean;
   companion: { deviceName: string; lastSeenAt: number | null; confirmed: boolean } | null;
@@ -43,7 +38,7 @@ export function formatEndpointAddress(address: { host: string; port: number }): 
 }
 
 export function localEndpointSituation(input: LocalEndpointSituationInput): LocalEndpointSituation {
-  if (input.capability !== "supported" || !input.bridgeAvailable) {
+  if (!input.bridgeAvailable) {
     return { kind: "unsupported" };
   }
   const { companion } = input;

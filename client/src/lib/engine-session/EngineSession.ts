@@ -1,9 +1,8 @@
-import type { EngineCapability, Woofx3EngineApi } from "@woofx3/api";
+import { ENGINE_CAPABILITIES_SCHEMA, type Woofx3EngineApi } from "@woofx3/api";
 import type { EngineBrowserSession } from "@woofx3/api/client";
+import { isAuthenticationRefused } from "@woofx3/api/rpc";
 import { EngineDisconnectedError, EngineTimeoutError } from "@/engine/errors";
 import { createReconnectBackoff, type ReconnectBackoff } from "@/lib/reconnect-backoff";
-import { isAuthenticationRefused } from "./authentication";
-import { readEngineCapabilities } from "./capabilities";
 import { type EngineSessionConfig, validateEngineSessionConfig } from "./config";
 import { type Cancel, type Clock, type Logger, notifyAll, type Random } from "./deps";
 import { describeTargetIssues, type EngineTarget, type EngineTargetSource, engineTargetSchema } from "./target";
@@ -23,7 +22,7 @@ export type RefusalReason = "target" | "credentials" | "incompatible";
 export type SessionState =
   | { status: "idle" }
   | { status: "connecting"; attempt: number }
-  | { status: "connected"; capabilities: readonly EngineCapability[] }
+  | { status: "connected" }
   | { status: "waiting"; attempt: number; retryAt: number; lastError: string }
   | { status: "refused"; reason: RefusalReason; message: string };
 
@@ -48,8 +47,6 @@ export interface SessionHooks<Api> {
 export interface EngineSessionDeps<Api> {
   targets: EngineTargetSource;
   open: OpenEngineSession<Api>;
-  /** Capabilities the host cannot run without; an engine missing one is refused, not retried. */
-  required: readonly EngineCapability[];
   hooks: SessionHooks<Api>;
   clock: Clock;
   random: Random;
@@ -59,7 +56,7 @@ export interface EngineSessionDeps<Api> {
 
 interface Link<Api> {
   handle: EngineBrowserSession<Api>;
-  /** Proven: its capabilities were read and accepted, so calls may use it. */
+  /** Proven: the engine answered over it, so calls may use it. */
   usable: boolean;
   broken: boolean;
 }
@@ -203,13 +200,10 @@ export class EngineSession<Api extends EngineSessionApi> {
 
   /** One connect attempt. Never rejects: every outcome becomes a state. */
   private async establish(generation: number): Promise<void> {
-    let capabilities: EngineCapability[];
     try {
-      const proven = await this.prove(generation);
-      if (proven === null) {
+      if (!(await this.prove(generation))) {
         return;
       }
-      capabilities = proven;
     } catch (error) {
       if (generation !== this.generation) {
         return;
@@ -223,23 +217,23 @@ export class EngineSession<Api extends EngineSessionApi> {
     }
     this.backoff.reset();
     this.deps.logger.info("EngineSession: connected");
-    this.setState({ status: "connected", capabilities });
+    this.setState({ status: "connected" });
   }
 
   /**
-   * Opens, proves and attaches a session for `generation`. Answers its
-   * capabilities once it may count as connected, and null when the attempt
-   * ended otherwise (superseded, or refused here); throws when it failed.
+   * Opens, proves and attaches a session for `generation`. Answers true once
+   * it may count as connected, and false when the attempt ended otherwise
+   * (superseded, or refused here); throws when it failed.
    */
-  private async prove(generation: number): Promise<EngineCapability[] | null> {
+  private async prove(generation: number): Promise<boolean> {
     const { config, hooks } = this.deps;
     const parsed = engineTargetSchema.safeParse(await this.deps.targets.current());
     if (generation !== this.generation) {
-      return null;
+      return false;
     }
     if (!parsed.success) {
       this.refuse("target", describeTargetIssues(parsed.error));
-      return null;
+      return false;
     }
     // One budget covers proving the session and the host's attach step.
     const deadline = this.deadlineIn(config.connectTimeoutMs);
@@ -253,21 +247,15 @@ export class EngineSession<Api extends EngineSessionApi> {
     });
 
     // One round trip proves the socket and the credentials, which the
-    // pipelined authenticate does not on its own, and says what the engine
-    // can do.
+    // pipelined authenticate does not on its own. An answer of another
+    // schema is an engine this client cannot read.
     const report = await this.withDeadline("getEngineCapabilities", deadline, link.handle.api.getEngineCapabilities());
     if (generation !== this.generation) {
-      return null;
+      return false;
     }
-    const reading = readEngineCapabilities(report);
-    if (!reading.ok) {
-      this.refuse("incompatible", reading.error);
-      return null;
-    }
-    const missing = this.deps.required.filter((id) => !reading.capabilities.includes(id));
-    if (missing.length > 0) {
-      this.refuse("incompatible", `the engine does not support ${missing.join(", ")}; update the engine`);
-      return null;
+    if (report.schema !== ENGINE_CAPABILITIES_SCHEMA || !Array.isArray(report.capabilities)) {
+      this.refuse("incompatible", `unreadable capability report (schema ${String(report.schema)})`);
+      return false;
     }
     link.usable = true;
     await this.withDeadline(
@@ -275,7 +263,7 @@ export class EngineSession<Api extends EngineSessionApi> {
       deadline,
       hooks.attach(link.handle.api, (reason) => this.lose(link, reason))
     );
-    return generation === this.generation ? reading.capabilities : null;
+    return generation === this.generation;
   }
 
   /**

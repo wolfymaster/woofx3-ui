@@ -140,7 +140,7 @@ function withBareArguments(display: string): string {
  * Whether a field can take function calls. `available` converts them; the others leave
  * `{round(amount)}` as text, which a note under the field has to say.
  */
-export type FunctionAvailability = "available" | "engine-update-needed" | "not-here" | "checking";
+export type FunctionAvailability = "available" | "not-here";
 
 /** A known function's call opening in a field's text, with or without its `$`. */
 const CALL_OPENING = /(?<!\{)\$?\{([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
@@ -160,14 +160,8 @@ export function expressionProblem(
     if (!isExpressionFunction(name)) {
       continue;
     }
-    if (availability === "engine-update-needed") {
-      return `Update your engine to use functions like ${name}. For now this would be shown as plain text.`;
-    }
     if (availability === "not-here") {
       return `Functions like ${name} can't be used here. This would be shown as plain text.`;
-    }
-    if (availability === "checking") {
-      return null;
     }
     const rest = display.slice(match.index + match[0].length);
     if (!closesBeforeNextBrace(rest)) {

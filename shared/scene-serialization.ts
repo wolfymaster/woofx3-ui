@@ -34,27 +34,9 @@ export function parseSceneLayout(layoutJson: string): SceneLayout {
 /** What a row of the engine's scenes table composes; see `CompositionKind` in `@woofx3/api`. */
 export type CompositionKind = "scene" | "alert";
 
-/**
- * The kind a `scene.*` webhook names. An engine that predates alert
- * compositions sends none, and holds only scenes.
- */
+/** The kind a `scene.*` webhook names; anything but `alert` is read as a scene. */
 export function parseCompositionKind(kind: unknown): CompositionKind {
   return kind === "alert" ? "alert" : "scene";
-}
-
-/**
- * The cache tables a `scene.deleted` webhook may name a row of. Without a
- * kind (an older engine) the id is looked for in both; ids are unique across
- * the engine's scenes table, so at most one matches.
- */
-export function tablesForDeletedComposition(kind: unknown): Array<"scenes" | "alertCompositions"> {
-  if (kind === "scene") {
-    return ["scenes"];
-  }
-  if (kind === "alert") {
-    return ["alertCompositions"];
-  }
-  return ["scenes", "alertCompositions"];
 }
 
 /** A composition's behaviors (`behaviorsJson`), a JSON object keyed by behavior id. */

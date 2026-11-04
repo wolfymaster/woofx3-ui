@@ -29,10 +29,13 @@ interface LiveScenePreviewProps {
  * That route exists to give OBS a stable URL whose token can be rotated
  * underneath it, which this authenticated editor has no use for. Framing a
  * convex.site page here would also put a third site in the frame's ancestor
- * chain, making every engine request cross-site — dropping Scene Manager's
- * SameSite=Strict session cookie, which is what authorizes the widget frames and
- * the event stream inside the overlay. Loaded directly, a UI and an engine
- * sharing a registrable domain stay same-site.
+ * chain, making every engine request cross-site. Scene Manager's session
+ * cookie, which authorizes the widget frames and the event stream inside the
+ * overlay, is `SameSite=None; Secure; Partitioned` over HTTPS and on loopback,
+ * so it survives a cross-site frame there, but on plain HTTP elsewhere (an
+ * engine on the LAN) it is `SameSite=Strict` and only same-site frames get it.
+ * Loaded directly, a UI and an engine sharing a registrable domain stay
+ * same-site.
  *
  * The preview's overlay token is its own, so rotating or revoking the public
  * browser-source URL leaves this untouched.

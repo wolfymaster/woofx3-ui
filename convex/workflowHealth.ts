@@ -16,7 +16,6 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
@@ -249,7 +248,7 @@ export const claimResync = internalMutation({
 export const finishResync = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    outcome: v.union(v.literal("ok"), v.literal("unsupported"), v.literal("failed")),
+    outcome: v.union(v.literal("ok"), v.literal("failed")),
   },
   handler: async (ctx, { instanceId, outcome }) => {
     const row = await ctx.db
@@ -297,15 +296,14 @@ export const applyResync = internalMutation({
   },
 });
 
-export type ResyncResult = "skipped" | "ok" | "unsupported" | "loading" | "failed";
+export type ResyncResult = "skipped" | "ok" | "loading" | "failed";
 
 /**
  * Ask the engine for every workflow's health and replace what is stored.
  * Webhooks normally keep health current; this repairs a delivery Convex missed.
  * Throttled per instance (see RESYNC_MIN_INTERVAL_MS), and it never throws for
- * an engine problem: callers fire it in the background, an engine that
- * predates the RPC simply has no health to show, and one still loading its
- * workflows is asked again on the next trigger.
+ * an engine problem: callers fire it in the background, and an engine still
+ * loading its workflows is asked again on the next trigger.
  */
 export const resync = action({
   args: { instanceId: v.id("instances"), trigger: resyncTrigger },
@@ -321,22 +319,6 @@ export const resync = action({
     const claimed = await ctx.runMutation(internal.workflowHealth.claimResync, { instanceId, trigger });
     if (!claimed) {
       return "skipped";
-    }
-
-    let supported: boolean;
-    try {
-      supported = hasEngineCapability(await fetchEngineCapabilities(engine), "workflow.health");
-    } catch (err) {
-      logger.warn("workflow health: capability check failed", {
-        instanceId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      await ctx.runMutation(internal.workflowHealth.finishResync, { instanceId, outcome: "failed" });
-      return "failed";
-    }
-    if (!supported) {
-      await ctx.runMutation(internal.workflowHealth.finishResync, { instanceId, outcome: "unsupported" });
-      return "unsupported";
     }
 
     const fetchStartedAt = Date.now();

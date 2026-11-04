@@ -11,6 +11,7 @@ import { AskAdminToConnectTwitch, AskOwnerToChooseUsername } from "@/components/
 import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
+import { useLogger } from "@/lib/logger-context";
 import { describePermissions } from "@/lib/module-permissions";
 import { setupStepPath } from "@/lib/setup-steps";
 
@@ -42,6 +43,7 @@ function chosenFrom(load: Load) {
  * also skip, so a password account gets through.
  */
 export function ConnectStep({ instanceId, status }: ConnectStepProps) {
+  const logger = useLogger();
   const listForSetup = useAction(api.setupPlatformsActions.listForSetup);
   const prepareConnect = useMutation(api.setup.prepareConnect);
   const skipTwitch = useMutation(api.setup.skipTwitch);
@@ -56,10 +58,10 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
     try {
       setLoad({ state: "ready", data: await listForSetup({ instanceId }) });
     } catch (err) {
-      console.error("[connect-step] could not list platforms", String(err));
+      logger.error("Could not list platforms", { error: err });
       setLoad({ state: "error" });
     }
-  }, [listForSetup, instanceId]);
+  }, [listForSetup, instanceId, logger]);
 
   useEffect(() => {
     void fetchPlatforms();
@@ -91,7 +93,7 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
     try {
       await action();
     } catch (err) {
-      console.error("[connect-step] could not save", String(err));
+      logger.error("Could not save", { error: err });
       setSaveFailed(true);
     } finally {
       setSaving(false);

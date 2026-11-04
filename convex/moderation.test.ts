@@ -116,7 +116,7 @@ const CASES: Array<{
 
 const OK_BODY = { data: [{ id: "x" }] };
 
-describe("without twitch.moderation (or with its flag off)", () => {
+describe("on a direct route", () => {
   for (const c of CASES) {
     test(`${c.name} goes to Helix as before`, async () => {
       const stub = fetchAnswering(200, JSON.stringify(OK_BODY));

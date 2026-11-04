@@ -2,10 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { createCompositionEditor, LocalDocumentSource, textBoxHeight } from "@woofx3/scene/editor";
 import { type CompositionDocument, keyBetween, PROFILES, stackOrder } from "@woofx3/scene/model";
 import {
-  ALERT_COMPOSITION_CAPABILITY,
   alertCompositionOf,
   alertLayoutChanged,
-  alertLayoutShapeFor,
   compositionOfLegacyAlert,
   DEFAULT_ALERT_CANVAS,
   isLegacyAlertLayout,
@@ -217,7 +215,7 @@ describe("writing a layout", () => {
   });
 
   it("reads back what it writes in the list shape, behaviors aside", () => {
-    const back = readAlertComposition(storedAlertLayout(doc, "list"), nameOf);
+    const back = readAlertComposition(legacyAlertLayoutOf(doc), nameOf);
     expect(stackOrder(back)).toEqual(["bottom", "top"]);
     expect(back.behaviors).toEqual({});
     const { z: _topZ, ...top } = back.widgets.top ?? placement("", "");
@@ -226,18 +224,10 @@ describe("writing a layout", () => {
   });
 
   it("writes the composition shape whole, as a copy", () => {
-    const written = storedAlertLayout(doc, "composition");
+    const written = storedAlertLayout(doc);
     expect(written).toEqual(doc);
     expect(written).not.toBe(doc);
     expect(readAlertComposition(written, nameOf)).toEqual(doc);
-  });
-
-  it("writes a composition only for an engine that says it plays one", () => {
-    expect(ALERT_COMPOSITION_CAPABILITY).toBe("alerts.compositionLayout");
-    expect(alertLayoutShapeFor("supported")).toBe("composition");
-    expect(alertLayoutShapeFor("unsupported")).toBe("list");
-    expect(alertLayoutShapeFor("checking")).toBe("list");
-    expect(alertLayoutShapeFor("unknown")).toBe("list");
   });
 });
 

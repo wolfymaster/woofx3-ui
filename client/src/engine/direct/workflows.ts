@@ -4,15 +4,9 @@ import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { parseViewerFacts } from "@shared/viewer-facts";
 import { isStillLoadingError, parseWorkflowHealthList, shouldResync } from "@shared/workflow-health";
 import { buildTriggerOptions } from "@shared/workflow-test-run";
-import {
-  type CallbackEnvelope,
-  ENGINE_CAPABILITIES,
-  EngineEventType,
-  WORKFLOW_RUN_SNAPSHOT_MAX_LIMIT,
-} from "@woofx3/api";
+import { type CallbackEnvelope, EngineEventType, WORKFLOW_RUN_SNAPSHOT_MAX_LIMIT } from "@woofx3/api";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { useCallback } from "react";
-import { GatewayUnsupportedError } from "@/engine/errors";
 import type { WorkflowsGateway } from "@/engine/gateway";
 import { NoInstanceSelectedError, useEngineScope } from "@/engine/scope";
 import type {
@@ -101,9 +95,6 @@ function runsRead(runtime: DirectRuntime, engineWorkflowId: string, limit: numbe
   return {
     queryKey: k.workflows.runs(engineWorkflowId, limit),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.workflowRunSnapshots)) {
-        throw new GatewayUnsupportedError("workflows.useRuns");
-      }
       const bounded = Math.min(Math.max(Math.trunc(limit), 1), WORKFLOW_RUN_SNAPSHOT_MAX_LIMIT);
       const runs = await runtime.call("listWorkflowRunSnapshots", (api) =>
         api.listWorkflowRunSnapshots({ workflowId: engineWorkflowId, limit: bounded })
@@ -114,17 +105,14 @@ function runsRead(runtime: DirectRuntime, engineWorkflowId: string, limit: numbe
 }
 
 /**
- * The health errors of enabled workflows. An engine without health reports,
- * or one still loading its workflows, has none to give yet; the second sends
- * a snapshot once it has, which reads this again.
+ * The health errors of enabled workflows. An engine still loading its
+ * workflows has none to give yet, and sends a snapshot once it has, which
+ * reads this again.
  */
 function healthRead(runtime: DirectRuntime): EngineRead<NotRunningWorkflow[]> {
   return {
     queryKey: k.workflows.health(),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.workflowHealth)) {
-        return [];
-      }
       let raw: unknown;
       try {
         raw = await runtime.call("getWorkflowHealth", (api) => api.getWorkflowHealth());
@@ -300,9 +288,6 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
       return "skipped";
     }
     lastResyncAt = now;
-    if (!runtime.supports(ENGINE_CAPABILITIES.workflowHealth)) {
-      return "unsupported";
-    }
     try {
       await runtime.call("getWorkflowHealth", (api) => api.getWorkflowHealth());
     } catch (error) {

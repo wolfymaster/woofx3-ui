@@ -79,6 +79,12 @@
       "includes": ["client/src/**"],
       "linter": {
         "rules": {
+          "suspicious": {
+            "noConsole": {
+              "level": "error",
+              "options": { "allow": [] }
+            }
+          },
           "style": {
             "noRestrictedImports": {
               "level": "error",
@@ -122,6 +128,16 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["client/src/lib/logger.ts", "client/src/**/*.test.*"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
           }
         }
       }

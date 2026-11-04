@@ -6,8 +6,8 @@ import type { AdSchedule, AdSnoozeResult } from "@/engine/types";
 import { withPlainError } from "./errors";
 import { useInstanceAction } from "./scope";
 
-// Convex asks Twitch with the broadcaster token it holds, through the engine
-// when the engine advertises `twitch.ads`.
+// Convex asks Twitch through the instance's engine, or with the broadcaster
+// token it holds when there is no engine to ask.
 
 type ScheduleResult = FunctionReturnType<typeof api.adBreaks.getSchedule>;
 type SnoozeResult = FunctionReturnType<typeof api.adBreaks.snoozeNextAd>;

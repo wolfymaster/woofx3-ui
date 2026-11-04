@@ -1,5 +1,3 @@
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
-import { GatewayUnsupportedError } from "@/engine/errors";
 import type { OverlaysGateway } from "@/engine/gateway";
 import type { OverlayFacts, ReadOptions, SceneId } from "@/engine/types";
 import { fromSceneId } from "./ids";
@@ -46,14 +44,12 @@ export function directOverlaysGateway(runtime: DirectRuntime): OverlaysGateway {
   };
 
   // The contract's null for a scene the engine does not have, asked before a
-  // token is minted for it; an engine that cannot say refuses the mint instead.
+  // token is minted for it.
   const previewUrl = async (sceneId: SceneId) => {
-    if (runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
-      const engineSceneId = fromSceneId(sceneId);
-      const scene = await runtime.call("getSceneSnapshot", (api) => api.getSceneSnapshot(engineSceneId));
-      if (scene === null) {
-        return null;
-      }
+    const engineSceneId = fromSceneId(sceneId);
+    const scene = await runtime.call("getSceneSnapshot", (api) => api.getSceneSnapshot(engineSceneId));
+    if (scene === null) {
+      return null;
     }
     return browserSourceUrl(sceneId);
   };
@@ -61,9 +57,6 @@ export function directOverlaysGateway(runtime: DirectRuntime): OverlaysGateway {
   const factsRead: EngineRead<OverlayFacts> = {
     queryKey: k.scenes.browserSources(),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
-        throw new GatewayUnsupportedError("overlays.useFacts");
-      }
       const [{ scenes }, tokens] = await Promise.all([
         runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots()),
         runtime.call("listOverlayTokens", (api) => api.listOverlayTokens()),

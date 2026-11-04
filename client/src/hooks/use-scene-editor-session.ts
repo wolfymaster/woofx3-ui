@@ -4,6 +4,7 @@ import { useOverlayPreviewUrlRequest } from "@/engine/hooks/use-overlays";
 import { useSceneEditorSessionRequest } from "@/engine/hooks/use-scenes";
 import type { InstanceId, SceneId } from "@/engine/types";
 import { toast } from "@/hooks/use-toast";
+import { useLogger } from "@/lib/logger-context";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
 import {
   browserClock,
@@ -24,8 +25,6 @@ interface UseSceneEditorSessionArgs {
    * preview URL when given.
    */
   publicUrl?: () => Promise<string | null>;
-  /** False for an engine without `scenes.editorSync`: the hook stays idle. */
-  enabled: boolean;
   /** Who this editor is, shown to the scene's other editors; the session waits for it. */
   editorName: string | undefined;
   /**
@@ -78,10 +77,10 @@ export function useSceneEditorSession({
   engineSceneId,
   sceneId,
   publicUrl,
-  enabled,
   editorName,
   unsavedOutsideSession,
 }: UseSceneEditorSessionArgs): SceneEditorSession {
+  const logger = useLogger();
   const getSession = useSceneEditorSessionRequest();
   const getPreviewUrl = useOverlayPreviewUrlRequest();
   const [sceneKey] = useState(() => sceneKeyOf(instanceId, engineSceneId));
@@ -114,7 +113,7 @@ export function useSceneEditorSession({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: generation only re-runs the effect, for reopen
   useEffect(() => {
-    if (!enabled || !hasScene || !hasName) {
+    if (!hasScene || !hasName) {
       return;
     }
     const acquired = sceneEditorSessions.acquire(sceneKey, () => {
@@ -127,7 +126,7 @@ export function useSceneEditorSession({
         name: editorNameRef.current ?? "",
         onReport: (report) =>
           toast({ ...syncReportToast(report, made.getState().name || undefined), variant: "destructive" }),
-        log: (event, detail) => console.warn(`[scene editor] ${event}`, detail ?? {}),
+        log: (event, detail) => logger.warn(`[scene editor] ${event}`, detail === undefined ? undefined : { detail }),
       });
       openers.set(made, opener);
       return made;
@@ -142,7 +141,7 @@ export function useSceneEditorSession({
       sceneEditorSessions.release(sceneKey, acquired);
       setClient(null);
     };
-  }, [enabled, hasScene, hasName, sceneKey, generation]);
+  }, [hasScene, hasName, sceneKey, generation]);
 
   const state = useSyncExternalStore(client?.subscribe ?? noClient, client?.getState ?? noState);
 

@@ -11,7 +11,7 @@ import { useMappedList } from "./mapped";
 import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./scope";
 
 // Convex keeps the queue and works through it on a schedule, sending each
-// shoutout through the engine when the engine advertises `twitch.chat`.
+// shoutout through the instance's engine.
 
 type QueueRow = FunctionReturnType<typeof api.shoutouts.listQueue>[number];
 type LookupRow = NonNullable<FunctionReturnType<typeof api.shoutouts.lookupUser>>;

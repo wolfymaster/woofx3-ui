@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ENGINE_CAPABILITIES, type EngineCapability, type Woofx3EngineApi } from "@woofx3/api";
+import type { Woofx3EngineApi } from "@woofx3/api";
 import { EngineDisconnectedError, EngineTimeoutError } from "@/engine/errors";
 import { EngineSession, type SessionState } from "./EngineSession";
 import type { EngineTarget } from "./target";
@@ -19,7 +19,6 @@ interface AttachStep {
 }
 
 interface SetupOptions {
-  required?: readonly EngineCapability[];
   /** Runs after the default attach step records the session; `attempt` counts from 1. */
   attach?: (step: AttachStep) => Promise<void>;
   /** Replaces the target source's `current`, to hold or fail the read. */
@@ -45,7 +44,6 @@ function setup(options: SetupOptions = {}) {
       },
     },
     open: engine.open,
-    required: options.required ?? [ENGINE_CAPABILITIES.engineEventStream],
     hooks: {
       attach: async (api, lost) => {
         attached.push(api);
@@ -80,8 +78,7 @@ describe("EngineSession connect", () => {
     expect(session.state).toEqual({ status: "connecting", attempt: 1 });
     await reach("connected");
     expect(attached).toHaveLength(1);
-    const state = session.state;
-    expect(state.status === "connected" && state.capabilities).toContain(ENGINE_CAPABILITIES.engineEventStream);
+    expect(session.state).toEqual({ status: "connected" });
     await session.stop();
   });
 
@@ -104,13 +101,13 @@ describe("EngineSession connect", () => {
       message: /Invalid client credentials/,
     },
     {
-      name: "an engine without a required capability",
+      name: "an engine whose capability report this client cannot read",
       arrange: (engine) => {
-        engine.capabilities = [ENGINE_CAPABILITIES.eventsLog];
+        engine.capabilitySchema = 2;
         return engine.target();
       },
       reason: "incompatible",
-      message: /engine\.eventStream/,
+      message: /schema 2/,
     },
   ];
 
@@ -381,17 +378,16 @@ describe("EngineSession failure paths", () => {
 
   test("reconnectNow and a target change check an incompatible engine again", async () => {
     const { engine, session, reach, retarget } = setup();
-    const full = engine.capabilities;
-    engine.capabilities = [ENGINE_CAPABILITIES.eventsLog];
+    engine.capabilitySchema = 2;
     session.start();
     await reach("refused");
-    engine.capabilities = full;
+    engine.capabilitySchema = 1;
     session.reconnectNow();
     await reach("connected");
-    engine.capabilities = [ENGINE_CAPABILITIES.eventsLog];
+    engine.capabilitySchema = 2;
     retarget(engine.target());
     await reach("refused");
-    engine.capabilities = full;
+    engine.capabilitySchema = 1;
     retarget(engine.target());
     await reach("connected");
     await session.stop();

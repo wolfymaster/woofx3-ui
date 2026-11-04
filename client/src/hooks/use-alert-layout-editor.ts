@@ -1,17 +1,10 @@
 import { LocalDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import type { SceneWidgetCatalogRow } from "@/engine/types";
 import { type CompositionEditorHandle, useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
-import {
-  ALERT_COMPOSITION_CAPABILITY,
-  alertLayoutChanged,
-  alertLayoutShapeFor,
-  readAlertComposition,
-  storedAlertLayout,
-} from "@/lib/alert-layout";
+import { alertLayoutChanged, readAlertComposition, storedAlertLayout } from "@/lib/alert-layout";
 import { catalogOfRows } from "@/lib/scene-composition";
 
 /** A composition editor over an alert, and the installed widgets it places. */
@@ -28,7 +21,7 @@ export interface AlertLayoutSession extends AlertEditorHandle {
   replace: (doc: CompositionDocument) => void;
   /** The document differs from the one the editor opened with. */
   isDirty: boolean;
-  /** The edited layout as a step stores it, in the shape the engine plays; null when nothing changed. */
+  /** The edited layout as a step stores it; null when nothing changed. */
   changedLayout: () => unknown | null;
 }
 
@@ -42,7 +35,6 @@ export interface AlertLayoutSession extends AlertEditorHandle {
  */
 export function useAlertLayoutEditor(value: unknown): AlertLayoutSession | null {
   const catalogRows = useSceneWidgetCatalog();
-  const compositionSupport = useEngineCapabilities().support(ALERT_COMPOSITION_CAPABILITY);
 
   const [seed, setSeed] = useState<CompositionDocument | null>(null);
   useEffect(() => {
@@ -61,10 +53,7 @@ export function useAlertLayoutEditor(value: unknown): AlertLayoutSession | null 
 
   const doc = composition?.state.doc ?? null;
   const isDirty = useMemo(() => seed !== null && doc !== null && alertLayoutChanged(seed, doc), [seed, doc]);
-  const changedLayout = useCallback(
-    () => (isDirty && doc !== null ? storedAlertLayout(doc, alertLayoutShapeFor(compositionSupport)) : null),
-    [isDirty, doc, compositionSupport]
-  );
+  const changedLayout = useCallback(() => (isDirty && doc !== null ? storedAlertLayout(doc) : null), [isDirty, doc]);
 
   const replace = useCallback((next: CompositionDocument) => source?.replace(next), [source]);
 

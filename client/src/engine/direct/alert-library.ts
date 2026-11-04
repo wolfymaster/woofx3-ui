@@ -1,4 +1,3 @@
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { AlertLibraryGateway } from "@/engine/gateway";
 import type { AlertComposition, CompositionPreviewUrl, NewLibraryAlert } from "@/engine/types";
 import { directKeys as k } from "./keys";
@@ -6,16 +5,10 @@ import { toAlertComposition } from "./map/alert-library";
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 
-/** Thrown for a write to an engine with no library; a read of one answers that it holds nothing. */
-const NO_LIBRARY = "This engine doesn't keep an alert library. Update the engine to use one.";
-
 function alertsRead(runtime: DirectRuntime): EngineRead<AlertComposition[]> {
   return {
     queryKey: k.alertLibrary.list(),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.compositionsAlerts)) {
-        return [];
-      }
       const { compositions } = await runtime.call("listAlertCompositions", (api) => api.listAlertCompositions());
       return compositions.map(toAlertComposition).sort((a, b) => a.name.localeCompare(b.name));
     },
@@ -26,9 +19,6 @@ function alertRead(runtime: DirectRuntime, engineCompositionId: string): EngineR
   return {
     queryKey: k.alertLibrary.detail(engineCompositionId),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.compositionsAlerts)) {
-        return null;
-      }
       const composition = await runtime.call("getAlertComposition", (api) =>
         api.getAlertComposition(engineCompositionId)
       );
@@ -43,12 +33,6 @@ function alertRead(runtime: DirectRuntime, engineCompositionId: string): EngineR
  * changes through the scene editor socket, not here.
  */
 export function directAlertLibraryGateway(runtime: DirectRuntime): AlertLibraryGateway {
-  const requireLibrary = () => {
-    if (!runtime.supports(ENGINE_CAPABILITIES.compositionsAlerts)) {
-      throw new Error(NO_LIBRARY);
-    }
-  };
-
   // Nothing is cached apart from the engine's answer, so a refresh is a
   // fresh read of the list, counted.
   const refresh = async () => {
@@ -61,7 +45,6 @@ export function directAlertLibraryGateway(runtime: DirectRuntime): AlertLibraryG
     if (name === "") {
       throw new Error("An alert in the library needs a name.");
     }
-    requireLibrary();
     const created = await runtime.call("createAlertComposition", (api) =>
       api.createAlertComposition({
         name,
@@ -77,7 +60,6 @@ export function directAlertLibraryGateway(runtime: DirectRuntime): AlertLibraryG
   };
 
   const remove = async (engineCompositionId: string) => {
-    requireLibrary();
     const { success } = await runtime.call("deleteAlertComposition", (api) =>
       api.deleteAlertComposition(engineCompositionId)
     );
@@ -86,9 +68,6 @@ export function directAlertLibraryGateway(runtime: DirectRuntime): AlertLibraryG
   };
 
   const previewUrl = async (): Promise<CompositionPreviewUrl | null> => {
-    if (!runtime.supports(ENGINE_CAPABILITIES.compositionsPreview)) {
-      return null;
-    }
     const requestedAt = runtime.clock.now();
     const answer = await runtime.call("getCompositionPreviewUrl", (api) => api.getCompositionPreviewUrl());
     if (answer === null) {

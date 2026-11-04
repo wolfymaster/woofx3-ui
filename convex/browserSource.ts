@@ -238,9 +238,10 @@ async function requireInstanceForScene(
 // URL whose token can be rotated underneath it; the editor is an authenticated
 // view that fetches this URL itself, so it has no use for the indirection. It
 // must not frame a convex.site document either: a third site in the frame's
-// ancestor chain makes every engine request cross-site and drops Scene Manager's
-// SameSite=Strict session cookie — the one authorizing the widget frames and the
-// event stream. (The OBS route avoids the same trap by redirecting, not framing.)
+// ancestor chain makes every engine request cross-site, and Scene Manager's
+// session cookie (the one authorizing the widget frames and the event stream)
+// is SameSite=Strict on plain HTTP away from loopback, so there it would be
+// dropped. (The OBS route avoids the same trap by redirecting, not framing.)
 // Embedded directly, a UI and an engine that share a registrable domain
 // (ui.x.tv / scenes.x.tv) stay same-site and the session holds.
 //

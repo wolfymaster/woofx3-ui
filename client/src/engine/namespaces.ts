@@ -13,15 +13,7 @@
  * calls the engine has no method for, dashboard preferences) are not engine access and stay out.
  */
 export const ENGINE_NAMESPACE_MODULES = {
-  status: [
-    "engineCapabilities",
-    "engineInfo",
-    "engineHealth",
-    "obsStatus",
-    "instanceLiveState",
-    "streamStatus",
-    "engineSync",
-  ],
+  status: ["engineInfo", "engineHealth", "obsStatus", "instanceLiveState", "streamStatus", "engineSync"],
   resources: ["resources"],
   eventLog: ["engineEventLog"],
   alertQueue: ["engineAlerts", "alertActions", "alertLog"],

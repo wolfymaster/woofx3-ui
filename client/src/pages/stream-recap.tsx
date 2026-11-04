@@ -2,7 +2,6 @@ import type { RecapSupporter, StreamRecapEngineDetail } from "@shared/stream-rec
 import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
 import { PageHeader } from "@/components/layout/page-header";
 import { ClipsCard, TopClipTile } from "@/components/stream-recap/clips-card";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
@@ -10,7 +9,6 @@ import { RecapTimeline } from "@/components/stream-recap/recap-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useRecap } from "@/engine/hooks/use-stream-recap";
 import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
@@ -21,7 +19,6 @@ import { useRecapMarkers } from "@/hooks/use-recap-markers";
 import { useRecapTimelineEvents } from "@/hooks/use-recap-timeline-events";
 import { type StreamRecapEngineState, useStreamRecapEngineDetail } from "@/hooks/use-stream-recap-engine-detail";
 import { useToast } from "@/hooks/use-toast";
-import { RECAP_ENGINE_CAPABILITIES, RECAP_EVENT_CAPABILITIES } from "@/lib/engine-capabilities";
 import {
   buildLanePoints,
   clipLayerStatus,
@@ -359,17 +356,14 @@ function SupportersCard({
 
 function RecapBody({ row, sessionId }: { row: StreamRecap; sessionId: string }) {
   const twitchLink = useTwitchLink();
-  const capabilities = useEngineCapabilities();
-  const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
   // Keyed on any open session, not only a live one: the snapshot taken after
   // the stream goes offline carries its last minutes, which the chart and
   // leaderboards should then pick up too.
   const body: SessionBody | null =
     row.summary.kind === "read" ? { session: row.summary.session, totals: row.summary.totals } : null;
   const engineDetailRefreshKey = body?.session.status === "open" ? row.generatedAtMs : 0;
-  const { state, retry } = useStreamRecapEngineDetail(sessionId, engineSupport === "supported", engineDetailRefreshKey);
-  const eventSupport = capabilities.support(...RECAP_EVENT_CAPABILITIES);
-  const events = useRecapTimelineEvents(sessionId, eventSupport === "supported", engineDetailRefreshKey);
+  const { state, retry } = useStreamRecapEngineDetail(sessionId, engineDetailRefreshKey);
+  const events = useRecapTimelineEvents(sessionId, engineDetailRefreshKey);
   const clips = useRecapClips(sessionId);
   const markers = useRecapMarkers(sessionId);
   const segments = useMemo(() => summarySegments(row), [row]);
@@ -387,11 +381,10 @@ function RecapBody({ row, sessionId }: { row: StreamRecap; sessionId: string }) 
   );
   const layerStatuses = recapLayerStatuses({
     viewers: viewerLayerStatus(
-      engineSupport,
       state,
       series.points.some((point) => point.viewers !== null)
     ),
-    events: eventLayersStatus(eventSupport, events),
+    events: eventLayersStatus(events),
     eventCounts: laneCounts(lanePoints),
     clips: clipLayerStatus(clips.state),
     markers: markerLayerStatus(markers),
@@ -448,25 +441,13 @@ function RecapBody({ row, sessionId }: { row: StreamRecap; sessionId: string }) 
             statuses={layerStatuses}
             footnote={eventsTruncatedNote(eventResult)}
           />
-          {(engineSupport === "unsupported" ||
-            engineSupport === "unknown" ||
-            (engineSupport === "supported" && !detail && state.kind !== "loading")) && (
-            <EngineFeatureGate
-              support={engineSupport}
-              state={capabilities.state}
-              feature="Viewer history and top supporters"
-              onRetry={capabilities.refresh}
-            >
-              <EngineNotice state={state} onRetry={retry} />
-            </EngineFeatureGate>
-          )}
+          {!detail && state.kind !== "loading" && <EngineNotice state={state} onRetry={retry} />}
         </CardContent>
       </Card>
 
       {detail ? (
         <SupportersCard detail={detail} canAnnounce={canAnnounce} />
       ) : (
-        engineSupport === "supported" &&
         state.kind === "loading" && (
           <Card>
             <CardHeader>

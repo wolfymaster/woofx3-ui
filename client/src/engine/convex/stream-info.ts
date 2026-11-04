@@ -19,9 +19,8 @@ import { fromStreamInfoPresetId, toStreamInfoPresetId } from "./ids";
 import { useMappedList } from "./mapped";
 import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./scope";
 
-// Convex keeps the presets, and reads and writes the channel with the
-// broadcaster token it holds, through the engine when the engine advertises
-// `twitch.streamInfo`.
+// Convex keeps the presets, and reads and writes the channel through the
+// instance's engine.
 
 type StreamInfoRow = FunctionReturnType<typeof api.streamInfo.getChannelInfo>;
 type CategoryRow = FunctionReturnType<typeof api.streamInfo.searchCategories>[number];

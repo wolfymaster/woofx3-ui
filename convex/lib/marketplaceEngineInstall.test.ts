@@ -10,12 +10,10 @@ import { getFunctionName } from "convex/server";
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
-import { type EngineCapabilityReport, LEGACY_ENGINE_REPORT } from "./engineCapabilities";
 import { MarketplaceError } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
 import {
   buyerTokensConfigured,
-  type EngineInstallGate,
   engineFailure,
   inspectThroughEngine,
   installBundleThroughEngine,
@@ -37,29 +35,6 @@ const LISTING = "obs-scenes";
 const TOKEN = "header.claims.signature";
 const SHA = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 const KEY = `${LISTING}:1.4.2:${SHA.slice(0, 7)}`;
-
-const CAPABLE: EngineCapabilityReport = { legacy: false, capabilities: ["modules.marketplaceInstall"] };
-const NOT_CAPABLE: EngineCapabilityReport = { legacy: false, capabilities: ["modules.files"] };
-
-/** A gate that records which inputs it was asked for. */
-function gate(
-  overrides: Partial<{
-    access: "public" | "dev";
-    buyerTokens: boolean;
-    report: EngineCapabilityReport;
-  }> = {}
-) {
-  const asked: string[] = [];
-  const value: EngineInstallGate = {
-    access: overrides.access ?? "public",
-    buyerTokens: overrides.buyerTokens ?? true,
-    capabilities: async () => {
-      asked.push("capabilities");
-      return overrides.report ?? CAPABLE;
-    },
-  };
-  return { gate: value, asked };
-}
 
 /** An engine session that answers each method from the given handlers and records its calls. */
 function fakeEngine(handlers: Partial<MarketplaceEngine>) {
@@ -140,38 +115,16 @@ async function convexErrorMessage(promise: Promise<unknown>): Promise<string> {
 }
 
 describe("routeThroughEngine", () => {
-  test("takes the engine path with the capability reported and public access", async () => {
-    const { gate: g, asked } = gate();
-    expect(await routeThroughEngine(g)).toBe(true);
-    expect(asked).toEqual(["capabilities"]);
+  test("takes the engine path with public access and buyer tokens", () => {
+    expect(routeThroughEngine({ access: "public", buyerTokens: true })).toBe(true);
   });
 
-  test("an engine without the capability keeps the Convex path", async () => {
-    expect(await routeThroughEngine(gate({ report: NOT_CAPABLE }).gate)).toBe(false);
-    expect(await routeThroughEngine(gate({ report: LEGACY_ENGINE_REPORT }).gate)).toBe(false);
+  test("dev access keeps the Convex path", () => {
+    expect(routeThroughEngine({ access: "dev", buyerTokens: true })).toBe(false);
   });
 
-  test("dev access keeps the Convex path without asking the engine", async () => {
-    const { gate: g, asked } = gate({ access: "dev" });
-    expect(await routeThroughEngine(g)).toBe(false);
-    expect(asked).toEqual([]);
-  });
-
-  test("a deployment that cannot mint buyer tokens keeps the Convex path without asking the engine", async () => {
-    const { gate: g, asked } = gate({ buyerTokens: false });
-    expect(await routeThroughEngine(g)).toBe(false);
-    expect(asked).toEqual([]);
-  });
-
-  test("an engine that cannot report capabilities keeps the Convex path", async () => {
-    const g: EngineInstallGate = {
-      access: "public",
-      buyerTokens: true,
-      capabilities: async () => {
-        throw new Error("fetch failed");
-      },
-    };
-    expect(await routeThroughEngine(g)).toBe(false);
+  test("a deployment that cannot mint buyer tokens keeps the Convex path", () => {
+    expect(routeThroughEngine({ access: "public", buyerTokens: false })).toBe(false);
   });
 });
 

@@ -15,6 +15,10 @@ import type { Plugin } from "vite";
 export const USER_PAGE_LOCAL_MODULES: readonly string[] = [
   "client/src/user-page/",
   "client/src/lib/resource-values.ts",
+  // The app's logger, its sinks and its React provider; they carry no app state.
+  "client/src/lib/logger.ts",
+  "client/src/lib/app-logger.ts",
+  "client/src/lib/logger-context.tsx",
   "shared/user-pages/",
   "shared/resource-kinds.ts",
   "convex/_generated/api.js",

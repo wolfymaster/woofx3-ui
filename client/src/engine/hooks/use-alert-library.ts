@@ -1,13 +1,10 @@
 import { useEffect } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { AlertComposition } from "@/engine/types";
-import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
+import { useLogger } from "@/lib/logger-context";
 
 export interface AlertLibrary {
-  /** The engine stores an alert library. Everything below is offered only then. */
-  enabled: boolean;
-  /** The library by name, undefined while loading or while not enabled. */
+  /** The library by name, undefined while loading. */
   alerts: AlertComposition[] | undefined;
 }
 
@@ -21,25 +18,25 @@ const refreshed = new Set<string>();
  * dashboard cached them, or while it was unreachable).
  */
 export function useAlertLibrary(): AlertLibrary {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
-  const enabled = useEngineCapabilities().support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
   const { alertLibrary } = useEngineGateway();
-  const alerts = alertLibrary.useAlerts({ enabled });
+  const alerts = alertLibrary.useAlerts();
   const refresh = alertLibrary.useRefreshRequest();
 
   useEffect(() => {
-    if (!enabled || !instanceId || refreshed.has(instanceId)) {
+    if (!instanceId || refreshed.has(instanceId)) {
       return;
     }
     refreshed.add(instanceId);
     refresh().catch((error: unknown) => {
       // The cache still has whatever the webhooks brought; the next editor to mount tries again.
       refreshed.delete(instanceId);
-      console.warn("[alert library] refresh failed", error);
+      logger.warn("[alert library] refresh failed", { error });
     });
-  }, [enabled, instanceId, refresh]);
+  }, [instanceId, refresh, logger]);
 
-  return { enabled, alerts: enabled ? alerts : undefined };
+  return { alerts };
 }
 
 /** One library alert by the engine's id; null until its webhook arrives or once it is deleted. */

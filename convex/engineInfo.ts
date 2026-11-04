@@ -3,14 +3,11 @@ import type { EngineInfo } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { recordEngineReport } from "./engineReports";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { reportedEngineVersion } from "./lib/engineReport";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
 // Called by the storage settings page and by the status bar each time the
-// engine connection comes up. Neither is a hot path, so nothing is cached;
-// the answer's version is recorded for operators (lib/engineReport.ts).
+// engine connection comes up. Neither is a hot path, so nothing is cached.
 export const getEngineInfo = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<EngineInfo | null> => {
@@ -34,17 +31,12 @@ export const getEngineInfo = action({
       return null;
     }
 
-    let info: EngineInfo;
     try {
       const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-      info = await rpc.getEngineInfo();
+      return await rpc.getEngineInfo();
     } catch {
       return null;
     }
-    // An engine older than the version field answers without one, so the
-    // type alone does not guarantee a string.
-    await recordEngineReport(ctx, args.instanceId, { version: reportedEngineVersion(info?.version) });
-    return info;
   },
 });
 

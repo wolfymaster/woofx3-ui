@@ -129,6 +129,14 @@ For each endpoint the controls show:
 The dashboard window renders hosted data, so it only requests the two choices that decide what the bridge dials or what leaves the PC. `Integrations::ask_streamer` puts a typed address and the password opt-in to the streamer in a native dialog the host draws, and refuses if they decline.
 - **The connection state** from the relay, and **Test**, which makes one WebSocket handshake with the stored address (offering `obswebsocket.json` and `obswebsocket.msgpack` to an OBS endpoint) and reports whether it answered within 3 seconds.
 
+### What the status bar reports
+
+The hosted shell's status bar (`ConnectionStatusBar` in `client/src/components/layout/connection-status.tsx`) shows the engine, then one coloured name per connected app. Names that don't fit collapse into a `+N` chip coloured by the worst state it hides, and problems sort first (`client/src/lib/connection-status.ts`). Clicking any of them opens one panel with the details and the engine version.
+
+"Connected" also depends on the relay, because a cloud engine can only reach this computer through it. `RelayWatch` (desktop only) follows the host's `RelayView` and sets `$relayLimitation`, which reads as **Limited**: the relay is displaced, refused or unavailable, or has been connecting for over `RELAY_GRACE_MS`. A relay with no enabled endpoint is not needed and counts as healthy. The web build never sets the store.
+
+The bar reports Twitch, plus every installed module whose manifest declares `local[]` endpoints. A module with no status source shows as grey ("doesn't report whether it's connected") rather than green, because Convex records how an endpoint is configured, not whether the engine is connected to it. Only OBS has a status source today (`engine.obs.status`).
+
 ### What the companion dials
 
 The companion's own store, `integrations.json` in its app data directory, is the only source of addresses the bridge dials:
@@ -344,11 +352,10 @@ Revoking, unpairing or replacing the companion deletes its row and its `companio
 
 ### When the bridge is offered
 
-All four must hold, or the module settings page is unchanged and nothing is bridged:
+All three must hold, or the module settings page is unchanged and nothing is bridged:
 
 - Convex env has `RELAY_URL`, `RELAY_SIGNING_KEY` and `RELAY_SIGNING_KEY_ID`.
 - The maintenance API is configured (`MAINTENANCE_API_URL`, `MAINTENANCE_API_KEY`). A self-hosted dashboard without it offers no bridge.
-- The engine lists the capability `modules.localEndpoints`.
 - The instance has a confirmed companion.
 
 ### Data
@@ -367,7 +374,7 @@ Every change goes through `scheduleRelaySync` (`convex/lib/companionEndpoints.ts
 - a module with enabled endpoints uninstalled;
 - the engine registering again. Every handshake, re-registration included, goes through `instances.applyRegistration`.
 
-Each call bumps `instances.relaySyncVersion`. A `syncEngine` run checks that version before and after asking the engine for its capabilities, and does nothing once a newer one exists, so an endpoint turned on and then off cannot reach the engine in reverse order. A failed run retries after 10 s, 60 s and 5 min.
+Each call bumps `instances.relaySyncVersion`. A `syncEngine` run checks that version before it sends, and does nothing once a newer one exists, so an endpoint turned on and then off cannot reach the engine in reverse order. A failed run retries after 10 s, 60 s and 5 min.
 
 Every 15 minutes the `companion relay resync` cron (`companionRelay.resyncBridgedInstances`) sends the configuration again to each instance with an endpoint turned on. It pages through the enabled rows of `companionEndpoints` only, so an idle deployment costs one empty index read. This repairs an engine that restarted, or one whose session cleared its configuration with `setRelayConfig(null)`. The engine's own credential requests also heal it, since a `{ relay: null }` answer clears a configuration it should not hold.
 

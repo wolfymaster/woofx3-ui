@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { PublicPageLookup } from "@shared/user-pages";
 import { useAction, useQuery } from "convex/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useLogger } from "@/lib/logger-context";
 import { useLookupWhileLoading } from "./lookup-while-loading";
 import { documentTitle, UserPageView } from "./page-view";
 import { PageViewerProvider } from "./viewer/page-viewer";
@@ -98,6 +99,7 @@ function UserPageScreen({
  * plain not-found page.
  */
 function useClaimable(slug: string, unclaimed: boolean): boolean {
+  const logger = useLogger();
   const checkClaimable = useAction(api.userPagesPublic.claimable);
   const [claimable, setClaimable] = useState(false);
   useEffect(() => {
@@ -113,11 +115,11 @@ function useClaimable(slug: string, unclaimed: boolean): boolean {
         }
       })
       .catch((error: unknown) => {
-        console.warn("Could not check whether this page can be claimed", error);
+        logger.warn("Could not check whether this page can be claimed", { error });
       });
     return () => {
       current = false;
     };
-  }, [checkClaimable, slug, unclaimed]);
+  }, [checkClaimable, slug, unclaimed, logger]);
   return claimable;
 }
