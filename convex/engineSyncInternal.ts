@@ -14,7 +14,7 @@ import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
-import { upsertWorkflowGroup, workflowGroupFields } from "./workflowGroups";
+import { upsertWorkflowGroupFromWebhook, workflowGroupFields } from "./workflowGroups";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
 // pre-spec deployment. Safe to delete after the first prod deploy.
@@ -1163,7 +1163,6 @@ export const reconcileWorkflowGroups = internalMutation({
     snapshots: v.array(v.object(workflowGroupFields)),
   },
   handler: async (ctx, { instanceId, snapshotStartedAt, snapshots }) => {
-    const now = Date.now();
     const local = await ctx.db
       .query("workflowGroups")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -1174,7 +1173,7 @@ export const reconcileWorkflowGroups = internalMutation({
       if (found && found.updatedAt >= snapshotStartedAt) {
         continue;
       }
-      await upsertWorkflowGroup(ctx, instanceId, snap, now);
+      await upsertWorkflowGroupFromWebhook(ctx, { instanceId, ...snap });
     }
     const live = new Set(snapshots.map((snap) => snap.engineGroupId));
     for (const row of local) {

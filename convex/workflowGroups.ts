@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
+import { type ObjectType, v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { getInstanceMembership } from "./lib/teamAccess";
 
@@ -21,14 +21,6 @@ export const workflowGroupFields = {
   memberIds: v.array(v.string()),
 };
 
-export interface WorkflowGroupFields {
-  engineGroupId: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  memberIds: string[];
-}
-
 export const list = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<Doc<"workflowGroups">[]> => {
@@ -47,16 +39,18 @@ export const list = query({
   },
 });
 
-export async function upsertWorkflowGroup(
+const upsertFromWebhookArgs = { instanceId: v.id("instances"), ...workflowGroupFields };
+
+/** The workflow_group.created and workflow_group.updated webhooks, and a group action's answer. */
+export async function upsertWorkflowGroupFromWebhook(
   ctx: MutationCtx,
-  instanceId: Id<"instances">,
-  group: WorkflowGroupFields,
-  now: number
+  { instanceId, ...group }: ObjectType<typeof upsertFromWebhookArgs>
 ): Promise<void> {
   const existing = await ctx.db
     .query("workflowGroups")
     .withIndex("by_engine_group_id", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", group.engineGroupId))
     .first();
+  const now = Date.now();
   const fields = {
     name: group.name,
     description: group.description,
@@ -76,24 +70,28 @@ export async function upsertWorkflowGroup(
   });
 }
 
-/** The workflow_group.created and workflow_group.updated webhooks, and a group action's answer. */
 export const upsertFromWebhook = internalMutation({
-  args: { instanceId: v.id("instances"), ...workflowGroupFields },
-  handler: async (ctx, { instanceId, ...group }) => {
-    await upsertWorkflowGroup(ctx, instanceId, group, Date.now());
-  },
+  args: upsertFromWebhookArgs,
+  handler: upsertWorkflowGroupFromWebhook,
 });
 
+const deleteFromWebhookArgs = { instanceId: v.id("instances"), engineGroupId: v.string() };
+
 /** The workflow_group.deleted webhook. Members' group lists arrive on their own workflow.updated. */
+export async function deleteWorkflowGroupFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, engineGroupId }: ObjectType<typeof deleteFromWebhookArgs>
+): Promise<void> {
+  const existing = await ctx.db
+    .query("workflowGroups")
+    .withIndex("by_engine_group_id", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId))
+    .first();
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
+}
+
 export const deleteFromWebhook = internalMutation({
-  args: { instanceId: v.id("instances"), engineGroupId: v.string() },
-  handler: async (ctx, { instanceId, engineGroupId }) => {
-    const existing = await ctx.db
-      .query("workflowGroups")
-      .withIndex("by_engine_group_id", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId))
-      .first();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
-  },
+  args: deleteFromWebhookArgs,
+  handler: deleteWorkflowGroupFromWebhook,
 });
