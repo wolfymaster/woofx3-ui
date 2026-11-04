@@ -6,6 +6,7 @@ import type { FormFieldType } from "@shared/user-pages";
 import type { MacroFields } from "@shared/macro-pad";
 import type { ListingType } from "@shared/marketplace-catalog";
 import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
+import type { ModerationActionRecord, ModerationConfig } from "@woofx3/api/moderation-config";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 
 export type {
@@ -1901,3 +1902,8 @@ export interface NewStreamHighlight {
   /** Epoch ms. */
   occurredAt: number;
 }
+
+export type { ModerationActionRecord, ModerationConfig };
+
+/** The chat moderation config, or that the instance's engine is too old to moderate chat. */
+export type ChatModerationRead = { kind: "unsupported" } | { kind: "ready"; config: ModerationConfig };
