@@ -197,20 +197,12 @@ describe("functions a field can't run", () => {
   const names = variableNames([option("${trigger.data.amount}")]);
   const text = "{round(divide(amount, 100))}";
 
-  test("an engine without them says to update", () => {
-    expect(expressionProblem(text, text, names, "engine-update-needed")).toContain("Update your engine");
-  });
-
   test("a field without them says so", () => {
     expect(expressionProblem(text, text, names, "not-here")).toContain("can't be used here");
   });
 
-  test("says nothing while the engine is still being asked", () => {
-    expect(expressionProblem(text, text, names, "checking")).toBeNull();
-  });
-
   test("leaves other text alone", () => {
-    expect(expressionProblem("{note(s)}", "{note(s)}", names, "engine-update-needed")).toBeNull();
+    expect(expressionProblem("{note(s)}", "{note(s)}", names, "not-here")).toBeNull();
   });
 });
 

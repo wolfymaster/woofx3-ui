@@ -4,7 +4,6 @@ import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import type { RecapMarkersState } from "@/hooks/use-recap-markers";
 import type { RecapTimelineEventsState } from "@/hooks/use-recap-timeline-events";
 import type { StreamRecapEngineState } from "@/hooks/use-stream-recap-engine-detail";
-import type { CapabilitySupport } from "@/lib/engine-capabilities";
 
 const MINUTE_MS = 60_000;
 
@@ -224,33 +223,12 @@ function unavailable(reason: string): RecapLayerStatus {
   return { kind: "unavailable", reason };
 }
 
-function capabilityStatus(support: CapabilitySupport): RecapLayerStatus | null {
-  switch (support) {
-    case "supported":
-      return null;
-    case "checking":
-      return LOADING;
-    case "unsupported":
-      return unavailable("Needs a newer engine than this instance runs.");
-    case "unknown":
-      return unavailable("Couldn't check what the engine supports.");
-  }
-}
-
 /**
  * The viewers layer. Its problems are explained, with a retry where one can
  * help, by the engine notice under the timeline, which also covers the
  * supporters the same call loads, so the reason here only points there.
  */
-export function viewerLayerStatus(
-  support: CapabilitySupport,
-  state: StreamRecapEngineState,
-  hasViewerValues: boolean
-): RecapLayerStatus {
-  const gated = capabilityStatus(support);
-  if (gated !== null) {
-    return gated;
-  }
+export function viewerLayerStatus(state: StreamRecapEngineState, hasViewerValues: boolean): RecapLayerStatus {
   if (state.kind === "loading") {
     return LOADING;
   }
@@ -276,11 +254,7 @@ function engineEventsProblem(result: Exclude<RecapTimelineEvents, { status: "ok"
 }
 
 /** The status every event lane shares, since one engine call loads them all. */
-export function eventLayersStatus(support: CapabilitySupport, state: RecapTimelineEventsState): RecapLayerStatus {
-  const gated = capabilityStatus(support);
-  if (gated !== null) {
-    return gated;
-  }
+export function eventLayersStatus(state: RecapTimelineEventsState): RecapLayerStatus {
   if (state.kind === "loading") {
     return LOADING;
   }

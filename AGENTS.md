@@ -76,7 +76,7 @@ Summary (see `CLAUDE.md` for the full list): `internal*` for private APIs; valid
 - **Have fun**: creative, expressive work and solid engineering reinforce each other.
 
 - **Biome** — 2 spaces, double quotes, semicolons, ES5 trailing commas, 120 cols.
-- **Wouter v3** — use `navigate` in `useEffect`, not `<Redirect>`.
+- **Wouter v3** — redirect with `<Redirect to="..." />`, or `navigate` in an effect when the redirect follows other logic.
 - **State:** Nanostores for UI-only; Convex for persisted data.
 - **Engine access:** through the engine gateway (`client/src/engine/`); only the Convex adapter (`client/src/engine/convex/`) imports `client/src/lib/transport/`. Do not use deprecated `rpc-client.ts`.
 - **Shadcn** in `client/src/components/ui/` — compose, don’t edit primitives.

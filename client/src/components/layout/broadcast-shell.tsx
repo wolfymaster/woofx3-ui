@@ -35,6 +35,7 @@ import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
 import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { ConnectionStatusBar } from "./connection-status";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
 import {
   findActiveSection,
@@ -46,7 +47,6 @@ import {
   withAlertsChildren,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
-import { PlatformStatusIndicators } from "./platform-status";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
@@ -171,27 +171,9 @@ function StatusBar() {
 
   return (
     <div className="h-7 bg-card border-t border-border flex items-center px-4 text-xs shrink-0">
-      <div className="flex-1 flex items-center gap-2 min-w-0">
-        <span className={cn("h-1.5 w-1.5 rounded-full", connection.dot)} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className={cn("font-semibold uppercase tracking-wider", connection.text)}
-              data-testid="status-engine-connection"
-              data-state={connectionState}
-            >
-              {connection.label}
-            </span>
-          </TooltipTrigger>
-          {connectionState === "limited" && relayLimitation && (
-            <TooltipContent>{relayLimitation.detail}</TooltipContent>
-          )}
-        </Tooltip>
-        <span className="text-muted-foreground font-mono truncate" data-testid="status-engine-version">
-          {formatEngineVersion(engineVersion)}
-        </span>
-        <PlatformStatusIndicators />
-      </div>
+      <ConnectionStatusBar
+        engine={{ ...connection, state: connectionState, version: formatEngineVersion(engineVersion) }}
+      />
 
       <StatusBarCenterMount className="flex items-center justify-center shrink-0" />
 

@@ -70,14 +70,11 @@ function dataOf(value: unknown): Record<string, unknown> | null {
  * envelope carries. An event or alert whose originating CloudEvent came from
  * the dashboard itself (`TEST_EVENT_SOURCE`) is dropped. `events` may hold the
  * same event twice (history and push overlap); the first copy wins.
- *
- * `enabledTypes` null shows every event given, for an engine that predates the
- * selection and pushes its own fixed set.
  */
 export function mergeActivity<A extends ActivityAlert>(
   events: readonly ActivityEvent[],
   alerts: readonly A[],
-  enabledTypes: ReadonlySet<string> | null
+  enabledTypes: ReadonlySet<string>
 ): ActivityRow<A>[] {
   const eventsById = new Map<string, ActivityEvent>();
   for (const event of events) {
@@ -122,7 +119,7 @@ export function mergeActivity<A extends ActivityAlert>(
   }
 
   eventsById.forEach((event, id) => {
-    if (rowsByEventId.has(id) || (enabledTypes && !enabledTypes.has(event.type))) {
+    if (rowsByEventId.has(id) || !enabledTypes.has(event.type)) {
       return;
     }
     rows.push({

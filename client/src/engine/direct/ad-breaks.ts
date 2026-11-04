@@ -8,14 +8,13 @@ import {
   parseHelixSnoozeResult,
   readAdAnswer,
 } from "@shared/ad-breaks";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { AdBreaksGateway } from "@/engine/gateway";
 import type { AdSchedule, AdSnoozeResult } from "@/engine/types";
 import { useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { directTwitch } from "./twitch";
 
-/** The ad schedule and snoozing, through the engine's `twitch.ads` methods. */
+/** The ad schedule and snoozing, through the engine's ad methods. */
 export function directAdBreaksGateway(runtime: DirectRuntime): AdBreaksGateway {
   const twitch = directTwitch(runtime);
   /** Helix sends no clock of its own; the schedule's times are read against the gateway's. */
@@ -31,9 +30,7 @@ export function directAdBreaksGateway(runtime: DirectRuntime): AdBreaksGateway {
 
   const schedule = async (): Promise<AdSchedule> => {
     await twitch.authorize(AD_READ_SCOPE, AD_SCOPE_MISSING_MESSAGE);
-    const response = await twitch.helix(ENGINE_CAPABILITIES.twitchAds, "twitchGetAdSchedule", (api) =>
-      api.twitchGetAdSchedule()
-    );
+    const response = await twitch.helix("twitchGetAdSchedule", (api) => api.twitchGetAdSchedule());
     const result = parseHelixAdSchedule(await body("read", response), now());
     if (!result) {
       throw new Error(AD_SCHEDULE_UNREADABLE_MESSAGE);
@@ -43,9 +40,7 @@ export function directAdBreaksGateway(runtime: DirectRuntime): AdBreaksGateway {
 
   const snooze = async (): Promise<AdSnoozeResult> => {
     await twitch.authorize(AD_MANAGE_SCOPE, AD_SCOPE_MISSING_MESSAGE);
-    const response = await twitch.helix(ENGINE_CAPABILITIES.twitchAds, "twitchSnoozeNextAd", (api) =>
-      api.twitchSnoozeNextAd()
-    );
+    const response = await twitch.helix("twitchSnoozeNextAd", (api) => api.twitchSnoozeNextAd());
     const result = parseHelixSnoozeResult(await body("snooze", response), now());
     if (!result) {
       throw new Error(AD_SNOOZE_UNREADABLE_MESSAGE);

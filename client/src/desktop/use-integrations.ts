@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLogger } from "@/lib/logger-context";
 import { companionLinkStatus, type IntegrationsView, integrations, onIntegrationsChange } from "./host";
 
 const OFF: IntegrationsView = {
@@ -10,6 +11,7 @@ const OFF: IntegrationsView = {
 
 /** Follows the host's picture of this computer's local connections. */
 export function useIntegrations(): IntegrationsView {
+  const logger = useLogger();
   const [view, setView] = useState<IntegrationsView>(OFF);
   useEffect(() => {
     let disposed = false;
@@ -25,14 +27,14 @@ export function useIntegrations(): IntegrationsView {
         }
       },
       (err: unknown) => {
-        console.error("Couldn't read this computer's local connections from the host", err);
+        logger.error("Couldn't read this computer's local connections from the host", { error: err });
       }
     );
     return () => {
       disposed = true;
       void unlisten.then((stop) => stop());
     };
-  }, []);
+  }, [logger]);
   return view;
 }
 
@@ -42,6 +44,7 @@ export function useIntegrations(): IntegrationsView {
  * across instances, so a view for another instance must not be read as this one's.
  */
 export function useIntegrationsFor(instanceId: string | undefined): IntegrationsView | null {
+  const logger = useLogger();
   const view = useIntegrations();
   const [linkedInstanceId, setLinkedInstanceId] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: linking starts and ends the host's view, so each new view asks again.
@@ -54,7 +57,7 @@ export function useIntegrationsFor(instanceId: string | undefined): Integrations
         }
       },
       (err: unknown) => {
-        console.error("Couldn't read which instance this computer is linked to", err);
+        logger.error("Couldn't read which instance this computer is linked to", { error: err });
       }
     );
     return () => {

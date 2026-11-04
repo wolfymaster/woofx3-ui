@@ -9,19 +9,17 @@ export type RecapTimelineEventsState =
   | { kind: "error"; message: string };
 
 /**
- * Loads a recap's events for the timeline when `enabled`, which the page sets
- * only for an engine that lists `analytics.sessionEvents`. Like the engine
- * detail, a session still in progress loads again on a new `refreshKey`, and
+ * Loads a recap's events for the timeline. Like the engine detail, a session still in progress loads again on a new `refreshKey`, and
  * the events on screen stay while that runs or if it fails.
  */
-export function useRecapTimelineEvents(sessionId: string, enabled: boolean, refreshKey = 0) {
+export function useRecapTimelineEvents(sessionId: string, refreshKey = 0) {
   const { instanceId } = useEngineScope();
   const loadTimelineEvents = useRecapTimelineEventsRequest();
   const [state, setState] = useState<RecapTimelineEventsState>({ kind: "loading" });
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a deliberate re-run trigger
   useEffect(() => {
-    if (!enabled || !instanceId) {
+    if (!instanceId) {
       return;
     }
     let cancelled = false;
@@ -41,7 +39,7 @@ export function useRecapTimelineEvents(sessionId: string, enabled: boolean, refr
     return () => {
       cancelled = true;
     };
-  }, [instanceId, sessionId, enabled, loadTimelineEvents, refreshKey]);
+  }, [instanceId, sessionId, loadTimelineEvents, refreshKey]);
 
   return state;
 }

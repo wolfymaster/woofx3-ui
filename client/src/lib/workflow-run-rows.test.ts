@@ -52,9 +52,8 @@ describe("runDurationMs", () => {
 });
 
 describe("describeStopOutcome", () => {
-  test("says whether the engine stopped the run, found it finished, or only marked it", () => {
+  test("says whether the engine stopped the run or found it finished", () => {
     expect(describeStopOutcome("cancelled", "cancelled").title).toBe("Run stopped");
     expect(describeStopOutcome("already_finished", "completed").description).toContain("completed");
-    expect(describeStopOutcome("marked", "cancelled").description).toContain("still run");
   });
 });

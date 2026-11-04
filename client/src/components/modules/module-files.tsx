@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
   File,
@@ -13,7 +12,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -45,44 +43,6 @@ function InlineMessage({ children, tone = "muted" }: { children: ReactNode; tone
     <p className={cn("text-xs px-3 py-2", tone === "error" ? "text-destructive" : "text-muted-foreground")}>
       {children}
     </p>
-  );
-}
-
-/**
- * Why the files cannot be browsed yet, or null when they can. An installed
- * module's files need an engine with the file methods.
- */
-export function ModuleFilesSupportNotice({ files }: { files: ModuleFiles }) {
-  if (files.support === "supported") {
-    return null;
-  }
-  if (files.support === "checking") {
-    return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
-  }
-  if (files.support === "unsupported") {
-    return (
-      <Alert data-testid="module-files-needs-update">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Update WoofX3 to browse this module's files</AlertTitle>
-        <AlertDescription>
-          The engine this instance runs can't share a module's files yet. Update it to the latest release; this view
-          checks again when the engine reconnects.
-        </AlertDescription>
-      </Alert>
-    );
-  }
-  return (
-    <Alert data-testid="module-files-unknown">
-      <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Couldn't check your engine</AlertTitle>
-      <AlertDescription className="space-y-2">
-        <p>Browsing an installed module's files depends on what your engine supports, and it didn't answer.</p>
-        <Button variant="outline" size="sm" onClick={files.retrySupport}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Try again
-        </Button>
-      </AlertDescription>
-    </Alert>
   );
 }
 
@@ -231,7 +191,7 @@ function toggled(set: ReadonlySet<string>, value: string): Set<string> {
 
 /** Every file the module ships, as a folder tree whose files open inline. */
 export function ModuleFilesTab({ files }: { files: ModuleFiles }) {
-  const { loadList, list, support } = files;
+  const { loadList, list } = files;
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [openFiles, setOpenFiles] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -242,9 +202,7 @@ export function ModuleFilesTab({ files }: { files: ModuleFiles }) {
   const tree = useMemo(() => (list.status === "ready" ? buildModuleFileTree(list.list.files) : []), [list]);
 
   let body: ReactNode;
-  if (support !== "supported") {
-    body = <ModuleFilesSupportNotice files={files} />;
-  } else if (list.status === "idle" || list.status === "loading") {
+  if (list.status === "idle" || list.status === "loading") {
     body = (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />

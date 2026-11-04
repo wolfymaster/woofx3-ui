@@ -1,5 +1,6 @@
 import type { VIEWER_RETURN_PARAMS, ViewerAuthErrorCode, ViewerPlatform } from "@convex/lib/viewerAuth";
 import type { ExchangeHandoffResult } from "@convex/viewerSession";
+import type { Logger } from "@/lib/logger";
 
 /**
  * The page's half of viewer sign-in (docs/ui/viewer-sign-in.md): build the
@@ -125,7 +126,8 @@ export type SignInOutcome = { kind: "signed_in"; sessionToken: string } | { kind
 export async function finishSignIn(
   signInReturn: SignInReturn,
   storage: ViewerStorage,
-  exchange: (args: { code: string; nonce: string }) => Promise<ExchangeHandoffResult>
+  exchange: (args: { code: string; nonce: string }) => Promise<ExchangeHandoffResult>,
+  logger: Logger
 ): Promise<SignInOutcome | null> {
   if (signInReturn.kind === "none") {
     return null;
@@ -141,7 +143,7 @@ export async function finishSignIn(
   try {
     result = await exchange({ code: signInReturn.code, nonce });
   } catch (error: unknown) {
-    console.warn("Could not exchange the viewer sign-in code", error);
+    logger.warn("Could not exchange the viewer sign-in code", { error });
     return { kind: "failed", failure: "exchange_failed" };
   }
   if (!result.ok) {
@@ -161,12 +163,12 @@ const SESSION_TOKEN_KEY = "woofx3.viewerSession";
  * blocked (private modes, site settings); the page then behaves as signed
  * out, which is the only safe reading of a store it cannot use.
  */
-export function browserViewerStorage(session: Storage | null, local: Storage | null): ViewerStorage {
+export function browserViewerStorage(session: Storage | null, local: Storage | null, logger: Logger): ViewerStorage {
   const read = (store: Storage | null, key: string): string | null => {
     try {
       return store?.getItem(key) ?? null;
     } catch (error: unknown) {
-      console.warn(`Could not read ${key}; treating it as unset`, error);
+      logger.warn("Could not read a stored value; treating it as unset", { key, error });
       return null;
     }
   };
@@ -178,7 +180,7 @@ export function browserViewerStorage(session: Storage | null, local: Storage | n
         store?.setItem(key, value);
       }
     } catch (error: unknown) {
-      console.warn(`Could not write ${key}; sign-in will not survive a reload`, error);
+      logger.warn("Could not write a stored value; sign-in will not survive a reload", { key, error });
     }
   };
   return {

@@ -17,7 +17,7 @@ export type StreamRecapEngineState =
  * summary's `generatedAtMs`) loads it again. That reload keeps the detail
  * already on screen while it runs, and keeps it if the reload fails.
  */
-export function useStreamRecapEngineDetail(sessionId: string, enabled: boolean, refreshKey = 0) {
+export function useStreamRecapEngineDetail(sessionId: string, refreshKey = 0) {
   const { instanceId } = useEngineScope();
   const loadEngineDetail = useRecapEngineDetailRequest();
   const [state, setState] = useState<StreamRecapEngineState>({ kind: "loading" });
@@ -25,7 +25,7 @@ export function useStreamRecapEngineDetail(sessionId: string, enabled: boolean, 
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt and refreshKey are deliberate re-run triggers
   useEffect(() => {
-    if (!instanceId || !enabled) {
+    if (!instanceId) {
       return;
     }
     let cancelled = false;
@@ -45,7 +45,7 @@ export function useStreamRecapEngineDetail(sessionId: string, enabled: boolean, 
     return () => {
       cancelled = true;
     };
-  }, [instanceId, sessionId, enabled, loadEngineDetail, attempt, refreshKey]);
+  }, [instanceId, sessionId, loadEngineDetail, attempt, refreshKey]);
 
   const retry = useCallback(() => setAttempt((count) => count + 1), []);
   return { state, retry };

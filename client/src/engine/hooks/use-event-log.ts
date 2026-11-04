@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
 import type { StreamEventFrame } from "@/engine/types";
 import type { ActivityEvent } from "@/lib/activity-feed";
+import { useLogger } from "@/lib/logger-context";
 
 /** One page: the engine keeps a few days of detail, and the feed shows the latest of it. */
 const HISTORY_LIMIT = 50;
@@ -10,10 +11,9 @@ const LIVE_LIMIT = 200;
 
 /**
  * - `ready`: history loaded.
- * - `unsupported`: the engine predates the event log, so the feed is live only.
  * - `error`: the read failed; the feed is live only until the next reconnect.
  */
-export type EventLogStatus = "loading" | "ready" | "unsupported" | "error";
+export type EventLogStatus = "loading" | "ready" | "error";
 
 function withId(frame: StreamEventFrame): ActivityEvent {
   // A pushed frame without an id still needs one key; it can never be joined
@@ -30,14 +30,13 @@ function withId(frame: StreamEventFrame): ActivityEvent {
  * - `types` an array: history and push of exactly those types. An empty list
  *   reads no history at all, since the engine reads an empty filter as every
  *   type.
- * - `types` null: an engine without an event log; no history, and whatever
- *   the engine pushes.
  * - `types` undefined: not known yet; nothing is read or subscribed.
  */
-export function useEventLog(types: readonly string[] | null | undefined): {
+export function useEventLog(types: readonly string[] | undefined): {
   events: ActivityEvent[];
   status: EventLogStatus;
 } {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const { eventLog } = useEngineGateway();
   const subscribeStreamEvents = eventLog.useStreamEventsSubscription();
@@ -47,7 +46,7 @@ export function useEventLog(types: readonly string[] | null | undefined): {
   const [live, setLive] = useState<ActivityEvent[]>([]);
   const [historyStatus, setHistoryStatus] = useState<EventLogStatus>("loading");
   // A content key: `types` gets a new identity on every render.
-  const typesKey = types ? [...types].sort().join(",") : types === null ? null : undefined;
+  const typesKey = types ? [...types].sort().join(",") : undefined;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: instanceId resets the feed for a different engine
   useEffect(() => {
@@ -60,14 +59,13 @@ export function useEventLog(types: readonly string[] | null | undefined): {
     if (!instanceId || typesKey === undefined) {
       return;
     }
-    const wanted = typesKey === null ? null : typesKey.split(",").filter(Boolean);
-    return subscribeStreamEvents(wanted, (frame) => {
+    return subscribeStreamEvents(typesKey.split(",").filter(Boolean), (frame) => {
       setLive((previous) => [withId(frame), ...previous].slice(0, LIVE_LIMIT));
     });
   }, [instanceId, typesKey, subscribeStreamEvents]);
 
   useEffect(() => {
-    if (!instanceId || !connected || typeof typesKey !== "string") {
+    if (!instanceId || !connected || typesKey === undefined) {
       return;
     }
     const wanted = typesKey.split(",").filter(Boolean);
@@ -86,23 +84,22 @@ export function useEventLog(types: readonly string[] | null | undefined): {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          console.warn("[Events] Could not read the engine's event log:", err);
+          logger.warn("[Events] Could not read the engine's event log", { error: err });
           setHistoryStatus("error");
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [instanceId, connected, typesKey, listEvents]);
+  }, [instanceId, connected, typesKey, listEvents, logger]);
 
   const events = useMemo(() => [...live, ...history], [live, history]);
-  const status = typesKey === null ? "unsupported" : typesKey === undefined ? "loading" : historyStatus;
+  const status = typesKey === undefined ? "loading" : historyStatus;
   return { events, status };
 }
 
 /**
- * Subscribes to pushed events of some types (null: every type the engine
- * pushes) and returns the unsubscribe. Throws without a current instance, so
+ * Subscribes to pushed events of some types and returns the unsubscribe. Throws without a current instance, so
  * callers subscribe only once there is one.
  */
 export function useStreamEventsSubscription() {

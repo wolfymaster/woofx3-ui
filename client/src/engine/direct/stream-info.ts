@@ -18,7 +18,7 @@ import {
   unappliedFields,
   withBoxArt,
 } from "@shared/stream-info";
-import { ENGINE_CAPABILITIES, type UISetting } from "@woofx3/api";
+import { type UISetting } from "@woofx3/api";
 import { z } from "zod";
 import type { StreamInfoGateway } from "@/engine/gateway";
 import type {
@@ -66,20 +66,19 @@ function byName(a: StreamInfoPreset, b: StreamInfoPreset): number {
 
 /**
  * The channel's title, category and tags, and VOD markers, through the
- * engine's `twitch.streamInfo` methods. Every call runs under one scope,
+ * engine's stream info methods. Every call runs under one scope,
  * reads included, as the Convex gateway's do. Presets are the dashboard's
  * own records, one per name in the engine's local UI settings.
  */
 export function directStreamInfoGateway(runtime: DirectRuntime): StreamInfoGateway {
   const twitch = directTwitch(runtime);
-  const streamInfo = ENGINE_CAPABILITIES.twitchStreamInfo;
 
   const readChannel = async (known?: KnownBoxArt): Promise<HelixStreamInfo> => {
     const info = await readChannelInfoAnswer(
-      await twitch.helix(streamInfo, "twitchGetChannelInformation", (api) => api.twitchGetChannelInformation())
+      await twitch.helix("twitchGetChannelInformation", (api) => api.twitchGetChannelInformation())
     );
     return withBoxArt(info, known, async (id) =>
-      readCategoryAnswer(await twitch.helix(streamInfo, "twitchGetGames", (api) => api.twitchGetGames({ id })))
+      readCategoryAnswer(await twitch.helix("twitchGetGames", (api) => api.twitchGetGames({ id })))
     );
   };
 
@@ -99,7 +98,7 @@ export function directStreamInfoGateway(runtime: DirectRuntime): StreamInfoGatew
     }
     await twitch.authorize(STREAM_INFO_SCOPE);
     const categories = await readSearchCategoriesAnswer(
-      await twitch.helix(streamInfo, "twitchSearchCategories", (api) =>
+      await twitch.helix("twitchSearchCategories", (api) =>
         api.twitchSearchCategories({ query: text, first: SEARCH_RESULT_LIMIT })
       )
     );
@@ -122,9 +121,7 @@ export function directStreamInfoGateway(runtime: DirectRuntime): StreamInfoGatew
     await twitch.authorize(STREAM_INFO_SCOPE);
     const patch = toHelixPatch(changes);
     await readModifyChannelAnswer(
-      await twitch.helix(streamInfo, "twitchModifyChannelInformation", (api) =>
-        api.twitchModifyChannelInformation(patch)
-      )
+      await twitch.helix("twitchModifyChannelInformation", (api) => api.twitchModifyChannelInformation(patch))
     );
     const info = await readChannel();
     return { info: toStreamInfo(info), unapplied: unappliedFields(changes, info) };
@@ -138,13 +135,13 @@ export function directStreamInfoGateway(runtime: DirectRuntime): StreamInfoGatew
     }
     await twitch.authorize(STREAM_INFO_SCOPE);
     return readMarkerAnswer(
-      await twitch.helix(streamInfo, "twitchCreateStreamMarker", (api) =>
+      await twitch.helix("twitchCreateStreamMarker", (api) =>
         api.twitchCreateStreamMarker(description ? { description } : {})
       )
     );
   };
 
-  const presetsRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.streamInfoPresets, "streamInfo.usePresets");
+  const presetsRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.streamInfoPresets);
 
   const toPreset = (setting: UISetting): StreamInfoPreset[] => {
     const info = parseSetting(runtime.logger, presetInfoSchema, setting);

@@ -13,6 +13,8 @@ import { formSubmitUrl, postFormSubmission } from "./widgets/form-submit";
 import { preloadMarkdown } from "./widgets/text-widget";
 import { loadTurnstileScript } from "./widgets/turnstile";
 import "./styles.css";
+import { appLogger } from "@/lib/app-logger";
+import { LoggerProvider } from "@/lib/logger-context";
 
 // No Convex Auth: a viewer signs in with a session token of their own
 // (viewer/sign-in.ts), which page functions take as an argument.
@@ -32,7 +34,7 @@ function storageOrNull(pick: () => Storage): Storage | null {
   try {
     return pick();
   } catch (error: unknown) {
-    console.warn("Browser storage is unavailable; sign-in will not be remembered", error);
+    appLogger.warn("Browser storage is unavailable; sign-in will not be remembered", { error });
     return null;
   }
 }
@@ -40,7 +42,8 @@ function storageOrNull(pick: () => Storage): Storage | null {
 const client = new ConvexReactClient(convexUrl);
 const storage = browserViewerStorage(
   storageOrNull(() => window.sessionStorage),
-  storageOrNull(() => window.localStorage)
+  storageOrNull(() => window.localStorage),
+  appLogger
 );
 
 // Take any sign-in result off the address bar before anything renders, so
@@ -58,7 +61,12 @@ const viewerEnv: ViewerEnvironment = {
   pendingSignIn:
     signInReturn.kind === "none"
       ? null
-      : finishSignIn(signInReturn, storage, (args) => client.action(api.viewerSession.exchangeHandoff, args)),
+      : finishSignIn(
+          signInReturn,
+          storage,
+          (args) => client.action(api.viewerSession.exchangeHandoff, args),
+          appLogger
+        ),
   navigate: (url) => window.location.assign(url),
   newNonce: generateOpaqueToken,
   random: Math.random,
@@ -77,8 +85,10 @@ preloadMarkdown();
 const slug = slugFromPath(window.location.pathname, import.meta.env.BASE_URL);
 createRoot(root).render(
   <StrictMode>
-    <ConvexProvider client={client}>
-      <UserPageApp slug={slug} viewerEnv={viewerEnv} formEnv={formEnv} />
-    </ConvexProvider>
+    <LoggerProvider logger={appLogger}>
+      <ConvexProvider client={client}>
+        <UserPageApp slug={slug} viewerEnv={viewerEnv} formEnv={formEnv} />
+      </ConvexProvider>
+    </LoggerProvider>
   </StrictMode>
 );

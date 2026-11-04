@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDismissedPageIntros, useDismissPageIntroRequest } from "@/engine/hooks/use-page-intros";
+import { useLogger } from "@/lib/logger-context";
 import { PAGE_INTROS, type PageIntroId } from "@/lib/page-intros";
 
 interface PageIntroProps {
@@ -18,11 +19,12 @@ interface PageIntroProps {
  * flashes for someone who already closed it.
  */
 export function PageIntro({ introId, onTry }: PageIntroProps) {
+  const logger = useLogger();
   const dismissed = useDismissedPageIntros();
   const dismissIntro = useDismissPageIntroRequest();
   const dismiss = ({ introId: closed }: { introId: PageIntroId }) =>
     dismissIntro(closed).catch((error: unknown) => {
-      console.error("dismissing a page intro failed:", error);
+      logger.error("dismissing a page intro failed", { error });
     });
 
   if (dismissed === undefined || dismissed.includes(introId)) {

@@ -1,6 +1,5 @@
 import { SHOUTOUT_SCOPE } from "@shared/twitch-chat";
 import { normalizeTwitchLogin, readTwitchUserAnswer } from "@shared/twitch-users";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { useEffect } from "react";
 import type { ShoutoutEntryId as HostShoutoutEntryId, ShoutoutQueueView } from "@/desktop/host";
 import type { ShoutoutQueueHost } from "@/engine/desktop-host";
@@ -68,7 +67,7 @@ export function directShoutoutsGateway(runtime: DirectRuntime, host: ShoutoutQue
     // Checked now so a missing permission shows when confirming, not when the host sends it.
     await twitch.authorize(SHOUTOUT_SCOPE);
     const user = await readTwitchUserAnswer(
-      await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, "twitchGetUsers", (api) => api.twitchGetUsers({ login }))
+      await twitch.helix("twitchGetUsers", (api) => api.twitchGetUsers({ login }))
     );
     return user ? toTwitchChannel(user) : null;
   };

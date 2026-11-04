@@ -1,8 +1,7 @@
 import type { RpcTarget } from "@woofx3/api/client";
 
 /**
- * The engine's OBS connection state, from `getObsStatus()` (capability
- * `obs.status`). Declared here because the engine checkout this repo builds
+ * The engine's OBS connection state, from `getObsStatus()`. Declared here because the engine checkout this repo builds
  * against may predate it. Must match `ObsStatus` in woofx3
  * `shared/clients/typescript/api/api.ts` (wolfymaster/woofx3#193).
  *
@@ -11,7 +10,7 @@ import type { RpcTarget } from "@woofx3/api/client";
  * - `failure`: `authentication` when OBS refused the password, `unreachable`
  *   when nothing answered at `address` or the connection was lost, `relay`
  *   when the engine goes through the companion and the companion is not
- *   connected or the relay refused (capability `modules.localEndpoints`).
+ *   connected or the relay refused.
  * - `address`: the `host:port` last tried; never the password.
  * - `route`: whether the engine dials OBS directly or through the companion's
  *   bridge. Absent from engines that predate the bridge.

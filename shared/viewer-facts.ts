@@ -1,6 +1,6 @@
 /**
  * One value a workflow reads as `${viewer.<path>}`, from the engine's
- * `listViewerFacts()` (capability `workflow.viewerFacts`). Declared here because
+ * `listViewerFacts()`. Declared here because
  * the engine checkout this repo builds against may predate it. Must match
  * `ViewerFact` in woofx3 `shared/clients/typescript/api/api.ts`.
  */

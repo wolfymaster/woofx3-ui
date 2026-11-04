@@ -193,8 +193,7 @@ export const finishDeliveryPass = internalMutation({
       v.literal("reached"),
       v.literal("not_contacted"),
       v.literal("not_registered"),
-      v.literal("unreachable"),
-      v.literal("capability_missing")
+      v.literal("unreachable")
     ),
   },
   handler: async (ctx, { instanceId, engineState }): Promise<void> => {

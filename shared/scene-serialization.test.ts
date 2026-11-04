@@ -5,7 +5,6 @@ import {
   parseSceneBehaviors,
   parseSceneLayout,
   parseSceneWidgets,
-  tablesForDeletedComposition,
 } from "./scene-serialization";
 
 describe("parseSceneWidgets", () => {
@@ -63,20 +62,6 @@ describe("parseCompositionKind", () => {
     expect(parseCompositionKind("scene")).toBe("scene");
     expect(parseCompositionKind(undefined)).toBe("scene");
     expect(parseCompositionKind("overlay")).toBe("scene");
-  });
-});
-
-describe("tablesForDeletedComposition", () => {
-  test("a deleted alert never touches the scenes cache", () => {
-    expect(tablesForDeletedComposition("alert")).toEqual(["alertCompositions"]);
-  });
-
-  test("a deleted scene never touches the alert library", () => {
-    expect(tablesForDeletedComposition("scene")).toEqual(["scenes"]);
-  });
-
-  test("without a kind both are looked in", () => {
-    expect(tablesForDeletedComposition(undefined)).toEqual(["scenes", "alertCompositions"]);
   });
 });
 

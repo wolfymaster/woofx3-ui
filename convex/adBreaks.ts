@@ -21,11 +21,11 @@ import type { EngineApi } from "./lib/engineInstanceUrl";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 
-// The Ad breaks dashboard widget's schedule and snooze, straight to Helix like
-// convex/pins.ts, or through an engine that advertises twitch.ads and makes
-// the same calls (convex/lib/twitchEngineHelix.ts). Convex holds a refreshable
-// broadcaster token either way. The engine's other part is the ad-break
-// events, which reach the widget over the stream-event session.
+// The Ad breaks dashboard widget's schedule and snooze, through the
+// instance's engine like convex/pins.ts (convex/lib/twitchEngineHelix.ts).
+// Convex holds a refreshable broadcaster token either way. The engine's other
+// part is the ad-break events, which reach the widget over the stream-event
+// session.
 //
 // Any member may snooze, not only owners and admins. A snooze only pushes the
 // next ad back (Twitch refills them over time), it is the kind of call a
@@ -88,7 +88,7 @@ export const getSchedule = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<AdSchedule> => {
     const call = await authorizeAds(ctx, args.instanceId, AD_READ_SCOPE);
-    const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.ads"), "read");
+    const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId), "read");
     const schedule = parseHelixAdSchedule(body, new Date().toISOString());
     if (!schedule) {
       throw new ConvexError(AD_SCHEDULE_UNREADABLE_MESSAGE);
@@ -101,7 +101,7 @@ export const snoozeNextAd = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<AdSnoozeResult> => {
     const call = await authorizeAds(ctx, args.instanceId, AD_MANAGE_SCOPE);
-    const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.ads"), "snooze");
+    const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId), "snooze");
     const result = parseHelixSnoozeResult(body, new Date().toISOString());
     if (!result) {
       throw new ConvexError(AD_SNOOZE_UNREADABLE_MESSAGE);

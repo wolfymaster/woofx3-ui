@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ENGINE_CAPABILITIES, type EventLogPage } from "@woofx3/api";
+import type { EventLogPage } from "@woofx3/api";
 import { useCallback } from "react";
 import { EngineDisconnectedError } from "@/engine/errors";
 import type { EventLogGateway } from "@/engine/gateway";
@@ -20,8 +20,6 @@ import { unsupportedRequest } from "./unsupported";
 
 /** The engine accepts 1 to 100 events a page. */
 const MAX_PAGE_SIZE = 100;
-
-const EMPTY_PAGE: EventLogPage = { events: [], nextCursor: null };
 
 function payloadOf(frame: StreamEventFrame): string {
   return JSON.stringify(frame.data);
@@ -49,14 +47,6 @@ export function directEventLogGateway(runtime: DirectRuntime): EventLogGateway {
   const setSelection = (selection: EventLogSelection) =>
     runtime.call("setEventLogSelection", (api) => api.setEventLogSelection(selection));
 
-  // A log the engine does not keep reads as empty rather than failing the screen.
-  const readPage = async (query: EventLogQuery): Promise<EventLogPage> => {
-    if (!runtime.supports(ENGINE_CAPABILITIES.eventsLog)) {
-      return EMPTY_PAGE;
-    }
-    return listEvents(query);
-  };
-
   const useWebhookEvents = (eventType: string | null, initialNumItems: number): Paginated<WebhookEventSummary> => {
     const { instanceId } = useEngineScope();
     const connected = useConnected(runtime);
@@ -66,7 +56,7 @@ export function directEventLogGateway(runtime: DirectRuntime): EventLogGateway {
         queryKey: k.eventLog.pages(eventType),
         initialPageParam: undefined as string | undefined,
         queryFn: ({ pageParam }) =>
-          readPage({ types: eventType === null ? undefined : [eventType], cursor: pageParam, limit }),
+          listEvents({ types: eventType === null ? undefined : [eventType], cursor: pageParam, limit }),
         getNextPageParam: (page) => page.nextCursor ?? undefined,
         select: (data) => data.pages.flatMap((page) => page.events),
         enabled: instanceId !== null && connected,
@@ -124,7 +114,7 @@ export function directEventLogGateway(runtime: DirectRuntime): EventLogGateway {
     useStreamEventsSubscription: () => {
       const { instanceId } = useEngineScope();
       return useCallback(
-        (types: readonly string[] | null, onFrame: (frame: StreamEventFrame) => void) => {
+        (types: readonly string[], onFrame: (frame: StreamEventFrame) => void) => {
           if (instanceId === null) {
             throw new NoInstanceSelectedError();
           }

@@ -1,32 +1,15 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action } from "./_generated/server";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
+import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { type InstanceContext, requireInstanceContext } from "./sceneActions";
 
-// The engine's alert library (capability `compositions.alerts`): alerts
-// stored in the engine as starting points. A step never plays one by id: the
-// alert editor copies one into the step, which keeps the copy. Every
-// write reaches the cache through the engine's `scene.*` webhooks, which
+// The engine's alert library: alerts stored in the engine as starting
+// points. A step never plays one by id: the alert editor copies one into the
+// step, which keeps the copy. Every write reaches the cache through the engine's `scene.*` webhooks, which
 // carry `kind: "alert"`; `refresh` catches the cache up by listing them. The
 // document itself is edited through the scene editor socket
 // (`sceneActions.getSceneEditorSession` takes an alert's id).
-
-/**
- * The instance's engine, refused unless it stores alert compositions. Asked
- * each time over its own session: a capnweb HTTP batch is spent by its first
- * call, and an engine is updated by restarting it, so no answer is kept.
- */
-async function requireAlertLibrary(ctx: ActionCtx, instanceId: Id<"instances">): Promise<InstanceContext> {
-  const engine = await requireInstanceContext(ctx, instanceId);
-  const capabilities = await fetchEngineCapabilities(engine);
-  if (!hasEngineCapability(capabilities, "compositions.alerts")) {
-    throw new ConvexError("This engine doesn't keep an alert library. Update the engine to use one.");
-  }
-  return engine;
-}
 
 function session(engine: InstanceContext): EngineApi {
   return createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret);
@@ -36,7 +19,7 @@ function session(engine: InstanceContext): EngineApi {
 export const refresh = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<{ count: number }> => {
-    const engine = await requireAlertLibrary(ctx, args.instanceId);
+    const engine = await requireInstanceContext(ctx, args.instanceId);
     const { compositions } = await session(engine).listAlertCompositions();
     await ctx.runMutation(internal.alertCompositions.reconcileFromEngine, {
       instanceId: args.instanceId,
@@ -75,7 +58,7 @@ export const create = action({
     if (name === "") {
       throw new ConvexError("An alert in the library needs a name.");
     }
-    const engine = await requireAlertLibrary(ctx, args.instanceId);
+    const engine = await requireInstanceContext(ctx, args.instanceId);
     const result = await session(engine).createAlertComposition({
       name,
       description: args.description,
@@ -99,7 +82,7 @@ export const update = action({
     inputsJson: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ success: boolean }> => {
-    const engine = await requireAlertLibrary(ctx, args.instanceId);
+    const engine = await requireInstanceContext(ctx, args.instanceId);
     return await session(engine).updateAlertComposition(args.engineCompositionId, {
       name: args.name,
       description: args.description,
@@ -116,7 +99,7 @@ export const update = action({
 export const remove = action({
   args: { instanceId: v.id("instances"), engineCompositionId: v.string() },
   handler: async (ctx, args): Promise<{ success: boolean }> => {
-    const engine = await requireAlertLibrary(ctx, args.instanceId);
+    const engine = await requireInstanceContext(ctx, args.instanceId);
     const result = await session(engine).deleteAlertComposition(args.engineCompositionId, crypto.randomUUID());
     return { success: result.success };
   },

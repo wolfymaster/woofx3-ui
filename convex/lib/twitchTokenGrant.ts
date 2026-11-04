@@ -47,21 +47,19 @@ export function twitchTokenGrant(input: {
 /**
  * The token `syncToEngine` hands an engine with `setTwitchToken`. `clientId`
  * tells the engine the token is this dashboard's, to ask here for the next
- * one. The refresh token goes only to an engine that cannot ask yet
- * (`asksForTokens` false), which still refreshes with it.
+ * one. The refresh token never goes with it: the engine renews by asking
+ * the dashboard (`twitch.token.requested`).
  */
 export function twitchTokenForEngine(input: {
   link: { platformUserId: string; expiresAt: number; scopes: string[] };
-  tokens: { accessToken: string; refreshToken: string };
-  asksForTokens: boolean;
+  accessToken: string;
   clientId: string;
   now: number;
 }) {
-  const { link, tokens } = input;
+  const { link } = input;
   return {
     userId: link.platformUserId,
-    accessToken: tokens.accessToken,
-    ...(input.asksForTokens ? {} : { refreshToken: tokens.refreshToken }),
+    accessToken: input.accessToken,
     expiresIn: Math.max(0, Math.floor((link.expiresAt - input.now) / 1000)),
     obtainmentTimestamp: input.now,
     scope: link.scopes,

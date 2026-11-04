@@ -6,6 +6,7 @@ import { useAction, useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useLogger } from "@/lib/logger-context";
 import { takeTwitchSignInNonce } from "@/lib/twitch-sign-in";
 
 /**
@@ -31,6 +32,7 @@ function readCallbackParams() {
 type Failure = { code: string; detail?: string };
 
 export default function TwitchCallback() {
+  const logger = useLogger();
   const [, navigate] = useLocation();
   const { signIn } = useAuthActions();
   const finishConnect = useAction(api.twitchIntegration.finishConnect);
@@ -72,10 +74,10 @@ export default function TwitchCallback() {
         window.location.href = safeRelativePath(result.redirectTo);
       })
       .catch((err: unknown) => {
-        console.error("[twitch-callback] finishConnect failed:", String(err));
+        logger.error("[twitch-callback] finishConnect failed", { error: err });
         setFailure({ code: "unexpected" });
       });
-  }, [callback, failure, finishConnect, isAuthenticated, isLoading]);
+  }, [callback, failure, finishConnect, isAuthenticated, isLoading, logger]);
 
   useEffect(() => {
     if (isLoading || failure || callback.mode !== "login") {
@@ -121,7 +123,7 @@ export default function TwitchCallback() {
         })
         .catch((err: unknown) => {
           const msg = String(err);
-          console.error("[twitch-callback] signIn error:", msg);
+          logger.error("[twitch-callback] signIn error", { error: err });
           if (msg.includes("Connection lost") && retriesLeft > 0 && !stopRetrying) {
             setTimeout(() => {
               if (stopRetrying) {
@@ -141,7 +143,7 @@ export default function TwitchCallback() {
     return () => {
       stopRetrying = true;
     };
-  }, [callback, signIn, isLoading, isAuthenticated, navigate, failure]);
+  }, [callback, signIn, isLoading, isAuthenticated, navigate, failure, logger]);
 
   if (failure) {
     const back = callback.mode === "connect" ? callback.redirectTo : "/auth/login";

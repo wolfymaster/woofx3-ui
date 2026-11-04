@@ -20,13 +20,14 @@ const BASE_STYLE =
 /**
  * Sends OBS on to the engine's overlay URL as a top-level navigation.
  *
- * A redirect, not an iframe: Scene Manager trades the URL's token for an
- * `sm_session` cookie marked `SameSite=Strict`, and every follow-up request
- * (widget frames, the `/events` stream, delivery acks) authenticates with that
- * cookie alone. Framed inside this convex.site page the overlay is cross-site to
- * its top-level document, so the browser withholds the cookie and those requests
- * 401. Once redirected, the overlay *is* the top-level document and the cookie
- * flows.
+ * A redirect, not an iframe: Scene Manager trades the URL's token for a session
+ * cookie, and every follow-up request (widget frames, the `/events` stream,
+ * delivery acks) authenticates with that cookie alone. On an engine reached
+ * over plain HTTP away from loopback the cookie is `SameSite=Strict`, so framed
+ * inside this convex.site page the overlay is cross-site to its top-level
+ * document, the browser withholds the cookie and those requests 401. Once
+ * redirected, the overlay *is* the top-level document and the cookie flows on
+ * every engine.
  *
  * `no-store` so every OBS load re-resolves the key: rotation and re-minting swap
  * the token behind it, and a cached redirect would pin the old one.

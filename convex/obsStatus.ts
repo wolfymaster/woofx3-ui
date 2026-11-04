@@ -7,8 +7,7 @@ import { type ObsStatus, type ObsStatusApi, parseObsStatus } from "./lib/engineO
 
 /**
  * How the instance's engine is doing at reaching OBS, for the OBS module's page
- * and the getting started card. Only for an engine with the `obs.status`
- * capability; the browser checks that before asking.
+ * and the getting started card.
  */
 export const get = action({
   args: { instanceId: v.id("instances") },

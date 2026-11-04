@@ -88,23 +88,20 @@ export interface WoofxTransport {
   // alongside the shared contract.
   //
   // `types` are the event types (CloudEvent `type`) the callback takes; the
-  // engine is asked to push only what some listener takes. `types` null takes
-  // every frame that arrives and asks for nothing: for an engine that predates
-  // per-subscriber types (capability `events.log`), which pushes its own fixed
-  // set whatever it is asked.
+  // engine is asked to push only what some listener takes.
   subscribeStreamEvents(
     instanceId: string,
-    types: readonly string[] | null,
+    types: readonly string[],
     callback: (frame: StreamEventFrame) => void
   ): () => void;
   /**
    * A page of the engine's event log, newest first: the history behind
-   * `subscribeStreamEvents`, in the same frame shape. Needs `events.log`.
+   * `subscribeStreamEvents`, in the same frame shape.
    */
   listEvents(instanceId: string, query?: EventLogQuery): Promise<EventLogPage>;
-  /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
+  /** Which event types the engine logs and pushes, and which it offers. */
   getEventLogSettings(instanceId: string): Promise<EventLogSettings>;
-  /** Replaces the engine's selection and returns the settings it results in. Needs `events.log`. */
+  /** Replaces the engine's selection and returns the settings it results in. */
   setEventLogSelection(instanceId: string, selection: EventLogSelection): Promise<EventLogSettings>;
 
   // Workflow runs

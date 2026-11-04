@@ -18,14 +18,10 @@ function ToneIcon({ tone }: { tone: ObsStatusTone }) {
 
 /**
  * Whether the engine is connected to OBS, above the OBS module's settings, so
- * a wrong password or address shows as soon as it is saved. Renders nothing
- * on an engine that cannot report it.
+ * a wrong password or address shows as soon as it is saved.
  */
 export function ObsConnectionStatus() {
-  const { support, status } = useObsStatus(true);
-  if (support !== "supported") {
-    return null;
-  }
+  const { status } = useObsStatus(true);
   const description = status ? describeObsStatus(status) : { tone: "pending" as const, text: "Checking OBS…" };
   return (
     <output

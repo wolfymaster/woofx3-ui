@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { LoggerContext } from "@/lib/logger-context";
 import { ErrorFallback } from "./error-fallback";
 
 // Browsers word a failed dynamic import differently; these cover Chromium, Firefox and Safari.
@@ -46,7 +47,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    // Rendered without a LoggerProvider above it, the boundary still catches; the error just goes unlogged.
+    this.context?.error("ErrorBoundary caught an error", { error, componentStack: errorInfo.componentStack });
   }
 
   handleReset = () => {
@@ -55,6 +57,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   static displayName = "ErrorBoundary";
+  static contextType = LoggerContext;
+  declare context: React.ContextType<typeof LoggerContext>;
 
   render() {
     if (this.state.hasError) {

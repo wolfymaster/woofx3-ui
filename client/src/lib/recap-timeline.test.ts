@@ -125,16 +125,12 @@ describe("timelineDomain", () => {
 });
 
 describe("layer statuses", () => {
-  it("waits on the capability check, then names what is missing", () => {
-    expect(eventLayersStatus("checking", { kind: "loading" })).toEqual({ kind: "loading" });
-    expect(eventLayersStatus("unsupported", { kind: "loading" })).toEqual({
-      kind: "unavailable",
-      reason: "Needs a newer engine than this instance runs.",
-    });
-    expect(
-      eventLayersStatus("supported", { kind: "loaded", result: { status: "unreachable", message: "x" } }).kind
-    ).toBe("unavailable");
-    expect(eventLayersStatus("supported", { kind: "loaded", result: { status: "ok", events: [], total: 0 } })).toEqual({
+  it("waits on the events, then names what went wrong", () => {
+    expect(eventLayersStatus({ kind: "loading" })).toEqual({ kind: "loading" });
+    expect(eventLayersStatus({ kind: "loaded", result: { status: "unreachable", message: "x" } }).kind).toBe(
+      "unavailable"
+    );
+    expect(eventLayersStatus({ kind: "loaded", result: { status: "ok", events: [], total: 0 } })).toEqual({
       kind: "ready",
       count: null,
     });
@@ -145,8 +141,8 @@ describe("layer statuses", () => {
       kind: "loaded" as const,
       detail: { status: "ok" as const, viewerSamples: [], topCheerers: [], topGifters: [] },
     };
-    expect(viewerLayerStatus("supported", loaded, false).kind).toBe("unavailable");
-    expect(viewerLayerStatus("supported", loaded, true)).toEqual({ kind: "ready", count: null });
+    expect(viewerLayerStatus(loaded, false).kind).toBe("unavailable");
+    expect(viewerLayerStatus(loaded, true)).toEqual({ kind: "ready", count: null });
   });
 
   it("counts clips and markers and explains a missing marker scope or VOD", () => {

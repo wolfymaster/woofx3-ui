@@ -123,10 +123,7 @@ and every point of the layers that are on.
 **Events** come from the engine's `getStreamSessionEvents`: the events the
 session totals count, oldest first, so the lanes and the totals agree on what
 happened. `streamRecap.loadTimelineEvents` asks for up to 1,000
-(`RECAP_EVENT_LIMIT`); past that the chart says how many it left out. The page
-calls it only when the engine lists `analytics.sessionEvents`, so against an
-older engine the five event lanes say the engine needs updating and the rest of
-the timeline still works. A session in progress loads them again with each new
+(`RECAP_EVENT_LIMIT`); past that the chart says how many it left out. A session in progress loads them again with each new
 snapshot, like the viewer line. Kinds the engine sends that this page does not
 know are left out (`toRecapTimelineEvents`).
 

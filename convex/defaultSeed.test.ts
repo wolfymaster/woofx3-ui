@@ -160,10 +160,6 @@ class FakeEngine extends RpcTarget {
     return this;
   }
 
-  getEngineCapabilities() {
-    return { schema: 1, capabilities: ["alerts.compositionLayout"] };
-  }
-
   getEngineInfo() {
     return { overlayPublicUrl: "https://engine.example" };
   }

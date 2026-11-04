@@ -13,6 +13,7 @@ import type {
   SceneWidgetCatalogRow,
   WidgetThemesRead,
 } from "@/engine/types";
+import { useLogger } from "@/lib/logger-context";
 import { toModuleId, toSceneId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
@@ -124,6 +125,7 @@ function useRemoveRequest() {
  * than polling: themes only come and go with modules.
  */
 function useWidgetThemes(widgetCanonicalId: string): WidgetThemesRead | undefined {
+  const logger = useLogger();
   const instanceId = useScopeInstanceId();
   const listWidgetThemes = useInstanceAction(api.sceneActions.listWidgetThemes);
   const revision = useQuery(api.moduleRepository.installedRevision, instanceId ? { instanceId } : "skip");
@@ -137,7 +139,7 @@ function useWidgetThemes(widgetCanonicalId: string): WidgetThemesRead | undefine
     listWidgetThemes({ widgetCanonicalId })
       .then((result): WidgetThemesRead => ({ status: "loaded", themes: result.themes }))
       .catch((error: unknown): WidgetThemesRead => {
-        console.error("listWidgetThemes failed:", error);
+        logger.error("listWidgetThemes failed", { error });
         return { status: "unavailable" };
       })
       .then((result) => {
@@ -148,7 +150,7 @@ function useWidgetThemes(widgetCanonicalId: string): WidgetThemesRead | undefine
     return () => {
       cancelled = true;
     };
-  }, [widgetCanonicalId, revision, listWidgetThemes]);
+  }, [widgetCanonicalId, revision, listWidgetThemes, logger]);
 
   return read?.widget === widgetCanonicalId ? read.result : undefined;
 }

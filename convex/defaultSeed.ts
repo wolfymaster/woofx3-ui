@@ -14,7 +14,6 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, mutation, query } from "./_generated/server";
 import { overlayDoneValidator } from "./lib/defaultSeedValidator";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { seedsDefaults } from "./lib/setupApply";
@@ -62,7 +61,6 @@ async function applyAlerts(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
   engine: DefaultSeedEngine,
-  bundle: { url: string; clientId: string; clientSecret: string },
   previous: DefaultSeedRecord | undefined
 ): Promise<Pick<DefaultSeedRecord, "alerts" | "alertImages">> {
   const everyAlert = (status: AlertRecord["status"], error: string): AlertRecord[] =>
@@ -76,9 +74,6 @@ async function applyAlerts(
     return { alerts: previous.alerts, alertImages: previous.alertImages };
   }
   try {
-    if (!hasEngineCapability(await fetchEngineCapabilities(bundle), "alerts.compositionLayout")) {
-      return { alerts: everyAlert("failed", "Requires engine update") };
-    }
     const imagesBaseUrl = await readDefaultAlertImages(engine);
     const outcomes = await installSeedPack(ctx, instanceId, defaultAlertsPack(imagesBaseUrl));
     return {
@@ -110,7 +105,7 @@ export async function applyDefaultSeed(
   }
   const engine = seedEngine(bundle);
   const scene = await applyScene(engine, previous?.scene);
-  const alerts = await applyAlerts(ctx, instanceId, engine, bundle, previous);
+  const alerts = await applyAlerts(ctx, instanceId, engine, previous);
   return { scene, ...alerts };
 }
 

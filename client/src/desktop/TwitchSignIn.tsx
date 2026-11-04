@@ -8,11 +8,10 @@ import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
 import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
 import type { Cancel } from "@/lib/engine-session/deps";
-import { consoleLogger, systemClock } from "@/lib/engine-session/system";
+import { systemClock } from "@/lib/engine-session/system";
+import { useLogger } from "@/lib/logger-context";
 import { openTwitchSignIn } from "./host";
 import { type DesktopSignInEnd, startDesktopTwitchSignIn } from "./twitch-sign-in";
-
-const logger = consoleLogger("desktop-twitch-sign-in");
 
 type Phase = { kind: "idle"; error: string | null } | { kind: "waiting" } | { kind: "signing_in" };
 
@@ -36,6 +35,7 @@ function endMessage(end: Exclude<DesktopSignInEnd, { kind: "signed_in" }>): stri
  * give up, and signs the window in once it has finished.
  */
 export default function DesktopTwitchSignIn({ nextPath }: { nextPath: string }) {
+  const logger = useLogger().scoped("desktop-twitch-sign-in");
   const { signIn } = useAuthActions();
   const claim = useMutation(api.twitchAuth.claimDesktopSignIn);
   const navigateAfterSignIn = useNavigateAfterSignIn();

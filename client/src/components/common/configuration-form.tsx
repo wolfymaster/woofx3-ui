@@ -28,6 +28,7 @@ import {
   defaultComparison,
   isComparisonValue,
 } from "@/lib/condition-comparison";
+import { useLogger } from "@/lib/logger-context";
 import { cn } from "@/lib/utils";
 import { ANY_CONDITION } from "@/lib/workflow-presets-json";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -302,6 +303,7 @@ function SelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
 // table. The saved value is a NATS subject slug (not the raw "!command"
 // string) so downstream code can assemble `chat.command.${value}` verbatim.
 function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const commands = useChatCommands();
 
@@ -321,8 +323,7 @@ function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererPr
   }, [commands]);
 
   if (!instanceId) {
-    // eslint-disable-next-line no-console
-    console.warn(`[ConfigurationForm] field "${field.id}" uses source.kind=commands but no instance is selected`);
+    logger.warn("[ConfigurationForm] a commands field has no instance selected", { fieldId: field.id });
   }
 
   const loading = !!instanceId && commands === undefined;

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useEngineScope } from "@/engine/context";
 import { useCanManageTwitchLink, useUnlinkTwitchRequest } from "@/engine/hooks/use-twitch-link";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
+import { useLogger } from "@/lib/logger-context";
 
 interface TwitchIntegrationCardProps {
   isConnected: boolean;
@@ -28,6 +29,7 @@ interface TwitchIntegrationCardProps {
 }
 
 export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: TwitchIntegrationCardProps) {
+  const logger = useLogger();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const unlink = useUnlinkTwitchRequest();
@@ -48,7 +50,7 @@ export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: Tw
     try {
       await unlink();
     } catch (err) {
-      console.error("Failed to disconnect Twitch:", err);
+      logger.error("Failed to disconnect Twitch", { error: err });
     } finally {
       setIsDisconnecting(false);
       setConfirmOpen(false);

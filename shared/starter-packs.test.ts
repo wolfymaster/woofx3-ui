@@ -13,15 +13,12 @@ import {
   type StarterCatalog,
   type StarterPack,
   type StarterWorkflowDefinition,
-  starterFeaturesFrom,
   starterFieldWarning,
   starterItemFieldIds,
   starterPackDefaults,
   textTokens,
   validateStarterValues,
 } from "./starter-packs";
-
-const NO_FEATURES = { delayWait: false };
 
 /** Every Twitch trigger event the packs bind to; the event subjects the Twitch module's manifest declares. */
 const TWITCH_EVENTS = [
@@ -219,7 +216,7 @@ describe("starter pack data", () => {
 
   test("every default value passes the pack's own validation", () => {
     for (const p of STARTER_PACKS) {
-      const result = validateStarterValues(p, {}, NO_FEATURES);
+      const result = validateStarterValues(p, {});
       expect(result).toEqual({ ok: true, values: starterPackDefaults(p) });
     }
   });
@@ -381,7 +378,7 @@ describe("validateStarterValues", () => {
   const raid = pack("raid-welcome");
 
   test("refuses a placeholder the field's items do not offer, naming the ones they do", () => {
-    const result = validateStarterValues(raid, { raidMessage: "Welcome {user}!" }, NO_FEATURES);
+    const result = validateStarterValues(raid, { raidMessage: "Welcome {user}!" });
     expect(result).toEqual({
       ok: false,
       errors: { raidMessage: "{user} isn't a placeholder here. Use {raider}, {viewers}." },
@@ -389,53 +386,39 @@ describe("validateStarterValues", () => {
   });
 
   test("refuses engine expressions, which could reach the engine's environment", () => {
-    const result = validateStarterValues(raid, { raidMessage: "Leaked: ${env.TWITCH_TOKEN}" }, NO_FEATURES);
+    const result = validateStarterValues(raid, { raidMessage: "Leaked: ${env.TWITCH_TOKEN}" });
     expect(result).toEqual({
       ok: false,
       errors: { raidMessage: "Engine expressions (${...}) aren't allowed here. Use the placeholders." },
     });
   });
 
-  test("a pause is refused until the engine supports delays, and allowed once it does", () => {
-    expect(validateStarterValues(raid, { shoutoutDelaySeconds: 5 }, NO_FEATURES)).toEqual({
-      ok: false,
-      errors: { shoutoutDelaySeconds: "Requires engine update. Leave it at 0." },
-    });
-    const withDelay = validateStarterValues(raid, { shoutoutDelaySeconds: 5 }, { delayWait: true });
+  test("a pause is allowed", () => {
+    const withDelay = validateStarterValues(raid, { shoutoutDelaySeconds: 5 });
     expect(withDelay.ok && withDelay.values.shoutoutDelaySeconds).toBe(5);
-  });
-
-  test("delays follow the engine's workflow.delayWait capability", () => {
-    expect(starterFeaturesFrom([])).toEqual({ delayWait: false });
-    expect(starterFeaturesFrom(["workflow.dryRun"])).toEqual({ delayWait: false });
-    expect(starterFeaturesFrom(["obs.control", "workflow.delayWait"])).toEqual({ delayWait: true });
   });
 
   test("counts each placeholder at a display name's length against a field's limit", () => {
     // 100 characters of text plus one placeholder at 25 is over a marker's 140.
     const marker = `${"x".repeat(116)}{raider}`;
     expect(estimatedLength(marker)).toBe(141);
-    expect(validateStarterValues(raid, { raidMarker: marker }, NO_FEATURES)).toEqual({
+    expect(validateStarterValues(raid, { raidMarker: marker })).toEqual({
       ok: false,
       errors: { raidMarker: "Keep it under 140 characters, counting each placeholder as 25." },
     });
-    expect(validateStarterValues(raid, { raidMarker: `${"x".repeat(115)}{raider}` }, NO_FEATURES).ok).toBe(true);
-    expect(validateStarterValues(raid, { raidMessage: "x".repeat(501) }, NO_FEATURES)).toEqual({
+    expect(validateStarterValues(raid, { raidMarker: `${"x".repeat(115)}{raider}` }).ok).toBe(true);
+    expect(validateStarterValues(raid, { raidMessage: "x".repeat(501) })).toEqual({
       ok: false,
       errors: { raidMessage: "Keep it under 500 characters." },
     });
   });
 
   test("refuses numbers out of range or fractional, empty text and unknown fields", () => {
-    const result = validateStarterValues(
-      raid,
-      {
-        shoutoutDelaySeconds: 61,
-        raidMessage: "   ",
-        extra: "x",
-      },
-      NO_FEATURES
-    );
+    const result = validateStarterValues(raid, {
+      shoutoutDelaySeconds: 61,
+      raidMessage: "   ",
+      extra: "x",
+    });
     expect(result).toEqual({
       ok: false,
       errors: {
@@ -444,7 +427,7 @@ describe("validateStarterValues", () => {
         raidMessage: "This can't be empty.",
       },
     });
-    expect(validateStarterValues(raid, { shoutoutDelaySeconds: 2.5 }, NO_FEATURES).ok).toBe(false);
+    expect(validateStarterValues(raid, { shoutoutDelaySeconds: 2.5 }).ok).toBe(false);
   });
 
   test("a field two items read offers only the placeholders both have", () => {
@@ -454,11 +437,11 @@ describe("validateStarterValues", () => {
   });
 
   test("trims text values, except exact ones such as scene names, which are flagged instead", () => {
-    const result = validateStarterValues(raid, { raidMarker: "  Raid!  " }, NO_FEATURES);
+    const result = validateStarterValues(raid, { raidMarker: "  Raid!  " });
     expect(result.ok && result.values.raidMarker).toBe("Raid!");
 
     const brb = pack("brb-scene");
-    const scene = validateStarterValues(brb, { brbScene: "BRB " }, NO_FEATURES);
+    const scene = validateStarterValues(brb, { brbScene: "BRB " });
     expect(scene.ok && scene.values.brbScene).toBe("BRB ");
     const brbField = brb.fields.find((field) => field.id === "brbScene");
     if (!brbField) {

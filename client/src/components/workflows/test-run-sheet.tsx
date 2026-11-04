@@ -23,13 +23,11 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
 import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
 import { useTriggerWorkflowRequest, useWorkflowRun } from "@/engine/hooks/use-workflows";
 import type { WorkflowRunDetail, WorkflowTriggerResult } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
-import { type TestRunOptionsState, useTestRunSupport } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import {
   settleTestEventOutcome,
@@ -88,16 +86,10 @@ export function TestRunSheet({
   preset,
   otherWorkflows,
 }: TestRunSheetProps) {
-  const testRunSupport = useTestRunSupport();
-  const optionsState = testRunSupport.options;
-  const takesOptions = optionsState === "supported";
-  // Null until someone picks a tab, so the default follows what loads in:
-  // this workflow alone once the engine can hand it the sample, otherwise the
-  // sample event, which is then the only way to test with event data.
   const [pickedMode, setPickedMode] = useState<TestMode | null>(null);
   const refusal = sampleEventRefusal(preset?.event);
   const samplePreset = preset && !refusal ? preset : null;
-  const activeMode: TestMode = samplePreset ? (pickedMode ?? (takesOptions ? "direct" : "event")) : "direct";
+  const activeMode: TestMode = samplePreset ? (pickedMode ?? "direct") : "direct";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
@@ -148,12 +140,7 @@ export function TestRunSheet({
                 otherWorkflows={otherWorkflows}
               />
             ) : (
-              <DirectTest
-                engineWorkflowId={engineWorkflowId}
-                preset={preset}
-                optionsState={optionsState}
-                dryRunState={testRunSupport.dryRun}
-              />
+              <DirectTest engineWorkflowId={engineWorkflowId} preset={preset} />
             )}
           </>
         )}
@@ -296,30 +283,14 @@ interface DirectAttempt {
   result: WorkflowTriggerResult;
 }
 
-function DirectTest({
-  engineWorkflowId,
-  preset,
-  optionsState,
-  dryRunState,
-}: {
-  engineWorkflowId: string;
-  preset: TriggerPreset | null;
-  optionsState: TestRunOptionsState;
-  dryRunState: TestRunOptionsState;
-}) {
+function DirectTest({ engineWorkflowId, preset }: { engineWorkflowId: string; preset: TriggerPreset | null }) {
   const { instanceId } = useEngineScope();
   const { toast } = useToast();
   const trigger = useTriggerWorkflowRequest();
-  const takesOptions = optionsState === "supported";
-  const takesDryRun = takesOptions && dryRunState === "supported";
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState<DirectAttempt | null>(null);
-  // The person's choice. The switch shows it only while the engine can honour
-  // it: showing it on for an engine that cannot would promise a run that does
-  // nothing while every step happens for real.
-  const [wantsDryRun, setWantsDryRun] = useState(true);
-  const dryRun = takesDryRun && wantsDryRun;
-  const withSample = takesOptions && preset !== null;
+  const [dryRun, setDryRun] = useState(true);
+  const withSample = preset !== null;
 
   const run = async (
     triggerData: Record<string, unknown> | undefined,
@@ -335,14 +306,12 @@ function DirectTest({
         trigger({
           workflowNameOrId: engineWorkflowId,
           origin: TEST_RUN_ORIGIN,
-          options: takesOptions
-            ? {
-                triggerData,
-                platform: triggerData && preset ? presetPlatform(preset) : undefined,
-                skipConditions: triggerData ? skipConditions : undefined,
-                dryRun: dryRun || undefined,
-              }
-            : undefined,
+          options: {
+            triggerData,
+            platform: triggerData && preset ? presetPlatform(preset) : undefined,
+            skipConditions: triggerData ? skipConditions : undefined,
+            dryRun: dryRun || undefined,
+          },
         }),
         TEST_EVENT_PUBLISH_TIMEOUT_MS,
         "The engine didn't answer. Check that it is running, then try again."
@@ -374,19 +343,11 @@ function DirectTest({
   const settings = (
     <div className="space-y-3 text-xs text-muted-foreground">
       <p>Starts this workflow alone, right now. No other workflow runs.</p>
-      {withSample ? (
+      {withSample && (
         <p>
           The fields below become its <span className="font-mono">trigger.data</span>, and its trigger conditions are
           checked against them.
         </p>
-      ) : (
-        preset !== null && (
-          <p>
-            Its trigger conditions are skipped, and it receives no sample event: steps that read{" "}
-            <span className="font-mono">trigger.data</span> get empty values.
-            {optionsState === "unsupported" && " Sample data needs the engine update that adds it."}
-          </p>
-        )
       )}
       {!dryRun && (
         <Alert className="border-amber-500/40 text-amber-600 dark:text-amber-400" data-testid="test-run-direct-warning">
@@ -404,21 +365,12 @@ function DirectTest({
           </Label>
           <p>Steps with side effects report what they would do instead of doing it.</p>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Wrapped so the tooltip still opens over a disabled switch, which receives no pointer events. */}
-            <span>
-              <Switch
-                id="test-run-dry-run"
-                checked={dryRun}
-                onCheckedChange={setWantsDryRun}
-                disabled={!takesDryRun}
-                data-testid="switch-test-run-dry-run"
-              />
-            </span>
-          </TooltipTrigger>
-          {dryRunState !== "supported" && <TooltipContent>{DRY_RUN_UNAVAILABLE[dryRunState]}</TooltipContent>}
-        </Tooltip>
+        <Switch
+          id="test-run-dry-run"
+          checked={dryRun}
+          onCheckedChange={setDryRun}
+          data-testid="switch-test-run-dry-run"
+        />
       </div>
     </div>
   );
@@ -459,12 +411,6 @@ function DirectTest({
     </div>
   );
 }
-
-const DRY_RUN_UNAVAILABLE: Record<Exclude<TestRunOptionsState, "supported">, string> = {
-  checking: "Checking what the engine supports…",
-  unsupported: "Needs an engine update",
-  unknown: "Could not reach the engine to check",
-};
 
 function DirectOutcome({
   attempt,

@@ -4,10 +4,6 @@
  * `TriggerWorkflowResponse`, `UnmetTriggerCondition`, `CancelWorkflowResult`
  * and `MAX_TRIGGER_DATA_BYTES` in woofx3 `shared/clients/typescript/api/api.ts`
  * (wolfymaster/woofx3#172 and #174).
- *
- * Every field is optional on the way back: an engine without those changes
- * answers `triggerWorkflowByName` with the old `{ executionId: "", status:
- * "requested" }` and `cancelWorkflow` with nothing, and both must still work.
  */
 
 /**

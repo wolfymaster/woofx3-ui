@@ -1,12 +1,9 @@
 import {
   fieldTokenNames,
-  NO_STARTER_FEATURES,
   STARTER_PACKS,
-  type StarterFeatures,
   type StarterFieldValues,
   type StarterPack,
   type StarterPackField,
-  starterFeaturesFrom,
   starterFieldWarning,
   starterPackDefaults,
   validateStarterValues,
@@ -44,7 +41,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstallStarterPackRequest, useStarterPackStatus } from "@/engine/hooks/use-starter-packs";
 import type { StarterPackInstallOutcome } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
@@ -206,19 +202,16 @@ function FieldInput({
   field,
   value,
   error,
-  features,
   onChange,
 }: {
   pack: StarterPack;
   field: StarterPackField;
   value: string | number;
   error: string | undefined;
-  features: StarterFeatures;
   onChange: (value: string | number) => void;
 }) {
   const inputId = `starter-field-${pack.id}-${field.id}`;
   const tokens = field.type === "text" ? fieldTokenNames(pack, field.id) : [];
-  const unsupported = field.requires !== undefined && !features[field.requires];
   const warning = starterFieldWarning(field, value);
 
   return (
@@ -232,7 +225,6 @@ function FieldInput({
           max={field.max}
           value={Number.isNaN(value) ? "" : value}
           onChange={(e) => onChange(e.target.value === "" ? Number.NaN : Number(e.target.value))}
-          disabled={unsupported}
           className="max-w-[10rem]"
         />
       ) : tokens.length > 0 ? (
@@ -256,7 +248,6 @@ function FieldInput({
         </div>
       )}
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
-      {unsupported && <p className="text-xs text-muted-foreground">Requires engine update.</p>}
       {warning && <p className="text-xs text-amber-600 dark:text-amber-400">{warning}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
@@ -328,17 +319,9 @@ function InstallDialog({ entry, onClose }: { entry: PackViews; onClose: () => vo
   const { toast } = useToast();
   const install = useInstallStarterPackRequest();
   const [draft, setDraft] = useState<DraftValues>(() => starterPackDefaults(pack));
-  const { state: capabilities } = useEngineCapabilities();
-  // Until the engine answers, a feature it may lack stays off; the install
-  // action checks again against the engine's own answer.
-  const features = useMemo(
-    () =>
-      capabilities.status === "ready" ? starterFeaturesFrom(capabilities.report.capabilities) : NO_STARTER_FEATURES,
-    [capabilities]
-  );
   const [installing, setInstalling] = useState(false);
 
-  const checked = useMemo(() => validateStarterValues(pack, draft, features), [pack, draft, features]);
+  const checked = useMemo(() => validateStarterValues(pack, draft), [pack, draft]);
   const errors = checked.ok ? {} : checked.errors;
   const previewValues: StarterFieldValues = checked.ok ? checked.values : draft;
 
@@ -389,7 +372,6 @@ function InstallDialog({ entry, onClose }: { entry: PackViews; onClose: () => vo
                 field={field}
                 value={draft[field.id]}
                 error={errors[field.id]}
-                features={features}
                 onChange={(value) => setDraft((current) => ({ ...current, [field.id]: value }))}
               />
             ))}

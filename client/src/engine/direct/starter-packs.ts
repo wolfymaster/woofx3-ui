@@ -10,11 +10,10 @@ import {
   type StarterCommandItem,
   type StarterItem,
   type StarterPack,
-  starterFeaturesFrom,
   starterItemKey,
   validateStarterValues,
 } from "@shared/starter-packs";
-import { ENGINE_CAPABILITIES, type UISetting, type UISettingValue } from "@woofx3/api";
+import type { UISetting, UISettingValue } from "@woofx3/api";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { useMemo } from "react";
 import type { StarterPacksGateway } from "@/engine/gateway";
@@ -137,10 +136,7 @@ export async function installPackItems(
   claimed: Set<string>,
   seedOnce = false
 ): Promise<StarterPackInstallOutcome[]> {
-  const features = starterFeaturesFrom(
-    runtime.supports(ENGINE_CAPABILITIES.workflowDelayWait) ? ["workflow.delayWait"] : []
-  );
-  const checked = validateStarterValues(pack, values, features);
+  const checked = validateStarterValues(pack, values);
   if (!checked.ok) {
     throw new Error(Object.values(checked.errors).join(" "));
   }
@@ -250,7 +246,7 @@ export function ledgerEngineId(settings: readonly UISetting[], key: string): str
 }
 
 export function directStarterPacksGateway(runtime: DirectRuntime): StarterPacksGateway {
-  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks, "starterPacks.useStatus");
+  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks);
   const commandsListRead = {
     queryKey: k.commands.list(),
     queryFn: () => runtime.call("listCommands", (api) => api.listCommands()),

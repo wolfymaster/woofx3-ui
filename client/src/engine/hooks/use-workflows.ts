@@ -43,7 +43,7 @@ export function useTriggerWorkflowRequest() {
   return useEngineGateway().workflows.useTriggerRequest();
 }
 
-/** The values `${viewer.*}` resolves on the engine; ask only engines with `workflow.viewerFacts`. */
+/** The values `${viewer.*}` resolves on the engine. */
 export function useViewerFactsRequest() {
   return useEngineGateway().workflows.useViewerFactsRequest();
 }
