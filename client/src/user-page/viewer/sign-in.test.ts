@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { generateOpaqueToken, isOpaqueToken } from "@convex/lib/oauthHandoff";
 import type { ExchangeHandoffResult } from "@convex/viewerSession";
+import { createLogger } from "@/lib/logger";
 import { DEFAULT_USER_PAGES_ORIGIN, userPagesOrigin } from "./config";
 import { ROLE_REFRESH_RETRY, roleRefreshRetryDelay, roleRefreshStep, roleRenewalDelay } from "./role-refresh";
 import {
@@ -14,6 +15,8 @@ import {
   signInStartUrl,
   type ViewerStorage,
 } from "./sign-in";
+
+const quiet = createLogger([]);
 
 describe("userPagesOrigin", () => {
   const cases: Array<{ value: unknown; origin?: string; throws?: string }> = [
@@ -170,17 +173,22 @@ describe("finishSignIn", () => {
 
   test("does nothing for a page with no sign-in", async () => {
     const storage = memoryStorage({ nonce: "n" });
-    expect(await finishSignIn({ kind: "none" }, storage, async () => ok)).toBeNull();
+    expect(await finishSignIn({ kind: "none" }, storage, async () => ok, quiet)).toBeNull();
     expect(storage.nonce).toBe("n");
   });
 
   test("exchanges the code with this tab's nonce, forgets the nonce and keeps the session", async () => {
     const storage = memoryStorage({ nonce: "n" });
     const calls: unknown[] = [];
-    const outcome = await finishSignIn({ kind: "code", code: "c" }, storage, async (args) => {
-      calls.push(args);
-      return ok;
-    });
+    const outcome = await finishSignIn(
+      { kind: "code", code: "c" },
+      storage,
+      async (args) => {
+        calls.push(args);
+        return ok;
+      },
+      quiet
+    );
     expect(outcome).toEqual({ kind: "signed_in", sessionToken: "session" });
     expect(calls).toEqual([{ code: "c", nonce: "n" }]);
     expect(storage.nonce).toBeNull();
@@ -190,38 +198,53 @@ describe("finishSignIn", () => {
   test("refuses a code this tab holds no nonce for, without asking Convex", async () => {
     const storage = memoryStorage();
     let asked = false;
-    const outcome = await finishSignIn({ kind: "code", code: "c" }, storage, async () => {
-      asked = true;
-      return ok;
-    });
+    const outcome = await finishSignIn(
+      { kind: "code", code: "c" },
+      storage,
+      async () => {
+        asked = true;
+        return ok;
+      },
+      quiet
+    );
     expect(outcome).toEqual({ kind: "failed", failure: "nonce_missing" });
     expect(asked).toBe(false);
   });
 
   test("passes on the exchange's refusal and stores nothing", async () => {
     const storage = memoryStorage({ nonce: "n" });
-    const outcome = await finishSignIn({ kind: "code", code: "c" }, storage, async () => ({
-      ok: false,
-      error: "handoff_expired",
-    }));
+    const outcome = await finishSignIn(
+      { kind: "code", code: "c" },
+      storage,
+      async () => ({
+        ok: false,
+        error: "handoff_expired",
+      }),
+      quiet
+    );
     expect(outcome).toEqual({ kind: "failed", failure: "handoff_expired" });
     expect(storage.token).toBeNull();
   });
 
   test("an exchange that throws is a failure, not a sign-in", async () => {
     const storage = memoryStorage({ nonce: "n" });
-    const outcome = await finishSignIn({ kind: "code", code: "c" }, storage, async () => {
-      throw new Error("offline");
-    });
+    const outcome = await finishSignIn(
+      { kind: "code", code: "c" },
+      storage,
+      async () => {
+        throw new Error("offline");
+      },
+      quiet
+    );
     expect(outcome).toEqual({ kind: "failed", failure: "exchange_failed" });
   });
 
   test("an error from the callback forgets the nonce", async () => {
     const storage = memoryStorage({ nonce: "n" });
-    const known = await finishSignIn({ kind: "error", code: "rate_limited" }, storage, async () => ok);
+    const known = await finishSignIn({ kind: "error", code: "rate_limited" }, storage, async () => ok, quiet);
     expect(known).toEqual({ kind: "failed", failure: "rate_limited" });
     expect(storage.nonce).toBeNull();
-    const unknown = await finishSignIn({ kind: "error", code: null }, memoryStorage(), async () => ok);
+    const unknown = await finishSignIn({ kind: "error", code: null }, memoryStorage(), async () => ok, quiet);
     expect(unknown).toEqual({ kind: "failed", failure: "unknown" });
   });
 });
@@ -264,7 +287,7 @@ describe("browserViewerStorage", () => {
   test("keeps the nonce for the tab, once, and the session token for the origin", () => {
     const session = new MapStorage();
     const local = new MapStorage();
-    const storage = browserViewerStorage(session, local);
+    const storage = browserViewerStorage(session, local, quiet);
     storage.putNonce("n");
     storage.putSessionToken("t");
     expect(session.length).toBe(1);
@@ -278,8 +301,8 @@ describe("browserViewerStorage", () => {
 
   test("reads as signed out where storage is blocked or missing", () => {
     for (const storage of [
-      browserViewerStorage(new BlockedStorage(), new BlockedStorage()),
-      browserViewerStorage(null, null),
+      browserViewerStorage(new BlockedStorage(), new BlockedStorage(), quiet),
+      browserViewerStorage(null, null, quiet),
     ]) {
       storage.putNonce("n");
       storage.putSessionToken("t");

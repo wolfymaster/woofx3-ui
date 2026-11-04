@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
 import type { StreamEventFrame } from "@/engine/types";
 import type { ActivityEvent } from "@/lib/activity-feed";
+import { useLogger } from "@/lib/logger-context";
 
 /** One page: the engine keeps a few days of detail, and the feed shows the latest of it. */
 const HISTORY_LIMIT = 50;
@@ -38,6 +39,7 @@ export function useEventLog(types: readonly string[] | null | undefined): {
   events: ActivityEvent[];
   status: EventLogStatus;
 } {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const { eventLog } = useEngineGateway();
   const subscribeStreamEvents = eventLog.useStreamEventsSubscription();
@@ -86,14 +88,14 @@ export function useEventLog(types: readonly string[] | null | undefined): {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          console.warn("[Events] Could not read the engine's event log:", err);
+          logger.warn("[Events] Could not read the engine's event log", { error: err });
           setHistoryStatus("error");
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [instanceId, connected, typesKey, listEvents]);
+  }, [instanceId, connected, typesKey, listEvents, logger]);
 
   const events = useMemo(() => [...live, ...history], [live, history]);
   const status = typesKey === null ? "unsupported" : typesKey === undefined ? "loading" : historyStatus;

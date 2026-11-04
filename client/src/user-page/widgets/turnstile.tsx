@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLogger } from "@/lib/logger-context";
 
 /** The part of Cloudflare's widget script this page uses. */
 export interface TurnstileApi {
@@ -65,6 +66,7 @@ export function TurnstileChallenge({
   load: () => Promise<TurnstileApi>;
   onToken: (token: string | null) => void;
 }) {
+  const logger = useLogger();
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -90,14 +92,14 @@ export function TurnstileChallenge({
         };
       })
       .catch((error: unknown) => {
-        console.warn("The visitor check could not start", error);
+        logger.warn("The visitor check could not start", { error });
         setFailed(true);
       });
     return () => {
       live = false;
       rendered?.api.remove(rendered.widgetId);
     };
-  }, [siteKey, load, onToken]);
+  }, [siteKey, load, onToken, logger]);
 
   return (
     <div>

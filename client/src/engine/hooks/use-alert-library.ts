@@ -3,6 +3,7 @@ import { useEngineGateway, useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { AlertComposition } from "@/engine/types";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
+import { useLogger } from "@/lib/logger-context";
 
 export interface AlertLibrary {
   /** The engine stores an alert library. Everything below is offered only then. */
@@ -21,6 +22,7 @@ const refreshed = new Set<string>();
  * dashboard cached them, or while it was unreachable).
  */
 export function useAlertLibrary(): AlertLibrary {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const enabled = useEngineCapabilities().support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
   const { alertLibrary } = useEngineGateway();
@@ -35,9 +37,9 @@ export function useAlertLibrary(): AlertLibrary {
     refresh().catch((error: unknown) => {
       // The cache still has whatever the webhooks brought; the next editor to mount tries again.
       refreshed.delete(instanceId);
-      console.warn("[alert library] refresh failed", error);
+      logger.warn("[alert library] refresh failed", { error });
     });
-  }, [enabled, instanceId, refresh]);
+  }, [enabled, instanceId, refresh, logger]);
 
   return { enabled, alerts: enabled ? alerts : undefined };
 }

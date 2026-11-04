@@ -30,6 +30,7 @@ import { useEngineScope } from "@/engine/context";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useInstalledModules, useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useTheme } from "@/hooks/use-theme";
+import { useLogger } from "@/lib/logger-context";
 import { MARKETPLACE_INSTALLED_PATH } from "@/lib/marketplace-route";
 import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } from "@/lib/module-archive";
 import { getLanguageFromPath } from "@/lib/module-files";
@@ -163,7 +164,7 @@ function FileExplorer({
           <span className="truncate">{node.name}</span>
         </button>
         {node.isDirectory && hasChildren && isExpanded && (
-          <div>{node.children!.map((child) => renderNode(child, depth + 1))}</div>
+          <div>{node.children?.map((child) => renderNode(child, depth + 1))}</div>
         )}
       </div>
     );
@@ -297,6 +298,7 @@ export default function ModuleInstall() {
 }
 
 function ModuleUpload() {
+  const logger = useLogger();
   const [, navigate] = useLocation();
   const { mode } = useTheme();
   // The archive's files as their bytes; edits replace a text file's bytes, and
@@ -413,16 +415,19 @@ function ModuleUpload() {
     return () => clearTimeout(timer);
   }, [pendingModuleKey]);
 
-  const processZipFile = useCallback(async (file: File) => {
-    try {
-      const extractedFiles = readModuleArchive(new Uint8Array(await file.arrayBuffer()));
+  const processZipFile = useCallback(
+    async (file: File) => {
+      try {
+        const extractedFiles = readModuleArchive(new Uint8Array(await file.arrayBuffer()));
 
-      setFiles(extractedFiles);
-    } catch (error) {
-      console.error("Failed to extract zip:", error);
-      setInstallError("Failed to extract zip file. Please ensure it is a valid zip archive.");
-    }
-  }, []);
+        setFiles(extractedFiles);
+      } catch (error) {
+        logger.error("Failed to extract zip", { error });
+        setInstallError("Failed to extract zip file. Please ensure it is a valid zip archive.");
+      }
+    },
+    [logger]
+  );
 
   const handleFileUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -519,25 +524,16 @@ function ModuleUpload() {
       const moduleId = (manifest.id as string) || toSnakeCase(name);
       const moduleKey = await computeModuleKey(moduleId, version, archive);
 
-      console.log("[module-install] moduleKey components", {
-        manifestId: manifest.id,
-        manifestName: manifest.name,
-        moduleId,
-        version,
-        zipSize: archive.byteLength,
-        moduleKey,
-      });
-
       await installArchive({ archive, moduleKey, name, description, version, tags, manifest });
 
       // Subscribe to transient events for this moduleKey
       setPendingModuleKey(moduleKey);
     } catch (error) {
-      console.error("Failed to install module:", error);
+      logger.error("Failed to install module", { error });
       setInstallError(error instanceof Error ? error.message : "Failed to install module. Please try again.");
       setIsInstalling(false);
     }
-  }, [files, editedManifest, instanceId, installArchive]);
+  }, [files, editedManifest, instanceId, installArchive, logger]);
 
   const handleInstallClick = useCallback(() => {
     if (permissionsNeedingApproval.length > 0 || localEndpointsNeedingApproval.length > 0) {

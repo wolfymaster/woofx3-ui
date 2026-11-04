@@ -229,6 +229,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **Formatting**: Biome — 2-space indent, double quotes, semicolons, trailing commas (ES5), 120 char line width.
 - **Braces on all branches and loops**: `if (!x) { return null; }` — never `if (!x) return null;`. Same for `for`, `while`, `else` — always use a block body. No exceptions.
 - **Routing**: Wouter v3. Redirect with its `<Redirect to="..." />` component, or `navigate` from `useLocation` inside an effect when the redirect follows other logic.
+- **Logging**: client code logs through `logger` (or `scopedLogger(scope)` where a `Logger` is injected) from `@/lib/logger`, never through `console`; Biome's `noConsole` enforces it. Pass errors and context as fields (`logger.error("Failed to install module", { error })`) so remote sinks receive them structured.
 - **State**: Nanostores (`$`-prefixed atoms) for UI-only state (theme, sidebar, engine URL, current instance ID). Convex for all server-persisted data.
 - **Engine access**: Screens reach the engine through the engine gateway (`useEngineGateway()` and the hooks in `client/src/engine/hooks/`; see `docs/patterns/engine-gateway.md`). `client/src/lib/transport/` (`WoofxTransport`, the realtime browser↔engine channel) is the Convex gateway's own and only `client/src/engine/convex/` imports it. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
 - **Shadcn/ui**: Components in `client/src/components/ui/` — extend via composition, never modify directly.

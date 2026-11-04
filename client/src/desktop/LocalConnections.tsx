@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useEngineScope } from "@/engine/context";
 import { actionErrorMessage } from "@/lib/action-error";
+import { useLogger } from "@/lib/logger-context";
 import { cn } from "@/lib/utils";
 import {
   chooseDiscovered,
@@ -264,6 +265,7 @@ export function ModuleLocalConnections({
 
 /** Every local endpoint across the instance's modules, on the Integrations page. */
 export function ThisComputerConnections() {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const view = useIntegrationsFor(instanceId ?? undefined);
   const [hosted, setHosted] = useState(false);
@@ -277,13 +279,13 @@ export function ThisComputerConnections() {
         }
       },
       (err: unknown) => {
-        console.error("Couldn't read the app's mode from the host", err);
+        logger.error("Couldn't read the app's mode from the host", { error: err });
       }
     );
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [logger]);
 
   // A local engine dials these itself, so there is nothing to set up.
   if (!hosted) {

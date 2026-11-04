@@ -16,6 +16,7 @@ import type {
   Woofx3EngineApi,
 } from "@woofx3/api";
 import { createEngineBrowserSession, type EngineBrowserSession, type RpcTarget } from "@woofx3/api/client";
+import type { Logger } from "@/lib/logger";
 import { createReconnectBackoff } from "@/lib/reconnect-backoff";
 import { $documentVisible } from "@/lib/stores";
 import { listenerTakes, type StreamListener, streamTypesUnion } from "@/lib/stream-listeners";
@@ -49,6 +50,8 @@ interface Credentials {
 }
 
 export class BrowserTransport implements WoofxTransport {
+  constructor(private readonly logger: Logger) {}
+
   private session: EngineBrowserSession<BrowserEngineApi> | null = null;
   /** url|clientId|clientSecret of the live session, so connect() can no-op. */
   private target: string | null = null;
@@ -167,7 +170,7 @@ export class BrowserTransport implements WoofxTransport {
         if (generation !== this.generation || this.session !== session) {
           return;
         }
-        console.warn("[Transport] Engine session broken; reconnecting");
+        this.logger.warn("Engine session broken; reconnecting");
         this.session = null;
         $engineConnected.set(false);
         this.registeredStreamTypes = null;
@@ -199,7 +202,7 @@ export class BrowserTransport implements WoofxTransport {
     } catch (err) {
       $engineConnected.set(false);
       this.session = null;
-      console.warn("[Transport] Failed to connect:", err);
+      this.logger.warn("Failed to connect", { error: err });
       this.scheduleReconnect(generation);
     }
   }
@@ -209,7 +212,7 @@ export class BrowserTransport implements WoofxTransport {
       return;
     }
     const delay = this.backoff.next();
-    console.warn(`[Transport] Reconnecting in ${delay}ms (attempt ${this.backoff.attempts})`);
+    this.logger.warn("Reconnecting", { delayMs: delay, attempt: this.backoff.attempts });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.openSession(generation);
@@ -270,7 +273,7 @@ export class BrowserTransport implements WoofxTransport {
         // Unreadable is read as unsupported: the push then carries the
         // engine's fixed set, which is less than asked for but never doubled.
         if (!isLegacyCapabilitiesError(err)) {
-          console.warn("[Transport] Could not read the engine's capabilities:", err);
+          this.logger.warn("Could not read the engine's capabilities", { error: err });
         }
         return false;
       })
@@ -336,7 +339,7 @@ export class BrowserTransport implements WoofxTransport {
       if (this.session === session && this.registeredStreamTypes === key) {
         this.registeredStreamTypes = null;
       }
-      console.warn("[Transport] Failed to subscribe to stream events:", err);
+      this.logger.warn("Failed to subscribe to stream events", { error: err });
     });
   }
 

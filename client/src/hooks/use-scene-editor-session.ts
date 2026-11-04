@@ -4,6 +4,7 @@ import { useOverlayPreviewUrlRequest } from "@/engine/hooks/use-overlays";
 import { useSceneEditorSessionRequest } from "@/engine/hooks/use-scenes";
 import type { InstanceId, SceneId } from "@/engine/types";
 import { toast } from "@/hooks/use-toast";
+import { useLogger } from "@/lib/logger-context";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
 import {
   browserClock,
@@ -82,6 +83,7 @@ export function useSceneEditorSession({
   editorName,
   unsavedOutsideSession,
 }: UseSceneEditorSessionArgs): SceneEditorSession {
+  const logger = useLogger();
   const getSession = useSceneEditorSessionRequest();
   const getPreviewUrl = useOverlayPreviewUrlRequest();
   const [sceneKey] = useState(() => sceneKeyOf(instanceId, engineSceneId));
@@ -127,7 +129,7 @@ export function useSceneEditorSession({
         name: editorNameRef.current ?? "",
         onReport: (report) =>
           toast({ ...syncReportToast(report, made.getState().name || undefined), variant: "destructive" }),
-        log: (event, detail) => console.warn(`[scene editor] ${event}`, detail ?? {}),
+        log: (event, detail) => logger.warn(`[scene editor] ${event}`, detail === undefined ? undefined : { detail }),
       });
       openers.set(made, opener);
       return made;
