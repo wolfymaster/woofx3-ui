@@ -88,13 +88,10 @@ export interface WoofxTransport {
   // alongside the shared contract.
   //
   // `types` are the event types (CloudEvent `type`) the callback takes; the
-  // engine is asked to push only what some listener takes. `types` null takes
-  // every frame that arrives and asks for nothing: for an engine that predates
-  // per-subscriber types (capability `events.log`), which pushes its own fixed
-  // set whatever it is asked.
+  // engine is asked to push only what some listener takes.
   subscribeStreamEvents(
     instanceId: string,
-    types: readonly string[] | null,
+    types: readonly string[],
     callback: (frame: StreamEventFrame) => void
   ): () => void;
   /**

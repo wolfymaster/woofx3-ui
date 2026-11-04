@@ -211,18 +211,18 @@ describe("eventLog", () => {
     const { runtime, state, clock } = await connected();
     const subscribe = renderDirect(() => directEventLogGateway(runtime).useStreamEventsSubscription()).current();
     const follows: string[] = [];
-    const everything: string[] = [];
+    const cheers: string[] = [];
     subscribe(["channel.follow"], (f) => follows.push(f.type));
-    subscribe(null, (f) => everything.push(f.type));
+    subscribe(["channel.cheer"], (f) => cheers.push(f.type));
 
     clock.advance(runtime.config.streamRegistrationDelayMs);
     await waitFor(() => state.streamSubscriptions.length === 1, "the registration");
-    expect(state.streamSubscriptions[0].types).toEqual(["channel.follow"]);
+    expect(state.streamSubscriptions[0].types).toEqual(["channel.cheer", "channel.follow"]);
 
     await state.pushStreamEvent(frame("channel.follow"));
     await state.pushStreamEvent(frame("channel.cheer"));
     expect(follows).toEqual(["channel.follow"]);
-    expect(everything).toEqual(["channel.follow", "channel.cheer"]);
+    expect(cheers).toEqual(["channel.cheer"]);
   });
 
   test("registers again on a new session, which starts with none", async () => {

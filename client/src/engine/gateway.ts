@@ -327,17 +327,11 @@ export interface EventLogGateway {
   useWebhookPayload(logId: WebhookEventId): Live<string | null>;
   /** Fires a logged event's type and payload at the engine again. */
   useRetriggerRequest(): (logId: WebhookEventId) => Promise<{ success: boolean; message: string }>;
-  /**
-   * Subscribes to pushed events of `types` (null: every type the engine
-   * pushes); returns the unsubscribe. Throws while the scope has no instance.
-   */
-  useStreamEventsSubscription(): (
-    types: readonly string[] | null,
-    onFrame: (frame: StreamEventFrame) => void
-  ) => () => void;
-  /** A page of the engine's event log. Needs `events.log`. */
+  /** Subscribes to pushed events of `types`; returns the unsubscribe. Throws while the scope has no instance. */
+  useStreamEventsSubscription(): (types: readonly string[], onFrame: (frame: StreamEventFrame) => void) => () => void;
+  /** A page of the engine's event log. */
   useEventsRequest(): (query?: EventLogQuery) => Promise<EventLogPage>;
-  /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
+  /** Which event types the engine logs and pushes, and which it offers. */
   useSettingsRequest(): () => Promise<EventLogSettings>;
   /** Replaces the engine's selection and resolves with the settings it results in. */
   useSetSelectionRequest(): (selection: EventLogSelection) => Promise<EventLogSettings>;

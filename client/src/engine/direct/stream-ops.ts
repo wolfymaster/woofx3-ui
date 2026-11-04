@@ -63,15 +63,10 @@ async function readRecaps(runtime: DirectRuntime, sessions: readonly StreamSessi
   return recaps;
 }
 
-// An engine without session history has no recaps to show, rather than a
-// failure: there is nothing it could answer on a retry.
 function recentRecapsRead(runtime: DirectRuntime, limit: number): EngineRead<StreamRecap[]> {
   return {
     queryKey: k.streamOps.recentRecaps(limit),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.analyticsSessions)) {
-        return [];
-      }
       const page = await runtime.call("listStreamSessions", (api) => api.listStreamSessions({ limit }));
       return readRecaps(runtime, page.sessions);
     },
@@ -82,9 +77,6 @@ function recapRead(runtime: DirectRuntime, sessionId: string): EngineRead<Stream
   return {
     queryKey: k.streamOps.recap(sessionId),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.analyticsSessions)) {
-        return null;
-      }
       const session = await runtime.call("getStreamSession", (api) => api.getStreamSession(sessionId));
       if (session === null) {
         return null;

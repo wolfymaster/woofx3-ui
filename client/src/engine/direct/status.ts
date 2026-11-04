@@ -1,4 +1,3 @@
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { StatusGateway } from "@/engine/gateway";
 import type { EngineConnectionTest, EngineInfo, InstanceLiveState } from "@/engine/types";
 import { readEngineCapabilities } from "@/lib/engine-session/capabilities";
@@ -15,11 +14,9 @@ export function liveStateRead(runtime: DirectRuntime): EngineRead<InstanceLiveSt
     queryFn: async () => {
       const [status, sessions] = await Promise.all([
         runtime.call("getStreamStatus", (api) => api.getStreamStatus()),
-        runtime.supports(ENGINE_CAPABILITIES.analyticsSessions)
-          ? runtime.call("listStreamSessions", (api) => api.listStreamSessions({ limit: 1 }))
-          : null,
+        runtime.call("listStreamSessions", (api) => api.listStreamSessions({ limit: 1 })),
       ]);
-      return toInstanceLiveState(status, sessions?.sessions[0] ?? null, runtime.clock.now());
+      return toInstanceLiveState(status, sessions.sessions[0] ?? null, runtime.clock.now());
     },
   };
 }
