@@ -2040,7 +2040,6 @@ export default defineSchema({
           v.literal("functions"),
           v.literal("workflows"),
           v.literal("workflowGroups"),
-          v.literal("workflowGroups"),
           v.literal("scenes"),
           v.literal("triggers"),
           v.literal("actions"),
