@@ -66,7 +66,9 @@ describe("moveEngineToEventQueue", () => {
       [ENGINE_CAPABILITIES.callbacksEventsTarget],
       `putSource ${URLS.deliveryUrl} ${hash}`
     );
-    await expect(moveEngineToEventQueue(ports, URLS, TOKEN)).rejects.toThrow();
+    await expect(moveEngineToEventQueue(ports, URLS, TOKEN)).rejects.toThrow(
+      `putSource ${URLS.deliveryUrl} ${hash} failed`
+    );
     expect(calls.some((call) => call.startsWith("setEventsTarget"))).toBe(false);
   });
 
@@ -75,7 +77,9 @@ describe("moveEngineToEventQueue", () => {
       [ENGINE_CAPABILITIES.callbacksEventsTarget],
       `setEventsTarget ${URLS.eventsUrl} ${TOKEN}`
     );
-    await expect(moveEngineToEventQueue(ports, URLS, TOKEN)).rejects.toThrow();
+    await expect(moveEngineToEventQueue(ports, URLS, TOKEN)).rejects.toThrow(
+      `setEventsTarget ${URLS.eventsUrl} ${TOKEN} failed`
+    );
     expect(calls).not.toContain("recordTargetSet");
   });
 });
