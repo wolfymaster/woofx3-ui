@@ -49,7 +49,6 @@ import { ProblemIndex } from "@/lib/page-problems";
 import { resourceName } from "@/lib/resource-instance";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 
-/** Rows shown a page at a time. */
 const PAGE_SIZE = 50;
 
 /** A woofx3 database: its columns and its rows. */

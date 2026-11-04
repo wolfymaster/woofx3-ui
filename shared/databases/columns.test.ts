@@ -81,13 +81,13 @@ describe("parseCell", () => {
   ])("%s %p", (type, input, value) => {
     expect(parseCell(columns[type], input)).toEqual({ ok: true, value } as never);
   });
-  test.each<[string, string]>([
-    ["number", "twelve"],
-    ["boolean", "yes"],
-    ["date", "yesterday"],
-    ["url", "ftp://example.com"],
-    ["select", "hype"],
-  ])("refuses %s %p", (type, input) => {
-    expect(parseCell(columns[type], input).ok).toBe(false);
+  test.each<[string, string, string]>([
+    ["number", "twelve", "Enter a number"],
+    ["boolean", "yes", "Choose yes or no"],
+    ["date", "yesterday", "Enter a date"],
+    ["url", "ftp://example.com", "Enter a link starting with http:// or https://"],
+    ["select", "hype", "Pick one of the options"],
+  ])("refuses %s %p", (type, input, error) => {
+    expect(parseCell(columns[type], input)).toEqual({ ok: false, error });
   });
 });

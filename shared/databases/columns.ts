@@ -15,6 +15,8 @@ import { type PageProblem, ProblemReport } from "../user-pages/problems";
 
 const COLUMN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const ALL_DIGITS = /^[0-9]+$/;
+/** Room left under the 64-character id limit for a "_<n>" suffix. */
+const GENERATED_ID_BASE_LENGTH = 48;
 
 export const COLUMN_TYPE_LABELS: Readonly<Record<DatabaseColumnType, string>> = {
   text: "Text",
@@ -72,7 +74,7 @@ export function columnIdFor(label: string, taken: ReadonlySet<string>): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "")
-      .slice(0, 48) || "column";
+      .slice(0, GENERATED_ID_BASE_LENGTH) || "column";
   const start = ALL_DIGITS.test(base) ? `c_${base}` : base;
   let id = start;
   for (let n = 2; taken.has(id); n++) {
@@ -187,7 +189,6 @@ export function parseCell(column: DatabaseColumn, text: string): CellParse {
   }
 }
 
-/** A cell as text in the editor. */
 export function cellText(value: DatabaseValue | undefined): string {
   return value === undefined ? "" : String(value);
 }
