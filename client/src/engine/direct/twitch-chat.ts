@@ -34,7 +34,7 @@ export async function sendChatMessage(twitch: DirectTwitch, text: string): Promi
   );
 }
 
-/** Writing in chat as the broadcaster, and who is in it, through the engine's `twitch.chat` methods. */
+/** Writing in chat as the broadcaster, and who is in it, through the engine's chat methods. */
 export function directTwitchChatGateway(runtime: DirectRuntime): TwitchChatGateway {
   const twitch = directTwitch(runtime);
 

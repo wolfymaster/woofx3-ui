@@ -37,7 +37,7 @@ import { directTwitch, type LinkedTwitchAccount } from "./twitch";
 
 /**
  * Blocked terms, timeouts and bans, and chat modes, through the engine's
- * `twitch.moderation` methods. The streamer holds the owner's role (see
+ * moderation methods. The streamer holds the owner's role (see
  * `toModerationAccess`), so only the link's scopes ever refuse them.
  */
 export function directModerationGateway(runtime: DirectRuntime): ModerationGateway {

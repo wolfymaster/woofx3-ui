@@ -16,8 +16,7 @@ import { useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 // Convex decides who may moderate from the caller's role and the link's
-// scopes, then asks Twitch with the broadcaster token it holds, through the
-// engine when the engine advertises `twitch.moderation`.
+// scopes, then asks Twitch through the instance's engine.
 
 type AccessRow = NonNullable<FunctionReturnType<typeof api.moderation.access>>;
 type BlockedTermRow = FunctionReturnType<typeof api.moderation.addBlockedTerm>;

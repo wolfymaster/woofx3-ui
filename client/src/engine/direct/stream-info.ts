@@ -66,7 +66,7 @@ function byName(a: StreamInfoPreset, b: StreamInfoPreset): number {
 
 /**
  * The channel's title, category and tags, and VOD markers, through the
- * engine's `twitch.streamInfo` methods. Every call runs under one scope,
+ * engine's stream info methods. Every call runs under one scope,
  * reads included, as the Convex gateway's do. Presets are the dashboard's
  * own records, one per name in the engine's local UI settings.
  */

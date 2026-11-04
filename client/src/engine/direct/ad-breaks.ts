@@ -15,7 +15,7 @@ import { useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { directTwitch } from "./twitch";
 
-/** The ad schedule and snoozing, through the engine's `twitch.ads` methods. */
+/** The ad schedule and snoozing, through the engine's ad methods. */
 export function directAdBreaksGateway(runtime: DirectRuntime): AdBreaksGateway {
   const twitch = directTwitch(runtime);
   /** Helix sends no clock of its own; the schedule's times are read against the gateway's. */

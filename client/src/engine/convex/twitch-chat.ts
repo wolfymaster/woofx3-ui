@@ -6,8 +6,7 @@ import type { Announcement, Chatter } from "@/engine/types";
 import { withPlainError } from "./errors";
 import { useInstanceAction } from "./scope";
 
-// Convex writes to chat with the broadcaster token it holds, through the
-// engine when the engine advertises `twitch.chat`.
+// Convex writes to chat through the instance's engine.
 
 type ChatterRow = FunctionReturnType<typeof api.shoutouts.listChatters>[number];
 

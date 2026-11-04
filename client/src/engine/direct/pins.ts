@@ -16,7 +16,7 @@ import { directTwitch } from "./twitch";
 import { unsupportedRead, unsupportedRequest } from "./unsupported";
 
 /**
- * The chat's one pin, through the engine's `twitch.pins` methods. The pin
+ * The chat's one pin, through the engine's pin methods. The pin
  * history is the dashboard's own record, kept in the account: the engine
  * keeps none, so nothing here reads or adds to it, and re-pinning from it
  * cannot be offered.

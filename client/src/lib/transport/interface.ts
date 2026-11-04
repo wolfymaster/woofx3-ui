@@ -96,12 +96,12 @@ export interface WoofxTransport {
   ): () => void;
   /**
    * A page of the engine's event log, newest first: the history behind
-   * `subscribeStreamEvents`, in the same frame shape. Needs `events.log`.
+   * `subscribeStreamEvents`, in the same frame shape.
    */
   listEvents(instanceId: string, query?: EventLogQuery): Promise<EventLogPage>;
-  /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
+  /** Which event types the engine logs and pushes, and which it offers. */
   getEventLogSettings(instanceId: string): Promise<EventLogSettings>;
-  /** Replaces the engine's selection and returns the settings it results in. Needs `events.log`. */
+  /** Replaces the engine's selection and returns the settings it results in. */
   setEventLogSelection(instanceId: string, selection: EventLogSelection): Promise<EventLogSettings>;
 
   // Workflow runs

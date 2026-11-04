@@ -19,8 +19,7 @@ import { expressionCalls } from "@/lib/expression-text";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
- * The alert library: alerts the engine stores (capability
- * `compositions.alerts`) as starting points. A step never plays one by id:
+ * The alert library: alerts the engine stores as starting points. A step never plays one by id:
  * starting from a library alert copies it into the step's own `layout`, and
  * saving a step's alert to the library stores a copy. A library alert is
  * edited on its own page, which changes only the copies made after.

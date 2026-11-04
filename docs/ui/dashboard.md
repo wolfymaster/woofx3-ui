@@ -275,8 +275,8 @@ stream preview, live pill, counter cards, Clip. It is not a widget and is not in
 the layout — it spans the whole dashboard and is hidden per browser through the
 `$commandBarHidden` nanostore.
 
-Clip creates the clip from `convex/twitchClips.ts`, on Helix or through an
-engine with `twitch.clips` (see
+Clip creates the clip from `convex/twitchClips.ts`, on Helix or through
+the instance's engine (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). Stream
 recap clips stay in Convex.
 
@@ -302,8 +302,7 @@ Values arrive by webhook while the dashboard is open, and the bar calls
 For a streamer with nobody else modding: block a phrase, time out or ban a user,
 or lock chat down, in seconds and without leaving the dashboard. Every call goes
 to Helix from `convex/moderation.ts` with the broadcaster's token, the same
-path as the announcement and shoutout controls, or through an engine with
-`twitch.moderation` (see
+path as the announcement and shoutout controls, or through the instance's engine (see
 [Helix calls through the engine](#helix-calls-through-the-engine)).
 
 The widget is three stacked sections, ordered by how fast each has to happen:
@@ -617,7 +616,7 @@ chooses:
 
 Edits the channel's title, category and tags, and drops stream markers, without
 leaving for Twitch's own dashboard. Every call goes to Helix from
-`convex/streamInfo.ts`, or through an engine with `twitch.streamInfo` (see
+`convex/streamInfo.ts`, or through the instance's engine (see
 above), so it keeps working while no engine is running. Every call needs one scope,
 `channel:manage:broadcast` — reads included, although Get Channel Information
 needs none, so a link missing the scope shows a single "reconnect Twitch" state
@@ -686,7 +685,7 @@ here. There is no EventSub type for pinning, which is why the current pin is
 polled rather than pushed.
 
 Reading, pinning, re-posting and unpinning go to Helix from `convex/pins.ts`,
-or through an engine with `twitch.pins` (see
+or through the instance's engine (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). The history
 stays in Convex.
 
@@ -711,7 +710,7 @@ Queues Twitch shoutouts and sends them one at a time within the endpoint's
 cooldown.
 
 The chatter list, the confirmation lookup and each send go to Helix, or through
-an engine with `twitch.chat` (see
+the instance's engine (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). The queue
 itself stays in Convex; in the desktop app's local mode it is the desktop host's
 queue instead (the confirmation lookup still goes through the engine). A
@@ -761,7 +760,7 @@ refills. While an ad plays the widget shows "Ad running, back in m:ss".
 
 The schedule and the snooze go to Helix from `convex/adBreaks.ts` (Get Ad
 Schedule under `channel:read:ads`, Snooze Next Ad under `channel:manage:ads`),
-or through an engine with `twitch.ads` (see
+or through the instance's engine (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). A snooze
 the engine could not confirm is not resent, since a second one would spend
 another snooze. `authorizeTwitch` checks membership and the scope.

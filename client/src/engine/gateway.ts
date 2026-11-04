@@ -554,13 +554,13 @@ export interface ScenesGateway {
   /**
    * A short-lived token for sceneManager's editor socket for one scene, and
    * the socket's path. Null when the engine does not know the scene or cannot
-   * reach sceneManager. Needs `scenes.editorSync`.
+   * reach sceneManager.
    */
   useEditorSessionRequest(): (engineSceneId: string) => Promise<SceneEditorGrant | null>;
   /**
    * Repair a scene or alert whose stored data the engine cannot read: the
    * engine keeps a copy of what it cannot read, then writes back the readable
-   * rest. Needs `scenes.repair`.
+   * rest.
    */
   useRepairRequest(): (engineSceneId: string) => Promise<SceneRepairResult>;
   /**
@@ -727,8 +727,8 @@ export interface StreamOpsGateway {
    */
   useRecapEngineDetailRequest(): (sessionId: string) => Promise<StreamRecapEngineDetail>;
   /**
-   * A recapped session's counted events in time order. Needs
-   * `analytics.sessionEvents`; resolves with the failure like the detail.
+   * A recapped session's counted events in time order; resolves with the
+   * failure like the detail.
    */
   useRecapTimelineEventsRequest(): (sessionId: string) => Promise<RecapTimelineEvents>;
   /**
