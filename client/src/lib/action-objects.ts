@@ -139,6 +139,14 @@ const OBJECT_DEFINITIONS: readonly ObjectDefinition[] = [
     target: { type: "resource", kindName: "schedule" },
     noun: "schedule",
   },
+  {
+    key: "databases",
+    taxonomy: "tools.database",
+    label: "Databases",
+    icon: STREAM_OBJECT_ICONS.databases,
+    target: { type: "resource", kindName: "database" },
+    noun: "database",
+  },
 ];
 
 export const ADVANCED_OBJECT_KEY = "advanced";

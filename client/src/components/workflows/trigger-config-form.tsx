@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatabaseColumnsFieldRenderer } from "@/components/workflows/database-field-renderers";
 import { useEngineScope } from "@/engine/context";
 import {
   useCreateResourceInstanceRequest,
@@ -321,6 +322,7 @@ export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   "source:alertWidgets": AlertWidgetNameRenderer,
   "source:scenes": ScenesFieldRenderer,
   "source:scenePlacements": ScenePlacementsFieldRenderer,
+  "source:databaseColumns": DatabaseColumnsFieldRenderer,
   // A theme is chosen per widget placement, never by a workflow, so it takes no variable toggle.
   [`field:${THEME_FIELD_TYPE}`]: ThemeFieldRenderer,
 };
