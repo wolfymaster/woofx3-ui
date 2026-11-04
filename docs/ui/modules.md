@@ -130,8 +130,6 @@ Same correlated-async pattern as install:
 
 A conflict entry with `resourceType: "module"` means other installed modules declare this one in their `requires` (theme packs, for example). Its `usedBy` entries name each dependent with the range it requires, and the dialog lists them under **Required by** rather than **Used by** (`client/src/lib/uninstall-conflicts.ts`).
 
-If the engine returns a delete webhook without a `moduleKey` (older engine build), `emitDeleteErrorForMissingKey` locates the record by name and emits the error under its stored `moduleKey` so the dialog unsticks.
-
 ## Module storage limit
 
 Module storage is what modules keep with `ctx.storage`. A managed engine keeps it on the container's own disk and restores it from its replica in the engine's bucket, so the plan bounds it with `storage.moduleStorageBytes` (default 500 MiB; see [Entitlements](../patterns/entitlements.md)). Operators can set it for one engine from the backoffice, beside the hosted asset limits (`instances.hostedStorageLimits.moduleStorageBytes`, through the [ops API](../patterns/ops-api.md)).
