@@ -19,6 +19,8 @@ import { insertEvent } from "./transientEvents";
 export const PUBLIC_DATABASE_RECORDS = 1000;
 /** Rows stripped or deleted per scheduled cleanup run. */
 const CLEANUP_BATCH = 200;
+/** Database instances read per engineSync pass; an instance holds far fewer. */
+const DATABASES_PER_INSTANCE_READ = 500;
 /** How long the change transient lives; a dashboard only needs to see it once. */
 const CHANGE_TRANSIENT_TTL_MS = 30_000;
 
@@ -267,7 +269,7 @@ export const listPublicDatabaseIds = internalQuery({
     const rows = await ctx.db
       .query("moduleResourceInstances")
       .withIndex("by_instance_kind", (q) => q.eq("instanceId", instanceId).eq("kind", kind))
-      .take(500);
+      .take(DATABASES_PER_INSTANCE_READ);
     return rows
       .filter((row) => row.moduleName === moduleName)
       .filter((row) => {
