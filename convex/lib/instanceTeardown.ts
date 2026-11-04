@@ -2,7 +2,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import { deleteEngine, isEngineNotFound } from "./maintenanceClient";
+import { deleteEngine, deleteEngineEventSource, isEngineNotFound } from "./maintenanceClient";
 
 /**
  * Deletes an instance and everything outside Convex that belongs to it. The
@@ -40,6 +40,13 @@ export async function deleteInstanceAndEngine(ctx: ActionCtx, instance: Doc<"ins
         );
       }
     }
+  }
+
+  // Like the managed engine above, before the instance goes: once it is gone
+  // nothing would remove the queue's source, and a running engine could keep
+  // filling the queue with events nothing can apply.
+  if (instance.eventsTokenHash !== undefined) {
+    await deleteEngineEventSource(instance._id);
   }
 
   await ctx.runMutation(internal.instances.deleteInstanceData, { instanceId: instance._id });

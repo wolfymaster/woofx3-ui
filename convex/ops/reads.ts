@@ -490,3 +490,31 @@ export const assignmentPage = internalQuery({
     };
   },
 });
+
+/** Which route a registered engine posts its events to; the gate for retiring the webhook route's events. */
+export interface EngineEventPathDto {
+  instanceId: string;
+  name: string;
+  path: "queue" | "webhook";
+  eventsTargetSetAt: number | null;
+}
+
+export const engineEventPaths = internalQuery({
+  args: { cursor: cursorArg },
+  handler: async (ctx, { cursor }): Promise<Page<EngineEventPathDto>> => {
+    const result = await ctx.db.query("instances").paginate({ numItems: PAGE_SIZE, cursor });
+    const page: EngineEventPathDto[] = [];
+    for (const instance of result.page) {
+      if (!instance.clientId) {
+        continue;
+      }
+      page.push({
+        instanceId: instance._id,
+        name: instance.name,
+        path: instance.eventsTargetSetAt === undefined ? "webhook" : "queue",
+        eventsTargetSetAt: instance.eventsTargetSetAt ?? null,
+      });
+    }
+    return { page, cursor: result.isDone ? null : result.continueCursor };
+  },
+});

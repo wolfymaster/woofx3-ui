@@ -3,6 +3,7 @@ import type { ActionCtx } from "../../_generated/server";
 import type { EngineApi } from "../engineInstanceUrl";
 import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
+import { eventQueueStep } from "./steps/eventQueue";
 import { functionsStep } from "./steps/functions";
 import { groupsStep } from "./steps/groups";
 import { modulesStep } from "./steps/modules";
@@ -22,7 +23,8 @@ export type SyncStepName =
   | "triggers"
   | "actions"
   | "widgets"
-  | "resources";
+  | "resources"
+  | "eventQueue";
 
 export interface SyncStepContext {
   ctx: ActionCtx;
@@ -55,4 +57,7 @@ export const SYNC_STEPS: readonly SyncStep[] = [
   actionsStep,
   widgetsStep,
   resourcesStep,
+  // Moves an engine onto the event queue once it advertises support, so an
+  // engine upgraded in place moves at its next sync.
+  eventQueueStep,
 ];
