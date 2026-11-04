@@ -16,6 +16,7 @@ export const databasesStep: SyncStep = {
     const databaseIds = await ctx.runQuery(internal.userPageDatabases.listPublicDatabaseIds, { instanceId });
     let itemsProcessed = 0;
     for (const databaseId of databaseIds) {
+      const startedAt = Date.now();
       const listed: string[] = [];
       for (let offset = 0; offset < PUBLIC_DATABASE_RECORDS; offset += DATABASE_LIMITS.pageSize) {
         // Each capnweb batch session is single-use, so every page needs its own.
@@ -36,7 +37,12 @@ export const databasesStep: SyncStep = {
           break;
         }
       }
-      await ctx.runMutation(internal.userPageDatabases.finishReconcile, { instanceId, databaseId, listed });
+      await ctx.runMutation(internal.userPageDatabases.finishReconcile, {
+        instanceId,
+        databaseId,
+        listed,
+        startedAt,
+      });
     }
     return { itemsProcessed };
   },

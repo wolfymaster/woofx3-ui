@@ -206,18 +206,25 @@ export const reconcilePage = internalMutation({
 
 /**
  * Drops the rows of a database the engine did not list, once the reconcile
- * has read its newest rows. `listed` holds every row id it read.
+ * has read its newest rows. `listed` holds every row id it read. A row
+ * written since `startedAt` came from a webhook the listing may have missed,
+ * so it stays.
  */
 export const finishReconcile = internalMutation({
-  args: { instanceId: v.id("instances"), databaseId: v.string(), listed: v.array(v.string()) },
-  handler: async (ctx, { instanceId, databaseId, listed }) => {
+  args: {
+    instanceId: v.id("instances"),
+    databaseId: v.string(),
+    listed: v.array(v.string()),
+    startedAt: v.number(),
+  },
+  handler: async (ctx, { instanceId, databaseId, listed, startedAt }) => {
     const keep = new Set(listed);
     const rows = await ctx.db
       .query("userPageDatabaseRecords")
       .withIndex("by_instance_database_created", (q) => q.eq("instanceId", instanceId).eq("databaseId", databaseId))
       .take(PUBLIC_DATABASE_RECORDS + CLEANUP_BATCH);
     for (const row of rows) {
-      if (!keep.has(row.recordId)) {
+      if (!keep.has(row.recordId) && row.updatedAt < startedAt) {
         await ctx.db.delete(row._id);
       }
     }
