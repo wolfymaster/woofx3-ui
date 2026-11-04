@@ -1,6 +1,6 @@
 import { type ObjectType, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { internalQuery, type MutationCtx } from "./_generated/server";
 import { pruneWidgetDefinitions } from "./lib/definitionCatalog";
 import { resolveModuleIdByRef } from "./lib/moduleKey";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -52,7 +52,7 @@ export const listByModule = internalQuery({
   },
 });
 
-const unregisterArgs = {
+const unregisterWidgetArgs = {
   instanceId: v.id("instances"),
   widgetId: v.string(),
 };
@@ -64,7 +64,7 @@ const unregisterArgs = {
  * tenant that had it — and left this instance's own placement row behind,
  * pointing at a definition that no longer existed.
  */
-export async function unregisterWidget(ctx: MutationCtx, args: ObjectType<typeof unregisterArgs>) {
+export async function unregisterWidget(ctx: MutationCtx, args: ObjectType<typeof unregisterWidgetArgs>) {
   const placement = await ctx.db
     .query("instanceWidgets")
     .withIndex("by_instance_widget", (q) => q.eq("instanceId", args.instanceId).eq("widgetId", args.widgetId))
@@ -76,9 +76,7 @@ export async function unregisterWidget(ctx: MutationCtx, args: ObjectType<typeof
   await pruneWidgetDefinitions(ctx, [args.widgetId]);
 }
 
-export const unregister = internalMutation({ args: unregisterArgs, handler: unregisterWidget });
-
-const registerFromWebhookArgs = {
+const registerWidgetFromWebhookArgs = {
   // The delivering instance, from the MODULE_WIDGET_REGISTERED webhook. Places
   // the widget for that instance, and scopes the owning-module lookup — a
   // module's moduleKey is shared by every tenant that installed it.
@@ -98,7 +96,7 @@ const registerFromWebhookArgs = {
   behaviorKinds: widgetBehaviorKindsValidator,
 };
 
-export async function registerWidgetFromWebhook(ctx: MutationCtx, args: ObjectType<typeof registerFromWebhookArgs>) {
+export async function registerWidgetFromWebhook(ctx: MutationCtx, args: ObjectType<typeof registerWidgetFromWebhookArgs>) {
   // Resolve moduleId only for module-sourced widgets (built-ins have none).
   const moduleId = await resolveModuleIdByRef(ctx, args.instanceId, args.createdByType, args.createdByRef);
 
@@ -135,8 +133,3 @@ export async function registerWidgetFromWebhook(ctx: MutationCtx, args: ObjectTy
     projectionKey: args.projectionKey,
   });
 }
-
-export const registerFromWebhook = internalMutation({
-  args: registerFromWebhookArgs,
-  handler: registerWidgetFromWebhook,
-});

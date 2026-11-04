@@ -46,7 +46,7 @@ An upload installs onto the engine, not into the catalog, so this page shows the
 Installs are **asynchronous** and correlated via a `moduleKey` echoed by the engine in its webhook callback.
 
 1. The page uploads the ZIP to Convex storage (`assets.generateUploadUrl`), then calls the mutation `api.moduleRepository.uploadAndDeliver` with a **client-generated `moduleKey`**. This mutation does **not** create a `moduleRepository` row yet — it schedules the internal action `moduleEngine.deliverZipToInstance`.
-2. `deliverZipToInstance` fetches the archive from storage, base64-encodes it, and calls `rpc.installModuleZip(fileName, zipBase64, { moduleKey })` on the engine. The engine performs the install in the background and POSTs back `module.installed` or `module.install_failed` to `/api/webhooks/woofx3`, echoing the same `moduleKey` in `data.moduleKey`.
+2. `deliverZipToInstance` fetches the archive from storage, base64-encodes it, and calls `rpc.installModuleZip(fileName, zipBase64, { moduleKey })` on the engine. The engine performs the install in the background and sends back `module.installed` or `module.install_failed` through the event queue to `/api/engine-events/batch`, echoing the same `moduleKey` in `data.moduleKey`.
 3. The UI follows the key with `useTransientEvent(instanceId, moduleKey)` from the engine gateway, which subscribes to `api.transientEvents.get`. Convex realtime pushes the event the moment the webhook handler emits it:
    - **`progress`** — surfaced by `deliverZipToInstance` transient errors or manual emits during delivery.
    - **`success`** — written by `moduleWebhook.processModuleInstalled`, which also upserts the `moduleRepository` row and its triggers/actions.

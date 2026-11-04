@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { type ObjectType, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
+import { type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import { hasRecordedTriggerEvent } from "./lib/runTriggerEvent";
 import { getInstanceMembership } from "./lib/teamAccess";
 
@@ -188,14 +188,14 @@ export const listForWorkflow = query({
   },
 });
 
-const recordFromWebhookArgs = {
+const recordRunFromWebhookArgs = {
   instanceId: v.id("instances"),
   run: runSnapshot,
 };
 
 export async function recordRunFromWebhook(
   ctx: MutationCtx,
-  { instanceId, run }: ObjectType<typeof recordFromWebhookArgs>
+  { instanceId, run }: ObjectType<typeof recordRunFromWebhookArgs>
 ) {
   const row = {
     instanceId,
@@ -227,16 +227,14 @@ export async function recordRunFromWebhook(
   }
 }
 
-export const recordFromWebhook = internalMutation({ args: recordFromWebhookArgs, handler: recordRunFromWebhook });
-
-const updateFromWebhookArgs = {
+const updateRunFromWebhookArgs = {
   instanceId: v.id("instances"),
   run: runSnapshot,
 };
 
 export async function updateRunFromWebhook(
   ctx: MutationCtx,
-  { instanceId, run }: ObjectType<typeof updateFromWebhookArgs>
+  { instanceId, run }: ObjectType<typeof updateRunFromWebhookArgs>
 ) {
   const existing = await ctx.db
     .query("workflowRuns")
@@ -274,16 +272,14 @@ export async function updateRunFromWebhook(
   });
 }
 
-export const updateFromWebhook = internalMutation({ args: updateFromWebhookArgs, handler: updateRunFromWebhook });
-
-const recordStepFromWebhookArgs = {
+const recordRunStepFromWebhookArgs = {
   instanceId: v.id("instances"),
   step: stepSnapshot,
 };
 
 export async function recordRunStepFromWebhook(
   ctx: MutationCtx,
-  { instanceId, step }: ObjectType<typeof recordStepFromWebhookArgs>
+  { instanceId, step }: ObjectType<typeof recordRunStepFromWebhookArgs>
 ) {
   const row = {
     instanceId,
@@ -324,8 +320,3 @@ export async function recordRunStepFromWebhook(
     await ctx.db.insert("workflowRunSteps", row);
   }
 }
-
-export const recordStepFromWebhook = internalMutation({
-  args: recordStepFromWebhookArgs,
-  handler: recordRunStepFromWebhook,
-});

@@ -12,8 +12,6 @@ import { logger } from "./logger";
 
 export type ReceivedEventOutcome = EngineEventOutcome | { kind: "duplicate" };
 
-export type WebhookEventResult = ReceivedEventOutcome | { kind: "unauthorized" };
-
 /**
  * Records that the engine called Convex, which the engine sync sweep reads as
  * the instance being active; throttled by engineActivityPatch.
@@ -61,32 +59,6 @@ export async function receiveEngineEvent(
   }
   return outcome;
 }
-
-/**
- * One engine event from the legacy webhook route, authenticated here rather
- * than in the route so that the whole event costs one function call. `body`
- * is the raw JSON: an engine payload can hold `$`-prefixed keys, which a
- * Convex argument cannot.
- */
-export const applyFromWebhook = internalMutation({
-  args: { webhookSecret: v.string(), body: v.string() },
-  handler: async (ctx, { webhookSecret, body }): Promise<WebhookEventResult> => {
-    const instance = await ctx.db
-      .query("instances")
-      .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", webhookSecret))
-      .first();
-    if (!instance) {
-      logger.warn("webhook: unauthorized - no instance found for provided secret");
-      return { kind: "unauthorized" };
-    }
-    const envelope = JSON.parse(body) as CallbackEnvelope;
-    logger.info("webhook: event received", { instanceId: instance._id, type: envelope.type, payload: body });
-    // Any event shows the engine is running and may hold changes a scheduled
-    // sync would mirror.
-    await recordEngineActivityIfDue(ctx, instance);
-    return receiveEngineEvent(ctx, instance, envelope);
-  },
-});
 
 /** Deletes receipts older than RECEIPT_RETENTION_MS; runs on a daily cron. */
 export const cleanupOldReceipts = internalMutation({

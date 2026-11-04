@@ -250,7 +250,7 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
   }
 }
 
-const mergeFromWebhookArgs = {
+const mergeEngineAlertArgs = {
   instanceId: v.id("instances"),
   snapshot: snapshotValidator,
 };
@@ -258,12 +258,10 @@ const mergeFromWebhookArgs = {
 /** Merge the snapshot any alert callback carries; see `mergeSnapshot`. */
 export async function mergeEngineAlert(
   ctx: MutationCtx,
-  { instanceId, snapshot }: ObjectType<typeof mergeFromWebhookArgs>
+  { instanceId, snapshot }: ObjectType<typeof mergeEngineAlertArgs>
 ) {
   await mergeSnapshot(ctx, instanceId, snapshot);
 }
-
-export const mergeFromWebhook = internalMutation({ args: mergeFromWebhookArgs, handler: mergeEngineAlert });
 
 /** Most rows one sweep marks before handing the rest to a fresh transaction. */
 const STALE_SWEEP_BATCH = 200;
