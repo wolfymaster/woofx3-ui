@@ -46,7 +46,16 @@ export const ENGINE_NAMESPACE_MODULES = {
   ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],
-  workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog", "viewerFacts"],
+  workflows: [
+    "workflows",
+    "workflowActions",
+    "workflowRuns",
+    "workflowHealth",
+    "workflowCatalog",
+    "viewerFacts",
+    "workflowGroups",
+    "workflowGroupActions",
+  ],
   macros: ["macros"],
   streamOps: ["streamRecap", "streamSessionSummaries", "supporters", "debug"],
   config: [

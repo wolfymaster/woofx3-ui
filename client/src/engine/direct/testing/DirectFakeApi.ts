@@ -64,6 +64,7 @@ import type {
   Woofx3EngineApi,
   Workflow,
   WorkflowCatalog,
+  WorkflowGroup,
   WorkflowHealth,
   WorkflowMutationResult,
   WorkflowRunDetail,
@@ -120,6 +121,10 @@ type DirectFakeSurface = Pick<
   | "createWorkflow"
   | "updateWorkflow"
   | "setWorkflowEnabled"
+  | "listWorkflowGroups"
+  | "createWorkflowGroup"
+  | "setWorkflowGroupEnabled"
+  | "addWorkflowGroupMembers"
   | "triggerWorkflowByName"
   | "getWorkflowRun"
   | "getWorkflowHealth"
@@ -222,6 +227,8 @@ export class FakeEngineState {
   widgetThemes: Record<string, WidgetThemes["themes"]> = {};
   modules: EngineModuleSummary[] = [];
   workflows: Workflow[] = [];
+  /** Alert groups. The fake stores what it is told; the hold and release rules are the engine's. */
+  workflowGroups: WorkflowGroup[] = [];
   workflowCatalog: WorkflowCatalog = { triggers: [], actions: [], functions: [] };
   /** Recorded runs by execution id; an id not here answers null. */
   workflowRuns: Record<string, WorkflowRunDetail> = {};
@@ -614,6 +621,47 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     found.definition = data.definition;
     found.revision = (found.revision ?? 0) + 1;
     return { id, definition: data.definition, isEnabled: found.isEnabled, revision: found.revision };
+  }
+
+  async listWorkflowGroups(): Promise<WorkflowGroup[]> {
+    this.state.record("listWorkflowGroups");
+    return this.state.workflowGroups;
+  }
+
+  async createWorkflowGroup(input: { name: string; description?: string }): Promise<WorkflowGroup> {
+    this.state.record("createWorkflowGroup", input);
+    const group: WorkflowGroup = {
+      id: `group-${this.state.workflowGroups.length + 1}`,
+      name: input.name,
+      description: input.description ?? "",
+      enabled: false,
+      memberIds: [],
+    };
+    this.state.workflowGroups.push(group);
+    return group;
+  }
+
+  async setWorkflowGroupEnabled(id: string, enabled: boolean): Promise<WorkflowGroup> {
+    this.state.record("setWorkflowGroupEnabled", id, enabled);
+    return this.groupWith(id, (group) => ({ ...group, enabled }));
+  }
+
+  async addWorkflowGroupMembers(groupId: string, workflowIds: string[]): Promise<WorkflowGroup> {
+    this.state.record("addWorkflowGroupMembers", groupId, workflowIds);
+    return this.groupWith(groupId, (group) => ({
+      ...group,
+      memberIds: [...new Set([...group.memberIds, ...workflowIds])].sort(),
+    }));
+  }
+
+  private groupWith(id: string, change: (group: WorkflowGroup) => WorkflowGroup): WorkflowGroup {
+    const index = this.state.workflowGroups.findIndex((group) => group.id === id);
+    if (index < 0) {
+      throw new Error(`workflow group ${id} not found`);
+    }
+    const changed = change(this.state.workflowGroups[index]);
+    this.state.workflowGroups[index] = changed;
+    return changed;
   }
 
   async setWorkflowEnabled(id: string, isEnabled: boolean): Promise<{ id: string; isEnabled: boolean }> {

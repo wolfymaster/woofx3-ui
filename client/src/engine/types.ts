@@ -857,6 +857,12 @@ export interface WorkflowGroup {
   memberIds: string[];
 }
 
+/** The part of an alert group a streamer writes on Save. */
+export interface WorkflowGroupText {
+  name: string;
+  description: string;
+}
+
 /**
  * What the UI's workflow logic reads of a workflow. Structural, so the pure
  * libraries work on any gateway's rows; a read returns the whole record,
