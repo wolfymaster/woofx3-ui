@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { pruneWidgetDefinitions } from "./lib/definitionCatalog";
@@ -52,6 +52,11 @@ export const listByModule = internalQuery({
   },
 });
 
+const unregisterArgs = {
+  instanceId: v.id("instances"),
+  widgetId: v.string(),
+};
+
 /**
  * MODULE_WIDGET_DEREGISTERED: remove this instance's placement, then drop the
  * shared definition only if no other instance still places it. The definition
@@ -59,79 +64,79 @@ export const listByModule = internalQuery({
  * tenant that had it — and left this instance's own placement row behind,
  * pointing at a definition that no longer existed.
  */
-export const unregister = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    widgetId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const placement = await ctx.db
-      .query("instanceWidgets")
-      .withIndex("by_instance_widget", (q) => q.eq("instanceId", args.instanceId).eq("widgetId", args.widgetId))
-      .first();
-    if (placement) {
-      await ctx.db.delete(placement._id);
-    }
+export async function unregisterWidget(ctx: MutationCtx, args: ObjectType<typeof unregisterArgs>) {
+  const placement = await ctx.db
+    .query("instanceWidgets")
+    .withIndex("by_instance_widget", (q) => q.eq("instanceId", args.instanceId).eq("widgetId", args.widgetId))
+    .first();
+  if (placement) {
+    await ctx.db.delete(placement._id);
+  }
 
-    await pruneWidgetDefinitions(ctx, [args.widgetId]);
-  },
-});
+  await pruneWidgetDefinitions(ctx, [args.widgetId]);
+}
+
+export const unregister = internalMutation({ args: unregisterArgs, handler: unregisterWidget });
+
+const registerFromWebhookArgs = {
+  // The delivering instance, from the MODULE_WIDGET_REGISTERED webhook. Places
+  // the widget for that instance, and scopes the owning-module lookup — a
+  // module's moduleKey is shared by every tenant that installed it.
+  instanceId: v.id("instances"),
+  widgetId: v.string(),
+  name: v.string(),
+  directory: v.string(),
+  description: v.optional(v.string()),
+  createdByType: v.optional(v.string()),
+  createdByRef: v.optional(v.string()),
+  projectionKey: v.optional(v.string()),
+  alertTypes: v.array(v.string()),
+  settings: v.array(v.any()),
+  surfaces: v.optional(v.array(v.string())),
+  hostsSurface: v.optional(v.string()),
+  taxonomy: v.optional(v.array(v.string())),
+  behaviorKinds: widgetBehaviorKindsValidator,
+};
+
+export async function registerWidgetFromWebhook(ctx: MutationCtx, args: ObjectType<typeof registerFromWebhookArgs>) {
+  // Resolve moduleId only for module-sourced widgets (built-ins have none).
+  const moduleId = await resolveModuleIdByRef(ctx, args.instanceId, args.createdByType, args.createdByRef);
+
+  const def = {
+    moduleId,
+    widgetId: args.widgetId,
+    name: args.name,
+    directory: args.directory,
+    description: args.description,
+    createdByType: args.createdByType,
+    createdByRef: args.createdByRef,
+    projectionKey: args.projectionKey,
+    alertTypes: args.alertTypes,
+    settings: args.settings,
+    surfaces: args.surfaces,
+    hostsSurface: args.hostsSurface,
+    taxonomy: args.taxonomy,
+    behaviorKinds: args.behaviorKinds,
+  };
+
+  const existing = await ctx.db
+    .query("moduleWidgets")
+    .withIndex("by_widget_id", (q) => q.eq("widgetId", args.widgetId))
+    .first();
+  if (existing) {
+    await ctx.db.patch(existing._id, def);
+  } else {
+    await ctx.db.insert("moduleWidgets", { ...def, createdAt: Date.now() });
+  }
+
+  await enableWidgetForInstance(ctx, args.instanceId, args.widgetId, {
+    createdByType: args.createdByType,
+    createdByRef: args.createdByRef,
+    projectionKey: args.projectionKey,
+  });
+}
 
 export const registerFromWebhook = internalMutation({
-  args: {
-    // The delivering instance, from the MODULE_WIDGET_REGISTERED webhook. Places
-    // the widget for that instance, and scopes the owning-module lookup — a
-    // module's moduleKey is shared by every tenant that installed it.
-    instanceId: v.id("instances"),
-    widgetId: v.string(),
-    name: v.string(),
-    directory: v.string(),
-    description: v.optional(v.string()),
-    createdByType: v.optional(v.string()),
-    createdByRef: v.optional(v.string()),
-    projectionKey: v.optional(v.string()),
-    alertTypes: v.array(v.string()),
-    settings: v.array(v.any()),
-    surfaces: v.optional(v.array(v.string())),
-    hostsSurface: v.optional(v.string()),
-    taxonomy: v.optional(v.array(v.string())),
-    behaviorKinds: widgetBehaviorKindsValidator,
-  },
-  handler: async (ctx, args) => {
-    // Resolve moduleId only for module-sourced widgets (built-ins have none).
-    const moduleId = await resolveModuleIdByRef(ctx, args.instanceId, args.createdByType, args.createdByRef);
-
-    const def = {
-      moduleId,
-      widgetId: args.widgetId,
-      name: args.name,
-      directory: args.directory,
-      description: args.description,
-      createdByType: args.createdByType,
-      createdByRef: args.createdByRef,
-      projectionKey: args.projectionKey,
-      alertTypes: args.alertTypes,
-      settings: args.settings,
-      surfaces: args.surfaces,
-      hostsSurface: args.hostsSurface,
-      taxonomy: args.taxonomy,
-      behaviorKinds: args.behaviorKinds,
-    };
-
-    const existing = await ctx.db
-      .query("moduleWidgets")
-      .withIndex("by_widget_id", (q) => q.eq("widgetId", args.widgetId))
-      .first();
-    if (existing) {
-      await ctx.db.patch(existing._id, def);
-    } else {
-      await ctx.db.insert("moduleWidgets", { ...def, createdAt: Date.now() });
-    }
-
-    await enableWidgetForInstance(ctx, args.instanceId, args.widgetId, {
-      createdByType: args.createdByType,
-      createdByRef: args.createdByRef,
-      projectionKey: args.projectionKey,
-    });
-  },
+  args: registerFromWebhookArgs,
+  handler: registerWidgetFromWebhook,
 });

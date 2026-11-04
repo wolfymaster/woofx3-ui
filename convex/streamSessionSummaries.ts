@@ -1,5 +1,5 @@
 import { isSummaryInProgress, MAX_RECENT_RECAPS } from "@shared/stream-recap";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
@@ -66,17 +66,26 @@ async function withInProgress(ctx: QueryCtx, instanceId: Id<"instances">, rows: 
   return rows.map((row) => ({ ...row, inProgress: isSummaryInProgress(row, liveState) }));
 }
 
+const upsertFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  data: v.any(),
+};
+
 /**
  * Stores one SESSION_SUMMARY delivery. Idempotent on (instance, session): a
  * repeat with the same or an older generatedAt leaves the stored row alone, so
  * redeliveries and out-of-order arrivals are harmless.
  */
+export async function upsertSessionSummaryFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, data }: ObjectType<typeof upsertFromWebhookArgs>
+) {
+  return storeSummary(ctx, instanceId, data, planSummaryWrite);
+}
+
 export const upsertFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    data: v.any(),
-  },
-  handler: async (ctx, { instanceId, data }) => storeSummary(ctx, instanceId, data, planSummaryWrite),
+  args: upsertFromWebhookArgs,
+  handler: upsertSessionSummaryFromWebhook,
 });
 
 /**

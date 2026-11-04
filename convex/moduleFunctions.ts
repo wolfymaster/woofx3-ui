@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 
@@ -79,84 +79,98 @@ async function disableFunctionForInstance(ctx: MutationCtx, instanceId: Id<"inst
   }
 }
 
-export const upsertFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    moduleKey: v.string(),
-    moduleName: v.string(),
-    version: v.string(),
-    functions: v.array(functionValidator),
-  },
-  handler: async (ctx, { instanceId, moduleKey, moduleName, version, functions }) => {
-    const moduleRecord = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
+const upsertFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  moduleKey: v.string(),
+  moduleName: v.string(),
+  version: v.string(),
+  functions: v.array(functionValidator),
+};
+
+export async function upsertModuleFunctionsFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, moduleKey, moduleName, version, functions }: ObjectType<typeof upsertFromWebhookArgs>
+) {
+  const moduleRecord = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
+    .first();
+
+  const moduleId =
+    moduleRecord?._id ??
+    (
+      await ctx.db
+        .query("moduleRepository")
+        .withIndex("by_instance_name_version", (q) =>
+          q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", version)
+        )
+        .first()
+    )?._id;
+
+  if (!moduleId) {
+    // No moduleRepository row yet — the install event may arrive after this
+    // function registration. Skip writing rather than orphan; the install
+    // handler will re-trigger registration via processRegisteredDefinitions.
+    return;
+  }
+
+  for (const fn of functions) {
+    const manifestId = fn.manifestId ?? fn.id;
+    const row = {
+      moduleId,
+      engineFunctionId: fn.id,
+      projectionKey: fn.projectionKey,
+      manifestId: fn.manifestId,
+      moduleName,
+      functionName: fn.name ?? fn.manifestId ?? fn.id,
+      qualifiedName: canonicalFunctionId(moduleKey, manifestId),
+      fileName: fn.fileName ?? "",
+      entryPoint: fn.entryPoint ?? "",
+      runtime: fn.runtime ?? "",
+    };
+
+    const existing = await ctx.db
+      .query("moduleFunctions")
+      .withIndex("by_engine_id", (q) => q.eq("engineFunctionId", fn.id))
       .first();
-
-    const moduleId =
-      moduleRecord?._id ??
-      (
-        await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_instance_name_version", (q) =>
-            q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", version)
-          )
-          .first()
-      )?._id;
-
-    if (!moduleId) {
-      // No moduleRepository row yet — the install event may arrive after this
-      // function registration. Skip writing rather than orphan; the install
-      // handler will re-trigger registration via processRegisteredDefinitions.
-      return;
+    if (existing) {
+      await ctx.db.patch(existing._id, row);
+    } else {
+      await ctx.db.insert("moduleFunctions", row);
     }
+    await enableFunctionForInstance(ctx, instanceId, fn.id, fn.projectionKey);
+  }
+}
 
-    for (const fn of functions) {
-      const manifestId = fn.manifestId ?? fn.id;
-      const row = {
-        moduleId,
-        engineFunctionId: fn.id,
-        projectionKey: fn.projectionKey,
-        manifestId: fn.manifestId,
-        moduleName,
-        functionName: fn.name ?? fn.manifestId ?? fn.id,
-        qualifiedName: canonicalFunctionId(moduleKey, manifestId),
-        fileName: fn.fileName ?? "",
-        entryPoint: fn.entryPoint ?? "",
-        runtime: fn.runtime ?? "",
-      };
-
-      const existing = await ctx.db
-        .query("moduleFunctions")
-        .withIndex("by_engine_id", (q) => q.eq("engineFunctionId", fn.id))
-        .first();
-      if (existing) {
-        await ctx.db.patch(existing._id, row);
-      } else {
-        await ctx.db.insert("moduleFunctions", row);
-      }
-      await enableFunctionForInstance(ctx, instanceId, fn.id, fn.projectionKey);
-    }
-  },
+export const upsertFromWebhook = internalMutation({
+  args: upsertFromWebhookArgs,
+  handler: upsertModuleFunctionsFromWebhook,
 });
 
-export const deleteFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    functions: v.array(functionValidator),
-  },
-  handler: async (ctx, { instanceId, functions }) => {
-    for (const fn of functions) {
-      const existing = await ctx.db
-        .query("moduleFunctions")
-        .withIndex("by_engine_id", (q) => q.eq("engineFunctionId", fn.id))
-        .first();
-      if (existing) {
-        await ctx.db.delete(existing._id);
-      }
-      await disableFunctionForInstance(ctx, instanceId, fn.id);
+const deleteFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  functions: v.array(functionValidator),
+};
+
+export async function deleteModuleFunctionsFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, functions }: ObjectType<typeof deleteFromWebhookArgs>
+) {
+  for (const fn of functions) {
+    const existing = await ctx.db
+      .query("moduleFunctions")
+      .withIndex("by_engine_id", (q) => q.eq("engineFunctionId", fn.id))
+      .first();
+    if (existing) {
+      await ctx.db.delete(existing._id);
     }
-  },
+    await disableFunctionForInstance(ctx, instanceId, fn.id);
+  }
+}
+
+export const deleteFromWebhook = internalMutation({
+  args: deleteFromWebhookArgs,
+  handler: deleteModuleFunctionsFromWebhook,
 });
 
 export const cascadeOnModuleDelete = internalMutation({
