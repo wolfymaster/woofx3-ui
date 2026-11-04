@@ -33,6 +33,8 @@ In production Caddy keeps the dashboard from ever being served at `/u/`. An in-a
 
 A running timer arrives as the moment it ends. The page counts it down in the browser, re-rendering as each second ticks over, and fetches nothing while it runs.
 
+A database widget shows rows of one of the streamer's databases, such as a "Games I've played" list. Only columns the streamer marked "Show on your public page" can be chosen, and the page checks that again on every read: a column made private disappears at once. Convex keeps the public columns of the newest 1000 rows per database (`userPageDatabaseRecords`, filled by the engine's `database.record.changed` callbacks and the regular sync), and the widget shows up to 200 of them, sorted as the streamer chose. Links show as their column's name, dates in the visitor's own format.
+
 ## Sections only some viewers see
 
 Each section has a visibility: `public`, `signed_in`, `follower`, `subscriber` (any tier) or `tier` with a level (that tier or higher). `bySlug` decides every section against the viewer its `sessionToken` signs in, before it loads anything the section shows (`sectionAccess` in `convex/lib/sectionAccess.ts`):
@@ -152,9 +154,9 @@ The engine refuses a malformed delivery for good (its rules are in woofx3 `docs/
 
 The `userpage.form.submitted` trigger's `form` field picks a form instance, so a form's page lists and edits its own workflows. Once a workflow is narrowed to a form, the step editor offers each question as a variable (`formAnswerVariables`), which reads as `${trigger.data.answers.<fieldId>}`.
 
-"Add to a queue", on the form's page and on the page editor's form widget, writes an ordinary workflow: this form submitted, then `queue.add` with the chosen question, the viewer's name or a template. It can make the queue too. Nothing else routes answers, so the result edits like any other workflow.
+"Save answers to a database", on the form's page and on the page editor's form widget, writes an ordinary workflow: this form submitted, then `database.insert` with every answer and the viewer's name, keyed by the submission id so an answer delivered twice is saved once. It can make the database too, with a column for each question and one for the viewer, all kept off the public page until the streamer chooses to show one. Nothing else routes answers, so the result edits like any other workflow.
 
-Its "Review answers first" switch, off by default, sends answers to a review queue instead: a queue whose `approveInto` setting names the chosen queue, reused if one already exists. A queue with that setting shows Approve on each entry, which runs `queue.move`, and Reject, which runs `queue.remove`. If the destination is full or already holds the entry, it stays in review.
+A question added later is not saved until the streamer runs "Save answers to a database" again for the same database: that adds the missing columns and updates the workflow's step, rather than adding a second workflow. The shortcut shows only on an engine that has databases.
 
 A path would read an id of only digits as an array index, so the page checks refuse one for a question. The editor's ids are UUIDs, which always contain hyphens.
 

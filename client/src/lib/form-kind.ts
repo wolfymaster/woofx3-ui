@@ -24,9 +24,6 @@ const VIEWER_COLUMN_ID = "viewer";
 /** How a workflow triggered by a form reads the submission's id, unique per submission. */
 const SUBMISSION_ID_REFERENCE = "${trigger.data.submissionId}";
 
-/** The module's `queue.add` action. */
-export const QUEUE_ADD_ACTION_REF = "woofx3:action:queue.add";
-
 /** How a workflow triggered by a form reads the answer to the question `fieldId`. */
 export function formAnswerReference(fieldId: string): string {
   return `\${trigger.data.answers.${fieldId}}`;
@@ -64,57 +61,6 @@ export function formAnswerVariables(
     type: field.type === "checkbox" ? "boolean" : "string",
     description: "What the viewer answered to this question.",
   }));
-}
-
-/** What can go in line for a form, as a queue entry is text: each question that isn't a checkbox, and who sent it. */
-export function formQueueEntryChoices(fields: readonly FormField[]): { value: string; label: string }[] {
-  return [
-    ...fields
-      .filter((field) => field.type !== "checkbox")
-      .map((field) => ({ value: formAnswerReference(field.id), label: field.label || field.id })),
-    { value: "${trigger.data.viewer.displayName}", label: "The viewer's name" },
-  ];
-}
-
-export interface FormQueueWorkflowOptions {
-  triggerPreset: TriggerPreset;
-  conditionFields: ConfigField[];
-  order: number;
-  /** The trigger's form field, held to the form. */
-  form: TriggerPin;
-  queueAdd: ActionPreset;
-  /** The action's queue field, aimed at the queue. */
-  queue: TriggerPin;
-  entry: string;
-}
-
-/** An ordinary workflow, editable like any other: when this form is submitted, add `entry` to the queue. */
-export function formQueueWorkflowTree(options: FormQueueWorkflowOptions): WorkflowTree {
-  const { triggerPreset, conditionFields, order, form, queueAdd, queue, entry } = options;
-  const tree = newTriggerTree({ triggerPreset, conditionFields, order, pin: form, seed: queueAdd, aim: queue });
-  return {
-    ...tree,
-    steps: tree.steps.map((step) =>
-      step.type === "action" ? { ...step, parameters: { ...step.parameters, entry } } : step
-    ),
-  };
-}
-
-/** The review queue that approves into `queueId`, or how to create one when there is none yet. */
-export function reviewQueueFor(
-  queues: readonly { canonicalId: string; settings?: unknown }[],
-  queueId: string,
-  queueLabel: string
-): { kind: "existing"; canonicalId: string } | { kind: "create"; resourceInstanceId: string; displayName: string } {
-  const existing = queues.find((row) => {
-    const settings = row.settings as Record<string, unknown> | null | undefined;
-    return settings?.approveInto === queueId;
-  });
-  if (existing) {
-    return { kind: "existing", canonicalId: existing.canonicalId };
-  }
-  const instance = queueId.split(":").pop() ?? "";
-  return { kind: "create", resourceInstanceId: `${instance}_review`, displayName: `${queueLabel} review` };
 }
 
 const COLUMN_VALUE = /^[A-Za-z0-9_-]{1,64}$/;
