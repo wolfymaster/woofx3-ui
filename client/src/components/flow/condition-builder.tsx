@@ -71,8 +71,6 @@ export interface ConditionBuilderProps {
   /** Whether the trigger names a viewer, so that facts about them can be offered. */
   namesViewer: boolean;
   viewerFacts: ViewerFactsState;
-  /** Whether the engine resolves a `${...}` inside a list value. */
-  listReferences: boolean;
   /** For a condition typed by hand; see computeAvailableVariables. */
   availableVariables: VariableOption[];
 }
@@ -90,7 +88,6 @@ export function ConditionBuilder({
   fields,
   namesViewer,
   viewerFacts,
-  listReferences,
   availableVariables,
 }: ConditionBuilderProps) {
   const [pickerFor, setPickerFor] = useState<number | null>(null);
@@ -171,7 +168,6 @@ export function ConditionBuilder({
                 index={index}
                 condition={condition}
                 availableVariables={availableVariables}
-                listReferences={listReferences}
                 onChange={(next) => setRow(index, next)}
                 onRemove={() => removeRow(index)}
                 canUsePickers={fitsBuilder(condition, field)}
@@ -728,7 +724,6 @@ function TypedRow({
   index,
   condition,
   availableVariables,
-  listReferences,
   onChange,
   onRemove,
   canUsePickers,
@@ -737,7 +732,6 @@ function TypedRow({
   index: number;
   condition: ConditionConfig;
   availableVariables: VariableOption[];
-  listReferences: boolean;
   onChange: (condition: ConditionConfig) => void;
   onRemove: () => void;
   canUsePickers: boolean;
@@ -748,7 +742,7 @@ function TypedRow({
   const draftIsCurrent =
     JSON.stringify(parseConditionValue(condition.operator, draft, fieldType)) === JSON.stringify(condition.value);
   const text = draftIsCurrent ? draft : conditionValueText(condition.value);
-  const problem = conditionValueProblem(condition.operator, text, listReferences);
+  const problem = conditionValueProblem(condition.operator, text);
 
   const retype = (field: string, operator: ConditionOperator) => {
     const type = conditionFieldType(field, availableVariables);
@@ -877,7 +871,6 @@ export function ConditionStepEditor({
       fields={sources.fields}
       namesViewer={sources.namesViewer}
       viewerFacts={sources.support.viewerFacts}
-      listReferences={sources.support.listReferences}
       availableVariables={typedVariables}
     />
   );

@@ -618,7 +618,7 @@ export interface WorkflowsGateway {
   useSetEnabledRequest(): (engineWorkflowId: string, isEnabled: boolean) => Promise<{ isEnabled: boolean }>;
   /** Starts a manual run and resolves at once with its key; the run's progress arrives in transient events. */
   useTriggerRequest(): (run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
-  /** The values `${viewer.*}` resolves on the engine. Needs `workflow.viewerFacts`. */
+  /** The values `${viewer.*}` resolves on the engine. */
   useViewerFactsRequest(): () => Promise<ViewerFact[]>;
   /** Runs a recorded run again and resolves at once with its key, like a manual run. */
   useReplayRequest(): (replay: WorkflowReplay) => Promise<{ triggerId: string }>;

@@ -1235,7 +1235,8 @@ export default defineSchema({
 
   // workflowHealthSyncs: one row per instance holding the last
   // getWorkflowHealth() resync attempt, so page mounts and reconnects across
-  // tabs share one throttle. "unsupported" means the engine predates the RPC.
+  // tabs share one throttle. Nothing writes "unsupported" any more; a row may
+  // still hold it until its next resync.
   workflowHealthSyncs: defineTable({
     instanceId: v.id("instances"),
     attemptedAt: v.number(),

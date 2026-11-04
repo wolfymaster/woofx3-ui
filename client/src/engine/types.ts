@@ -1006,9 +1006,9 @@ export interface WorkflowReplay {
   origin?: WorkflowRunOrigin;
 }
 
-/** How stopping a run went: the engine's outcome, or `marked` when an older engine only marked it stopped. */
+/** How stopping a run went, as the engine reported it. */
 export interface WorkflowCancelResult {
-  outcome: "cancelled" | "already_finished" | "marked";
+  outcome: "cancelled" | "already_finished";
   status: string;
 }
 
@@ -1092,7 +1092,7 @@ export interface NotRunningWorkflow {
 /** What prompted a workflow health resync; repeats are throttled per instance. */
 export type WorkflowHealthResyncTrigger = "mount" | "reconnect";
 
-export type WorkflowHealthResyncResult = "ok" | "skipped" | "failed" | "unsupported" | "loading";
+export type WorkflowHealthResyncResult = "ok" | "skipped" | "failed" | "loading";
 
 // ==================== Macros ====================
 

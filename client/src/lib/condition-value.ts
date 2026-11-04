@@ -7,9 +7,8 @@ import type { VariableOption } from "@/lib/workflow-variables";
  * The engine compares two values as numbers only when both are numbers; when either is
  * a string it compares their text, so "9" is greater than "100". A value typed as text
  * is therefore stored as a number wherever the comparison is meant to be numeric. A
- * `${...}` reference is kept as the string the engine resolves; an engine without the
- * `workflow.conditionListReferences` capability resolves one only as the whole value,
- * not as a list item.
+ * `${...}` reference is kept as the string the engine resolves, as the whole value or
+ * as a list item.
  */
 
 const NUMERIC_OPERATORS = new Set<ConditionOperator>(["gt", "gte", "lt", "lte"]);
@@ -105,13 +104,8 @@ export function parseConditionValue(operator: ConditionOperator, text: string, f
 /**
  * Why the engine would not evaluate a typed value as the operator means, or null when it
  * would. A blank value is a condition not yet filled in, and has no problem to report.
- * `listReferences` is whether the engine resolves a reference inside a list.
  */
-export function conditionValueProblem(
-  operator: ConditionOperator,
-  text: string,
-  listReferences = false
-): string | null {
+export function conditionValueProblem(operator: ConditionOperator, text: string): string | null {
   if (VALUELESS_OPERATORS.has(operator) || text.trim() === "") {
     return null;
   }
@@ -125,9 +119,6 @@ export function conditionValueProblem(
     return null;
   }
   const items = splitList(text);
-  if (!listReferences && items.some(isReference)) {
-    return "A list can't contain variables: they are compared as the literal text you see.";
-  }
   if (operator === "between") {
     if (items.length !== 2) {
       return "Enter exactly two numbers, the minimum and the maximum, separated by a comma.";
