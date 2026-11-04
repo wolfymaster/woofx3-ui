@@ -22,6 +22,7 @@ import type * as browserSource from "../browserSource.js";
 import type * as chatCommandActions from "../chatCommandActions.js";
 import type * as chatCommandGroups from "../chatCommandGroups.js";
 import type * as chatCommands from "../chatCommands.js";
+import type * as chatModerationActions from "../chatModerationActions.js";
 import type * as companionIntegrations from "../companionIntegrations.js";
 import type * as companionIntegrationsActions from "../companionIntegrationsActions.js";
 import type * as companionPairing from "../companionPairing.js";
@@ -307,6 +308,7 @@ declare const fullApi: ApiFromModules<{
   chatCommandActions: typeof chatCommandActions;
   chatCommandGroups: typeof chatCommandGroups;
   chatCommands: typeof chatCommands;
+  chatModerationActions: typeof chatModerationActions;
   companionIntegrations: typeof companionIntegrations;
   companionIntegrationsActions: typeof companionIntegrationsActions;
   companionPairing: typeof companionPairing;
