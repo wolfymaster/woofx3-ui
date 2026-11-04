@@ -6,7 +6,6 @@ import { ENGINE_CAPABILITIES, type UISetting } from "@woofx3/api";
 import { useEffect, useMemo } from "react";
 import { z } from "zod";
 import type { StreamStartMarkerRequest, StreamStartMarkers } from "@/engine/desktop-host";
-import { GatewayUnsupportedError } from "@/engine/errors";
 import type { GoLiveGateway } from "@/engine/gateway";
 import type {
   GoLiveCheckId,
@@ -118,9 +117,6 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
   const browserSourcesRead: EngineRead<GoLiveOverlayFacts> = {
     queryKey: k.scenes.browserSources(),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
-        throw new GatewayUnsupportedError("goLive.useOverlays");
-      }
       const [{ scenes }, tokens] = await Promise.all([
         runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots()),
         runtime.call("listOverlayTokens", (api) => api.listOverlayTokens()),

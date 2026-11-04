@@ -14,7 +14,6 @@ import { sessionNotice, sessionStatusText } from "@/components/scenes/scene-canv
 import { UnreadSceneNotice } from "@/components/scenes/unread-scene-notice";
 import { Button } from "@/components/ui/button";
 import { useLibraryAlert } from "@/engine/hooks/use-alert-library";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
 import { useRepairSceneRequest, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import type { InstanceId } from "@/engine/types";
@@ -52,7 +51,6 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   const myName = useViewerName();
   const getEngineInfo = useEngineInfoRequest();
   const repairScene = useRepairSceneRequest();
-  const capabilities = useEngineCapabilities();
   // An alert has no preview page to take sceneManager's origin from, so the socket is
   // opened at the engine's overlay URL, which is sceneManager's public URL.
   const publicUrl = useCallback(async () => (await getEngineInfo())?.overlayPublicUrl ?? null, [getEngineInfo]);
@@ -65,7 +63,6 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
     engineSceneId: compositionId,
     sceneId: undefined,
     publicUrl,
-    enabled: true,
     editorName: myName,
     unsavedOutsideSession: false,
   });
@@ -170,15 +167,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
       context="Alert library · new copies start from what you publish"
       backLabel="alerts"
       onBack={onBack}
-      notice={
-        <UnreadSceneNotice
-          conn={conn}
-          unread={syncState?.unread}
-          noun="alert"
-          repairSupported={capabilities.support("scenes.repair") === "supported"}
-          onRepair={handleRepair}
-        />
-      }
+      notice={<UnreadSceneNotice conn={conn} unread={syncState?.unread} noun="alert" onRepair={handleRepair} />}
       status={
         notice === null ? undefined : (
           <span className="truncate text-xs text-muted-foreground" data-testid="text-alert-sync">

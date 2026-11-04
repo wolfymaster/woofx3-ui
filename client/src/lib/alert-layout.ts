@@ -1,4 +1,3 @@
-import type { EngineCapability } from "@convex/lib/engineCapabilities";
 import {
   type CompositionDocument,
   evenKeys,
@@ -9,7 +8,6 @@ import {
   sameValue,
   stackOrder,
 } from "@woofx3/scene/model";
-import type { CapabilitySupport } from "@/lib/engine-capabilities";
 
 /**
  * An Alert step's `layout` parameter, in both the shapes it is stored in.
@@ -17,9 +15,8 @@ import type { CapabilitySupport } from "@/lib/engine-capabilities";
  * Alerts are compositions (`@woofx3/scene/model`): a canvas under `layout`,
  * widgets keyed by id with a fractional `z`, and behaviors. Steps saved
  * before that hold a canvas with a list of widgets, bottom of the stack
- * first, and an engine that predates compositions plays only that list. The
- * editor always works on a composition; this file converts on the way in
- * and picks the shape on the way out.
+ * first. The editor always works on a composition: this file converts a
+ * list on the way in, and a step is always written back as a composition.
  *
  * `compositionOfLegacyAlert` and `alertCompositionOf` mirror the engine's
  * `model/legacy-alert.ts` (woofx3 branch feat/scene-overlay), name for name,
@@ -31,12 +28,6 @@ import type { CapabilitySupport } from "@/lib/engine-capabilities";
 
 /** The canvas a new alert layout starts on. */
 export const DEFAULT_ALERT_CANVAS = { width: 1920, height: 1080 } as const;
-
-/**
- * The engine capability that says an alert step's `layout` may be a
- * composition. An engine without it gets the list shape.
- */
-export const ALERT_COMPOSITION_CAPABILITY: EngineCapability = "alerts.compositionLayout";
 
 /** The list-shaped layout's outer fields; each widget entry is read defensively. */
 export interface LegacyAlertLayout {
@@ -180,21 +171,9 @@ export function legacyAlertLayoutOf(doc: CompositionDocument): LegacyAlertLayout
   return { ...doc.layout, width: doc.layout.width, height: doc.layout.height, widgets };
 }
 
-/** Which shape a step's `layout` is written in. */
-export type AlertLayoutShape = "composition" | "list";
-
-/**
- * The shape to write for an engine: a composition where the engine says it
- * plays one, else the list every engine plays. An engine still being asked,
- * or one that could not be asked, gets the list, which loses only behaviors.
- */
-export function alertLayoutShapeFor(support: CapabilitySupport): AlertLayoutShape {
-  return support === "supported" ? "composition" : "list";
-}
-
-/** What to store in a step's `layout` for `doc`, in `shape`. */
-export function storedAlertLayout(doc: CompositionDocument, shape: AlertLayoutShape): unknown {
-  return shape === "composition" ? structuredClone(doc) : legacyAlertLayoutOf(doc);
+/** What to store in a step's `layout` for `doc`: the composition, as a copy. */
+export function storedAlertLayout(doc: CompositionDocument): unknown {
+  return structuredClone(doc);
 }
 
 /** Whether the editor's document differs from the one it opened with. */

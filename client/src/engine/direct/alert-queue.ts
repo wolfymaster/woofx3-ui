@@ -1,4 +1,4 @@
-import { ALERT_LIST_MAX_LIMIT, ENGINE_CAPABILITIES } from "@woofx3/api";
+import { ALERT_LIST_MAX_LIMIT } from "@woofx3/api";
 import type { AlertQueueGateway } from "@/engine/gateway";
 import type { AlertOverview, EngineAlert } from "@/engine/types";
 import { directKeys as k } from "./keys";
@@ -20,14 +20,10 @@ function alertsRead(runtime: DirectRuntime, limit: number): EngineRead<EngineAle
   };
 }
 
-/** Null from an engine that cannot total its alerts, which has nothing to show. */
 function overviewRead(runtime: DirectRuntime, hourStart: number): EngineRead<AlertOverview | null> {
   return {
     queryKey: k.alertQueue.overview(hourStart),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.alertsOverview)) {
-        return null;
-      }
       return runtime.call("getAlertOverview", (api) => api.getAlertOverview(hourStart));
     },
   };
