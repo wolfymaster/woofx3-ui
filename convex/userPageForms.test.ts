@@ -629,12 +629,12 @@ function runner(f: Fixture): DeliveryRunner {
 
 function transportWith(
   deliver: SubmissionTransport["deliver"],
-  canDeliver: SubmissionTransport["canDeliver"] = async () => true
+  probe: SubmissionTransport["probe"] = async () => {}
 ): SubmissionTransport & { sent: string[] } {
   const sent: string[] = [];
   return {
     sent,
-    canDeliver,
+    probe,
     deliver: (engine, delivery) => {
       sent.push(delivery.submissionId);
       return deliver(engine, delivery);
@@ -720,34 +720,9 @@ describe("delivery", () => {
       f.instanceId,
       transportWith(RECORDED, async () => {
         probes.count += 1;
-        return true;
       })
     );
     expect(probes.count).toBe(0);
-  });
-
-  test("an engine without the capability leaves rows pending, then a new one gets them", async () => {
-    const f = await formFixture();
-    await seedPending(f, 1);
-    await runDeliveryPass(
-      runner(f),
-      f.instanceId,
-      transportWith(RECORDED, async () => false)
-    );
-    expect((await rows(f))[0].status).toBe("pending");
-    expect((await queueOf(f))?.engineProblem).toBe("capability_missing");
-
-    await f.t.run(async (ctx) => {
-      const queue = await ctx.db.query("pageSubmissionQueues").first();
-      if (queue) {
-        await ctx.db.patch(queue._id, { nextAttemptAt: 1, engineRetryAt: 1 });
-      }
-    });
-    await runDeliveryPass(runner(f), f.instanceId, transportWith(RECORDED));
-    expect((await rows(f))[0].status).toBe("delivered");
-    const queue = await queueOf(f);
-    expect(queue?.consecutiveFailures).toBe(0);
-    expect(queue?.engineProblem).toBeUndefined();
   });
 
   test("an unregistered engine stays pending", async () => {

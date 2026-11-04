@@ -2301,6 +2301,8 @@ export default defineSchema({
     leaseUntil: v.optional(v.number()),
     consecutiveFailures: v.number(),
     engineRetryAt: v.optional(v.number()),
+    // Nothing writes "capability_missing" any more; a queue may still hold it
+    // until its next delivery pass.
     engineProblem: v.optional(
       v.union(v.literal("not_registered"), v.literal("unreachable"), v.literal("capability_missing"))
     ),

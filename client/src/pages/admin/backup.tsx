@@ -16,7 +16,6 @@ import { ConvexError } from "convex/values";
 import { Download, FileUp, Loader2, PackageX, Upload, UserPlus } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link } from "wouter";
-import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
 import { PageHeader } from "@/components/layout/page-header";
 import { SetupImportPanel } from "@/components/setup-import/setup-import-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -38,7 +37,6 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
   useConfigExportRequest,
   useConfigImportPreviewRequest,
@@ -630,7 +628,6 @@ export default function AdminBackup() {
   const { instance, isLoading } = useInstance();
   const access = useQuery(api.configBackup.access, instance ? { instanceId: instance._id } : "skip");
   const { instanceId: engineInstanceId } = useEngineScope();
-  const capabilities = useEngineCapabilities();
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -645,15 +642,8 @@ export default function AdminBackup() {
         <p className="text-sm text-muted-foreground">Select an instance you are a member of to back it up.</p>
       ) : (
         <>
-          <EngineFeatureGate
-            support={capabilities.support("config.bundles")}
-            state={capabilities.state}
-            feature="Backups"
-            onRetry={capabilities.refresh}
-          >
-            <ExportCard instanceName={instance.name} canExportMembers={access.canExportMembers} />
-            <ImportCard canImport={access.canImport} />
-          </EngineFeatureGate>
+          <ExportCard instanceName={instance.name} canExportMembers={access.canExportMembers} />
+          <ImportCard canImport={access.canImport} />
           <Card>
             <CardHeader>
               <CardTitle>Bring your setup from Firebot or Streamer.bot</CardTitle>
