@@ -8,7 +8,6 @@ import { RECEIPT_CLEANUP_BATCH, RECEIPT_RETENTION_MS } from "./lib/engineEvents/
 import { type BatchEventResult, REJECTION_REASONS } from "./lib/engineEvents/contract";
 import { applyEngineEvent, type EngineEventOutcome } from "./lib/engineEvents/dispatch";
 import { engineActivityPatch } from "./lib/engineSync/activity";
-import { logger } from "./logger";
 
 export type ReceivedEventOutcome = EngineEventOutcome | { kind: "duplicate" };
 
