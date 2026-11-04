@@ -144,8 +144,46 @@ describe("reconcile", () => {
       databaseId: GAMES,
       records: [{ recordId: "r1", revision: 1, createdAt: 5, values: { game: "Celeste" } }],
     });
-    await t.mutation(internal.userPageDatabases.finishReconcile, { instanceId, databaseId: GAMES, listed: ["r1"] });
+    await t.mutation(internal.userPageDatabases.finishReconcile, {
+      instanceId,
+      databaseId: GAMES,
+      listed: ["r1"],
+      startedAt: Date.now() + 1,
+    });
     const stored = await rows(t);
     expect(stored.map((row) => row.recordId)).toEqual(["r1"]);
+  });
+
+  test("fills a column made public after the row was written, at the same revision", async () => {
+    const PUBLIC_VIEWER = { ...PRIVATE_VIEWER, public: true };
+    const { t, instanceId, rowId } = await fixture([PUBLIC_GAME, PRIVATE_VIEWER]);
+    await t.mutation(internal.userPageDatabases.applyRecordChange, change(instanceId, "r1", 1, { game: "Hades" }));
+    await t.run(async (ctx) => ctx.db.patch(rowId, { settings: { columns: [PUBLIC_GAME, PUBLIC_VIEWER] } }));
+    await t.mutation(internal.userPageDatabases.reconcilePage, {
+      instanceId,
+      databaseId: GAMES,
+      records: [{ recordId: "r1", revision: 1, createdAt: 5, values: { game: "Hades", viewer: "wolfy" } }],
+    });
+    expect((await rows(t))[0]?.values).toEqual([
+      { columnId: "game", value: "Hades" },
+      { columnId: "viewer", value: "wolfy" },
+    ]);
+
+    // A webhook redelivered at that revision carries the columns public back then.
+    await t.mutation(internal.userPageDatabases.applyRecordChange, change(instanceId, "r1", 1, { game: "Hades" }));
+    expect((await rows(t))[0]?.values).toHaveLength(2);
+  });
+
+  test("keeps a row a webhook wrote while the engine was being listed", async () => {
+    const { t, instanceId } = await fixture([PUBLIC_GAME]);
+    const startedAt = Date.now();
+    await t.mutation(internal.userPageDatabases.applyRecordChange, change(instanceId, "fresh", 1, { game: "Tunic" }));
+    await t.mutation(internal.userPageDatabases.finishReconcile, {
+      instanceId,
+      databaseId: GAMES,
+      listed: [],
+      startedAt,
+    });
+    expect((await rows(t)).map((row) => row.recordId)).toEqual(["fresh"]);
   });
 });
