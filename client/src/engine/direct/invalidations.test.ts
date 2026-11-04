@@ -42,6 +42,19 @@ describe("INVALIDATIONS", () => {
       [k.alertQueue.all, k.workflows.run("run-1")],
     ],
     [
+      "a database row change refreshes every read of that database",
+      makeCallbackEnvelope({
+        type: EngineEventType.DATABASE_RECORD_CHANGED,
+        databaseId: "woofx3:database:games",
+        recordId: "row-1",
+        op: "updated",
+        revision: 2,
+        createdAt: "2026-11-04T12:00:00Z",
+        publicValues: {},
+      }),
+      [k.databases.database("woofx3:database:games")],
+    ],
+    [
       "a change to the Twitch link refreshes the link the Twitch namespaces read",
       makeCallbackEnvelope({ type: EngineEventType.TWITCH_LINK_CHANGED, revision: 2, linked: false }),
       [k.twitch.link()],
