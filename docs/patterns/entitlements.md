@@ -6,7 +6,6 @@ A paid plan sells features ("advanced reports", a dashboard tool) and amounts ("
 
 | Question | Answered by | Lifetime |
 |---|---|---|
-| Can this engine build do X? | [Engine capabilities](./engine-capabilities.md) (`useEngineCapabilities`, `EngineFeatureGate`) | Until every engine in use has it |
 | Does this account's plan include X, and how much? | An entitlement (this page) | As long as the plan |
 | Should this viewer see new UI Y yet? | A [feature flag](./feature-flags.md) | Until the rollout ends |
 
@@ -21,7 +20,7 @@ The engine never enforces a plan. A self-hosted engine has every capability its 
 - **Writes are validated** in `convex/lib/plans.ts`, the one path the CLI and the operator backoffice both use: unknown keys, a feature both added and removed, a limit set twice, or an amount that is not a whole number of at least 0 is refused. Keys code no longer lists are ignored when read.
 - **Entitlements belong to the account,** whatever hosts its engines. A feature every self-hosting account should have belongs in the default plan, or stays ungated.
 - **Enforcing:** a Convex function that serves a paid feature calls `requireEntitlement(ctx, accountId, feature)`. A limit is checked with `isWithinLimit(await accountEntitlements(ctx, accountId), key, usage)` where the usage is known.
-- **Reading:** `useEntitlements()` and `useEntitlement(feature)` in the browser, both over `entitlements.forViewer` for the current instance's account. `PlanGate` renders its children only when the plan includes a feature, and otherwise says it is not on the plan. For an engine feature on a plan, nest an `EngineFeatureGate` inside a `PlanGate`.
+- **Reading:** `useEntitlements()` and `useEntitlement(feature)` in the browser, both over `entitlements.forViewer` for the current instance's account. `PlanGate` renders its children only when the plan includes a feature, and otherwise says it is not on the plan.
 - **Rollouts can follow plans:** a feature flag's `entitlement` rule admits only accounts whose plan includes a feature, which is how early access becomes a plan benefit.
 
 ```bash

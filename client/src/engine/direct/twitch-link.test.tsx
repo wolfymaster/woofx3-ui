@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { TwitchLinking } from "@/engine/types";
 import { waitFor } from "@/lib/engine-session/testing/wait-for";
 import { nextDeviceLinking, toTwitchLink } from "./map/twitch-link";
@@ -134,7 +133,7 @@ describe("twitchLink", () => {
     await waitFor(() => state.callsOf("cancelTwitchDeviceLogin").length === 2, "the engine told on unmount");
   });
 
-  test("an engine without a Twitch app, or without device login, fails with a reason", async () => {
+  test("an engine without a Twitch app fails with a reason", async () => {
     const { runtime } = await connected((harness) => {
       harness.state.deviceLoginStart = { ok: false, code: "not_configured", error: "no client id" };
     });
@@ -143,17 +142,6 @@ describe("twitchLink", () => {
     expect((await flow.until((value) => value.linking.status === "failed", "failed")).linking).toEqual({
       status: "failed",
       error: "This engine has no Twitch app to link with.",
-    });
-
-    const old = await connected((harness) => {
-      harness.engine.capabilities = harness.engine.capabilities.filter(
-        (capability) => capability !== ENGINE_CAPABILITIES.twitchDeviceLogin
-      );
-    });
-    const oldFlow = renderDirect(() => directTwitchLinkGateway(old.runtime).useLinkFlow());
-    oldFlow.current().start({ returnTo: "/" });
-    expect((await oldFlow.until((value) => value.linking.status === "failed", "failed")).linking).toMatchObject({
-      error: expect.stringContaining("Update the engine"),
     });
   });
 });

@@ -5,7 +5,6 @@ import { HEALTH_STILL_LOADING_MESSAGE, RESYNC_MIN_INTERVAL_MS } from "@shared/wo
 import {
   type AlertComposition,
   type CommandSnapshot,
-  ENGINE_CAPABILITIES,
   EngineEventType,
   makeCallbackEnvelope,
   type SceneSnapshot,
@@ -212,18 +211,18 @@ describe("eventLog", () => {
     const { runtime, state, clock } = await connected();
     const subscribe = renderDirect(() => directEventLogGateway(runtime).useStreamEventsSubscription()).current();
     const follows: string[] = [];
-    const everything: string[] = [];
+    const cheers: string[] = [];
     subscribe(["channel.follow"], (f) => follows.push(f.type));
-    subscribe(null, (f) => everything.push(f.type));
+    subscribe(["channel.cheer"], (f) => cheers.push(f.type));
 
     clock.advance(runtime.config.streamRegistrationDelayMs);
     await waitFor(() => state.streamSubscriptions.length === 1, "the registration");
-    expect(state.streamSubscriptions[0].types).toEqual(["channel.follow"]);
+    expect(state.streamSubscriptions[0].types).toEqual(["channel.cheer", "channel.follow"]);
 
     await state.pushStreamEvent(frame("channel.follow"));
     await state.pushStreamEvent(frame("channel.cheer"));
     expect(follows).toEqual(["channel.follow"]);
-    expect(everything).toEqual(["channel.follow", "channel.cheer"]);
+    expect(cheers).toEqual(["channel.cheer"]);
   });
 
   test("registers again on a new session, which starts with none", async () => {
@@ -270,19 +269,6 @@ describe("eventLog", () => {
     expect(await payload.until((value) => value !== undefined, "the payload")).toBe(JSON.stringify({ n: 2 }));
     read.unmount();
     payload.unmount();
-  });
-
-  test("an engine that keeps no event log reads as an empty log", async () => {
-    const harness = createDirectHarness();
-    harnesses.push(harness);
-    const { runtime, state, engine } = harness;
-    engine.capabilities = engine.capabilities.filter((capability) => capability !== ENGINE_CAPABILITIES.eventsLog);
-    state.events = [{ id: "ev-1", type: "channel.follow", source: "twitch", time: "", data: {} }];
-    await harness.connect();
-    const read = renderDirect(() => directEventLogGateway(runtime).useWebhookEvents(null, 10));
-    await read.until((value) => value.status === "Exhausted", "an empty log");
-    expect(read.current().results).toEqual([]);
-    read.unmount();
   });
 
   test("a logged event cannot be fired again", async () => {
@@ -386,24 +372,6 @@ describe("alertLibrary", () => {
     );
     await read.until((value) => value?.length === 1, "the new alert");
     expect(state.callsOf("listAlertCompositions")).toHaveLength(2);
-    read.unmount();
-  });
-
-  test("an engine with no library reads as empty and refuses a new alert", async () => {
-    const harness = createDirectHarness();
-    harnesses.push(harness);
-    harness.engine.capabilities = harness.engine.capabilities.filter(
-      (id) => id !== ENGINE_CAPABILITIES.compositionsAlerts
-    );
-    await harness.connect();
-    const library = directAlertLibraryGateway(harness.runtime);
-    const read = renderDirect(() => library.useAlerts());
-    expect(await read.until((value) => value !== undefined, "the library")).toEqual([]);
-    const create = renderDirect(() => library.useCreateRequest()).current();
-    await expect(create({ name: "Follow", widgetsJson: "[]", layoutJson: "{}", behaviorsJson: "{}" })).rejects.toThrow(
-      "doesn't keep an alert library"
-    );
-    expect(harness.state.callsOf("listAlertCompositions")).toEqual([]);
     read.unmount();
   });
 
@@ -571,19 +539,6 @@ describe("streamOps", () => {
     untotalled.unmount();
   });
 
-  test("an engine without session history has no recaps", async () => {
-    const harness = createDirectHarness();
-    harnesses.push(harness);
-    harness.engine.capabilities = harness.engine.capabilities.filter(
-      (id) => id !== ENGINE_CAPABILITIES.analyticsSessions
-    );
-    await harness.connect();
-    const read = renderDirect(() => directStreamOpsGateway(harness.runtime).useRecentRecaps(10));
-    expect(await read.until((value) => value !== undefined, "the recaps")).toEqual([]);
-    expect(harness.state.callsOf("listStreamSessions")).toEqual([]);
-    read.unmount();
-  });
-
   test("a recap's clips and markers are Twitch's lists, which the engine cannot serve", async () => {
     const { runtime } = await connected();
     const streamOps = directStreamOpsGateway(runtime);
@@ -725,19 +680,6 @@ describe("scenes", () => {
     );
     await read.until((value) => value?.length === 2, "the new scene");
     read.unmount();
-  });
-
-  test("an engine that cannot hand over whole scenes has none to show", async () => {
-    const harness = createDirectHarness();
-    harnesses.push(harness);
-    harness.engine.capabilities = harness.engine.capabilities.filter(
-      (id) => id !== ENGINE_CAPABILITIES.scenesSnapshots
-    );
-    await harness.connect();
-    const read = renderDirect(() => directScenesGateway(harness.runtime).useScenes());
-    await waitFor(() => read.error() !== undefined, "the read to fail");
-    expect(read.error()).toBeInstanceOf(GatewayUnsupportedError);
-    expect(harness.state.callsOf("listSceneSnapshots")).toEqual([]);
   });
 
   test("the widget catalog groups a module's widgets under its name and the engine's own as built in", async () => {

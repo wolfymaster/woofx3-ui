@@ -50,7 +50,7 @@ function fetchAnswering(respond: (call: FetchCall) => Response) {
 
 const noCheck = async () => {};
 
-describe("without twitch.pins (or with its flag off)", () => {
+describe("on a direct route", () => {
   test("reads, pins, re-posts and unpins on Helix as before", async () => {
     const stub = fetchAnswering((call) =>
       call.url === MESSAGES
@@ -75,7 +75,7 @@ describe("without twitch.pins (or with its flag off)", () => {
 });
 
 describe("through the engine", () => {
-  test("reads, pins and unpins with the engine's twitch.pins methods", async () => {
+  test("reads, pins and unpins with the engine's pin methods", async () => {
     const stub = fetchAnswering(() => new Response(null, { status: 500 }));
     const engine = fakeEngineRoute((call: EngineCall) =>
       call.method === "twitchGetChatPins" ? { ok: true, body: PIN_BODY } : { ok: true, body: null }

@@ -38,9 +38,7 @@ export function ModuleStorageCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         {usage === null ? (
-          <p className="text-sm text-muted-foreground">
-            Your engine can't report this yet. Update it to the latest release to see how much your modules use.
-          </p>
+          <p className="text-sm text-muted-foreground">Reading what your modules store…</p>
         ) : (
           <ModuleStorageMeter usage={usage} />
         )}

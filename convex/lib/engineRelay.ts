@@ -1,8 +1,7 @@
 import type { RpcTarget } from "@woofx3/api/client";
 
 /**
- * The engine's half of the companion bridge (capability
- * `modules.localEndpoints`). Declared here because the engine checkout this
+ * The engine's half of the companion bridge. Declared here because the engine checkout this
  * repo builds against may predate it; retire these as the shared surface
  * catches up. Must match `RelayConfig` and `setRelayConfig` in woofx3
  * `shared/clients/typescript/api/api.ts`, and `EngineRequestType.RELAY_CREDENTIAL_REQUESTED`

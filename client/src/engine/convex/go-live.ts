@@ -22,8 +22,7 @@ import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./sc
 
 // Convex keeps the checklist's dismissals and last run, reads the overlay and
 // workflow facts from its own tables, and asks Twitch with the broadcaster
-// token it holds. Finishing posts through the engine when the engine
-// advertises `twitch.chat`.
+// token it holds. Finishing posts through the engine.
 
 type ChecklistRow = NonNullable<FunctionReturnType<typeof api.goLive.checklist>>;
 type OverlaysRow = NonNullable<FunctionReturnType<typeof api.goLive.overlays>>;

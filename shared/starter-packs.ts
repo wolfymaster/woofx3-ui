@@ -1,11 +1,4 @@
-import type {
-  ActionStep,
-  ConditionConfig,
-  ConditionOperator,
-  EngineCapability,
-  TaskDefinition,
-  WorkflowDefinition,
-} from "@woofx3/api";
+import type { ActionStep, ConditionConfig, ConditionOperator, TaskDefinition, WorkflowDefinition } from "@woofx3/api";
 
 /**
  * Starter packs: curated sets of workflows and chat commands a new streamer
@@ -67,30 +60,6 @@ export interface StarterPackField {
   maxLength?: number;
   /** A text value used exactly as typed, spaces included, such as an OBS scene name. */
   exact?: boolean;
-  /** An engine capability a number field needs for any value but its default. */
-  requires?: StarterFeature;
-}
-
-/** Engine capabilities that the action catalog cannot show. */
-export type StarterFeature = "delayWait";
-export type StarterFeatures = Record<StarterFeature, boolean>;
-
-/**
- * The engine capability behind each starter feature. A delay is a wait task
- * rather than a catalog action, so the catalog cannot say whether the engine
- * has it. An engine without delays reads one as an event wait for an empty
- * event, which times out and fails the run, so a raid welcome with a pause
- * would lose its shoutout and marker on every raid.
- */
-const STARTER_FEATURE_CAPABILITIES: Record<StarterFeature, EngineCapability> = {
-  delayWait: "workflow.delayWait",
-};
-
-export const NO_STARTER_FEATURES: StarterFeatures = { delayWait: false };
-
-/** What the engine supports beyond its action catalog, from the capability ids it lists. */
-export function starterFeaturesFrom(capabilities: readonly string[]): StarterFeatures {
-  return { delayWait: capabilities.includes(STARTER_FEATURE_CAPABILITIES.delayWait) };
 }
 
 /** Twitch display names are at most 25 characters, the longest thing a placeholder becomes in practice. */
@@ -222,7 +191,6 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         defaultValue: 0,
         min: 0,
         max: 60,
-        requires: "delayWait",
       },
       {
         id: "raidMarker",
@@ -794,11 +762,7 @@ export type StarterValuesResult =
  * Checks field values a person entered against the pack's fields, filling any
  * that were left out with their defaults. Errors are keyed by field id.
  */
-export function validateStarterValues(
-  pack: StarterPack,
-  input: Record<string, unknown>,
-  features: StarterFeatures
-): StarterValuesResult {
+export function validateStarterValues(pack: StarterPack, input: Record<string, unknown>): StarterValuesResult {
   const errors: Record<string, string> = {};
   const values: StarterFieldValues = {};
   const known = new Set(pack.fields.map((field) => field.id));
@@ -816,10 +780,6 @@ export function validateStarterValues(
       }
       if ((field.min !== undefined && raw < field.min) || (field.max !== undefined && raw > field.max)) {
         errors[field.id] = `Enter a number from ${field.min} to ${field.max}.`;
-        continue;
-      }
-      if (field.requires !== undefined && !features[field.requires] && raw !== field.defaultValue) {
-        errors[field.id] = `Requires engine update. Leave it at ${field.defaultValue}.`;
         continue;
       }
       values[field.id] = raw;

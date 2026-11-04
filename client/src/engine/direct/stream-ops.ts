@@ -20,7 +20,7 @@ import {
   VIEWER_STREAM_SCAN,
 } from "@shared/supporters";
 import { readTwitchUserAnswer } from "@shared/twitch-users";
-import { ENGINE_CAPABILITIES, type StreamSession } from "@woofx3/api";
+import { type StreamSession } from "@woofx3/api";
 import type { StreamOpsGateway } from "@/engine/gateway";
 import type {
   EngineTestEvent,
@@ -63,15 +63,10 @@ async function readRecaps(runtime: DirectRuntime, sessions: readonly StreamSessi
   return recaps;
 }
 
-// An engine without session history has no recaps to show, rather than a
-// failure: there is nothing it could answer on a retry.
 function recentRecapsRead(runtime: DirectRuntime, limit: number): EngineRead<StreamRecap[]> {
   return {
     queryKey: k.streamOps.recentRecaps(limit),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.analyticsSessions)) {
-        return [];
-      }
       const page = await runtime.call("listStreamSessions", (api) => api.listStreamSessions({ limit }));
       return readRecaps(runtime, page.sessions);
     },
@@ -82,9 +77,6 @@ function recapRead(runtime: DirectRuntime, sessionId: string): EngineRead<Stream
   return {
     queryKey: k.streamOps.recap(sessionId),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.analyticsSessions)) {
-        return null;
-      }
       const session = await runtime.call("getStreamSession", (api) => api.getStreamSession(sessionId));
       if (session === null) {
         return null;
@@ -233,9 +225,7 @@ export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway
       return null;
     }
     await twitch.authorize(null);
-    const user = await readTwitchUserAnswer(
-      await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, "twitchGetUsers", (api) => api.twitchGetUsers(query))
-    );
+    const user = await readTwitchUserAnswer(await twitch.helix("twitchGetUsers", (api) => api.twitchGetUsers(query)));
     return user ? toTwitchChannel(user) : null;
   };
 

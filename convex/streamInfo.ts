@@ -33,11 +33,10 @@ import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/tw
 // Title, category and tags for the dashboard's Stream info widget, plus stream
 // markers and the named presets that apply a whole set in one click.
 //
-// Straight to Helix, like convex/twitchBroadcast.ts and convex/pins.ts, unless
-// the engine advertises twitch.streamInfo and makes the same calls itself
-// (convex/lib/twitchEngineHelix.ts). Convex holds a refreshable broadcaster
-// token either way, so editing the channel keeps working while no engine is
-// running.
+// Through the instance's engine, which makes the same calls itself, like
+// convex/twitchBroadcast.ts and convex/pins.ts (convex/lib/twitchEngineHelix.ts).
+// Convex holds a refreshable broadcaster token either way, so editing the
+// channel keeps working while no engine is running.
 // Every call runs under channel:manage:broadcast, reads included. Reading
 // channel information needs no scope on Helix, but the widget exists to edit,
 // and one scope gate keeps "reconnect Twitch" a single, predictable state
@@ -106,7 +105,7 @@ export const getChannelInfo = action({
   },
   handler: async (ctx, args): Promise<StreamInfo> => {
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    return readChannel(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo"), args.knownBoxArt);
+    return readChannel(call, await twitchHelixRoute(ctx, args.instanceId), args.knownBoxArt);
   },
 });
 
@@ -122,7 +121,7 @@ export const searchCategories = action({
       throw new Error(problem);
     }
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    return searchCategoriesOnTwitch(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo"), text);
+    return searchCategoriesOnTwitch(call, await twitchHelixRoute(ctx, args.instanceId), text);
   },
 });
 
@@ -182,7 +181,7 @@ export const updateChannelInfo = action({
     assertValidChanges(changes);
 
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo");
+    const route = await twitchHelixRoute(ctx, args.instanceId);
     await modifyChannelInformation(call, route, changes);
 
     const info = await readChannel(call, route);
@@ -220,7 +219,7 @@ export const createMarker = action({
     }
 
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    return createMarkerOnTwitch(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo"), description);
+    return createMarkerOnTwitch(call, await twitchHelixRoute(ctx, args.instanceId), description);
   },
 });
 

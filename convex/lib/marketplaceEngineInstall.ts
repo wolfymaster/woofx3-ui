@@ -26,19 +26,12 @@ import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
-import {
-  type EngineCapability,
-  type EngineCapabilityReport,
-  fetchEngineCapabilities,
-  hasEngineCapability,
-} from "./engineCapabilities";
+import { logger } from "../logger";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
 import { marketplaceGet } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
 import { notBoughtMessage } from "./marketplaceEntitlement";
-
-export const ENGINE_INSTALL_CAPABILITY: EngineCapability = "modules.marketplaceInstall";
 
 export interface EngineCredentials {
   url: string;
@@ -77,12 +70,11 @@ export type MarketplaceEngine = Pick<
 
 // --- routing ---
 
-/** What decides the path for one instance. Read lazily, cheapest first. */
+/** What decides the path for one instance. */
 export interface EngineInstallGate {
   access: MarketplaceAccess;
   /** Whether this deployment can mint buyer tokens at all. */
   buyerTokens: boolean;
-  capabilities(): Promise<EngineCapabilityReport>;
 }
 
 /**
@@ -91,26 +83,10 @@ export interface EngineInstallGate {
  * Dev access keeps the Convex path: the engine reads `/catalog/{id}`
  * anonymously, where dev-tier listings do not exist. A deployment without
  * the buyer signing key keeps it too, because the engine could then only
- * install free listings and would claim nothing for the buyer. Both are
- * checked before the engine is asked for its capabilities, so they cost no
- * engine round trip.
- *
- * An engine that cannot answer for its capabilities gets the Convex path:
- * reviews and file browsing do not need the engine there, and an install
- * fails the way it always has.
+ * install free listings and would claim nothing for the buyer.
  */
-export async function routeThroughEngine(gate: EngineInstallGate): Promise<boolean> {
-  if (gate.access === "dev" || !gate.buyerTokens) {
-    return false;
-  }
-  let report: EngineCapabilityReport;
-  try {
-    report = await gate.capabilities();
-  } catch (err) {
-    console.warn("Marketplace install routing could not read engine capabilities:", err);
-    return false;
-  }
-  return hasEngineCapability(report, ENGINE_INSTALL_CAPABILITY);
+export function routeThroughEngine(gate: EngineInstallGate): boolean {
+  return gate.access !== "dev" && gate.buyerTokens;
 }
 
 /** Whether `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are both set. */
@@ -121,7 +97,9 @@ export function buyerTokensConfigured(env: Record<string, string | undefined> = 
 /**
  * The engine to run a marketplace operation on for `instanceId`, or null for
  * the Convex path. An instance that is not registered with its engine gets
- * null, so the Convex path reports that as it always has.
+ * null, so the Convex path reports that as it always has. An engine that does
+ * not answer gets the Convex path too: reviews and file browsing do not need
+ * the engine there, and an install fails the way it always has.
  */
 export async function marketplaceEngineFor(
   ctx: ActionCtx,
@@ -132,12 +110,19 @@ export async function marketplaceEngineFor(
     return null;
   }
   const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
-  const useEngine = await routeThroughEngine({
-    access: marketplaceAccessFor(instance),
-    buyerTokens: buyerTokensConfigured(),
-    capabilities: () => fetchEngineCapabilities(engine),
-  });
-  return useEngine ? engine : null;
+  if (!routeThroughEngine({ access: marketplaceAccessFor(instance), buyerTokens: buyerTokensConfigured() })) {
+    return null;
+  }
+  try {
+    await createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret).getEngineInfo();
+  } catch (err) {
+    logger.warn("marketplace install routing: engine unreachable, using the Convex path", {
+      instanceId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+  return engine;
 }
 
 /**

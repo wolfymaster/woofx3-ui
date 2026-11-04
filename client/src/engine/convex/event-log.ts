@@ -56,7 +56,7 @@ function useRetriggerRequest() {
 function useStreamEventsSubscription() {
   const instanceId = useScopeInstanceId();
   return useCallback(
-    (types: readonly string[] | null, onFrame: (frame: StreamEventFrame) => void) =>
+    (types: readonly string[], onFrame: (frame: StreamEventFrame) => void) =>
       transport.subscribeStreamEvents(requireInstance(instanceId), types, onFrame),
     [instanceId]
   );

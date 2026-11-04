@@ -9,8 +9,7 @@ import { fromPinHistoryEntryId, toPinHistoryEntryId } from "./ids";
 import { useMappedList } from "./mapped";
 import { useInstanceAction, useInstanceMutation, useScopeInstanceId } from "./scope";
 
-// Convex keeps the pin history, and pins with the broadcaster token it holds,
-// through the engine when the engine advertises `twitch.pins`.
+// Convex keeps the pin history, and pins through the instance's engine.
 
 type HistoryRow = FunctionReturnType<typeof api.pins.listHistory>[number];
 type CurrentPinRow = NonNullable<FunctionReturnType<typeof api.pins.currentPin>>;

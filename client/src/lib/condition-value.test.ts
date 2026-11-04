@@ -96,15 +96,9 @@ describe("conditionValueProblem", () => {
     expect(conditionValueProblem("between", "a, 10")).toContain("must be numbers");
   });
 
-  test("reports a variable inside a list", () => {
-    expect(conditionValueProblem("between", `1, \${trigger.data.amount}`)).toContain("can't contain variables");
-    expect(conditionValueProblem("in", `a, \${trigger.data.user}`)).toContain("can't contain variables");
-  });
-
-  test("accepts a variable inside a list when the engine resolves list items", () => {
-    expect(conditionValueProblem("between", `1, \${trigger.data.amount}`, true)).toBeNull();
-    expect(conditionValueProblem("in", `a, \${trigger.data.user}`, true)).toBeNull();
-    expect(conditionValueProblem("between", "a, 10", true)).toContain("must be numbers");
+  test("accepts a variable inside a list", () => {
+    expect(conditionValueProblem("between", `1, \${trigger.data.amount}`)).toBeNull();
+    expect(conditionValueProblem("in", `a, \${trigger.data.user}`)).toBeNull();
   });
 
   test("has nothing to report for a blank value or a text operator", () => {

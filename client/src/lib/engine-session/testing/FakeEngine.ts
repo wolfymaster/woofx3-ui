@@ -52,7 +52,10 @@ export class FakeApi extends RpcTarget implements FakeEngineSurface {
 
   async getEngineCapabilities(): Promise<EngineCapabilities> {
     await this.engine.answering("getEngineCapabilities");
-    return { schema: ENGINE_CAPABILITIES_SCHEMA, capabilities: [...this.engine.capabilities] };
+    return {
+      schema: this.engine.capabilitySchema as typeof ENGINE_CAPABILITIES_SCHEMA,
+      capabilities: supportedEngineCapabilities("local"),
+    };
   }
 
   async subscribeEngineEvents(callback: EngineEventSubscriber): Promise<void> {
@@ -76,7 +79,7 @@ class FakeGateway extends RpcTarget {
   authenticate(clientId: string, clientSecret: string): FakeApi {
     if (clientId !== this.engine.clientId || clientSecret !== this.engine.clientSecret) {
       // The engine's own refusal, word for word (woofx3 api/src/gateway.ts).
-      throw new Error("Invalid client credentials");
+      throw new Error("AuthenticationRefused: Invalid client credentials");
     }
     const api = this.engine.createApi(this.engine);
     this.engine.sessions.push(api);
@@ -93,7 +96,8 @@ export class FakeEngine {
   readonly url = "http://engine.test";
   readonly clientId = "fake-client";
   clientSecret = "ab".repeat(32);
-  capabilities: string[] = supportedEngineCapabilities("local");
+  /** The schema its capability report claims; another than the client reads makes it incompatible. */
+  capabilitySchema: number = ENGINE_CAPABILITIES_SCHEMA;
   /** False makes every new session break before it answers, as an engine that is down does. */
   reachable = true;
   /** Methods that never answer, as an engine that hangs does. */

@@ -38,8 +38,6 @@ const moduleFileContentValidator = v.union(
   v.object({ path: v.string(), size: v.number(), kind: v.literal("too_large") })
 );
 
-const UPDATE_ENGINE_MESSAGE = "Update WoofX3 to browse this module's files.";
-
 type FileSource =
   | { kind: "engine"; manifestModuleId: string; engine: EngineCredentials }
   | { kind: "marketplace"; marketplaceId: string; content: ContentAccess }
@@ -97,18 +95,9 @@ async function fetchArchive(source: Extract<FileSource, { kind: "marketplace" }>
   return await fetchMarketplaceArchive(await fetchMarketplaceDownload(source.marketplaceId, source.content));
 }
 
-/**
- * The error a browser can show. An engine without the file methods answers
- * with capnweb's refusal of an unknown method; the browser gates on the
- * `modules.files` capability, so this only catches an engine that changed
- * between that check and this call.
- */
-function toClientError(error: unknown, method: string): ConvexError<string> {
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes(`'${method}' is not a function`)) {
-    return new ConvexError(UPDATE_ENGINE_MESSAGE);
-  }
-  return new ConvexError(message);
+/** The error a browser can show. */
+function toClientError(error: unknown): ConvexError<string> {
+  return new ConvexError(error instanceof Error ? error.message : String(error));
 }
 
 export const listModuleFiles = action({
@@ -134,7 +123,7 @@ export const listModuleFiles = action({
       }
       return listArchiveModuleFiles(await fetchArchive(source));
     } catch (error) {
-      throw toClientError(error, "listModuleFiles");
+      throw toClientError(error);
     }
   },
 });
@@ -158,7 +147,7 @@ export const readModuleFile = action({
       }
       return readArchiveModuleFile(await fetchArchive(source), path);
     } catch (error) {
-      throw toClientError(error, "getModuleFile");
+      throw toClientError(error);
     }
   },
 });

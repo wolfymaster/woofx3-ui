@@ -1,7 +1,5 @@
 import { type AlertStepSource, alertTargetUses, alertWidgetNamesAcross } from "@shared/alert-widgets";
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
-import { GatewayUnsupportedError } from "@/engine/errors";
 import type { ScenesGateway } from "@/engine/gateway";
 import type {
   AlertTargetUsage,
@@ -18,23 +16,12 @@ import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { readAllWorkflows } from "./workflow-pages";
 
-/**
- * Throws for an engine that cannot hand over whole scenes: its scene list
- * leaves out what the screens draw, so there is nothing true to show.
- */
 const noPrewarm = (): void => {};
-
-function requireSnapshots(runtime: DirectRuntime, member: string): void {
-  if (!runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
-    throw new GatewayUnsupportedError(member);
-  }
-}
 
 function scenesRead(runtime: DirectRuntime): EngineRead<SceneRecord[]> {
   return {
     queryKey: k.scenes.list(),
     queryFn: async () => {
-      requireSnapshots(runtime, "scenes.useScenes");
       const { scenes } = await runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots());
       return scenes.map(toSceneRecord);
     },
@@ -64,7 +51,6 @@ function sceneRead(runtime: DirectRuntime, engineSceneId: string): EngineRead<Sc
   return {
     queryKey: k.scenes.detail(engineSceneId),
     queryFn: async () => {
-      requireSnapshots(runtime, "scenes.useScene");
       const snapshot = await runtime.call("getSceneSnapshot", (api) => api.getSceneSnapshot(engineSceneId));
       return snapshot === null ? null : toSceneRecord(snapshot);
     },

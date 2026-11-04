@@ -5,7 +5,6 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { readMemberRole } from "./instances";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
@@ -207,15 +206,10 @@ export const syncToEngine = internalAction({
       throw new Error("AUTH_TWITCH_ID env var is not set");
     }
 
-    const capabilities = await fetchEngineCapabilities({
-      url: instance.url,
-      clientId: instance.clientId,
-      clientSecret: instance.clientSecret,
-    });
+    const { accessToken } = await openPlatformLinkTokens(await platformTokenCipher(), link);
     const token = twitchTokenForEngine({
       link,
-      tokens: await openPlatformLinkTokens(await platformTokenCipher(), link),
-      asksForTokens: hasEngineCapability(capabilities, "twitch.dashboardTokens"),
+      accessToken,
       clientId: twitchClientId,
       now: Date.now(),
     });

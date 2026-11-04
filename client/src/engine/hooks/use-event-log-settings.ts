@@ -2,22 +2,14 @@ import { useStore } from "@nanostores/react";
 import { atom } from "nanostores";
 import { useCallback, useEffect, useState } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { EventLogSettings } from "@/engine/types";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
-import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
 import { useLogger } from "@/lib/logger-context";
 
-/**
- * - `unsupported`: the engine has no selection, so nothing can be chosen.
- *   `checked` says whether that is known (`outdated`) or the engine could not
- *   be asked (`unknown`).
- * - `error`: the settings could not be read; asked again on reconnect.
- */
+/** `error`: the settings could not be read; asked again on reconnect. */
 export type EventLogSettingsState =
   | { status: "loading" }
   | { status: "ready"; settings: EventLogSettings }
-  | { status: "unsupported"; checked: "outdated" | "unknown" }
   | { status: "error"; message: string };
 
 /**
@@ -52,7 +44,6 @@ export interface EventLogSettingsHandle {
 export function useEventLogSettings(): EventLogSettingsHandle {
   const logger = useLogger();
   const { instanceId } = useEngineScope();
-  const support = useEngineCapabilities().support(...EVENT_LOG_CAPABILITIES);
   const { eventLog } = useEngineGateway();
   const getEventLogSettings = eventLog.useSettingsRequest();
   const setEventLogSelection = eventLog.useSetSelectionRequest();
@@ -65,7 +56,7 @@ export function useEventLogSettings(): EventLogSettingsHandle {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: readCount asks again on refresh
   useEffect(() => {
-    if (!instanceId || support !== "supported" || !connected) {
+    if (!instanceId || !connected) {
       return;
     }
     let cancelled = false;
@@ -85,7 +76,7 @@ export function useEventLogSettings(): EventLogSettingsHandle {
     return () => {
       cancelled = true;
     };
-  }, [instanceId, support, connected, readCount, getEventLogSettings]);
+  }, [instanceId, connected, readCount, getEventLogSettings]);
 
   const refresh = useCallback(() => {
     setReadCount((count) => count + 1);
@@ -107,20 +98,10 @@ export function useEventLogSettings(): EventLogSettingsHandle {
     [instanceId, settings, setEventLogSelection]
   );
 
-  return { state: settingsState(support, settings, error), saving, refresh, setEnabled };
+  return { state: settingsState(settings, error), saving, refresh, setEnabled };
 }
 
-function settingsState(
-  support: CapabilitySupport,
-  settings: EventLogSettings | undefined,
-  error: string | null
-): EventLogSettingsState {
-  if (support === "unsupported") {
-    return { status: "unsupported", checked: "outdated" };
-  }
-  if (support === "unknown") {
-    return { status: "unsupported", checked: "unknown" };
-  }
+function settingsState(settings: EventLogSettings | undefined, error: string | null): EventLogSettingsState {
   if (settings) {
     return { status: "ready", settings };
   }

@@ -46,11 +46,6 @@ describe("mergeActivity", () => {
     expect(rows).toEqual([]);
   });
 
-  test("shows every event when no selection applies, as for an engine that predates it", () => {
-    const rows = mergeActivity([event("e1", "stream.online", "2026-10-01T10:00:00Z")], [], null);
-    expect(rows.map((row) => row.key)).toEqual(["e1"]);
-  });
-
   test("keeps one copy of an event that history and the push both delivered", () => {
     const rows = mergeActivity(
       [event("e1", "channel.follow", "2026-10-01T10:00:00Z"), event("e1", "channel.follow", "2026-10-01T10:00:00Z")],

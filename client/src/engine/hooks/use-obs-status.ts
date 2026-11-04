@@ -1,9 +1,7 @@
 import { useStore } from "@nanostores/react";
 import { useEffect, useState } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { ObsStatus } from "@/engine/types";
-import type { CapabilitySupport } from "@/lib/engine-capabilities";
 import { $documentVisible } from "@/lib/stores";
 
 /**
@@ -13,9 +11,7 @@ import { $documentVisible } from "@/lib/stores";
 const POLL_MS = 5_000;
 
 export interface ObsStatusResult {
-  /** Whether the engine can report its OBS connection at all. */
-  support: CapabilitySupport;
-  /** Null until the first answer, and while unsupported or disabled. */
+  /** Null until the first answer, and while disabled. */
   status: ObsStatus | null;
 }
 
@@ -26,11 +22,10 @@ export interface ObsStatusResult {
  */
 export function useObsStatus(enabled: boolean): ObsStatusResult {
   const { instanceId } = useEngineScope();
-  const support = useEngineCapabilities().support("obs.status");
   const getStatus = useEngineGateway().status.useObsStatusRequest();
   const visible = useStore($documentVisible);
   const [status, setStatus] = useState<ObsStatus | null>(null);
-  const active = Boolean(instanceId) && enabled && support === "supported" && visible;
+  const active = Boolean(instanceId) && enabled && visible;
 
   useEffect(() => {
     if (!active || !instanceId) {
@@ -60,5 +55,5 @@ export function useObsStatus(enabled: boolean): ObsStatusResult {
     };
   }, [active, instanceId, getStatus]);
 
-  return { support, status: active ? status : null };
+  return { status: active ? status : null };
 }

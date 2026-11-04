@@ -105,7 +105,7 @@ export const listChatters = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<Chatter[]> => {
     const call = await authorizeTwitch(ctx, args.instanceId, CHATTERS_SCOPE);
-    return fetchChatters(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"));
+    return fetchChatters(call, await twitchHelixRoute(ctx, args.instanceId));
   },
 });
 
@@ -143,11 +143,7 @@ export const lookupUser = action({
     // here means a missing permission surfaces at confirmation time rather than
     // two minutes later inside the queue processor.
     const { accessToken, clientId } = await authorizeTwitch(ctx, args.instanceId, SHOUTOUT_SCOPE);
-    return fetchTwitchUser(
-      { accessToken, clientId },
-      { login },
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.chat")
-    );
+    return fetchTwitchUser({ accessToken, clientId }, { login }, await twitchHelixRoute(ctx, args.instanceId));
   },
 });
 
@@ -476,7 +472,7 @@ export const sweepStalledQueues = internalMutation({
 
 async function sendShoutoutNow(ctx: ActionCtx, instanceId: Id<"instances">, toBroadcasterId: string): Promise<void> {
   const call = await authorizeTwitchUnattended(ctx, instanceId, SHOUTOUT_SCOPE);
-  await sendQueuedShoutout(call, await twitchHelixRoute(ctx, instanceId, "twitch.chat"), toBroadcasterId);
+  await sendQueuedShoutout(call, await twitchHelixRoute(ctx, instanceId), toBroadcasterId);
 }
 
 /**

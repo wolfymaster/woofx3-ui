@@ -27,7 +27,7 @@ function fetchAnswering(status: number, body: string | null) {
   return fetchStub;
 }
 
-describe("without twitch.ads", () => {
+describe("on a direct route", () => {
   test("reads the schedule and snoozes on Helix as before", async () => {
     const stub = fetchAnswering(200, JSON.stringify(SCHEDULE_BODY));
     expect(await callHelix(CALL, DIRECT_ROUTE, "read")).toEqual(SCHEDULE_BODY);
@@ -39,7 +39,7 @@ describe("without twitch.ads", () => {
   });
 });
 
-describe("with twitch.ads", () => {
+describe("through the engine", () => {
   test("reads the schedule and snoozes through the engine", async () => {
     const stub = fetchAnswering(500, null);
     const schedule = fakeEngineRoute({ ok: true, body: SCHEDULE_BODY });

@@ -645,45 +645,6 @@ export const reconcileUninstalledModule = internalMutation({
  * is left untouched. Emits an error transient event carrying the conflict
  * list so the UI can show the user why the delete was refused.
  */
-/**
- * Best-effort: the engine sent a delete webhook without a moduleKey, so we
- * can't correlate it directly. Look up this instance's moduleRepository record
- * by name and emit an error transient event under its stored moduleKey so the
- * UI subscription unsticks. If no record is found (or it has no moduleKey),
- * there's no pending UI subscription to notify — log and drop.
- *
- * Scoped to the instance: another tenant's row for the same module carries a
- * different moduleKey, so emitting under it would leave the dialog that is
- * actually waiting stuck until its timeout.
- */
-export const emitDeleteErrorForMissingKey = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    moduleName: v.string(),
-    reason: v.string(),
-  },
-  handler: async (ctx, { instanceId, moduleName, reason }) => {
-    const record = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_name_version", (q) => q.eq("instanceId", instanceId).eq("name", moduleName))
-      .first();
-
-    const correlationKey = record?.moduleKey;
-    if (!correlationKey) {
-      return;
-    }
-
-    await ctx.runMutation(internal.transientEvents.emit, {
-      instanceId,
-      correlationKey,
-      type: "module.uninstall",
-      status: "error",
-      message: reason,
-      data: { moduleName, conflicts: [] },
-    });
-  },
-});
-
 export const processModuleDeleteFailed = internalMutation({
   args: {
     instanceId: v.id("instances"),

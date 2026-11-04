@@ -395,12 +395,7 @@ export const complete = action({
     if (announcementText) {
       try {
         requireScope(SEND_SCOPE);
-        await sendChatMessage(
-          twitch,
-          announcementText,
-          { pin: false },
-          await twitchHelixRoute(ctx, args.instanceId, "twitch.chat")
-        );
+        await sendChatMessage(twitch, announcementText, { pin: false }, await twitchHelixRoute(ctx, args.instanceId));
         announcement = { status: "done" };
       } catch (error) {
         announcement = { status: "failed", message: messageOf(error) };

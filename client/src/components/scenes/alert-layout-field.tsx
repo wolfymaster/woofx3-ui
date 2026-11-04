@@ -130,13 +130,13 @@ function AlertLayoutDialogBody({
       toast({ title: "Some of its inputs had no value", description: unfilledInputsText(unfilled) });
     }
   };
-  const library = libraryAlerts.enabled ? (
+  const library = (
     <LibraryAlertList
       alerts={libraryAlerts.alerts}
       onPick={setAddingFromLibrary}
       onEdit={(alert) => leaveTo(() => navigate(libraryAlertEditorPath(alert.engineCompositionId)))}
     />
-  ) : undefined;
+  );
 
   return (
     <DialogContent

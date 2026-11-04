@@ -15,7 +15,6 @@ import {
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngineScope } from "@/engine/context";
 import { useCompositionPreviewUrlRequest } from "@/engine/hooks/use-alert-library";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -46,7 +45,7 @@ export interface CompositionPreviewController {
   live: boolean;
   /** Layers the page draws nothing for, which keep their stand-ins. */
   undrawn: ReadonlySet<string>;
-  /** Null without the capability, or once the editor has given up on the page. */
+  /** Null until the page has a URL, or once the editor has given up on it. */
   frame: PreviewFrameBinding | null;
   /** When the alert finishes on the page, exits included; null until it says. */
   durationMs: number | null;
@@ -67,8 +66,6 @@ interface UseCompositionPreviewArgs {
   /** Names what a problem's id is about, for its toast. */
   labelOf: (id: string) => string | undefined;
 }
-
-const CAPABILITY = "compositions.preview";
 
 /** How long before a frame's load event a `ready` may arrive and still be that page's. */
 const READY_BEFORE_LOAD_MS = 2_000;
@@ -126,7 +123,6 @@ export function useCompositionPreview({
 }: UseCompositionPreviewArgs): CompositionPreviewController {
   const logger = useLogger();
   const { instanceId } = useEngineScope();
-  const supported = useEngineCapabilities().support(CAPABILITY) === "supported";
   const getUrl = useCompositionPreviewUrlRequest();
   fetchPreviewUrl = getUrl;
   const { toast } = useToast();
@@ -149,7 +145,7 @@ export function useCompositionPreview({
   const seenProblems = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!supported || instanceId === null || attempt >= PREVIEW_MAX_ATTEMPTS) {
+    if (instanceId === null || attempt >= PREVIEW_MAX_ATTEMPTS) {
       setSrc(null);
       return;
     }
@@ -161,7 +157,7 @@ export function useCompositionPreview({
     return () => {
       current = false;
     };
-  }, [supported, instanceId, attempt]);
+  }, [instanceId, attempt]);
 
   const post = useCallback((command: PreviewCommand) => {
     const target = frameRef.current?.contentWindow;

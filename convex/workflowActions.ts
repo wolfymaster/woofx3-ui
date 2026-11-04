@@ -10,7 +10,7 @@ import {
 } from "@shared/workflow-test-run";
 import type { WorkflowDefinition } from "@woofx3/api";
 import type { RpcTarget } from "@woofx3/api/client";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
@@ -19,11 +19,7 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import { manualRunOrigin } from "./lib/manualRunOrigin";
 import { logger } from "./logger";
 
-/**
- * The slice of the engine API test runs use, typed to the engine that has
- * the options. Calls against an older engine still succeed: capnweb passes
- * the extra argument, which the older method ignores.
- */
+/** The slice of the engine API test runs use. */
 interface TestRunEngineApi extends RpcTarget {
   triggerWorkflowByName(
     workflowNameOrId: string,
@@ -33,8 +29,7 @@ interface TestRunEngineApi extends RpcTarget {
     triggeredBy?: string,
     options?: TriggerWorkflowOptions
   ): Promise<TriggerWorkflowResponse>;
-  /** Returns nothing on an engine whose cancel only marks the history row. */
-  cancelWorkflow(executionId: string, reason?: string): Promise<CancelWorkflowResult | undefined | null>;
+  cancelWorkflow(executionId: string, reason?: string): Promise<CancelWorkflowResult>;
 }
 
 /**
@@ -319,14 +314,8 @@ export const replay = action({
 });
 
 /**
- * Stop a recorded run.
- *
- * An engine with real cancel (wolfymaster/woofx3#172) stops the run and
- * reports its settled status back through the usual run webhooks, and answers
- * with an `outcome`. An older engine answers with nothing, having only written
- * the status onto its history row -- the remaining steps still run -- and
- * relays no webhook for it, so for that engine the Convex mirror is updated
- * here and a later snapshot from the engine still wins.
+ * Stop a recorded run. The engine stops it, reports its settled status back
+ * through the usual run webhooks, and answers with an `outcome`.
  */
 export const cancelRun = action({
   args: {
@@ -337,29 +326,16 @@ export const cancelRun = action({
     const bundle = await requireInstanceContext(ctx, instanceId);
 
     const rpc = createEngineRpcSession<TestRunEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    const result: CancelWorkflowResult | undefined | null = await rpc.cancelWorkflow(
-      engineRunId,
-      "Cancelled from the dashboard"
-    );
-    if (result?.outcome) {
-      return { outcome: result.outcome, status: result.status };
+    const result = await rpc.cancelWorkflow(engineRunId, "Cancelled from the dashboard");
+    if (result?.outcome !== "cancelled" && result?.outcome !== "already_finished") {
+      throw new ConvexError("The engine answered the cancel without an outcome.");
     }
-
-    await ctx.runMutation(internal.workflowRuns.markCancelled, {
-      instanceId,
-      engineRunId,
-      at: new Date().toISOString(),
-    });
-    return { outcome: "marked", status: "cancelled" };
+    return { outcome: result.outcome, status: result.status };
   },
 });
 
 interface CancelRunResult {
-  /**
-   * `cancelled` / `already_finished` as the engine reported them, or `marked`
-   * when an older engine only marked the history row and the steps keep running.
-   */
-  outcome: "cancelled" | "already_finished" | "marked";
+  outcome: CancelWorkflowResult["outcome"];
   status: string;
 }
 

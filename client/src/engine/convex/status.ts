@@ -13,15 +13,9 @@ import type {
   ReadOptions,
 } from "@/engine/types";
 import { useOptimisticInstanceQueryFor } from "@/hooks/use-optimistic-instance-query";
-import { withPlainError } from "./errors";
 import { fromInstanceId } from "./ids";
 import { useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
-
-function useCapabilitiesRequest() {
-  const get = useInstanceAction(api.engineCapabilities.get);
-  return useCallback(() => get({}).catch(withPlainError), [get]);
-}
 
 function useEngineInfoRequest() {
   const getEngineInfo = useInstanceAction(api.engineInfo.getEngineInfo);
@@ -132,7 +126,6 @@ function useSyncRequest() {
 }
 
 export const convexStatusGateway: StatusGateway = {
-  useCapabilitiesRequest,
   useEngineInfoRequest,
   useSetOverlayPublicUrlRequest,
   useConnectionTestRequest,

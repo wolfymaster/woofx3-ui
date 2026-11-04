@@ -1,12 +1,9 @@
-import { ENGINE_CAPABILITIES, type StreamEventFrame, type StreamEventSubscriber } from "@woofx3/api";
+import type { StreamEventFrame, StreamEventSubscriber } from "@woofx3/api";
 import { RpcTarget } from "@woofx3/api/client";
 import type { Cancel, Clock, Logger } from "@/lib/engine-session/deps";
 import type { EngineSession, SessionState } from "@/lib/engine-session/EngineSession";
 import { listenerTakes, type StreamListener, streamTypesUnion } from "@/lib/stream-listeners";
 import type { DirectEngineApi } from "./connection";
-
-/** What the registry registered on the current session: the sorted types it asked for, or the engine's fixed set. */
-type Registration = { kind: "types"; key: string } | { kind: "fixed" };
 
 /**
  * The subscriber handed to `subscribeStreamEvents`. capnweb exports it by
@@ -31,15 +28,15 @@ class StreamEventSink extends RpcTarget implements StreamEventSubscriber {
  * A session holds one registration, which every subscribe replaces, so the
  * union is registered again whenever it changes, debounced so a screen
  * mounting several listeners registers once, and again on every new session,
- * which starts with none. An engine without `events.log` pushes a fixed set
- * of types whatever it is asked for; it is registered once per session.
+ * which starts with none.
  *
  * Delivery has no replay: frames pushed while disconnected are gone, and a
  * listener that needs a full picture reads it again on reconnect.
  */
 export class StreamEventRegistry {
   private readonly listeners = new Set<StreamListener>();
-  private registration: Registration | null = null;
+  /** The sorted types registered on the current session, joined with commas; null before the first. */
+  private registration: string | null = null;
   private sink: StreamEventSink | null = null;
   private session: SessionState | null = null;
   private cancelRegistration: Cancel | null = null;
@@ -62,9 +59,9 @@ export class StreamEventRegistry {
     };
   }
 
-  /** Adds a listener for `types` (null: every type the engine pushes); returns the unsubscribe. */
-  subscribe(types: readonly string[] | null, onFrame: (frame: StreamEventFrame) => void): () => void {
-    const listener: StreamListener = { types: types ? new Set(types) : null, callback: onFrame };
+  /** Adds a listener for `types`; returns the unsubscribe. */
+  subscribe(types: readonly string[], onFrame: (frame: StreamEventFrame) => void): () => void {
+    const listener: StreamListener = { types: new Set(types), callback: onFrame };
     this.listeners.add(listener);
     this.scheduleRegistration();
     return () => {
@@ -111,22 +108,16 @@ export class StreamEventRegistry {
     if (this.registration === null && listeners.length === 0) {
       return;
     }
-    const perSubscriber = state.capabilities.includes(ENGINE_CAPABILITIES.eventsLog);
-    const types = perSubscriber ? streamTypesUnion(listeners) : null;
-    const next: Registration = types ? { kind: "types", key: types.join(",") } : { kind: "fixed" };
-    if (
-      this.registration !== null &&
-      (this.registration.kind === "fixed" || sameRegistration(this.registration, next))
-    ) {
+    const types = streamTypesUnion(listeners);
+    const next = types.join(",");
+    if (this.registration === next) {
       return;
     }
     this.registration = next;
     const sink = new StreamEventSink((frame) => this.deliver(frame));
     this.sink = sink;
     this.engine
-      .call("subscribeStreamEvents", (api) =>
-        types ? api.subscribeStreamEvents(sink, types) : api.subscribeStreamEvents(sink)
-      )
+      .call("subscribeStreamEvents", (api) => api.subscribeStreamEvents(sink, types))
       .catch((error: unknown) => {
         // Only the latest registration counts; one that replaced this one is
         // left alone, and a failed one is tried again on the next change.
@@ -149,8 +140,4 @@ export class StreamEventRegistry {
       }
     }
   }
-}
-
-function sameRegistration(a: Registration, b: Registration): boolean {
-  return a.kind === "types" && b.kind === "types" && a.key === b.key;
 }

@@ -61,11 +61,9 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
   const selection = useEventLogSettings();
   const settings = selection.state;
 
-  // Undefined until the selection is known; null for an engine without one,
-  // which then pushes its own fixed set and every pushed event shows.
-  const enabled =
-    settings.status === "ready" ? settings.settings.enabled : settings.status === "unsupported" ? null : undefined;
-  const enabledTypes = useMemo(() => (enabled === null ? null : new Set(enabled ?? [])), [enabled]);
+  // Undefined until the selection is known.
+  const enabled = settings.status === "ready" ? settings.settings.enabled : undefined;
+  const enabledTypes = useMemo(() => new Set(enabled ?? []), [enabled]);
 
   const alerts = useEngineAlerts(ALERT_LIMIT);
   const { events, status } = useEventLog(enabled);
@@ -136,13 +134,11 @@ function EmptyFeed({ children }: { children: string }) {
 
 /** Says why the feed holds only what arrived since the page loaded, when it does. */
 function HistoryNote({ status }: { status: EventLogStatus }) {
-  if (status !== "unsupported" && status !== "error") {
+  if (status !== "error") {
     return null;
   }
   const reason =
-    status === "unsupported"
-      ? "Your engine is too old to keep an event log. Update it to see events from before this page loaded."
-      : "The engine's event log could not be read. Events from before this page loaded will show after it reconnects.";
+    "The engine's event log could not be read. Events from before this page loaded will show after it reconnects.";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -164,10 +160,6 @@ function filterUnavailableReason(state: EventLogSettingsHandle["state"]): string
       return "Reading which events your engine records…";
     case "error":
       return "Your engine's event choices could not be read. They will be read again when it reconnects.";
-    case "unsupported":
-      return state.checked === "outdated"
-        ? "Update your engine to choose which events show here."
-        : "Your engine could not be asked whether it lets you choose which events show.";
   }
 }
 
