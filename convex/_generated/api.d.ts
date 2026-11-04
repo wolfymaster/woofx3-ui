@@ -204,7 +204,6 @@ import type * as migrations_backfillAccountMembers from "../migrations/backfillA
 import type * as migrations_backfillCommandActions from "../migrations/backfillCommandActions.js";
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
-import type * as migrations_dropEngineReports from "../migrations/dropEngineReports.js";
 import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
 import type * as moderation from "../moderation.js";
@@ -490,7 +489,6 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillCommandActions": typeof migrations_backfillCommandActions;
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
-  "migrations/dropEngineReports": typeof migrations_dropEngineReports;
   "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
   moderation: typeof moderation;
