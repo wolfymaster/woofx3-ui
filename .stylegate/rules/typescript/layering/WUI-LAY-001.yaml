@@ -1,0 +1,55 @@
+id: WUI-LAY-001
+title: shared/ imports neither Convex, React nor client code
+lang: typescript
+scope:
+  include: ["shared/**/*.ts"]
+  skip_tests: true
+category: layering
+severity: warn
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-lay-001.yml
+statement: >
+  A file under `shared/` (imported as `@shared/*` by both `convex/` and
+  `client/`) imports or re-exports from Convex (`convex`, `convex/values`,
+  `convex/server`, `@convex/*`, or a relative path into `convex/`), from
+  React (`react`, `react-dom`), or from client code (`@/...` or a relative
+  path into `client/`). Code in `shared/` is pure TypeScript: parsers,
+  mappers and rules over plain data. A Convex validator for a shared shape
+  lives in `convex/` (or `convex/lib/`) and is built from the shared type,
+  not the other way round.
+rationale: >
+  The engine gateway's direct adapter and the desktop app's local mode run
+  without a Convex client and may not import Convex modules; they reach
+  helpers through `shared/` precisely so that Convex stays out of them. A
+  Convex or React import in `shared/` pulls that dependency into every
+  bundle that imports the helper and breaks the boundary the gateway tests
+  hold for `client/src/engine/`.
+violation_examples:
+  - note: A shared model builds its shape with Convex validators.
+    code: |
+      // shared/user-pages/page.ts
+      import { type Infer, v } from "convex/values";
+
+      export const pageSectionValidator = v.object({ id: v.string(), widgets: v.array(v.string()) });
+      export type PageSection = Infer<typeof pageSectionValidator>;
+  - note: A shared helper reaches into the client for a formatter.
+    code: |
+      // shared/stream-recap.ts
+      import { formatDuration } from "@/lib/format";
+non_violation_examples:
+  - note: The shared file declares the plain type; Convex builds its validator beside the schema.
+    code: |
+      // shared/user-pages/page.ts
+      export interface PageSection {
+        id: string;
+        widgets: string[];
+      }
+  - note: Near miss. One shared module importing another through the alias.
+    code: |
+      // shared/twitch-pins.ts
+      import { parseHelixAnswer } from "@shared/twitch-helix-answer";
+context_needs: [imports]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

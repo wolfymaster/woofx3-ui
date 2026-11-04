@@ -1,0 +1,6 @@
+reviewed: false
+findings:
+  - file: bad/convex/relaySigning.ts
+    line_start: 8
+    line_end: 11
+    note: A use-node file registers an internal query.

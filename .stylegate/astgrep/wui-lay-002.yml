@@ -1,0 +1,15 @@
+id: WUI-LAY-002
+language: typescript
+severity: error
+message: A "use node" file registers a query or mutation.
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: ^(query|mutation|internalQuery|internalMutation)$
+  inside:
+    stopBy: end
+    kind: program
+    has:
+      kind: expression_statement
+      regex: ^["']use node["'];?$

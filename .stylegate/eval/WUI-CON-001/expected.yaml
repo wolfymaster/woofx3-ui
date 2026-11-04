@@ -1,0 +1,10 @@
+reviewed: false
+findings:
+  - file: bad/client/src/hooks/use-marketplace-counts.ts
+    line_start: 10
+    line_end: 30
+    note: The effect sets loading and depends on it, so its re-run cancels the request it just started.
+  - file: bad/client/src/hooks/use-supporter-page.ts
+    line_start: 9
+    line_end: 13
+    note: The effect stores the page it depends on, so each answer aborts and restarts the request.

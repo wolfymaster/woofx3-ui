@@ -1,0 +1,60 @@
+id: WUI-API-002
+title: Every Convex function declares an args validator
+lang: typescript
+scope:
+  include: ["convex/**/*.ts"]
+  exclude: ["convex/_generated/**"]
+  skip_tests: true
+category: api
+severity: error
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-api-002.yml
+statement: >
+  A Convex function registered with `query`, `mutation`, `action`,
+  `internalQuery`, `internalMutation` or `internalAction` from
+  `convex/_generated/server` has no `args` validator: its definition object
+  has no `args` key, or the handler is passed directly as a function. Every
+  function declares `args`, `args: {}` for one that takes none. An object
+  built with a spread (`{ ...shared, handler }`) is not judged, since the
+  spread may carry `args`. `httpAction` takes a request, not args, and is
+  not covered.
+rationale: >
+  Public functions are internet-facing: without a validator any client can
+  send any shape, and the handler's TypeScript types describe nothing that
+  was checked. Internal functions are called from webhooks and engine
+  callbacks with data that came from outside, so they validate too
+  (`convex/_generated/ai/guidelines.md`, "ALWAYS include argument
+  validators").
+violation_examples:
+  - note: A public query with no args key.
+    code: |
+      export const listMine = query({
+        handler: async (ctx) => {
+          const userId = await requireUserId(ctx);
+          return ctx.db.query("accountMembers").withIndex("by_user", (q) => q.eq("userId", userId)).take(50);
+        },
+      });
+  - note: An internal mutation registered with a bare handler.
+    code: |
+      export const touch = internalMutation(async (ctx, { instanceId }: { instanceId: Id<"instances"> }) => {
+        await ctx.db.patch(instanceId, { lastSeenAt: Date.now() });
+      });
+non_violation_examples:
+  - note: A function taking no arguments says so.
+    code: |
+      export const viewer = query({
+        args: {},
+        handler: async (ctx) => getAuthUserId(ctx),
+      });
+  - note: Near miss. The validator object is declared once and passed by shorthand.
+    code: |
+      const args = { instanceId: v.id("instances"), limit: v.optional(v.number()) };
+      export const list = query({ args, handler: async (ctx, { instanceId, limit }) => listRows(ctx, instanceId, limit) });
+  - note: Near miss. An httpAction takes a Request and has no args.
+    code: |
+      export const engineWebhook = httpAction(async (ctx, request) => handleEngineWebhook(ctx, request));
+context_needs: [enclosing_decl]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

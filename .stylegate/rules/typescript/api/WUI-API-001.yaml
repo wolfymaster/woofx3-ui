@@ -1,0 +1,81 @@
+id: WUI-API-001
+title: An engine HTTP batch session is opened and used in one expression
+lang: typescript
+scope:
+  include: ["convex/**/*.ts"]
+  exclude: ["convex/_generated/**"]
+  skip_tests: true
+category: api
+severity: error
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-api-001.yml
+statement: >
+  Convex reaches an engine through `createEngineRpcSession(url, clientId,
+  clientSecret)` (`convex/lib/engineInstanceUrl.ts`), a capnweb HTTP batch
+  session: the batch, `authenticate` included, is sent on the first `await`
+  and the session is spent afterwards. The session is spent before the real
+  call when the code awaits the session itself
+  (`await createEngineRpcSession(...)`), returns it from an `async`
+  function (whose promise resolves it, sending a batch holding only
+  `authenticate`), or keeps it in a variable and uses that variable again in
+  a later statement after a statement that awaited a call on it (two
+  sequential calls, or a call followed by passing the session on). Open a
+  new session for each call, in the expression that makes the call:
+  `await createEngineRpcSession<EngineApi>(url, id, secret).listScenes()`, or
+  hand out a function that opens one (`() => createEngineRpcSession(...)`).
+  Calls made on one session before its first await, such as
+  `Promise.all([rpc.a(), rpc.b()])`, share one batch and are not a
+  violation, nor is one call per branch on a session opened above the
+  branches.
+rationale: >
+  A spent session fails at run time with "Batch RPC request ended", only on
+  the second call, and only against a real engine: type checks and most
+  fakes pass. It shipped twice, in the config backup actions (an async
+  `connect()` returning the session) and in the default seed (one session
+  shared across the scene and image reads).
+violation_examples:
+  - note: An async helper returns the session, so awaiting the helper spends it on authenticate alone.
+    code: |
+      async function connect(ctx: ActionCtx, instanceId: Id<"instances">): Promise<EngineApi> {
+        const engine = await requireInstanceContext(ctx, instanceId);
+        return createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret);
+      }
+  - note: One session is shared by two sequential calls; the second goes out on a spent session.
+    code: |
+      const engine = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+      const scene = await applyScene(engine, previous?.scene);
+      const alerts = await applyAlerts(ctx, instanceId, engine, bundle, previous);
+  - note: The session itself is awaited before the call.
+    code: |
+      const api = await createEngineRpcSession<EngineApi>(url, clientId, clientSecret);
+      return api.listModuleFiles(moduleId);
+non_violation_examples:
+  - note: The session is opened and called in one expression.
+    code: |
+      return await createEngineRpcSession<EngineApi>(url, clientId, clientSecret).listModuleFiles(moduleId);
+  - note: A function that opens a fresh session per call, as the default seed does.
+    code: |
+      const session = () => createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+      return {
+        getScenes: (query) => session().getScenes(query),
+        createScene: (scene) => session().createScene(scene),
+      };
+  - note: Near miss. One session, but each branch makes exactly one call and returns.
+    code: |
+      const rpc = createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret);
+      if (plan.kind === "trigger-workflow") {
+        await rpc.triggerWorkflowByName(plan.workflowNameOrId, {}, undefined, triggerId, triggeredBy);
+        return { triggerId };
+      }
+      await rpc.runActions(macroRunActionsInput(plan.step, triggeredBy));
+  - note: Near miss. A synchronous helper returns the session unawaited; the caller chains the call on it.
+    code: |
+      function session(engine: InstanceContext): EngineApi {
+        return createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret);
+      }
+      const { compositions } = await session(engine).listAlertCompositions();
+context_needs: [enclosing_decl]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }
