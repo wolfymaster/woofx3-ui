@@ -2,7 +2,7 @@ import { isGoLiveCheckId } from "@shared/go-live-check-ids";
 import { readChannelInfoAnswer, STREAM_INFO_SCOPE } from "@shared/stream-info";
 import { chatMessageProblem } from "@shared/twitch-chat";
 import { missingRequiredTwitchScopes } from "@shared/twitch-scope-health";
-import { ENGINE_CAPABILITIES, type UISetting } from "@woofx3/api";
+import { type UISetting } from "@woofx3/api";
 import { useEffect, useMemo } from "react";
 import { z } from "zod";
 import type { StreamStartMarkerRequest, StreamStartMarkers } from "@/engine/desktop-host";

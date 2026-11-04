@@ -14,7 +14,6 @@ import {
   SHOUTOUT_SCOPE,
 } from "@shared/twitch-chat";
 import { normalizeTwitchLogin, readTwitchUserAnswer } from "@shared/twitch-users";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { TwitchChatGateway } from "@/engine/gateway";
 import type { Announcement, Chatter } from "@/engine/types";
 import { useEngineRequest } from "./query";

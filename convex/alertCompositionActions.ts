@@ -1,7 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action } from "./_generated/server";
+import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { type InstanceContext, requireInstanceContext } from "./sceneActions";
 

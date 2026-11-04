@@ -20,7 +20,7 @@ import {
   VIEWER_STREAM_SCAN,
 } from "@shared/supporters";
 import { readTwitchUserAnswer } from "@shared/twitch-users";
-import { ENGINE_CAPABILITIES, type StreamSession } from "@woofx3/api";
+import { type StreamSession } from "@woofx3/api";
 import type { StreamOpsGateway } from "@/engine/gateway";
 import type {
   EngineTestEvent,

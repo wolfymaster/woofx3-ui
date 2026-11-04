@@ -1,5 +1,4 @@
 import { readCreatedClipAnswer } from "@shared/twitch-clips";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { ClipsGateway } from "@/engine/gateway";
 import type { CreatedClip } from "@/engine/types";
 import { useEngineRequest } from "./query";

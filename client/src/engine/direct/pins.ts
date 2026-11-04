@@ -6,7 +6,6 @@ import {
   readCurrentPinAnswer,
   readUnpinAnswer,
 } from "@shared/twitch-pins";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { PinsGateway } from "@/engine/gateway";
 import type { CurrentPin, PinnedMessage } from "@/engine/types";
 import { toCurrentPin } from "./map/twitch";

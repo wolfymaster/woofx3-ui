@@ -8,7 +8,6 @@ import {
   parseHelixSnoozeResult,
   readAdAnswer,
 } from "@shared/ad-breaks";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { AdBreaksGateway } from "@/engine/gateway";
 import type { AdSchedule, AdSnoozeResult } from "@/engine/types";
 import { useEngineRequest } from "./query";

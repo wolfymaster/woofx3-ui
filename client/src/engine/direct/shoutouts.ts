@@ -1,6 +1,5 @@
 import { SHOUTOUT_SCOPE } from "@shared/twitch-chat";
 import { normalizeTwitchLogin, readTwitchUserAnswer } from "@shared/twitch-users";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { useEffect } from "react";
 import type { ShoutoutEntryId as HostShoutoutEntryId, ShoutoutQueueView } from "@/desktop/host";
 import type { ShoutoutQueueHost } from "@/engine/desktop-host";

@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
   File,
@@ -13,7 +12,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";

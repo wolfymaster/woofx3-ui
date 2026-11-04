@@ -19,7 +19,7 @@ import {
   validateTimeoutSeconds,
 } from "@shared/moderation";
 import { readTwitchUserAnswer, type TwitchUser } from "@shared/twitch-users";
-import { ENGINE_CAPABILITIES, type TwitchHelixResult } from "@woofx3/api";
+import { type TwitchHelixResult } from "@woofx3/api";
 import type { ModerationGateway } from "@/engine/gateway";
 import type {
   BlockedTerm,

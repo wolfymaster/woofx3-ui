@@ -13,7 +13,6 @@ import type {
   ReadOptions,
 } from "@/engine/types";
 import { useOptimisticInstanceQueryFor } from "@/hooks/use-optimistic-instance-query";
-import { withPlainError } from "./errors";
 import { fromInstanceId } from "./ids";
 import { useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
