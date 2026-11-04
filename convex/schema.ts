@@ -2023,7 +2023,8 @@ export default defineSchema({
           v.literal("triggers"),
           v.literal("actions"),
           v.literal("widgets"),
-          v.literal("resources")
+          v.literal("resources"),
+          v.literal("databases")
         ),
         status: v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error")),
         itemsProcessed: v.number(),
@@ -2232,6 +2233,25 @@ export default defineSchema({
     settings: v.record(v.string(), v.any()),
     updatedAt: v.number(),
   }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
+
+  // userPageDatabaseRecords: the public columns of database rows, for public
+  // user pages, newest 1000 per database. The engine owns the rows; this is a
+  // projection kept by the `database.record.changed` webhook and the engineSync
+  // `databases` step, written only for a column public when it arrived and
+  // stripped when a column stops being public. The public read filters by the
+  // current flags again. Cells are a list because a column id may start with
+  // `_`, which a Convex object key may not. See convex/userPageDatabases.ts.
+  userPageDatabaseRecords: defineTable({
+    instanceId: v.id("instances"),
+    databaseId: v.string(),
+    recordId: v.string(),
+    values: v.array(v.object({ columnId: v.string(), value: v.union(v.string(), v.number(), v.boolean()) })),
+    createdAt: v.number(),
+    revision: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance_database_created", ["instanceId", "databaseId", "createdAt"])
+    .index("by_instance_database_record", ["instanceId", "databaseId", "recordId"]),
 
   // pageSubmissions: the outbox of form answers sent from public pages, each
   // kept until its engine's receipt confirms it. Labels and the viewer are

@@ -1051,6 +1051,21 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      case EngineEventType.DATABASE_RECORD_CHANGED: {
+        await ctx.runMutation(internal.userPageDatabases.applyRecordChange, {
+          instanceId: instance._id,
+          change: {
+            databaseId: event.databaseId,
+            recordId: event.recordId,
+            op: event.op,
+            revision: event.revision,
+            createdAt: event.createdAt,
+            publicValues: event.publicValues,
+          },
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       case EngineEventType.ENGINE_RESPONSE_RECEIVED: {
         await ctx.runMutation(internal.transientEvents.emit, {
           instanceId: instance._id,

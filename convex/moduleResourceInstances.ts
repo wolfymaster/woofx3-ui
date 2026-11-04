@@ -1,4 +1,4 @@
-import { parseKindRef, rowsOfKind } from "@shared/resource-kinds";
+import { DATABASE_KIND, parseKindRef, rowsOfKind } from "@shared/resource-kinds";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -6,6 +6,7 @@ import { internalMutation, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
 import { dropPageState, refreshPageStateSettings } from "./lib/userPageState";
 import { findResourceKind } from "./resourceKinds";
+import { scheduleDatabaseCleanup } from "./userPageDatabases";
 
 const resourceInstanceValidator = v.object({
   id: v.string(),
@@ -205,6 +206,9 @@ async function upsertRow(
     await ctx.db.insert("moduleResourceInstances", row);
   }
   await refreshPageStateSettings(ctx, instanceId, row.canonicalId, row.settings);
+  if (`${row.moduleName}:${row.kind}` === DATABASE_KIND) {
+    await scheduleDatabaseCleanup(ctx, instanceId, row.canonicalId);
+  }
 }
 
 export const upsertFromWebhook = internalMutation({
@@ -275,6 +279,9 @@ export const deleteFromWebhook = internalMutation({
       await ctx.db.delete(existing._id);
     }
     await dropPageState(ctx, instanceId, instance.canonicalId);
+    if (`${instance.moduleName}:${instance.kind}` === DATABASE_KIND) {
+      await scheduleDatabaseCleanup(ctx, instanceId, instance.canonicalId);
+    }
   },
 });
 
