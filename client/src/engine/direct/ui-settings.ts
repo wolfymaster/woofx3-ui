@@ -1,6 +1,5 @@
-import { ENGINE_CAPABILITIES, type UISetting, type UISettingValue, type UISettingWriteResult } from "@woofx3/api";
+import type { UISetting, UISettingValue, UISettingWriteResult } from "@woofx3/api";
 import type { z } from "zod";
-import { GatewayUnsupportedError } from "@/engine/errors";
 import type { Logger } from "@/lib/engine-session/deps";
 import { directKeys as k } from "./keys";
 import type { EngineRead } from "./query";
@@ -56,24 +55,11 @@ export function parseSetting<T>(logger: Logger, schema: z.ZodType<T>, setting: U
   return parsed.data;
 }
 
-function requireUISettings(runtime: DirectRuntime, member: string): void {
-  if (!runtime.supports(ENGINE_CAPABILITIES.uiSettings)) {
-    throw new GatewayUnsupportedError(member);
-  }
-}
-
 /** Every live setting in `namespace`; tombstones are left out by the engine. */
-export function uiSettingsRead(
-  runtime: DirectRuntime,
-  namespace: UISettingNamespace,
-  member: string
-): EngineRead<UISetting[]> {
+export function uiSettingsRead(runtime: DirectRuntime, namespace: UISettingNamespace): EngineRead<UISetting[]> {
   return {
     queryKey: k.uiSettings.namespace(namespace),
-    queryFn: async () => {
-      requireUISettings(runtime, member);
-      return runtime.call("listUISettings", (api) => api.listUISettings(namespace));
-    },
+    queryFn: () => runtime.call("listUISettings", (api) => api.listUISettings(namespace)),
   };
 }
 
@@ -88,7 +74,6 @@ export async function putUISetting(
   value: UISettingValue,
   member: string
 ): Promise<void> {
-  requireUISettings(runtime, member);
   const result = await runtime.call("setUISetting", (api) => api.setUISetting(namespace, key, value));
   if (!result.ok) {
     throw new Error(`${member}: the engine refused an unconditional write to ${namespace}/${key}`);
@@ -135,7 +120,6 @@ export async function updateUISetting(
   update: (current: UISetting | null) => UISettingUpdate,
   member: string
 ): Promise<UISetting | null> {
-  requireUISettings(runtime, member);
   let current = await runtime.call("getUISetting", (api) => api.getUISetting(namespace, key));
   for (let attempt = 1; attempt <= runtime.config.uiSettingWriteAttempts; attempt += 1) {
     const next = update(current);
@@ -164,7 +148,6 @@ export async function removeUISetting(
   key: string,
   member: string
 ): Promise<void> {
-  requireUISettings(runtime, member);
   const result = await runtime.call("deleteUISetting", (api) => api.deleteUISetting(namespace, key));
   if (!result.ok) {
     throw new Error(`${member}: the engine refused an unconditional delete of ${namespace}/${key}`);

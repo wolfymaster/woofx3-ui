@@ -57,7 +57,7 @@ const OPERATIONS: Array<{ name: string; run: (route: TwitchHelixRoute) => Promis
     { name: "createMarkerOnTwitch", run: (route) => createMarkerOnTwitch(CALL, route, "clip this"), kind: "write" },
   ];
 
-describe("without twitch.streamInfo", () => {
+describe("on a direct route", () => {
   test("reads the channel from Helix as before", async () => {
     const stub = fetchAnswering(200, json(CHANNEL_BODY));
     const info = await fetchChannelInfo(CALL, DIRECT_ROUTE);
@@ -84,7 +84,7 @@ describe("without twitch.streamInfo", () => {
   });
 });
 
-describe("with twitch.streamInfo", () => {
+describe("through the engine", () => {
   test("reads the channel and its box art from the engine", async () => {
     const stub = fetchAnswering(500, null);
     const channel = fakeEngineRoute({ ok: true, body: CHANNEL_BODY });

@@ -123,7 +123,7 @@ function errorMessage(error: unknown): string {
 }
 
 export function directStarterPacksGateway(runtime: DirectRuntime): StarterPacksGateway {
-  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks, "starterPacks.useStatus");
+  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks);
   const commandsListRead = {
     queryKey: k.commands.list(),
     queryFn: () => runtime.call("listCommands", (api) => api.listCommands()),

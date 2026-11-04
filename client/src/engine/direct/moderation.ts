@@ -47,18 +47,13 @@ export function directModerationGateway(runtime: DirectRuntime): ModerationGatew
 
   const moderate = async (
     operation: ModerationOperation,
-    method: Parameters<typeof twitch.helix>[1],
+    method: Parameters<typeof twitch.helix>[0],
     invoke: (api: DirectEngineApi) => PromiseLike<TwitchHelixResult>
-  ): Promise<unknown> =>
-    readModerationAnswer(operation, await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, method, invoke));
+  ): Promise<unknown> => readModerationAnswer(operation, await twitch.helix(method, invoke));
 
   const target = (account: LinkedTwitchAccount, login: string): Promise<TwitchUser> =>
     resolveModerationTarget(login, account.userId, async (normalized) =>
-      readTwitchUserAnswer(
-        await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, "twitchGetUsers", (api) =>
-          api.twitchGetUsers({ login: normalized })
-        )
-      )
+      readTwitchUserAnswer(await twitch.helix("twitchGetUsers", (api) => api.twitchGetUsers({ login: normalized })))
     );
 
   const blockedTerms = async (): Promise<BlockedTermList> => {

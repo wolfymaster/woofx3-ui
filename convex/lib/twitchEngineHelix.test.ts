@@ -4,11 +4,9 @@ import type { TwitchHelixResult } from "@woofx3/api";
 import { type FunctionReference, getFunctionName } from "convex/server";
 import type { ActionCtx } from "../_generated/server";
 import { logger } from "../logger";
-import type { EngineCapabilityReport } from "./engineCapabilities";
 import type { EngineApi } from "./engineInstanceUrl";
 import { EngineTimeoutError } from "./inboundWebhookRelay";
 import {
-  chooseTwitchHelixRoute,
   directHelixRoute,
   type HelixRequest,
   helixResponse,
@@ -47,57 +45,6 @@ afterEach(() => {
   error.mockRestore();
 });
 
-describe("chooseTwitchHelixRoute", () => {
-  const session = () => ({}) as EngineApi;
-  const report = (capabilities: EngineCapabilityReport["capabilities"]): EngineCapabilityReport => ({
-    legacy: false,
-    capabilities,
-  });
-
-  test("calls Helix directly when the engine does not advertise the capability", async () => {
-    const route = await chooseTwitchHelixRoute({
-      instanceId: "instance-1",
-      capability: "twitch.streamInfo",
-      capabilities: async () => report(["obs.status"]),
-      session,
-    });
-    expect(route.engine).toBeNull();
-  });
-
-  test("calls Helix directly for an engine that predates capabilities", async () => {
-    const route = await chooseTwitchHelixRoute({
-      instanceId: "instance-1",
-      capability: "twitch.streamInfo",
-      capabilities: async () => ({ legacy: true, capabilities: [] }),
-      session,
-    });
-    expect(route.engine).toBeNull();
-  });
-
-  test("calls Helix directly, and says so, when the engine cannot say what it supports", async () => {
-    const route = await chooseTwitchHelixRoute({
-      instanceId: "instance-1",
-      capability: "twitch.streamInfo",
-      capabilities: async () => {
-        throw new TypeError("fetch failed");
-      },
-      session,
-    });
-    expect(route.engine).toBeNull();
-    expect(warn).toHaveBeenCalledTimes(1);
-  });
-
-  test("uses the engine that advertises the capability", async () => {
-    const route = await chooseTwitchHelixRoute({
-      instanceId: "instance-1",
-      capability: "twitch.streamInfo",
-      capabilities: async () => report(["twitch.streamInfo"]),
-      session,
-    });
-    expect(route.engine).toBe(session);
-  });
-});
-
 describe("twitchHelixRoute", () => {
   function ctxAnswering(answers: Record<string, unknown>): ActionCtx {
     return {
@@ -110,7 +57,7 @@ describe("twitchHelixRoute", () => {
     const ctx = ctxAnswering({
       "instances:getInternal": { url: "https://engine.example", clientId: undefined, clientSecret: undefined },
     });
-    const route = await twitchHelixRoute(ctx, instanceId, "twitch.moderation");
+    const route = await twitchHelixRoute(ctx, instanceId);
     expect(route.engine).toBeNull();
   });
 });

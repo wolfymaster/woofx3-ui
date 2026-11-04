@@ -225,9 +225,7 @@ export function directStreamOpsGateway(runtime: DirectRuntime): StreamOpsGateway
       return null;
     }
     await twitch.authorize(null);
-    const user = await readTwitchUserAnswer(
-      await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, "twitchGetUsers", (api) => api.twitchGetUsers(query))
-    );
+    const user = await readTwitchUserAnswer(await twitch.helix("twitchGetUsers", (api) => api.twitchGetUsers(query)));
     return user ? toTwitchChannel(user) : null;
   };
 

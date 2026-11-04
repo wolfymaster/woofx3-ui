@@ -27,7 +27,7 @@ function fetchAnswering(status: number, body: string | null) {
   return fetchStub;
 }
 
-describe("without twitch.chat (or with the shoutout flag off)", () => {
+describe("on a direct route", () => {
   test("reads chatters and sends a queued shoutout on Helix as before", async () => {
     const stub = fetchAnswering(200, JSON.stringify(CHATTERS));
     expect(await fetchChatters(CALL, DIRECT_ROUTE)).toEqual(ROSTER);

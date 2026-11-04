@@ -11,7 +11,7 @@ import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/tw
 //
 // This goes straight to Helix with the refreshable broadcaster token Convex
 // holds (see platformRealtime.ensureFreshTwitchToken, which the EventSub layer
-// uses), or through an engine that advertises twitch.clips (convex/lib/twitchEngineHelix.ts).
+// uses), or through the instance's engine (convex/lib/twitchEngineHelix.ts).
 // The `clips:edit` scope is already part of TWITCH_INTEGRATION_SCOPES, so a
 // channel connected through Settings → Integrations can clip with no
 // re-consent.
@@ -47,7 +47,7 @@ export const createClip = action({
 
     return createClipOnTwitch(
       { accessToken: token.accessToken, broadcasterUserId: token.broadcasterUserId, clientId },
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.clips")
+      await twitchHelixRoute(ctx, args.instanceId)
     );
   },
 });

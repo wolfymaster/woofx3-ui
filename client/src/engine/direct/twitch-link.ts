@@ -1,4 +1,3 @@
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { useEffect, useState } from "react";
 import type { TwitchLinkGateway } from "@/engine/gateway";
 import type { TwitchLinkFlow, TwitchLinking } from "@/engine/types";
@@ -12,7 +11,6 @@ import { directTwitch } from "./twitch";
 // the login and polls Twitch, and the screen shows the streamer the code and
 // where to type it. Nothing leaves the page, so `start`'s `returnTo` is unused.
 
-const UPDATE_ENGINE_MESSAGE = "This engine can't link Twitch. Update the engine to link it.";
 const NOT_CONFIGURED_MESSAGE = "This engine has no Twitch app to link with.";
 
 /**
@@ -35,10 +33,6 @@ class DeviceLoginFollower {
       return;
     }
     this.report({ type: "start" });
-    if (!this.runtime.supports(ENGINE_CAPABILITIES.twitchDeviceLogin)) {
-      this.report({ type: "refused", error: UPDATE_ENGINE_MESSAGE });
-      return;
-    }
     this.attempt = "starting";
     this.runtime
       .call("startTwitchDeviceLogin", (api) => api.startTwitchDeviceLogin())

@@ -99,7 +99,7 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
   const { logger } = runtime;
   const namespace = UI_SETTING_NAMESPACES.goLiveChecklist;
   const twitch = directTwitch(runtime);
-  const settingsRead = uiSettingsRead(runtime, namespace, "goLive.useChecklist");
+  const settingsRead = uiSettingsRead(runtime, namespace);
   const workflows = workflowsRead(runtime);
   const markerRead: EngineRead<boolean> = { queryKey: k.goLive.marker(), queryFn: () => markers.isPending() };
 
@@ -215,9 +215,7 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
 
   const readChannel = async () =>
     readChannelInfoAnswer(
-      await twitch.helix(ENGINE_CAPABILITIES.twitchStreamInfo, "twitchGetChannelInformation", (api) =>
-        api.twitchGetChannelInformation()
-      )
+      await twitch.helix("twitchGetChannelInformation", (api) => api.twitchGetChannelInformation())
     );
 
   const checkStreamInfo = async (): Promise<GoLiveStreamInfoFacts> => {

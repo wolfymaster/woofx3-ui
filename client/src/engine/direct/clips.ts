@@ -12,9 +12,7 @@ export function directClipsGateway(runtime: DirectRuntime): ClipsGateway {
 
   const create = async (): Promise<CreatedClip> => {
     await twitch.authorize(null);
-    return readCreatedClipAnswer(
-      await twitch.helix(ENGINE_CAPABILITIES.twitchClips, "twitchCreateClip", (api) => api.twitchCreateClip())
-    );
+    return readCreatedClipAnswer(await twitch.helix("twitchCreateClip", (api) => api.twitchCreateClip()));
   };
 
   return {

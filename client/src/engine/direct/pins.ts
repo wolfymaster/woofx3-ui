@@ -23,13 +23,10 @@ import { unsupportedRead, unsupportedRequest } from "./unsupported";
  */
 export function directPinsGateway(runtime: DirectRuntime): PinsGateway {
   const twitch = directTwitch(runtime);
-  const pins = ENGINE_CAPABILITIES.twitchPins;
 
   const current = async (): Promise<CurrentPin | null> => {
     await twitch.authorize(PIN_READ_SCOPE);
-    const pin = await readCurrentPinAnswer(
-      await twitch.helix(pins, "twitchGetChatPins", (api) => api.twitchGetChatPins())
-    );
+    const pin = await readCurrentPinAnswer(await twitch.helix("twitchGetChatPins", (api) => api.twitchGetChatPins()));
     return pin ? toCurrentPin(pin) : null;
   };
 
@@ -43,9 +40,7 @@ export function directPinsGateway(runtime: DirectRuntime): PinsGateway {
     await twitch.authorize(SEND_MESSAGE_SCOPE);
     await twitch.authorize(PIN_MANAGE_SCOPE);
     const messageId = await readSentMessageIdAnswer(
-      await twitch.helix(pins, "twitchSendChatMessage", (api) =>
-        api.twitchSendChatMessage({ message: text, pin: true })
-      )
+      await twitch.helix("twitchSendChatMessage", (api) => api.twitchSendChatMessage({ message: text, pin: true }))
     );
     return { messageId };
   };
@@ -53,7 +48,7 @@ export function directPinsGateway(runtime: DirectRuntime): PinsGateway {
   const unpin = async (messageId: string): Promise<void> => {
     await twitch.authorize(PIN_MANAGE_SCOPE);
     await readUnpinAnswer(
-      await twitch.helix(pins, "twitchUnpinChatMessage", (api) => api.twitchUnpinChatMessage({ message_id: messageId }))
+      await twitch.helix("twitchUnpinChatMessage", (api) => api.twitchUnpinChatMessage({ message_id: messageId }))
     );
   };
 

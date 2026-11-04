@@ -98,11 +98,11 @@ export function directDashboardGateway(runtime: DirectRuntime): DashboardGateway
 
   // Panels and the rail share one namespace and so one cached read; each
   // names itself in the error a read the engine cannot serve throws.
-  const panelsRead = uiSettingsRead(runtime, dashboardLayouts, "dashboard.usePanels");
-  const railRead = uiSettingsRead(runtime, dashboardLayouts, "dashboard.useRailWidgets");
-  const notesRead = uiSettingsRead(runtime, dashboardNotes, "dashboard.useNote");
-  const countersRead = uiSettingsRead(runtime, dashboardCounters, "dashboard.usePinnedCounters");
-  const highlightsRead = uiSettingsRead(runtime, dashboardHighlights, "dashboard.useHighlights");
+  const panelsRead = uiSettingsRead(runtime, dashboardLayouts);
+  const railRead = uiSettingsRead(runtime, dashboardLayouts);
+  const notesRead = uiSettingsRead(runtime, dashboardNotes);
+  const countersRead = uiSettingsRead(runtime, dashboardCounters);
+  const highlightsRead = uiSettingsRead(runtime, dashboardHighlights);
 
   const readPanels = (setting: UISetting | null): DashboardPanel[] =>
     (setting && parseSetting(logger, panelsSchema, setting)) ?? [];

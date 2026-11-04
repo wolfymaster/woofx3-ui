@@ -41,8 +41,8 @@ import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/tw
 //
 // These endpoints are in open beta as of 2026-05-15 and may change.
 //
-// The Helix calls go through an engine that advertises twitch.pins when it
-// does (convex/lib/twitchEngineHelix.ts).
+// The Helix calls go through the instance's engine when it has one
+// (convex/lib/twitchEngineHelix.ts).
 
 const TWITCH_PINS_URL = "https://api.twitch.tv/helix/chat/pins";
 
@@ -219,7 +219,7 @@ export const currentPin = action({
       throw new Error("Not authenticated");
     }
     const twitch = await authorizeTwitch(ctx, args.instanceId, PIN_READ_SCOPE);
-    const pin = await fetchCurrentPin(twitch, await twitchHelixRoute(ctx, args.instanceId, "twitch.pins"));
+    const pin = await fetchCurrentPin(twitch, await twitchHelixRoute(ctx, args.instanceId));
     if (!pin) {
       return null;
     }
@@ -362,12 +362,7 @@ export const pinNewMessage = action({
     const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_MESSAGE_SCOPE);
     await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
 
-    const messageId = await sendChatMessage(
-      twitch,
-      text,
-      { pin: true },
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.pins")
-    );
+    const messageId = await sendChatMessage(twitch, text, { pin: true }, await twitchHelixRoute(ctx, args.instanceId));
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
       userId,
@@ -417,7 +412,7 @@ export const repinFromHistory = action({
 
     const { messageId, resent } = await repinOnTwitch(
       twitch,
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.pins"),
+      await twitchHelixRoute(ctx, args.instanceId),
       plan,
       entry.content,
       async () => {
@@ -442,7 +437,7 @@ export const unpinCurrent = action({
   args: { instanceId: v.id("instances"), messageId: v.string() },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     const twitch = await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
-    await unpinOnTwitch(twitch, await twitchHelixRoute(ctx, args.instanceId, "twitch.pins"), args.messageId);
+    await unpinOnTwitch(twitch, await twitchHelixRoute(ctx, args.instanceId), args.messageId);
     return { ok: true };
   },
 });
