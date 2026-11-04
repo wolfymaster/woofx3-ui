@@ -1,6 +1,7 @@
 import { ChevronRight, ExternalLink } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { TriggerAdvancedSettings, TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
@@ -132,6 +133,7 @@ export function TriggerGroupCard({
             {!anyOn && (
               <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
             )}
+            <TriggerGroupChips workflows={group.members.map((member) => member.row)} />
             {unhealthy && (
               <span className="relative z-10 shrink-0">
                 <NotRunningBadge health={unhealthy} />
@@ -164,6 +166,7 @@ export function TriggerGroupCard({
               {alsoRuns}
             </>
           )}
+          <TriggerAdvancedSettings workflows={group.members.map((member) => member.row)} />
         </div>
       )}
     </article>

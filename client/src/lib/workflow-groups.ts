@@ -22,13 +22,18 @@ export function cardWorkflowIds(card: GroupableCard): string[] {
   return card.workflows.map((workflow) => workflow.engineWorkflowId);
 }
 
-/** The groups every workflow of a card is in. A card half in a group is not in it. */
-export function cardGroupIds(card: GroupableCard): string[] {
-  const [first, ...rest] = card.workflows;
+/** The groups every one of `workflows` is in. */
+export function commonGroupIds(workflows: readonly Workflow[]): string[] {
+  const [first, ...rest] = workflows;
   if (!first) {
     return [];
   }
   return first.groupIds.filter((groupId) => rest.every((workflow) => workflow.groupIds.includes(groupId)));
+}
+
+/** The groups a card is in: those all of its workflows are in. A card half in a group is not in it. */
+export function cardGroupIds(card: GroupableCard): string[] {
+  return commonGroupIds(card.workflows);
 }
 
 /** Every trigger card on the instance, by event label and then in the order the Alerts screen lists them. */
