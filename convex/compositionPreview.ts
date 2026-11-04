@@ -10,8 +10,9 @@ import { requireInstanceContext } from "./sceneActions";
 //
 // The browser frames the URL directly, as the scene editor frames its overlay
 // preview (see browserSource.getOrCreatePreviewUrl): a convex.site page in
-// between would make every request to sceneManager cross-site and drop the
-// page's SameSite=Strict session cookie.
+// between would make every request to sceneManager cross-site, which drops the
+// page's session cookie wherever it is SameSite=Strict (plain HTTP away from
+// loopback).
 //
 // Nothing is stored. Unlike an overlay token, this one names no scene or
 // composition and lives a few minutes, only long enough for the page to load

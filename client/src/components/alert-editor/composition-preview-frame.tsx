@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
  * so it draws at the stage's zoom exactly where the stand-ins draw.
  *
  * The URL is framed directly rather than through a convex.site page, which
- * would make every request to sceneManager cross-site and drop its
- * SameSite=Strict session cookie (see convex/compositionPreview.ts).
+ * would make every request to sceneManager cross-site; on an engine reached
+ * over plain HTTP away from loopback its session cookie is SameSite=Strict and
+ * would be dropped (see convex/compositionPreview.ts).
  */
 export function CompositionPreviewFrame({
   frame,
