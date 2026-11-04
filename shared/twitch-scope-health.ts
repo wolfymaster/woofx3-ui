@@ -58,8 +58,14 @@ export const TWITCH_CAPABILITIES: readonly TwitchCapability[] = [
   // Changing chat modes (follower-only, subscriber-only, emote-only, slow).
   // The Moderation capability's read scope already shows the current modes.
   { label: "Moderation: chat modes", scopes: ["moderator:manage:chat_settings"], optional: true },
+  // Twitch's formal warning, which chat moderation's warn action sends.
+  { label: "Moderation: warnings", scopes: ["moderator:manage:warnings"], optional: true },
   { label: "Announcements and shoutouts", scopes: ["moderator:manage:announcements", "moderator:manage:shoutouts"] },
-  { label: "Pinned messages", scopes: ["moderator:manage:chat_messages", "moderator:read:chat_messages"] },
+  // Managing chat messages covers both pinning one and chat moderation removing one.
+  {
+    label: "Pinned and removed messages",
+    scopes: ["moderator:manage:chat_messages", "moderator:read:chat_messages"],
+  },
   {
     label: "Viewer lists",
     scopes: ["moderator:read:chatters", "moderator:read:followers", "moderator:read:moderators", "moderator:read:vips"],
