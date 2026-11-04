@@ -1,5 +1,4 @@
 import { parseDatabaseColumns } from "@shared/databases/columns";
-import { DATABASE_KIND } from "@shared/resource-kinds";
 import { type BindableResourceKind, type PageContent, pageBindings, USER_PAGE_LIMITS } from "@shared/user-pages";
 import { DATABASE_COLUMNS_SETTING } from "@woofx3/api/databases";
 import type { Id } from "../_generated/dataModel";
@@ -21,29 +20,36 @@ import type { MutationCtx } from "../_generated/server";
  * parseFormDefinition reads. Nothing else an instance was created with is
  * published.
  */
-const PUBLIC_SETTING_KEYS: Record<BindableResourceKind, readonly string[]> = {
-  "woofx3:counter": ["initialValue", "goals"],
-  "woofx3:timer": ["duration"],
-  "woofx3:form": ["title", "submitLabel", "fields"],
-  // Filtered to the public columns below: a private column's name is not the visitor's to see.
-  "woofx3:database": ["columns"],
+type SettingsPicker = (source: Record<string, unknown>) => Record<string, unknown>;
+
+/** A picker publishing `keys` as they are stored. */
+function keys(...names: string[]): SettingsPicker {
+  return (source) => {
+    const picked: Record<string, unknown> = {};
+    for (const key of names) {
+      if (key in source && source[key] !== undefined) {
+        picked[key] = source[key];
+      }
+    }
+    return picked;
+  };
+}
+
+const PUBLIC_SETTINGS: Record<BindableResourceKind, SettingsPicker> = {
+  "woofx3:counter": keys("initialValue", "goals"),
+  "woofx3:timer": keys("duration"),
+  "woofx3:form": keys("title", "submitLabel", "fields"),
+  // Only the public columns: a private column's name is not the visitor's to see.
+  "woofx3:database": (source) => ({
+    [DATABASE_COLUMNS_SETTING]: parseDatabaseColumns(source).filter((column) => column.public),
+  }),
 };
 
 export function publicSettings(kind: BindableResourceKind, settings: unknown): Record<string, unknown> {
-  const picked: Record<string, unknown> = {};
   if (settings === null || typeof settings !== "object" || Array.isArray(settings)) {
-    return picked;
+    return {};
   }
-  const source = settings as Record<string, unknown>;
-  for (const key of PUBLIC_SETTING_KEYS[kind]) {
-    if (key in source && source[key] !== undefined) {
-      picked[key] = source[key];
-    }
-  }
-  if (kind === DATABASE_KIND) {
-    picked[DATABASE_COLUMNS_SETTING] = parseDatabaseColumns(source).filter((column) => column.public);
-  }
-  return picked;
+  return PUBLIC_SETTINGS[kind](settings as Record<string, unknown>);
 }
 
 /**
