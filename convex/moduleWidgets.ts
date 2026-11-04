@@ -96,7 +96,10 @@ const registerWidgetFromWebhookArgs = {
   behaviorKinds: widgetBehaviorKindsValidator,
 };
 
-export async function registerWidgetFromWebhook(ctx: MutationCtx, args: ObjectType<typeof registerWidgetFromWebhookArgs>) {
+export async function registerWidgetFromWebhook(
+  ctx: MutationCtx,
+  args: ObjectType<typeof registerWidgetFromWebhookArgs>
+) {
   // Resolve moduleId only for module-sourced widgets (built-ins have none).
   const moduleId = await resolveModuleIdByRef(ctx, args.instanceId, args.createdByType, args.createdByRef);
 
