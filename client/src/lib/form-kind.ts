@@ -1,7 +1,7 @@
-import { columnIdFor } from "@shared/databases/columns";
+import { COLUMN_ID, columnIdFor } from "@shared/databases/columns";
 import { type FormField, parseFormFields } from "@shared/user-pages";
 import type { WorkflowDefinition } from "@woofx3/api";
-import type { DatabaseColumn } from "@woofx3/api/databases";
+import { DATABASE_LIMITS, type DatabaseColumn } from "@woofx3/api/databases";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type EventTrigger, newTriggerTree, type TriggerPin } from "@/lib/alert-triggers";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
@@ -63,10 +63,6 @@ export function formAnswerVariables(
   }));
 }
 
-const COLUMN_VALUE = /^[A-Za-z0-9_-]{1,64}$/;
-/** Must match the engine's select option limit (DATABASE_LIMITS.selectOptions). */
-const MAX_SELECT_OPTIONS = 50;
-
 /**
  * The column a question's answers fill, private like every answer. A choice
  * keeps its options when every value is one a column option may hold, and
@@ -79,8 +75,8 @@ function questionColumn(field: FormField): DatabaseColumn {
       return { ...base, type: "boolean" };
     case "select":
       return field.options.length > 0 &&
-        field.options.length <= MAX_SELECT_OPTIONS &&
-        field.options.every((option) => COLUMN_VALUE.test(option.value))
+        field.options.length <= DATABASE_LIMITS.selectOptions &&
+        field.options.every((option) => COLUMN_ID.test(option.value))
         ? { ...base, type: "select", options: field.options.map(({ value, label }) => ({ value, label })) }
         : { ...base, type: "text" };
     case "text":

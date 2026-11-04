@@ -123,9 +123,15 @@ function ColumnsCard({ instance, settings, stored }: ColumnsCardProps) {
     next.splice(index + by, 0, column);
     setDraft(next);
   };
+  // A new column's id must not reuse a saved one, even one deleted in this
+  // draft: the engine would read it as that column and keep its values.
+  const takenIds = (except: number) =>
+    new Set([
+      ...stored.map((column) => column.id),
+      ...columns.filter((_, i) => i !== except).map((column) => column.id),
+    ]);
   const add = () => {
-    const taken = new Set(columns.map((column) => column.id));
-    setDraft([...columns, { id: columnIdFor("Column", taken), label: "", type: "text", public: false }]);
+    setDraft([...columns, { id: columnIdFor("Column", takenIds(-1)), label: "", type: "text", public: false }]);
   };
 
   const shown = showProblems ? problems : ProblemIndex.empty;
@@ -163,10 +169,16 @@ function ColumnsCard({ instance, settings, stored }: ColumnsCardProps) {
 
       {columns.map((column, index) => (
         <ColumnRow
-          key={`${column.id}-${index}`}
+          // biome-ignore lint/suspicious/noArrayIndexKey: a new column's id follows its name, so keying by it would remount the row on every keystroke
+          key={index}
           column={column}
           isNew={!stored.some((s) => s.id === column.id)}
-          problems={[...shown.at(`${COLUMNS_PATH}[${index}].label`), ...shown.at(`${COLUMNS_PATH}[${index}].options`)]}
+          takenIds={takenIds(index)}
+          problems={[
+            ...shown.at(`${COLUMNS_PATH}[${index}].id`),
+            ...shown.at(`${COLUMNS_PATH}[${index}].label`),
+            ...shown.at(`${COLUMNS_PATH}[${index}].options`),
+          ]}
           canMoveUp={index > 0}
           canMoveDown={index < columns.length - 1}
           onChange={(patch) => change(index, patch)}
@@ -191,6 +203,8 @@ function ColumnsCard({ instance, settings, stored }: ColumnsCardProps) {
 interface ColumnRowProps {
   column: DatabaseColumn;
   isNew: boolean;
+  /** Ids a new column's generated id must avoid. */
+  takenIds: ReadonlySet<string>;
   problems: readonly string[];
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -231,7 +245,7 @@ function ColumnRow(props: ColumnRowProps) {
           onChange={(event) => {
             const label = event.target.value;
             // A new column's id follows its name until saved; a saved id never changes.
-            props.onChange(props.isNew ? { label, id: columnIdFor(label, new Set()) } : { label });
+            props.onChange(props.isNew ? { label, id: columnIdFor(label, props.takenIds) } : { label });
           }}
         />
         <Select
@@ -288,6 +302,7 @@ function ColumnRow(props: ColumnRowProps) {
       </div>
       {column.type === "select" && (
         <textarea
+          key={column.id}
           className="w-full rounded-md border bg-transparent p-2 text-sm"
           rows={3}
           placeholder="One option per line"
