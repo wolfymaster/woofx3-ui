@@ -16,7 +16,7 @@ const SCOPE: EngineScope = {
 };
 
 async function render(fake: FakeChatModerationGateway): Promise<ReactTestRenderer> {
-  const gateway = { chatModeration: fake } as unknown as EngineGateway;
+  const gateway = { chatModeration: fake, twitchLink: { useLink: () => null } } as unknown as EngineGateway;
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
     renderer = create(

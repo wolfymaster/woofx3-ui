@@ -25,3 +25,17 @@ exclusive, the ban confirmation) are in `client/src/lib/chat-moderation-form.ts`
 The separate Moderation dashboard widget (blocked terms, manual timeouts and
 bans, chat modes) is unrelated: it acts on Twitch directly and keeps the
 `moderation` namespace.
+
+## Recent actions and reconnect prompts
+
+The page lists the latest 50 moderated lines (`useRecentModerationActions`,
+the engine's `listModerationActions`, read from its event log) with each
+step's outcome in plain words (`OUTCOME_LABELS`).
+
+Each action needs a Twitch permission (`TWITCH_ACTION_SCOPES`): removing a
+message `moderator:manage:chat_messages`, a warning `moderator:manage:warnings`,
+a timeout or ban `moderator:manage:banned_users`. When an enabled rule uses an
+action the link was not granted, the page shows a banner and an inline note
+on the action, both linking to the integrations page to reconnect. The engine
+skips such a step and records it as failed; it never sends a chat message in
+place of a warning.
