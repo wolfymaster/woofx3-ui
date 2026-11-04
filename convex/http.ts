@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import type { WebhookEventResult } from "./engineEvents";
+import { registerEngineEventRoutes } from "./engineEventsHttp";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
@@ -953,5 +954,6 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macr
 
 registerViewerAuthRoutes(http);
 registerUserPageFormRoutes(http);
+registerEngineEventRoutes(http);
 
 export default http;
