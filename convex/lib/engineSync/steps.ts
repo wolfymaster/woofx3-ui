@@ -10,6 +10,7 @@ import { resourcesStep } from "./steps/resources";
 import { scenesStep } from "./steps/scenes";
 import { triggersStep } from "./steps/triggers";
 import { widgetsStep } from "./steps/widgets";
+import { workflowGroupsStep } from "./steps/workflowGroups";
 import { workflowsStep } from "./steps/workflows";
 
 export type SyncStepName =
@@ -18,6 +19,7 @@ export type SyncStepName =
   | "groups"
   | "functions"
   | "workflows"
+  | "workflowGroups"
   | "scenes"
   | "triggers"
   | "actions"
@@ -50,6 +52,7 @@ export const SYNC_STEPS: readonly SyncStep[] = [
   groupsStep,
   functionsStep,
   workflowsStep,
+  workflowGroupsStep,
   scenesStep,
   triggersStep,
   actionsStep,

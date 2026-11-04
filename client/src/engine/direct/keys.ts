@@ -53,6 +53,7 @@ export const directKeys = {
     allRunLists: ["workflows", "runs"] as const,
     runs: (engineWorkflowId: string, limit: number) => ["workflows", "runs", engineWorkflowId, limit] as const,
     health: () => ["workflows", "health"] as const,
+    groups: () => ["workflows", "groups"] as const,
   },
   uiSettings: {
     all: ["uiSettings"] as const,

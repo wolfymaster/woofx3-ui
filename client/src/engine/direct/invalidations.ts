@@ -116,6 +116,10 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.GROUP_DELETED]: (event) => [k.commands.groups(), k.commands.members(event.groupId)],
   [EngineEventType.GROUP_MEMBER_ADDED]: (event) => [k.commands.members(event.groupId)],
   [EngineEventType.GROUP_MEMBER_REMOVED]: (event) => [k.commands.members(event.groupId)],
+  [EngineEventType.WORKFLOW_GROUP_CREATED]: () => [k.workflows.groups()],
+  [EngineEventType.WORKFLOW_GROUP_UPDATED]: () => [k.workflows.groups()],
+  // The members' group lists arrive on their own workflow.updated.
+  [EngineEventType.WORKFLOW_GROUP_DELETED]: () => [k.workflows.groups()],
   [EngineEventType.UI_SETTING_CHANGED]: (event) => [k.uiSettings.namespace(event.namespace)],
   [EngineEventType.TWITCH_LINK_CHANGED]: () => [k.twitch.link()],
 };
