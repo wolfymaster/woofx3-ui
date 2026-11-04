@@ -4,7 +4,6 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { type HostedStorageLimits, isOnHostedStorage } from "./lib/hostedStorage";
 
@@ -141,9 +140,6 @@ export const requestUpload = action({
     if (usage === null) {
       return await requestGrant();
     }
-    if (usage === "engine-outdated") {
-      throw new ConvexError<string>(OUTDATED_ENGINE_REFUSAL);
-    }
     const reserved = await ctx.runMutation(internal.hostedStorage.reserve, {
       instanceId: args.instanceId,
       engineBytes: usage.engineBytes,
@@ -180,38 +176,27 @@ export const completeUpload = action({
 });
 
 /**
- * Uploads to hosted storage are only safe on an engine that binds each grant
- * to its size and reports its total; an older managed engine would accept a
- * body of any length, so it takes no uploads until it is upgraded.
- */
-const OUTDATED_ENGINE_REFUSAL =
-  "Uploads are paused until this engine is updated to the latest release. Update it from Admin, then try again.";
-
-/**
  * The engine's total of its user assets when the instance is on hosted
- * storage, with when the read began; null when no hosted limit applies, and
- * "engine-outdated" when hosted storage is in use but the engine predates
- * `assets.sizedUploads`. `readAt` is taken before the usage read so
+ * storage, with when the read began; null when no hosted limit applies.
+ * `readAt` is taken before the usage read so
  * reservations released during it are still counted.
  */
 async function readHostedUsage(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
   bundle: InstanceContext
-): Promise<{ engineBytes: number; readAt: number; limits: HostedStorageLimits } | "engine-outdated" | null> {
+): Promise<{ engineBytes: number; readAt: number; limits: HostedStorageLimits } | null> {
   const { hosting, limits } = await ctx.runQuery(internal.hostedStorage.context, { instanceId });
   if (hosting !== "managed") {
     return null;
   }
-  const [config, capabilities] = await Promise.all([
-    createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret).getStorageConfig(),
-    fetchEngineCapabilities(bundle),
-  ]);
+  const config = await createEngineRpcSession<EngineApi>(
+    bundle.url,
+    bundle.clientId,
+    bundle.clientSecret
+  ).getStorageConfig();
   if (!isOnHostedStorage(hosting, config)) {
     return null;
-  }
-  if (!hasEngineCapability(capabilities, "assets.sizedUploads")) {
-    return "engine-outdated";
   }
   const readAt = Date.now();
   const usage = await createEngineRpcSession<EngineApi>(
@@ -236,7 +221,7 @@ export const hostedStorageUsage = action({
   handler: async (ctx, args): Promise<HostedStorageUsage | null> => {
     const bundle = await requireInstanceContext(ctx, args.instanceId);
     const usage = await readHostedUsage(ctx, args.instanceId, bundle);
-    if (usage === null || usage === "engine-outdated") {
+    if (usage === null) {
       return null;
     }
     const usedBytes = await ctx.runQuery(internal.hostedStorage.usedBytes, {

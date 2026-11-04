@@ -6,7 +6,6 @@
 // Stream events arrive as engine pushes over this session; workflow runs are
 // still polled, since the engine exposes no subscription for them.
 
-import { isLegacyCapabilitiesError, parseEngineCapabilities } from "@convex/lib/engineCapabilities";
 import type {
   EventLogPage,
   EventLogQuery,
@@ -40,8 +39,6 @@ const POLL_INTERVAL_RUNS = 10000;
  * commit, and several widgets mount together, so this keeps that to one call.
  */
 const STREAM_REGISTRATION_DELAY_MS = 100;
-/** `registeredStreamTypes` for a registration without types, which no union's key can equal. */
-const FIXED_STREAM_SET = "*";
 
 interface Credentials {
   url: string;
@@ -64,13 +61,6 @@ export class BrowserTransport implements WoofxTransport {
    * listeners' union to skip a registration that would change nothing.
    */
   private registeredStreamTypes: string | null = null;
-  /**
-   * Whether the live session's engine pushes per-subscriber types (capability
-   * `events.log`); null until it has answered. An engine without them adds a
-   * subscription on every call instead of replacing one, so it is registered
-   * once, without types.
-   */
-  private streamTypesSupported: boolean | null = null;
   private streamRegistrationTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private backoff = createReconnectBackoff();
@@ -147,7 +137,6 @@ export class BrowserTransport implements WoofxTransport {
     }
     $engineConnected.set(false);
     this.registeredStreamTypes = null;
-    this.streamTypesSupported = null;
   }
 
   private openSession(generation: number): void {
@@ -174,7 +163,6 @@ export class BrowserTransport implements WoofxTransport {
         this.session = null;
         $engineConnected.set(false);
         this.registeredStreamTypes = null;
-        this.streamTypesSupported = null;
         this.scheduleReconnect(generation);
       });
 
@@ -198,7 +186,7 @@ export class BrowserTransport implements WoofxTransport {
           // retry, so there is nothing to do but leave the backoff advancing.
         });
 
-      this.detectStreamTypes(session);
+      this.registerStreamTypes();
     } catch (err) {
       $engineConnected.set(false);
       this.session = null;
@@ -252,38 +240,16 @@ export class BrowserTransport implements WoofxTransport {
    */
   subscribeStreamEvents(
     _instanceId: string,
-    types: readonly string[] | null,
+    types: readonly string[],
     callback: (frame: StreamEventFrame) => void
   ): () => void {
-    const listener: StreamListener = { types: types ? new Set(types) : null, callback };
+    const listener: StreamListener = { types: new Set(types), callback };
     this.streamListeners.add(listener);
     this.scheduleStreamRegistration();
     return () => {
       this.streamListeners.delete(listener);
       this.scheduleStreamRegistration();
     };
-  }
-
-  /** Asks the session's engine whether it takes per-subscriber types, then registers the listeners. */
-  private detectStreamTypes(session: EngineBrowserSession<BrowserEngineApi>): void {
-    session.api
-      .getEngineCapabilities()
-      .then((raw) => parseEngineCapabilities(raw).capabilities.includes("events.log"))
-      .catch((err: unknown) => {
-        // Unreadable is read as unsupported: the push then carries the
-        // engine's fixed set, which is less than asked for but never doubled.
-        if (!isLegacyCapabilitiesError(err)) {
-          this.logger.warn("Could not read the engine's capabilities", { error: err });
-        }
-        return false;
-      })
-      .then((supported) => {
-        if (this.session !== session) {
-          return;
-        }
-        this.streamTypesSupported = supported;
-        this.registerStreamTypes();
-      });
   }
 
   private scheduleStreamRegistration(): void {
@@ -301,23 +267,19 @@ export class BrowserTransport implements WoofxTransport {
    * the session has. An empty union is registered too once anything was, so
    * the engine stops pushing types nobody listens to; with nothing registered
    * yet and nothing wanted, there is nothing to ask for.
-   *
-   * An engine without per-subscriber types is registered once, without them,
-   * and pushes its fixed set; each listener still takes only its own types.
    */
   private registerStreamTypes(): void {
     const session = this.session;
-    const supported = this.streamTypesSupported;
-    if (!session || supported === null) {
+    if (!session) {
       return;
     }
     const listeners = Array.from(this.streamListeners);
     if (this.registeredStreamTypes === null && listeners.length === 0) {
       return;
     }
-    const types = supported ? streamTypesUnion(listeners) : undefined;
-    const key = types ? types.join(",") : FIXED_STREAM_SET;
-    if (key === this.registeredStreamTypes || (!supported && this.registeredStreamTypes !== null)) {
+    const types = streamTypesUnion(listeners);
+    const key = types.join(",");
+    if (key === this.registeredStreamTypes) {
       return;
     }
     this.registeredStreamTypes = key;
@@ -330,10 +292,7 @@ export class BrowserTransport implements WoofxTransport {
         });
       },
     };
-    (types
-      ? session.api.subscribeStreamEvents(subscriber, types)
-      : session.api.subscribeStreamEvents(subscriber)
-    ).catch((err: unknown) => {
+    session.api.subscribeStreamEvents(subscriber, types).catch((err: unknown) => {
       // Only the latest registration counts; a later one that already
       // replaced this one is left alone.
       if (this.session === session && this.registeredStreamTypes === key) {

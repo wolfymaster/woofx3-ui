@@ -1,10 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import {
-  parseCompositionKind,
-  parseSceneLayout,
-  parseSceneWidgets,
-  tablesForDeletedComposition,
-} from "@shared/scene-serialization";
+import { parseCompositionKind, parseSceneLayout, parseSceneWidgets } from "@shared/scene-serialization";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -217,11 +212,8 @@ export const deleteFromWebhook = internalMutation({
     kind: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const tables = tablesForDeletedComposition(args.kind);
-    if (tables.includes("alertCompositions")) {
+    if (parseCompositionKind(args.kind) === "alert") {
       await deleteAlertCompositionRow(ctx, args.instanceId, args.engineSceneId);
-    }
-    if (!tables.includes("scenes")) {
       return;
     }
     const scene = await findScene(ctx, args.instanceId, args.engineSceneId);

@@ -233,10 +233,9 @@ all of these hold, checked cheapest first:
   `/catalog/{id}` anonymously, where dev-tier listings do not exist);
 - `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are set, so a buyer token can
   be minted;
-- the engine reports capability `modules.marketplaceInstall`.
+- the engine answers (`getEngineInfo`).
 
-Otherwise everything above runs unchanged. An engine that cannot answer for
-its capabilities also gets the Convex path. On the engine path, the module install (`installMarketplaceListing`),
+Otherwise everything above runs unchanged. On the engine path, the module install (`installMarketplaceListing`),
 the bundle install (`installMarketplaceBundle`), the file list of a module not
 yet installed and the setup platform review (`inspectMarketplaceListing`) each
 get a fresh buyer token. The engine calls `acquire` itself with that token,

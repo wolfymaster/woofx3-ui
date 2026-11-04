@@ -11,7 +11,6 @@ import {
   type StarterCatalog,
   type StarterCommandItem,
   type StarterItem,
-  starterFeaturesFrom,
   starterItemKey,
   validateStarterValues,
 } from "@shared/starter-packs";
@@ -21,7 +20,6 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
 import { createCommandInEngine } from "./chatCommandActions";
-import { fetchEngineCapabilities } from "./lib/engineCapabilities";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { createWorkflowInEngine, EngineConfirmationTimeout } from "./workflowActions";
 import type { CatalogBundle } from "./workflowCatalogContext";
@@ -308,8 +306,7 @@ async function installStarterPack(
   if (!pack) {
     throw new Error(`Unknown starter pack "${packId}"`);
   }
-  const capabilities = await fetchEngineCapabilities(instance);
-  const checked = validateStarterValues(pack, values, starterFeaturesFrom(capabilities.capabilities));
+  const checked = validateStarterValues(pack, values);
   if (!checked.ok) {
     throw new Error(Object.values(checked.errors).join(" "));
   }

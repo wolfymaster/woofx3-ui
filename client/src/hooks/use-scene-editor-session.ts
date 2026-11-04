@@ -25,8 +25,6 @@ interface UseSceneEditorSessionArgs {
    * preview URL when given.
    */
   publicUrl?: () => Promise<string | null>;
-  /** False for an engine without `scenes.editorSync`: the hook stays idle. */
-  enabled: boolean;
   /** Who this editor is, shown to the scene's other editors; the session waits for it. */
   editorName: string | undefined;
   /**
@@ -79,7 +77,6 @@ export function useSceneEditorSession({
   engineSceneId,
   sceneId,
   publicUrl,
-  enabled,
   editorName,
   unsavedOutsideSession,
 }: UseSceneEditorSessionArgs): SceneEditorSession {
@@ -116,7 +113,7 @@ export function useSceneEditorSession({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: generation only re-runs the effect, for reopen
   useEffect(() => {
-    if (!enabled || !hasScene || !hasName) {
+    if (!hasScene || !hasName) {
       return;
     }
     const acquired = sceneEditorSessions.acquire(sceneKey, () => {
@@ -144,7 +141,7 @@ export function useSceneEditorSession({
       sceneEditorSessions.release(sceneKey, acquired);
       setClient(null);
     };
-  }, [enabled, hasScene, hasName, sceneKey, generation]);
+  }, [hasScene, hasName, sceneKey, generation]);
 
   const state = useSyncExternalStore(client?.subscribe ?? noClient, client?.getState ?? noState);
 

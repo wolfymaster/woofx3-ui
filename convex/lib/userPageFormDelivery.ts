@@ -2,7 +2,6 @@ import type { UserPageSubmissionDelivery } from "@woofx3/api";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
-import { fetchEngineCapabilities, hasEngineCapability } from "./engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
 import { EngineTimeoutError, withEngineTimeout } from "./inboundWebhookRelay";
 import { boundedReason, SUBMISSION_DELIVERY } from "./userPageSubmissions";
@@ -21,8 +20,8 @@ export type SubmissionReceiptStatus = "recorded" | "duplicate";
  * implementation; the outbox does not change.
  */
 export interface SubmissionTransport {
-  /** Whether the engine can take submissions. Throws when it cannot be reached. */
-  canDeliver(engine: SubmissionEngine): Promise<boolean>;
+  /** Resolves once the engine answers, before any submission is sent. Throws when it cannot be reached. */
+  probe(engine: SubmissionEngine): Promise<void>;
   /** Resolves only with the engine's receipt. */
   deliver(engine: SubmissionEngine, delivery: UserPageSubmissionDelivery): Promise<SubmissionReceiptStatus>;
 }
@@ -36,9 +35,9 @@ function readReceipt(receipt: { status?: unknown }): SubmissionReceiptStatus {
 
 /** Direct capnweb calls, for engines Convex can reach: the managed ones. */
 export const ENGINE_SUBMISSION_TRANSPORT: SubmissionTransport = {
-  async canDeliver(engine) {
-    const report = await withEngineTimeout(fetchEngineCapabilities(engine), SUBMISSION_DELIVERY.engineCallTimeoutMs);
-    return hasEngineCapability(report, "userPages.formSubmissions");
+  async probe(engine) {
+    const session = createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret);
+    await withEngineTimeout(session.getEngineInfo(), SUBMISSION_DELIVERY.engineCallTimeoutMs);
   },
   async deliver(engine, delivery) {
     const session = createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret);
@@ -92,7 +91,7 @@ export function classifyDeliveryError(error: unknown): DeliveryFailure {
 }
 
 /** What a pass learned about its engine, which sets the queue's backoff. */
-export type PassEngineState = "reached" | "not_contacted" | "not_registered" | "unreachable" | "capability_missing";
+export type PassEngineState = "reached" | "not_contacted" | "not_registered" | "unreachable";
 
 /** The function calls a pass makes; an action's context, or a test's backend. */
 export type DeliveryRunner = Pick<ActionCtx, "runMutation">;
@@ -126,9 +125,7 @@ async function deliverBatch(
   transport: SubmissionTransport
 ): Promise<PassEngineState> {
   try {
-    if (!(await transport.canDeliver(engine))) {
-      return "capability_missing";
-    }
+    await transport.probe(engine);
   } catch {
     return "unreachable";
   }

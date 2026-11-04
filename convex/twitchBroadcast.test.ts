@@ -58,7 +58,7 @@ const OPERATIONS: Array<{ name: string; run: (route: TwitchHelixRoute) => Promis
   { name: "shoutout", run: (route) => postShoutout(CALL, route, "friend") },
 ];
 
-describe("without twitch.chat (or with its flag off)", () => {
+describe("on a direct route", () => {
   test("each send goes to Helix as before", async () => {
     const stub = helixAnswering(200, JSON.stringify(SENT));
     for (const operation of OPERATIONS) {

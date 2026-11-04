@@ -57,15 +57,16 @@ function useConnections(relayLimited: boolean): Connection[] {
   const twitchRequired = useQuery(api.setup.status, instance ? { instanceId: instance._id } : "skip")?.twitchRequired;
   const { health, twitchLink, isLoading: twitchLoading } = useTwitchIntegration();
   const modules = localModules(useInstalledModules() ?? []);
-  const { support: obsSupport, status: obsStatus } = useObsStatus(modules.some(({ id }) => id === OBS_MODULE_ID));
+  const { status: obsStatus } = useObsStatus(modules.some(({ id }) => id === OBS_MODULE_ID));
 
   const connections: Connection[] = [];
   if (twitchRequired && !twitchLoading) {
     connections.push(twitchConnection(health, twitchLink?.platformUsername));
   }
   for (const module of modules) {
-    const reportsStatus = module.id === OBS_MODULE_ID && obsSupport === "supported";
-    connections.push(reportsStatus ? obsConnection(module, obsStatus, relayLimited) : unreportedConnection(module));
+    connections.push(
+      module.id === OBS_MODULE_ID ? obsConnection(module, obsStatus, relayLimited) : unreportedConnection(module)
+    );
   }
   return sortConnections(connections);
 }

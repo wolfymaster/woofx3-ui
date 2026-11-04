@@ -4,8 +4,8 @@ import type { ClipsGateway } from "@/engine/gateway";
 import { withPlainError } from "./errors";
 import { useInstanceAction } from "./scope";
 
-// Convex clips with the broadcaster token it holds, through the engine when
-// the engine advertises `twitch.clips`.
+// Convex clips through the instance's engine, or with the broadcaster token
+// it holds when there is no engine to ask.
 
 function useCreateRequest() {
   const createClip = useInstanceAction(api.twitchClips.createClip);

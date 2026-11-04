@@ -147,7 +147,7 @@ export function directMacrosGateway(runtime: DirectRuntime): MacrosGateway {
   const { logger } = runtime;
   const { macros: namespace } = UI_SETTING_NAMESPACES;
   const twitch = directTwitch(runtime);
-  const padRead = uiSettingsRead(runtime, namespace, "macros.useMacros");
+  const padRead = uiSettingsRead(runtime, namespace);
 
   const padEntries = (settings: UISetting[]): PadEntry[] =>
     settings
@@ -160,14 +160,14 @@ export function directMacrosGateway(runtime: DirectRuntime): MacrosGateway {
   // Built once per gateway so the cached read is derived again only when the namespace changes.
   const selectMacros = (settings: UISetting[]): Macro[] => padEntries(settings).map(toMacro);
 
-  const readPad = async (member: string): Promise<PadEntry[]> => {
-    return padEntries(await runtime.queryClient.fetchQuery(uiSettingsRead(runtime, namespace, member)));
+  const readPad = async (): Promise<PadEntry[]> => {
+    return padEntries(await runtime.queryClient.fetchQuery(uiSettingsRead(runtime, namespace)));
   };
 
   const add = async (input: MacroInput): Promise<MacroId> => {
     const member = "macros.useAddRequest";
     const fields = requireStorable(input);
-    const sortOrder = nextMacroSortOrder((await readPad(member)).map((entry) => entry.stored.sortOrder));
+    const sortOrder = nextMacroSortOrder((await readPad()).map((entry) => entry.stored.sortOrder));
     const id = runtime.newId();
     await updateUISetting(runtime, namespace, id, () => write(fields, sortOrder), member);
     return toMacroId(id);
@@ -209,7 +209,7 @@ export function directMacrosGateway(runtime: DirectRuntime): MacrosGateway {
 
   const reorder = async (macroIds: MacroId[]): Promise<void> => {
     const member = "macros.useReorderRequest";
-    const pad = await readPad(member);
+    const pad = await readPad();
     const current = new Map(pad.map((entry) => [entry.id, entry.stored.sortOrder]));
     const changes = macroOrderChanges(macroIds.map(fromMacroId), current);
     showOrder(new Map(changes.map((change) => [change.id, change.sortOrder])));
@@ -267,7 +267,7 @@ export function directMacrosGateway(runtime: DirectRuntime): MacrosGateway {
   // One computer is one viewer, its streamer, so nothing on the pad is held back by role.
   const run = async (macroId: MacroId, values: MacroVariableValue[]): Promise<MacroRunResult> => {
     const id = fromMacroId(macroId);
-    const entry = (await readPad("macros.useRunRequest")).find((candidate) => candidate.id === id);
+    const entry = (await readPad()).find((candidate) => candidate.id === id);
     if (!entry) {
       throw new Error(NOT_FOUND);
     }

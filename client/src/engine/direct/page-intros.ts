@@ -9,7 +9,7 @@ const DISMISSED = true;
 const dismissedIds = (settings: { key: string }[]): readonly string[] => settings.map((setting) => setting.key);
 
 export function directPageIntrosGateway(runtime: DirectRuntime): PageIntrosGateway {
-  const read = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.pageIntros, "pageIntros.useDismissed");
+  const read = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.pageIntros);
   const dismiss = (introId: string) =>
     putUISetting(runtime, UI_SETTING_NAMESPACES.pageIntros, introId, DISMISSED, "pageIntros.useDismissRequest");
   return {

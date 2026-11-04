@@ -14,9 +14,7 @@ import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 /**
  * Every value `${viewer.*}` can resolve on the instance's engine, for the
  * condition builder's field picker. Read live rather than synced: fact
- * definitions change without a callback, and the list is small. Only for an
- * engine with the `workflow.viewerFacts` capability; the browser checks that
- * before asking.
+ * definitions change without a callback, and the list is small.
  */
 export const list = action({
   args: { instanceId: v.id("instances") },

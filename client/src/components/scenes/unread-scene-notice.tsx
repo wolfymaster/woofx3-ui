@@ -21,8 +21,6 @@ interface UnreadSceneNoticeProps {
   unread: UnreadReport | null | undefined;
   /** What is being edited, "scene" or "alert". */
   noun: string;
-  /** Whether the engine can repair (capability `scenes.repair`). */
-  repairSupported: boolean;
   /** Ask the engine to repair; resolves once it has answered, however it answered. */
   onRepair: () => Promise<void>;
 }
@@ -33,7 +31,7 @@ interface UnreadSceneNoticeProps {
  * of what is shown. Repairing sets either aside on the engine, keeping a copy,
  * because data a newer engine wrote can look unreadable to an older one.
  */
-export function UnreadSceneNotice({ conn, unread, noun, repairSupported, onRepair }: UnreadSceneNoticeProps) {
+export function UnreadSceneNotice({ conn, unread, noun, onRepair }: UnreadSceneNoticeProps) {
   const [confirming, setConfirming] = useState(false);
   const [repairing, setRepairing] = useState(false);
   if (unread == null) {
@@ -74,20 +72,16 @@ export function UnreadSceneNotice({ conn, unread, noun, repairSupported, onRepai
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription className="space-y-2">
           <p>{explanation}</p>
-          {repairSupported ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirming(true)}
-              disabled={repairing}
-              data-testid="button-repair-scene"
-            >
-              {repairing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {repairing ? "Repairing…" : repairLabel}
-            </Button>
-          ) : (
-            <p>Update your engine to repair it from here.</p>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirming(true)}
+            disabled={repairing}
+            data-testid="button-repair-scene"
+          >
+            {repairing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {repairing ? "Repairing…" : repairLabel}
+          </Button>
         </AlertDescription>
       </Alert>
       <AlertDialog open={confirming} onOpenChange={setConfirming}>

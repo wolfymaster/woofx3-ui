@@ -261,8 +261,6 @@ export const VIEWER_GROUP = "About the viewer";
 /** What the engine lets a condition builder offer, beyond what the catalog says. */
 export interface EngineConditionSupport {
   viewerFacts: ViewerFactsState;
-  /** Whether a `${...}` inside a list value is resolved (`workflow.conditionListReferences`). */
-  listReferences: boolean;
 }
 
 /** Everything a condition step's builder offers, for one step. */
@@ -297,7 +295,6 @@ export function conditionSourcesFor(
 
 export const NO_ENGINE_CONDITION_SUPPORT: EngineConditionSupport = {
   viewerFacts: { status: "unavailable", reason: "unsupported" },
-  listReferences: false,
 };
 
 /** Every value a condition step can check, in picker order. */

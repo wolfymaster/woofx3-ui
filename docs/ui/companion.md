@@ -354,11 +354,10 @@ Revoking, unpairing or replacing the companion deletes its row and its `companio
 
 ### When the bridge is offered
 
-All four must hold, or the module settings page is unchanged and nothing is bridged:
+All three must hold, or the module settings page is unchanged and nothing is bridged:
 
 - Convex env has `RELAY_URL`, `RELAY_SIGNING_KEY` and `RELAY_SIGNING_KEY_ID`.
 - The maintenance API is configured (`MAINTENANCE_API_URL`, `MAINTENANCE_API_KEY`). A self-hosted dashboard without it offers no bridge.
-- The engine lists the capability `modules.localEndpoints`.
 - The instance has a confirmed companion.
 
 ### Data
@@ -377,7 +376,7 @@ Every change goes through `scheduleRelaySync` (`convex/lib/companionEndpoints.ts
 - a module with enabled endpoints uninstalled;
 - the engine registering again. Every handshake, re-registration included, goes through `instances.applyRegistration`.
 
-Each call bumps `instances.relaySyncVersion`. A `syncEngine` run checks that version before and after asking the engine for its capabilities, and does nothing once a newer one exists, so an endpoint turned on and then off cannot reach the engine in reverse order. A failed run retries after 10 s, 60 s and 5 min.
+Each call bumps `instances.relaySyncVersion`. A `syncEngine` run checks that version before it sends, and does nothing once a newer one exists, so an endpoint turned on and then off cannot reach the engine in reverse order. A failed run retries after 10 s, 60 s and 5 min.
 
 Every 15 minutes the `companion relay resync` cron (`companionRelay.resyncBridgedInstances`) sends the configuration again to each instance with an endpoint turned on. It pages through the enabled rows of `companionEndpoints` only, so an idle deployment costs one empty index read. This repairs an engine that restarted, or one whose session cleared its configuration with `setRelayConfig(null)`. The engine's own credential requests also heal it, since a `{ relay: null }` answer clears a configuration it should not hold.
 

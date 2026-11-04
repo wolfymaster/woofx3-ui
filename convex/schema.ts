@@ -197,19 +197,15 @@ export default defineSchema({
     // entitlements. Operator-only: set through the ops API, never from the
     // dashboard. See lib/hostedStorage.ts.
     hostedStorageLimits: v.optional(hostedStorageOverrideValidator),
-    // What the engine last reported about itself, recorded for operators
-    // deciding when a capability check can be retired; gating never reads
-    // them. See lib/engineReport.ts. engineSeenAt is the last time it
-    // answered either call, and is the ops API's measure of a recently
-    // active instance.
+    // Nothing reads or writes these; migrations/dropEngineReports clears
+    // them, and the fields go once that has run.
     engineVersion: v.optional(v.string()),
     engineCapabilityIds: v.optional(v.array(v.string())),
     engineCapabilitiesSeenAt: v.optional(v.number()),
     engineSeenAt: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
-    .index("by_webhook_secret", ["webhookSecret"])
-    .index("by_engine_seen", ["engineSeenAt"]),
+    .index("by_webhook_secret", ["webhookSecret"]),
 
   // instanceLiveState: live stream presence per instance, driven by STREAM_ONLINE/OFFLINE
   // engine events (and best-effort poll fallback). One row per instance.
@@ -1235,7 +1231,8 @@ export default defineSchema({
 
   // workflowHealthSyncs: one row per instance holding the last
   // getWorkflowHealth() resync attempt, so page mounts and reconnects across
-  // tabs share one throttle. "unsupported" means the engine predates the RPC.
+  // tabs share one throttle. Nothing writes "unsupported" any more; a row may
+  // still hold it until its next resync.
   workflowHealthSyncs: defineTable({
     instanceId: v.id("instances"),
     attemptedAt: v.number(),
@@ -2300,6 +2297,8 @@ export default defineSchema({
     leaseUntil: v.optional(v.number()),
     consecutiveFailures: v.number(),
     engineRetryAt: v.optional(v.number()),
+    // Nothing writes "capability_missing" any more; a queue may still hold it
+    // until its next delivery pass.
     engineProblem: v.optional(
       v.union(v.literal("not_registered"), v.literal("unreachable"), v.literal("capability_missing"))
     ),

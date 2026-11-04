@@ -54,7 +54,7 @@ The server side keeps its own: all changes to a scene are serialized; commit is 
 
 ## Protocol 2 in brief
 
-The editor socket is `GET /scene/{sceneId}/edit?token=…&protocol=2`, at sceneManager's public origin. The token comes from `getSceneEditorSession` (through `sceneActions.getSceneEditorSession`). An engine that speaks protocol 2 answers a socket without `protocol=2` with HTTP 426, and advertises capability `scenes.editorSync`.
+The editor socket is `GET /scene/{sceneId}/edit?token=…&protocol=2`, at sceneManager's public origin. The token comes from `getSceneEditorSession` (through `sceneActions.getSceneEditorSession`). The engine answers a socket without `protocol=2` with HTTP 426.
 
 | Direction | Message | Meaning |
 |---|---|---|
@@ -73,7 +73,6 @@ The editor socket is `GET /scene/{sceneId}/edit?token=…&protocol=2`, at sceneM
 - `client/src/hooks/use-scene-editor-session.ts` acquires the client and reads it with `useSyncExternalStore(client.subscribe, client.getState)`. `client/src/lib/scene-sync-browser.ts` supplies the WebSocket, the clock and the socket URL. A client's `open` is a `SceneSocketOpener` that reads the session grant and preview URL from the editor that took the client last, through a ref that editor updates on every render: a client handed to a remounted editor (for a Convex scene row recreated under a new id, say) reconnects with that editor's arguments, not those of the editor that made it.
 - `SceneCanvasEditor` keeps no copy of the document. Its composition editor (`@woofx3/scene/editor`) works on a `SyncDocumentSource` around the client, which reads `state.local[version]` and sends every change as `client.edit(version, update)`. The Draft / Live toggle only chooses which version the source reads and edits.
 - Reports become toasts through `syncReportToast` (`client/src/lib/scene-sync-report.ts`), a pure function of the typed `SyncReport`.
-- The editor uses session mode only when the engine reports `scenes.editorSync`. Otherwise it is the Save-button editor, and an engine that reports only `scenes.editorSessions` (protocol 1, which this dashboard no longer speaks) gets a notice to upgrade. Until the capabilities have answered, or when asking for them failed, the editor is read-only and Save is off: the Save-button editor shows the published scene from the cache, and a save from it on an engine with editor sync would change what is on stream without a publish.
 
 ## Consequences
 

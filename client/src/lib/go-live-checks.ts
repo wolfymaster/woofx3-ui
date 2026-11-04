@@ -200,7 +200,7 @@ export type ObsFacts =
   | { kind: "connected"; sceneCount: number }
   /** The scene manager answered with a reason instead of scenes, e.g. OBS is not connected. */
   | { kind: "disconnected"; reason: string }
-  /** The engine has no OBS scene field to ask: the OBS module is missing or older, or the engine predates field references. */
+  /** The engine has no OBS scene field to ask: the OBS module is missing or older. */
   | { kind: "unsupported" }
   /** Nothing answered in time. */
   | { kind: "no-answer" }
@@ -216,16 +216,13 @@ export interface FieldOptionsReplyEvent {
 /**
  * Phrases in the engine's refusal to send the request that mean it has nothing
  * to send, rather than that it failed to: the OBS module or its scene field
- * is missing, or the engine still takes a request descriptor instead of a
- * field reference. Must match the errors of `dispatchFieldOptionsRequest` in
+ * is missing. Must match the errors of `dispatchFieldOptionsRequest` in
  * the engine's api/src/routes/field-options.ts and field-options-reference.ts.
  */
 const UNSUPPORTED_DISPATCH_PATTERNS: readonly RegExp[] = [
   /is not installed/,
   /declares no /,
   /: no (top-level )?field /,
-  /Unsupported descriptor kind/,
-  /is not a function/,
 ];
 
 /** NATS's answers when nobody replied: a timeout, or no subscriber on the subject at all. */
@@ -270,11 +267,7 @@ export function obsCheck(facts: ObsFacts): CheckResult {
       return result("obs", "warn", facts.reason, { fixes: [RETRY] });
     }
     case "unsupported": {
-      return result(
-        "obs",
-        "warn",
-        "OBS status can't be checked from here. Install the OBS module, or update it and your engine."
-      );
+      return result("obs", "warn", "OBS status can't be checked from here. Install the OBS module, or update it.");
     }
     case "no-answer": {
       return result("obs", "warn", "OBS didn't answer. Check that the scene manager is running.", {

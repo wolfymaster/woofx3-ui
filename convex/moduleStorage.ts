@@ -2,7 +2,6 @@ import type { RpcTarget } from "@woofx3/api/client";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { type ModuleStorageUsage, moduleStorageUsage } from "./lib/hostedStorage";
 import { requireInstanceContext } from "./sceneActions";
@@ -13,7 +12,7 @@ import { requireInstanceContext } from "./sceneActions";
 // engine never refuses a write, and this read only feeds the owner's warning.
 
 /**
- * The engine's `getModuleStorageUsage` (capability `modules.storageUsage`), declared here rather than taken from
+ * The engine's `getModuleStorageUsage`, declared here rather than taken from
  * `EngineApi`: CI type-checks against the engine's master, which may predate the method.
  */
 interface ModuleStorageUsageApi extends RpcTarget {
@@ -22,8 +21,7 @@ interface ModuleStorageUsageApi extends RpcTarget {
 
 /**
  * What the engine's modules keep in module storage against the plan's limit.
- * Null when no limit applies (the engine is not managed) or the engine
- * predates `modules.storageUsage`, which the dashboard shows as unknown.
+ * Null when no limit applies (the engine is not managed).
  */
 export const usage = action({
   args: { instanceId: v.id("instances") },
@@ -31,10 +29,6 @@ export const usage = action({
     const bundle = await requireInstanceContext(ctx, instanceId);
     const { hosting, limits } = await ctx.runQuery(internal.hostedStorage.context, { instanceId });
     if (hosting !== "managed") {
-      return null;
-    }
-    const capabilities = await fetchEngineCapabilities(bundle);
-    if (!hasEngineCapability(capabilities, "modules.storageUsage")) {
       return null;
     }
     const { bytes } = await createEngineRpcSession<ModuleStorageUsageApi>(

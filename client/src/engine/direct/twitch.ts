@@ -3,7 +3,7 @@ import {
   TWITCH_NOT_CONNECTED_MESSAGE,
   twitchLinkRefusal,
 } from "@shared/twitch-link-refusal";
-import { ENGINE_CAPABILITIES, type EngineCapability, type TwitchHelixResult, type TwitchLinkInfo } from "@woofx3/api";
+import type { TwitchHelixResult, TwitchLinkInfo } from "@woofx3/api";
 import type { DirectEngineApi } from "./connection";
 import { directKeys as k } from "./keys";
 import { engineHelixAnswer } from "./map/twitch";
@@ -19,8 +19,6 @@ type TwitchMethod = Extract<keyof DirectEngineApi, `twitch${string}`>;
 
 export type LinkedTwitchAccount = Extract<TwitchLinkInfo, { linked: true }>;
 
-const UPDATE_ENGINE = "This engine can't make that Twitch call. Update the engine to use it.";
-
 export interface DirectTwitch {
   readonly linkRead: EngineRead<TwitchLinkInfo>;
   /**
@@ -29,23 +27,14 @@ export interface DirectTwitch {
    * the missing-scope one.
    */
   authorize(scope: string | null, missingScope?: string): Promise<LinkedTwitchAccount>;
-  /** One engine Twitch method, needing `capability`, its result read as Twitch's answer. */
-  helix(
-    capability: EngineCapability,
-    method: TwitchMethod,
-    invoke: (api: DirectEngineApi) => PromiseLike<TwitchHelixResult>
-  ): Promise<Response>;
+  /** One engine Twitch method, its result read as Twitch's answer. */
+  helix(method: TwitchMethod, invoke: (api: DirectEngineApi) => PromiseLike<TwitchHelixResult>): Promise<Response>;
 }
 
 export function directTwitch(runtime: DirectRuntime): DirectTwitch {
   const linkRead: EngineRead<TwitchLinkInfo> = {
     queryKey: k.twitch.link(),
-    queryFn: () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.twitchLinkRead)) {
-        throw new Error(UPDATE_ENGINE);
-      }
-      return runtime.call("getTwitchLink", (api) => api.getTwitchLink());
-    },
+    queryFn: () => runtime.call("getTwitchLink", (api) => api.getTwitchLink()),
   };
 
   const authorize = async (scope: string | null, missingScope?: string): Promise<LinkedTwitchAccount> => {
@@ -61,10 +50,7 @@ export function directTwitch(runtime: DirectRuntime): DirectTwitch {
     return linked;
   };
 
-  const helix: DirectTwitch["helix"] = async (capability, method, invoke) => {
-    if (!runtime.supports(capability)) {
-      throw new Error(UPDATE_ENGINE);
-    }
+  const helix: DirectTwitch["helix"] = async (method, invoke) => {
     const { response, unconfirmed } = engineHelixAnswer(await runtime.call(method, invoke));
     if (unconfirmed !== null) {
       runtime.logger.warn("twitch: the engine could not confirm Twitch's answer", { method, error: unconfirmed });

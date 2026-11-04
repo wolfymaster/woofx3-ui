@@ -5,7 +5,6 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { bridgeAvailable } from "./lib/companionEndpoints";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import {
   bridgeOrigin,
@@ -102,29 +101,18 @@ const SYNC_RETRY_DELAYS_MS = [10_000, 60_000, 5 * 60_000];
  * revoked or replaced, its approver's role changed, a module uninstalled, the
  * engine registered again), and every 15 minutes by `resyncBridgedInstances`.
  * A run whose `version` is no longer the instance's `relaySyncVersion` was
- * overtaken by a newer change and does nothing. An engine without
- * `modules.localEndpoints` gets nothing, and keeps reaching endpoints directly.
+ * overtaken by a newer change and does nothing.
  */
 export const syncEngine = internalAction({
   args: { instanceId: v.id("instances"), version: v.number(), attempt: v.optional(v.number()) },
   returns: v.null(),
   handler: async (ctx, { instanceId, version, attempt = 0 }) => {
-    const first = await ctx.runQuery(internal.companionRelay.relayTarget, { instanceId });
-    if (!first?.engine || first.syncVersion !== version) {
+    const target = await ctx.runQuery(internal.companionRelay.relayTarget, { instanceId });
+    if (!target?.engine || target.syncVersion !== version) {
       return null;
     }
-    const engine = first.engine;
+    const engine = target.engine;
     try {
-      const capabilities = await fetchEngineCapabilities(engine);
-      if (!hasEngineCapability(capabilities, "modules.localEndpoints")) {
-        return null;
-      }
-      // Read again after the round trip, so what is sent is current and a run
-      // overtaken while it waited sends nothing.
-      const target = await ctx.runQuery(internal.companionRelay.relayTarget, { instanceId });
-      if (!target?.engine || target.syncVersion !== version) {
-        return null;
-      }
       const endpoints = bridgeAvailable() ? target.endpoints : [];
       const config =
         endpoints.length > 0

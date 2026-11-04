@@ -143,13 +143,4 @@ describe("createDirectConnection", () => {
     expect(resyncs).toEqual(["connected", "retargeted", "connected"]);
     await connection.session.stop();
   });
-
-  test("refuses an engine without the event stream", async () => {
-    const { engine, connection } = setup();
-    engine.capabilities = engine.capabilities.filter((id) => id !== "engine.eventStream");
-    connection.session.start();
-    await waitFor(() => connection.session.state.status === "refused", "refused");
-    expect(engine.subscribeCalls).toBe(0);
-    await connection.session.stop();
-  });
 });

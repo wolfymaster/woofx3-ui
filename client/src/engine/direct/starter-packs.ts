@@ -9,11 +9,10 @@ import {
   type StarterCatalog,
   type StarterCommandItem,
   type StarterItem,
-  starterFeaturesFrom,
   starterItemKey,
   validateStarterValues,
 } from "@shared/starter-packs";
-import { ENGINE_CAPABILITIES, type UISetting, type UISettingValue } from "@woofx3/api";
+import type { UISetting, UISettingValue } from "@woofx3/api";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { useMemo } from "react";
 import type { StarterPacksGateway } from "@/engine/gateway";
@@ -124,7 +123,7 @@ function errorMessage(error: unknown): string {
 }
 
 export function directStarterPacksGateway(runtime: DirectRuntime): StarterPacksGateway {
-  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks, "starterPacks.useStatus");
+  const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks);
   const commandsListRead = {
     queryKey: k.commands.list(),
     queryFn: () => runtime.call("listCommands", (api) => api.listCommands()),
@@ -153,10 +152,7 @@ export function directStarterPacksGateway(runtime: DirectRuntime): StarterPacksG
     if (pack === undefined) {
       throw new Error(`Unknown starter pack "${packId}"`);
     }
-    const features = starterFeaturesFrom(
-      runtime.supports(ENGINE_CAPABILITIES.workflowDelayWait) ? ["workflow.delayWait"] : []
-    );
-    const checked = validateStarterValues(pack, values, features);
+    const checked = validateStarterValues(pack, values);
     if (!checked.ok) {
       throw new Error(Object.values(checked.errors).join(" "));
     }

@@ -14,7 +14,6 @@ import {
   SHOUTOUT_SCOPE,
 } from "@shared/twitch-chat";
 import { normalizeTwitchLogin, readTwitchUserAnswer } from "@shared/twitch-users";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { TwitchChatGateway } from "@/engine/gateway";
 import type { Announcement, Chatter } from "@/engine/types";
 import { useEngineRequest } from "./query";
@@ -30,16 +29,13 @@ export async function sendChatMessage(twitch: DirectTwitch, text: string): Promi
   }
   await twitch.authorize(SEND_MESSAGE_SCOPE);
   await readChatMessageAnswer(
-    await twitch.helix(ENGINE_CAPABILITIES.twitchChat, "twitchSendChatMessage", (api) =>
-      api.twitchSendChatMessage({ message })
-    )
+    await twitch.helix("twitchSendChatMessage", (api) => api.twitchSendChatMessage({ message }))
   );
 }
 
-/** Writing in chat as the broadcaster, and who is in it, through the engine's `twitch.chat` methods. */
+/** Writing in chat as the broadcaster, and who is in it, through the engine's chat methods. */
 export function directTwitchChatGateway(runtime: DirectRuntime): TwitchChatGateway {
   const twitch = directTwitch(runtime);
-  const chat = ENGINE_CAPABILITIES.twitchChat;
 
   const sendMessage = (text: string): Promise<void> => sendChatMessage(twitch, text);
 
@@ -51,7 +47,7 @@ export function directTwitchChatGateway(runtime: DirectRuntime): TwitchChatGatew
     }
     await twitch.authorize(ANNOUNCEMENT_SCOPE);
     await readAnnouncementAnswer(
-      await twitch.helix(chat, "twitchSendChatAnnouncement", (api) =>
+      await twitch.helix("twitchSendChatAnnouncement", (api) =>
         api.twitchSendChatAnnouncement({ message, color: announcement.color })
       )
     );
@@ -65,13 +61,13 @@ export function directTwitchChatGateway(runtime: DirectRuntime): TwitchChatGatew
     await twitch.authorize(SHOUTOUT_SCOPE);
     // Helix takes the channel by id, not login.
     const channel = await readTwitchUserAnswer(
-      await twitch.helix(ENGINE_CAPABILITIES.twitchModeration, "twitchGetUsers", (api) => api.twitchGetUsers({ login }))
+      await twitch.helix("twitchGetUsers", (api) => api.twitchGetUsers({ login }))
     );
     if (!channel) {
       throw new Error(noShoutoutChannelMessage(login));
     }
     await readShoutoutAnswer(
-      await twitch.helix(chat, "twitchSendShoutout", (api) =>
+      await twitch.helix("twitchSendShoutout", (api) =>
         api.twitchSendShoutout({ to_broadcaster_id: channel.twitchUserId })
       )
     );
@@ -80,7 +76,7 @@ export function directTwitchChatGateway(runtime: DirectRuntime): TwitchChatGatew
   const chatters = async (): Promise<Chatter[]> => {
     await twitch.authorize(CHATTERS_SCOPE);
     return readChattersAnswer(
-      await twitch.helix(chat, "twitchGetChatters", (api) => api.twitchGetChatters({ first: CHATTERS_PAGE_SIZE }))
+      await twitch.helix("twitchGetChatters", (api) => api.twitchGetChatters({ first: CHATTERS_PAGE_SIZE }))
     );
   };
 

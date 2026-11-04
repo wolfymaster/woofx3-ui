@@ -199,7 +199,6 @@ describe("obsFactsFromDispatchError", () => {
       'dispatchFieldOptionsRequest: module "woofx3_obs" is not installed',
       'dispatchFieldOptionsRequest: module "woofx3_obs" declares no action "obs.switch_scene"',
       'dispatchFieldOptionsRequest: no field "sceneName" of woofx3_obs:action:obs.switch_scene',
-      "Unsupported descriptor kind: undefined",
     ]) {
       expect(obsFactsFromDispatchError(message)).toEqual({ kind: "unsupported" });
     }

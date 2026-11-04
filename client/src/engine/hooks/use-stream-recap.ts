@@ -31,7 +31,7 @@ export function useRecapEngineDetailRequest() {
   return useEngineGateway().streamOps.useRecapEngineDetailRequest();
 }
 
-/** Fetches a recapped session's events for the timeline. Needs `analytics.sessionEvents`. */
+/** Fetches a recapped session's events for the timeline. */
 export function useRecapTimelineEventsRequest() {
   return useEngineGateway().streamOps.useRecapTimelineEventsRequest();
 }

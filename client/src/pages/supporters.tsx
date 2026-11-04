@@ -1,7 +1,6 @@
 import type { SupporterMetric, SupporterStream } from "@shared/supporters";
 import { Copy, Gem, Gift, Loader2, Megaphone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
 import { PageHeader } from "@/components/layout/page-header";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
-import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useCanShoutOut, useEnqueueShoutoutRequest } from "@/engine/hooks/use-shoutouts";
 import {
   useSupporterLeaderboardRequest,
@@ -24,7 +22,6 @@ import {
 import type { InstanceId } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "@/hooks/use-toast";
-import { SUPPORTER_CAPABILITIES } from "@/lib/engine-capabilities";
 import {
   formatMetricEvents,
   formatMetricTotal,
@@ -106,7 +103,6 @@ async function copyToClipboard(text: string): Promise<void> {
 
 export default function Supporters() {
   const { instanceId: engineInstanceId } = useEngineScope();
-  const capabilities = useEngineCapabilities();
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
@@ -115,14 +111,7 @@ export default function Supporters() {
         description="The viewers who cheer and gift subs, all time or for one stream. Look anyone up before a thank-you or a VIP decision."
       />
       {engineInstanceId ? (
-        <EngineFeatureGate
-          support={capabilities.support(...SUPPORTER_CAPABILITIES)}
-          state={capabilities.state}
-          feature="Supporter stats"
-          onRetry={capabilities.refresh}
-        >
-          <SupportersView engineInstanceId={engineInstanceId} />
-        </EngineFeatureGate>
+        <SupportersView engineInstanceId={engineInstanceId} />
       ) : (
         <p className="text-sm text-muted-foreground">No instance available yet.</p>
       )}

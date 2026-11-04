@@ -2,11 +2,10 @@ import { isGoLiveCheckId } from "@shared/go-live-check-ids";
 import { readChannelInfoAnswer, STREAM_INFO_SCOPE } from "@shared/stream-info";
 import { chatMessageProblem } from "@shared/twitch-chat";
 import { missingRequiredTwitchScopes } from "@shared/twitch-scope-health";
-import { ENGINE_CAPABILITIES, type UISetting } from "@woofx3/api";
+import { type UISetting } from "@woofx3/api";
 import { useEffect, useMemo } from "react";
 import { z } from "zod";
 import type { StreamStartMarkerRequest, StreamStartMarkers } from "@/engine/desktop-host";
-import { GatewayUnsupportedError } from "@/engine/errors";
 import type { GoLiveGateway } from "@/engine/gateway";
 import type {
   GoLiveCheckId,
@@ -100,7 +99,7 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
   const { logger } = runtime;
   const namespace = UI_SETTING_NAMESPACES.goLiveChecklist;
   const twitch = directTwitch(runtime);
-  const settingsRead = uiSettingsRead(runtime, namespace, "goLive.useChecklist");
+  const settingsRead = uiSettingsRead(runtime, namespace);
   const workflows = workflowsRead(runtime);
   const markerRead: EngineRead<boolean> = { queryKey: k.goLive.marker(), queryFn: () => markers.isPending() };
 
@@ -118,9 +117,6 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
   const browserSourcesRead: EngineRead<GoLiveOverlayFacts> = {
     queryKey: k.scenes.browserSources(),
     queryFn: async () => {
-      if (!runtime.supports(ENGINE_CAPABILITIES.scenesSnapshots)) {
-        throw new GatewayUnsupportedError("goLive.useOverlays");
-      }
       const [{ scenes }, tokens] = await Promise.all([
         runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots()),
         runtime.call("listOverlayTokens", (api) => api.listOverlayTokens()),
@@ -219,9 +215,7 @@ export function directGoLiveGateway(runtime: DirectRuntime, markers: StreamStart
 
   const readChannel = async () =>
     readChannelInfoAnswer(
-      await twitch.helix(ENGINE_CAPABILITIES.twitchStreamInfo, "twitchGetChannelInformation", (api) =>
-        api.twitchGetChannelInformation()
-      )
+      await twitch.helix("twitchGetChannelInformation", (api) => api.twitchGetChannelInformation())
     );
 
   const checkStreamInfo = async (): Promise<GoLiveStreamInfoFacts> => {
