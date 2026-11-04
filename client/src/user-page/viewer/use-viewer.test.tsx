@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RefreshRolesResult } from "@convex/viewerRoles";
 import { getFunctionName } from "convex/server";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { createAppLogger } from "@/lib/logger";
+import { LoggerProvider } from "@/lib/logger-context";
 import { type Clock, ClockProvider } from "../clock";
 
 // Drives useRoleCheck with a clock the test moves by hand and a fake
@@ -113,7 +115,9 @@ async function mount(clock: FakeClock, props: ProbeProps): Promise<ReactTestRend
   await act(async () => {
     renderer = create(
       <ClockProvider clock={clock}>
-        <Probe {...props} />
+        <LoggerProvider logger={createAppLogger([])}>
+          <Probe {...props} />
+        </LoggerProvider>
       </ClockProvider>
     );
   });
@@ -127,7 +131,9 @@ async function update(renderer: ReactTestRenderer, clock: FakeClock, props: Prob
   await act(async () => {
     renderer.update(
       <ClockProvider clock={clock}>
-        <Probe {...props} />
+        <LoggerProvider logger={createAppLogger([])}>
+          <Probe {...props} />
+        </LoggerProvider>
       </ClockProvider>
     );
   });

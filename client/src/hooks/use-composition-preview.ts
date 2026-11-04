@@ -31,6 +31,7 @@ import {
 } from "@/lib/composition-preview";
 import { createDebouncer } from "@/lib/debounce";
 import { createFrameCoalescer } from "@/lib/frame-coalescer";
+import { useLogger } from "@/lib/logger-context";
 
 /** The frame the stage puts behind its layers. */
 export interface PreviewFrameBinding {
@@ -123,6 +124,7 @@ export function useCompositionPreview({
   inputs,
   labelOf,
 }: UseCompositionPreviewArgs): CompositionPreviewController {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const supported = useEngineCapabilities().support(CAPABILITY) === "supported";
   const getUrl = useCompositionPreviewUrlRequest();
@@ -322,14 +324,18 @@ export function useCompositionPreview({
       }
       if (!parsed.ok) {
         // The page speaks a protocol this dashboard does not: keep the stand-ins.
-        console.warn("[alert preview] unreadable report", parsed.error);
+        logger.warn("[alert preview] unreadable report", { error: parsed.error });
         return;
       }
       handleReport(parsed.report);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [src, handleReport]);
+  }, [
+    src,
+    handleReport, // The page speaks a protocol this dashboard does not: keep the stand-ins.
+    logger,
+  ]);
 
   // The document, sample event and inputs: posted again once they hold still.
   useEffect(() => {

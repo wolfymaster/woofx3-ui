@@ -6,6 +6,7 @@ import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { EventLogSettings } from "@/engine/types";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
 import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
+import { useLogger } from "@/lib/logger-context";
 
 /**
  * - `unsupported`: the engine has no selection, so nothing can be chosen.
@@ -49,6 +50,7 @@ export interface EventLogSettingsHandle {
  * reconnect and on `refresh`.
  */
 export function useEventLogSettings(): EventLogSettingsHandle {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const support = useEngineCapabilities().support(...EVENT_LOG_CAPABILITIES);
   const { eventLog } = useEngineGateway();
@@ -76,7 +78,7 @@ export function useEventLogSettings(): EventLogSettingsHandle {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          console.warn("[Events] Could not read the engine's event selection:", err);
+          logger.warn("[Events] Could not read the engine's event selection", { error: err });
           setError(errorMessage(err));
         }
       });

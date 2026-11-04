@@ -3,6 +3,7 @@ import { useConvexAuth } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useModuleOAuthFinishRequest } from "@/engine/hooks/use-module-oauth";
+import { useLogger } from "@/lib/logger-context";
 import type { ModuleOAuthResult } from "@/lib/marketplace-mode";
 
 /** The provider's name for messages: the integration id, capitalized. */
@@ -21,6 +22,7 @@ function integrationLabel(integration: string): string {
  * so a reload does not try to redeem the code again.
  */
 export function useModuleOAuthReturn(returnSearch = ""): [ModuleOAuthResult | null, () => void] {
+  const logger = useLogger();
   const [location, navigate] = useLocation();
   const [result, setResult] = useState<ModuleOAuthResult | null>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -57,10 +59,10 @@ export function useModuleOAuthReturn(returnSearch = ""): [ModuleOAuthResult | nu
         );
       })
       .catch((err: unknown) => {
-        console.error("[modules] finishing the OAuth connect failed:", String(err));
+        logger.error("[modules] finishing the OAuth connect failed", { error: err });
         setResult({ status: "error", message: oauthErrorMessage(null, label) });
       });
-  }, [finishModuleOAuth, isAuthenticated, result]);
+  }, [finishModuleOAuth, isAuthenticated, result, logger]);
 
   const urlStrippedRef = useRef(false);
   useEffect(() => {

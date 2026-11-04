@@ -21,6 +21,7 @@ import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
 import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import type { Macro, MacroId, MacroInput } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { useLogger } from "@/lib/logger-context";
 import { applyMacroVariables, extractMacroVariables, isHexColor } from "@/lib/macro-pad";
 import { cn } from "@/lib/utils";
 import { MacroIconPreview } from "./macro-icon-picker";
@@ -177,6 +178,7 @@ interface MacroPadProps {
 // Nothing about the pad comes from the per-user widget config: it is shared
 // per instance and kept behind the gateway.
 export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const [isEditMode, setIsEditMode] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
@@ -201,8 +203,10 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
     if (!instanceId) {
       return;
     }
-    listEngineWorkflows().then(setWorkflows).catch(console.error);
-  }, [instanceId, listEngineWorkflows]);
+    listEngineWorkflows()
+      .then(setWorkflows)
+      .catch((error: unknown) => logger.error("Could not list the engine's workflows", { error }));
+  }, [instanceId, listEngineWorkflows, logger]);
 
   const variableCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -299,7 +303,7 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
               headers: resolved.headers || {},
               body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
             });
-            console.log("HTTP request result:", response.status);
+            logger.info("Macro HTTP request finished", { status: response.status });
           }
         } else if (macro.type === "send-message") {
           const resolved = applyMacroVariables(macro.config, values);
@@ -317,7 +321,7 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
         setIsExecuting(null);
       }
     },
-    [instanceId, runMacroOnEngine, sendChatMessage, toast]
+    [instanceId, runMacroOnEngine, sendChatMessage, toast, logger]
   );
 
   const handlePress = useCallback(
