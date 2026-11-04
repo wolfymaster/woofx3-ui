@@ -590,7 +590,7 @@ describe("envelope receipts", () => {
   test("a failed event leaves no receipt, so its retry applies", async () => {
     const t = await backendWithInstance();
     const body = envelope({ type: EngineEventType.SCENE_CREATED, scene: { ...scene, name: undefined } });
-    await expect(applyEnvelope(t, body)).rejects.toThrow();
+    await expect(applyEnvelope(t, body)).rejects.toThrow("Missing required field `name`");
     expect(await count(t, "engineEventReceipts")).toBe(0);
   });
 
