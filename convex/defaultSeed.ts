@@ -6,6 +6,7 @@ import {
   type DefaultSeedEngine,
   defaultAlertStatus,
   defaultAlertsPack,
+  defaultAlertsToInstall,
   readDefaultAlertImages,
   seedDefaultScene,
 } from "@shared/default-seed";
@@ -15,6 +16,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, mutation, query } from "./_generated/server";
 import { overlayDoneValidator } from "./lib/defaultSeedValidator";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { readAllEngineWorkflows } from "./lib/engineWorkflows";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { seedsDefaults } from "./lib/setupApply";
 import { getInstanceMembership } from "./lib/teamAccess";
@@ -40,6 +42,7 @@ function seedEngine(bundle: { url: string; clientId: string; clientSecret: strin
     getAvailableWidgets: () => session().getAvailableWidgets(),
     listSceneSnapshots: () => session().listSceneSnapshots(),
     createScene: (scene) => session().createScene(scene),
+    listWorkflows: () => readAllEngineWorkflows(session),
   };
 }
 
@@ -75,13 +78,20 @@ async function applyAlerts(
   }
   try {
     const imagesBaseUrl = await readDefaultAlertImages(engine);
-    const outcomes = await installSeedPack(ctx, instanceId, defaultAlertsPack(imagesBaseUrl));
+    const { pack, coveredItemIds } = defaultAlertsToInstall(
+      defaultAlertsPack(imagesBaseUrl),
+      await engine.listWorkflows()
+    );
+    const outcomes = await installSeedPack(ctx, instanceId, pack);
     return {
-      alerts: outcomes.map((outcome) => ({
-        itemId: outcome.itemId,
-        status: defaultAlertStatus(outcome.outcome),
-        error: outcome.message,
-      })),
+      alerts: [
+        ...outcomes.map((outcome) => ({
+          itemId: outcome.itemId,
+          status: defaultAlertStatus(outcome.outcome),
+          error: outcome.message,
+        })),
+        ...coveredItemIds.map((itemId): AlertRecord => ({ itemId, status: "installed" })),
+      ],
       alertImages: imagesBaseUrl === null ? "omitted" : "included",
     };
   } catch (err) {

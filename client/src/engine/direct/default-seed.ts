@@ -4,6 +4,7 @@ import {
   type DefaultSeedEngine,
   defaultAlertStatus,
   defaultAlertsPack,
+  defaultAlertsToInstall,
   readDefaultAlertImages,
   seedDefaultScene,
 } from "@shared/default-seed";
@@ -18,6 +19,7 @@ import { useEngineQuery, useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { installPackItems, ledgerEngineId } from "./starter-packs";
 import { parseSetting, putUISetting, toSettingValue, UI_SETTING_NAMESPACES, uiSettingsRead } from "./ui-settings";
+import { readAllWorkflows } from "./workflow-pages";
 
 // The seed's outcomes live in one UI setting, beside the starter pack ledger
 // that names the alerts' workflows. Nothing here reads whether a scene or
@@ -48,6 +50,7 @@ function seedEngine(runtime: DirectRuntime): DefaultSeedEngine {
     listEngineModules: () => runtime.call("listEngineModules", (api) => api.listEngineModules()),
     getAvailableWidgets: () => runtime.call("getAvailableWidgets", (api) => api.getAvailableWidgets()),
     listSceneSnapshots: () => runtime.call("listSceneSnapshots", (api) => api.listSceneSnapshots()),
+    listWorkflows: () => readAllWorkflows(runtime),
     createScene: (scene) => runtime.call("createScene", (api) => api.createScene(scene)),
   };
 }
@@ -124,12 +127,19 @@ export function directDefaultSeedGateway(runtime: DirectRuntime): DefaultSeedGat
     try {
       const imagesBaseUrl = await readDefaultAlertImages(engine);
       alertImagesOmitted = imagesBaseUrl === null;
-      const outcomes = await installPackItems(runtime, defaultAlertsPack(imagesBaseUrl), {}, claimed, true);
-      alerts = outcomes.map((outcome) => ({
-        itemId: outcome.itemId,
-        status: defaultAlertStatus(outcome.outcome),
-        error: outcome.message,
-      }));
+      const { pack, coveredItemIds } = defaultAlertsToInstall(
+        defaultAlertsPack(imagesBaseUrl),
+        await engine.listWorkflows()
+      );
+      const outcomes = await installPackItems(runtime, pack, {}, claimed, true);
+      alerts = [
+        ...outcomes.map((outcome) => ({
+          itemId: outcome.itemId,
+          status: defaultAlertStatus(outcome.outcome),
+          error: outcome.message,
+        })),
+        ...coveredItemIds.map((itemId): SeedRecord["alerts"][number] => ({ itemId, status: "installed" })),
+      ];
     } catch (error) {
       alerts = DEFAULT_ALERT_ITEMS.map((item) => ({
         itemId: item.id,

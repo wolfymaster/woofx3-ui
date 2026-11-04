@@ -1,4 +1,4 @@
-import type { EngineInfo, EngineModuleSummary } from "@woofx3/api";
+import type { EngineInfo, EngineModuleSummary, Workflow } from "@woofx3/api";
 import { alertWidgetNamesOf, DEFAULT_ALERT_WIDGET_NAME, placedWidgetsOf } from "./alert-widgets";
 import { parseSceneWidgets } from "./scene-serialization";
 import { STARTER_ACTION_REFS, type StarterPack, type StarterWorkflowItem } from "./starter-packs";
@@ -275,6 +275,31 @@ export function defaultAlertsPack(imagesBaseUrl: string | null): StarterPack {
 /** The seed's alerts by id and trigger, the same whether or not the images are included. */
 export const DEFAULT_ALERT_ITEMS: readonly Pick<StarterWorkflowItem, "id" | "trigger">[] = DEFAULT_ALERT_SPECS;
 
+/**
+ * The pack without the alerts whose event already starts a workflow on the
+ * engine, and the ids of those left out. The engine merges workflows on the
+ * same event into one list of steps, so a default added beside the streamer's
+ * own alert would play with it on every event. Any workflow counts, paused or
+ * conditioned, because the streamer already chose what that event does.
+ */
+export function defaultAlertsToInstall(
+  pack: StarterPack,
+  workflows: readonly Pick<Workflow, "definition">[]
+): { pack: StarterPack; coveredItemIds: string[] } {
+  const events = new Set<string>();
+  for (const workflow of workflows) {
+    const trigger = workflow.definition?.trigger;
+    if (trigger?.type === "event") {
+      events.add(trigger.event);
+    }
+  }
+  const covered = (item: StarterPack["items"][number]) => item.kind === "workflow" && events.has(item.trigger.event);
+  return {
+    pack: { ...pack, items: pack.items.filter((item) => !covered(item)) },
+    coveredItemIds: pack.items.filter(covered).map((item) => item.id),
+  };
+}
+
 /** The engine calls the seed makes, satisfied by either delivery's engine connection. */
 export interface DefaultSeedEngine {
   getEngineInfo(): PromiseLike<Pick<EngineInfo, "overlayPublicUrl">>;
@@ -288,6 +313,8 @@ export interface DefaultSeedEngine {
    */
   listSceneSnapshots(): PromiseLike<{ scenes: { id: string; name: string; widgetsJson: string }[] }>;
   createScene(scene: { name: string; widgetsJson: string; layoutJson: string }): PromiseLike<{ id: string }>;
+  /** Every workflow on the engine, whatever made it. */
+  listWorkflows(): PromiseLike<readonly Pick<Workflow, "definition">[]>;
 }
 
 export type DefaultSeedItemStatus = "installed" | "pending" | "failed";
