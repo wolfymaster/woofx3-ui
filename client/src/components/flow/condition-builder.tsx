@@ -442,7 +442,7 @@ function viewerFactsNote(state: ViewerFactsState): string | null {
       return null;
     case "unavailable":
       return state.reason === "unsupported"
-        ? "Update WoofX3 to check facts about the viewer."
+        ? "Facts about the viewer aren't available here."
         : "Facts about the viewer couldn't be loaded.";
   }
 }
