@@ -92,7 +92,7 @@ const formTrigger: TriggerPreset = {
   category: "Forms",
   color: "#888",
   event: FORM_SUBMITTED_EVENT,
-} as TriggerPreset;
+};
 
 const insert: ActionPreset = {
   id: "a",
@@ -103,6 +103,7 @@ const insert: ActionPreset = {
   category: "Tools",
   color: "#888",
   handlerType: "native",
+  source: "woofx3",
   config: {
     fields: [
       { id: "target", label: "Database", type: "resource_ref", resourceKind: "database" },
@@ -115,7 +116,7 @@ const insert: ActionPreset = {
       { id: "key", label: "Only once per", type: "text" },
     ] as ConfigField[],
   },
-} as ActionPreset;
+};
 
 const formField = {
   id: "form",
@@ -140,7 +141,7 @@ describe("formDatabaseWorkflowTree", () => {
         values,
       })
     );
-    expect(definition.trigger.event).toBe(FORM_SUBMITTED_EVENT);
+    expect(definition.trigger).toMatchObject({ type: "event", event: FORM_SUBMITTED_EVENT });
     const [task] = definition.tasks;
     expect(task?.parameters).toEqual({
       target: DATABASE,
@@ -159,14 +160,12 @@ describe("formDatabaseWorkflowTree", () => {
 describe("formDatabaseWorkflow", () => {
   function row(trigger: Record<string, unknown>, tasks: unknown[]): Workflow {
     return {
-      _id: "doc",
-      _creationTime: 0,
-      instanceId: "instance",
       engineWorkflowId: "wf-1",
       definition: escapeDollarKeys({ id: "wf-1", name: "wf", trigger, tasks }),
       isEnabled: true,
       createdAt: 0,
-    } as unknown as Workflow;
+      updatedAt: 0,
+    };
   }
   const trigger = {
     type: "event",
