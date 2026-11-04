@@ -82,17 +82,25 @@ async function recordRow(ctx: MutationCtx, instanceId: Id<"instances">, database
 }
 
 /**
- * Writes one row's public cells unless what is stored is as new or newer. A
- * database with no public column keeps nothing.
+ * Writes one row's public cells unless what is stored is newer, or as new and
+ * `sameRevision` is "keep". A database with no public column keeps nothing.
+ * The reconcile replaces a row at the same revision because the engine's
+ * listing carries the columns public now, so a column made public after a
+ * row was written fills in; a redelivered webhook carries the columns public
+ * back then and must not.
  */
 async function upsertIfNewer(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   row: { databaseId: string; recordId: string; revision: number; createdAt: number; values: Cells },
-  hasPublicColumn: boolean
+  hasPublicColumn: boolean,
+  sameRevision: "keep" | "replace"
 ): Promise<void> {
   const existing = await recordRow(ctx, instanceId, row.databaseId, row.recordId);
-  if (existing && existing.revision >= row.revision) {
+  if (
+    existing &&
+    (existing.revision > row.revision || (existing.revision === row.revision && sameRevision === "keep"))
+  ) {
     return;
   }
   if (!hasPublicColumn) {
@@ -145,7 +153,8 @@ export const applyRecordChange = internalMutation({
           createdAt: Date.parse(change.createdAt),
           values: publicCells(change.publicValues ?? {}, publicColumns),
         },
-        publicColumns.size > 0
+        publicColumns.size > 0,
+        "keep"
       );
       await trim(ctx, instanceId, change.databaseId);
     }
@@ -187,7 +196,8 @@ export const reconcilePage = internalMutation({
           createdAt: record.createdAt,
           values: publicCells(record.values, publicColumns),
         },
-        publicColumns.size > 0
+        publicColumns.size > 0,
+        "replace"
       );
     }
     return { itemsProcessed: records.length };
