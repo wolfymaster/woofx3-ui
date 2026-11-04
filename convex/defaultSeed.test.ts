@@ -144,6 +144,7 @@ type Backend = ReturnType<typeof newBackend>;
 class FakeEngine extends RpcTarget {
   readonly scenes: { id: string; name: string; widgetsJson: string }[] = [];
   readonly workflows = new Map<string, boolean>();
+  readonly definitions = new Map<string, unknown>();
   readonly enableCalls: string[] = [];
   createsFailing = 0;
   enablesFailing = 0;
@@ -208,8 +209,17 @@ class FakeEngine extends RpcTarget {
     }
     const id = `workflow-${this.workflows.size + 1}`;
     this.workflows.set(id, false);
+    this.definitions.set(id, input.definition);
     await this.echo(id, input.definition, false, input.correlationKey, "create");
     return { id, definition: input.definition, isEnabled: false };
+  }
+
+  getWorkflows({ page = 1 }: { page?: number } = {}) {
+    const workflows =
+      page === 1
+        ? [...this.workflows].map(([id, isEnabled]) => ({ id, isEnabled, definition: this.definitions.get(id) ?? null }))
+        : [];
+    return { workflows, total: this.workflows.size, page, pageSize: 100 };
   }
 
   async setWorkflowEnabled(id: string, isEnabled: boolean, correlationKey: string) {
@@ -321,6 +331,27 @@ describe("applying the seed on a real engine connection", () => {
     expect(seeded?.alertImagesOmitted).toBe(false);
     expect(engine.workflows.size).toBe(DEFAULT_ALERT_ITEMS.length);
     await enablesSettled(t, engine);
+  });
+
+  test("leaves the streamer's own alert alone, recording that event as covered", async () => {
+    const { t, instanceId, engine, status } = await firstRunEngine();
+    engine.workflows.set("own-follow", true);
+    engine.definitions.set("own-follow", {
+      name: "My follow alert",
+      trigger: { type: "event", event: "channel.follow" },
+      tasks: [],
+    });
+
+    await t.action(internal.setupApply.run, { instanceId });
+
+    const seeded = await status();
+    expect(seeded?.alerts.find((alert) => alert.itemId === "follow")?.status).toBe("installed");
+    expect(seeded?.alerts.map((alert) => alert.status)).toEqual(DEFAULT_ALERT_ITEMS.map(() => "installed"));
+    expect(engine.workflows.size).toBe(DEFAULT_ALERT_ITEMS.length);
+    const created = [...engine.definitions.values()].map((definition) => (definition as { name: string }).name);
+    expect(created.filter((name) => name === "Follow alert")).toEqual([]);
+    await until(() => engine.enableCalls.length === DEFAULT_ALERT_ITEMS.length - 1, "every seeded alert is enabled");
+    await t.finishInProgressScheduledFunctions();
   });
 
   test("adopts the scene of a run that died before recording its id, rather than wedging on its name", async () => {

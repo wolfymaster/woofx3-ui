@@ -9,6 +9,7 @@ import {
   defaultAlertImageUrl,
   defaultAlertStatus,
   defaultAlertsPack,
+  defaultAlertsToInstall,
   seedDefaultScene,
 } from "./default-seed";
 import { buildStarterWorkflow, STARTER_ACTION_REFS, type StarterItem } from "./starter-packs";
@@ -121,6 +122,28 @@ describe("default alerts", () => {
   test("without images there is no image layer", () => {
     const layout = layoutOf(defaultAlertsPack(null).items.find((item) => item.id === "follow"));
     expect(JSON.stringify(layout)).not.toContain("webp");
+  });
+
+  test("leaves out an alert whose event already starts any workflow, paused or conditioned", () => {
+    const eventWorkflow = (event: string) => ({
+      definition: { name: event, trigger: { type: "event" as const, event, conditions: [] }, tasks: [] },
+    });
+    const { pack, coveredItemIds } = defaultAlertsToInstall(defaultAlertsPack(null), [
+      eventWorkflow("channel.follow"),
+      eventWorkflow("channel.cheer"),
+      { definition: { name: "nightly", trigger: { type: "schedule" as const, schedule: "0 0 * * *" }, tasks: [] } },
+      { definition: null },
+    ]);
+    expect(coveredItemIds).toEqual(["follow", "bits"]);
+    expect(pack.items.map((item) => item.id)).toEqual(
+      DEFAULT_ALERT_ITEMS.map((item) => item.id).filter((id) => !coveredItemIds.includes(id))
+    );
+  });
+
+  test("an engine with no workflows gets every alert", () => {
+    const { pack, coveredItemIds } = defaultAlertsToInstall(defaultAlertsPack(null), []);
+    expect(coveredItemIds).toEqual([]);
+    expect(pack.items.length).toBe(DEFAULT_ALERT_ITEMS.length);
   });
 
   test("an install outcome maps to a status", () => {
