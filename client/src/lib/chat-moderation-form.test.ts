@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_MODERATION_CONFIG, type ModerationAction } from "@woofx3/api/moderation-config";
 import {
+  DEFAULT_MODERATION_CONFIG,
+  MODERATION_STEP_OUTCOMES,
+  type ModerationAction,
+} from "@woofx3/api/moderation-config";
+import {
+  actionsMissingScope,
+  configActionsMissingScope,
   configProblem,
   DEFAULT_TIMEOUT_SECONDS,
   DEFAULT_WARN_REASON,
   needsBanConfirm,
+  OUTCOME_LABELS,
   parseNameList,
   phraseProblem,
   ruleOf,
@@ -88,5 +95,47 @@ describe("configProblem and rules", () => {
 describe("parseNameList", () => {
   test("splits on lines and commas and drops blanks", () => {
     expect(parseNameList("one, two\n\n three ,")).toEqual(["one", "two", "three"]);
+  });
+});
+
+describe("scopes", () => {
+  const ALL = ["moderator:manage:chat_messages", "moderator:manage:warnings", "moderator:manage:banned_users"];
+  const without = (scope: string) => ALL.filter((granted) => granted !== scope);
+  const actions: ModerationAction[] = [{ kind: "delete" }, { kind: "warn", reason: "x" }, { kind: "ban" }];
+  const rows: Array<[name: string, granted: string[], missing: string[]]> = [
+    ["a link with every scope", ALL, []],
+    ["a link without warnings", without("moderator:manage:warnings"), ["warn"]],
+    ["a link without message management", without("moderator:manage:chat_messages"), ["delete"]],
+    ["a link without bans", without("moderator:manage:banned_users"), ["ban"]],
+    ["a link with nothing", [], ["delete", "warn", "ban"]],
+  ];
+  for (const [name, granted, missing] of rows) {
+    test(`actionsMissingScope: ${name}`, () => {
+      expect(actionsMissingScope(actions, granted)).toEqual(missing);
+    });
+  }
+
+  test("configActionsMissingScope counts enabled rules only, each action once", () => {
+    const config = withRule(
+      withRule(DEFAULT_MODERATION_CONFIG, "links", {
+        ...ruleOf(DEFAULT_MODERATION_CONFIG, "links"),
+        enabled: true,
+        actions,
+      }),
+      "caps",
+      {
+        ...ruleOf(DEFAULT_MODERATION_CONFIG, "caps"),
+        enabled: false,
+        actions: [{ kind: "timeout", durationSeconds: 60 }],
+      }
+    );
+    expect(configActionsMissingScope(config, [])).toEqual(["delete", "warn", "ban"]);
+    expect(configActionsMissingScope(config, without("moderator:manage:warnings"))).toEqual(["warn"]);
+  });
+
+  test("every outcome has a label", () => {
+    for (const outcome of MODERATION_STEP_OUTCOMES) {
+      expect(OUTCOME_LABELS[outcome]).toBeString();
+    }
   });
 });

@@ -9,8 +9,9 @@ import type {
   RepetitionParams,
   ShareParams,
 } from "@woofx3/api/moderation-config";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
@@ -30,16 +31,23 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { useModerationConfig } from "@/engine/hooks/use-chat-moderation";
+import { useModerationConfig, useRecentModerationActions } from "@/engine/hooks/use-chat-moderation";
 import { useToast } from "@/hooks/use-toast";
+import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 import {
+  ACTION_NAMES,
+  actionsMissingScope,
+  configActionsMissingScope,
   configProblem,
   FILTER_COPY,
   FILTER_ORDER,
   needsBanConfirm,
+  OUTCOME_LABELS,
   parseNameList,
   phraseProblem,
+  RECONNECT_MESSAGES,
   ruleOf,
   TIMEOUT_CHOICES,
   toggleAction,
@@ -50,6 +58,9 @@ import {
 export default function Moderation() {
   const { read, save } = useModerationConfig();
   const { toast } = useToast();
+  const { twitchLink } = useTwitchIntegration();
+  // Unknown until the link loads, so no prompt flashes before it does.
+  const granted = twitchLink?.scopes ?? null;
   const [draft, setDraft] = useState<ModerationConfig | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -117,15 +128,18 @@ export default function Moderation() {
         </p>
       ) : null}
       <div className="space-y-4">
+        {granted !== null ? <ReconnectBanner missing={configActionsMissingScope(draft, granted)} /> : null}
         <GeneralCard config={draft} onChange={setDraft} />
         {FILTER_ORDER.map((filter) => (
           <FilterCard
             key={filter}
             filter={filter}
             rule={ruleOf(draft, filter)}
+            granted={granted}
             onChange={(rule) => setDraft(withRule(draft, filter, rule))}
           />
         ))}
+        <RecentActionsCard />
       </div>
     </Page>
   );
@@ -260,13 +274,42 @@ const ACTION_LABELS: Record<ModerationActionKind, string> = {
   ban: "Ban the viewer",
 };
 
+function ReconnectLink() {
+  return (
+    <Link href="/admin/integrations" className="text-primary underline-offset-2 hover:underline">
+      Reconnect Twitch
+    </Link>
+  );
+}
+
+function ReconnectBanner({ missing }: { missing: readonly ModerationActionKind[] }) {
+  if (missing.length === 0) {
+    return null;
+  }
+  return (
+    <Card className="border-amber-500/50" data-testid="moderation-reconnect">
+      <CardContent className="space-y-1 py-4 text-sm">
+        {missing.map((kind) => (
+          <p key={kind}>{RECONNECT_MESSAGES[kind]}</p>
+        ))}
+        <p className="text-muted-foreground">
+          Until then those steps are skipped and the rest still run. <ReconnectLink />
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function FilterCard({
   filter,
   rule,
+  granted,
   onChange,
 }: {
   filter: FilterId;
   rule: ModerationRule;
+  /** The Twitch link's scopes; null while unknown. */
+  granted: readonly string[] | null;
   onChange: (rule: ModerationRule) => void;
 }) {
   const copy = FILTER_COPY[filter];
@@ -290,6 +333,7 @@ function FilterCard({
           <ActionsEditor
             filter={filter}
             actions={rule.actions}
+            missingScope={granted === null ? [] : actionsMissingScope(rule.actions, granted)}
             onChange={(actions) => onChange({ ...rule, actions })}
           />
         </CardContent>
@@ -477,10 +521,13 @@ function PhrasesEditor({
 function ActionsEditor({
   filter,
   actions,
+  missingScope,
   onChange,
 }: {
   filter: FilterId;
   actions: ModerationAction[];
+  /** Chosen actions the Twitch link cannot perform yet. */
+  missingScope: readonly ModerationActionKind[];
   onChange: (actions: ModerationAction[]) => void;
 }) {
   const [confirmingBan, setConfirmingBan] = useState(false);
@@ -506,6 +553,11 @@ function ActionsEditor({
             checked={has(kind)}
             onChange={(on) => toggle(kind, on)}
           />
+          {missingScope.includes(kind) ? (
+            <p className="ml-6 text-sm text-amber-600" data-testid={`${filter}-action-${kind}-reconnect`}>
+              {RECONNECT_MESSAGES[kind]} <ReconnectLink />
+            </p>
+          ) : null}
           {actions.map((action) => {
             if (action.kind !== kind) {
               return null;
@@ -567,5 +619,63 @@ function ActionsEditor({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** How many moderated lines the table shows. */
+const RECENT_ACTIONS_SHOWN = 50;
+
+function RecentActionsCard() {
+  const recent = useRecentModerationActions(RECENT_ACTIONS_SHOWN);
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div className="space-y-1">
+          <CardTitle>Recent actions</CardTitle>
+          <CardDescription>The latest messages chat moderation caught, newest first.</CardDescription>
+        </div>
+        <Button variant="ghost" size="icon" aria-label="Refresh" onClick={recent.refetch}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {recent.error !== null ? <p className="text-sm text-destructive">{recent.error}</p> : null}
+        {recent.data === undefined && recent.error === null ? <Skeleton className="h-20 w-full" /> : null}
+        {recent.data?.length === 0 ? <p className="text-sm text-muted-foreground">Nothing caught yet.</p> : null}
+        {recent.data !== undefined && recent.data.length > 0 ? (
+          <Table data-testid="moderation-recent">
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Viewer</TableHead>
+                <TableHead>Why</TableHead>
+                <TableHead>What happened</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recent.data.map((record) => (
+                <TableRow key={record.id}>
+                  <TableCell className="whitespace-nowrap">{new Date(record.time).toLocaleString()}</TableCell>
+                  <TableCell>
+                    <div>{record.chatterLogin}</div>
+                    <div className="max-w-xs truncate text-xs text-muted-foreground">{record.text}</div>
+                  </TableCell>
+                  <TableCell>
+                    {FILTER_COPY[record.filter].title}: {record.reason}
+                  </TableCell>
+                  <TableCell>
+                    {record.steps.map((step) => (
+                      <div key={step.kind}>
+                        {ACTION_NAMES[step.kind]}: {OUTCOME_LABELS[step.outcome]}
+                      </div>
+                    ))}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
