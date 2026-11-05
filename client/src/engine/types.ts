@@ -186,7 +186,8 @@ export type EngineSyncStepName =
   | "groups"
   | "functions"
   | "triggers"
-  | "resources";
+  | "resources"
+  | "eventQueue";
 
 /** When the instance's mirror last synced and when it may sync next. Times are epoch ms. */
 export interface EngineSyncSchedule {
