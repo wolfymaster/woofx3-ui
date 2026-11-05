@@ -1,6 +1,6 @@
 import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { TRANSIENT_SWEEP_BATCH } from "./lib/engineEvents/config";
 import { isInstanceMember } from "./lib/teamAccess";
@@ -8,16 +8,11 @@ import { isInstanceMember } from "./lib/teamAccess";
 const DEFAULT_TTL_MS = 60_000;
 
 /**
- * Whether a row is still live. The sweep deletes expired rows up to a minute
- * late, so every reader checks the expiry itself.
- */
-function isLive(row: Doc<"transientEvents">, now: number): boolean {
-  return row.expiresAt > now;
-}
-
-/**
  * Subscribe to a transient event by instanceId + correlationKey.
- * Returns the most recent event, or null if none exists yet.
+ * Returns the most recent event, or null if none exists yet. A row past its
+ * expiry is still returned until the sweep deletes it, up to a minute late:
+ * a query must not read the clock, so the client drops expired rows
+ * (client/src/engine/convex/requests.ts).
  * Convex realtime pushes updates the moment an event is written.
  *
  * Null for a caller who is not a member: correlation keys are guessable
@@ -33,14 +28,13 @@ export const get = query({
     if (!(await isInstanceMember(ctx, args.instanceId))) {
       return null;
     }
-    const latest = await ctx.db
+    return ctx.db
       .query("transientEvents")
       .withIndex("by_instance_correlation", (q) =>
         q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
       )
       .order("desc")
       .first();
-    return latest !== null && isLive(latest, Date.now()) ? latest : null;
   },
 });
 
@@ -61,14 +55,12 @@ export const listByCorrelation = query({
     if (!(await isInstanceMember(ctx, args.instanceId))) {
       return [];
     }
-    const now = Date.now();
-    const rows = await ctx.db
+    return ctx.db
       .query("transientEvents")
       .withIndex("by_instance_correlation", (q) =>
         q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
       )
       .take(200);
-    return rows.filter((row) => isLive(row, now));
   },
 });
 

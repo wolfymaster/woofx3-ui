@@ -12,7 +12,7 @@ import type {
   EventWatch,
   TransientEvent,
 } from "@/engine/types";
-import { useMappedList, useMappedValue } from "./mapped";
+import { systemClock } from "@/lib/engine-session/system";
 import { requireInstance, useInstanceAction, useScopeInstanceId } from "./scope";
 
 function toTransientEvent(row: Doc<"transientEvents">): TransientEvent {
@@ -26,8 +26,20 @@ function toTransientEvent(row: Doc<"transientEvents">): TransientEvent {
   };
 }
 
+/**
+ * The rows still live at `now`. The server keeps an expired row until its
+ * sweep deletes it, up to a minute late, and cannot filter it out itself: a
+ * Convex query must not read the clock.
+ */
+export function liveTransientEvents(rows: Doc<"transientEvents">[], now: number): TransientEvent[] {
+  return rows.filter((row) => row.expiresAt > now).map(toTransientEvent);
+}
+
 function toLiveTransientEvent(row: Doc<"transientEvents"> | null | undefined): TransientEvent | null | undefined {
-  return row === undefined || row === null ? row : toTransientEvent(row);
+  if (row === undefined || row === null) {
+    return row;
+  }
+  return liveTransientEvents([row], systemClock.now())[0] ?? null;
 }
 
 // Every correlated request kind is a Convex action taking the instance, the
@@ -42,7 +54,7 @@ function useEvent(correlationKey: string | null) {
     api.transientEvents.get,
     instanceId && correlationKey !== null ? { instanceId, correlationKey } : "skip"
   );
-  return useMappedValue(row, toTransientEvent);
+  return useMemo(() => toLiveTransientEvent(row), [row]);
 }
 
 function useEvents(correlationKey: string | null) {
@@ -51,7 +63,7 @@ function useEvents(correlationKey: string | null) {
     api.transientEvents.listByCorrelation,
     instanceId && correlationKey !== null ? { instanceId, correlationKey } : "skip"
   );
-  return useMappedList(rows, toTransientEvent);
+  return useMemo(() => (rows === undefined ? undefined : liveTransientEvents(rows, systemClock.now())), [rows]);
 }
 
 function useCorrelated(kind: CorrelatedRequestKind): Correlated<CorrelatedRequests[CorrelatedRequestKind]> {

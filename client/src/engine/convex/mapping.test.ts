@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import { getFunctionName } from "convex/server";
 import { renderInScope } from "./render-in-scope";
 
@@ -29,12 +30,14 @@ const { convexAlertQueueGateway } = await import("./alert-queue");
 const { convexCommandsGateway } = await import("./commands");
 const { convexEventLogGateway } = await import("./event-log");
 const { convexModuleResourcesGateway } = await import("./module-resources");
-const { convexRequestsGateway } = await import("./requests");
+const { convexRequestsGateway, liveTransientEvents } = await import("./requests");
 const { convexScenesGateway } = await import("./scenes");
 const { convexStatusGateway } = await import("./status");
 const { convexWorkflowsGateway, toWorkflowRun } = await import("./workflows");
 
 const convexFields = { _creationTime: 1_700_000_000_000, instanceId: "instance-1" };
+// An expiry no test run reaches, for transient events that must read as live.
+const FAR_FUTURE = Number.MAX_SAFE_INTEGER;
 
 beforeEach(() => {
   rows = {};
@@ -348,7 +351,7 @@ const MAPPING_CASES: MappingCase[] = [
       type: "module.install",
       status: "success",
       data: { moduleKey: "obs" },
-      expiresAt: 9,
+      expiresAt: FAR_FUTURE,
     },
     read: () => convexRequestsGateway.useEvent("key-1"),
     expected: {
@@ -356,8 +359,22 @@ const MAPPING_CASES: MappingCase[] = [
       type: "module.install",
       status: "success",
       data: { moduleKey: "obs" },
+      expiresAt: FAR_FUTURE,
+    },
+  },
+  {
+    name: "an expired transient event the sweep has not deleted yet reads as null",
+    query: "transientEvents:get",
+    answer: {
+      _id: "event-row-1",
+      ...convexFields,
+      correlationKey: "key-1",
+      type: "module.install",
+      status: "success",
       expiresAt: 9,
     },
+    read: () => convexRequestsGateway.useEvent("key-1"),
+    expected: null,
   },
   {
     name: "a missing transient event passes through as null",
@@ -447,6 +464,34 @@ describe("a pushed workflow run crosses field by field", () => {
   for (const { name, run, expected } of cases) {
     test(name, () => {
       expect(toWorkflowRun(run)).toEqual(expected);
+    });
+  }
+});
+
+describe("liveTransientEvents drops rows past their expiry", () => {
+  const NOW = 1_000;
+  const row = (correlationKey: string, expiresAt: number): Doc<"transientEvents"> => ({
+    _id: `row-${correlationKey}` as Id<"transientEvents">,
+    _creationTime: convexFields._creationTime,
+    instanceId: convexFields.instanceId as Id<"instances">,
+    correlationKey,
+    type: "workflow.run",
+    status: "progress",
+    expiresAt,
+  });
+  const cases = [
+    { name: "a row expiring later is kept", rows: [row("a", NOW + 1)], expected: ["a"] },
+    { name: "a row expiring exactly now is dropped", rows: [row("a", NOW)], expected: [] },
+    { name: "a row already expired is dropped", rows: [row("a", NOW - 1)], expected: [] },
+    {
+      name: "only the expired rows of a mixed list are dropped, in order",
+      rows: [row("a", NOW + 5), row("b", NOW - 5), row("c", NOW + 9)],
+      expected: ["a", "c"],
+    },
+  ];
+  for (const { name, rows: input, expected } of cases) {
+    test(name, () => {
+      expect(liveTransientEvents(input, NOW).map((event) => event.correlationKey)).toEqual(expected);
     });
   }
 });

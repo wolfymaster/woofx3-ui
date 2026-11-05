@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
 import { TRANSIENT_SWEEP_BATCH } from "./lib/engineEvents/config";
@@ -69,25 +69,5 @@ describe("sweepExpired", () => {
     });
     const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
     expect(scheduled).toEqual([]);
-  });
-});
-
-describe("readers", () => {
-  test("an expired row is never returned, even before the sweep", async () => {
-    const t = newBackend();
-    const instanceId = await seed(t, [Date.now() - 1]);
-    const userId = await t.run(async (ctx) => {
-      const userId = (await ctx.db.query("users").first())?._id;
-      if (!userId) {
-        throw new Error("seed wrote no user");
-      }
-      await ctx.db.insert("instanceMembers", { instanceId, userId, role: "owner" });
-      return userId;
-    });
-    const owner = t.withIdentity({ subject: `${userId}|session` });
-    expect(await owner.query(api.transientEvents.get, { instanceId, correlationKey: "key-0" })).toBeNull();
-    expect(await owner.query(api.transientEvents.listByCorrelation, { instanceId, correlationKey: "key-0" })).toEqual(
-      []
-    );
   });
 });
