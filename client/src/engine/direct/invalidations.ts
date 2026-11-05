@@ -81,6 +81,10 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.WORKFLOW_CREATED]: (event) => workflowKeys(event.workflow.id),
   [EngineEventType.WORKFLOW_UPDATED]: (event) => workflowKeys(event.workflow.id),
   [EngineEventType.WORKFLOW_DELETED]: (event) => workflowKeys(event.workflowId),
+  // Nothing here reads workflow groups yet; a member's own switch arrives as its `workflow.updated`.
+  [EngineEventType.WORKFLOW_GROUP_CREATED]: NONE,
+  [EngineEventType.WORKFLOW_GROUP_UPDATED]: NONE,
+  [EngineEventType.WORKFLOW_GROUP_DELETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_STARTED]: NONE,
   [EngineEventType.WORKFLOW_RUN_COMPLETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_FAILED]: NONE,
