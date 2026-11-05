@@ -5,10 +5,14 @@ import type { ActionCtx } from "../../../_generated/server";
 import type { EngineApi } from "../../engineInstanceUrl";
 import { workflowGroupsStep } from "./workflowGroups";
 
-function run(capabilities: string[]) {
+function run(capabilities: string[] | null) {
   const sent: { name: string; args: Record<string, unknown> }[] = [];
   let listed = false;
   const ctx = {
+    runQuery: async (ref: Parameters<typeof getFunctionName>[0]) => {
+      expect(getFunctionName(ref)).toBe("engineCapabilities:forInstance");
+      return capabilities;
+    },
     runMutation: async (ref: Parameters<typeof getFunctionName>[0], args: Record<string, unknown>) => {
       sent.push({ name: getFunctionName(ref), args });
       return { itemsProcessed: 1 };
@@ -16,7 +20,6 @@ function run(capabilities: string[]) {
   } as unknown as ActionCtx;
   const newApi = () =>
     ({
-      getEngineCapabilities: async () => ({ schema: 1, capabilities }),
       listWorkflowGroups: async () => {
         listed = true;
         return [{ id: "g-1", name: "Holiday", description: "", enabled: true, memberIds: ["wf-1"] }];
@@ -41,5 +44,11 @@ describe("workflowGroupsStep", () => {
     expect(await t.done).toEqual({ itemsProcessed: 0 });
     expect(t.wasListed()).toBe(false);
     expect(t.sent).toHaveLength(0);
+  });
+
+  test("leaves the mirror alone while the engine has not reported its capabilities", async () => {
+    const t = run(null);
+    expect(await t.done).toEqual({ itemsProcessed: 0 });
+    expect(t.wasListed()).toBe(false);
   });
 });

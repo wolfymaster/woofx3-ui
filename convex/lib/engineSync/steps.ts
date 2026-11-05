@@ -4,6 +4,7 @@ import type { EngineApi } from "../engineInstanceUrl";
 import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
 import { databasesStep } from "./steps/databases";
+import { engineCapabilitiesStep } from "./steps/engineCapabilities";
 import { eventQueueStep } from "./steps/eventQueue";
 import { functionsStep } from "./steps/functions";
 import { groupsStep } from "./steps/groups";
@@ -16,6 +17,7 @@ import { workflowGroupsStep } from "./steps/workflowGroups";
 import { workflowsStep } from "./steps/workflows";
 
 export type SyncStepName =
+  | "engineCapabilities"
   | "modules"
   | "commands"
   | "groups"
@@ -48,6 +50,8 @@ export interface SyncStep {
 }
 
 export const SYNC_STEPS: readonly SyncStep[] = [
+  // Before everything: later steps gate on what the engine advertises.
+  engineCapabilitiesStep,
   // First: every later step resolves an engine record back to its
   // moduleRepository row, and `resources` drops an instance whose module has
   // none. A module installed since the last sweep has no row until this runs.

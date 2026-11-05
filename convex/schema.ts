@@ -1246,6 +1246,19 @@ export default defineSchema({
   // groups), written from the workflow_group.* webhooks, the group actions'
   // own RPC answers, and the "workflowGroups" engine-sync step. The engine
   // owns the switch rules; members' switches arrive on their workflow rows.
+  // engineCapabilities: what the instance's engine last reported from
+  // getEngineCapabilities(), so every capability gate on every page reads one
+  // stored answer instead of asking the engine. Written by the
+  // "engineCapabilities" engine-sync step (which runs on every registration,
+  // so an engine restarted or replaced reports again) and by
+  // engineCapabilities.refresh, which the dashboard calls each time its live
+  // connection to the engine comes up.
+  engineCapabilities: defineTable({
+    instanceId: v.id("instances"),
+    capabilities: v.array(v.string()),
+    fetchedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
   workflowGroups: defineTable({
     instanceId: v.id("instances"),
     engineGroupId: v.string(),
@@ -2080,6 +2093,7 @@ export default defineSchema({
     steps: v.array(
       v.object({
         name: v.union(
+          v.literal("engineCapabilities"),
           v.literal("modules"),
           v.literal("commands"),
           v.literal("groups"),

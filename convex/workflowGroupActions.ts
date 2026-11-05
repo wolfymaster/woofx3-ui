@@ -1,4 +1,4 @@
-import { ENGINE_CAPABILITIES, type WorkflowGroup } from "@woofx3/api";
+import type { WorkflowGroup } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -33,15 +33,6 @@ async function mirror(ctx: ActionCtx, instanceId: Id<"instances">, group: Workfl
   });
   return group;
 }
-
-/** Whether the instance's engine has workflow groups (the `workflows.groups` capability). */
-export const supported = action({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<boolean> => {
-    const { capabilities } = await (await engineFor(ctx, instanceId))().getEngineCapabilities();
-    return capabilities.includes(ENGINE_CAPABILITIES.workflowsGroups);
-  },
-});
 
 export const create = action({
   args: { instanceId: v.id("instances"), name: v.string(), description: v.string() },

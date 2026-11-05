@@ -648,8 +648,6 @@ export interface WorkflowsGateway {
   useHealthResyncRequest(): (trigger: WorkflowHealthResyncTrigger) => Promise<WorkflowHealthResyncResult>;
   /** Every alert group. Empty when the caller cannot see the instance. */
   useGroups(): Live<WorkflowGroup[]>;
-  /** Whether the engine has alert groups at all (its `workflows.groups` capability). */
-  useGroupsSupportedRequest(): () => Promise<boolean>;
   /**
    * The group writes. Each resolves with the group as the engine stored it,
    * already mirrored; the members' switches follow on their own workflows.
@@ -833,6 +831,13 @@ export interface SessionGateway {
   useReconnectRequest(): () => void;
   /** True while the connection holds an engine session that has completed an authenticated round trip. */
   useConnected(): boolean;
+  /**
+   * The capability ids the scope's engine advertises, cached once per engine
+   * and read again when the engine changes or the connection comes back.
+   * Empty when the caller cannot see the instance or the engine has not
+   * reported yet. Gate on it through `useEngineCapability`.
+   */
+  useCapabilities(): Live<readonly string[]>;
 }
 
 /**

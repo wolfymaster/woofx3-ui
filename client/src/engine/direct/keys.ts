@@ -4,6 +4,9 @@
 // talks to one engine, and a new target clears the whole cache.
 
 export const directKeys = {
+  session: {
+    capabilities: () => ["session", "capabilities"] as const,
+  },
   status: {
     all: ["status"] as const,
     liveState: () => ["status", "liveState"] as const,

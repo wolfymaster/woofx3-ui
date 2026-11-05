@@ -183,6 +183,7 @@ export type EngineSyncStepName =
   | "modules"
   | "workflows"
   | "workflowGroups"
+  | "engineCapabilities"
   | "scenes"
   | "commands"
   | "groups"

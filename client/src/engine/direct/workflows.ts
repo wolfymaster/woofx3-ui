@@ -6,7 +6,6 @@ import { isStillLoadingError, parseWorkflowHealthList, shouldResync } from "@sha
 import { buildTriggerOptions } from "@shared/workflow-test-run";
 import {
   type CallbackEnvelope,
-  ENGINE_CAPABILITIES,
   EngineEventType,
   type WorkflowGroup as EngineWorkflowGroup,
   WORKFLOW_RUN_SNAPSHOT_MAX_LIMIT,
@@ -338,10 +337,6 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
     return group;
   };
 
-  const groupsSupported = async () => {
-    const { capabilities } = await runtime.call("getEngineCapabilities", (api) => api.getEngineCapabilities());
-    return capabilities.includes(ENGINE_CAPABILITIES.workflowsGroups);
-  };
   const createGroup = (group: WorkflowGroupText) =>
     groupWrite(runtime.call("createWorkflowGroup", (api) => api.createWorkflowGroup(group)));
   const updateGroup = (engineGroupId: string, group: WorkflowGroupText) =>
@@ -408,7 +403,6 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
     useNotRunning: () => useEngineQuery(runtime, healthRead(runtime)),
     useHealthResyncRequest: () => useEngineRequest(healthResync),
     useGroups: () => useEngineQuery(runtime, groupsRead(runtime)),
-    useGroupsSupportedRequest: () => useEngineRequest(groupsSupported),
     useCreateGroupRequest: () => useEngineRequest(createGroup),
     useUpdateGroupRequest: () => useEngineRequest(updateGroup),
     useRemoveGroupRequest: () => useEngineRequest(removeGroup),

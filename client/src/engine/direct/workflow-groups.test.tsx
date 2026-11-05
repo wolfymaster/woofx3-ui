@@ -69,10 +69,4 @@ describe("alert groups", () => {
       enabled: false,
     });
   });
-
-  test("support follows the engine's capability", async () => {
-    const { runtime } = await connected();
-    const supported = renderDirect(() => directWorkflowsGateway(runtime).useGroupsSupportedRequest()).current();
-    expect(await supported()).toBe(true);
-  });
 });

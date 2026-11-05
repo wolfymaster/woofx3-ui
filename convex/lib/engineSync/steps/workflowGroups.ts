@@ -5,14 +5,14 @@ import type { SyncStep, SyncStepContext } from "../steps";
 /**
  * workflowGroupsStep — full-snapshot reconciliation of workflow groups
  * (alert groups). An engine without `workflows.groups` has none to read, so
- * the step asks for the capability first and leaves the mirror alone without
- * it.
+ * the step leaves the mirror alone without it. It reads the capabilities the
+ * engineCapabilities step stored earlier in the same run.
  */
 export const workflowGroupsStep: SyncStep = {
   name: "workflowGroups",
   run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
-    const { capabilities } = await newApi().getEngineCapabilities();
-    if (!capabilities.includes(ENGINE_CAPABILITIES.workflowsGroups)) {
+    const capabilities = await ctx.runQuery(internal.engineCapabilities.forInstance, { instanceId });
+    if (!capabilities?.includes(ENGINE_CAPABILITIES.workflowsGroups)) {
       return { itemsProcessed: 0 };
     }
     const snapshotStartedAt = Date.now();
