@@ -282,6 +282,7 @@ import type * as webhookAuth from "../webhookAuth.js";
 import type * as workflowActions from "../workflowActions.js";
 import type * as workflowCatalog from "../workflowCatalog.js";
 import type * as workflowCatalogContext from "../workflowCatalogContext.js";
+import type * as workflowGroupActions from "../workflowGroupActions.js";
 import type * as workflowGroups from "../workflowGroups.js";
 import type * as workflowHealth from "../workflowHealth.js";
 import type * as workflowInternal from "../workflowInternal.js";
@@ -569,6 +570,7 @@ declare const fullApi: ApiFromModules<{
   workflowActions: typeof workflowActions;
   workflowCatalog: typeof workflowCatalog;
   workflowCatalogContext: typeof workflowCatalogContext;
+  workflowGroupActions: typeof workflowGroupActions;
   workflowGroups: typeof workflowGroups;
   workflowHealth: typeof workflowHealth;
   workflowInternal: typeof workflowInternal;

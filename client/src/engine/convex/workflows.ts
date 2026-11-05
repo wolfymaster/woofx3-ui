@@ -11,6 +11,8 @@ import type {
   WorkflowCatalog,
   WorkflowCatalogAction,
   WorkflowCatalogTrigger,
+  WorkflowGroup,
+  WorkflowGroupText,
   WorkflowHealthResyncTrigger,
   WorkflowReplay,
   WorkflowRun,
@@ -41,6 +43,27 @@ function toWorkflow(row: Doc<"workflows">): Workflow {
     groupIds: row.groupIds ?? [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+function toWorkflowGroup(row: Doc<"workflowGroups">): WorkflowGroup {
+  return {
+    engineGroupId: row.engineGroupId,
+    name: row.name,
+    description: row.description,
+    enabled: row.enabled,
+    memberIds: row.memberIds,
+  };
+}
+
+/** A group action's answer, which carries the engine's id as `id`. */
+function answeredGroup(group: { id: string } & Omit<WorkflowGroup, "engineGroupId">): WorkflowGroup {
+  return {
+    engineGroupId: group.id,
+    name: group.name,
+    description: group.description,
+    enabled: group.enabled,
+    memberIds: group.memberIds,
   };
 }
 
@@ -275,6 +298,61 @@ function useHealthResyncRequest() {
   return useCallback((trigger: WorkflowHealthResyncTrigger) => resync({ trigger }), [resync]);
 }
 
+function useGroups() {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.workflowGroups.list, instanceId ? { instanceId } : "skip");
+  return useMappedList(rows, toWorkflowGroup);
+}
+
+function useGroupsSupportedRequest() {
+  const supported = useInstanceAction(api.workflowGroupActions.supported);
+  return useCallback(() => supported({}), [supported]);
+}
+
+function useCreateGroupRequest() {
+  const create = useInstanceAction(api.workflowGroupActions.create);
+  return useCallback(async (group: WorkflowGroupText) => answeredGroup(await create(group)), [create]);
+}
+
+function useUpdateGroupRequest() {
+  const update = useInstanceAction(api.workflowGroupActions.update);
+  return useCallback(
+    async (engineGroupId: string, group: WorkflowGroupText) => answeredGroup(await update({ engineGroupId, ...group })),
+    [update]
+  );
+}
+
+function useRemoveGroupRequest() {
+  const remove = useInstanceAction(api.workflowGroupActions.remove);
+  return useCallback((engineGroupId: string) => remove({ engineGroupId }), [remove]);
+}
+
+function useSetGroupEnabledRequest() {
+  const setEnabled = useInstanceAction(api.workflowGroupActions.setEnabled);
+  return useCallback(
+    async (engineGroupId: string, enabled: boolean) => answeredGroup(await setEnabled({ engineGroupId, enabled })),
+    [setEnabled]
+  );
+}
+
+function useAddGroupMembersRequest() {
+  const addMembers = useInstanceAction(api.workflowGroupActions.addMembers);
+  return useCallback(
+    async (engineGroupId: string, workflowIds: string[]) =>
+      answeredGroup(await addMembers({ engineGroupId, workflowIds })),
+    [addMembers]
+  );
+}
+
+function useRemoveGroupMembersRequest() {
+  const removeMembers = useInstanceAction(api.workflowGroupActions.removeMembers);
+  return useCallback(
+    async (engineGroupId: string, workflowIds: string[]) =>
+      answeredGroup(await removeMembers({ engineGroupId, workflowIds })),
+    [removeMembers]
+  );
+}
+
 export const convexWorkflowsGateway: WorkflowsGateway = {
   useWorkflows,
   useHasAny,
@@ -293,4 +371,12 @@ export const convexWorkflowsGateway: WorkflowsGateway = {
   useRunsSubscription,
   useNotRunning,
   useHealthResyncRequest,
+  useGroups,
+  useGroupsSupportedRequest,
+  useCreateGroupRequest,
+  useUpdateGroupRequest,
+  useRemoveGroupRequest,
+  useSetGroupEnabledRequest,
+  useAddGroupMembersRequest,
+  useRemoveGroupMembersRequest,
 };
