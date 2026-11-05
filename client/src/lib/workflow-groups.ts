@@ -63,17 +63,29 @@ export function groupableCards(workflows: readonly Workflow[], presets: readonly
   return cards.sort((a, b) => a.eventLabel.localeCompare(b.eventLabel));
 }
 
+/** The cards a group holds, as its page lists them: those all of whose workflows are in it. */
+export function cardsInGroup(cards: readonly GroupableCard[], engineGroupId: string): GroupableCard[] {
+  return cards.filter((card) => cardGroupIds(card).includes(engineGroupId));
+}
+
 /**
- * How many of a group's triggers go back to how they were when it is switched
- * off or deleted: those no other group that is on still holds. Trigger
- * switches stay as they are while the group is off.
+ * How many of a group's cards go back to how they were when it is switched
+ * off or deleted: those with a workflow no other group that is on still
+ * holds. None while the group is off, since its cards then follow their own
+ * switches.
  */
-export function triggersReleasedBy(group: WorkflowGroup, groups: readonly WorkflowGroup[]): number {
+export function cardsReleasedBy(
+  group: WorkflowGroup,
+  groups: readonly WorkflowGroup[],
+  cards: readonly GroupableCard[]
+): number {
   if (!group.enabled) {
     return 0;
   }
   const heldElsewhere = new Set(
     groups.filter((other) => other.enabled && other.engineGroupId !== group.engineGroupId).flatMap((g) => g.memberIds)
   );
-  return group.memberIds.filter((id) => !heldElsewhere.has(id)).length;
+  return cardsInGroup(cards, group.engineGroupId).filter((card) =>
+    cardWorkflowIds(card).some((id) => !heldElsewhere.has(id))
+  ).length;
 }

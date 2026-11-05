@@ -36,10 +36,11 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { decodeSegment } from "@/lib/route-subpath";
 import {
   cardGroupIds,
+  cardsInGroup,
+  cardsReleasedBy,
   cardWorkflowIds,
   type GroupableCard,
   groupableCards,
-  triggersReleasedBy,
 } from "@/lib/workflow-groups";
 
 /** Where the group pages live, below the Alerts route. Must match the reserved segment in pages/alerts.tsx. */
@@ -48,6 +49,20 @@ export const NEW_ALERT_GROUP_SEGMENT = "new";
 
 export const SWITCH_EXPLAINER =
   "Turning this on switches on every trigger in it. Turning it off puts each one back how it was, unless another group that is on still includes it.";
+
+/** Every trigger card on the instance; undefined until the triggers have loaded. */
+function useGroupableCards(): GroupableCard[] | undefined {
+  const workflows = useWorkflows();
+  const { triggerPresets } = useWorkflowCatalog();
+  return useMemo(
+    () => (workflows === undefined ? undefined : groupableCards(workflows, triggerPresets)),
+    [workflows, triggerPresets]
+  );
+}
+
+function triggerCount(count: number): string {
+  return `${count} trigger${count === 1 ? "" : "s"}`;
+}
 
 function errorText(err: unknown): string | undefined {
   return err instanceof Error ? err.message : undefined;
@@ -96,6 +111,7 @@ export function WorkflowGroupPages({ route }: { route: readonly string[] }) {
 /** Every alert group, with its member count and switch. */
 function WorkflowGroupList() {
   const groups = useWorkflowGroups();
+  const cards = useGroupableCards();
   const [, navigate] = useLocation();
   const sorted = useMemo(() => [...(groups ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [groups]);
 
@@ -128,9 +144,11 @@ function WorkflowGroupList() {
             <li key={group.engineGroupId} className="flex items-center justify-between gap-4 px-4 py-3">
               <Link href={`${ALERT_GROUPS_PATH}/${encodeURIComponent(group.engineGroupId)}`} className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{group.name}</span>
-                <span className="text-[13px] text-muted-foreground">
-                  {group.memberIds.length} trigger{group.memberIds.length === 1 ? "" : "s"}
-                </span>
+                {cards !== undefined && (
+                  <span className="text-[13px] text-muted-foreground">
+                    {triggerCount(cardsInGroup(cards, group.engineGroupId).length)}
+                  </span>
+                )}
               </Link>
               <GroupSwitch group={group} />
             </li>
@@ -149,6 +167,7 @@ function WorkflowGroupList() {
 function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }) {
   const isNew = engineGroupId === null;
   const groups = useWorkflowGroups();
+  const cards = useGroupableCards();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const createGroup = useCreateWorkflowGroupRequest();
@@ -233,7 +252,7 @@ function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }
     }
   }
 
-  const changing = existing ? triggersReleasedBy(existing, groups) : 0;
+  const changing = existing ? cardsReleasedBy(existing, groups, cards ?? []) : 0;
 
   return (
     <div className="flex flex-col gap-10">
@@ -291,7 +310,7 @@ function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }
             <p className="text-[13px] text-muted-foreground">
               Each change here is saved straight away. Adding a trigger to a group that is on switches it on.
             </p>
-            <GroupMembers group={existing} />
+            <GroupMembers group={existing} cards={cards ?? []} />
           </Section>
           <Section title="Delete">
             <div>
@@ -313,7 +332,7 @@ function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }
             <AlertDialogDescription>
               {changing === 0
                 ? "The triggers in it stay as they are; only the group goes."
-                : `${changing} trigger${changing === 1 ? "" : "s"} go${changing === 1 ? "es" : ""} back to how ${changing === 1 ? "it was" : "they were"} before this group switched ${changing === 1 ? "it" : "them"} on. The triggers themselves are kept.`}
+                : `${triggerCount(changing)} go${changing === 1 ? "es" : ""} back to how ${changing === 1 ? "it was" : "they were"} before this group switched ${changing === 1 ? "it" : "them"} on. The triggers themselves are kept.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -338,9 +357,7 @@ function CardLabel({ card }: { card: GroupableCard }) {
   );
 }
 
-function GroupMembers({ group }: { group: WorkflowGroup }) {
-  const workflows = useWorkflows();
-  const { triggerPresets } = useWorkflowCatalog();
+function GroupMembers({ group, cards }: { group: WorkflowGroup; cards: readonly GroupableCard[] }) {
   const addMembers = useAddWorkflowGroupMembersRequest();
   const removeMembers = useRemoveWorkflowGroupMembersRequest();
   const { toast } = useToast();
@@ -348,8 +365,7 @@ function GroupMembers({ group }: { group: WorkflowGroup }) {
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
 
-  const cards = useMemo(() => groupableCards(workflows ?? [], triggerPresets), [workflows, triggerPresets]);
-  const inGroup = cards.filter((card) => cardGroupIds(card).includes(group.engineGroupId));
+  const inGroup = cardsInGroup(cards, group.engineGroupId);
   const notInGroup = cards.filter((card) => !cardGroupIds(card).includes(group.engineGroupId));
 
   async function change(write: () => Promise<unknown>, failure: string) {
