@@ -49,7 +49,19 @@ export async function instanceHoldingSlug(ctx: QueryCtx, slug: string): Promise<
   if (holders.length > 1) {
     throw new Error(`Slug "${slug}" is held by ${holders.length} engines`);
   }
-  return holders[0]?.instanceId ?? null;
+  if (holders[0]) {
+    return holders[0].instanceId;
+  }
+  const heldFromBeforeRename = await ctx.db
+    .query("engineHeldSlugs")
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
+    .take(MAX_ROWS_PER_SLUG);
+  for (const held of heldFromBeforeRename) {
+    if ((await pageSlugForInstance(ctx, held.instanceId)) !== null) {
+      return held.instanceId;
+    }
+  }
+  return null;
 }
 
 /** Longer than any slug the maintenance API issues, so a longer one is answered without a read. */

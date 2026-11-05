@@ -18,9 +18,9 @@
 //!
 //! In local mode this host also keeps the UI state that a cloud deployment's
 //! dashboard backend keeps and the engine has no business holding: the
-//! shoutout queue and the go-live checklist's stream start marker. Both live
-//! in memory for as long as the app runs, outlast an engine restart, and
-//! act through the engine with this host's own client credentials.
+//! shoutout queue. It lives in memory for as long as the app runs, outlasts
+//! an engine restart, and acts through the engine with this host's own
+//! client credentials.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -31,19 +31,15 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use woofx3_companion_core::clock::{Clock, SystemClock};
 use woofx3_companion_core::host::{
-    orchestrator_spec, run_registration, run_shoutout_pacing, run_sidecar, run_stream_marker,
-    ClientCredentials, CredentialRefusals, CredentialStore, EngineGateway, EnginePhase,
-    EngineStatus, GatewayTimeouts, HostError, HttpEngineGateway, LocalEngineLayout,
-    LocalEngineSettings, LocalSession, MarkerRequestOutcome, Registrar, RegistrationOptions,
-    ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId, ShoutoutOptions, ShoutoutQueue,
-    ShoutoutQueueView, ShoutoutQueueWatch, SidecarSpec, StreamMarkerOptions, StreamMarkerRequests,
-    StreamStartMarker,
+    orchestrator_spec, run_registration, run_shoutout_pacing, run_sidecar, CredentialRefusals,
+    CredentialStore, EngineGateway, EnginePhase, EngineStatus, GatewayTimeouts, HostError,
+    HttpEngineGateway, LocalEngineLayout, LocalEngineSettings, LocalSession, Registrar,
+    RegistrationOptions, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId, ShoutoutOptions,
+    ShoutoutQueue, ShoutoutQueueView, ShoutoutQueueWatch, SidecarSpec,
 };
 
 use crate::lock;
-use woofx3_companion_core::window::{
-    LocalEngineSession, SHOUTOUT_QUEUE_EVENT, STREAM_START_MARKER_EVENT,
-};
+use woofx3_companion_core::window::{LocalEngineSession, SHOUTOUT_QUEUE_EVENT};
 
 /// The answer to a local-mode call on a host that runs no local engine.
 const NOT_LOCAL: &str = "This host runs no local engine.";
@@ -51,19 +47,12 @@ const NOT_LOCAL: &str = "This host runs no local engine.";
 /// Where the window hears that local-mode UI state changed.
 pub trait WindowEvents: Send + Sync + 'static {
     fn shoutout_queue_changed(&self, queue: &ShoutoutQueueView);
-    fn stream_start_marker_changed(&self, marker: &StreamStartMarker);
 }
 
 impl WindowEvents for AppHandle {
     fn shoutout_queue_changed(&self, queue: &ShoutoutQueueView) {
         if let Err(err) = self.emit(SHOUTOUT_QUEUE_EVENT, queue) {
             eprintln!("[companion] could not send the shoutout queue to the window: {err}");
-        }
-    }
-
-    fn stream_start_marker_changed(&self, marker: &StreamStartMarker) {
-        if let Err(err) = self.emit(STREAM_START_MARKER_EVENT, marker) {
-            eprintln!("[companion] could not send the stream start marker to the window: {err}");
         }
     }
 }
@@ -139,26 +128,6 @@ impl LocalEngine {
         Ok(())
     }
 
-    pub fn stream_start_marker(&self) -> Result<StreamStartMarker, String> {
-        Ok(self.sidecar()?.launcher.markers.current())
-    }
-
-    /// Drops the stream start marker now when the stream is live, else when
-    /// it next goes live.
-    pub async fn request_stream_start_marker(&self) -> Result<MarkerRequestOutcome, String> {
-        let sidecar = self.sidecar()?;
-        let Some(credentials) = sidecar.credentials() else {
-            return Ok(MarkerRequestOutcome::Failed {
-                message: "The local engine is not ready yet.".to_string(),
-            });
-        };
-        let launcher = &sidecar.launcher;
-        Ok(launcher
-            .markers
-            .request(launcher.gateway.as_ref(), &credentials)
-            .await)
-    }
-
     /// What the window needs to open a session with the engine.
     pub fn session(&self) -> LocalEngineSession {
         match self {
@@ -227,14 +196,7 @@ impl EngineSidecar {
         clock: Arc<dyn Clock>,
         events: Arc<dyn WindowEvents>,
     ) -> Self {
-        let shoutouts = Arc::new(ShoutoutQueue::new(
-            Arc::clone(&clock),
-            ShoutoutOptions::default(),
-        ));
-        let markers = Arc::new(StreamMarkerRequests::new(
-            clock,
-            StreamMarkerOptions::default(),
-        ));
+        let shoutouts = Arc::new(ShoutoutQueue::new(clock, ShoutoutOptions::default()));
         let launcher = Launcher {
             spec,
             layout,
@@ -242,7 +204,6 @@ impl EngineSidecar {
             client_store,
             options,
             shoutouts,
-            markers,
             events,
         };
         let (views, tasks) = launcher.launch();
@@ -255,14 +216,6 @@ impl EngineSidecar {
 
     fn phase(&self) -> EnginePhase {
         lock(&self.views).status.borrow().phase.clone()
-    }
-
-    /// This host's engine credentials, once it is registered.
-    fn credentials(&self) -> Option<ClientCredentials> {
-        match &*lock(&self.views).session.borrow() {
-            LocalSession::Ready(credentials) => Some(credentials.clone()),
-            LocalSession::Starting | LocalSession::Failed { .. } => None,
-        }
     }
 
     fn session(&self) -> LocalEngineSession {
@@ -313,7 +266,6 @@ struct Launcher {
     options: RegistrationOptions,
     /// Kept across engine restarts; only the workers stop with the engine.
     shoutouts: Arc<ShoutoutQueue>,
-    markers: Arc<StreamMarkerRequests>,
     events: Arc<dyn WindowEvents>,
 }
 
@@ -343,26 +295,14 @@ impl Launcher {
         ));
         let shoutout_pacing = tauri::async_runtime::spawn(run_shoutout_pacing(
             Arc::clone(&self.shoutouts),
-            Arc::clone(&gateway),
-            session.clone(),
-            status.clone(),
-            refusals.clone(),
-            cancel.clone(),
-        ));
-        let stream_marker = tauri::async_runtime::spawn(run_stream_marker(
-            Arc::clone(&self.markers),
             gateway,
             session.clone(),
+            status.clone(),
             refusals,
             cancel.clone(),
         ));
         let shoutout_events = tauri::async_runtime::spawn(forward_shoutout_queue(
             self.shoutouts.subscribe(),
-            Arc::clone(&self.events),
-            cancel.clone(),
-        ));
-        let marker_events = tauri::async_runtime::spawn(forward_stream_start_marker(
-            self.markers.subscribe(),
             Arc::clone(&self.events),
             cancel.clone(),
         ));
@@ -376,9 +316,7 @@ impl Launcher {
                 followers: vec![
                     ("engine registration", registration),
                     ("shoutout queue", shoutout_pacing),
-                    ("stream start marker", stream_marker),
                     ("shoutout queue events", shoutout_events),
-                    ("stream start marker events", marker_events),
                 ],
             },
         )
@@ -398,26 +336,6 @@ async fn forward_shoutout_queue(
         tokio::select! {
             _ = cancel.cancelled() => return,
             changed = queue.changed() => if changed.is_err() { return; },
-        }
-    }
-}
-
-/// Sends the marker's state to the window now and after every change, and
-/// logs a marker that could not be dropped, until cancelled.
-async fn forward_stream_start_marker(
-    mut marker: watch::Receiver<StreamStartMarker>,
-    events: Arc<dyn WindowEvents>,
-    cancel: CancellationToken,
-) {
-    loop {
-        let current = marker.borrow_and_update().clone();
-        if let StreamStartMarker::Failed { message } = &current {
-            eprintln!("[companion] could not drop the stream start marker: {message}");
-        }
-        events.stream_start_marker_changed(&current);
-        tokio::select! {
-            _ = cancel.cancelled() => return,
-            changed = marker.changed() => if changed.is_err() { return; },
         }
     }
 }
@@ -478,7 +396,6 @@ mod tests {
 
     impl WindowEvents for NoWindow {
         fn shoutout_queue_changed(&self, _queue: &ShoutoutQueueView) {}
-        fn stream_start_marker_changed(&self, _marker: &StreamStartMarker) {}
     }
 
     fn channel(id: &str) -> ShoutoutChannel {
@@ -546,8 +463,8 @@ mod tests {
         assert_eq!(engine.session(), LocalEngineSession::NotLocal);
     }
 
-    #[tokio::test]
-    async fn test_local_engine_off_refuses_local_mode_calls() {
+    #[test]
+    fn test_local_engine_off_refuses_local_mode_calls() {
         let engine = LocalEngine::Off;
         assert_eq!(engine.shoutout_queue(), Err(NOT_LOCAL.to_string()));
         assert_eq!(
@@ -559,11 +476,6 @@ mod tests {
             Err(NOT_LOCAL.to_string())
         );
         assert_eq!(engine.reorder_shoutouts(&[]), Err(NOT_LOCAL.to_string()));
-        assert_eq!(engine.stream_start_marker(), Err(NOT_LOCAL.to_string()));
-        assert_eq!(
-            engine.request_stream_start_marker().await,
-            Err(NOT_LOCAL.to_string())
-        );
     }
 
     #[tokio::test]
@@ -583,19 +495,6 @@ mod tests {
             .map(|entry| entry.login)
             .collect();
         assert_eq!(logins, ["a", "b"]);
-        engine.stop().await;
-    }
-
-    #[tokio::test]
-    async fn test_local_engine_marker_request_waits_for_a_session() {
-        let engine = unstartable();
-        assert_eq!(
-            engine.request_stream_start_marker().await,
-            Ok(MarkerRequestOutcome::Failed {
-                message: "The local engine is not ready yet.".to_string()
-            })
-        );
-        assert_eq!(engine.stream_start_marker(), Ok(StreamStartMarker::Idle));
         engine.stop().await;
     }
 }

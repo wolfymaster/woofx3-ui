@@ -8,6 +8,8 @@ import {
   removePanel,
   renamePanel,
   setPanelWidgets,
+  withoutRetiredPanelWidgets,
+  withoutRetiredRailWidgets,
 } from "./dashboard-layout";
 
 const main: DashboardPanel = { id: "p1", name: "Main", layoutId: "single", widgets: [] };
@@ -96,4 +98,37 @@ describe("assertRailWidgets", () => {
       expect(() => assertRailWidgets(widgets)).toThrow(error);
     });
   }
+});
+
+describe("retired widgets", () => {
+  const retiredPanel: DashboardPanel = {
+    ...chat,
+    widgets: [
+      { zoneId: "0-0", slotId: "s1", type: "notes" },
+      { zoneId: "0-1", slotId: "s2", type: "go-live", config: { stale: true } },
+    ],
+  };
+
+  test("a panel's retired widgets are left out of what is read", () => {
+    const [panel] = withoutRetiredPanelWidgets([retiredPanel]);
+    expect(panel?.widgets).toEqual([{ zoneId: "0-0", slotId: "s1", type: "notes" }]);
+  });
+
+  test("panels without a retired widget are returned as they were", () => {
+    const panels = [main, chat];
+    expect(withoutRetiredPanelWidgets(panels)).toBe(panels);
+  });
+
+  test("the rail's retired widgets are left out of what is read", () => {
+    const rail: DashboardRailWidget[] = [
+      { slotId: "r1", type: "go-live" },
+      { slotId: "r2", type: "notes" },
+    ];
+    expect(withoutRetiredRailWidgets(rail)).toEqual([{ slotId: "r2", type: "notes" }]);
+  });
+
+  test("a rail without a retired widget is returned as it was", () => {
+    const rail: DashboardRailWidget[] = [{ slotId: "r2", type: "notes" }];
+    expect(withoutRetiredRailWidgets(rail)).toBe(rail);
+  });
 });

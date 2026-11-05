@@ -8,15 +8,12 @@ import {
   INTEGRATIONS_EVENT,
   type IntegrationsView,
   type LocalEngineSession,
-  type MarkerRequestOutcome,
   OPEN_LOCAL_CONNECTIONS_EVENT,
   SHOUTOUT_QUEUE_EVENT,
   type ShoutoutChannel,
   type ShoutoutEnqueued,
   type ShoutoutEntryId,
   type ShoutoutQueueView,
-  STREAM_START_MARKER_EVENT,
-  type StreamStartMarker,
   type TestResult,
 } from "@desktop-host/window";
 import { listen } from "@tauri-apps/api/event";
@@ -32,7 +29,6 @@ export type {
   HostModeView,
   IntegrationsView,
   LocalEngineSession,
-  MarkerRequestOutcome,
   ModuleView,
   RelayView,
   ShoutoutChannel,
@@ -40,7 +36,6 @@ export type {
   ShoutoutEntry,
   ShoutoutEntryId,
   ShoutoutQueueView,
-  StreamStartMarker,
   TestResult,
 } from "@desktop-host/window";
 
@@ -67,8 +62,7 @@ export async function localEngineSession(): Promise<LocalEngineSession> {
 }
 
 // ==================== Local-mode UI state ====================
-// The shoutout queue and the stream start marker, which this host keeps for
-// the window in local mode. Every command below rejects outside local mode.
+// The shoutout queue, which this host keeps for the window in local mode. Every command below rejects outside local mode.
 
 export async function shoutoutQueue(): Promise<ShoutoutQueueView> {
   return call(COMMANDS.shoutout_queue);
@@ -91,19 +85,6 @@ export async function reorderShoutouts(entryIds: ShoutoutEntryId[]): Promise<voi
 
 export function onShoutoutQueueChange(handler: (queue: ShoutoutQueueView) => void): Promise<() => void> {
   return listen<ShoutoutQueueView>(SHOUTOUT_QUEUE_EVENT, (event) => handler(event.payload));
-}
-
-export async function streamStartMarker(): Promise<StreamStartMarker> {
-  return call(COMMANDS.stream_start_marker);
-}
-
-/** Drops the "Stream start" marker now when the stream is live, else when it next goes live. */
-export async function requestStreamStartMarker(): Promise<MarkerRequestOutcome> {
-  return call(COMMANDS.request_stream_start_marker);
-}
-
-export function onStreamStartMarkerChange(handler: (marker: StreamStartMarker) => void): Promise<() => void> {
-  return listen<StreamStartMarker>(STREAM_START_MARKER_EVENT, (event) => handler(event.payload));
 }
 
 // ==================== The relay ====================

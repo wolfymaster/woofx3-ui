@@ -1,9 +1,10 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AlertQueueGateway } from "@/engine/gateway";
-import type { EngineAlert } from "@/engine/types";
+import type { EngineAlert, OverlayPresence, ReadOptions } from "@/engine/types";
+import { OVERLAY_PRESENCE_POLL_MS, overlayPresenceOf } from "@/lib/overlay-presence";
 import { useMappedList } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
@@ -56,10 +57,38 @@ function useClearQueueRequest() {
   return useCallback(() => clearQueue({}), [clearQueue]);
 }
 
+/** Each read waits for the last to answer, so a slow engine is never asked twice at once. */
+function useOverlayOpen({ enabled = true }: ReadOptions = {}) {
+  const readQueue = useInstanceAction(api.alertActions.queueState);
+  const [presence, setPresence] = useState<OverlayPresence | undefined>(undefined);
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const poll = async () => {
+      // A failed read says nothing about the overlay, so it is not an error here.
+      const next = await readQueue({}).then(overlayPresenceOf, (): OverlayPresence => "unknown");
+      if (!stopped) {
+        setPresence(next);
+        timer = setTimeout(() => void poll(), OVERLAY_PRESENCE_POLL_MS);
+      }
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [enabled, readQueue]);
+  return enabled ? presence : undefined;
+}
+
 export const convexAlertQueueGateway: AlertQueueGateway = {
   useAlerts,
   useOverview,
   useReplayRequest,
   useSkipCurrentRequest,
   useClearQueueRequest,
+  useOverlayOpen,
 };

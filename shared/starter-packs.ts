@@ -34,6 +34,7 @@ export const STARTER_ACTION_REFS = {
   shoutout: "woofx3_twitch:action:twitch.shoutout",
   clip: "woofx3_twitch:action:twitch.clip",
   marker: "woofx3_twitch:action:twitch.marker",
+  alert: "woofx3:action:alert",
 } as const;
 
 export type StarterActionRef = (typeof STARTER_ACTION_REFS)[keyof typeof STARTER_ACTION_REFS];
@@ -71,8 +72,12 @@ const CHAT_MAX_LENGTH = 500;
 /** Longest stream marker description Twitch accepts. */
 const MARKER_MAX_LENGTH = 140;
 
-/** A parameter or condition value: a literal, or the value of one of the pack's fields. */
-export type StarterValue = string | number | boolean | { field: string };
+/**
+ * A parameter or condition value: a literal, the value of one of the pack's
+ * fields, or a literal object such as an alert's layout, with `{name}`
+ * placeholders filled in every string inside it.
+ */
+export type StarterValue = string | number | boolean | { field: string } | { object: Record<string, unknown> };
 
 export interface StarterActionStep {
   kind: "action";
@@ -676,7 +681,7 @@ export function starterItemTokens(item: StarterItem): Record<string, string> {
 }
 
 function isFieldRef(value: StarterValue): value is { field: string } {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && "field" in value;
 }
 
 /** The ids of the pack fields an item reads. */
@@ -939,7 +944,23 @@ export function requirementsMessage(missing: StarterRequirements): string | null
   return null;
 }
 
+function fillTokensDeep(value: unknown, tokens: Record<string, string>): unknown {
+  if (typeof value === "string") {
+    return fillTokens(value, tokens);
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => fillTokensDeep(entry, tokens));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, fillTokensDeep(entry, tokens)]));
+  }
+  return value;
+}
+
 function resolveValue(value: StarterValue, values: StarterFieldValues, tokens: Record<string, string>): unknown {
+  if (typeof value === "object" && "object" in value) {
+    return fillTokensDeep(value.object, tokens);
+  }
   if (isFieldRef(value)) {
     const fieldValue = values[value.field];
     if (fieldValue === undefined) {

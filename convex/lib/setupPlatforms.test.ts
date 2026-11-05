@@ -174,14 +174,12 @@ describe("curatedForDeployment", () => {
 });
 
 describe("setupNeedsTwitch", () => {
-  test("production always needs Twitch", () => {
-    expect(setupNeedsTwitch([], false)).toBe(true);
-    expect(setupNeedsTwitch(["woofx3_obs"], false)).toBe(true);
-  });
-
-  test("a preview needs Twitch only when it was chosen", () => {
-    expect(setupNeedsTwitch([], true)).toBe(false);
-    expect(setupNeedsTwitch(["woofx3_obs"], true)).toBe(false);
-    expect(setupNeedsTwitch([TWITCH_SETUP_MODULE_ID], true)).toBe(true);
+  test.each([
+    { skipped: false, preview: false, needed: true },
+    { skipped: true, preview: false, needed: true },
+    { skipped: false, preview: true, needed: true },
+    { skipped: true, preview: true, needed: false },
+  ])("skipped $skipped on preview $preview", ({ skipped, preview, needed }) => {
+    expect(setupNeedsTwitch(skipped, preview)).toBe(needed);
   });
 });

@@ -3,6 +3,7 @@ import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
 import {
   initialValues,
   payloadFromValues,
+  SAMPLE_VIEWER_NAME,
   type TestEventField,
   testEventFields,
   valuesFromPayload,
@@ -129,6 +130,75 @@ describe("testEventFields", () => {
     );
     expect(field.options).toEqual(options);
     expect(field.initial).toBe("2000");
+  });
+
+  // The Twitch module's "Gifted subs" filter is a select whose "any" choice has
+  // the value "", which would fail a real `isGift eq false` condition.
+  test("starts a boolean at false whatever choices a config select offers for its path", () => {
+    const [field] = testEventFields(
+      preset(
+        [{ path: "isGift", type: "boolean" }],
+        [
+          {
+            id: "isGift",
+            label: "Gifted subs",
+            type: "select",
+            eventPath: "isGift",
+            defaultValue: "",
+            options: [
+              { value: "", label: "Any subscription" },
+              { value: "false", label: "Only subs the viewer bought" },
+              { value: "true", label: "Only gifted subs" },
+            ],
+          },
+        ]
+      )
+    );
+    expect(field.initial).toBe(false);
+    expect(field.options).toBeUndefined();
+  });
+
+  test.each([
+    ["an example", { path: "isGift", type: "boolean", example: "" }, []],
+    [
+      "an example payload",
+      { path: "isGift", type: "boolean" },
+      [{ id: "x", label: "X", type: "text", examplePayload: '{"isGift":"true"}' }],
+    ],
+  ] as [string, DataShapeField, ConfigField[]][])("ignores %s that is not a boolean", (_, emit, config) => {
+    expect(testEventFields(preset([emit], config))[0].initial).toBe(false);
+  });
+
+  test("keeps a boolean's real example and example payload value", () => {
+    expect(testEventFields(preset([{ path: "live", type: "boolean", example: true }]))[0].initial).toBe(true);
+    const [field] = testEventFields(
+      preset(
+        [{ path: "isGift", type: "boolean" }],
+        [{ id: "x", label: "X", type: "text", examplePayload: '{"isGift":true}' }]
+      )
+    );
+    expect(field.initial).toBe(true);
+  });
+
+  test("starts the name of who the event is about at a sample viewer", () => {
+    const fields = testEventFields(
+      preset([
+        { path: "gifterId", type: "string", identity: "viewer", displayName: "gifterName" },
+        { path: "gifterName", type: "string" },
+        { path: "tier", type: "string" },
+      ])
+    );
+    expect(seeds(fields)).toEqual({ "Gifter id": "", "Gifter name": SAMPLE_VIEWER_NAME, Tier: "" });
+  });
+
+  test("a declared example beats the sample viewer", () => {
+    const fields = testEventFields(
+      preset([
+        { path: "userId", type: "string", identity: "viewer", displayName: "userName" },
+        { path: "userName", type: "string", example: "raider99" },
+      ])
+    );
+    expect(seeds(fields)["User name"]).toBe("raider99");
   });
 
   test("binds a config field to a path by eventPath before its id", () => {

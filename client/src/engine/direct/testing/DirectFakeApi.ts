@@ -2,10 +2,12 @@ import type {
   AlertComposition,
   AlertListPage,
   AlertListQuery,
+  AlertQueueState,
   AlertSnapshot,
   AvailableFunction,
   CommandSnapshot,
   CreateCommandInput,
+  EngineInfo,
   EngineModuleSummary,
   EventLogPage,
   EventLogQuery,
@@ -27,6 +29,7 @@ import type {
   PaginatedWorkflows,
   ResourceInstanceDefinition,
   RunActionsInput,
+  Scene,
   SceneSnapshot,
   StreamEventFrame,
   StreamEventSubscriber,
@@ -93,6 +96,7 @@ type DirectFakeSurface = Pick<
   | "getStreamSession"
   | "getStreamSessionTotals"
   | "listAlerts"
+  | "getAlertQueue"
   | "subscribeStreamEvents"
   | "dispatchFieldOptionsRequest"
   | "listAlertCompositions"
@@ -108,6 +112,9 @@ type DirectFakeSurface = Pick<
   | "listSceneSnapshots"
   | "getSceneSnapshot"
   | "getAvailableWidgets"
+  | "createScene"
+  | "getEngineInfo"
+  | "getScenes"
   | "listWidgetThemes"
   | "listUISettings"
   | "getUISetting"
@@ -277,6 +284,7 @@ export class FakeEngineState {
   });
   /** Every call the fake served, by method, with its arguments. */
   readonly calls: Array<{ method: keyof DirectFakeSurface; args: unknown[] }> = [];
+  alertQueue: AlertQueueState = { ok: false, playing: [], waiting: [], reason: "no overlay is open" };
   /** The latest stream subscription of each session, in the order they were made. */
   readonly streamSubscriptions: StreamSubscription[] = [];
 
@@ -383,6 +391,11 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return { alerts: this.state.alerts.slice(0, limit), totalCount: this.state.alerts.length, limit, offset: 0 };
   }
 
+  async getAlertQueue(): Promise<AlertQueueState> {
+    this.state.record("getAlertQueue");
+    return this.state.alertQueue;
+  }
+
   async subscribeStreamEvents(callback: StreamEventSubscriber, types?: string[]): Promise<void> {
     this.state.record("subscribeStreamEvents", types);
     // capnweb disposes a stub received as a parameter when the call returns;
@@ -482,6 +495,37 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async getAvailableWidgets(): Promise<{ widgets: AvailableWidget[] }> {
     this.state.record("getAvailableWidgets");
     return { widgets: this.state.widgets };
+  }
+
+  async createScene(data: { name: string; widgetsJson?: string; layoutJson?: string }): Promise<never> {
+    this.state.record("createScene", data);
+    const id = `scene-${this.state.scenes.length + 1}`;
+    this.state.scenes = [
+      ...this.state.scenes,
+      {
+        id,
+        name: data.name,
+        widgetsJson: data.widgetsJson ?? "[]",
+        layoutJson: data.layoutJson ?? "{}",
+      } as SceneSnapshot,
+    ];
+    return { id } as never;
+  }
+
+  async getEngineInfo(): Promise<EngineInfo> {
+    this.state.record("getEngineInfo");
+    return { engineSceneOverlayBaseUrl: "", overlayPublicUrl: "https://overlay.test", version: "dev" };
+  }
+
+  async getScenes(): Promise<{ scenes: Scene[]; total: number; page: number; pageSize: number }> {
+    this.state.record("getScenes");
+    const scenes = this.state.scenes.map((scene) => ({
+      id: scene.id,
+      name: scene.name,
+      widgets: JSON.parse(scene.widgetsJson),
+      createdAt: "",
+    }));
+    return { scenes, total: scenes.length, page: 1, pageSize: scenes.length };
   }
 
   async listUISettings(namespace: string): Promise<UISetting[]> {

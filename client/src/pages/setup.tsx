@@ -1,16 +1,16 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import type { SetupStatus } from "@convex/setup";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Loader2, MonitorPlay } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { DashboardStep } from "@/components/setup/dashboard-step";
-import { FinishStep } from "@/components/setup/finish-step";
-import { ImportStep } from "@/components/setup/import-step";
-import { InterestsStep } from "@/components/setup/interests-step";
-import { OverlayStep } from "@/components/setup/overlay-step";
-import { PlatformsStep } from "@/components/setup/platforms-step";
+import { ConnectStep } from "@/components/setup/connect-step";
+import { EngineSplash } from "@/components/setup/engine-splash";
+import { OverlayPage } from "@/components/setup/overlay-page";
 import { ProvisioningBar } from "@/components/setup/provisioning-bar";
-import { AskAdminToConnectTwitch, TwitchStep } from "@/components/setup/twitch-step";
+import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
+import { useEngineBuild } from "@/components/setup/use-engine-build";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
@@ -23,16 +23,15 @@ import {
   setupStepIndex,
   setupStepPath,
 } from "@/lib/setup-steps";
+import { $currentInstanceId } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 interface SetupShellProps {
   activeStep: SetupStepId | null;
-  /** Null while the setup status is loading; the product name stands in until then. */
-  workspaceName: string | null;
   children: React.ReactNode;
 }
 
-function SetupShell({ activeStep, workspaceName, children }: SetupShellProps) {
+function SetupShell({ activeStep, children }: SetupShellProps) {
   const activeIndex = activeStep === null ? -1 : setupStepIndex(activeStep);
   return (
     <div className="min-h-screen bg-background flex justify-center p-4 sm:pt-12">
@@ -41,9 +40,7 @@ function SetupShell({ activeStep, workspaceName, children }: SetupShellProps) {
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary text-primary-foreground">
             <MonitorPlay className="h-5 w-5" />
           </div>
-          <span className="font-bold text-2xl tracking-tight min-w-0 truncate" data-testid="text-setup-workspace-name">
-            {workspaceName ?? "woofx3"}
-          </span>
+          <span className="font-bold text-2xl tracking-tight">woofx3</span>
         </div>
         {activeStep !== null && (
           <ol className="flex items-center justify-center gap-2" aria-label="Setup progress">
@@ -74,13 +71,31 @@ function SetupShell({ activeStep, workspaceName, children }: SetupShellProps) {
   );
 }
 
+interface HostedStepProps {
+  instanceId: Id<"instances">;
+  status: SetupStatus;
+}
+
+function HostedOverlayPage({ instanceId, status, onExit }: HostedStepProps & { onExit: () => void }) {
+  return <OverlayPage engine={useEngineBuild(instanceId, status)} onExit={onExit} />;
+}
+
+/** The last stop: the wait for a build still running, and straight through to the dashboard otherwise. */
+function HostedSplash({ instanceId, status }: HostedStepProps) {
+  const [, navigate] = useLocation();
+  const openDashboard = useCallback(() => {
+    $currentInstanceId.set(instanceId);
+    navigate("/");
+  }, [instanceId, navigate]);
+  return <EngineSplash build={useEngineBuild(instanceId, status)} onReady={openDashboard} />;
+}
+
 /**
- * The setup wizard, one route per step (/setup/:step). It runs while a
- * managed engine is still being built, with the build's progress above it.
- * Steps that must be done in order are enforced here: a later step's URL
- * opened early lands on the first one still to do. A finished step asks to go
- * on through `goTo`, which waits for the setup status to record it (see
- * setupRedirect).
+ * First-run setup, one route per step (/setup/:step). It runs while a managed
+ * engine is still being built, with the build's progress above it. Order is
+ * enforced here: any other step's URL, including ones that no longer exist,
+ * lands where the user belongs. A finished step asks to go on through `goTo`,
+ * which waits for the setup status to record it (see setupRedirect).
  */
 export default function Setup() {
   const params = useParams<{ step?: string }>();
@@ -124,7 +139,7 @@ export default function Setup() {
 
   if (!instance || !status || !step) {
     return (
-      <SetupShell activeStep={null} workspaceName={status?.workspaceName ?? null}>
+      <SetupShell activeStep={null}>
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -137,7 +152,7 @@ export default function Setup() {
 
   if (!status.canManageSetup) {
     return (
-      <SetupShell activeStep={null} workspaceName={status.workspaceName}>
+      <SetupShell activeStep={null}>
         {status.twitchUsername === null ? (
           <AskAdminToConnectTwitch />
         ) : (
@@ -152,32 +167,23 @@ export default function Setup() {
     );
   }
 
+  if (step === "overlay") {
+    return <HostedOverlayPage instanceId={instanceId} status={status} onExit={() => goTo("finish")} />;
+  }
+  if (step === "finish") {
+    return <HostedSplash instanceId={instanceId} status={status} />;
+  }
+
   const title = SETUP_STEPS[setupStepIndex(step)].title;
 
   return (
-    <SetupShell activeStep={step} workspaceName={status.workspaceName}>
-      <ProvisioningBar instanceId={instanceId} />
+    <SetupShell activeStep={step}>
+      {!status.usernameNeeded && <ProvisioningBar instanceId={instanceId} />}
       <Card>
         <CardHeader>
           <CardTitle data-testid="text-setup-step-title">{title}</CardTitle>
         </CardHeader>
-        <CardContent>
-          {step === "platforms" && (
-            <PlatformsStep instanceId={instanceId} status={status} onContinue={() => goTo("twitch")} />
-          )}
-          {step === "twitch" && <TwitchStep status={status} onContinue={() => goTo("import")} />}
-          {step === "import" && (
-            <ImportStep instanceId={instanceId} status={status} onContinue={() => goTo("interests")} />
-          )}
-          {step === "interests" && (
-            <InterestsStep instanceId={instanceId} status={status} onContinue={() => goTo("dashboard")} />
-          )}
-          {step === "dashboard" && (
-            <DashboardStep instanceId={instanceId} status={status} onContinue={() => goTo("overlay")} />
-          )}
-          {step === "overlay" && <OverlayStep status={status} onContinue={() => goTo("finish")} />}
-          {step === "finish" && <FinishStep instanceId={instanceId} status={status} />}
-        </CardContent>
+        <CardContent>{step === "connect" && <ConnectStep instanceId={instanceId} status={status} />}</CardContent>
       </Card>
     </SetupShell>
   );
