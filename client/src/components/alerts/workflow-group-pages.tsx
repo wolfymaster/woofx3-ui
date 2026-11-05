@@ -44,7 +44,7 @@ import {
 
 /** Where the group pages live, below the Alerts route. Must match the reserved segment in pages/alerts.tsx. */
 export const ALERT_GROUPS_PATH = "/stream/alerts/groups";
-const NEW_ALERT_GROUP_SEGMENT = "new";
+export const NEW_ALERT_GROUP_SEGMENT = "new";
 
 export const SWITCH_EXPLAINER =
   "Turning this on switches on every trigger in it. Turning it off puts each one back how it was, unless another group that is on still includes it.";
