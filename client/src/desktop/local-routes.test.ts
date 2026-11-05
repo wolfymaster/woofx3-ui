@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
-import { LOCAL_HOME_PATH, LOCAL_ROUTES, servesLocally } from "./local-routes";
+import { LOCAL_HOME_PATH, LOCAL_NAV_SECTIONS, LOCAL_ROUTES, servesLocally } from "./local-routes";
 
 // Local mode runs with no Convex client, so nothing it loads may reach one: a
 // Convex hook there throws for want of a provider. This walks every import
@@ -118,5 +118,30 @@ describe("local mode", () => {
 
   test("the marketplace link survives being served by the browse route", () => {
     expect(servesLocally(MARKETPLACE_PATH)).toBe(true);
+  });
+});
+
+describe("LOCAL_NAV_SECTIONS", () => {
+  const hrefs = LOCAL_NAV_SECTIONS.flatMap((section) => [
+    section.href,
+    ...(section.children ?? []).map((child) => child.href),
+  ]);
+
+  // Twitch is connected on Integrations; without a way there, local mode
+  // cannot link Twitch at all.
+  test("reaches Integrations through Admin", () => {
+    const admin = LOCAL_NAV_SECTIONS.find((section) => section.id === "admin");
+    expect(admin?.href).toBe("/admin/integrations");
+    expect(admin?.children?.map((child) => child.href)).toEqual(["/admin/integrations", "/admin/appearance"]);
+  });
+
+  test("links only to pages local mode serves", () => {
+    for (const href of hrefs) {
+      expect(servesLocally(href)).toBe(true);
+    }
+  });
+
+  test("leaves out Team, which needs an account", () => {
+    expect(LOCAL_NAV_SECTIONS.some((section) => section.id === "team")).toBe(false);
   });
 });
