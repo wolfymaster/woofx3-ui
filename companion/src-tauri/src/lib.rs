@@ -707,19 +707,20 @@ mod tests {
         );
     }
 
+    /// tauri.woofx3.conf.json declares no windows, so the desktop app gets
+    /// these too.
     #[test]
-    fn test_product_configs_leave_creating_windows_to_setup() {
-        for config in [
-            include_str!("../tauri.conf.json"),
-            include_str!("../tauri.woofx3.conf.json"),
-        ] {
-            let config: serde_json::Value = serde_json::from_str(config).expect("valid JSON");
-            let windows = config["app"]["windows"].as_array().expect("a window list");
-            assert!(!windows.is_empty());
-            for window in windows {
-                assert_eq!(window["create"], serde_json::json!(false), "{window}");
-            }
+    fn test_product_config_leaves_creating_windows_to_setup() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("valid JSON");
+        let windows = config["app"]["windows"].as_array().expect("a window list");
+        assert!(!windows.is_empty());
+        for window in windows {
+            assert_eq!(window["create"], serde_json::json!(false), "{window}");
         }
+        let overlay: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.woofx3.conf.json")).expect("valid JSON");
+        assert!(overlay["app"]["windows"].is_null());
     }
 
     #[test]
