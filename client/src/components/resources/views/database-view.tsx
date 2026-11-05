@@ -54,7 +54,7 @@ const PAGE_SIZE = 50;
 /** A woofx3 database: its columns and its rows. */
 export const databaseView: KindView = {
   description:
-    "Tables you keep: form answers, games you played, giveaway entrants. Workflows add and change rows; columns you choose can show on your public page.",
+    "Tables you keep: form answers, games you played, giveaway entrants. Triggers add and change rows, and columns you choose can show on your public page.",
   icon: STREAM_OBJECT_ICONS.databases,
   railValue: ({ settings }) => parseDatabaseColumns(settings).length.toLocaleString(),
   detail: (props) => <DatabasePanel key={props.instance.canonicalId} {...props} />,

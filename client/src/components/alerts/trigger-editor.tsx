@@ -306,10 +306,10 @@ export function TriggerEditor({
           className="h-11 text-[13px] text-muted-foreground sm:h-9"
           onClick={() => saved && navigate(`/stream/workflows/${saved.engineWorkflowId}`)}
           disabled={!saved}
-          title={saved ? undefined : "Save a step first: the workflow doesn't exist yet"}
+          title={saved ? undefined : "Save a step first"}
         >
           <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-          Open in workflow editor
+          Open the full editor
         </Button>
         {confirmingDelete ? (
           <div className="flex items-center gap-2">

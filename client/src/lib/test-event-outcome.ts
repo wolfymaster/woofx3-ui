@@ -66,7 +66,7 @@ export function describeTestEventOutcome(record: RunRecord | null | undefined, w
       const friendly = record.message ? describeAlertFailure(record.message) : null;
       return {
         kind: "failed",
-        title: friendly?.title ?? "The workflow failed",
+        title: friendly?.title ?? "Its steps didn't finish",
         detail: friendly?.hint ?? record.message ?? "No reason was reported.",
       };
     }
