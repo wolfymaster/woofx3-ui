@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 
 // Chat commands are engine-authoritative (see docs/services/commands-ui.md in
 // the woofx3 engine repo). This table is a read cache populated by
@@ -85,76 +85,81 @@ export const listAvailableFunctions = query({
   },
 });
 
+const upsertFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineCommandId: v.string(),
+  command: v.string(),
+  actions: v.array(v.any()),
+  engineWorkflowId: v.string(),
+  steps: v.array(v.any()),
+  workflowError: v.string(),
+  cooldown: v.number(),
+  priority: v.number(),
+  enabled: v.boolean(),
+  visibility: v.union(v.literal("public"), v.literal("restricted")),
+  groupIds: v.array(v.string()),
+  usernames: v.array(v.string()),
+  argumentPattern: v.string(),
+};
+
 // Populated by convex/chatCommandActions.ts (own RPC response) and the
 // command.created / command.updated webhooks. Keyed on engineCommandId via
 // the by_engine_command_id index, so redelivery is idempotent.
-export const upsertFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineCommandId: v.string(),
-    command: v.string(),
-    actions: v.array(v.any()),
-    engineWorkflowId: v.string(),
-    steps: v.array(v.any()),
-    workflowError: v.string(),
-    cooldown: v.number(),
-    priority: v.number(),
-    enabled: v.boolean(),
-    visibility: v.union(v.literal("public"), v.literal("restricted")),
-    groupIds: v.array(v.string()),
-    usernames: v.array(v.string()),
-    argumentPattern: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("chatCommands")
-      .withIndex("by_engine_command_id", (q) =>
-        q.eq("instanceId", args.instanceId).eq("engineCommandId", args.engineCommandId)
-      )
-      .first();
+export async function upsertCommandFromWebhook(ctx: MutationCtx, args: ObjectType<typeof upsertFromWebhookArgs>) {
+  const existing = await ctx.db
+    .query("chatCommands")
+    .withIndex("by_engine_command_id", (q) =>
+      q.eq("instanceId", args.instanceId).eq("engineCommandId", args.engineCommandId)
+    )
+    .first();
 
-    const fields = {
-      command: args.command,
-      actions: args.actions,
-      engineWorkflowId: args.engineWorkflowId || undefined,
-      steps: args.steps,
-      workflowError: args.workflowError || undefined,
-      cooldown: args.cooldown,
-      priority: args.priority,
-      enabled: args.enabled,
-      visibility: args.visibility,
-      groupIds: args.groupIds,
-      usernames: args.usernames,
-      argumentPattern: args.argumentPattern,
-      updatedAt: Date.now(),
-    };
+  const fields = {
+    command: args.command,
+    actions: args.actions,
+    engineWorkflowId: args.engineWorkflowId || undefined,
+    steps: args.steps,
+    workflowError: args.workflowError || undefined,
+    cooldown: args.cooldown,
+    priority: args.priority,
+    enabled: args.enabled,
+    visibility: args.visibility,
+    groupIds: args.groupIds,
+    usernames: args.usernames,
+    argumentPattern: args.argumentPattern,
+    updatedAt: Date.now(),
+  };
 
-    if (existing) {
-      await ctx.db.patch(existing._id, fields);
-    } else {
-      await ctx.db.insert("chatCommands", {
-        instanceId: args.instanceId,
-        engineCommandId: args.engineCommandId,
-        ...fields,
-        createdAt: Date.now(),
-      });
-    }
-  },
-});
+  if (existing) {
+    await ctx.db.patch(existing._id, fields);
+  } else {
+    await ctx.db.insert("chatCommands", {
+      instanceId: args.instanceId,
+      engineCommandId: args.engineCommandId,
+      ...fields,
+      createdAt: Date.now(),
+    });
+  }
+}
+
+export const upsertFromWebhook = internalMutation({ args: upsertFromWebhookArgs, handler: upsertCommandFromWebhook });
+
+const deleteFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineCommandId: v.string(),
+};
 
 // Populated by convex/chatCommandActions.ts and the command.deleted webhook.
-export const deleteFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineCommandId: v.string(),
-  },
-  handler: async (ctx, { instanceId, engineCommandId }) => {
-    const existing = await ctx.db
-      .query("chatCommands")
-      .withIndex("by_engine_command_id", (q) => q.eq("instanceId", instanceId).eq("engineCommandId", engineCommandId))
-      .first();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
-  },
-});
+export async function deleteCommandFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, engineCommandId }: ObjectType<typeof deleteFromWebhookArgs>
+) {
+  const existing = await ctx.db
+    .query("chatCommands")
+    .withIndex("by_engine_command_id", (q) => q.eq("instanceId", instanceId).eq("engineCommandId", engineCommandId))
+    .first();
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
+}
+
+export const deleteFromWebhook = internalMutation({ args: deleteFromWebhookArgs, handler: deleteCommandFromWebhook });

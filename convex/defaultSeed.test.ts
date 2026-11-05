@@ -10,6 +10,7 @@ import { newHttpBatchRpcResponse, RpcTarget } from "capnweb";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
+import { resolveWorkflowCorrelation } from "./workflowInternal";
 
 const ITEM = { packId: DEFAULT_ALERTS_PACK_ID, itemId: "follow", kind: "workflow" as const };
 
@@ -250,7 +251,7 @@ class FakeEngine extends RpcTarget {
       definition: escapeDollarKeys(definition),
       isEnabled,
     });
-    await this.t.mutation(internal.workflowInternal.resolveCorrelation, { correlationKey, engineWorkflowId, op });
+    await this.t.run((ctx) => resolveWorkflowCorrelation(ctx, { correlationKey, engineWorkflowId, op }));
   }
 }
 
@@ -426,11 +427,9 @@ describe("applying the seed on a real engine connection", () => {
         .first();
       return row?.correlationKey ?? "";
     });
-    await t.mutation(internal.workflowInternal.resolveCorrelation, {
-      correlationKey,
-      engineWorkflowId: "workflow-1",
-      op: "create",
-    });
+    await t.run((ctx) =>
+      resolveWorkflowCorrelation(ctx, { correlationKey, engineWorkflowId: "workflow-1", op: "create" })
+    );
 
     expect((await scheduledEnables(t)).length).toBe(alertCount);
     expect(engine.enableCalls.length).toBe(alertCount);

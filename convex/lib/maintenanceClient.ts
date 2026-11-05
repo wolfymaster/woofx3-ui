@@ -295,3 +295,28 @@ export function deleteEngine(
 ): Promise<{ engine: MaintenanceEngine; run: MaintenanceRun }> {
   return request(`/v1/engines/${encodeURIComponent(engineId)}`, { method: "DELETE", idempotencyKey });
 }
+
+export interface EngineEventSource {
+  instanceId: string;
+  deliveryUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Register (or replace) where the maintenance event queue delivers an
+ * instance's events, and the hash of the token the engine will send them
+ * with. Idempotent per instance; called before the engine is given the token,
+ * so its first event already has a source.
+ */
+export function putEngineEventSource(
+  instanceId: string,
+  source: { deliveryUrl: string; tokenSha256: string }
+): Promise<{ source: EngineEventSource }> {
+  return request(`/v1/engine-event-sources/${encodeURIComponent(instanceId)}`, { method: "PUT", body: source });
+}
+
+/** Remove an instance's event source and its queued events. Succeeds when it is already gone. */
+export async function deleteEngineEventSource(instanceId: string): Promise<void> {
+  await request<unknown>(`/v1/engine-event-sources/${encodeURIComponent(instanceId)}`, { method: "DELETE" });
+}

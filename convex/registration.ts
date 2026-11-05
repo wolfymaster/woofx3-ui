@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
+import { isEventQueueConfigured } from "./engineEventQueue";
 import { createEngineGatewaySession } from "./lib/engineInstanceUrl";
 import { previewEngineRegistrationToken } from "./lib/previewEngine";
 import { registrationFailureMessage } from "./lib/registrationError";
@@ -84,6 +85,11 @@ export async function performRegistration(
       clientSecret: result.clientSecret,
       webhookSecret: callbackToken,
     });
+
+    // A new client posts its events to the webhook route until it moves.
+    if (isEventQueueConfigured()) {
+      await ctx.scheduler.runAfter(0, internal.engineEventQueue.moveToQueue, { instanceId });
+    }
 
     return { ok: true, clientId: result.clientId };
   } catch (err) {

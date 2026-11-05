@@ -1,9 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { parseCompositionKind, parseSceneLayout, parseSceneWidgets } from "@shared/scene-serialization";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import { deleteAlertCompositionRow, upsertAlertComposition } from "./alertCompositions";
 import { deleteSceneAndChildren, purgeSceneChildren } from "./lib/sceneCascade";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
@@ -137,91 +137,89 @@ async function findScene(ctx: QueryCtx, instanceId: Id<"instances">, engineScene
     .first();
 }
 
+const upsertSceneFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineSceneId: v.string(),
+  /** `scene` or `alert`; absent from an engine that predates alert compositions. */
+  kind: v.optional(v.string()),
+  name: v.string(),
+  description: v.string(),
+  widgetsJson: v.string(),
+  layoutJson: v.string(),
+  behaviorsJson: v.optional(v.string()),
+  inputsJson: v.optional(v.string()),
+  createdByType: v.string(),
+  createdByRef: v.string(),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+};
+
 // Populated by the engine SCENE_CREATED / SCENE_UPDATED webhook. Keyed on
 // engineSceneId (the engine's stable identity) via the by_engine_scene_id index,
 // so redelivery is idempotent and renames never create duplicates. An alert
 // goes to `alertCompositions`; a scene row under its id (cached before alerts
 // were told apart) is removed, since a row's kind never changes.
-export const upsertFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineSceneId: v.string(),
-    /** `scene` or `alert`; absent from an engine that predates alert compositions. */
-    kind: v.optional(v.string()),
-    name: v.string(),
-    description: v.string(),
-    widgetsJson: v.string(),
-    layoutJson: v.string(),
-    behaviorsJson: v.optional(v.string()),
-    inputsJson: v.optional(v.string()),
-    createdByType: v.string(),
-    createdByRef: v.string(),
-    createdAt: v.string(),
-    updatedAt: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await findScene(ctx, args.instanceId, args.engineSceneId);
+export async function upsertSceneFromWebhook(ctx: MutationCtx, args: ObjectType<typeof upsertSceneFromWebhookArgs>) {
+  const existing = await findScene(ctx, args.instanceId, args.engineSceneId);
 
-    if (parseCompositionKind(args.kind) === "alert") {
-      if (existing) {
-        await deleteSceneAndChildren(ctx, existing._id);
-      }
-      await upsertAlertComposition(ctx, args.instanceId, {
-        engineCompositionId: args.engineSceneId,
-        name: args.name,
-        description: args.description,
-        widgetsJson: args.widgetsJson,
-        layoutJson: args.layoutJson,
-        behaviorsJson: args.behaviorsJson,
-        inputsJson: args.inputsJson,
-        createdByType: args.createdByType,
-        createdByRef: args.createdByRef,
-      });
-      return;
-    }
-
-    const widgets = parseSceneWidgets(args.widgetsJson);
-    const layout = parseSceneLayout(args.layoutJson);
-
-    const fields = {
-      instanceId: args.instanceId,
-      engineSceneId: args.engineSceneId,
-      name: args.name,
-      description: args.description || undefined,
-      width: layout.width ?? 1920,
-      height: layout.height ?? 1080,
-      backgroundColor: layout.backgroundColor ?? "transparent",
-      widgets,
-      updatedAt: Date.now(),
-    };
-
+  if (parseCompositionKind(args.kind) === "alert") {
     if (existing) {
-      await ctx.db.patch(existing._id, fields);
-    } else {
-      await ctx.db.insert("scenes", { ...fields, createdAt: Date.now() });
+      await deleteSceneAndChildren(ctx, existing._id);
     }
-  },
-});
+    await upsertAlertComposition(ctx, args.instanceId, {
+      engineCompositionId: args.engineSceneId,
+      name: args.name,
+      description: args.description,
+      widgetsJson: args.widgetsJson,
+      layoutJson: args.layoutJson,
+      behaviorsJson: args.behaviorsJson,
+      inputsJson: args.inputsJson,
+      createdByType: args.createdByType,
+      createdByRef: args.createdByRef,
+    });
+    return;
+  }
+
+  const widgets = parseSceneWidgets(args.widgetsJson);
+  const layout = parseSceneLayout(args.layoutJson);
+
+  const fields = {
+    instanceId: args.instanceId,
+    engineSceneId: args.engineSceneId,
+    name: args.name,
+    description: args.description || undefined,
+    width: layout.width ?? 1920,
+    height: layout.height ?? 1080,
+    backgroundColor: layout.backgroundColor ?? "transparent",
+    widgets,
+    updatedAt: Date.now(),
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, fields);
+  } else {
+    await ctx.db.insert("scenes", { ...fields, createdAt: Date.now() });
+  }
+}
+
+const deleteSceneFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineSceneId: v.string(),
+  kind: v.optional(v.string()),
+};
 
 // Populated by the engine SCENE_DELETED webhook. Deletes the specific scene by
 // engineSceneId — never a positional .first(), which could destroy a sibling.
-export const deleteFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineSceneId: v.string(),
-    kind: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (parseCompositionKind(args.kind) === "alert") {
-      await deleteAlertCompositionRow(ctx, args.instanceId, args.engineSceneId);
-      return;
-    }
-    const scene = await findScene(ctx, args.instanceId, args.engineSceneId);
-    if (scene) {
-      await deleteSceneAndChildren(ctx, scene._id);
-    }
-  },
-});
+export async function deleteSceneFromWebhook(ctx: MutationCtx, args: ObjectType<typeof deleteSceneFromWebhookArgs>) {
+  if (parseCompositionKind(args.kind) === "alert") {
+    await deleteAlertCompositionRow(ctx, args.instanceId, args.engineSceneId);
+    return;
+  }
+  const scene = await findScene(ctx, args.instanceId, args.engineSceneId);
+  if (scene) {
+    await deleteSceneAndChildren(ctx, scene._id);
+  }
+}
 
 // Continuation of a cascade that exceeded its per-transaction budget. Reschedules
 // itself until every child row of the (already deleted) scene is gone.

@@ -166,6 +166,12 @@ export default defineSchema({
     clientId: v.optional(v.string()),
     clientSecret: v.optional(v.string()),
     webhookSecret: v.optional(v.string()),
+    // Hex SHA-256 of the token the engine sends its events to the maintenance
+    // event queue with; the queue sends the same hash with every event, and a
+    // mismatch (a token rotated since) rejects the event. Absent while the
+    // engine still posts its events to the webhook route.
+    eventsTokenHash: v.optional(v.string()),
+    eventsTargetSetAt: v.optional(v.number()),
     // Who runs the engine. Absent means "external": every instance predates
     // managed engines, so the user pasted the URL of an engine they host.
     // "managed" engines are created by the woofx3 maintenance API and are the
@@ -2019,6 +2025,17 @@ export default defineSchema({
   // JSON string of the raw, unescaped event data — never structured v.any(),
   // since the engine embeds $ref keys that Convex rejects on structured
   // fields (see shared/dollar-keys.ts).
+  // One row per engine event applied, so a redelivered envelope is answered
+  // `duplicate` instead of applied twice. Kept RECEIPT_RETENTION_MS, longer
+  // than any sender keeps retrying.
+  engineEventReceipts: defineTable({
+    instanceId: v.id("instances"),
+    envelopeId: v.string(),
+    receivedAt: v.number(),
+  })
+    .index("by_instance_envelope", ["instanceId", "envelopeId"])
+    .index("by_received_at", ["receivedAt"]),
+
   engineEventLog: defineTable({
     instanceId: v.id("instances"),
     eventType: v.string(),
@@ -2074,7 +2091,8 @@ export default defineSchema({
           v.literal("actions"),
           v.literal("widgets"),
           v.literal("resources"),
-          v.literal("databases")
+          v.literal("databases"),
+          v.literal("eventQueue")
         ),
         status: v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error")),
         itemsProcessed: v.number(),

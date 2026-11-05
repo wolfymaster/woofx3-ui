@@ -1,5 +1,5 @@
 import { escapeDollarKeys } from "@shared/dollar-keys";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
@@ -38,37 +38,39 @@ export const findCompletion = internalQuery({
   },
 });
 
+const resolveWorkflowCorrelationArgs = {
+  correlationKey: v.string(),
+  engineWorkflowId: v.string(),
+  op: v.union(v.literal("create"), v.literal("update"), v.literal("delete")),
+};
+
 /**
  * Resolve a pending operation when its webhook echo arrives: delete the
  * pending row (if still present) and record the completion. Works for
  * create/update events.
  */
-export const resolveCorrelation = internalMutation({
-  args: {
-    correlationKey: v.string(),
-    engineWorkflowId: v.string(),
-    op: v.union(v.literal("create"), v.literal("update"), v.literal("delete")),
-  },
-  handler: async (ctx, { correlationKey, engineWorkflowId, op }) => {
-    const pending = await ctx.db
-      .query("pendingWorkflowOperations")
-      .withIndex("by_correlation", (q) => q.eq("correlationKey", correlationKey))
-      .first();
-    if (pending) {
-      await ctx.db.delete(pending._id);
-    }
-    await ctx.db.insert("completedWorkflowOperations", {
-      correlationKey,
-      engineWorkflowId,
-      op,
-      completedAt: Date.now(),
-    });
-    if (op === "create") {
-      await completeStarterItemByCorrelation(ctx, correlationKey, engineWorkflowId);
-      await completeImportItemByCorrelation(ctx, correlationKey, engineWorkflowId);
-    }
-  },
-});
+export async function resolveWorkflowCorrelation(
+  ctx: MutationCtx,
+  { correlationKey, engineWorkflowId, op }: ObjectType<typeof resolveWorkflowCorrelationArgs>
+) {
+  const pending = await ctx.db
+    .query("pendingWorkflowOperations")
+    .withIndex("by_correlation", (q) => q.eq("correlationKey", correlationKey))
+    .first();
+  if (pending) {
+    await ctx.db.delete(pending._id);
+  }
+  await ctx.db.insert("completedWorkflowOperations", {
+    correlationKey,
+    engineWorkflowId,
+    op,
+    completedAt: Date.now(),
+  });
+  if (op === "create") {
+    await completeStarterItemByCorrelation(ctx, correlationKey, engineWorkflowId);
+    await completeImportItemByCorrelation(ctx, correlationKey, engineWorkflowId);
+  }
+}
 
 /**
  * Delete a completion record. Intended for action-side cleanup once the
@@ -87,55 +89,59 @@ export const clearCompletion = internalMutation({
   },
 });
 
+const upsertFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineWorkflowId: v.string(),
+  definition: v.any(),
+  isEnabled: v.boolean(),
+  revision: v.optional(v.number()),
+  // Absent from an engine without groups, or a callback that does not know
+  // them; the stored list is then left as it is.
+  groupIds: v.optional(v.array(v.string())),
+};
+
 /**
  * Mirror a workflow row from a webhook snapshot. Upsert keyed on
  * (instanceId, engineWorkflowId); idempotent for duplicate deliveries.
  */
-export const upsertFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineWorkflowId: v.string(),
-    definition: v.any(),
-    isEnabled: v.boolean(),
-    revision: v.optional(v.number()),
-    // Absent from an engine without groups, or a callback that does not know
-    // them; the stored list is then left as it is.
-    groupIds: v.optional(v.array(v.string())),
-  },
-  handler: async (ctx, { instanceId, engineWorkflowId, definition, isEnabled, revision, groupIds }) => {
-    const storedDefinition = escapeDollarKeys(definition);
-    const existing = await ctx.db
-      .query("workflows")
-      .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", engineWorkflowId))
-      .first();
-    const now = Date.now();
-    if (existing) {
-      // Callbacks can arrive out of order, and a late one must not put steps back
-      // to an older copy that an editor would then save from.
-      if (revision !== undefined && existing.revision !== undefined && revision < existing.revision) {
-        return existing._id;
-      }
-      await ctx.db.patch(existing._id, {
-        definition: storedDefinition,
-        isEnabled,
-        revision,
-        ...(groupIds === undefined ? {} : { groupIds }),
-        updatedAt: now,
-      });
+export async function upsertWorkflowFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, engineWorkflowId, definition, isEnabled, revision, groupIds }: ObjectType<typeof upsertFromWebhookArgs>
+) {
+  const storedDefinition = escapeDollarKeys(definition);
+  const existing = await ctx.db
+    .query("workflows")
+    .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", engineWorkflowId))
+    .first();
+  const now = Date.now();
+  if (existing) {
+    // Callbacks can arrive out of order, and a late one must not put steps back
+    // to an older copy that an editor would then save from.
+    if (revision !== undefined && existing.revision !== undefined && revision < existing.revision) {
       return existing._id;
     }
-    return ctx.db.insert("workflows", {
-      instanceId,
-      engineWorkflowId,
+    await ctx.db.patch(existing._id, {
       definition: storedDefinition,
       isEnabled,
       revision,
-      groupIds,
-      createdAt: now,
+      ...(groupIds === undefined ? {} : { groupIds }),
       updatedAt: now,
     });
-  },
-});
+    return existing._id;
+  }
+  return ctx.db.insert("workflows", {
+    instanceId,
+    engineWorkflowId,
+    definition: storedDefinition,
+    isEnabled,
+    revision,
+    groupIds,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+export const upsertFromWebhook = internalMutation({ args: upsertFromWebhookArgs, handler: upsertWorkflowFromWebhook });
 
 const MAX_ROWS_FOLLOWING_A_WORKFLOW = 1000;
 
@@ -166,29 +172,33 @@ async function followMergedWorkflow(
   }
 }
 
+const deleteFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineWorkflowId: v.string(),
+  mergedInto: v.optional(v.string()),
+};
+
 /**
  * Delete a mirrored workflow row in response to a workflow.deleted webhook.
  */
-export const deleteFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineWorkflowId: v.string(),
-    mergedInto: v.optional(v.string()),
-  },
-  handler: async (ctx, { instanceId, engineWorkflowId, mergedInto }) => {
-    if (mergedInto) {
-      await followMergedWorkflow(ctx, instanceId, engineWorkflowId, mergedInto);
-    }
-    const row = await ctx.db
-      .query("workflows")
-      .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", engineWorkflowId))
-      .first();
-    if (row) {
-      await ctx.db.delete(row._id);
-    }
-    await deleteWorkflowHealth(ctx, instanceId, engineWorkflowId);
-  },
-});
+export async function deleteWorkflowFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, engineWorkflowId, mergedInto }: ObjectType<typeof deleteFromWebhookArgs>
+) {
+  if (mergedInto) {
+    await followMergedWorkflow(ctx, instanceId, engineWorkflowId, mergedInto);
+  }
+  const row = await ctx.db
+    .query("workflows")
+    .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", engineWorkflowId))
+    .first();
+  if (row) {
+    await ctx.db.delete(row._id);
+  }
+  await deleteWorkflowHealth(ctx, instanceId, engineWorkflowId);
+}
+
+export const deleteFromWebhook = internalMutation({ args: deleteFromWebhookArgs, handler: deleteWorkflowFromWebhook });
 
 const EXPIRED_PENDING_BATCH = 100;
 
@@ -216,25 +226,27 @@ export const sweepExpiredPending = internalMutation({
   },
 });
 
+const resolveWorkflowDeleteCorrelationArgs = { correlationKey: v.string(), engineWorkflowId: v.string() };
+
 /**
  * Resolve a pending delete op. Separate from resolveCorrelation because
  * the delete webhook carries workflowId directly (no nested snapshot).
  */
-export const resolveCorrelationForDelete = internalMutation({
-  args: { correlationKey: v.string(), engineWorkflowId: v.string() },
-  handler: async (ctx, { correlationKey, engineWorkflowId }) => {
-    const pending = await ctx.db
-      .query("pendingWorkflowOperations")
-      .withIndex("by_correlation", (q) => q.eq("correlationKey", correlationKey))
-      .first();
-    if (pending) {
-      await ctx.db.delete(pending._id);
-    }
-    await ctx.db.insert("completedWorkflowOperations", {
-      correlationKey,
-      engineWorkflowId,
-      op: "delete",
-      completedAt: Date.now(),
-    });
-  },
-});
+export async function resolveWorkflowDeleteCorrelation(
+  ctx: MutationCtx,
+  { correlationKey, engineWorkflowId }: ObjectType<typeof resolveWorkflowDeleteCorrelationArgs>
+) {
+  const pending = await ctx.db
+    .query("pendingWorkflowOperations")
+    .withIndex("by_correlation", (q) => q.eq("correlationKey", correlationKey))
+    .first();
+  if (pending) {
+    await ctx.db.delete(pending._id);
+  }
+  await ctx.db.insert("completedWorkflowOperations", {
+    correlationKey,
+    engineWorkflowId,
+    op: "delete",
+    completedAt: Date.now(),
+  });
+}

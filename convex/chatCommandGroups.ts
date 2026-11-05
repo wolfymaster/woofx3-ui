@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 
 // Chat command groups ("user groups"/roles) are engine-authoritative (see
 // docs/services/commands-ui.md in the woofx3 engine repo). This table is a
@@ -68,108 +68,125 @@ export const listMembers = query({
   },
 });
 
+const upsertFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineGroupId: v.string(),
+  name: v.string(),
+  description: v.string(),
+  isBuiltIn: v.optional(v.boolean()),
+  engineCreatedAt: v.string(),
+};
+
 // Populated by convex/chatCommandActions.ts (own RPC response) and the
 // group.created / group.updated webhooks.
-export const upsertFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineGroupId: v.string(),
-    name: v.string(),
-    description: v.string(),
-    isBuiltIn: v.optional(v.boolean()),
-    engineCreatedAt: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("chatCommandGroups")
-      .withIndex("by_engine_group_id", (q) =>
-        q.eq("instanceId", args.instanceId).eq("engineGroupId", args.engineGroupId)
-      )
-      .first();
+export async function upsertGroupFromWebhook(ctx: MutationCtx, args: ObjectType<typeof upsertFromWebhookArgs>) {
+  const existing = await ctx.db
+    .query("chatCommandGroups")
+    .withIndex("by_engine_group_id", (q) => q.eq("instanceId", args.instanceId).eq("engineGroupId", args.engineGroupId))
+    .first();
 
-    const fields = {
-      name: args.name,
-      description: args.description,
-      isBuiltIn: args.isBuiltIn ?? false,
-      engineCreatedAt: args.engineCreatedAt,
-      updatedAt: Date.now(),
-    };
+  const fields = {
+    name: args.name,
+    description: args.description,
+    isBuiltIn: args.isBuiltIn ?? false,
+    engineCreatedAt: args.engineCreatedAt,
+    updatedAt: Date.now(),
+  };
 
-    if (existing) {
-      await ctx.db.patch(existing._id, fields);
-    } else {
-      await ctx.db.insert("chatCommandGroups", {
-        instanceId: args.instanceId,
-        engineGroupId: args.engineGroupId,
-        ...fields,
-        createdAt: Date.now(),
-      });
-    }
-  },
-});
+  if (existing) {
+    await ctx.db.patch(existing._id, fields);
+  } else {
+    await ctx.db.insert("chatCommandGroups", {
+      instanceId: args.instanceId,
+      engineGroupId: args.engineGroupId,
+      ...fields,
+      createdAt: Date.now(),
+    });
+  }
+}
+
+export const upsertFromWebhook = internalMutation({ args: upsertFromWebhookArgs, handler: upsertGroupFromWebhook });
+
+const deleteFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineGroupId: v.string(),
+};
 
 // Populated by convex/chatCommandActions.ts and the group.deleted webhook.
 // Also drops the group's cached membership rows.
-export const deleteFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineGroupId: v.string(),
-  },
-  handler: async (ctx, { instanceId, engineGroupId }) => {
-    const existing = await ctx.db
-      .query("chatCommandGroups")
-      .withIndex("by_engine_group_id", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId))
-      .first();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
+export async function deleteGroupFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, engineGroupId }: ObjectType<typeof deleteFromWebhookArgs>
+) {
+  const existing = await ctx.db
+    .query("chatCommandGroups")
+    .withIndex("by_engine_group_id", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId))
+    .first();
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
 
-    const members = await ctx.db
-      .query("chatCommandGroupMembers")
-      .withIndex("by_group", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId))
-      .collect();
-    for (const m of members) {
-      await ctx.db.delete(m._id);
-    }
-  },
-});
+  const members = await ctx.db
+    .query("chatCommandGroupMembers")
+    .withIndex("by_group", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId))
+    .collect();
+  for (const m of members) {
+    await ctx.db.delete(m._id);
+  }
+}
+
+export const deleteFromWebhook = internalMutation({ args: deleteFromWebhookArgs, handler: deleteGroupFromWebhook });
+
+const addMemberFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineGroupId: v.string(),
+  username: v.string(),
+};
 
 // Populated by convex/chatCommandActions.ts and the group.member_added webhook.
+export async function addGroupMemberFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, engineGroupId, username }: ObjectType<typeof addMemberFromWebhookArgs>
+) {
+  const existing = await ctx.db
+    .query("chatCommandGroupMembers")
+    .withIndex("by_group_username", (q) =>
+      q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId).eq("username", username)
+    )
+    .first();
+  if (!existing) {
+    await ctx.db.insert("chatCommandGroupMembers", { instanceId, engineGroupId, username });
+  }
+}
+
 export const addMemberFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineGroupId: v.string(),
-    username: v.string(),
-  },
-  handler: async (ctx, { instanceId, engineGroupId, username }) => {
-    const existing = await ctx.db
-      .query("chatCommandGroupMembers")
-      .withIndex("by_group_username", (q) =>
-        q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId).eq("username", username)
-      )
-      .first();
-    if (!existing) {
-      await ctx.db.insert("chatCommandGroupMembers", { instanceId, engineGroupId, username });
-    }
-  },
+  args: addMemberFromWebhookArgs,
+  handler: addGroupMemberFromWebhook,
 });
 
+const removeMemberFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  engineGroupId: v.string(),
+  username: v.string(),
+};
+
 // Populated by convex/chatCommandActions.ts and the group.member_removed webhook.
+export async function removeGroupMemberFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, engineGroupId, username }: ObjectType<typeof removeMemberFromWebhookArgs>
+) {
+  const existing = await ctx.db
+    .query("chatCommandGroupMembers")
+    .withIndex("by_group_username", (q) =>
+      q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId).eq("username", username)
+    )
+    .first();
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
+}
+
 export const removeMemberFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineGroupId: v.string(),
-    username: v.string(),
-  },
-  handler: async (ctx, { instanceId, engineGroupId, username }) => {
-    const existing = await ctx.db
-      .query("chatCommandGroupMembers")
-      .withIndex("by_group_username", (q) =>
-        q.eq("instanceId", instanceId).eq("engineGroupId", engineGroupId).eq("username", username)
-      )
-      .first();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
-  },
+  args: removeMemberFromWebhookArgs,
+  handler: removeGroupMemberFromWebhook,
 });

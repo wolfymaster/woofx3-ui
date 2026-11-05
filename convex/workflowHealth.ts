@@ -12,7 +12,7 @@ import {
   type StoredHealthRow,
   shouldResync,
 } from "@shared/workflow-health";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
@@ -113,43 +113,47 @@ async function applyReplaceAll(
   return { written: plan.writes.length, cleared: plan.clears.length };
 }
 
+const recordWorkflowHealthChangeArgs = {
+  instanceId: v.id("instances"),
+  data: v.any(),
+};
+
 /** One `workflow.health.changed` delivery. */
-export const recordChangedFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    data: v.any(),
-  },
-  handler: async (ctx, { instanceId, data }) => {
-    const parsed = parseWorkflowHealthChanged(data);
-    if (!parsed.ok) {
-      return { outcome: "invalid" as const, reason: parsed.reason };
-    }
-    const existing = await healthRow(ctx, instanceId, parsed.health.engineWorkflowId);
-    const plan = planHealthWrite(existing, parsed.health);
-    if (plan === "insert" || plan === "replace") {
-      await writeHealth(ctx, instanceId, existing, parsed.health);
-    }
-    return { outcome: plan };
-  },
-});
+export async function recordWorkflowHealthChange(
+  ctx: MutationCtx,
+  { instanceId, data }: ObjectType<typeof recordWorkflowHealthChangeArgs>
+) {
+  const parsed = parseWorkflowHealthChanged(data);
+  if (!parsed.ok) {
+    return { outcome: "invalid" as const, reason: parsed.reason };
+  }
+  const existing = await healthRow(ctx, instanceId, parsed.health.engineWorkflowId);
+  const plan = planHealthWrite(existing, parsed.health);
+  if (plan === "insert" || plan === "replace") {
+    await writeHealth(ctx, instanceId, existing, parsed.health);
+  }
+  return { outcome: plan };
+}
+
+const recordWorkflowHealthSnapshotArgs = {
+  instanceId: v.id("instances"),
+  data: v.any(),
+};
 
 /** One `workflow.health.snapshot` delivery: replaces the instance's health. */
-export const recordSnapshotFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    data: v.any(),
-  },
-  handler: async (ctx, { instanceId, data }) => {
-    const parsed = parseWorkflowHealthSnapshot(data);
-    if (!parsed.ok) {
-      return { outcome: "invalid" as const, reason: parsed.reason };
-    }
-    const rows = await rowsForReplaceAll(ctx, instanceId, parsed.snapshot.entries);
-    const plan = planSnapshot(Array.from(rows.values(), toStored), parsed.snapshot);
-    const counts = await applyReplaceAll(ctx, instanceId, rows, plan);
-    return { outcome: "applied" as const, ...counts };
-  },
-});
+export async function recordWorkflowHealthSnapshot(
+  ctx: MutationCtx,
+  { instanceId, data }: ObjectType<typeof recordWorkflowHealthSnapshotArgs>
+) {
+  const parsed = parseWorkflowHealthSnapshot(data);
+  if (!parsed.ok) {
+    return { outcome: "invalid" as const, reason: parsed.reason };
+  }
+  const rows = await rowsForReplaceAll(ctx, instanceId, parsed.snapshot.entries);
+  const plan = planSnapshot(Array.from(rows.values(), toStored), parsed.snapshot);
+  const counts = await applyReplaceAll(ctx, instanceId, rows, plan);
+  return { outcome: "applied" as const, ...counts };
+}
 
 /** Drop a deleted workflow's health so nothing is left to count against it. */
 export async function deleteWorkflowHealth(

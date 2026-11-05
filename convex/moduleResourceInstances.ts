@@ -1,8 +1,7 @@
 import { DATABASE_KIND, parseKindRef, rowsOfKind } from "@shared/resource-kinds";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
 import { dropPageState, refreshPageStateSettings } from "./lib/userPageState";
 import { findResourceKind } from "./resourceKinds";
@@ -211,18 +210,25 @@ async function upsertRow(
   }
 }
 
+const upsertFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  instance: resourceInstanceValidator,
+};
+
+export async function upsertResourceInstanceFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, instance }: ObjectType<typeof upsertFromWebhookArgs>
+) {
+  const moduleRecord = await resolveOwningModule(ctx, instanceId, instance.moduleKey, instance.moduleName);
+  if (!moduleRecord) {
+    return;
+  }
+  await upsertRow(ctx, instanceId, moduleRecord._id, instance);
+}
+
 export const upsertFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    instance: resourceInstanceValidator,
-  },
-  handler: async (ctx, { instanceId, instance }) => {
-    const moduleRecord = await resolveOwningModule(ctx, instanceId, instance.moduleKey, instance.moduleName);
-    if (!moduleRecord) {
-      return;
-    }
-    await upsertRow(ctx, instanceId, moduleRecord._id, instance);
-  },
+  args: upsertFromWebhookArgs,
+  handler: upsertResourceInstanceFromWebhook,
 });
 
 /**
@@ -263,26 +269,33 @@ export const reconcileForModule = internalMutation({
   },
 });
 
+const deleteFromWebhookArgs = {
+  // The deleting instance, from the webhook's Bearer token — canonicalId is
+  // not unique across tenants, so without it this deletes someone else's row.
+  instanceId: v.id("instances"),
+  instance: resourceInstanceValidator,
+};
+
+export async function deleteResourceInstanceFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, instance }: ObjectType<typeof deleteFromWebhookArgs>
+) {
+  const existing = await ctx.db
+    .query("moduleResourceInstances")
+    .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", instance.canonicalId))
+    .first();
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
+  await dropPageState(ctx, instanceId, instance.canonicalId);
+  if (`${instance.moduleName}:${instance.kind}` === DATABASE_KIND) {
+    await scheduleDatabaseCleanup(ctx, instanceId, instance.canonicalId);
+  }
+}
+
 export const deleteFromWebhook = internalMutation({
-  args: {
-    // The deleting instance, from the webhook's Bearer token — canonicalId is
-    // not unique across tenants, so without it this deletes someone else's row.
-    instanceId: v.id("instances"),
-    instance: resourceInstanceValidator,
-  },
-  handler: async (ctx, { instanceId, instance }) => {
-    const existing = await ctx.db
-      .query("moduleResourceInstances")
-      .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", instance.canonicalId))
-      .first();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
-    await dropPageState(ctx, instanceId, instance.canonicalId);
-    if (`${instance.moduleName}:${instance.kind}` === DATABASE_KIND) {
-      await scheduleDatabaseCleanup(ctx, instanceId, instance.canonicalId);
-    }
-  },
+  args: deleteFromWebhookArgs,
+  handler: deleteResourceInstanceFromWebhook,
 });
 
 export const cascadeOnModuleDelete = internalMutation({

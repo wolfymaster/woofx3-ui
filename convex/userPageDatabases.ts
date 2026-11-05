@@ -1,11 +1,11 @@
 import { parseDatabaseColumns } from "@shared/databases/columns";
 import { DATABASE_KIND } from "@shared/resource-kinds";
 import type { DatabaseValue } from "@woofx3/api";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
-import { insertEvent } from "./transientEvents";
+import { emitTransientEvent } from "./transientEvents";
 
 /**
  * The public user page's copy of database rows: only columns public at the
@@ -133,41 +133,46 @@ async function trim(ctx: MutationCtx, instanceId: Id<"instances">, databaseId: s
  * The `database.record.changed` webhook: the projection's write and the
  * dashboard's change transient, in one mutation.
  */
-export const applyRecordChange = internalMutation({
-  args: { instanceId: v.id("instances"), change: recordChangeValidator },
-  handler: async (ctx, { instanceId, change }) => {
-    if (change.op === "deleted") {
-      const existing = await recordRow(ctx, instanceId, change.databaseId, change.recordId);
-      if (existing && existing.revision < change.revision) {
-        await ctx.db.delete(existing._id);
-      }
-    } else {
-      const publicColumns = await currentPublicColumns(ctx, instanceId, change.databaseId);
-      await upsertIfNewer(
-        ctx,
-        instanceId,
-        {
-          databaseId: change.databaseId,
-          recordId: change.recordId,
-          revision: change.revision,
-          createdAt: Date.parse(change.createdAt),
-          values: publicCells(change.publicValues ?? {}, publicColumns),
-        },
-        publicColumns.size > 0,
-        "keep"
-      );
-      await trim(ctx, instanceId, change.databaseId);
+const applyRecordChangeArgs = { instanceId: v.id("instances"), change: recordChangeValidator };
+
+/** The database.record.changed event: mirror the row's public cells and tell readers the database changed. */
+export async function applyDatabaseRecordChange(
+  ctx: MutationCtx,
+  { instanceId, change }: ObjectType<typeof applyRecordChangeArgs>
+): Promise<void> {
+  if (change.op === "deleted") {
+    const existing = await recordRow(ctx, instanceId, change.databaseId, change.recordId);
+    if (existing && existing.revision < change.revision) {
+      await ctx.db.delete(existing._id);
     }
-    await insertEvent(ctx, {
+  } else {
+    const publicColumns = await currentPublicColumns(ctx, instanceId, change.databaseId);
+    await upsertIfNewer(
+      ctx,
       instanceId,
-      correlationKey: databaseChangeKey(change.databaseId),
-      type: "database.record.changed",
-      status: "success",
-      data: { recordId: change.recordId, op: change.op, revision: change.revision },
-      ttlMs: CHANGE_TRANSIENT_TTL_MS,
-    });
-  },
-});
+      {
+        databaseId: change.databaseId,
+        recordId: change.recordId,
+        revision: change.revision,
+        createdAt: Date.parse(change.createdAt),
+        values: publicCells(change.publicValues ?? {}, publicColumns),
+      },
+      publicColumns.size > 0,
+      "keep"
+    );
+    await trim(ctx, instanceId, change.databaseId);
+  }
+  await emitTransientEvent(ctx, {
+    instanceId,
+    correlationKey: databaseChangeKey(change.databaseId),
+    type: "database.record.changed",
+    status: "success",
+    data: { recordId: change.recordId, op: change.op, revision: change.revision },
+    ttlMs: CHANGE_TRANSIENT_TTL_MS,
+  });
+}
+
+export const applyRecordChange = internalMutation({ args: applyRecordChangeArgs, handler: applyDatabaseRecordChange });
 
 const reconciledRecord = v.object({
   recordId: v.string(),

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
@@ -39,40 +39,42 @@ async function scheduleOfflineSnapshot(ctx: MutationCtx, instanceId: Id<"instanc
   });
 }
 
-export const onStreamOnline = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    twitchUserId: v.string(),
-    startedAt: v.string(),
-    streamTitle: v.optional(v.string()),
-    gameName: v.optional(v.string()),
-    viewerCount: v.optional(v.number()),
-  },
-  handler: async (ctx, { instanceId, twitchUserId, startedAt, streamTitle, gameName, viewerCount }) => {
-    const existing = await ctx.db
-      .query("instanceLiveState")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .first();
+const applyStreamOnlineArgs = {
+  instanceId: v.id("instances"),
+  twitchUserId: v.string(),
+  startedAt: v.string(),
+  streamTitle: v.optional(v.string()),
+  gameName: v.optional(v.string()),
+  viewerCount: v.optional(v.number()),
+};
 
-    const patch = {
-      instanceId,
-      twitchUserId,
-      isLive: true,
-      startedAt,
-      streamTitle,
-      gameName,
-      viewerCount,
-      lastUpdateSource: "webhook" as const,
-      lastUpdatedAt: Date.now(),
-    };
+export async function applyStreamOnline(
+  ctx: MutationCtx,
+  { instanceId, twitchUserId, startedAt, streamTitle, gameName, viewerCount }: ObjectType<typeof applyStreamOnlineArgs>
+) {
+  const existing = await ctx.db
+    .query("instanceLiveState")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .first();
 
-    if (existing) {
-      await ctx.db.patch(existing._id, patch);
-    } else {
-      await ctx.db.insert("instanceLiveState", patch);
-    }
-  },
-});
+  const patch = {
+    instanceId,
+    twitchUserId,
+    isLive: true,
+    startedAt,
+    streamTitle,
+    gameName,
+    viewerCount,
+    lastUpdateSource: "webhook" as const,
+    lastUpdatedAt: Date.now(),
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, patch);
+  } else {
+    await ctx.db.insert("instanceLiveState", patch);
+  }
+}
 
 type PolledFields = Pick<
   Doc<"instanceLiveState">,
@@ -140,6 +142,12 @@ export const recordPoll = internalMutation({
   },
 });
 
+const applySessionStartedArgs = {
+  instanceId: v.id("instances"),
+  sessionId: v.string(),
+  sessionStartedAt: v.string(),
+};
+
 // The engine's resolver owns which session the system is in and announces it
 // here. Deliberately not folded into onStreamOnline: a session spans brief
 // dropouts, so it changes on a different schedule from the broadcast, and on
@@ -148,65 +156,63 @@ export const recordPoll = internalMutation({
 //
 // Touches only the session fields. isLive and the broadcast columns belong to
 // the stream writers, and a session can legitimately start while offline.
-export const onSessionStarted = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    sessionId: v.string(),
-    sessionStartedAt: v.string(),
-  },
-  handler: async (ctx, { instanceId, sessionId, sessionStartedAt }) => {
-    const existing = await ctx.db
-      .query("instanceLiveState")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .first();
+export async function applySessionStarted(
+  ctx: MutationCtx,
+  { instanceId, sessionId, sessionStartedAt }: ObjectType<typeof applySessionStartedArgs>
+) {
+  const existing = await ctx.db
+    .query("instanceLiveState")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .first();
 
-    if (existing) {
-      await ctx.db.patch(existing._id, { sessionId, sessionStartedAt });
-      return;
-    }
+  if (existing) {
+    await ctx.db.patch(existing._id, { sessionId, sessionStartedAt });
+    return;
+  }
 
-    // No stream event has landed yet, so nothing knows whether we are live.
-    await ctx.db.insert("instanceLiveState", {
-      instanceId,
-      sessionId,
-      sessionStartedAt,
-      isLive: false,
-      lastUpdateSource: "webhook" as const,
-      lastUpdatedAt: Date.now(),
-    });
-  },
-});
+  // No stream event has landed yet, so nothing knows whether we are live.
+  await ctx.db.insert("instanceLiveState", {
+    instanceId,
+    sessionId,
+    sessionStartedAt,
+    isLive: false,
+    lastUpdateSource: "webhook" as const,
+    lastUpdatedAt: Date.now(),
+  });
+}
 
-export const onStreamOffline = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    twitchUserId: v.string(),
-  },
-  handler: async (ctx, { instanceId, twitchUserId }) => {
-    const existing = await ctx.db
-      .query("instanceLiveState")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .first();
+const applyStreamOfflineArgs = {
+  instanceId: v.id("instances"),
+  twitchUserId: v.string(),
+};
 
-    const patch = {
-      instanceId,
-      twitchUserId,
-      isLive: false,
-      startedAt: undefined,
-      streamTitle: undefined,
-      gameName: undefined,
-      viewerCount: undefined,
-      lastUpdateSource: "webhook" as const,
-      lastUpdatedAt: Date.now(),
-    };
+export async function applyStreamOffline(
+  ctx: MutationCtx,
+  { instanceId, twitchUserId }: ObjectType<typeof applyStreamOfflineArgs>
+) {
+  const existing = await ctx.db
+    .query("instanceLiveState")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .first();
 
-    if (existing) {
-      await ctx.db.patch(existing._id, patch);
-    } else {
-      await ctx.db.insert("instanceLiveState", patch);
-    }
-    if (existing?.isLive) {
-      await scheduleOfflineSnapshot(ctx, instanceId);
-    }
-  },
-});
+  const patch = {
+    instanceId,
+    twitchUserId,
+    isLive: false,
+    startedAt: undefined,
+    streamTitle: undefined,
+    gameName: undefined,
+    viewerCount: undefined,
+    lastUpdateSource: "webhook" as const,
+    lastUpdatedAt: Date.now(),
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, patch);
+  } else {
+    await ctx.db.insert("instanceLiveState", patch);
+  }
+  if (existing?.isLive) {
+    await scheduleOfflineSnapshot(ctx, instanceId);
+  }
+}

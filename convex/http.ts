@@ -1,20 +1,13 @@
-import { escapeDollarKeys } from "@shared/dollar-keys";
 import { valuesToPairs } from "@shared/macro-run";
 import { integrationOfModuleOAuthState } from "@shared/module-oauth";
-import { canonicalIdForStorageKey } from "@shared/resource-values";
-import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
-import { widgetCanonicalKey } from "@shared/widget-key";
-import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "@shared/workflow-health";
-import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "@shared/workflow-test-run";
 import type { InboundWebhookResponse } from "@woofx3/api";
-import type { CallbackEnvelope, CallbackEvent, WorkflowRunCancelledEvent } from "@woofx3/api/webhooks";
-import { EngineEventType } from "@woofx3/api/webhooks";
+import type { CallbackEnvelope } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
+import { registerEngineEventRoutes } from "./engineEventsHttp";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
-import { ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLifecycle";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { engineActivityPatch } from "./lib/engineSync/activity";
@@ -46,17 +39,10 @@ import { OPS_PATH_PREFIX } from "./lib/ops/routes";
 import { platformTokenCipher, sealPlatformLinkTokens } from "./lib/platformLinkTokens";
 import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
-import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 import { parseEngineShoutoutTarget, SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE } from "./lib/shoutoutEngineRequest";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 import { DESKTOP_SIGN_IN_PAGE_PATH, isNonceHash, parseSignInClient } from "./lib/twitchSignIn";
 import { TWITCH_TOKEN_REQUESTED_EVENT_TYPE } from "./lib/twitchTokenGrant";
-import {
-  engineResponseTransient,
-  runLifecycleTransient,
-  storageChangedTransient,
-  widgetStatusTransient,
-} from "./lib/webhookTransients";
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
 import { registerUserPageFormRoutes } from "./userPageFormsHttp";
@@ -74,17 +60,6 @@ const CORS_HEADERS: Record<string, string> =
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
       }
     : {};
-
-/** Callbacks that carry an engine alert snapshot to merge into `engineAlerts`. */
-const ALERT_SNAPSHOT_EVENT_TYPES: ReadonlySet<string> = new Set([
-  EngineEventType.ALERT_RECORDED,
-  ALERT_PLAYING_EVENT_TYPE,
-  EngineEventType.ALERT_REPLAYED,
-  EngineEventType.ALERT_COMPLETED,
-  EngineEventType.ALERT_FAILED,
-  EngineEventType.ALERT_TIMED_OUT,
-  EngineEventType.ALERT_SKIPPED,
-]);
 
 function corsJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -464,7 +439,8 @@ http.route({
   path: "/api/webhooks/woofx3",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const payload = await request.json();
+    const body = await request.text();
+    const payload = JSON.parse(body);
 
     logger.info("webhook: incoming request", {
       type: payload.type,
@@ -472,7 +448,7 @@ http.route({
     });
 
     if (!payload.type) {
-      logger.warn("webhook: missing type field", { payload: JSON.stringify(payload) });
+      logger.warn("webhook: missing type field", { payload: body });
       return corsJson({ error: "Missing required field: type" }, 400);
     }
 
@@ -484,720 +460,114 @@ http.route({
       return corsJson({ error: "Missing Authorization header" }, 401);
     }
 
-    // Look up instance by webhook secret
-    const instance = await ctx.runQuery(internal.instances.getByWebhookSecret, {
-      webhookSecret: providedSecret,
-    });
-    if (!instance) {
-      logger.warn("webhook: unauthorized - no instance found for provided secret");
-      return corsJson({ error: "Unauthorized" }, 401);
+    // Events go to the maintenance event queue, which delivers them to
+    // /api/engine-events/batch. An engine still posting them here predates
+    // the queue: 4xx, which it does not retry.
+    const eventType: string = payload.data?.type ?? payload.type;
+    if (!ENGINE_REQUEST_TYPES.has(eventType)) {
+      return corsJson(
+        { error: { code: "events_moved", message: "Engine events are no longer accepted here; update the engine" } },
+        410
+      );
     }
+    return answerEngineRequest(ctx, providedSecret, payload as CallbackEnvelope, eventType);
+  }),
+});
 
-    // Any authenticated callback, a request included, shows the engine is
-    // running and may hold changes a scheduled sync would mirror. Checked here
-    // first so a busy engine's callbacks do not each run a mutation.
-    if (engineActivityPatch(instance.lastEngineActivityAt, Date.now())) {
-      try {
-        await ctx.runMutation(internal.instances.recordEngineActivity, { instanceId: instance._id });
-      } catch (error) {
-        // Safe to carry on: a missed write only delays scheduled syncs until a
-        // later callback records the activity, and the event must not be lost.
-        logger.warn("webhook: could not record engine activity", {
-          instanceId: instance._id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+/** The callbacks the engine waits on for an answer in the response body; the only ones this route takes. */
+const ENGINE_REQUEST_TYPES: ReadonlySet<string> = new Set([
+  RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE,
+  TWITCH_TOKEN_REQUESTED_EVENT_TYPE,
+  SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE,
+]);
 
-    // Envelope shape is @woofx3/api/webhooks CallbackEnvelope; `data` is the
-    // discriminated CallbackEvent union. We trust the engine's contract and
-    // narrow by event.type — anything outside the union falls through to
-    // `handled: false` so legacy or future event types are safe to ignore.
-    //
-    // Escape $‑prefixed keys before dispatching — the engine embeds `$ref`
-    // inside workflow definitions and Convex rejects reserved field names.
-    const envelope = payload as CallbackEnvelope;
-    const event = escapeDollarKeys(envelope.data) as CallbackEvent;
-    const eventType: string = event?.type ?? (payload.type as string | undefined) ?? "";
+async function answerEngineRequest(
+  ctx: ActionCtx,
+  webhookSecret: string,
+  envelope: CallbackEnvelope,
+  eventType: string
+): Promise<Response> {
+  const instance = await ctx.runQuery(internal.instances.getByWebhookSecret, { webhookSecret });
+  if (!instance) {
+    logger.warn("webhook: unauthorized - no instance found for provided secret");
+    return corsJson({ error: "Unauthorized" }, 401);
+  }
 
-    // Also a request: the engine waits for a bridge credential, about every
-    // four minutes while it bridges. Answered ahead of the event log, which
-    // records only a failure: the body is a live credential, so no CORS
-    // headers, no caching, and it is never logged.
-    if (eventType === RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE) {
-      try {
-        const answer = await ctx.runAction(internal.companionRelayActions.engineCredential, {
-          instanceId: instance._id,
-        });
-        return new Response(JSON.stringify(answer), {
-          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error("webhook: relay credential request failed", { instanceId: instance._id, error: message });
-        await ctx.runMutation(internal.engineEventLog.record, {
-          instanceId: instance._id,
-          eventType,
-          payload: JSON.stringify({ error: message }),
-          envelopeId: typeof envelope.id === "string" ? envelope.id : undefined,
-          engineEventTime: typeof envelope.time === "string" ? envelope.time : undefined,
-        });
-        return new Response(JSON.stringify({ error: "Could not issue a relay credential" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-        });
-      }
-    }
-
-    logger.info("webhook: event received", {
-      instanceId: instance._id,
-      type: eventType,
-      payload: JSON.stringify(payload),
-    });
-
-    await ctx.runMutation(internal.engineEventLog.record, {
-      instanceId: instance._id,
-      eventType,
-      payload: JSON.stringify(envelope.data ?? null),
-      envelopeId: typeof envelope.id === "string" ? envelope.id : undefined,
-      engineEventTime: typeof envelope.time === "string" ? envelope.time : undefined,
-    });
-
-    if (!event || typeof event !== "object" || !event.type) {
-      logger.warn("webhook: envelope missing typed data", {
-        eventType,
-        hasData: !!payload.data,
+  // A request shows the engine is running and may hold changes a scheduled
+  // sync would mirror. Checked here first so most requests do not run a
+  // mutation for it.
+  if (engineActivityPatch(instance.lastEngineActivityAt, Date.now())) {
+    try {
+      await ctx.runMutation(internal.instances.recordEngineActivity, { instanceId: instance._id });
+    } catch (error) {
+      // Safe to carry on: a missed write only delays scheduled syncs until a
+      // later callback records the activity, and the request must be answered.
+      logger.warn("webhook: could not record engine activity", {
+        instanceId: instance._id,
+        error: error instanceof Error ? error.message : String(error),
       });
-      return corsJson({ success: true, type: eventType, handled: false });
     }
+  }
 
-    // A request rather than a notification: the engine waits for the token in
-    // the response body. Ahead of the switch, like SESSION_SUMMARY below,
-    // because the engine types this repo builds against may predate it.
-    if (eventType === TWITCH_TOKEN_REQUESTED_EVENT_TYPE) {
-      const answer = await ctx.runAction(internal.twitchIntegration.grantTokenToEngine, { instanceId: instance._id });
-      // No CORS headers and no caching: the body is a live access token, for
-      // the engine only.
+  // The engine waits for a bridge credential, about every four minutes while
+  // it bridges. Answered ahead of the event log, which records only a
+  // failure: the body is a live credential, so no CORS headers, no caching,
+  // and it is never logged.
+  if (eventType === RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE) {
+    try {
+      const answer = await ctx.runAction(internal.companionRelayActions.engineCredential, {
+        instanceId: instance._id,
+      });
       return new Response(JSON.stringify(answer), {
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
       });
-    }
-
-    // Also a request: the engine waits for the queue position, and only sends
-    // a shoutout itself when it has no dashboard queue at all.
-    if (eventType === SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE) {
-      const target = parseEngineShoutoutTarget(event);
-      if (!target) {
-        logger.warn("webhook: shoutout request without a target", { instanceId: instance._id });
-        return corsJson({ error: "Shoutout request needs twitchUserId and login" }, 400);
-      }
-      const answer = await ctx.runMutation(internal.shoutouts.enqueueFromEngine, {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error("webhook: relay credential request failed", { instanceId: instance._id, error: message });
+      await ctx.runMutation(internal.engineEventLog.record, {
         instanceId: instance._id,
-        ...target,
+        eventType,
+        payload: JSON.stringify({ error: message }),
+        envelopeId: typeof envelope.id === "string" ? envelope.id : undefined,
+        engineEventTime: typeof envelope.time === "string" ? envelope.time : undefined,
       });
-      return corsJson(answer);
-    }
-
-    // Handled ahead of the switch because the engine types this repo builds
-    // against may predate SESSION_SUMMARY, so it cannot be a case of the
-    // CallbackEvent union. The body is validated field by field instead.
-    if (eventType === SESSION_SUMMARY_EVENT_TYPE) {
-      const result = await ctx.runMutation(internal.streamSessionSummaries.upsertFromWebhook, {
-        instanceId: instance._id,
-        data: event,
+      return new Response(JSON.stringify({ error: "Could not issue a relay credential" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
       });
-      if (result.outcome === "invalid") {
-        logger.warn("webhook: rejected session summary", { instanceId: instance._id, reason: result.reason });
-        return corsJson({ error: `Invalid session summary: ${result.reason}` }, 400);
-      }
-      return corsJson({ success: true, type: eventType, outcome: result.outcome });
     }
+  }
 
-    // Also ahead of the switch, for the same reason as SESSION_SUMMARY.
-    if (eventType === WORKFLOW_HEALTH_CHANGED_EVENT_TYPE || eventType === WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE) {
-      const result =
-        eventType === WORKFLOW_HEALTH_CHANGED_EVENT_TYPE
-          ? await ctx.runMutation(internal.workflowHealth.recordChangedFromWebhook, {
-              instanceId: instance._id,
-              data: event,
-            })
-          : await ctx.runMutation(internal.workflowHealth.recordSnapshotFromWebhook, {
-              instanceId: instance._id,
-              data: event,
-            });
-      if (result.outcome === "invalid") {
-        logger.warn("webhook: rejected workflow health", { instanceId: instance._id, reason: result.reason });
-        return corsJson({ error: `Invalid workflow health: ${result.reason}` }, 400);
-      }
-      return corsJson({ success: true, type: eventType, outcome: result.outcome });
-    }
+  await ctx.runMutation(internal.engineEventLog.record, {
+    instanceId: instance._id,
+    eventType,
+    payload: JSON.stringify(envelope.data ?? null),
+    envelopeId: typeof envelope.id === "string" ? envelope.id : undefined,
+    engineEventTime: typeof envelope.time === "string" ? envelope.time : undefined,
+  });
 
-    // Handled ahead of the switch for the same reason as SESSION_SUMMARY: the
-    // engine types this repo builds against may predate the event. Written to
-    // transientEvents like the other workflow.run.* lifecycle events, for a
-    // caller watching the run's triggerId; the history row settles through
-    // WORKFLOW_RUN_UPDATED.
-    if (eventType === WORKFLOW_RUN_CANCELLED_EVENT_TYPE) {
-      const transient = runLifecycleTransient(event as unknown as WorkflowRunCancelledEvent);
-      if (!transient) {
-        return corsJson({ success: true, type: eventType, handled: false });
-      }
-      await ctx.runMutation(internal.transientEvents.emit, { instanceId: instance._id, ...transient });
-      return corsJson({ success: true, type: eventType });
-    }
+  // The engine waits for the token in the response body. No CORS headers and
+  // no caching: the body is a live access token, for the engine only.
+  if (eventType === TWITCH_TOKEN_REQUESTED_EVENT_TYPE) {
+    const answer = await ctx.runAction(internal.twitchIntegration.grantTokenToEngine, { instanceId: instance._id });
+    return new Response(JSON.stringify(answer), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
 
-    // Every alert callback carries a whole snapshot and merges the same way.
-    // Handled ahead of the switch because `alert.playing` is missing from the
-    // engine types this repo may build against (as with SESSION_SUMMARY), and
-    // read through readAlertSnapshot so a field a newer engine adds does not
-    // fail the mutation's validator.
-    if (ALERT_SNAPSHOT_EVENT_TYPES.has(eventType)) {
-      // A snapshot without an id or status can never be merged, so it is
-      // answered 4xx, which the engine does not retry. A field read as absent
-      // is only logged. A failure while merging answers 5xx, which the engine
-      // retries.
-      const { snapshot, problems } = readAlertSnapshot((event as unknown as { alert?: unknown }).alert);
-      if (!snapshot) {
-        logger.warn("webhook: alert callback without a usable alert", {
-          instanceId: instance._id,
-          eventType,
-          problems,
-        });
-        return corsJson({ error: "Alert callback needs an alert with an id and a status" }, 400);
-      }
-      if (problems.length > 0) {
-        logger.warn("webhook: alert callback with unusable fields", {
-          instanceId: instance._id,
-          eventType,
-          alertId: snapshot.id,
-          problems,
-        });
-      }
-      await ctx.runMutation(internal.engineAlerts.mergeFromWebhook, { instanceId: instance._id, snapshot });
-      return corsJson({ success: true, type: eventType });
-    }
-
-    switch (event.type) {
-      case EngineEventType.MODULE_INSTALLED: {
-        const moduleDbId = await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
-          instanceId: instance._id,
-          correlationKey: event.moduleKey,
-          moduleName: event.moduleName,
-          moduleVersion: event.version,
-          // module.installed carries no definitions — those arrive on
-          // separate module.trigger.registered / module.action.registered
-          // events.
-          triggers: [],
-          actions: [],
-        });
-        // Neither install path (marketplace or direct zip upload) reliably has
-        // the manifest in hand at this point, so fetch the engine's
-        // authoritative copy out-of-band rather than block the webhook response.
-        await ctx.scheduler.runAfter(0, internal.moduleManifestSync.syncManifest, {
-          instanceId: instance._id,
-          moduleDbId,
-          manifestModuleId: event.moduleKey.split(":")[0],
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_INSTALL_FAILED: {
-        await ctx.runMutation(internal.moduleWebhook.processModuleInstallFailed, {
-          instanceId: instance._id,
-          correlationKey: event.moduleKey,
-          moduleName: event.moduleName,
-          moduleVersion: event.version,
-          statusMessage: event.error || undefined,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_DELETED: {
-        await ctx.runMutation(internal.moduleWebhook.processModuleDeleted, {
-          instanceId: instance._id,
-          correlationKey: event.moduleKey,
-          moduleName: event.moduleName,
-          moduleVersion: undefined,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_DELETE_FAILED: {
-        await ctx.runMutation(internal.moduleWebhook.processModuleDeleteFailed, {
-          instanceId: instance._id,
-          correlationKey: event.moduleKey,
-          moduleName: event.moduleName,
-          moduleVersion: undefined,
-          error: event.error || undefined,
-          conflicts: event.inUseResources,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_TRIGGER_REGISTERED: {
-        await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
-          instanceId: instance._id,
-          moduleName: event.moduleName,
-          moduleVersion: event.version,
-          triggers: event.triggers,
-          actions: [],
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_ACTION_REGISTERED: {
-        await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
-          instanceId: instance._id,
-          moduleName: event.moduleName,
-          moduleVersion: event.version,
-          triggers: [],
-          actions: event.actions,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_WIDGET_REGISTERED: {
-        // Upsert the widget definition AND place it for this instance
-        // (instanceWidgets join). Built-ins (createdByType "SYSTEM") have no
-        // module — registerFromWebhook resolves moduleId only for MODULE widgets.
-        // Key on the canonical projectionKey, NOT widget.id (the engine omits id
-        // for built-ins, which previously produced a duplicate empty-id row).
-        for (const widget of event.widgets) {
-          // The engine sends ConfigField[] — the same shape a trigger's or
-          // action's fields use — so there is nothing left to translate.
-          const settings = widget.settings;
-          const widgetId = widgetCanonicalKey({
-            projectionKey: widget.projectionKey,
-            createdByRef: widget.createdByRef,
-            manifestId: widget.manifestId,
-            canonicalId: widget.canonicalId,
-            id: widget.id,
-          });
-          await ctx.runMutation(internal.moduleWidgets.registerFromWebhook, {
-            instanceId: instance._id,
-            widgetId,
-            name: widget.name ?? widgetId,
-            directory: widget.directory ?? "",
-            description: widget.description,
-            createdByType: widget.createdByType,
-            createdByRef: widget.createdByRef,
-            projectionKey: widget.projectionKey,
-            alertTypes: widget.alertTypes ?? [],
-            settings,
-            surfaces: widget.surfaces,
-            hostsSurface: widget.hostsSurface,
-            taxonomy: widget.taxonomy,
-            behaviorKinds: readWidgetBehaviorKinds(widget.behaviorKinds),
-          });
-        }
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_WIDGET_DEREGISTERED: {
-        for (const widget of event.widgets) {
-          await ctx.runMutation(internal.moduleWidgets.unregister, {
-            instanceId: instance._id,
-            widgetId: widgetCanonicalKey({
-              projectionKey: widget.projectionKey,
-              createdByRef: widget.createdByRef,
-              manifestId: widget.manifestId,
-              canonicalId: widget.canonicalId,
-              id: widget.id,
-            }),
-          });
-        }
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.WORKFLOW_CREATED:
-      case EngineEventType.WORKFLOW_UPDATED: {
-        await ctx.runMutation(internal.workflowInternal.upsertFromWebhook, {
-          instanceId: instance._id,
-          engineWorkflowId: event.workflow.id,
-          definition: event.workflow.definition,
-          isEnabled: event.workflow.isEnabled,
-          revision: event.workflow.revision,
-          groupIds: event.workflow.groupIds,
-        });
-        if (event.correlationKey) {
-          await ctx.runMutation(internal.workflowInternal.resolveCorrelation, {
-            correlationKey: event.correlationKey,
-            engineWorkflowId: event.workflow.id,
-            op: event.type === EngineEventType.WORKFLOW_CREATED ? "create" : "update",
-          });
-        }
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.WORKFLOW_DELETED: {
-        await ctx.runMutation(internal.workflowInternal.deleteFromWebhook, {
-          instanceId: instance._id,
-          engineWorkflowId: event.workflowId,
-          mergedInto: event.mergedInto,
-        });
-        if (event.correlationKey) {
-          await ctx.runMutation(internal.workflowInternal.resolveCorrelationForDelete, {
-            correlationKey: event.correlationKey,
-            engineWorkflowId: event.workflowId,
-          });
-        }
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.SCENE_CREATED: {
-        await ctx.runMutation(internal.scenes.upsertFromWebhook, {
-          instanceId: instance._id,
-          engineSceneId: event.scene.id,
-          kind: optionalString(event.scene.kind),
-          name: event.scene.name,
-          description: event.scene.description,
-          widgetsJson: event.scene.widgetsJson,
-          layoutJson: event.scene.layoutJson,
-          behaviorsJson: optionalString(event.scene.behaviorsJson),
-          inputsJson: optionalString(event.scene.inputsJson),
-          createdByType: event.scene.createdByType,
-          createdByRef: event.scene.createdByRef,
-          createdAt: event.scene.createdAt,
-          updatedAt: event.scene.updatedAt,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.SCENE_UPDATED: {
-        await ctx.runMutation(internal.scenes.upsertFromWebhook, {
-          instanceId: instance._id,
-          engineSceneId: event.scene.id,
-          kind: optionalString(event.scene.kind),
-          name: event.scene.name,
-          description: event.scene.description,
-          widgetsJson: event.scene.widgetsJson,
-          layoutJson: event.scene.layoutJson,
-          behaviorsJson: optionalString(event.scene.behaviorsJson),
-          inputsJson: optionalString(event.scene.inputsJson),
-          createdByType: event.scene.createdByType,
-          createdByRef: event.scene.createdByRef,
-          createdAt: event.scene.createdAt,
-          updatedAt: event.scene.updatedAt,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.SCENE_DELETED: {
-        await ctx.runMutation(internal.scenes.deleteFromWebhook, {
-          instanceId: instance._id,
-          engineSceneId: event.sceneId,
-          kind: optionalString(event.kind),
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.COMMAND_CREATED:
-      case EngineEventType.COMMAND_UPDATED: {
-        await ctx.runMutation(internal.chatCommands.upsertFromWebhook, {
-          instanceId: instance._id,
-          engineCommandId: event.command.id,
-          command: event.command.command,
-          // Already `$`-escaped: the whole webhook payload is escaped on the
-          // way in (see the escapeDollarKeys call on the envelope above).
-          actions: event.command.actions ?? [],
-          engineWorkflowId: event.command.workflowId ?? "",
-          workflowError: event.command.workflowError ?? "",
-          steps: (event.command.steps ?? []) as unknown[],
-          cooldown: event.command.cooldown,
-          priority: event.command.priority,
-          enabled: event.command.enabled,
-          visibility: event.command.visibility,
-          groupIds: event.command.groupIds ?? [],
-          usernames: event.command.usernames ?? [],
-          argumentPattern: event.command.argumentPattern ?? "",
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.COMMAND_DELETED: {
-        await ctx.runMutation(internal.chatCommands.deleteFromWebhook, {
-          instanceId: instance._id,
-          engineCommandId: event.commandId,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.GROUP_CREATED:
-      case EngineEventType.GROUP_UPDATED: {
-        await ctx.runMutation(internal.chatCommandGroups.upsertFromWebhook, {
-          instanceId: instance._id,
-          engineGroupId: event.group.id,
-          name: event.group.name,
-          description: event.group.description,
-          isBuiltIn: event.group.isBuiltIn,
-          engineCreatedAt: event.group.createdAt,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.GROUP_DELETED: {
-        await ctx.runMutation(internal.chatCommandGroups.deleteFromWebhook, {
-          instanceId: instance._id,
-          engineGroupId: event.groupId,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.GROUP_MEMBER_ADDED: {
-        await ctx.runMutation(internal.chatCommandGroups.addMemberFromWebhook, {
-          instanceId: instance._id,
-          engineGroupId: event.groupId,
-          username: event.username,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.GROUP_MEMBER_REMOVED: {
-        await ctx.runMutation(internal.chatCommandGroups.removeMemberFromWebhook, {
-          instanceId: instance._id,
-          engineGroupId: event.groupId,
-          username: event.username,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.WORKFLOW_GROUP_CREATED:
-      case EngineEventType.WORKFLOW_GROUP_UPDATED: {
-        await ctx.runMutation(internal.workflowGroups.upsertFromWebhook, {
-          instanceId: instance._id,
-          engineGroupId: event.group.id,
-          name: event.group.name,
-          description: event.group.description,
-          enabled: event.group.enabled,
-          memberIds: event.group.memberIds,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.WORKFLOW_GROUP_DELETED: {
-        await ctx.runMutation(internal.workflowGroups.deleteFromWebhook, {
-          instanceId: instance._id,
-          engineGroupId: event.groupId,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_TRIGGER_DEREGISTERED: {
-        await ctx.runMutation(internal.moduleWebhook.processDeregisteredDefinitions, {
-          instanceId: instance._id,
-          triggers: event.triggers,
-          actions: [],
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_ACTION_DEREGISTERED: {
-        await ctx.runMutation(internal.moduleWebhook.processDeregisteredDefinitions, {
-          instanceId: instance._id,
-          triggers: [],
-          actions: event.actions,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_FUNCTION_REGISTERED: {
-        await ctx.runMutation(internal.moduleFunctions.upsertFromWebhook, {
-          instanceId: instance._id,
-          moduleKey: event.moduleKey,
-          moduleName: event.moduleName,
-          version: event.version,
-          functions: event.functions,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_FUNCTION_DEREGISTERED: {
-        await ctx.runMutation(internal.moduleFunctions.deleteFromWebhook, {
-          instanceId: instance._id,
-          functions: event.functions,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_ASSET_REGISTERED: {
-        await ctx.runMutation(internal.moduleAssets.upsertFromWebhook, {
-          instanceId: instance._id,
-          moduleKey: event.moduleKey,
-          moduleName: event.moduleName,
-          version: event.version,
-          assets: event.assets,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_ASSET_DEREGISTERED: {
-        await ctx.runMutation(internal.moduleAssets.deleteFromWebhook, {
-          instanceId: instance._id,
-          moduleKey: event.moduleKey,
-          moduleName: event.moduleName,
-          version: event.version,
-          assets: event.assets,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_RESOURCE_INSTANCE_UPDATED:
-      case EngineEventType.MODULE_RESOURCE_INSTANCE_CREATED: {
-        await ctx.runMutation(internal.moduleResourceInstances.upsertFromWebhook, {
-          instanceId: instance._id,
-          instance: event.instance,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED: {
-        await ctx.runMutation(internal.moduleResourceInstances.deleteFromWebhook, {
-          instanceId: instance._id,
-          instance: event.instance,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.MODULE_STORAGE_CHANGED: {
-        const canonicalId = canonicalIdForStorageKey(event.key);
-        if (canonicalId) {
-          await ctx.runMutation(internal.resourceValues.upsert, {
-            instanceId: instance._id,
-            canonicalId,
-            value: event.value ?? null,
-          });
-        }
-        await ctx.runMutation(internal.transientEvents.emit, {
-          instanceId: instance._id,
-          ...storageChangedTransient(event),
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.DATABASE_RECORD_CHANGED: {
-        await ctx.runMutation(internal.userPageDatabases.applyRecordChange, {
-          instanceId: instance._id,
-          change: {
-            databaseId: event.databaseId,
-            recordId: event.recordId,
-            op: event.op,
-            revision: event.revision,
-            createdAt: event.createdAt,
-            publicValues: event.publicValues,
-          },
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.ENGINE_RESPONSE_RECEIVED: {
-        await ctx.runMutation(internal.transientEvents.emit, {
-          instanceId: instance._id,
-          ...engineResponseTransient(event),
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      // A workflow run somebody is waiting on. transientEvents is keyed by the
-      // client-generated id the trigger carried, so the UI subscribes before
-      // the run exists; these three arms are the only thing that turns "the
-      // event was published" into an outcome it can actually show.
-      case EngineEventType.WORKFLOW_RUN_STARTED:
-      case EngineEventType.WORKFLOW_RUN_COMPLETED:
-      case EngineEventType.WORKFLOW_RUN_FAILED: {
-        const transient = runLifecycleTransient(event);
-        if (!transient) {
-          // The api-side relay already drops these, so arriving here means an
-          // older engine or a hand-published event. There is nothing to
-          // correlate it to, and writing a row under an undefined key would
-          // put it somewhere no subscriber looks.
-          return corsJson({ success: true, type: event.type, handled: false });
-        }
-        await ctx.runMutation(internal.transientEvents.emit, { instanceId: instance._id, ...transient });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      // Durable run history. Separate from the WORKFLOW_RUN_STARTED family
-      // above, which writes transientEvents for a caller watching one run:
-      // these are database rows, and they outlive the person who wasn't there.
-      case EngineEventType.WORKFLOW_RUN_RECORDED: {
-        await ctx.runMutation(internal.workflowRuns.recordFromWebhook, {
-          instanceId: instance._id,
-          run: event.run,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.WORKFLOW_RUN_UPDATED: {
-        await ctx.runMutation(internal.workflowRuns.updateFromWebhook, {
-          instanceId: instance._id,
-          run: event.run,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.WORKFLOW_RUN_STEP_RECORDED: {
-        await ctx.runMutation(internal.workflowRuns.recordStepFromWebhook, {
-          instanceId: instance._id,
-          step: event.step,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.WIDGET_STATUS_CHANGED: {
-        await ctx.runMutation(internal.transientEvents.emit, {
-          instanceId: instance._id,
-          ...widgetStatusTransient(event),
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.OVERLAY_TOKEN_REVOKED: {
-        // Best-effort cache invalidation — see clearOverlayUrlByTokenId's doc
-        // comment. woofx3-ui's own revoke/rotate calls (convex/browserSource.ts)
-        // already keep their own cache correct; this only matters when a
-        // token is revoked through some other channel.
-        await ctx.runMutation(internal.browserSource.clearOverlayUrlByTokenId, {
-          engineTokenId: event.tokenId,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.STREAM_ONLINE: {
-        await ctx.runMutation(internal.instanceLiveState.onStreamOnline, {
-          instanceId: instance._id,
-          twitchUserId: event.twitchUserId,
-          startedAt: event.startedAt,
-          streamTitle: event.streamTitle,
-          gameName: event.gameName,
-          viewerCount: event.viewerCount,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.STREAM_OFFLINE: {
-        await ctx.runMutation(internal.instanceLiveState.onStreamOffline, {
-          instanceId: instance._id,
-          twitchUserId: event.twitchUserId,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.SESSION_STARTED: {
-        await ctx.runMutation(internal.instanceLiveState.onSessionStarted, {
-          instanceId: instance._id,
-          sessionId: event.sessionId,
-          sessionStartedAt: event.startedAt,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      default: {
-        logger.warn("webhook: unhandled event type", { eventType });
-        return corsJson({ success: true, type: eventType, handled: false });
-      }
-    }
-  }),
-});
+  // The engine waits for the queue position, and only sends a shoutout itself
+  // when it has no dashboard queue at all.
+  const target = parseEngineShoutoutTarget(envelope.data);
+  if (!target) {
+    logger.warn("webhook: shoutout request without a target", { instanceId: instance._id });
+    return corsJson({ error: "Shoutout request needs twitchUserId and login" }, 400);
+  }
+  const answer = await ctx.runMutation(internal.shoutouts.enqueueFromEngine, {
+    instanceId: instance._id,
+    ...target,
+  });
+  return corsJson(answer);
+}
 
 /**
  * Progress callbacks from the woofx3 maintenance API while it provisions,
@@ -1565,14 +935,6 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macr
 
 registerViewerAuthRoutes(http);
 registerUserPageFormRoutes(http);
+registerEngineEventRoutes(http);
 
 export default http;
-
-/**
- * A webhook field newer engines send and older ones leave out. Typed as a
- * string by the shared event types, but read defensively: the validator
- * downstream takes a string or nothing, never null.
- */
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}

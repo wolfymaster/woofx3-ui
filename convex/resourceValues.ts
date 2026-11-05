@@ -23,7 +23,7 @@ export const listForInstance = query({
   },
 });
 
-async function upsertValue(ctx: MutationCtx, instanceId: Id<"instances">, canonicalId: string, value: unknown) {
+export async function upsertValue(ctx: MutationCtx, instanceId: Id<"instances">, canonicalId: string, value: unknown) {
   const existing = await ctx.db
     .query("resourceValues")
     .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", canonicalId))

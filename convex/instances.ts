@@ -368,7 +368,8 @@ export const applyRegistration = internalMutation({
       throw new Error("Instance not found");
     }
 
-    await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret });
+    // The new client has no events target yet, whatever the last one had.
+    await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret, eventsTargetSetAt: undefined });
     await ensureSyncRow(ctx, instanceId);
     // Setup and the scene editor read the catalogs a sync mirrors (widgets,
     // triggers, actions, command groups). The sweep would not get to a new

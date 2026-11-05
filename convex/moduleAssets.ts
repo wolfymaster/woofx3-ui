@@ -1,5 +1,5 @@
 import { assetsOfKinds } from "@shared/module-assets";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
@@ -79,52 +79,62 @@ export const listForModule = query({
   },
 });
 
-export const upsertFromWebhook = internalMutation({
-  args: {
-    // The delivering instance, from the webhook's Bearer token. Required to
-    // resolve the owning module: moduleKey and name+version are both shared
-    // between tenants that installed the same module.
-    instanceId: v.id("instances"),
-    moduleKey: v.string(),
-    moduleName: v.string(),
-    version: v.string(),
-    assets: v.array(assetValidator),
-  },
-  handler: async (ctx, { instanceId, moduleKey, moduleName, version, assets }) => {
-    const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
-    if (!moduleId) {
-      return;
-    }
+const upsertModuleAssetsFromWebhookArgs = {
+  // The delivering instance, from the webhook's Bearer token. Required to
+  // resolve the owning module: moduleKey and name+version are both shared
+  // between tenants that installed the same module.
+  instanceId: v.id("instances"),
+  moduleKey: v.string(),
+  moduleName: v.string(),
+  version: v.string(),
+  assets: v.array(assetValidator),
+};
 
-    for (const asset of assets) {
-      const row = {
-        moduleId,
-        engineAssetId: asset.id,
-        canonicalId: asset.canonicalId,
-        projectionKey: asset.projectionKey,
-        manifestId: asset.manifestId,
-        name: asset.name,
-        description: asset.description,
-        repositoryKey: asset.repositoryKey,
-        manifestPath: asset.manifestPath,
-        kind: asset.kind,
-        contentType: asset.contentType,
-        createdByType: asset.createdByType,
-        createdByRef: asset.createdByRef,
-      };
+export async function upsertModuleAssetsFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, moduleKey, moduleName, version, assets }: ObjectType<typeof upsertModuleAssetsFromWebhookArgs>
+) {
+  const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
+  if (!moduleId) {
+    return;
+  }
 
-      const existing = await ctx.db
-        .query("moduleAssets")
-        .withIndex("by_module_canonical", (q) => q.eq("moduleId", moduleId).eq("canonicalId", asset.canonicalId))
-        .first();
-      if (existing) {
-        await ctx.db.patch(existing._id, row);
-      } else {
-        await ctx.db.insert("moduleAssets", row);
-      }
+  for (const asset of assets) {
+    const row = {
+      moduleId,
+      engineAssetId: asset.id,
+      canonicalId: asset.canonicalId,
+      projectionKey: asset.projectionKey,
+      manifestId: asset.manifestId,
+      name: asset.name,
+      description: asset.description,
+      repositoryKey: asset.repositoryKey,
+      manifestPath: asset.manifestPath,
+      kind: asset.kind,
+      contentType: asset.contentType,
+      createdByType: asset.createdByType,
+      createdByRef: asset.createdByRef,
+    };
+
+    const existing = await ctx.db
+      .query("moduleAssets")
+      .withIndex("by_module_canonical", (q) => q.eq("moduleId", moduleId).eq("canonicalId", asset.canonicalId))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, row);
+    } else {
+      await ctx.db.insert("moduleAssets", row);
     }
-  },
-});
+  }
+}
+
+const deleteModuleAssetsFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  moduleKey: v.string(),
+  moduleName: v.string(),
+  version: v.string(),
+  assets: v.array(assetValidator),
+};
 
 /**
  * Deregistration carries the same module identity as the registration that
@@ -133,31 +143,25 @@ export const upsertFromWebhook = internalMutation({
  * delete, and `module.deleted` may land first — there is nothing left to do:
  * `cascadeOnModuleDelete` removes every asset row for that module.
  */
-export const deleteFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    moduleKey: v.string(),
-    moduleName: v.string(),
-    version: v.string(),
-    assets: v.array(assetValidator),
-  },
-  handler: async (ctx, { instanceId, moduleKey, moduleName, version, assets }) => {
-    const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
-    if (!moduleId) {
-      return;
-    }
+export async function deleteModuleAssetsFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, moduleKey, moduleName, version, assets }: ObjectType<typeof deleteModuleAssetsFromWebhookArgs>
+) {
+  const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
+  if (!moduleId) {
+    return;
+  }
 
-    for (const asset of assets) {
-      const existing = await ctx.db
-        .query("moduleAssets")
-        .withIndex("by_module_canonical", (q) => q.eq("moduleId", moduleId).eq("canonicalId", asset.canonicalId))
-        .first();
-      if (existing) {
-        await ctx.db.delete(existing._id);
-      }
+  for (const asset of assets) {
+    const existing = await ctx.db
+      .query("moduleAssets")
+      .withIndex("by_module_canonical", (q) => q.eq("moduleId", moduleId).eq("canonicalId", asset.canonicalId))
+      .first();
+    if (existing) {
+      await ctx.db.delete(existing._id);
     }
-  },
-});
+  }
+}
 
 export const cascadeOnModuleDelete = internalMutation({
   args: { moduleId: v.id("moduleRepository") },

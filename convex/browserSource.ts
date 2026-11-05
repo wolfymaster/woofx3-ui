@@ -1,8 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { type ActionCtx, action, internalMutation, internalQuery, query } from "./_generated/server";
+import { type ActionCtx, action, internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
@@ -149,6 +149,8 @@ export const deleteKeys = internalMutation({
   },
 });
 
+const clearOverlayUrlForTokenArgs = { engineTokenId: v.string() };
+
 // Best-effort consistency for the OVERLAY_TOKEN_REVOKED webhook — a token
 // might be revoked through a channel other than this file's own
 // revokeOverlayToken/rotateOverlayToken calls (e.g. a direct engine-side
@@ -157,18 +159,18 @@ export const deleteKeys = internalMutation({
 // iframing a dead token, without deleting the row itself (the key stays
 // reusable — the next getOrCreateBrowserSourceKey/getOrCreatePreviewUrl call
 // mints a fresh token in its place).
-export const clearOverlayUrlByTokenId = internalMutation({
-  args: { engineTokenId: v.string() },
-  handler: async (ctx, { engineTokenId }) => {
-    const row = await ctx.db
-      .query("browserSourceKeys")
-      .withIndex("by_engine_token_id", (q) => q.eq("engineTokenId", engineTokenId))
-      .first();
-    if (row) {
-      await ctx.db.patch(row._id, { overlayUrl: undefined });
-    }
-  },
-});
+export async function clearOverlayUrlForToken(
+  ctx: MutationCtx,
+  { engineTokenId }: ObjectType<typeof clearOverlayUrlForTokenArgs>
+) {
+  const row = await ctx.db
+    .query("browserSourceKeys")
+    .withIndex("by_engine_token_id", (q) => q.eq("engineTokenId", engineTokenId))
+    .first();
+  if (row) {
+    await ctx.db.patch(row._id, { overlayUrl: undefined });
+  }
+}
 
 // Busts every cached overlayUrl for an instance — called after
 // setOverlayPublicUrl changes what every URL should resolve to. Every

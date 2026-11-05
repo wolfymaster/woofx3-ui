@@ -16,6 +16,7 @@ describe("matchOpsRoute", () => {
       accountId: "k1",
     });
     expect(matchOpsRoute("GET", "/api/ops/engines")).toEqual({ method: "GET", name: "engines.list" });
+    expect(matchOpsRoute("GET", "/api/ops/engines/event-path")).toEqual({ method: "GET", name: "engines.eventPath" });
     expect(matchOpsRoute("GET", "/api/ops/engines/module-storage-limits")).toEqual({
       method: "GET",
       name: "engines.moduleStorageLimits",

@@ -1,7 +1,7 @@
 import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
 import { bareModuleKey } from "@shared/module-key";
 import { webhookEndpointKey } from "@shared/webhook-endpoint-key";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
@@ -181,6 +181,15 @@ async function findSupersededModule(
   return installed.find((m) => m.moduleKey?.split(":")[0] === bareKey) ?? null;
 }
 
+const applyModuleInstalledArgs = {
+  instanceId: v.id("instances"),
+  correlationKey: v.string(),
+  moduleName: v.string(),
+  moduleVersion: v.string(),
+  triggers: v.array(triggerValidator),
+  actions: v.array(actionValidator),
+};
+
 /**
  * Process a module.installed webhook callback from the engine.
  * Flips the "pending" moduleRepository record created by uploadAndDeliver to
@@ -195,114 +204,120 @@ async function findSupersededModule(
  * already installed, and is applied to the existing row rather than inserted
  * beside it — see `findSupersededModule`.
  */
-export const processModuleInstalled = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    correlationKey: v.string(),
-    moduleName: v.string(),
-    moduleVersion: v.string(),
-    triggers: v.array(triggerValidator),
-    actions: v.array(actionValidator),
-  },
-  handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, triggers, actions }) => {
-    // Check if this instance already has the row (idempotency)
-    const record = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_name_version", (q) =>
-        q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", moduleVersion)
-      )
-      .first();
+export async function applyModuleInstalled(
+  ctx: MutationCtx,
+  {
+    instanceId,
+    correlationKey,
+    moduleName,
+    moduleVersion,
+    triggers,
+    actions,
+  }: ObjectType<typeof applyModuleInstalledArgs>
+) {
+  // Check if this instance already has the row (idempotency)
+  const record = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance_name_version", (q) =>
+      q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", moduleVersion)
+    )
+    .first();
 
-    const superseded = record ? null : await findSupersededModule(ctx, instanceId, correlationKey);
+  const superseded = record ? null : await findSupersededModule(ctx, instanceId, correlationKey);
 
-    // Which listing the build is: what Convex recorded when it started the
-    // install, or, for a row whose key is unchanged, what the row already says.
-    // The callback itself carries neither.
-    const existing = record ?? superseded;
-    const moduleKey = record?.moduleKey ?? correlationKey;
-    const provenance = resolveProvenance({
+  // Which listing the build is: what Convex recorded when it started the
+  // install, or, for a row whose key is unchanged, what the row already says.
+  // The callback itself carries neither.
+  const existing = record ?? superseded;
+  const moduleKey = record?.moduleKey ?? correlationKey;
+  const provenance = resolveProvenance({
+    moduleKey,
+    recorded: await recordedProvenance(ctx, instanceId, moduleKey),
+    existing,
+  });
+
+  let moduleId: Id<"moduleRepository">;
+  if (record) {
+    await ctx.db.patch(record._id, {
+      status: "installed" as const,
+      statusMessage: undefined,
       moduleKey,
-      recorded: await recordedProvenance(ctx, instanceId, moduleKey),
-      existing,
+      ...provenance,
     });
-
-    let moduleId: Id<"moduleRepository">;
-    if (record) {
-      await ctx.db.patch(record._id, {
-        status: "installed" as const,
-        statusMessage: undefined,
-        moduleKey,
-        ...provenance,
-      });
-      moduleId = record._id;
-    } else if (superseded) {
-      await ctx.db.patch(superseded._id, {
-        status: "installed" as const,
-        statusMessage: undefined,
-        moduleKey,
-        name: moduleName,
-        version: moduleVersion,
-        ...provenance,
-      });
-      moduleId = superseded._id;
-    } else {
-      moduleId = await ctx.db.insert("moduleRepository", {
-        instanceId,
-        moduleKey,
-        name: moduleName,
-        description: "",
-        version: moduleVersion,
-        tags: [],
-        manifest: {},
-        archiveKey: "",
-        status: "installed" as const,
-        ...provenance,
-      });
-    }
-
-    // Emit success event for the UI
-    await ctx.runMutation(internal.transientEvents.emit, {
+    moduleId = record._id;
+  } else if (superseded) {
+    await ctx.db.patch(superseded._id, {
+      status: "installed" as const,
+      statusMessage: undefined,
+      moduleKey,
+      name: moduleName,
+      version: moduleVersion,
+      ...provenance,
+    });
+    moduleId = superseded._id;
+  } else {
+    moduleId = await ctx.db.insert("moduleRepository", {
       instanceId,
-      ...moduleInstalledTransient({ correlationKey, moduleName, moduleVersion }),
+      moduleKey,
+      name: moduleName,
+      description: "",
+      version: moduleVersion,
+      tags: [],
+      manifest: {},
+      archiveKey: "",
+      status: "installed" as const,
+      ...provenance,
     });
+  }
 
-    for (const trigger of triggers) {
-      const row = triggerDefinitionRow(trigger, moduleId);
-      const existing = await ctx.db
-        .query("triggerDefinitions")
-        .withIndex("by_slug", (q) => q.eq("slug", row.slug))
-        .first();
-      if (existing) {
-        await ctx.db.patch(existing._id, row);
-      } else {
-        await ctx.db.insert("triggerDefinitions", row);
-      }
-      await enableTriggerForInstance(ctx, instanceId, row.slug, {
-        createdByType: trigger.createdByType,
-        createdByRef: trigger.createdByRef,
-      });
+  // Emit success event for the UI
+  await ctx.runMutation(internal.transientEvents.emit, {
+    instanceId,
+    ...moduleInstalledTransient({ correlationKey, moduleName, moduleVersion }),
+  });
+
+  for (const trigger of triggers) {
+    const row = triggerDefinitionRow(trigger, moduleId);
+    const existing = await ctx.db
+      .query("triggerDefinitions")
+      .withIndex("by_slug", (q) => q.eq("slug", row.slug))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, row);
+    } else {
+      await ctx.db.insert("triggerDefinitions", row);
     }
+    await enableTriggerForInstance(ctx, instanceId, row.slug, {
+      createdByType: trigger.createdByType,
+      createdByRef: trigger.createdByRef,
+    });
+  }
 
-    for (const action of actions) {
-      const row = actionDefinitionRow(action, moduleId);
-      const existing = await ctx.db
-        .query("actionDefinitions")
-        .withIndex("by_slug", (q) => q.eq("slug", row.slug))
-        .first();
-      if (existing) {
-        await ctx.db.patch(existing._id, row);
-      } else {
-        await ctx.db.insert("actionDefinitions", row);
-      }
-      await enableActionForInstance(ctx, instanceId, row.slug, {
-        createdByType: action.createdByType,
-        createdByRef: action.createdByRef,
-      });
+  for (const action of actions) {
+    const row = actionDefinitionRow(action, moduleId);
+    const existing = await ctx.db
+      .query("actionDefinitions")
+      .withIndex("by_slug", (q) => q.eq("slug", row.slug))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, row);
+    } else {
+      await ctx.db.insert("actionDefinitions", row);
     }
+    await enableActionForInstance(ctx, instanceId, row.slug, {
+      createdByType: action.createdByType,
+      createdByRef: action.createdByRef,
+    });
+  }
 
-    return moduleId;
-  },
-});
+  return moduleId;
+}
+
+const applyDeregisteredDefinitionsArgs = {
+  instanceId: v.id("instances"),
+  triggers: v.array(triggerValidator),
+  actions: v.array(actionValidator),
+};
 
 /**
  * Process trigger/action deregistration events from the engine. Fires on
@@ -314,96 +329,102 @@ export const processModuleInstalled = internalMutation({
  *
  * Idempotent: deletes only when the row exists; missing rows are skipped.
  */
-export const processDeregisteredDefinitions = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    triggers: v.array(triggerValidator),
-    actions: v.array(actionValidator),
-  },
-  handler: async (ctx, { instanceId, triggers, actions }) => {
-    // Disable first, prune second: the shared-catalog check asks whether any
-    // instance still enables the definition, and this one no longer should
-    // count itself.
-    for (const trigger of triggers) {
-      await disableTriggerForInstance(ctx, instanceId, trigger.id);
-      // Disabled, never deleted: a forced reinstall or rollback also
-      // deregisters, and deleting would hand the trigger a new URL.
-      const endpointKey = webhookEndpointKey(trigger);
-      if (endpointKey) {
-        await disableEndpoint(ctx, { instanceId, triggerKey: endpointKey.triggerKey });
-      }
+export async function applyDeregisteredDefinitions(
+  ctx: MutationCtx,
+  { instanceId, triggers, actions }: ObjectType<typeof applyDeregisteredDefinitionsArgs>
+) {
+  // Disable first, prune second: the shared-catalog check asks whether any
+  // instance still enables the definition, and this one no longer should
+  // count itself.
+  for (const trigger of triggers) {
+    await disableTriggerForInstance(ctx, instanceId, trigger.id);
+    // Disabled, never deleted: a forced reinstall or rollback also
+    // deregisters, and deleting would hand the trigger a new URL.
+    const endpointKey = webhookEndpointKey(trigger);
+    if (endpointKey) {
+      await disableEndpoint(ctx, { instanceId, triggerKey: endpointKey.triggerKey });
     }
-    await pruneTriggerDefinitions(ctx, uniqueIds(triggers.map((t) => t.id)));
+  }
+  await pruneTriggerDefinitions(ctx, uniqueIds(triggers.map((t) => t.id)));
 
-    for (const action of actions) {
-      await disableActionForInstance(ctx, instanceId, action.id);
-    }
-    await pruneActionDefinitions(ctx, uniqueIds(actions.map((a) => a.id)));
-  },
-});
+  for (const action of actions) {
+    await disableActionForInstance(ctx, instanceId, action.id);
+  }
+  await pruneActionDefinitions(ctx, uniqueIds(actions.map((a) => a.id)));
+}
+
+const applyRegisteredDefinitionsArgs = {
+  instanceId: v.id("instances"),
+  moduleName: v.string(),
+  moduleVersion: v.string(),
+  triggers: v.array(triggerValidator),
+  actions: v.array(actionValidator),
+};
 
 /**
  * Process trigger/action registration events from the engine.
  * These are standalone events — they don't require a moduleKey or correlationKey.
  * They upsert definitions and optionally link to an existing module record.
  */
-export const processRegisteredDefinitions = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    moduleName: v.string(),
-    moduleVersion: v.string(),
-    triggers: v.array(triggerValidator),
-    actions: v.array(actionValidator),
-  },
-  handler: async (ctx, { instanceId, moduleName, moduleVersion, triggers, actions }) => {
-    // Try to find this instance's module record to link definitions to it
-    const record = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_name_version", (q) =>
-        q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", moduleVersion)
-      )
+export async function applyRegisteredDefinitions(
+  ctx: MutationCtx,
+  { instanceId, moduleName, moduleVersion, triggers, actions }: ObjectType<typeof applyRegisteredDefinitionsArgs>
+) {
+  // Try to find this instance's module record to link definitions to it
+  const record = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance_name_version", (q) =>
+      q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", moduleVersion)
+    )
+    .first();
+  const moduleId = record?._id;
+
+  for (const trigger of triggers) {
+    const row = triggerDefinitionRow(trigger, moduleId);
+    const existing = await ctx.db
+      .query("triggerDefinitions")
+      .withIndex("by_slug", (q) => q.eq("slug", row.slug))
       .first();
-    const moduleId = record?._id;
-
-    for (const trigger of triggers) {
-      const row = triggerDefinitionRow(trigger, moduleId);
-      const existing = await ctx.db
-        .query("triggerDefinitions")
-        .withIndex("by_slug", (q) => q.eq("slug", row.slug))
-        .first();
-      if (existing) {
-        await ctx.db.patch(existing._id, row);
-      } else {
-        await ctx.db.insert("triggerDefinitions", row);
-      }
-      await enableTriggerForInstance(ctx, instanceId, row.slug, {
-        createdByType: trigger.createdByType,
-        createdByRef: trigger.createdByRef,
-      });
-      const endpointKey = webhookEndpointKey(trigger);
-      if (endpointKey) {
-        await provisionEndpoint(ctx, { instanceId, ...endpointKey });
-      }
+    if (existing) {
+      await ctx.db.patch(existing._id, row);
+    } else {
+      await ctx.db.insert("triggerDefinitions", row);
     }
-
-    for (const action of actions) {
-      const row = actionDefinitionRow(action, moduleId);
-      const existing = await ctx.db
-        .query("actionDefinitions")
-        .withIndex("by_slug", (q) => q.eq("slug", row.slug))
-        .first();
-      if (existing) {
-        await ctx.db.patch(existing._id, row);
-      } else {
-        await ctx.db.insert("actionDefinitions", row);
-      }
-      await enableActionForInstance(ctx, instanceId, row.slug, {
-        createdByType: action.createdByType,
-        createdByRef: action.createdByRef,
-      });
+    await enableTriggerForInstance(ctx, instanceId, row.slug, {
+      createdByType: trigger.createdByType,
+      createdByRef: trigger.createdByRef,
+    });
+    const endpointKey = webhookEndpointKey(trigger);
+    if (endpointKey) {
+      await provisionEndpoint(ctx, { instanceId, ...endpointKey });
     }
-  },
-});
+  }
+
+  for (const action of actions) {
+    const row = actionDefinitionRow(action, moduleId);
+    const existing = await ctx.db
+      .query("actionDefinitions")
+      .withIndex("by_slug", (q) => q.eq("slug", row.slug))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, row);
+    } else {
+      await ctx.db.insert("actionDefinitions", row);
+    }
+    await enableActionForInstance(ctx, instanceId, row.slug, {
+      createdByType: action.createdByType,
+      createdByRef: action.createdByRef,
+    });
+  }
+}
+
+const applyModuleInstallFailedArgs = {
+  instanceId: v.id("instances"),
+  correlationKey: v.string(),
+  moduleName: v.string(),
+  moduleVersion: v.string(),
+  statusMessage: v.optional(v.string()),
+};
 
 /**
  * Process a module.install_failed webhook callback from the engine.
@@ -411,28 +432,28 @@ export const processRegisteredDefinitions = internalMutation({
  * "failed" (if one exists — marketplace installs don't create one up front),
  * then emits a transient error event.
  */
-export const processModuleInstallFailed = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    correlationKey: v.string(),
-    moduleName: v.string(),
-    moduleVersion: v.string(),
-    statusMessage: v.optional(v.string()),
-  },
-  handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, statusMessage }) => {
-    const transient = moduleInstallFailedTransient({ correlationKey, moduleName, moduleVersion }, statusMessage);
+export async function applyModuleInstallFailed(
+  ctx: MutationCtx,
+  {
+    instanceId,
+    correlationKey,
+    moduleName,
+    moduleVersion,
+    statusMessage,
+  }: ObjectType<typeof applyModuleInstallFailedArgs>
+) {
+  const transient = moduleInstallFailedTransient({ correlationKey, moduleName, moduleVersion }, statusMessage);
 
-    const record = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", correlationKey))
-      .first();
-    if (record) {
-      await ctx.db.patch(record._id, { status: "failed" as const, statusMessage: transient.message });
-    }
+  const record = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", correlationKey))
+    .first();
+  if (record) {
+    await ctx.db.patch(record._id, { status: "failed" as const, statusMessage: transient.message });
+  }
 
-    await ctx.runMutation(internal.transientEvents.emit, { instanceId, ...transient });
-  },
-});
+  await ctx.runMutation(internal.transientEvents.emit, { instanceId, ...transient });
+}
 
 /**
  * Process a module.deleted webhook callback from the engine.
@@ -579,29 +600,33 @@ async function removeLocalEndpointState(ctx: MutationCtx, instanceId: Id<"instan
   }
 }
 
-export const processModuleDeleted = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    correlationKey: v.string(),
-    moduleName: v.string(),
-    moduleVersion: v.optional(v.string()),
-  },
-  handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion }) => {
-    const record = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", correlationKey))
-      .first();
+const processModuleDeletedArgs = {
+  instanceId: v.id("instances"),
+  correlationKey: v.string(),
+  moduleName: v.string(),
+  moduleVersion: v.optional(v.string()),
+};
 
-    if (record) {
-      await cascadeDeleteModuleRecord(ctx, instanceId, record);
-    }
+export async function applyModuleDeleted(
+  ctx: MutationCtx,
+  { instanceId, correlationKey, moduleName, moduleVersion }: ObjectType<typeof processModuleDeletedArgs>
+) {
+  const record = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", correlationKey))
+    .first();
 
-    await ctx.runMutation(internal.transientEvents.emit, {
-      instanceId,
-      ...moduleRemovedTransient({ correlationKey, moduleName, moduleVersion }),
-    });
-  },
-});
+  if (record) {
+    await cascadeDeleteModuleRecord(ctx, instanceId, record);
+  }
+
+  await ctx.runMutation(internal.transientEvents.emit, {
+    instanceId,
+    ...moduleRemovedTransient({ correlationKey, moduleName, moduleVersion }),
+  });
+}
+
+export const processModuleDeleted = internalMutation({ args: processModuleDeletedArgs, handler: applyModuleDeleted });
 
 /**
  * Reconcile a moduleRepository record after confirming directly with the
@@ -639,25 +664,34 @@ export const reconcileUninstalledModule = internalMutation({
   },
 });
 
+const applyModuleDeleteFailedArgs = {
+  instanceId: v.id("instances"),
+  correlationKey: v.string(),
+  moduleName: v.string(),
+  moduleVersion: v.optional(v.string()),
+  error: v.optional(v.string()),
+  conflicts: v.optional(v.array(v.any())),
+};
+
 /**
  * Process a module.delete_failed webhook callback from the engine.
  * The module is still installed on the engine — the moduleRepository record
  * is left untouched. Emits an error transient event carrying the conflict
  * list so the UI can show the user why the delete was refused.
  */
-export const processModuleDeleteFailed = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    correlationKey: v.string(),
-    moduleName: v.string(),
-    moduleVersion: v.optional(v.string()),
-    error: v.optional(v.string()),
-    conflicts: v.optional(v.array(v.any())),
-  },
-  handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, error, conflicts }) => {
-    await ctx.runMutation(internal.transientEvents.emit, {
-      instanceId,
-      ...moduleDeleteFailedTransient({ correlationKey, moduleName, moduleVersion }, error, conflicts),
-    });
-  },
-});
+export async function applyModuleDeleteFailed(
+  ctx: MutationCtx,
+  {
+    instanceId,
+    correlationKey,
+    moduleName,
+    moduleVersion,
+    error,
+    conflicts,
+  }: ObjectType<typeof applyModuleDeleteFailedArgs>
+) {
+  await ctx.runMutation(internal.transientEvents.emit, {
+    instanceId,
+    ...moduleDeleteFailedTransient({ correlationKey, moduleName, moduleVersion }, error, conflicts),
+  });
+}

@@ -1,9 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 
 // Audit trail of every engine webhook event received (source: "webhook",
 // written by convex/http.ts's POST /api/webhooks/woofx3 handler) plus every
@@ -23,22 +23,23 @@ async function membershipFor(
     .first();
 }
 
-export const record = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    eventType: v.string(),
-    payload: v.string(),
-    envelopeId: v.optional(v.string()),
-    engineEventTime: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert("engineEventLog", {
-      ...args,
-      source: "webhook",
-      receivedAt: Date.now(),
-    });
-  },
-});
+const recordArgs = {
+  instanceId: v.id("instances"),
+  eventType: v.string(),
+  payload: v.string(),
+  envelopeId: v.optional(v.string()),
+  engineEventTime: v.optional(v.string()),
+};
+
+export async function recordEngineEvent(ctx: MutationCtx, args: ObjectType<typeof recordArgs>) {
+  await ctx.db.insert("engineEventLog", {
+    ...args,
+    source: "webhook",
+    receivedAt: Date.now(),
+  });
+}
+
+export const record = internalMutation({ args: recordArgs, handler: recordEngineEvent });
 
 export const recordFireAttempt = internalMutation({
   args: {

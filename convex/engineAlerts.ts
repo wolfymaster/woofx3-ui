@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { type Infer, v } from "convex/values";
+import { type Infer, type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
@@ -250,16 +250,18 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
   }
 }
 
+const mergeEngineAlertArgs = {
+  instanceId: v.id("instances"),
+  snapshot: snapshotValidator,
+};
+
 /** Merge the snapshot any alert callback carries; see `mergeSnapshot`. */
-export const mergeFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    snapshot: snapshotValidator,
-  },
-  handler: async (ctx, { instanceId, snapshot }) => {
-    await mergeSnapshot(ctx, instanceId, snapshot);
-  },
-});
+export async function mergeEngineAlert(
+  ctx: MutationCtx,
+  { instanceId, snapshot }: ObjectType<typeof mergeEngineAlertArgs>
+) {
+  await mergeSnapshot(ctx, instanceId, snapshot);
+}
 
 /** Most rows one sweep marks before handing the rest to a fresh transaction. */
 const STALE_SWEEP_BATCH = 200;

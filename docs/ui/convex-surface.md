@@ -36,13 +36,8 @@ Shared engine types are imported from the `@woofx3/api` package (resolved via a 
 
 Besides auth and Twitch OAuth, the HTTP router wires **public or special-purpose endpoints** (CORS optional via env):
 
-- `POST /api/webhooks/woofx3` — the single shared **engine callback endpoint**. Authenticates via `Authorization: Bearer <callbackToken>` (resolved to an instance through the `by_webhook_secret` index), then dispatches on `payload.type`:
-  - `module.installed` → `moduleWebhook.processModuleInstalled` (upserts the repository row, emits a `module.install` success transient event).
-  - `module.install_failed` → emits a `module.install` error transient event.
-  - `module.deleted` → cascade-deletes the repository row + storage blob + trigger/action definitions, emits a `module.uninstall` success transient event.
-  - `module.delete_failed` → emits a `module.uninstall` error transient event carrying the engine's conflict list.
-  - `module.trigger.registered`, `module.action.registered` → `moduleWebhook.processRegisteredDefinitions` (upsert trigger / action definitions without requiring a `moduleKey`).
-  - Every branch correlates to the originating UI operation via `data.moduleKey` (echoed back by the engine). Unknown event types return `{ success: true, handled: false }`.
+- `POST /api/webhooks/woofx3` — the engine's **request endpoint**, for the callbacks it waits on an answer to: `twitch.token.requested`, `relay.credential.requested` and `shoutout.enqueue.requested`. Authenticates via `Authorization: Bearer <callbackToken>` (resolved to an instance through the `by_webhook_secret` index). Any other type is an event and answers `410 events_moved`.
+- `POST /api/engine-events/batch` — **engine events**, in batches from the woofx3 maintenance event queue. Engines post their events to the queue (their events target, set by `engineEventQueue.moveToQueue`), and its relay delivers them here signed with `MAINTENANCE_WEBHOOK_SECRET`. One `engineEvents.applyBatch` mutation applies the whole batch in queue order through `lib/engineEvents/dispatch.ts`, deduplicating on the envelope id (`engineEventReceipts`), and answers one outcome per event (`applied`, `duplicate`, `ignored`, `rejected`). A throwing event fails the batch with 500 `batch_failed` and nothing of it applies. Module install and delete events correlate to the originating UI operation via `data.moduleKey` (echoed back by the engine).
 - `POST` or `GET /api/webhooks/<endpointId>` — **third-party ingress** for module webhook triggers, distinct from the engine callback above. It carries no credential: the endpoint id is the capability. Convex looks the endpoint up (`inboundWebhooks.getByEndpointId`; 404 when unknown or disabled), caps the body at 256 KiB (413), and forwards the request to the engine's `handleInboundWebhook` RPC, waiting up to 10 s. The engine runs the module's handler, publishes the events it returns, and answers; Convex relays that answer as-is (502 when malformed, 503 when the engine is unreachable, 504 when it is too slow). Endpoints are provisioned from `module.trigger.registered`, disabled (never deleted) on `module.trigger.deregistered` so an upgrade, reinstall or rollback keeps the URL, and deleted only with the module.
 - The `/browser-source/{key}` redirect to the engine-rendered overlay, and widget asset serving.
 
@@ -51,7 +46,7 @@ Paths evolve — read `http.ts` and the imported route modules when integrating.
 ## Engine vs Convex (reminder)
 
 - **UI → engine (sensitive / server):** Convex **actions** call the instance’s engine URL with its client credentials — not the browser.
-- **Engine → UI:** engine **webhooks** hit Convex with the instance’s callback token, which routes them to the instance for upserts.
+- **Engine → UI:** engine **events** reach Convex in batches through the maintenance event queue; the engine's **requests** hit `/api/webhooks/woofx3` with the instance’s callback token.
 - **Browser ↔ engine (realtime):** **`WoofxTransport`** only — not used for Convex proxy calls.
 
 This file is only a map; precise contracts belong next to the functions and in `CLAUDE.md`.
