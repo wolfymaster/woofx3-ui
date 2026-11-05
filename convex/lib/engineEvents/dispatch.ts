@@ -36,6 +36,7 @@ import { upsertValue } from "../../resourceValues";
 import { deleteSceneFromWebhook, upsertSceneFromWebhook } from "../../scenes";
 import { upsertSessionSummaryFromWebhook } from "../../streamSessionSummaries";
 import { emitTransientEvent } from "../../transientEvents";
+import { applyDatabaseRecordChange } from "../../userPageDatabases";
 import { deleteWorkflowGroupFromWebhook, upsertWorkflowGroupFromWebhook } from "../../workflowGroups";
 import { recordWorkflowHealthChange, recordWorkflowHealthSnapshot } from "../../workflowHealth";
 import {
@@ -488,6 +489,21 @@ export async function applyEngineEvent(
         await upsertValue(ctx, instanceId, canonicalId, event.value ?? null);
       }
       await emitTransientEvent(ctx, { instanceId, ...storageChangedTransient(event) });
+      return APPLIED;
+    }
+
+    case EngineEventType.DATABASE_RECORD_CHANGED: {
+      await applyDatabaseRecordChange(ctx, {
+        instanceId,
+        change: {
+          databaseId: event.databaseId,
+          recordId: event.recordId,
+          op: event.op,
+          revision: event.revision,
+          createdAt: event.createdAt,
+          publicValues: event.publicValues,
+        },
+      });
       return APPLIED;
     }
 

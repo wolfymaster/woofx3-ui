@@ -177,6 +177,22 @@ const PARITY_CASES: { name: string; events: Record<string, unknown>[]; table: Ta
     table: "workflowGroups",
     rows: 0,
   },
+  {
+    name: "database.record.changed",
+    events: [
+      {
+        type: EngineEventType.DATABASE_RECORD_CHANGED,
+        databaseId: "woofx3:database:games",
+        recordId: "row-1",
+        op: "created",
+        revision: 1,
+        createdAt: NOW,
+        publicValues: {},
+      },
+    ],
+    table: "transientEvents",
+    rows: 1,
+  },
   { name: "scene.created", events: [{ type: EngineEventType.SCENE_CREATED, scene }], table: "scenes", rows: 1 },
   { name: "scene.updated", events: [{ type: EngineEventType.SCENE_UPDATED, scene }], table: "scenes", rows: 1 },
   {
