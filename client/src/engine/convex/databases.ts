@@ -12,7 +12,7 @@ import { requireInstance, useScopeInstanceId } from "./scope";
 // Convex keeps none of them; it only records, as a transient event, that a
 // row of a database changed, which is what refetches the reads below.
 
-/** The correlation key the `database.record.changed` webhook's transient is stored under. Must match convex/lib/webhookTransients.ts. */
+/** The correlation key the `database.record.changed` webhook's transient is stored under. Must match `databaseChangeKey` in convex/userPageDatabases.ts. */
 export function databaseChangeKey(databaseId: string): string {
   return `database:${databaseId}`;
 }
