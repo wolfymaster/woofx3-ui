@@ -49,8 +49,17 @@ export const databasesStep: SyncStep = {
       instanceId: context.instanceId,
     });
     let itemsProcessed = 0;
+    const failed: string[] = [];
+    // One database the engine can't list must not keep the others stale.
     for (const databaseId of databaseIds) {
-      itemsProcessed += await reconcileDatabase(context, databaseId);
+      try {
+        itemsProcessed += await reconcileDatabase(context, databaseId);
+      } catch (error) {
+        failed.push(`${databaseId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (failed.length > 0) {
+      throw new Error(`Couldn't reconcile ${failed.length} of ${databaseIds.length} databases: ${failed.join("; ")}`);
     }
     return { itemsProcessed };
   },
