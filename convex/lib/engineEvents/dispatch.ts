@@ -36,6 +36,7 @@ import { upsertValue } from "../../resourceValues";
 import { deleteSceneFromWebhook, upsertSceneFromWebhook } from "../../scenes";
 import { upsertSessionSummaryFromWebhook } from "../../streamSessionSummaries";
 import { emitTransientEvent } from "../../transientEvents";
+import { deleteWorkflowGroupFromWebhook, upsertWorkflowGroupFromWebhook } from "../../workflowGroups";
 import { recordWorkflowHealthChange, recordWorkflowHealthSnapshot } from "../../workflowHealth";
 import {
   deleteWorkflowFromWebhook,
@@ -293,6 +294,7 @@ export async function applyEngineEvent(
         definition: event.workflow.definition,
         isEnabled: event.workflow.isEnabled,
         revision: event.workflow.revision,
+        groupIds: event.workflow.groupIds,
       });
       if (event.correlationKey) {
         await resolveWorkflowCorrelation(ctx, {
@@ -316,6 +318,24 @@ export async function applyEngineEvent(
           engineWorkflowId: event.workflowId,
         });
       }
+      return APPLIED;
+    }
+
+    case EngineEventType.WORKFLOW_GROUP_CREATED:
+    case EngineEventType.WORKFLOW_GROUP_UPDATED: {
+      await upsertWorkflowGroupFromWebhook(ctx, {
+        instanceId,
+        engineGroupId: event.group.id,
+        name: event.group.name,
+        description: event.group.description,
+        enabled: event.group.enabled,
+        memberIds: event.group.memberIds,
+      });
+      return APPLIED;
+    }
+
+    case EngineEventType.WORKFLOW_GROUP_DELETED: {
+      await deleteWorkflowGroupFromWebhook(ctx, { instanceId, engineGroupId: event.groupId });
       return APPLIED;
     }
 

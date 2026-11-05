@@ -92,6 +92,7 @@ const command = {
   visibility: "public",
 };
 const group = { id: "grp-1", name: "Mods", description: "", isBuiltIn: false, createdAt: NOW };
+const workflowGroup = { id: "wg-1", name: "Hype", description: "", enabled: true, memberIds: ["wf-1"] };
 const run = { id: "run-1", workflowId: "wf-1", status: "running", createdAt: NOW, updatedAt: NOW };
 const step = {
   id: "step-1",
@@ -153,6 +154,27 @@ const PARITY_CASES: { name: string; events: Record<string, unknown>[]; table: Ta
       { type: EngineEventType.WORKFLOW_DELETED, workflowId: "wf-1" },
     ],
     table: "workflows",
+    rows: 0,
+  },
+  {
+    name: "workflow_group.created",
+    events: [{ type: EngineEventType.WORKFLOW_GROUP_CREATED, group: workflowGroup }],
+    table: "workflowGroups",
+    rows: 1,
+  },
+  {
+    name: "workflow_group.updated",
+    events: [{ type: EngineEventType.WORKFLOW_GROUP_UPDATED, group: workflowGroup }],
+    table: "workflowGroups",
+    rows: 1,
+  },
+  {
+    name: "workflow_group.deleted",
+    events: [
+      { type: EngineEventType.WORKFLOW_GROUP_CREATED, group: workflowGroup },
+      { type: EngineEventType.WORKFLOW_GROUP_DELETED, groupId: "wg-1" },
+    ],
+    table: "workflowGroups",
     rows: 0,
   },
   { name: "scene.created", events: [{ type: EngineEventType.SCENE_CREATED, scene }], table: "scenes", rows: 1 },
@@ -498,6 +520,14 @@ describe("applyBatch, one event at a time", () => {
   test("invalid workflow health is invalid", async () => {
     const t = await backendWithInstance();
     expect((await apply(t, { type: WORKFLOW_HEALTH_CHANGED_EVENT_TYPE })).kind).toBe("invalid");
+  });
+
+  test("a workflow's group ids are stored with it", async () => {
+    const t = await backendWithInstance();
+    const workflow = { id: "wf-1", definition: {}, isEnabled: true, groupIds: ["wg-1"] };
+    await apply(t, { type: EngineEventType.WORKFLOW_CREATED, workflow });
+    const [row] = await t.run((ctx) => ctx.db.query("workflows").collect());
+    expect(row.groupIds).toEqual(["wg-1"]);
   });
 
   test("$-prefixed keys are escaped before they are stored", async () => {
