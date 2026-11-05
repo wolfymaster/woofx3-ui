@@ -5,7 +5,7 @@ import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
 import { dropPageState, refreshPageStateSettings } from "./lib/userPageState";
 import { findResourceKind } from "./resourceKinds";
-import { scheduleDatabaseCleanup } from "./userPageDatabases";
+import { scheduleDatabaseRefresh } from "./userPageDatabases";
 
 const resourceInstanceValidator = v.object({
   id: v.string(),
@@ -205,8 +205,9 @@ async function upsertRow(
     await ctx.db.insert("moduleResourceInstances", row);
   }
   await refreshPageStateSettings(ctx, instanceId, row.canonicalId, row.settings);
+  // stylegate:ignore ANY-ABS-001 reason="databases are the only kind with a public row projection; a per-kind hook registry waits for a second one"
   if (`${row.moduleName}:${row.kind}` === DATABASE_KIND) {
-    await scheduleDatabaseCleanup(ctx, instanceId, row.canonicalId);
+    await scheduleDatabaseRefresh(ctx, instanceId, row.canonicalId, existing ? existing.settings : null, row.settings);
   }
 }
 
@@ -288,8 +289,9 @@ export async function deleteResourceInstanceFromWebhook(
     await ctx.db.delete(existing._id);
   }
   await dropPageState(ctx, instanceId, instance.canonicalId);
+  // stylegate:ignore ANY-ABS-001 reason="databases are the only kind with a public row projection; a per-kind hook registry waits for a second one"
   if (`${instance.moduleName}:${instance.kind}` === DATABASE_KIND) {
-    await scheduleDatabaseCleanup(ctx, instanceId, instance.canonicalId);
+    await scheduleDatabaseRefresh(ctx, instanceId, instance.canonicalId, instance.settings, null);
   }
 }
 

@@ -10,39 +10,47 @@ import type { SyncStep, SyncStepContext } from "../steps";
  * webhook: fills rows a missed webhook never brought and drops rows the
  * engine no longer has.
  */
+/**
+ * Reconciles one database's public rows from the engine's listing, newest
+ * first, and returns how many rows the engine listed. Each page is read in
+ * its own session: a capnweb batch session is single-use.
+ */
+export async function reconcileDatabase(
+  { ctx, newApi, instanceId }: SyncStepContext,
+  databaseId: string
+): Promise<number> {
+  const startedAt = Date.now();
+  const listed: string[] = [];
+  for (let offset = 0; offset < PUBLIC_DATABASE_RECORDS; offset += DATABASE_LIMITS.pageSize) {
+    const page = await newApi().listPublicDatabaseRecords(databaseId, offset, DATABASE_LIMITS.pageSize);
+    await ctx.runMutation(internal.userPageDatabases.reconcilePage, {
+      instanceId,
+      databaseId,
+      records: page.records.map((record) => ({
+        recordId: record.id,
+        revision: record.revision,
+        createdAt: Date.parse(record.createdAt),
+        values: record.values,
+      })),
+    });
+    listed.push(...page.records.map((record) => record.id));
+    if (page.records.length < DATABASE_LIMITS.pageSize) {
+      break;
+    }
+  }
+  await ctx.runMutation(internal.userPageDatabases.finishReconcile, { instanceId, databaseId, listed, startedAt });
+  return listed.length;
+}
+
 export const databasesStep: SyncStep = {
   name: "databases",
-  run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
-    const databaseIds = await ctx.runQuery(internal.userPageDatabases.listPublicDatabaseIds, { instanceId });
+  run: async (context: SyncStepContext) => {
+    const databaseIds = await context.ctx.runQuery(internal.userPageDatabases.listPublicDatabaseIds, {
+      instanceId: context.instanceId,
+    });
     let itemsProcessed = 0;
     for (const databaseId of databaseIds) {
-      const startedAt = Date.now();
-      const listed: string[] = [];
-      for (let offset = 0; offset < PUBLIC_DATABASE_RECORDS; offset += DATABASE_LIMITS.pageSize) {
-        // Each capnweb batch session is single-use, so every page needs its own.
-        const page = await newApi().listPublicDatabaseRecords(databaseId, offset, DATABASE_LIMITS.pageSize);
-        await ctx.runMutation(internal.userPageDatabases.reconcilePage, {
-          instanceId,
-          databaseId,
-          records: page.records.map((record) => ({
-            recordId: record.id,
-            revision: record.revision,
-            createdAt: Date.parse(record.createdAt),
-            values: record.values,
-          })),
-        });
-        listed.push(...page.records.map((record) => record.id));
-        itemsProcessed += page.records.length;
-        if (page.records.length < DATABASE_LIMITS.pageSize) {
-          break;
-        }
-      }
-      await ctx.runMutation(internal.userPageDatabases.finishReconcile, {
-        instanceId,
-        databaseId,
-        listed,
-        startedAt,
-      });
+      itemsProcessed += await reconcileDatabase(context, databaseId);
     }
     return { itemsProcessed };
   },
