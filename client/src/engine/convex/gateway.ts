@@ -2,6 +2,7 @@ import type { EngineGateway } from "@/engine/gateway";
 import { convexAdBreaksGateway } from "./ad-breaks";
 import { convexAlertLibraryGateway } from "./alert-library";
 import { convexAlertQueueGateway } from "./alert-queue";
+import { convexChatModerationGateway } from "./chat-moderation";
 import { convexClipsGateway } from "./clips";
 import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
@@ -62,6 +63,7 @@ export const convexEngineGateway: EngineGateway = {
   starterPacks: convexStarterPacksGateway,
   adBreaks: convexAdBreaksGateway,
   moderation: convexModerationGateway,
+  chatModeration: convexChatModerationGateway,
   pins: convexPinsGateway,
   shoutouts: convexShoutoutsGateway,
   twitchChat: convexTwitchChatGateway,
