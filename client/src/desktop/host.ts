@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import {
   type AppLinkStart,
   COMMANDS,
@@ -8,15 +9,13 @@ import {
   INTEGRATIONS_EVENT,
   type IntegrationsView,
   type LocalEngineSession,
-  OPEN_LOCAL_CONNECTIONS_EVENT,
   SHOUTOUT_QUEUE_EVENT,
   type ShoutoutChannel,
   type ShoutoutEnqueued,
   type ShoutoutEntryId,
   type ShoutoutQueueView,
   type TestResult,
-} from "@desktop-host/window";
-import { listen } from "@tauri-apps/api/event";
+} from "@/desktop/generated/window";
 import { call } from "./invoke";
 
 export type {
@@ -37,10 +36,10 @@ export type {
   ShoutoutEntryId,
   ShoutoutQueueView,
   TestResult,
-} from "@desktop-host/window";
+} from "@/desktop/generated/window";
 
-// Calls into the desktop app's Rust host, for the dashboard window. The
-// dashboard's capability grants exactly these commands
+// Calls into the desktop app's Rust host from the dashboard, its one window.
+// The dashboard's capability grants every host command
 // (companion/src-tauri/capabilities/dashboard.json).
 
 /** The mode this run of the app started in, and whether the streamer chose it. */
@@ -128,11 +127,6 @@ export async function setSharePassword(moduleId: string, endpointId: string, sha
 /** One handshake with the stored address, whether or not the endpoint is on. */
 export async function testEndpoint(moduleId: string, endpointId: string): Promise<TestResult> {
   return call(COMMANDS.test_endpoint, { moduleId, endpointId });
-}
-
-/** The tray's "Local connections" item. */
-export function onOpenLocalConnections(handler: () => void): Promise<() => void> {
-  return listen(OPEN_LOCAL_CONNECTIONS_EVENT, handler);
 }
 
 // ==================== Linking the companion ====================
