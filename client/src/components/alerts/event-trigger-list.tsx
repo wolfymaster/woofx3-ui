@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
 import { useEngineScope } from "@/engine/context";
+import { useResourceLabels } from "@/engine/hooks/use-module-resources";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
 import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +36,7 @@ import { type OptionLabels, type SentencePart, sentenceParts, sentenceText } fro
 import { isInternalSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
 import { cn } from "@/lib/utils";
+import { resourceFieldLabels } from "@/lib/wait-event";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 import { definitionToTree, type WorkflowTree } from "@/lib/workflow-tree";
 
@@ -107,18 +109,17 @@ export function EventTriggerList({
   const handleOptionsLoaded = useCallback((fieldId: string, entry: LoadedFieldOptions) => {
     setLoadedOptions((previous) => new Map(previous).set(fieldId, entry));
   }, []);
+  const resourceLabels = useResourceLabels();
   const optionLabels = useMemo<OptionLabels>(() => {
-    const labels = new Map(
-      Array.from(loadedOptions.entries()).map(([fieldId, entry]) => [
-        fieldId,
-        new Map(entry.options.map((option) => [option.value, option.label])),
-      ])
-    );
+    const labels = resourceFieldLabels(conditionFields, resourceLabels);
+    for (const [fieldId, entry] of Array.from(loadedOptions.entries())) {
+      labels.set(fieldId, new Map(entry.options.map((option) => [option.value, option.label])));
+    }
     if (pin) {
       labels.set(pin.fieldId, new Map([[pin.value, pin.label]]));
     }
     return labels;
-  }, [loadedOptions, pin]);
+  }, [conditionFields, resourceLabels, loadedOptions, pin]);
 
   const all = useMemo(() => eventTriggers(workflows, event), [workflows, event]);
   const shown = useMemo(
