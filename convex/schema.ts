@@ -1198,12 +1198,32 @@ export default defineSchema({
     nodes: v.optional(v.array(v.any())),
     edges: v.optional(v.array(v.any())),
     projectionUpdatedAt: v.optional(v.number()),
+    // Engine ids of the workflow groups (alert groups) the workflow is in.
+    // Missing on rows from an engine without groups; read it as [].
+    groupIds: v.optional(v.array(v.string())),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_enabled", ["instanceId", "isEnabled"])
     .index("by_engine_id", ["instanceId", "engineWorkflowId"]),
+
+  // workflowGroups: read cache of the engine's workflow groups (alert
+  // groups), written from the workflow_group.* webhooks, the group actions'
+  // own RPC answers, and the "workflowGroups" engine-sync step. The engine
+  // owns the switch rules; members' switches arrive on their workflow rows.
+  workflowGroups: defineTable({
+    instanceId: v.id("instances"),
+    engineGroupId: v.string(),
+    name: v.string(),
+    description: v.string(),
+    enabled: v.boolean(),
+    memberIds: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_group_id", ["instanceId", "engineGroupId"]),
 
   // workflowHealth: whether the engine runs each stored workflow on its own,
   // from the workflow.health.* webhooks and the getWorkflowHealth() resync
@@ -2019,6 +2039,7 @@ export default defineSchema({
           v.literal("groups"),
           v.literal("functions"),
           v.literal("workflows"),
+          v.literal("workflowGroups"),
           v.literal("scenes"),
           v.literal("triggers"),
           v.literal("actions"),

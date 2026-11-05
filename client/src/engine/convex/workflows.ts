@@ -38,6 +38,7 @@ function toWorkflow(row: Doc<"workflows">): Workflow {
     edges: row.edges,
     projectionKey: row.projectionKey,
     projectionUpdatedAt: row.projectionUpdatedAt,
+    groupIds: row.groupIds ?? [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

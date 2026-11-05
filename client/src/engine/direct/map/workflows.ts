@@ -51,6 +51,7 @@ export function toWorkflow(workflow: EngineWorkflow): Workflow | null {
     definition: escapeDollarKeys(workflow.definition),
     isEnabled: workflow.isEnabled,
     revision: workflow.revision,
+    groupIds: workflow.groupIds ?? [],
     createdAt: epochMs(workflow.createdAt, "workflow creation time"),
     updatedAt: epochMs(workflow.updatedAt, "workflow update time"),
   };

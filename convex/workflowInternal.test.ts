@@ -78,3 +78,50 @@ describe("upsertFromWebhook", () => {
     });
   });
 });
+
+describe("upsertFromWebhook group ids", () => {
+  const definition = { name: "x", trigger: { type: "event", event: "cheer" }, tasks: [] };
+
+  test("stores the groups an engine sends and keeps them when a callback omits them", async () => {
+    const { t, instanceId } = await fixture();
+    const deliver = (groupIds: string[] | undefined) =>
+      t.mutation(internal.workflowInternal.upsertFromWebhook, {
+        instanceId,
+        engineWorkflowId: "wf",
+        definition,
+        isEnabled: true,
+        groupIds,
+      });
+    const read = () =>
+      t.run(async (ctx) =>
+        ctx.db
+          .query("workflows")
+          .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", "wf"))
+          .first()
+      );
+
+    await deliver(["g-1"]);
+    expect((await read())?.groupIds).toEqual(["g-1"]);
+    await deliver(undefined);
+    expect((await read())?.groupIds).toEqual(["g-1"]);
+    await deliver([]);
+    expect((await read())?.groupIds).toEqual([]);
+  });
+
+  test("a row from an engine without groups has none", async () => {
+    const { t, instanceId } = await fixture();
+    await t.mutation(internal.workflowInternal.upsertFromWebhook, {
+      instanceId,
+      engineWorkflowId: "old",
+      definition,
+      isEnabled: false,
+    });
+    const row = await t.run(async (ctx) =>
+      ctx.db
+        .query("workflows")
+        .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", "old"))
+        .first()
+    );
+    expect(row?.groupIds).toBeUndefined();
+  });
+});

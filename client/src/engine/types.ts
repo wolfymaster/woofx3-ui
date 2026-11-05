@@ -181,6 +181,7 @@ export type EngineSyncStepName =
   | "widgets"
   | "modules"
   | "workflows"
+  | "workflowGroups"
   | "scenes"
   | "commands"
   | "groups"
@@ -835,9 +836,25 @@ export interface Workflow {
   edges?: unknown[];
   projectionKey?: string;
   projectionUpdatedAt?: number;
+  /** Engine ids of the alert groups the workflow is in; empty on an engine without groups. */
+  groupIds: string[];
   /** Epoch ms. */
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * An alert group: triggers switched on and off together. The engine applies
+ * the switch to its members, whose own `isEnabled` shows the result; nothing
+ * here needs recomputing.
+ */
+export interface WorkflowGroup {
+  engineGroupId: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  /** Engine workflow ids. */
+  memberIds: string[];
 }
 
 /**
