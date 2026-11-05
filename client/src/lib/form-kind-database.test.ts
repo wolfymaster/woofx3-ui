@@ -9,6 +9,7 @@ import {
   FORM_SUBMITTED_EVENT,
   formAnswerReference,
   formDatabaseColumns,
+  formDatabaseTarget,
   formDatabaseValues,
   formDatabaseWorkflow,
   formDatabaseWorkflowTree,
@@ -289,5 +290,39 @@ describe("formDatabaseWorkflow", () => {
       const updated = withInsertValues(found.trigger.definition, found.taskId, { song: "a", why: "b" });
       expect(updated.tasks[0]?.parameters).toEqual({ target: DATABASE, values: { song: "a", why: "b" } });
     }
+  });
+});
+
+describe("formDatabaseTarget", () => {
+  const trigger = {
+    type: "event",
+    event: FORM_SUBMITTED_EVENT,
+    conditions: [{ field: ["$", "{trigger.data.formId}"].join(""), operator: "eq", value: FORM }],
+  };
+  const insertInto = (target: string) => ({
+    id: "step_1",
+    type: "action",
+    action: "database.insert",
+    $ref: DATABASE_INSERT_ACTION_REF,
+    parameters: { target, values: {} },
+  });
+  const row = (tasks: unknown[]): Workflow => ({
+    engineWorkflowId: "wf-1",
+    definition: escapeDollarKeys({ id: "wf-1", name: "wf", trigger, tasks }),
+    isEnabled: true,
+    createdAt: 0,
+    updatedAt: 0,
+  });
+
+  test("is the database the form already saves to, so the dialog opens on it", () => {
+    const triggers = eventTriggers([row([insertInto(DATABASE)])], FORM_SUBMITTED_EVENT);
+    expect(formDatabaseTarget(triggers, FORM, [DATABASE, "woofx3:database:other"])).toBe(DATABASE);
+  });
+
+  test("is null for another form, no insert step, or a database that is gone", () => {
+    const triggers = eventTriggers([row([insertInto(DATABASE)])], FORM_SUBMITTED_EVENT);
+    expect(formDatabaseTarget(triggers, "woofx3:form:other", [DATABASE])).toBeNull();
+    expect(formDatabaseTarget(triggers, FORM, ["woofx3:database:other"])).toBeNull();
+    expect(formDatabaseTarget(eventTriggers([row([])], FORM_SUBMITTED_EVENT), FORM, [DATABASE])).toBeNull();
   });
 });

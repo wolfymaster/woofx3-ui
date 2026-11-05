@@ -215,6 +215,16 @@ export function formDatabaseWorkflowTree(options: FormDatabaseWorkflowOptions): 
   };
 }
 
+function savesForm(trigger: EventTrigger, formId: string): boolean {
+  return trigger.conditions.some((condition) => condition.field === FORM_CONDITION_FIELD && condition.value === formId);
+}
+
+function insertTasks(trigger: EventTrigger): WorkflowDefinition["tasks"] {
+  return trigger.definition.tasks.filter(
+    (candidate) => (candidate as { $ref?: unknown }).$ref === DATABASE_INSERT_ACTION_REF
+  );
+}
+
 /**
  * The workflow saving `formId`'s answers to `databaseId`, and its insert
  * step, so running the shortcut again updates that step instead of adding a
@@ -226,18 +236,36 @@ export function formDatabaseWorkflow(
   databaseId: string
 ): { trigger: EventTrigger; taskId: string } | null {
   for (const trigger of triggers) {
-    if (
-      !trigger.conditions.some((condition) => condition.field === FORM_CONDITION_FIELD && condition.value === formId)
-    ) {
+    if (!savesForm(trigger, formId)) {
       continue;
     }
-    const task = trigger.definition.tasks.find(
-      (candidate) =>
-        (candidate as { $ref?: unknown }).$ref === DATABASE_INSERT_ACTION_REF &&
-        candidate.parameters?.target === databaseId
-    );
+    const task = insertTasks(trigger).find((candidate) => candidate.parameters?.target === databaseId);
     if (task) {
       return { trigger, taskId: task.id };
+    }
+  }
+  return null;
+}
+
+/**
+ * The database `formId`'s answers already save to, of those in `databases`, so
+ * the shortcut opens on it and a second run updates that workflow instead of
+ * making a new database. Null when they save to none of them.
+ */
+export function formDatabaseTarget(
+  triggers: readonly EventTrigger[],
+  formId: string,
+  databases: readonly string[]
+): string | null {
+  for (const trigger of triggers) {
+    if (!savesForm(trigger, formId)) {
+      continue;
+    }
+    for (const task of insertTasks(trigger)) {
+      const target = task.parameters?.target;
+      if (typeof target === "string" && databases.includes(target)) {
+        return target;
+      }
     }
   }
   return null;
