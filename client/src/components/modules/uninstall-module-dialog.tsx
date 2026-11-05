@@ -1,5 +1,6 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { UninstallUsageRow } from "@/components/modules/uninstall-usage-row";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,32 +11,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useReconcileModuleUninstallRequest, useUninstallModuleRequest } from "@/engine/hooks/use-modules";
 import type { ModuleId } from "@/engine/types";
-import { usedByContext, usedByHeading } from "@/lib/uninstall-conflicts";
+import { type ConflictResource, usageRows } from "@/lib/uninstall-conflicts";
 
 const ENGINE_RESPONSE_TIMEOUT_MS = 60_000;
-
-type UsedByEntry = {
-  sourceType?: string;
-  sourceId?: string;
-  sourceName?: string;
-  context?: string;
-};
-
-type ConflictResource = {
-  resourceType?: string;
-  resourceId?: string;
-  // Canonical id (machine-readable, e.g. "twitch_platform:trigger:twitch.channel.cheer").
-  // Kept around for diagnostics; not the primary label.
-  resourceName?: string;
-  // Human-friendly name resolved by the engine (e.g. "Channel Cheer").
-  resourceDisplayName?: string;
-  usedBy?: UsedByEntry[];
-};
 
 type UninstallDialogModule = {
   id: ModuleId;
@@ -53,17 +35,6 @@ type Props = {
 
 type Phase = "confirm" | "requesting" | "awaiting-engine" | "conflicts" | "error";
 
-function groupConflicts(conflicts: ConflictResource[]): Array<[string, ConflictResource[]]> {
-  const groups = new Map<string, ConflictResource[]>();
-  for (const c of conflicts) {
-    const key = c.resourceType ?? "other";
-    const bucket = groups.get(key) ?? [];
-    bucket.push(c);
-    groups.set(key, bucket);
-  }
-  return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
-}
-
 export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }: Props) {
   const requestModuleUninstall = useUninstallModuleRequest();
   const reconcileUninstall = useReconcileModuleUninstallRequest();
@@ -71,6 +42,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<ConflictResource[]>([]);
+  const [removedKeys, setRemovedKeys] = useState<ReadonlySet<string>>(new Set());
 
   const uninstallEvent = useTransientEvent(pendingKey || null);
 
@@ -79,6 +51,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
     setPendingKey(null);
     setErrorMessage(null);
     setConflicts([]);
+    setRemovedKeys(new Set());
   }, []);
 
   useEffect(() => {
@@ -157,6 +130,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
     setPhase("requesting");
     setErrorMessage(null);
     setConflicts([]);
+    setRemovedKeys(new Set());
     try {
       const result = await requestModuleUninstall(module.id);
       setPendingKey(result.moduleKey);
@@ -174,7 +148,12 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
     setPhase("confirm");
   }, []);
 
-  const groupedConflicts = useMemo(() => groupConflicts(conflicts), [conflicts]);
+  const usage = useMemo(() => usageRows(conflicts), [conflicts]);
+  const hasFixes = usage.some((row) => row.fix !== "none");
+  const allClear = usage.length > 0 && usage.every((row) => removedKeys.has(row.key));
+  const markRemoved = useCallback((key: string) => {
+    setRemovedKeys((keys) => (keys.has(key) ? keys : new Set(keys).add(key)));
+  }, []);
 
   if (!module) {
     return null;
@@ -233,72 +212,29 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
                 Can&apos;t remove {module.name} yet
               </AlertDialogTitle>
               <AlertDialogDescription>
-                {errorMessage ?? "The engine refused the uninstall because these resources still use this module."}{" "}
-                Remove or reassign them, then try again.
+                {usage.length === 1 ? "This still uses it." : `These ${usage.length} still use it.`}{" "}
+                {hasFixes ? "Remove them here, then uninstall." : "Clear them, then try again."}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
-              {groupedConflicts.map(([type, items]) => (
-                <div key={type}>
-                  <div className="mb-2 flex items-center gap-2">
-                    <Badge variant="outline" className="capitalize">
-                      {type}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {items.length} {items.length === 1 ? "item" : "items"}
-                    </span>
-                  </div>
-                  <ul className="space-y-1 pl-1">
-                    {items.map((item, idx) => {
-                      const primaryLabel =
-                        item.resourceDisplayName ?? item.resourceName ?? item.resourceId ?? "(unnamed)";
-                      const showCanonical = !!item.resourceName && item.resourceName !== primaryLabel;
-                      const usedBy = item.usedBy ?? [];
-                      return (
-                        <li
-                          key={`${type}-${item.resourceId ?? idx}`}
-                          className="text-sm border-l-2 border-border pl-3 py-1"
-                        >
-                          <div className="font-medium">{primaryLabel}</div>
-                          {showCanonical && (
-                            <div className="text-xs text-muted-foreground font-mono">{item.resourceName}</div>
-                          )}
-                          {usedBy.length > 0 && (
-                            <div className="mt-1.5 pl-3">
-                              <div className="text-xs text-muted-foreground">{usedByHeading(item.resourceType)}</div>
-                              <ul className="mt-1 space-y-1">
-                                {usedBy.map((user, userIdx) => {
-                                  const userLabel = user.sourceName ?? user.sourceId ?? "(unnamed)";
-                                  const contextLabel = usedByContext(item.resourceType, user.context);
-                                  return (
-                                    <li
-                                      key={`${type}-${item.resourceId ?? idx}-user-${user.sourceId ?? userIdx}`}
-                                      className="flex items-center gap-2 text-xs"
-                                    >
-                                      {user.sourceType && (
-                                        <Badge variant="secondary" className="capitalize">
-                                          {user.sourceType}
-                                        </Badge>
-                                      )}
-                                      <span>{userLabel}</span>
-                                      {contextLabel && <span className="text-muted-foreground">{contextLabel}</span>}
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
+            <ul className="-mr-1 flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
+              {usage.map((row) => (
+                <UninstallUsageRow
+                  key={row.key}
+                  row={row}
+                  isRemoved={removedKeys.has(row.key)}
+                  onRemoved={markRemoved}
+                />
               ))}
-            </div>
+            </ul>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => onOpenChange(false)}>Close</AlertDialogCancel>
-              <Button variant="outline" onClick={handleRetry}>
-                Try again
+              <Button
+                variant={allClear ? "destructive" : "outline"}
+                onClick={() => {
+                  void handleConfirm();
+                }}
+              >
+                {allClear ? `Uninstall ${module.name}` : "Try again"}
               </Button>
             </AlertDialogFooter>
           </>
