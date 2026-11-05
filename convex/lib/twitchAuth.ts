@@ -67,18 +67,6 @@ export async function authorizeTwitch(
 }
 
 /**
- * `authorizeTwitch` for a Helix read that needs no scope at all, such as the
- * channel's title and category. Still member-only: the token is the
- * broadcaster's, whatever the endpoint asks of it.
- */
-export async function authorizeTwitchUnscoped(
-  ctx: ActionCtx,
-  instanceId: Id<"instances">
-): Promise<AuthorizedTwitchCall> {
-  return credentialsFromLink(ctx, await linkForCaller(ctx, instanceId));
-}
-
-/**
  * The same token and scope work without the caller check, for a scheduled job
  * that has no authenticated user behind it. Never reachable from a client:
  * every public entry point goes through `authorizeTwitch` above.

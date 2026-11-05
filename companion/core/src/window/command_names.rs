@@ -40,8 +40,6 @@ macro_rules! with_command_names {
             enqueue_shoutout(EnqueueShoutoutArgs) -> ShoutoutEnqueued,
             remove_shoutout(RemoveShoutoutArgs) -> (),
             reorder_shoutouts(ReorderShoutoutsArgs) -> (),
-            stream_start_marker(()) -> StreamStartMarker,
-            request_stream_start_marker(()) -> MarkerRequestOutcome,
             host_mode(()) -> HostModeView,
             choose_host_mode(ChooseHostModeArgs) -> (),
             companion_link_status(()) -> CompanionLinkStatus,

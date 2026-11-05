@@ -73,7 +73,7 @@ export default function Login() {
         <Card>
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
-            <CardDescription>Access your streaming control plane</CardDescription>
+            <CardDescription>Sign in to run your stream</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {DesktopTwitchSignIn ? (

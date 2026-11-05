@@ -321,6 +321,12 @@ export type EngineAlertStatus =
   | "dispatched"
   | "unknown";
 
+/**
+ * Whether an overlay page is open on the engine. "unknown" is a failed or
+ * unanswered read, which says nothing about the overlay.
+ */
+export type OverlayPresence = "open" | "closed" | "unknown";
+
 /** One alert the engine dispatched, kept current by its `alert.*` callbacks. */
 export interface EngineAlert {
   /** The gateway's id of the record, for keys. */
@@ -1567,6 +1573,36 @@ export interface MarketplaceBundleInstall {
 }
 
 /** Whether a starter-pack item is in place on the engine. */
+export type DefaultSeedItemStatus = "installed" | "pending" | "failed";
+
+/** Where an instance's default overlay scene and alerts stand. */
+export interface DefaultSeedStatus {
+  scene: {
+    status: DefaultSeedItemStatus;
+    /** Matches `SceneRecord.engineSceneId`. Kept after the streamer deletes the scene, which is then not in the scenes read. */
+    engineSceneId?: string;
+    error?: string;
+  };
+  alerts: {
+    /** `DEFAULT_ALERT_ITEMS` id: follow, sub, resub, gift or bits. */
+    itemId: string;
+    /** The event its workflow listens for, e.g. `channel.follow`. */
+    event: string;
+    status: DefaultSeedItemStatus;
+    /** Kept after the streamer deletes the workflow, which is then not in the workflows read. */
+    engineWorkflowId?: string;
+    error?: string;
+  }[];
+  /** The engine's woofx3 module predates the images, so the alerts were seeded with text alone. */
+  alertImagesOmitted: boolean;
+  /** Set up before the seed existed, so nothing was or will be seeded. */
+  neverSeeded: boolean;
+  overlayDone: { outcome: OverlayDoneOutcome } | null;
+}
+
+/** How setup passed the overlay page: an alert was seen to play, or the streamer skipped. */
+export type OverlayDoneOutcome = "finished" | "skipped";
+
 export type StarterPackItemState = "installed" | "installing" | "conflict" | "available";
 
 /** How installing one starter-pack item went. */
@@ -1803,38 +1839,10 @@ export interface NewStreamInfoPreset {
   info: StreamInfo;
 }
 
-// ==================== Go live ====================
+// ==================== Overlays ====================
 
-/** Every check the go-live checklist runs. Dismissals are kept by these ids. */
-export type GoLiveCheckId = "engine" | "twitch" | "overlays" | "obs" | "stream-info" | "workflows";
-
-/** The channel as it stood when the checklist was last completed. Epoch ms. */
-export interface LastGoLive {
-  completedAt: number;
-  title: string | null;
-  categoryId: string | null;
-  categoryName: string | null;
-}
-
-export interface GoLiveWorkflowFacts {
-  /** Whether the instance has any workflow at all, enabled or not. */
-  any: boolean;
-  /** Enabled workflows, counted up to a cap. */
-  enabled: number;
-  /** True when there are more enabled workflows than `enabled` says. */
-  enabledCapped: boolean;
-}
-
-/** What the checklist keeps between runs, and the workflow facts it checks. */
-export interface GoLiveChecklistState {
-  dismissedCheckIds: GoLiveCheckId[];
-  lastGoLive: LastGoLive | null;
-  /** A "Stream start" marker is waiting for the stream to go live. */
-  markerPending: boolean;
-  workflows: GoLiveWorkflowFacts;
-}
-
-export interface GoLiveOverlayFacts {
+/** What Getting Started needs to know about the instance's overlays. */
+export interface OverlayFacts {
   hasScene: boolean;
   /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
   browserSourceKeyCount: number;
@@ -1842,48 +1850,6 @@ export interface GoLiveOverlayFacts {
   featuredUrl: string | null;
   /** When any browser source last loaded one of those keys, in epoch ms. */
   lastLoadedAt: number | null;
-}
-
-export type GoLiveTwitchFacts =
-  | { linked: false }
-  | {
-      linked: true;
-      login: string;
-      /** False when Twitch refused the token and it could not be refreshed. */
-      tokenValid: boolean;
-      tokenProblem: string | null;
-      /** Scopes of required Twitch capabilities the link was never granted. */
-      missingScopes: string[];
-    };
-
-export type GoLiveStreamInfoFacts =
-  | { kind: "unlinked" }
-  | {
-      kind: "ok";
-      login: string;
-      title: string;
-      categoryId: string;
-      categoryName: string;
-      tags: string[];
-    };
-
-export interface GoLiveFinish {
-  /** Posted to chat as the broadcaster when present. */
-  announcement?: string;
-  /** Dropped now when live, else when the stream next goes live. */
-  dropMarker: boolean;
-}
-
-export type GoLiveStepOutcome =
-  | { status: "done" }
-  /** Waiting on something outside the request, such as the stream going live. */
-  | { status: "queued"; reason: string }
-  | { status: "skipped"; reason: string }
-  | { status: "failed"; message: string };
-
-export interface GoLiveCompletion {
-  announcement: GoLiveStepOutcome;
-  marker: GoLiveStepOutcome;
 }
 
 // ==================== Dashboard ====================

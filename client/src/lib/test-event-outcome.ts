@@ -27,6 +27,18 @@ export interface RunRecord {
 }
 
 /**
+ * The row that says how the run under one key went, from its rows oldest first:
+ * the last settled one, else the last. Reading only the newest row is not enough
+ * because the engine can write `progress` just after the terminal row.
+ */
+export function runRecordOf<Row extends RunRecord>(rows: readonly Row[] | undefined): Row | null | undefined {
+  if (rows === undefined) {
+    return undefined;
+  }
+  return rows.findLast((row) => row.status !== "progress") ?? rows.at(-1) ?? null;
+}
+
+/**
  * `record` is undefined while the subscription is loading and null when no row
  * exists yet. Those are the same thing -- nothing has arrived -- until the
  * caller's wait elapses, at which point the absence becomes the answer.
@@ -34,7 +46,8 @@ export interface RunRecord {
  * That distinction only works because the engine announces `workflow.run.started`
  * as well as the terminal events: a run that matched says so immediately, so
  * continued silence really does mean nothing was listening, rather than a slow
- * workflow still working.
+ * workflow still working. It also only works for a record that was never seen:
+ * rows expire, so callers keep the last one with `useLastRunRecord`.
  */
 export function describeTestEventOutcome(record: RunRecord | null | undefined, waitElapsed: boolean): TestEventOutcome {
   if (record === undefined || record === null) {

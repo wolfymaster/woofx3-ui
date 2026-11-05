@@ -98,10 +98,20 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "level-meter": {
+          "0%, 100%": { transform: "scaleY(0.25)" },
+          "50%": { transform: "scaleY(1)" },
+        },
+        "confetti-fall": {
+          from: { transform: "translateY(-10%) rotate(0deg)", opacity: "1" },
+          to: { transform: "translateY(110%) rotate(320deg)", opacity: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "level-meter": "level-meter 1.1s ease-in-out infinite",
+        "confetti-fall": "confetti-fall 1.8s ease-in forwards",
       },
     },
   },

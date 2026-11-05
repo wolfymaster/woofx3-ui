@@ -9,7 +9,6 @@ import {
   MessagesSquare,
   NotebookPen,
   Radio,
-  Rocket,
   Shield,
   Timer,
   Tv,
@@ -21,7 +20,6 @@ import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-pan
 import { AdBreaksWidget } from "@/components/dashboard/widgets/ad-breaks";
 import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement";
 import { EventsWidget } from "@/components/dashboard/widgets/events";
-import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
 import { MacroPadWidget } from "@/components/dashboard/widgets/macro-pad";
 import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
@@ -50,15 +48,6 @@ export const streamStatusWidget: DashboardWidgetDefinition = {
   icon: Radio,
   category: "stream",
   component: StreamStatusWidget,
-};
-
-export const goLiveWidget: DashboardWidgetDefinition = {
-  type: "go-live",
-  label: "Go Live Checklist",
-  description: "Pre-flight checks before you go live: engine, Twitch, overlays, OBS, stream info and workflows.",
-  icon: Rocket,
-  category: "stream",
-  component: GoLiveWidget,
 };
 
 export const eventsWidget: DashboardWidgetDefinition = {

@@ -1,4 +1,4 @@
-import { Loader2, Megaphone, Volume2 } from "lucide-react";
+import { Loader2, Megaphone, Radio, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
@@ -12,14 +12,17 @@ import {
   useReorderShoutoutsRequest,
   useShoutoutQueue,
 } from "@/engine/hooks/use-shoutouts";
+import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { ShoutoutEntry, ShoutoutEntryId, TwitchChannel } from "@/engine/types";
 import { useChatters } from "@/hooks/use-chatters";
 import { matchChatters } from "@/lib/chatter-match";
+import { shoutoutLinkProblem } from "@/lib/shoutout-link";
 import { ShoutoutQueue } from "./shoutout-queue";
 
 export function ShoutoutWidget() {
   const { instanceId } = useEngineScope();
 
+  const twitchLink = useTwitchLink();
   const { chatters, error: chattersError } = useChatters();
   const [query, setQuery] = useState("");
   const [pending, setPending] = useState<TwitchChannel | null>(null);
@@ -63,8 +66,9 @@ export function ShoutoutWidget() {
           return;
         }
         setPending(found);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+      } catch {
+        // The server's text is for operators; a link problem has its own line below.
+        setError("Couldn't look up that channel. Try again in a moment.");
       } finally {
         setIsLooking(false);
       }
@@ -102,6 +106,17 @@ export function ShoutoutWidget() {
   );
 
   const entries: ShoutoutEntry[] = queue ?? [];
+
+  if (twitchLink === null) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-4 text-center">
+        <Radio className="h-8 w-8 text-muted-foreground/50 mb-3" />
+        <p className="text-sm text-muted-foreground">Connect Twitch in Settings to send shoutouts</p>
+      </div>
+    );
+  }
+
+  const linkProblem = twitchLink ? shoutoutLinkProblem(twitchLink) : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -180,7 +195,16 @@ export function ShoutoutWidget() {
             </Button>
 
             {error && <p className="text-xs text-destructive">{error}</p>}
-            {chattersError && <p className="text-xs text-muted-foreground">Couldn't load chat: {chattersError}</p>}
+            {linkProblem ? (
+              <p className="text-xs text-muted-foreground" data-testid="text-shoutout-link-problem">
+                {linkProblem}
+              </p>
+            ) : (
+              chattersError &&
+              twitchLink && (
+                <p className="text-xs text-muted-foreground">Couldn't load who's in chat. You can still type a name.</p>
+              )
+            )}
           </div>
         )}
 

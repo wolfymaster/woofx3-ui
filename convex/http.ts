@@ -348,6 +348,7 @@ http.route({
         twitch: {
           platformUserId: twitchUser.id,
           platformUsername: twitchUser.display_name || twitchUser.login,
+          login: twitchUser.login,
           profileImageUrl: twitchUser.profile_image_url ?? undefined,
           ...sealed,
           expiresAt: Date.now() + tokenData.expires_in * 1000,
@@ -1249,6 +1250,7 @@ http.route({
       eventId,
       eventType,
       maintenanceEngineId: engineId,
+      externalRef: typeof event.externalRef === "string" ? event.externalRef : undefined,
       step: typeof event.step === "string" ? event.step : undefined,
       label: typeof event.label === "string" ? event.label : undefined,
       stepStatus: maintenanceStepStatus(event.status) ?? undefined,

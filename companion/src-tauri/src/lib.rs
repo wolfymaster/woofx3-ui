@@ -5,8 +5,8 @@
 //!
 //! In local mode, chosen by the host configuration file, it also runs the
 //! engine's orchestrator as its sidecar (`engine_host`), and stops it before
-//! it quits. There it also keeps the shoutout queue and the stream start
-//! marker for the window, which reaches them through the local-mode commands.
+//! it quits. There it also keeps the shoutout queue for the window, which
+//! reaches it through the local-mode commands.
 //!
 //! The same crate builds two products: the companion, and the desktop app
 //! (the `bundled-engine` feature with `tauri.woofx3.conf.json`). Whatever
@@ -41,7 +41,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewWindowBuilder, 
 use tauri_plugin_opener::OpenerExt;
 use woofx3_companion_core::host::{
     choose_host_mode as write_host_mode, HostConfig, HostMode, HostModeKind, LocalEngineSettings,
-    MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView, StreamStartMarker, HOST_CONFIG_FILE,
+    ShoutoutEnqueued, ShoutoutQueueView, HOST_CONFIG_FILE,
 };
 
 use cloud::CloudLink;
@@ -415,7 +415,7 @@ async fn local_engine_session(
 }
 
 /// The local shoutout queue, in order, and why it is paused, if it is.
-/// Local mode only, like every shoutout and marker command below.
+/// Local mode only, like every shoutout command below.
 #[tauri::command]
 async fn shoutout_queue(companion: State<'_, Arc<Companion>>) -> Result<ShoutoutQueueView, String> {
     companion.engine.shoutout_queue()
@@ -446,22 +446,6 @@ async fn reorder_shoutouts(
     args: ReorderShoutoutsArgs,
 ) -> Result<(), String> {
     companion.engine.reorder_shoutouts(&args.entry_ids)
-}
-
-#[tauri::command]
-async fn stream_start_marker(
-    companion: State<'_, Arc<Companion>>,
-) -> Result<StreamStartMarker, String> {
-    companion.engine.stream_start_marker()
-}
-
-/// Drops the "Stream start" marker now when the stream is live, else when
-/// it next goes live.
-#[tauri::command]
-async fn request_stream_start_marker(
-    companion: State<'_, Arc<Companion>>,
-) -> Result<MarkerRequestOutcome, String> {
-    companion.engine.request_stream_start_marker().await
 }
 
 /// The mode this run started in, and whether the streamer chose it.

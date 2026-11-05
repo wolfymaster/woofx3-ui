@@ -18,9 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useLiveState } from "@/engine/hooks/use-live-state";
+import { engineAddress } from "@/lib/engine-address";
 import { upgradeHeading, upgradeResult } from "@/lib/engine-upgrade";
 import { engineReleaseNotesUrl } from "@/lib/engine-version";
 import { ProvisioningSteps } from "./provisioning-steps";
+import { RenameEngineDialog } from "./rename-engine-dialog";
 import { UpgradeDialog } from "./upgrade-dialog";
 
 interface ManagedEngineCardProps {
@@ -86,10 +88,10 @@ function statusVariant(status: RowStatus): "default" | "secondary" | "destructiv
 /**
  * The engine page for an engine woofx3 runs.
  *
- * There is no URL to edit here — the address is the slug the user chose, and
- * the maintenance API decides where it points — so this reports rather than
- * configures: what it is running, how the last run went, and the actions that
- * make sense on a hosted engine.
+ * There is no URL to edit here — the address follows the engine's name, and
+ * the maintenance API decides where it points — so this reports: what it is
+ * running, how the last run went, and the actions that make sense on a hosted
+ * engine.
  */
 export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
   const provisioning = useQuery(api.provisioning.forInstance, { instanceId });
@@ -107,6 +109,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
 
   // Only the maintenance API knows about a flag, and nothing pushes it, so it
   // is read once when the page opens.
@@ -175,6 +178,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
   }
 
   const status = provisioning.status as RowStatus;
+  const address = engineAddress(provisioning.publicUrl, provisioning.slug);
   const upgrade = provisioning.upgrade;
   const result = upgradeResult(status, upgrade);
   const offered = status === "registered" && upgradeInfo?.available ? upgradeInfo.offered : null;
@@ -226,7 +230,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <CardTitle>Managed Engine</CardTitle>
-              <CardDescription>woofx3 runs this engine for you, at the address you chose.</CardDescription>
+              <CardDescription>woofx3 runs this engine for you, at your address.</CardDescription>
             </div>
             <Badge variant={statusVariant(status)} data-testid="badge-engine-status">
               {STATUS_LABELS[status] ?? status}
@@ -237,21 +241,34 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
           <div className="grid gap-4 sm:grid-cols-3 text-sm">
             <div>
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Name</div>
-              <div className="mt-1 font-mono" data-testid="text-engine-slug">
-                {provisioning.slug}
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-mono" data-testid="text-engine-slug">
+                  {provisioning.slug}
+                </span>
+                {provisioning.canRename && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto px-1 py-0 text-primary"
+                    onClick={() => setRenameOpen(true)}
+                    data-testid="button-rename-engine"
+                  >
+                    Rename
+                  </Button>
+                )}
               </div>
             </div>
             <div className="sm:col-span-2 min-w-0">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Address</div>
-              {provisioning.publicUrl ? (
+              {address ? (
                 <a
-                  href={provisioning.publicUrl}
+                  href={address}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-1 inline-flex items-center gap-1 font-mono text-primary hover:underline break-all"
                   data-testid="link-engine-url"
                 >
-                  {provisioning.publicUrl}
+                  {address}
                   <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               ) : (
@@ -420,9 +437,9 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this engine?</AlertDialogTitle>
             <AlertDialogDescription>
-              The engine at {provisioning.publicUrl ?? provisioning.slug} is destroyed, along with its database and
-              everything stored on it. Your workspace, scenes and workflows stay here, and the address becomes available
-              to someone else. This cannot be undone.
+              The engine at {address ?? provisioning.slug} is destroyed, along with its database and everything stored
+              on it. Your workspace, scenes and workflows stay here, and the address becomes available to someone else.
+              This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -444,6 +461,14 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <RenameEngineDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        instanceId={instanceId}
+        currentName={provisioning.slug}
+        address={address}
+      />
 
       {offered && (
         <UpgradeDialog

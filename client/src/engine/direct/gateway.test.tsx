@@ -3,7 +3,6 @@ import { GatewayUnsupportedError } from "@/engine/errors";
 import { createDirectEngineGateway } from "./gateway";
 import { createDirectHarness, type DirectHarness, renderDirect } from "./testing/direct-harness";
 import { FakeShoutoutQueueHost } from "./testing/FakeShoutoutQueueHost";
-import { FakeStreamStartMarkers } from "./testing/FakeStreamStartMarkers";
 
 const harnesses: DirectHarness[] = [];
 
@@ -19,7 +18,6 @@ test("the assembled gateway reads through the runtime it was built around", asyn
   await harness.connect();
   harness.state.commands = [];
   const gateway = createDirectEngineGateway(harness.runtime, {
-    streamStartMarkers: new FakeStreamStartMarkers(),
     shoutoutQueue: new FakeShoutoutQueueHost(),
   });
   const commands = renderDirect(() => gateway.commands.useCommands());
@@ -32,7 +30,6 @@ test("a namespace with no engine home rejects, naming the member", async () => {
   harnesses.push(harness);
   await harness.connect();
   const gateway = createDirectEngineGateway(harness.runtime, {
-    streamStartMarkers: new FakeStreamStartMarkers(),
     shoutoutQueue: new FakeShoutoutQueueHost(),
   });
   const start = renderDirect(() => gateway.setupImports.useStartRequest()).current();

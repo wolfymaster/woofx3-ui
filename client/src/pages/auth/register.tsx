@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
 import { nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { IS_DESKTOP } from "@/lib/desktop";
+import { PASSWORD_MIN_LENGTH, type RegisterError, registerError } from "@/lib/register-error";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
 // The desktop app signs in with Twitch through the system browser, which its
@@ -30,11 +31,10 @@ function afterRegisterPath(): string {
 export default function Register() {
   const navigateAfterSignIn = useNavigateAfterSignIn();
   const { signIn } = useAuthActions();
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<RegisterError | null>(null);
 
   function handleTwitchRegister() {
     setError(null);
@@ -42,7 +42,7 @@ export default function Register() {
     try {
       startTwitchSignIn(afterRegisterPath());
     } catch {
-      setError(TWITCH_SIGN_IN_STORAGE_ERROR);
+      setError({ kind: "exists-or-unknown", message: TWITCH_SIGN_IN_STORAGE_ERROR });
       setIsLoading(false);
     }
   }
@@ -52,10 +52,10 @@ export default function Register() {
     setError(null);
     setIsLoading(true);
     try {
-      await signIn("password", { name, email, password, flow: "signUp" });
+      await signIn("password", { email, password, flow: "signUp" });
       navigateAfterSignIn(afterRegisterPath());
-    } catch (err: any) {
-      setError(err?.message || "Registration failed. Please try again.");
+    } catch (err) {
+      setError(registerError(err));
       setIsLoading(false);
     }
   }
@@ -73,7 +73,7 @@ export default function Register() {
         <Card>
           <CardHeader>
             <CardTitle>Create account</CardTitle>
-            <CardDescription>Get started with your streaming control plane</CardDescription>
+            <CardDescription>Sign up to start streaming with woofx3</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {DesktopTwitchSignIn ? (
@@ -81,7 +81,7 @@ export default function Register() {
                 <DesktopTwitchSignIn nextPath={afterRegisterPath()} />
               </Suspense>
             ) : (
-              <Button variant="outline" className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>
+              <Button className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>
                 <TwitchGlyph className="mr-2" />
                 Continue with Twitch
               </Button>
@@ -96,22 +96,11 @@ export default function Register() {
 
             <form onSubmit={handleRegister} className="space-y-3">
               <div>
-                <Label htmlFor="name">Display Name</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="StreamerName"
-                  className="mt-1"
-                  required
-                />
-              </div>
-              <div>
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -124,16 +113,26 @@ export default function Register() {
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
                   className="mt-1"
                   required
-                  minLength={8}
+                  minLength={PASSWORD_MIN_LENGTH}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">At least {PASSWORD_MIN_LENGTH} characters.</p>
               </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && (
+                <p className="text-sm text-destructive">
+                  {error.message}{" "}
+                  {error.kind === "exists-or-unknown" && (
+                    <Link href={withNext("/auth/login", nextPathFromLocation("") || null)} className="underline">
+                      Sign in
+                    </Link>
+                  )}
+                </p>
+              )}
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}

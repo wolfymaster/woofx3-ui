@@ -102,7 +102,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : rows.length === 0 ? (
-            <EmptyFeed>Nothing has happened yet</EmptyFeed>
+            <EmptyFeed>Nothing has happened yet. Test alerts don&apos;t appear here.</EmptyFeed>
           ) : (
             rows.map((row) => {
               const trigger = row.event?.type ? byEvent.get(row.event.type) : undefined;
