@@ -187,3 +187,42 @@ describe("reconcile", () => {
     expect((await rows(t)).map((row) => row.recordId)).toEqual(["fresh"]);
   });
 });
+
+describe("an update to a database instance", () => {
+  function update(instanceId: Id<"instances">, columns: DatabaseColumn[]) {
+    return {
+      instanceId,
+      instance: {
+        id: "e-1",
+        moduleId: "module-uuid",
+        moduleName: "woofx3",
+        kind: "database",
+        instanceId: "games",
+        displayName: "Games",
+        canonicalId: GAMES,
+        moduleKey: "",
+        settings: { columns },
+      },
+    };
+  }
+
+  async function scheduledReconciles(t: ReturnType<typeof newBackend>) {
+    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    return jobs.filter((job) => job.name.includes("reconcileDatabaseNow")).map((job) => job.args[0]);
+  }
+
+  test("reconciles that database at once when a column turns public, and not otherwise", async () => {
+    const { t, instanceId } = await fixture([PUBLIC_GAME, PRIVATE_VIEWER]);
+    await t.mutation(
+      internal.moduleResourceInstances.upsertFromWebhook,
+      update(instanceId, [PUBLIC_GAME, PRIVATE_VIEWER])
+    );
+    expect(await scheduledReconciles(t)).toEqual([]);
+
+    await t.mutation(
+      internal.moduleResourceInstances.upsertFromWebhook,
+      update(instanceId, [PUBLIC_GAME, { ...PRIVATE_VIEWER, public: true }])
+    );
+    expect(await scheduledReconciles(t)).toEqual([{ instanceId, databaseId: GAMES }]);
+  });
+});

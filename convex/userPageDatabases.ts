@@ -274,13 +274,37 @@ export const cleanupDatabase = internalMutation({
   },
 });
 
-/** Schedules `cleanupDatabase` for a database instance that changed or went away. */
-export async function scheduleDatabaseCleanup(
+function publicColumnIds(settings: unknown): Set<string> {
+  const record = settings && typeof settings === "object" ? (settings as Record<string, unknown>) : {};
+  return new Set(
+    parseDatabaseColumns(record)
+      .filter((column) => column.public)
+      .map((column) => column.id)
+  );
+}
+
+/**
+ * Brings a database's public rows in line with a change to its instance:
+ * cleanup strips what stopped being public, and a column that turned public
+ * is filled by reconciling that database from the engine at once rather than
+ * at the next full sync. `before` is null for an instance new to the mirror
+ * and `after` null for one that went away.
+ */
+export async function scheduleDatabaseRefresh(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
-  databaseId: string
+  databaseId: string,
+  before: unknown,
+  after: unknown
 ): Promise<void> {
   await ctx.scheduler.runAfter(0, internal.userPageDatabases.cleanupDatabase, { instanceId, databaseId, cursor: null });
+  if (before === null || after === null) {
+    return;
+  }
+  const was = publicColumnIds(before);
+  if ([...publicColumnIds(after)].some((columnId) => !was.has(columnId))) {
+    await ctx.scheduler.runAfter(0, internal.engineSync.reconcileDatabaseNow, { instanceId, databaseId });
+  }
 }
 
 /** The databases of an instance with a public column, which the engineSync step reconciles. */
