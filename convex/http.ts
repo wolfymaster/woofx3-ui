@@ -6,6 +6,7 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
+import type { WebhookEventResult } from "./engineEvents";
 import { registerEngineEventRoutes } from "./engineEventsHttp";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
@@ -460,26 +461,48 @@ http.route({
       return corsJson({ error: "Missing Authorization header" }, 401);
     }
 
-    // Events go to the maintenance event queue, which delivers them to
-    // /api/engine-events/batch. An engine still posting them here predates
-    // the queue: 4xx, which it does not retry.
+    // An engine on the maintenance event queue sends its events there; one
+    // that has not moved yet (too old to support an events target) posts them here.
     const eventType: string = payload.data?.type ?? payload.type;
     if (!ENGINE_REQUEST_TYPES.has(eventType)) {
-      return corsJson(
-        { error: { code: "events_moved", message: "Engine events are no longer accepted here; update the engine" } },
-        410
-      );
+      const result = await ctx.runMutation(internal.engineEvents.applyFromWebhook, {
+        webhookSecret: providedSecret,
+        body,
+      });
+      return legacyEventResponse(result, eventType);
     }
     return answerEngineRequest(ctx, providedSecret, payload as CallbackEnvelope, eventType);
   }),
 });
 
-/** The callbacks the engine waits on for an answer in the response body; the only ones this route takes. */
+/**
+ * The callbacks the engine waits on for an answer in the response body. Every
+ * other type is an event, applied in one mutation.
+ */
 const ENGINE_REQUEST_TYPES: ReadonlySet<string> = new Set([
   RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE,
   TWITCH_TOKEN_REQUESTED_EVENT_TYPE,
   SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE,
 ]);
+
+/**
+ * An event the engine cannot ever have applied answers 4xx, which it does not
+ * retry; a failure while applying throws, answers 5xx, and is retried.
+ */
+function legacyEventResponse(result: WebhookEventResult, eventType: string): Response {
+  switch (result.kind) {
+    case "unauthorized":
+      return corsJson({ error: "Unauthorized" }, 401);
+    case "invalid":
+      return corsJson({ error: result.reason }, 400);
+    case "ignored":
+      return corsJson({ success: true, type: eventType, handled: false });
+    case "duplicate":
+      return corsJson({ success: true, type: eventType, duplicate: true });
+    case "applied":
+      return corsJson({ success: true, type: eventType });
+  }
+}
 
 async function answerEngineRequest(
   ctx: ActionCtx,
