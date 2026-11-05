@@ -1,10 +1,19 @@
 import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
+import { TRANSIENT_SWEEP_BATCH } from "./lib/engineEvents/config";
 import { isInstanceMember } from "./lib/teamAccess";
 
-const DEFAULT_TTL_MS = 60_000; // 60 seconds
+const DEFAULT_TTL_MS = 60_000;
+
+/**
+ * Whether a row is still live. The sweep deletes expired rows up to a minute
+ * late, so every reader checks the expiry itself.
+ */
+function isLive(row: Doc<"transientEvents">, now: number): boolean {
+  return row.expiresAt > now;
+}
 
 /**
  * Subscribe to a transient event by instanceId + correlationKey.
@@ -24,13 +33,14 @@ export const get = query({
     if (!(await isInstanceMember(ctx, args.instanceId))) {
       return null;
     }
-    return ctx.db
+    const latest = await ctx.db
       .query("transientEvents")
       .withIndex("by_instance_correlation", (q) =>
         q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
       )
       .order("desc")
       .first();
+    return latest !== null && isLive(latest, Date.now()) ? latest : null;
   },
 });
 
@@ -51,12 +61,14 @@ export const listByCorrelation = query({
     if (!(await isInstanceMember(ctx, args.instanceId))) {
       return [];
     }
-    return ctx.db
+    const now = Date.now();
+    const rows = await ctx.db
       .query("transientEvents")
       .withIndex("by_instance_correlation", (q) =>
         q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
       )
       .take(200);
+    return rows.filter((row) => isLive(row, now));
   },
 });
 
@@ -77,7 +89,7 @@ export async function emitTransientEvent(
   const ttl = args.ttlMs ?? DEFAULT_TTL_MS;
   const expiresAt = Date.now() + ttl;
 
-  const eventId = await ctx.db.insert("transientEvents", {
+  return await ctx.db.insert("transientEvents", {
     instanceId: args.instanceId,
     correlationKey: args.correlationKey,
     type: args.type,
@@ -86,11 +98,6 @@ export async function emitTransientEvent(
     data: args.data,
     expiresAt,
   });
-
-  // Schedule cleanup
-  await ctx.scheduler.runAt(expiresAt, internal.transientEvents.deleteEvent, { eventId });
-
-  return eventId;
 }
 
 /**
@@ -128,14 +135,22 @@ export const emitUnlessNewer = internalMutation({
 });
 
 /**
- * Delete a single transient event (used by scheduled cleanup).
+ * Deletes expired rows, oldest first, a page at a time; runs from a cron. A
+ * full page reschedules at once, so a backlog drains without waiting for the
+ * next tick.
  */
-export const deleteEvent = internalMutation({
-  args: { eventId: v.id("transientEvents") },
-  handler: async (ctx, args) => {
-    const event = await ctx.db.get(args.eventId);
-    if (event) {
-      await ctx.db.delete(args.eventId);
+export const sweepExpired = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const expired = await ctx.db
+      .query("transientEvents")
+      .withIndex("by_expires_at", (q) => q.lt("expiresAt", Date.now()))
+      .take(TRANSIENT_SWEEP_BATCH);
+    for (const row of expired) {
+      await ctx.db.delete(row._id);
+    }
+    if (expired.length === TRANSIENT_SWEEP_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.transientEvents.sweepExpired, {});
     }
   },
 });
