@@ -48,9 +48,6 @@ crons.interval("stream live state sweep", { minutes: 10 }, internal.streamStatus
 // sits idle and nothing reports it.
 crons.interval("shoutout queue sweep", { minutes: 10 }, internal.shoutouts.sweepStalledQueues);
 
-// Pairing attempts live ten minutes; this deletes them an hour after expiry.
-crons.interval("companion pairing cleanup", { hours: 1 }, internal.companionPairing.cleanupExpired);
-
 // Re-sends each bridging instance's relay configuration, repairing an engine
 // that lost it. Reads only enabled companion endpoints.
 crons.interval("companion relay resync", { minutes: 15 }, internal.companionRelay.resyncBridgedInstances, {});
