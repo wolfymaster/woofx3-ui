@@ -1,11 +1,13 @@
 import { FORM_KIND, WOOFX3_MODULE } from "@shared/resource-kinds";
 import { parseFormFields } from "@shared/user-pages";
-import { ListPlus, Plus } from "lucide-react";
+import { ListPlus, Plus, Table2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { AddFormToQueueDialog } from "@/components/resources/add-form-to-queue-dialog";
+import { SaveFormToDatabaseDialog } from "@/components/resources/save-form-to-database-dialog";
 import { Button } from "@/components/ui/button";
+import { useDatabasesSupported } from "@/engine/hooks/use-databases";
 import {
   useCreateResourceInstanceRequest,
   useResourceInstancesOfKind,
@@ -25,6 +27,8 @@ export function FormWidgetActions({ value, onChange }: { value: string; onChange
   const createInstance = useCreateResourceInstanceRequest();
   const [creating, setCreating] = useState(false);
   const [addingToQueue, setAddingToQueue] = useState(false);
+  const databasesSupported = useDatabasesSupported() === true;
+  const [savingToDatabase, setSavingToDatabase] = useState(false);
   const chosen = forms?.find((row) => row.canonicalId === value);
   const settings = chosen ? resourceSettings(chosen) : null;
   const hasQuestions = settings !== null && parseFormFields(settings.fields).length > 0;
@@ -54,6 +58,17 @@ export function FormWidgetActions({ value, onChange }: { value: string; onChange
             Add to a queue
           </Button>
         )}
+        {chosen && databasesSupported && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSavingToDatabase(true)}
+            data-testid="button-widget-form-to-database"
+          >
+            <Table2 className="mr-1.5 h-3.5 w-3.5" />
+            Save answers to a database
+          </Button>
+        )}
         {chosen && (
           <Link href={formPath} className="text-sm font-medium underline">
             Edit its questions
@@ -80,6 +95,14 @@ export function FormWidgetActions({ value, onChange }: { value: string; onChange
             });
             onChange(`${kind.moduleName}:${kind.kind}:${resourceInstanceId}`);
           }}
+        />
+      )}
+      {savingToDatabase && chosen && settings && (
+        <SaveFormToDatabaseDialog
+          formId={chosen.canonicalId}
+          formName={resourceName(chosen)}
+          settings={settings}
+          onClose={() => setSavingToDatabase(false)}
         />
       )}
       {addingToQueue && chosen && settings && (
