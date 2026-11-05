@@ -1,4 +1,13 @@
 import type {
+  DatabaseRecord,
+  DatabaseRecordCreate,
+  DatabaseRecordCreateResult,
+  DatabaseRecordDeleteResult,
+  DatabaseRecordPage,
+  DatabaseRecordUpdate,
+  DatabaseRecordUpdateResult,
+} from "@woofx3/api";
+import type {
   AdSchedule,
   AdSnoozeResult,
   AlertClearResult,
@@ -51,6 +60,7 @@ import type {
   EventLogSelection,
   EventLogSettings,
   EventWatch,
+  Fetched,
   FormSubmission,
   FormSubmissionId,
   FormSubmissionQueueStatus,
@@ -265,6 +275,7 @@ export interface EngineGateway {
   readonly twitchChat: TwitchChatGateway;
   readonly clips: ClipsGateway;
   readonly formSubmissions: FormSubmissionsGateway;
+  readonly databases: DatabasesGateway;
   readonly streamInfo: StreamInfoGateway;
   readonly pageIntros: PageIntrosGateway;
   readonly dashboard: DashboardGateway;
@@ -1012,6 +1023,30 @@ export interface FormSubmissionsGateway {
   /** Null when the caller can't see it; undefined while loading. */
   useQueueStatus(): FormSubmissionQueueStatus | null | undefined;
   useRetryRequest(): (submissionId: FormSubmissionId) => Promise<void>;
+}
+
+/** How a database's rows are listed: by a column id or creation time, one page. */
+export interface DatabaseRecordsView {
+  sortBy?: string;
+  direction?: "asc" | "desc";
+  offset?: number;
+  limit: number;
+}
+
+/**
+ * The rows of a database resource instance. The engine owns them and checks
+ * every value against the columns, so both gateways ask it; reads are fetched
+ * again whenever the engine reports a row of that database changed.
+ */
+export interface DatabasesGateway {
+  /** One page of rows and how many the database holds. */
+  useRecords(databaseId: string, view: DatabaseRecordsView, options?: ReadOptions): Fetched<DatabaseRecordPage>;
+  /** Null when the database holds no row with that id. */
+  useRecord(databaseId: string, recordId: string, options?: ReadOptions): Fetched<DatabaseRecord | null>;
+  /** Rejects a value that does not fit its column, naming the column. */
+  useCreateRequest(): (create: DatabaseRecordCreate) => Promise<DatabaseRecordCreateResult>;
+  useUpdateRequest(): (update: DatabaseRecordUpdate) => Promise<DatabaseRecordUpdateResult>;
+  useDeleteRequest(): (databaseId: string, recordId: string) => Promise<DatabaseRecordDeleteResult>;
 }
 
 export interface ClipsGateway {

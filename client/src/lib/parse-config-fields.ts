@@ -39,6 +39,9 @@ export function parseConfigFieldSource(raw: unknown): ConfigFieldSource | undefi
   if (o.kind === "scenePlacements" && typeof o.sceneField === "string") {
     return { kind: "scenePlacements", sceneField: o.sceneField };
   }
+  if (o.kind === "databaseColumns" && typeof o.databaseField === "string") {
+    return { kind: "databaseColumns", databaseField: o.databaseField };
+  }
   return parseInternalRequest(o);
 }
 

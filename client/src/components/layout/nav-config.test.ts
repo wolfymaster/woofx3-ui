@@ -89,13 +89,14 @@ describe("isNavGroupOpen", () => {
 describe("flattenNavItems", () => {
   test("nested entries follow their parent", () => {
     const ids = flattenNavItems(STREAM_ITEMS).map((item) => item.id);
-    expect(ids.slice(ids.indexOf("alerts"), ids.indexOf("alerts") + 7)).toEqual([
+    expect(ids.slice(ids.indexOf("alerts"), ids.indexOf("alerts") + 8)).toEqual([
       "alerts",
       "counters",
       "timers",
       "queues",
       "schedules",
       "forms",
+      "databases",
       "workflows",
     ]);
   });
@@ -118,6 +119,7 @@ describe("withAlertsChildren", () => {
       "queues",
       "schedules",
       "forms",
+      "databases",
       "resource-kind:wheel_spin:wheel",
       "workflows",
     ]);

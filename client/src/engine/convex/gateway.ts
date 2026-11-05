@@ -7,6 +7,7 @@ import { convexClipsGateway } from "./clips";
 import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
 import { convexDashboardGateway } from "./dashboard";
+import { convexDatabasesGateway } from "./databases";
 import { convexDefaultSeedGateway } from "./default-seed";
 import { convexEventLogGateway } from "./event-log";
 import { convexFormSubmissionsGateway } from "./form-submissions";
@@ -70,6 +71,7 @@ export const convexEngineGateway: EngineGateway = {
   twitchChat: convexTwitchChatGateway,
   clips: convexClipsGateway,
   formSubmissions: convexFormSubmissionsGateway,
+  databases: convexDatabasesGateway,
   streamInfo: convexStreamInfoGateway,
   pageIntros: convexPageIntrosGateway,
   dashboard: convexDashboardGateway,

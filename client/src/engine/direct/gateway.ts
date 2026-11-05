@@ -7,6 +7,7 @@ import { directChatModerationGateway } from "./chat-moderation";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
+import { directDatabasesGateway } from "./databases";
 import { directDefaultSeedGateway } from "./default-seed";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
@@ -89,6 +90,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
     formSubmissions: directFormSubmissionsGateway,
+    databases: directDatabasesGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
     pageIntros: directPageIntrosGateway(runtime),
     dashboard: directDashboardGateway(runtime),

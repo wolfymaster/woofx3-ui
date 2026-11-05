@@ -80,6 +80,11 @@ export function widgetSummary(widget: PageWidget): string {
       return widget.config.alt;
     case "form":
       return widget.config.resource === "" ? "Not chosen yet" : "";
+    case "database":
+      return (
+        widget.config.label ??
+        (widget.config.resource === "" ? "Not chosen yet" : plural(widget.config.columns.length, "column"))
+      );
   }
 }
 

@@ -3,6 +3,7 @@ import type { ActionCtx } from "../../_generated/server";
 import type { EngineApi } from "../engineInstanceUrl";
 import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
+import { databasesStep } from "./steps/databases";
 import { functionsStep } from "./steps/functions";
 import { groupsStep } from "./steps/groups";
 import { modulesStep } from "./steps/modules";
@@ -24,7 +25,8 @@ export type SyncStepName =
   | "triggers"
   | "actions"
   | "widgets"
-  | "resources";
+  | "resources"
+  | "databases";
 
 export interface SyncStepContext {
   ctx: ActionCtx;
@@ -58,4 +60,6 @@ export const SYNC_STEPS: readonly SyncStep[] = [
   actionsStep,
   widgetsStep,
   resourcesStep,
+  // After resources: which databases have a public column is read from their mirrored settings.
+  databasesStep,
 ];
