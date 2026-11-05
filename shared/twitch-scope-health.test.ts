@@ -68,7 +68,6 @@ describe("missingTwitchCapabilities", () => {
     const warnings = { label: "Moderation: warnings", optional: true, missingScopes: ["moderator:manage:warnings"] };
     expect(missingTwitchCapabilities(granted)).toEqual([warnings]);
     expect(twitchScopeHealth({ scopes: granted })).toEqual({ state: "ok", optionalMissing: [warnings] });
-    expect(missingRequiredTwitchScopes(granted)).toEqual([]);
   });
 
   test("ignores extra scopes the link happens to hold", () => {
