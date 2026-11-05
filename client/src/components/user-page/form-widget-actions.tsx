@@ -1,10 +1,9 @@
 import { FORM_KIND, WOOFX3_MODULE } from "@shared/resource-kinds";
 import { parseFormFields } from "@shared/user-pages";
-import { ListPlus, Plus, Table2 } from "lucide-react";
+import { Plus, Table2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
-import { AddFormToQueueDialog } from "@/components/resources/add-form-to-queue-dialog";
 import { SaveFormToDatabaseDialog } from "@/components/resources/save-form-to-database-dialog";
 import { Button } from "@/components/ui/button";
 import { useDatabasesSupported } from "@/engine/hooks/use-databases";
@@ -18,7 +17,7 @@ import { resourceKindPath } from "@/lib/resource-kind-route";
 
 /**
  * What can be done from a page's form widget without leaving the page: make a
- * new form, and send the chosen one's answers to a queue. A form is edited on
+ * new form, and save the chosen one's answers to a database. A form is edited on
  * its own page, since it may sit on several.
  */
 export function FormWidgetActions({ value, onChange }: { value: string; onChange: (canonicalId: string) => void }) {
@@ -26,7 +25,6 @@ export function FormWidgetActions({ value, onChange }: { value: string; onChange
   const forms = useResourceInstancesOfKind(FORM_KIND);
   const createInstance = useCreateResourceInstanceRequest();
   const [creating, setCreating] = useState(false);
-  const [addingToQueue, setAddingToQueue] = useState(false);
   const databasesSupported = useDatabasesSupported() === true;
   const [savingToDatabase, setSavingToDatabase] = useState(false);
   const chosen = forms?.find((row) => row.canonicalId === value);
@@ -47,17 +45,6 @@ export function FormWidgetActions({ value, onChange }: { value: string; onChange
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           New form
         </Button>
-        {chosen && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAddingToQueue(true)}
-            data-testid="button-widget-form-to-queue"
-          >
-            <ListPlus className="mr-1.5 h-3.5 w-3.5" />
-            Add to a queue
-          </Button>
-        )}
         {chosen && databasesSupported && (
           <Button
             variant="outline"
@@ -103,14 +90,6 @@ export function FormWidgetActions({ value, onChange }: { value: string; onChange
           formName={resourceName(chosen)}
           settings={settings}
           onClose={() => setSavingToDatabase(false)}
-        />
-      )}
-      {addingToQueue && chosen && settings && (
-        <AddFormToQueueDialog
-          formId={chosen.canonicalId}
-          formName={resourceName(chosen)}
-          settings={settings}
-          onClose={() => setAddingToQueue(false)}
         />
       )}
     </div>
