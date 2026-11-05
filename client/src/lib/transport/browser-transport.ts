@@ -7,6 +7,14 @@
 // still polled, since the engine exposes no subscription for them.
 
 import type {
+  DatabaseRecord,
+  DatabaseRecordCreate,
+  DatabaseRecordCreateResult,
+  DatabaseRecordDeleteResult,
+  DatabaseRecordPage,
+  DatabaseRecordsQuery,
+  DatabaseRecordUpdate,
+  DatabaseRecordUpdateResult,
   EventLogPage,
   EventLogQuery,
   EventLogSelection,
@@ -312,6 +320,30 @@ export class BrowserTransport implements WoofxTransport {
 
   async setEventLogSelection(_instanceId: string, selection: EventLogSelection): Promise<EventLogSettings> {
     return this.getApi().setEventLogSelection(selection);
+  }
+
+  async listDatabaseRecords(_instanceId: string, query: DatabaseRecordsQuery): Promise<DatabaseRecordPage> {
+    return this.getApi().listDatabaseRecords(query);
+  }
+
+  async getDatabaseRecord(_instanceId: string, databaseId: string, recordId: string): Promise<DatabaseRecord | null> {
+    return this.getApi().getDatabaseRecord(databaseId, recordId);
+  }
+
+  async createDatabaseRecord(_instanceId: string, create: DatabaseRecordCreate): Promise<DatabaseRecordCreateResult> {
+    return this.getApi().createDatabaseRecord(create);
+  }
+
+  async updateDatabaseRecord(_instanceId: string, update: DatabaseRecordUpdate): Promise<DatabaseRecordUpdateResult> {
+    return this.getApi().updateDatabaseRecord(update);
+  }
+
+  async deleteDatabaseRecord(
+    _instanceId: string,
+    databaseId: string,
+    recordId: string
+  ): Promise<DatabaseRecordDeleteResult> {
+    return this.getApi().deleteDatabaseRecord(databaseId, recordId);
   }
 
   /** Polled only while the tab is visible; returning to the tab polls at once. */

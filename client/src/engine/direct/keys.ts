@@ -63,6 +63,12 @@ export const directKeys = {
     installed: () => ["modules", "installed"] as const,
     assets: (moduleId: string, kinds: readonly string[]) => ["modules", "assets", moduleId, ...kinds] as const,
   },
+  databases: {
+    /** Every read of one database's rows. */
+    database: (databaseId: string) => ["databases", databaseId] as const,
+    records: (databaseId: string, view: object) => ["databases", databaseId, "records", view] as const,
+    record: (databaseId: string, recordId: string) => ["databases", databaseId, "record", recordId] as const,
+  },
   moduleResources: {
     all: ["moduleResources"] as const,
     instances: () => ["moduleResources", "instances"] as const,

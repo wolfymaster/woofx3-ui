@@ -6,6 +6,7 @@ import { directAlertQueueGateway } from "./alert-queue";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
+import { directDatabasesGateway } from "./databases";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
 import { directFormSubmissionsGateway } from "./form-submissions";
@@ -86,6 +87,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
     formSubmissions: directFormSubmissionsGateway,
+    databases: directDatabasesGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
     goLive: directGoLiveGateway(runtime, host.streamStartMarkers),
     pageIntros: directPageIntrosGateway(runtime),
