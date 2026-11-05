@@ -3,6 +3,7 @@ import type { ActionCtx } from "../../_generated/server";
 import type { EngineApi } from "../engineInstanceUrl";
 import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
+import { databasesStep } from "./steps/databases";
 import { eventQueueStep } from "./steps/eventQueue";
 import { functionsStep } from "./steps/functions";
 import { groupsStep } from "./steps/groups";
@@ -26,6 +27,7 @@ export type SyncStepName =
   | "actions"
   | "widgets"
   | "resources"
+  | "databases"
   | "eventQueue";
 
 export interface SyncStepContext {
@@ -60,6 +62,8 @@ export const SYNC_STEPS: readonly SyncStep[] = [
   actionsStep,
   widgetsStep,
   resourcesStep,
+  // After resources: which databases have a public column is read from their mirrored settings.
+  databasesStep,
   // Moves an engine onto the event queue once it advertises support, so an
   // engine upgraded in place moves at its next sync.
   eventQueueStep,

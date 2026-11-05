@@ -22,13 +22,13 @@ describe("twitchReconnectMessage", () => {
       state: "missing",
       missing: [
         { label: "Clips", optional: false, missingScopes: ["clips:edit"] },
-        { label: "Pinned messages", optional: false, missingScopes: ["moderator:manage:chat_messages"] },
+        { label: "Pinned and removed messages", optional: false, missingScopes: ["moderator:manage:chat_messages"] },
       ],
       optionalMissing: [
         { label: "Moderation: chat modes", optional: true, missingScopes: ["moderator:manage:chat_settings"] },
       ],
     });
-    expect(message).toContain("Clips, Pinned messages");
+    expect(message).toContain("Clips, Pinned and removed messages");
     expect(message).not.toContain("chat modes");
   });
 

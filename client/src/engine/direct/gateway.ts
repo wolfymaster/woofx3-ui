@@ -3,9 +3,11 @@ import type { EngineGateway, ModuleOAuthGateway, SetupImportsGateway } from "@/e
 import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
+import { directChatModerationGateway } from "./chat-moderation";
 import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
+import { directDatabasesGateway } from "./databases";
 import { directDefaultSeedGateway } from "./default-seed";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
@@ -82,11 +84,13 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     defaultSeed: directDefaultSeedGateway(runtime),
     adBreaks: directAdBreaksGateway(runtime),
     moderation: directModerationGateway(runtime),
+    chatModeration: directChatModerationGateway(runtime),
     pins: directPinsGateway(runtime),
     shoutouts: directShoutoutsGateway(runtime, host.shoutoutQueue),
     twitchChat: directTwitchChatGateway(runtime),
     clips: directClipsGateway(runtime),
     formSubmissions: directFormSubmissionsGateway,
+    databases: directDatabasesGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
     pageIntros: directPageIntrosGateway(runtime),
     dashboard: directDashboardGateway(runtime),

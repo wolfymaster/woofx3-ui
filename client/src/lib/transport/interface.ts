@@ -1,4 +1,18 @@
-import type { EventLogPage, EventLogQuery, EventLogSelection, EventLogSettings, StreamEventFrame } from "@woofx3/api";
+import type {
+  DatabaseRecord,
+  DatabaseRecordCreate,
+  DatabaseRecordCreateResult,
+  DatabaseRecordDeleteResult,
+  DatabaseRecordPage,
+  DatabaseRecordsQuery,
+  DatabaseRecordUpdate,
+  DatabaseRecordUpdateResult,
+  EventLogPage,
+  EventLogQuery,
+  EventLogSelection,
+  EventLogSettings,
+  StreamEventFrame,
+} from "@woofx3/api";
 
 // WoofxTransport — abstracts communication with a woofx3 instance.
 // The browser (BrowserTransport) connects directly via WebSocket.
@@ -103,6 +117,13 @@ export interface WoofxTransport {
   getEventLogSettings(instanceId: string): Promise<EventLogSettings>;
   /** Replaces the engine's selection and returns the settings it results in. */
   setEventLogSelection(instanceId: string, selection: EventLogSelection): Promise<EventLogSettings>;
+
+  // Database rows, which only the engine holds.
+  listDatabaseRecords(instanceId: string, query: DatabaseRecordsQuery): Promise<DatabaseRecordPage>;
+  getDatabaseRecord(instanceId: string, databaseId: string, recordId: string): Promise<DatabaseRecord | null>;
+  createDatabaseRecord(instanceId: string, create: DatabaseRecordCreate): Promise<DatabaseRecordCreateResult>;
+  updateDatabaseRecord(instanceId: string, update: DatabaseRecordUpdate): Promise<DatabaseRecordUpdateResult>;
+  deleteDatabaseRecord(instanceId: string, databaseId: string, recordId: string): Promise<DatabaseRecordDeleteResult>;
 
   // Workflow runs
   subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void;

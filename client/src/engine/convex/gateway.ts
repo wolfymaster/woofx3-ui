@@ -2,10 +2,12 @@ import type { EngineGateway } from "@/engine/gateway";
 import { convexAdBreaksGateway } from "./ad-breaks";
 import { convexAlertLibraryGateway } from "./alert-library";
 import { convexAlertQueueGateway } from "./alert-queue";
+import { convexChatModerationGateway } from "./chat-moderation";
 import { convexClipsGateway } from "./clips";
 import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
 import { convexDashboardGateway } from "./dashboard";
+import { convexDatabasesGateway } from "./databases";
 import { convexDefaultSeedGateway } from "./default-seed";
 import { convexEventLogGateway } from "./event-log";
 import { convexFormSubmissionsGateway } from "./form-submissions";
@@ -63,11 +65,13 @@ export const convexEngineGateway: EngineGateway = {
   defaultSeed: convexDefaultSeedGateway,
   adBreaks: convexAdBreaksGateway,
   moderation: convexModerationGateway,
+  chatModeration: convexChatModerationGateway,
   pins: convexPinsGateway,
   shoutouts: convexShoutoutsGateway,
   twitchChat: convexTwitchChatGateway,
   clips: convexClipsGateway,
   formSubmissions: convexFormSubmissionsGateway,
+  databases: convexDatabasesGateway,
   streamInfo: convexStreamInfoGateway,
   pageIntros: convexPageIntrosGateway,
   dashboard: convexDashboardGateway,

@@ -1,5 +1,6 @@
 import type { PublicPageWidget } from "@shared/user-pages";
 import { CounterWidget } from "./counter-widget";
+import { DatabaseWidget } from "./database-widget";
 import { FormWidget } from "./form-widget";
 import { ImageWidget } from "./image-widget";
 import { LinksWidget } from "./links-widget";
@@ -23,5 +24,7 @@ export function PageWidgetView({ widget }: { widget: PublicPageWidget }) {
       return <ImageWidget widget={widget} />;
     case "form":
       return <FormWidget widget={widget} />;
+    case "database":
+      return <DatabaseWidget widget={widget} />;
   }
 }

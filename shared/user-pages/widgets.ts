@@ -1,4 +1,4 @@
-import { COUNTER_KIND, FORM_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, DATABASE_KIND, FORM_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import { type Infer, type Validator, v } from "convex/values";
 import { checkFormFieldId, checkId, checkImage, checkLinkUrl, checkUniqueIds, pageImageValidator } from "./fields";
 import { hasUndeliverableText } from "./forms";
@@ -15,12 +15,13 @@ import { type PageProblem, ProblemReport } from "./problems";
  */
 
 /** The resource kinds a widget can bind, as `{module}:{kind}`. */
-export const BINDABLE_RESOURCE_KINDS = [COUNTER_KIND, TIMER_KIND, FORM_KIND] as const;
+export const BINDABLE_RESOURCE_KINDS = [COUNTER_KIND, TIMER_KIND, FORM_KIND, DATABASE_KIND] as const;
 export type BindableResourceKind = (typeof BINDABLE_RESOURCE_KINDS)[number];
 export const bindableResourceKindValidator = v.union(
   v.literal(COUNTER_KIND),
   v.literal(TIMER_KIND),
-  v.literal(FORM_KIND)
+  v.literal(FORM_KIND),
+  v.literal(DATABASE_KIND)
 );
 
 /** An engine resource a widget shows the value of, by the canonical id `{module}:{kind}:{id}`. */
@@ -329,6 +330,44 @@ export const FORM_WIDGET = defineWidget({
   bindings: (config) => [{ canonicalId: config.resource, kind: FORM_KIND }],
 });
 
+/** What a database widget sorts by besides a column id. */
+export const DATABASE_WIDGET_SORT_CREATED = "createdAt";
+
+export const DATABASE_WIDGET = defineWidget({
+  type: "database",
+  label: "Database",
+  description: "Rows of one of your databases, showing the columns you made public.",
+  configValidator: v.object({
+    resource: v.string(),
+    columns: v.array(v.string()),
+    sortBy: v.string(),
+    direction: v.union(v.literal("asc"), v.literal("desc")),
+    limit: v.number(),
+    label: v.optional(v.string()),
+  }),
+  defaultConfig: () => ({
+    resource: "",
+    columns: [],
+    sortBy: DATABASE_WIDGET_SORT_CREATED,
+    direction: "desc" as const,
+    limit: 20,
+  }),
+  check: (config, report) => {
+    checkResource(config.resource, report);
+    checkLabel(config.label, report);
+    const columns = report.field("columns");
+    if (config.columns.length === 0) {
+      columns.add("Choose at least one column to show");
+    }
+    columns.count(config.columns.length, "columns", USER_PAGE_LIMITS.databaseWidgetColumns);
+    checkUniqueIds(config.columns, columns);
+    if (!Number.isInteger(config.limit) || config.limit < 1 || config.limit > USER_PAGE_LIMITS.databaseWidgetRows) {
+      report.field("limit").add(`Show 1 to ${USER_PAGE_LIMITS.databaseWidgetRows} rows`);
+    }
+  },
+  bindings: (config) => [{ canonicalId: config.resource, kind: DATABASE_KIND }],
+});
+
 function placedWidget<Type extends string, Config>(definition: PageWidgetDefinition<Type, Config>) {
   return v.object({ id: v.string(), type: v.literal(definition.type), config: definition.configValidator });
 }
@@ -341,7 +380,8 @@ export const pageWidgetValidator = v.union(
   placedWidget(LIVE_STATUS_WIDGET),
   placedWidget(LINKS_WIDGET),
   placedWidget(IMAGE_WIDGET),
-  placedWidget(FORM_WIDGET)
+  placedWidget(FORM_WIDGET),
+  placedWidget(DATABASE_WIDGET)
 );
 
 export type PageWidget = Infer<typeof pageWidgetValidator>;
@@ -358,6 +398,7 @@ export const PAGE_WIDGETS: PageWidgetRegistry = {
   links: LINKS_WIDGET,
   image: IMAGE_WIDGET,
   form: FORM_WIDGET,
+  database: DATABASE_WIDGET,
 };
 
 export const PAGE_WIDGET_TYPES = Object.keys(PAGE_WIDGETS) as PageWidgetType[];

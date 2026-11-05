@@ -1,4 +1,14 @@
-import { Bell, CalendarClock, ClipboardList, Layers, ListOrdered, type LucideIcon, Tally5, Timer } from "lucide-react";
+import {
+  Bell,
+  CalendarClock,
+  ClipboardList,
+  Layers,
+  ListOrdered,
+  type LucideIcon,
+  Table2,
+  Tally5,
+  Timer,
+} from "lucide-react";
 
 /**
  * The icons the streamer's own things wear wherever they appear: the sidebar entry
@@ -13,4 +23,5 @@ export const STREAM_OBJECT_ICONS = {
   queues: ListOrdered,
   schedules: CalendarClock,
   forms: ClipboardList,
+  databases: Table2,
 } as const satisfies Record<string, LucideIcon>;

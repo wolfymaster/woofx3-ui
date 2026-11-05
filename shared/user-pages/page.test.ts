@@ -164,19 +164,20 @@ describe("checkPageContent refuses", () => {
 
 describe("the widget registry", () => {
   // A widget that shows a resource or an image starts without one, which the owner must pick.
-  const needsChoosing: Record<string, string> = {
-    counter: "resource",
-    timer: "resource",
-    form: "resource",
-    image: "image.url",
+  const needsChoosing: Record<string, string[]> = {
+    counter: ["resource"],
+    timer: ["resource"],
+    form: ["resource"],
+    image: ["image.url"],
+    database: ["resource", "columns"],
   };
 
   test.each(PAGE_WIDGET_TYPES)("%s starts valid but for what its owner must choose", (type) => {
     const widget = { id: "w1", type, config: PAGE_WIDGETS[type].defaultConfig() } as PageWidget;
     const result = checkPageContent(onlyWidget(widget));
     const paths = result.ok ? [] : result.problems.map((problem) => problem.path);
-    const required = needsChoosing[type];
-    expect(paths).toEqual(required ? [`sections[0].widgets[0].config.${required}`] : []);
+    const required = needsChoosing[type] ?? [];
+    expect(paths).toEqual(required.map((path) => `sections[0].widgets[0].config.${path}`));
   });
 
   test("knows its own type ids and nothing else", () => {

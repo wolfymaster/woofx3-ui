@@ -924,6 +924,7 @@ export const startRun = internalMutation({
         { name: "actions", status: "pending", itemsProcessed: 0 },
         { name: "widgets", status: "pending", itemsProcessed: 0 },
         { name: "resources", status: "pending", itemsProcessed: 0 },
+        { name: "databases", status: "pending", itemsProcessed: 0 },
         { name: "eventQueue", status: "pending", itemsProcessed: 0 },
       ],
     });
@@ -945,6 +946,7 @@ export const updateRunStep = internalMutation({
       v.literal("actions"),
       v.literal("widgets"),
       v.literal("resources"),
+      v.literal("databases"),
       v.literal("eventQueue")
     ),
     patch: v.object({

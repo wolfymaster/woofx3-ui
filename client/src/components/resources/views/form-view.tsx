@@ -5,15 +5,16 @@ import {
   ProblemReport,
   parseFormFields,
 } from "@shared/user-pages";
-import { ListPlus, Loader2 } from "lucide-react";
+import { Loader2, Table2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { AddFormToQueueDialog } from "@/components/resources/add-form-to-queue-dialog";
 import type { KindView } from "@/components/resources/kind-views";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
+import { SaveFormToDatabaseDialog } from "@/components/resources/save-form-to-database-dialog";
 import { FormQuestionsEditor } from "@/components/resources/views/form-questions-editor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SubmissionsPanel } from "@/components/user-page/submissions-panel";
+import { useDatabasesSupported } from "@/engine/hooks/use-databases";
 import { useFormSubmissionsSupported } from "@/engine/hooks/use-form-submissions";
 import { useUpdateResourceInstanceRequest } from "@/engine/hooks/use-module-resources";
 import { toast } from "@/hooks/use-toast";
@@ -34,10 +35,10 @@ function questionCount(settings: Record<string, unknown>): number {
   return parseFormFields(settings.fields).length;
 }
 
-/** A woofx3 form: its questions, the answers it has received, and a quick way to send them to a queue. */
+/** A woofx3 form: its questions, the answers it has received, and a quick way to save them to a database. */
 export const formView: KindView = {
   description:
-    "Questions viewers answer on your public page. Decide below what happens with each answer: add it to a queue, post it to chat, or anything else.",
+    "Questions viewers answer on your public page. Decide below what happens with each answer: save it to a database, post it to chat, or anything else.",
   icon: STREAM_OBJECT_ICONS.forms,
   railValue: ({ settings }) => questionCount(settings).toLocaleString(),
   detail: (props) => <FormPanel key={props.instance.canonicalId} {...props} />,
@@ -46,27 +47,30 @@ export const formView: KindView = {
 function FormPanel(props: ResourceDetailProps) {
   const { instance, settings } = props;
   const submissionsSupported = useFormSubmissionsSupported();
-  const [addingToQueue, setAddingToQueue] = useState(false);
+  const databasesSupported = useDatabasesSupported() === true;
+  const [savingToDatabase, setSavingToDatabase] = useState(false);
   return (
     <div className="space-y-6">
       <QuestionsCard instance={instance} settings={settings} />
-      <div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setAddingToQueue(true)}
-          data-testid="button-add-form-to-queue"
-        >
-          <ListPlus className="mr-1.5 h-3.5 w-3.5" />
-          Add to a queue
-        </Button>
+      <div className="flex flex-wrap gap-2">
+        {databasesSupported && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSavingToDatabase(true)}
+            data-testid="button-save-form-to-database"
+          >
+            <Table2 className="mr-1.5 h-3.5 w-3.5" />
+            Save answers to a database
+          </Button>
+        )}
       </div>
-      {addingToQueue && (
-        <AddFormToQueueDialog
+      {savingToDatabase && (
+        <SaveFormToDatabaseDialog
           formId={instance.canonicalId}
           formName={resourceName(instance)}
           settings={settings}
-          onClose={() => setAddingToQueue(false)}
+          onClose={() => setSavingToDatabase(false)}
         />
       )}
       {submissionsSupported && (
