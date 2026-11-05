@@ -6,8 +6,8 @@ import type { PinHistoryEntryId, ShoutoutEntryId, StreamInfoPresetId } from "@/e
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // The Convex hooks are replaced so each call can be checked: a gateway
-// request or read must send what the Twitch widgets, the command palette and
-// the go-live checklist sent before, and answer with the gateway's own
+// request or read must send what the Twitch widgets and the command palette
+// sent before, and answer with the gateway's own
 // records.
 
 type FunctionRef = Parameters<typeof getFunctionName>[0];
@@ -55,7 +55,6 @@ const ANSWERS: Record<string, unknown> = {
   "streamInfo:createMarker": { positionSeconds: 12, createdAt: null },
   "streamInfo:savePreset": "preset-1",
   "twitchClips:createClip": { clipId: "clip-1", editUrl: "https://clips.test/edit" },
-  "goLive:complete": { announcement: { status: "done" }, marker: { status: "done" } },
 };
 
 // Bun runs every test file in one process and a module mock is not undone,
@@ -95,9 +94,7 @@ const { convexShoutoutsGateway, reorderQueueOptimistically } = await import("./s
 const { convexTwitchChatGateway } = await import("./twitch-chat");
 const { convexClipsGateway } = await import("./clips");
 const { convexStreamInfoGateway, removePresetOptimistically, toStreamInfo } = await import("./stream-info");
-const { convexGoLiveGateway, toGoLiveCompletion, toGoLiveStreamInfoFacts, toGoLiveTwitchFacts } = await import(
-  "./go-live"
-);
+const { convexOverlaysGateway } = await import("./overlays");
 
 const instanceId = TEST_INSTANCE_ID;
 
@@ -286,22 +283,6 @@ describe("requests carry the scope's instance", () => {
         renderInScope(() => convexStreamInfoGateway.useRemovePresetRequest())("preset-1" as StreamInfoPresetId),
       expected: { name: "streamInfo:removePreset", args: { instanceId, presetId: "preset-1" } },
     },
-    {
-      name: "dismiss a check",
-      run: () => renderInScope(() => convexGoLiveGateway.useSetCheckDismissedRequest())("obs", true),
-      expected: { name: "goLive:setCheckDismissed", args: { instanceId, checkId: "obs", dismissed: true } },
-    },
-    {
-      name: "finish the checklist",
-      run: () => {
-        results["goLive:complete"] = { announcement: { status: "done" }, marker: { status: "done" } };
-        return renderInScope(() => convexGoLiveGateway.useCompleteRequest())({
-          announcement: "live!",
-          dropMarker: true,
-        });
-      },
-      expected: { name: "goLive:complete", args: { instanceId, announcement: "live!", dropMarker: true } },
-    },
   ];
 
   for (const { name, run, expected } of cases) {
@@ -390,14 +371,9 @@ describe("reads", () => {
       query: "streamInfo:listPresets",
     },
     {
-      name: "go-live checklist",
-      read: (enabled) => convexGoLiveGateway.useChecklist({ enabled }),
-      query: "goLive:checklist",
-    },
-    {
-      name: "go-live overlays",
-      read: (enabled) => convexGoLiveGateway.useOverlays({ enabled }),
-      query: "goLive:overlays",
+      name: "overlay facts",
+      read: (enabled) => convexOverlaysGateway.useFacts({ enabled }),
+      query: "browserSource:overlayFacts",
     },
   ];
 
@@ -478,84 +454,9 @@ describe("optimistic updates", () => {
 });
 
 describe("mappers", () => {
-  type TwitchFacts = Parameters<typeof toGoLiveTwitchFacts>[0];
-  type StreamInfoFacts = Parameters<typeof toGoLiveStreamInfoFacts>[0];
-  type Completion = Parameters<typeof toGoLiveCompletion>[0];
   type StreamInfoRow = Parameters<typeof toStreamInfo>[0];
 
   const cases: Array<{ name: string; map: () => unknown; expected: unknown }> = [
-    {
-      name: "an unlinked Twitch check carries nothing else",
-      map: () => toGoLiveTwitchFacts({ linked: false, login: "stray" } as unknown as TwitchFacts),
-      expected: { linked: false },
-    },
-    {
-      name: "a linked Twitch check keeps its token state and missing scopes",
-      map: () =>
-        toGoLiveTwitchFacts({
-          linked: true,
-          login: "wolfy",
-          tokenValid: false,
-          tokenProblem: "Twitch no longer accepts the connection",
-          missingScopes: ["user:write:chat"],
-        }),
-      expected: {
-        linked: true,
-        login: "wolfy",
-        tokenValid: false,
-        tokenProblem: "Twitch no longer accepts the connection",
-        missingScopes: ["user:write:chat"],
-      },
-    },
-    {
-      name: "an unlinked stream info check carries nothing else",
-      map: () => toGoLiveStreamInfoFacts({ kind: "unlinked", title: "stray" } as unknown as StreamInfoFacts),
-      expected: { kind: "unlinked" },
-    },
-    {
-      name: "a stream info check keeps the channel",
-      map: () =>
-        toGoLiveStreamInfoFacts({
-          kind: "ok",
-          login: "wolfy",
-          title: "Cozy",
-          categoryId: "509658",
-          categoryName: "Just Chatting",
-          tags: ["cozy"],
-        }),
-      expected: {
-        kind: "ok",
-        login: "wolfy",
-        title: "Cozy",
-        categoryId: "509658",
-        categoryName: "Just Chatting",
-        tags: ["cozy"],
-      },
-    },
-    {
-      name: "each finishing step keeps its own outcome",
-      map: () =>
-        toGoLiveCompletion({
-          announcement: { status: "failed", message: "AutoMod held it" },
-          marker: { status: "queued", reason: "When the stream goes live" },
-        } as Completion),
-      expected: {
-        announcement: { status: "failed", message: "AutoMod held it" },
-        marker: { status: "queued", reason: "When the stream goes live" },
-      },
-    },
-    {
-      name: "a skipped step keeps its reason",
-      map: () =>
-        toGoLiveCompletion({
-          announcement: { status: "skipped", reason: "No announcement was asked for" },
-          marker: { status: "done" },
-        } as Completion),
-      expected: {
-        announcement: { status: "skipped", reason: "No announcement was asked for" },
-        marker: { status: "done" },
-      },
-    },
     {
       name: "a channel with no category keeps null",
       map: () => toStreamInfo({ title: "Cozy", category: null, tags: [] }),

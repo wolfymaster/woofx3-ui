@@ -7,9 +7,9 @@ import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
 import { convexDashboardGateway } from "./dashboard";
 import { convexDatabasesGateway } from "./databases";
+import { convexDefaultSeedGateway } from "./default-seed";
 import { convexEventLogGateway } from "./event-log";
 import { convexFormSubmissionsGateway } from "./form-submissions";
-import { convexGoLiveGateway } from "./go-live";
 import { convexMacrosGateway } from "./macros";
 import { convexMarketplaceGateway } from "./marketplace";
 import { convexModerationGateway } from "./moderation";
@@ -61,6 +61,7 @@ export const convexEngineGateway: EngineGateway = {
   moduleOAuth: convexModuleOAuthGateway,
   setupImports: convexSetupImportsGateway,
   starterPacks: convexStarterPacksGateway,
+  defaultSeed: convexDefaultSeedGateway,
   adBreaks: convexAdBreaksGateway,
   moderation: convexModerationGateway,
   pins: convexPinsGateway,
@@ -70,7 +71,6 @@ export const convexEngineGateway: EngineGateway = {
   formSubmissions: convexFormSubmissionsGateway,
   databases: convexDatabasesGateway,
   streamInfo: convexStreamInfoGateway,
-  goLive: convexGoLiveGateway,
   pageIntros: convexPageIntrosGateway,
   dashboard: convexDashboardGateway,
 };

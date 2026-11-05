@@ -9,13 +9,11 @@ import {
   History,
   Key,
   LayoutDashboard,
-  ListChecks,
   MessageSquare,
   MessageSquarePlus,
   PackagePlus,
   Palette,
   Radio,
-  Rocket,
   ScrollText,
   Server,
   Settings,
@@ -85,7 +83,6 @@ export function sectionsFor(sections: NavSection[], isAdmin: boolean): NavSectio
 }
 
 export const STREAM_ITEMS: NavItem[] = [
-  { id: "go-live", label: "Go live", icon: Rocket, href: "/stream/go-live" },
   {
     id: "alerts",
     label: "Alerts",
@@ -113,7 +110,6 @@ export const STREAM_ITEMS: NavItem[] = [
 
 export const HELP_ITEMS: NavItem[] = [
   { id: "learning", label: "Learning", icon: GraduationCap, href: "/help/learning" },
-  { id: "setup", label: "Setup", icon: ListChecks, href: "/setup" },
   { id: "logs", label: "Logs", icon: ScrollText, href: "/help/logs" },
   { id: "feedback", label: "Feedback", icon: MessageSquarePlus, href: FEEDBACK_PATH },
 ];
@@ -128,8 +124,7 @@ export const ADMIN_ITEMS: NavItem[] = [
 
 export const MAIN_NAV_SECTIONS: NavSection[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  // Lands on Alerts, like the /stream redirect in App.tsx, rather than on the
-  // first entry: Go live leads the list for visibility, not as the section's home.
+  // Lands on Alerts, like the /stream redirect in App.tsx.
   { id: "stream", label: "Stream", icon: Radio, href: "/stream/alerts", children: STREAM_ITEMS },
   // The storefront is /marketplace; /modules is still the install surface and
   // is reached from a listing, so the section owns both paths.

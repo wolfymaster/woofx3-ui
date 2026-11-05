@@ -34,6 +34,31 @@ export interface DashboardRailWidget {
   config?: Record<string, unknown>;
 }
 
+/**
+ * Widget types that no longer exist anywhere. A layout saved with one is read
+ * without it, in either mode, so no placeholder is drawn for it; the next save
+ * of that layout drops it for good.
+ */
+export const RETIRED_WIDGET_TYPES: ReadonlySet<string> = new Set(["go-live"]);
+
+/** `panels` with the retired widgets left out; the same array when there are none. */
+export function withoutRetiredPanelWidgets(panels: DashboardPanel[]): DashboardPanel[] {
+  if (!panels.some((panel) => panel.widgets.some((widget) => RETIRED_WIDGET_TYPES.has(widget.type)))) {
+    return panels;
+  }
+  return panels.map((panel) => ({
+    ...panel,
+    widgets: panel.widgets.filter((widget) => !RETIRED_WIDGET_TYPES.has(widget.type)),
+  }));
+}
+
+/** `widgets` with the retired ones left out; the same array when there are none. */
+export function withoutRetiredRailWidgets(widgets: DashboardRailWidget[]): DashboardRailWidget[] {
+  return widgets.some((widget) => RETIRED_WIDGET_TYPES.has(widget.type))
+    ? widgets.filter((widget) => !RETIRED_WIDGET_TYPES.has(widget.type))
+    : widgets;
+}
+
 /** The rail is a column of icon buttons, not a list; more widgets than this are refused. */
 export const MAX_RAIL_WIDGETS = 12;
 

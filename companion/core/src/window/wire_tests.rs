@@ -9,9 +9,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::host::{
-    ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId, ShoutoutQueueView, StreamStartMarker,
-};
+use crate::host::{ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId, ShoutoutQueueView};
 
 fn wire<T: Serialize>(value: &T) -> serde_json::Value {
     serde_json::to_value(value).expect("serializes")
@@ -55,10 +53,6 @@ fn test_window_wire_tagged_unions_carry_their_kind_and_camel_case_fields() {
             "clientId": "id",
             "clientSecret": "secret",
         })
-    );
-    assert_eq!(
-        wire(&StreamStartMarker::Pending { requested_at: 7 }),
-        json!({ "kind": "pending", "requestedAt": 7 })
     );
     assert_eq!(
         wire(&AddressView {

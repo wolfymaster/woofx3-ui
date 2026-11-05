@@ -2,9 +2,8 @@ import { readSentMessageIdAnswer } from "@shared/twitch-chat";
 import type { AuthorizedTwitchCall } from "./twitchAuth";
 import { helixResponse, type TwitchHelixRoute } from "./twitchEngineHelix";
 
-// Posting to the broadcaster's chat as the broadcaster, shared by pinning and
-// the Go live announcement. Only the Helix call lives here; the caller has
-// already checked membership and the user:write:chat scope via authorizeTwitch.
+// Posting to the broadcaster's chat as the broadcaster, used by pinning. Only
+// the Helix call lives here; the caller has already checked membership and the user:write:chat scope via authorizeTwitch.
 
 const TWITCH_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
 

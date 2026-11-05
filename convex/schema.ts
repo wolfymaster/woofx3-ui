@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { defaultSeedValidator, overlayDoneValidator } from "./lib/defaultSeedValidator";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
@@ -257,6 +258,17 @@ export default defineSchema({
   // it, so a public engine cannot be claimed by whoever reaches it first. It
   // is sent to the maintenance API at create time and replayed to the engine
   // at registration; no public query may return it.
+  // Names a managed engine answered to before a rename. The maintenance API
+  // keeps each one routed to the engine and out of anyone else's reach until
+  // the engine is deleted, so /u/<old name> keeps showing the same page. Rows
+  // go when the engine does, since the instance's next engine does not hold them.
+  engineHeldSlugs: defineTable({
+    slug: v.string(),
+    instanceId: v.id("instances"),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_instance", ["instanceId"]),
+
   engineProvisioning: defineTable({
     instanceId: v.id("instances"),
     accountId: v.id("accounts"),
@@ -304,6 +316,11 @@ export default defineSchema({
     reportedVersion: v.optional(v.string()),
     error: v.optional(v.string()),
     registrationToken: v.string(),
+    // Names the create request while its outcome may be unknown: with the slug
+    // and channel it makes the idempotency key, so asking again after a lost
+    // response returns the same engine. The body must match, which is why the
+    // registration token above is kept with it. Cleared by a definite refusal.
+    createRequestId: v.optional(v.string()),
     // Registration is retried on a backoff after the engine reports ready;
     // this counts the attempts made so far so the schedule can advance.
     registrationAttempts: v.optional(v.number()),
@@ -461,6 +478,9 @@ export default defineSchema({
     platform: v.string(),
     platformUserId: v.string(),
     platformUsername: v.string(),
+    // The account's login, unlike platformUsername, which is its display name
+    // and may hold characters a URL cannot. Absent on links made before it was kept.
+    platformLogin: v.optional(v.string()),
     profileImageUrl: v.optional(v.string()),
     channelId: v.string(),
     sealedAccessToken: v.string(),
@@ -573,6 +593,23 @@ export default defineSchema({
       })
     ),
     platformsChosenAt: v.optional(v.number()),
+    // What the connect card listed when Connect was pressed. Not consent until
+    // Twitch approves: linking moves it to `platforms`, and a denial leaves
+    // `platforms` as it was.
+    pendingPlatforms: v.optional(
+      v.array(
+        v.object({
+          marketplaceModuleId: v.string(),
+          name: v.optional(v.string()),
+          approvedPermissions: v.array(v.string()),
+          approvedLocalEndpoints: v.optional(v.array(v.string())),
+        })
+      )
+    ),
+    // Written only when the first-run path makes the instance. It alone says the
+    // instance started empty: without it, applying never seeds default alerts,
+    // which would play beside a streamer's own, and no overlay page is owed.
+    firstRunAt: v.optional(v.number()),
     // When the "bring your setup" question was answered: an import queued, or skipped.
     importChosenAt: v.optional(v.number()),
     // SETUP_INTERESTS ids (convex/lib/setupInterests.ts). Skipping saves none.
@@ -580,6 +617,11 @@ export default defineSchema({
     interestsChosenAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     completedByUserId: v.optional(v.id("users")),
+    // A preview deployment's "Skip for now" on the Twitch connection.
+    twitchSkippedAt: v.optional(v.number()),
+    // No username could be derived for the engine, so the connect screen asks
+    // for one. Cleared when an engine is requested.
+    usernameNeededAt: v.optional(v.number()),
     // What applying the choices has done so far (convex/setupApply.ts): one
     // entry per chosen module and per starter pack. Applying runs once the
     // setup is complete and the engine is registered, and again on retry.
@@ -607,6 +649,13 @@ export default defineSchema({
         })
       )
     ),
+    // The default overlay scene and alerts (shared/default-seed.ts), once
+    // applying has tried them. An installed entry is never seeded again, so
+    // deleting a seeded scene or alert keeps it deleted.
+    defaultSeed: v.optional(defaultSeedValidator),
+    // That first-run setup passed the overlay page, by seeing an alert play or
+    // by skipping. Unset on a setup still owed the page.
+    overlayDone: v.optional(overlayDoneValidator),
     applyAttempts: v.optional(v.number()),
     // Held while an apply runs, so two scheduled at once do not both install.
     applyClaimedAt: v.optional(v.number()),
@@ -868,27 +917,6 @@ export default defineSchema({
     instanceId: v.id("instances"),
     doneItemIds: v.array(v.string()),
     dismissedAt: v.optional(v.number()),
-    updatedAt: v.number(),
-  }).index("by_instance", ["instanceId"]),
-
-  // goLiveChecklists: one row per instance for the Go live checklist. Shared by
-  // everyone on the instance, like the channel it describes: a check dismissed
-  // because this setup has no OBS stays dismissed for the moderator too.
-  //
-  // The last* fields are the channel's title and category as they stood when
-  // the checklist was last completed. Twitch keeps no history of either, so
-  // this is what "same title as last time" is measured against.
-  goLiveChecklists: defineTable({
-    instanceId: v.id("instances"),
-    dismissedCheckIds: v.array(v.string()),
-    lastCompletedAt: v.optional(v.number()),
-    lastTitle: v.optional(v.string()),
-    lastCategoryId: v.optional(v.string()),
-    lastCategoryName: v.optional(v.string()),
-    // Set when "Stream start" was asked for before going live; the marker is
-    // dropped by whichever writer first flips instanceLiveState to live, and
-    // a request older than lib/goLiveMarker.ts's window is ignored.
-    pendingMarkerRequestedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_instance", ["instanceId"]),
 
@@ -1198,12 +1226,32 @@ export default defineSchema({
     nodes: v.optional(v.array(v.any())),
     edges: v.optional(v.array(v.any())),
     projectionUpdatedAt: v.optional(v.number()),
+    // Engine ids of the workflow groups (alert groups) the workflow is in.
+    // Missing on rows from an engine without groups; read it as [].
+    groupIds: v.optional(v.array(v.string())),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_enabled", ["instanceId", "isEnabled"])
     .index("by_engine_id", ["instanceId", "engineWorkflowId"]),
+
+  // workflowGroups: read cache of the engine's workflow groups (alert
+  // groups), written from the workflow_group.* webhooks, the group actions'
+  // own RPC answers, and the "workflowGroups" engine-sync step. The engine
+  // owns the switch rules; members' switches arrive on their workflow rows.
+  workflowGroups: defineTable({
+    instanceId: v.id("instances"),
+    engineGroupId: v.string(),
+    name: v.string(),
+    description: v.string(),
+    enabled: v.boolean(),
+    memberIds: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_group_id", ["instanceId", "engineGroupId"]),
 
   // workflowHealth: whether the engine runs each stored workflow on its own,
   // from the workflow.health.* webhooks and the getWorkflowHealth() resync
@@ -1331,6 +1379,7 @@ export default defineSchema({
       v.object({
         platformUserId: v.string(),
         platformUsername: v.string(),
+        login: v.optional(v.string()),
         profileImageUrl: v.optional(v.string()),
         // Sealed like platformLinks, which they are copied into.
         sealedAccessToken: v.string(),
@@ -2019,6 +2068,7 @@ export default defineSchema({
           v.literal("groups"),
           v.literal("functions"),
           v.literal("workflows"),
+          v.literal("workflowGroups"),
           v.literal("scenes"),
           v.literal("triggers"),
           v.literal("actions"),

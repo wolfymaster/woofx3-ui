@@ -1,180 +1,122 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import { PLACEHOLDER_NAME } from "@convex/lib/firstRun";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
-import { Building2, Check, Loader2, MonitorPlay, Server } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
-import { HelpTip } from "@/components/common/help-tip";
-import { ManagedEngineStep } from "@/components/onboarding/managed-engine-step";
+import { Loader2, MonitorPlay, Server } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { suggestSlug } from "@/lib/engine-slug";
+import { useLogger } from "@/lib/logger-context";
+import { type OnboardingRoute, onboardingRoute } from "@/lib/onboarding-route";
 import { $currentInstanceId } from "@/lib/stores";
 
-const STEPS = [
-  { id: "account", title: "Create your workspace", icon: Building2, description: "Set up your account name" },
-  {
-    id: "instance",
-    title: "Set up your engine",
-    icon: Server,
-    description: "woofx3 can run it for you, or connect one you already have",
-  },
-];
-
+/**
+ * Where a signed-in user with no engine lands, on the way to setup. Nothing is
+ * asked here: the rows setup works on are made, and setup takes over. The one
+ * form is for an engine the user runs themselves, reached by a link on the
+ * connect screen, or the only option on a deployment with no managed engines.
+ *
+ * All state lives in Convex, so coming back here mid-build goes straight on to
+ * wherever setup is.
+ */
 export default function Onboarding() {
+  const logger = useLogger();
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { isAuthenticated } = useConvexAuth();
-  const user = useQuery(api.users.getMe);
 
-  const [step, setStep] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Step 1: Account
-  const [accountName, setAccountName] = useState("");
-
-  // Step 2: Instance
-  const [instanceName, setInstanceName] = useState("");
-  const [instanceUrl, setInstanceUrl] = useState("localhost:8080");
-  // The managed path is the default; this reveals the bring-your-own form.
-  const [connectExisting, setConnectExisting] = useState(false);
-
-  const createAccount = useMutation(api.accounts.createAccount);
+  const ensureFirstRun = useMutation(api.setup.ensureFirstRun);
+  const ensureMyAccount = useMutation(api.accounts.ensureMyAccount);
   const createInstance = useMutation(api.instances.create);
   const registerInstance = useAction(api.registration.registerInstance);
-  const existingAccount = useQuery(api.accounts.getMyAccount);
   const managedEngines = useQuery(api.provisioning.isAvailable);
   const previewEngine = useQuery(api.previewEngine.get);
   const instances = useQuery(api.instances.listForCurrentUser);
-  const [workspaceAccountId, setWorkspaceAccountId] = useState<Id<"accounts"> | null>(null);
-  const [registrationStatus, setRegistrationStatus] = useState<string | null>(null);
-  const didPrefill = useRef(false);
-  const didPrefillPreviewEngine = useRef(false);
 
-  // An engine that is being built, or was built but never finished
-  // registering. The state lives in Convex, so reloading mid-provision comes
-  // back here rather than to an empty form.
-  const unfinishedManagedInstance = useMemo(
-    () => instances?.find((instance) => instance?.hosting === "managed" && !instance.clientId) ?? null,
-    [instances]
-  );
-  const [provisioningInstanceId, setProvisioningInstanceId] = useState<Id<"instances"> | null>(null);
-  const unfinishedProvisioning = useQuery(
-    api.provisioning.forInstance,
-    unfinishedManagedInstance ? { instanceId: unfinishedManagedInstance._id } : "skip"
-  );
+  const [instanceUrl, setInstanceUrl] = useState("localhost:8080");
+  const [connecting, setConnecting] = useState(false);
+  const [pairingFailed, setPairingFailed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [choseManaged, setChoseManaged] = useState(false);
+  const started = useRef<OnboardingRoute | null>(null);
 
-  useEffect(() => {
-    if (!unfinishedManagedInstance || unfinishedProvisioning === undefined) {
-      return;
-    }
-    // A deleted engine is not something to wait on: the instance is still
-    // there but has nothing behind it, so offer to set one up again.
-    if (unfinishedProvisioning === null || unfinishedProvisioning.status === "deleted") {
-      setProvisioningInstanceId(null);
-      return;
-    }
-    setProvisioningInstanceId(unfinishedManagedInstance._id);
-  }, [unfinishedManagedInstance, unfinishedProvisioning]);
+  const route =
+    !isAuthenticated || instances === undefined || managedEngines === undefined || previewEngine === undefined
+      ? null
+      : onboardingRoute({
+          instances,
+          wantsOwnEngine: new URLSearchParams(search).has("external"),
+          choseManaged,
+          hasPreviewEngine: previewEngine !== null,
+          managedAvailable: managedEngines.available,
+        });
 
-  // Setup continues on its own pages while the engine is built, with the
-  // build's progress shown above them.
-  useEffect(() => {
-    if (!provisioningInstanceId) {
-      return;
-    }
-    $currentInstanceId.set(provisioningInstanceId);
-    navigate("/setup", { replace: true });
-  }, [provisioningInstanceId, navigate]);
-
-  // A pull request preview comes paired with an engine; connecting it is the
-  // whole point, so it is filled in rather than offered alongside a new one.
-  useEffect(() => {
-    if (!previewEngine || didPrefillPreviewEngine.current) {
-      return;
-    }
-    setInstanceUrl(previewEngine.url);
-    setConnectExisting(true);
-    didPrefillPreviewEngine.current = true;
-  }, [previewEngine]);
-
-  useEffect(() => {
-    if (!user?.name || didPrefill.current) {
-      return;
-    }
-    setAccountName(user.name);
-    setInstanceName(`${user.name}'s Instance`);
-    didPrefill.current = true;
-  }, [user?.name]);
-
-  async function handleAccountStep(e: React.FormEvent) {
-    e.preventDefault();
+  async function connectEngine(url: string): Promise<boolean> {
     setError(null);
-    setIsLoading(true);
+    setConnecting(true);
     try {
-      if (!existingAccount) {
-        const id = await createAccount({ name: accountName.trim() });
-        setWorkspaceAccountId(id);
-      } else {
-        setWorkspaceAccountId(existingAccount._id);
+      const accountId = await ensureMyAccount({});
+      const instanceId = await createInstance({ accountId, name: PLACEHOLDER_NAME, url: url.trim() });
+      const result = await registerInstance({ instanceId });
+      if (!result.ok) {
+        setError(`We couldn't connect to that server: ${result.error}`);
+        return false;
       }
-      setStep(1);
-    } catch (err: any) {
-      setError(err.message || "Failed to create account.");
+      $currentInstanceId.set(instanceId);
+      navigate("/setup", { replace: true });
+      return true;
+    } catch (err) {
+      logger.error("Could not connect the engine", { error: err });
+      setError("We couldn't connect to that server. Check the address and try again.");
+      return false;
     } finally {
-      setIsLoading(false);
+      setConnecting(false);
     }
   }
 
-  async function handleInstanceStep(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-    try {
-      const accountIdToUse = existingAccount?._id ?? workspaceAccountId;
-      if (!accountIdToUse) {
-        throw new Error("Account not found");
-      }
-
-      setRegistrationStatus("Creating instance...");
-      const instanceId = await createInstance({
-        accountId: accountIdToUse,
-        name: instanceName.trim(),
-        url: instanceUrl.trim(),
-      });
-
-      // Register with the woofx3 engine (handshake)
-      setRegistrationStatus("Registering with engine...");
-      const result = await registerInstance({ instanceId });
-
-      if (!result.ok) {
-        setError(`Engine registration failed: ${result.error}`);
-        return;
-      }
-
-      $currentInstanceId.set(instanceId);
-      navigate("/setup");
-    } catch (err: any) {
-      setError(err.message || "Failed to create instance.");
-    } finally {
-      setIsLoading(false);
-      setRegistrationStatus(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each route starts once, guarded by `started`.
+  useEffect(() => {
+    if (route === "setup" && instances) {
+      const current =
+        instances.find((instance) => instance.clientId) ??
+        instances.find((instance) => instance.hosting === "managed") ??
+        instances[0];
+      $currentInstanceId.set(current._id);
+      navigate("/setup", { replace: true });
+      return;
     }
+    if (started.current === route || route === null || route === "own-engine-form") {
+      return;
+    }
+    started.current = route;
+    if (route === "paired-engine" && previewEngine) {
+      setInstanceUrl(previewEngine.url);
+      void connectEngine(previewEngine.url).then((connected) => setPairingFailed(!connected));
+      return;
+    }
+    ensureFirstRun({})
+      .then((instanceId) => {
+        $currentInstanceId.set(instanceId);
+        navigate("/setup/connect", { replace: true });
+      })
+      .catch((err: unknown) => {
+        logger.error("Could not prepare setup", { error: err });
+        setError("Something went wrong getting you set up. Reload the page to try again.");
+      });
+  }, [route, instances, previewEngine, ensureFirstRun, navigate, logger]);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    await connectEngine(instanceUrl);
   }
 
   if (!isAuthenticated) {
     return null;
   }
 
-  // While an engine is being built the second step is where the user is, even
-  // though no form is on screen.
-  const activeStep = provisioningInstanceId ? 1 : step;
-  const currentStep = STEPS[activeStep];
-  const accountId = existingAccount?._id ?? workspaceAccountId;
-  const managedAvailable = managedEngines?.available === true;
-  const showManagedStep = managedAvailable && !connectExisting && accountId !== null;
+  const showForm = route === "own-engine-form" || (route === "paired-engine" && pairingFailed);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -186,107 +128,35 @@ export default function Onboarding() {
           <span className="font-bold text-2xl tracking-tight">woofx3</span>
         </div>
 
-        {/* Step indicators */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {STEPS.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-2">
-              <div
-                className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
-                  i < activeStep
-                    ? "bg-primary text-primary-foreground"
-                    : i === activeStep
-                      ? "bg-primary/20 text-primary border-2 border-primary"
-                      : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {i < activeStep ? <Check className="h-4 w-4" /> : i + 1}
-              </div>
-              {i < STEPS.length - 1 && <div className={`h-px w-12 ${i < activeStep ? "bg-primary" : "bg-muted"}`} />}
-            </div>
-          ))}
-        </div>
+        {!showForm && !error && (
+          <output className="flex justify-center py-6" aria-label="Getting you set up">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </output>
+        )}
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-muted">
-                <currentStep.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>{currentStep.title}</CardTitle>
-                <CardDescription>{currentStep.description}</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {provisioningInstanceId && (
-              <div className="flex justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            )}
+        {!showForm && error && <p className="text-sm text-destructive text-center">{error}</p>}
 
-            {!provisioningInstanceId && step === 0 && (
-              <form onSubmit={handleAccountStep} className="space-y-4">
-                <div>
-                  <Label htmlFor="account-name">Workspace Name</Label>
-                  <Input
-                    id="account-name"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="My Stream Studio"
-                    className="mt-1"
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    This is your account name. You can change it later.
-                  </p>
-                </div>
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Continue
-                </Button>
-              </form>
-            )}
-
-            {!provisioningInstanceId && step === 1 && showManagedStep && accountId && (
-              <ManagedEngineStep
-                accountId={accountId}
-                suggestedSlug={suggestSlug(user?.name ?? accountName)}
-                onStarted={setProvisioningInstanceId}
-                onConnectExisting={() => setConnectExisting(true)}
-              />
-            )}
-
-            {!provisioningInstanceId && step === 1 && !showManagedStep && (
-              <form onSubmit={handleInstanceStep} className="space-y-4">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <Label htmlFor="instance-name">Instance Name</Label>
-                    <HelpTip term="instance" />
-                  </div>
-                  <Input
-                    id="instance-name"
-                    value={instanceName}
-                    onChange={(e) => setInstanceName(e.target.value)}
-                    placeholder="My woofx3 Instance"
-                    className="mt-1"
-                    required
-                  />
+        {showForm && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-muted">
+                  <Server className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <Label htmlFor="instance-url">woofx3 API URL</Label>
-                    <HelpTip term="engine">
-                      <p>This is the address your engine answers on, such as localhost:8080 or engine.example.com.</p>
-                    </HelpTip>
-                  </div>
+                  <CardTitle>Connect your server</CardTitle>
+                  <CardDescription>Point woofx3 at the engine you run yourself</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="instance-url">Server address</Label>
                   <Input
                     id="instance-url"
                     value={instanceUrl}
-                    onChange={(e) => setInstanceUrl(e.target.value)}
+                    onChange={(event) => setInstanceUrl(event.target.value)}
                     placeholder="localhost:8080"
                     className="mt-1 font-mono"
                     required
@@ -294,32 +164,24 @@ export default function Onboarding() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {previewEngine
                       ? `This preview is paired with engine ${previewEngine.version ?? previewEngine.url}.`
-                      : "The URL where your woofx3 instance is running. Include port if needed."}
+                      : "The address where your server is running. Include the port if it needs one."}
                   </p>
                 </div>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
 
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setStep(0)}
-                    disabled={isLoading}
-                  >
-                    Back
-                  </Button>
-                  <Button type="submit" className="flex-1" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    {registrationStatus ?? "Get started"}
-                  </Button>
-                </div>
+                <Button type="submit" className="w-full" disabled={connecting} data-testid="button-connect-engine">
+                  {connecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {connecting ? "Connecting…" : "Connect"}
+                </Button>
 
-                {managedAvailable && (
+                {managedEngines?.available && (
                   <button
                     type="button"
-                    onClick={() => setConnectExisting(false)}
+                    onClick={() => {
+                      setError(null);
+                      setChoseManaged(true);
+                    }}
                     className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
                     data-testid="button-create-managed-engine"
                   >
@@ -327,9 +189,9 @@ export default function Onboarding() {
                   </button>
                 )}
               </form>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

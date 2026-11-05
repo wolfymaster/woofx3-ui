@@ -4,7 +4,6 @@ import {
   adBreaksWidget,
   announcementWidget,
   eventsWidget,
-  goLiveWidget,
   macroPadWidget,
   moderationWidget,
   notesWidget,
@@ -28,7 +27,6 @@ import {
 export const localDashboardCatalog: DashboardCatalog = {
   widgets: [
     streamStatusWidget,
-    goLiveWidget,
     eventsWidget,
     activityWidget,
     streamInfoWidget,

@@ -1,6 +1,8 @@
 import { ALERT_LIST_MAX_LIMIT } from "@woofx3/api";
+import { EngineDisconnectedError } from "@/engine/errors";
 import type { AlertQueueGateway } from "@/engine/gateway";
-import type { AlertOverview, EngineAlert } from "@/engine/types";
+import type { AlertOverview, EngineAlert, OverlayPresence, ReadOptions } from "@/engine/types";
+import { OVERLAY_PRESENCE_POLL_MS, overlayPresenceOf } from "@/lib/overlay-presence";
 import { directKeys as k } from "./keys";
 import { toEngineAlert } from "./map/alerts";
 import { type EngineRead, useEngineQuery, useEngineRequest } from "./query";
@@ -30,6 +32,27 @@ function overviewRead(runtime: DirectRuntime, hourStart: number): EngineRead<Ale
 }
 
 /**
+ * A read that fails says nothing about the overlay, so it is an answer here
+ * rather than an error for the screen's boundary. A dropped session stays an
+ * error, which keeps the last answer while the next session reads again.
+ */
+function overlayPresenceRead(runtime: DirectRuntime): EngineRead<OverlayPresence> {
+  return {
+    queryKey: k.alertQueue.overlayPresence(),
+    queryFn: async () => {
+      try {
+        return overlayPresenceOf(await runtime.call("getAlertQueue", (api) => api.getAlertQueue()));
+      } catch (error) {
+        if (error instanceof EngineDisconnectedError) {
+          throw error;
+        }
+        return "unknown";
+      }
+    },
+  };
+}
+
+/**
  * The alerts the engine recorded, read from the engine and kept current by
  * its `alert.*` events. The queue controls answer as the engine does; the
  * rows they change arrive through those events.
@@ -45,5 +68,7 @@ export function directAlertQueueGateway(runtime: DirectRuntime): AlertQueueGatew
     useReplayRequest: () => useEngineRequest(replay),
     useSkipCurrentRequest: () => useEngineRequest(skipCurrent),
     useClearQueueRequest: () => useEngineRequest(clearQueue),
+    useOverlayOpen: ({ enabled = true }: ReadOptions = {}) =>
+      useEngineQuery(runtime, overlayPresenceRead(runtime), { enabled, refetchIntervalMs: OVERLAY_PRESENCE_POLL_MS }),
   };
 }

@@ -4,7 +4,13 @@ import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { parseViewerFacts } from "@shared/viewer-facts";
 import { isStillLoadingError, parseWorkflowHealthList, shouldResync } from "@shared/workflow-health";
 import { buildTriggerOptions } from "@shared/workflow-test-run";
-import { type CallbackEnvelope, EngineEventType, WORKFLOW_RUN_SNAPSHOT_MAX_LIMIT } from "@woofx3/api";
+import {
+  type CallbackEnvelope,
+  ENGINE_CAPABILITIES,
+  EngineEventType,
+  type WorkflowGroup as EngineWorkflowGroup,
+  WORKFLOW_RUN_SNAPSHOT_MAX_LIMIT,
+} from "@woofx3/api";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { useCallback } from "react";
 import type { WorkflowsGateway } from "@/engine/gateway";
@@ -15,6 +21,8 @@ import type {
   Workflow,
   WorkflowCancelResult,
   WorkflowCatalog,
+  WorkflowGroup,
+  WorkflowGroupText,
   WorkflowHealthResyncResult,
   WorkflowHealthResyncTrigger,
   WorkflowReplay,
@@ -130,6 +138,24 @@ function healthRead(runtime: DirectRuntime): EngineRead<NotRunningWorkflow[]> {
       const enabled = new Set(workflows.filter((w) => w.isEnabled).map((w) => w.engineWorkflowId));
       return toNotRunning(parsed.entries, enabled);
     },
+  };
+}
+
+function toWorkflowGroup(group: EngineWorkflowGroup): WorkflowGroup {
+  return {
+    engineGroupId: group.id,
+    name: group.name,
+    description: group.description,
+    enabled: group.enabled,
+    memberIds: group.memberIds,
+  };
+}
+
+function groupsRead(runtime: DirectRuntime): EngineRead<WorkflowGroup[]> {
+  return {
+    queryKey: k.workflows.groups(),
+    queryFn: async () =>
+      (await runtime.call("listWorkflowGroups", (api) => api.listWorkflowGroups())).map(toWorkflowGroup),
   };
 }
 
@@ -304,6 +330,38 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
     return "ok";
   };
 
+  // A group write moves its members' switches too, so the workflow reads go stale with it.
+  const groupStale = () => invalidate(k.workflows.groups(), k.workflows.list(), k.workflows.health());
+  const groupWrite = async (write: Promise<EngineWorkflowGroup>) => {
+    const group = toWorkflowGroup(await write);
+    await groupStale();
+    return group;
+  };
+
+  const groupsSupported = async () => {
+    const { capabilities } = await runtime.call("getEngineCapabilities", (api) => api.getEngineCapabilities());
+    return capabilities.includes(ENGINE_CAPABILITIES.workflowsGroups);
+  };
+  const createGroup = (group: WorkflowGroupText) =>
+    groupWrite(runtime.call("createWorkflowGroup", (api) => api.createWorkflowGroup(group)));
+  const updateGroup = (engineGroupId: string, group: WorkflowGroupText) =>
+    groupWrite(runtime.call("updateWorkflowGroup", (api) => api.updateWorkflowGroup(engineGroupId, group)));
+  const removeGroup = async (engineGroupId: string) => {
+    await runtime.call("deleteWorkflowGroup", (api) => api.deleteWorkflowGroup(engineGroupId));
+    await groupStale();
+    return { deleted: true as const };
+  };
+  const setGroupEnabled = (engineGroupId: string, enabled: boolean) =>
+    groupWrite(runtime.call("setWorkflowGroupEnabled", (api) => api.setWorkflowGroupEnabled(engineGroupId, enabled)));
+  const addGroupMembers = (engineGroupId: string, workflowIds: string[]) =>
+    groupWrite(
+      runtime.call("addWorkflowGroupMembers", (api) => api.addWorkflowGroupMembers(engineGroupId, workflowIds))
+    );
+  const removeGroupMembers = (engineGroupId: string, workflowIds: string[]) =>
+    groupWrite(
+      runtime.call("removeWorkflowGroupMembers", (api) => api.removeWorkflowGroupMembers(engineGroupId, workflowIds))
+    );
+
   return {
     useWorkflows: () => useEngineQuery(runtime, workflowsRead(runtime)),
     useHasAny: () => useEngineQuery(runtime, workflowsRead(runtime), { select: hasAny }),
@@ -349,6 +407,14 @@ export function directWorkflowsGateway(runtime: DirectRuntime): WorkflowsGateway
     },
     useNotRunning: () => useEngineQuery(runtime, healthRead(runtime)),
     useHealthResyncRequest: () => useEngineRequest(healthResync),
+    useGroups: () => useEngineQuery(runtime, groupsRead(runtime)),
+    useGroupsSupportedRequest: () => useEngineRequest(groupsSupported),
+    useCreateGroupRequest: () => useEngineRequest(createGroup),
+    useUpdateGroupRequest: () => useEngineRequest(updateGroup),
+    useRemoveGroupRequest: () => useEngineRequest(removeGroup),
+    useSetGroupEnabledRequest: () => useEngineRequest(setGroupEnabled),
+    useAddGroupMembersRequest: () => useEngineRequest(addGroupMembers),
+    useRemoveGroupMembersRequest: () => useEngineRequest(removeGroupMembers),
   };
 }
 

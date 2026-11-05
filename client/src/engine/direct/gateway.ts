@@ -7,10 +7,10 @@ import { directClipsGateway } from "./clips";
 import { directCommandsGateway } from "./commands";
 import { directDashboardGateway } from "./dashboard";
 import { directDatabasesGateway } from "./databases";
+import { directDefaultSeedGateway } from "./default-seed";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
 import { directFormSubmissionsGateway } from "./form-submissions";
-import { directGoLiveGateway } from "./go-live";
 import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
@@ -80,6 +80,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     moduleOAuth,
     setupImports,
     starterPacks: directStarterPacksGateway(runtime),
+    defaultSeed: directDefaultSeedGateway(runtime),
     adBreaks: directAdBreaksGateway(runtime),
     moderation: directModerationGateway(runtime),
     pins: directPinsGateway(runtime),
@@ -89,7 +90,6 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     formSubmissions: directFormSubmissionsGateway,
     databases: directDatabasesGateway(runtime),
     streamInfo: directStreamInfoGateway(runtime),
-    goLive: directGoLiveGateway(runtime, host.streamStartMarkers),
     pageIntros: directPageIntrosGateway(runtime),
     dashboard: directDashboardGateway(runtime),
   };
