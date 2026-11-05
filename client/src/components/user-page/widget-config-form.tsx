@@ -10,6 +10,7 @@ import {
 } from "@shared/user-pages";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DatabaseWidgetForm } from "@/components/user-page/database-widget-form";
 import { FieldProblems } from "@/components/user-page/field-problems";
 import { FieldFrame, SwitchField, TextField } from "@/components/user-page/fields";
 import { FormWidgetActions } from "@/components/user-page/form-widget-actions";
@@ -60,6 +61,10 @@ export function WidgetConfigForm({ widget, onChange, path, problems }: WidgetCon
       return <ImageForm {...common} config={widget.config} onChange={(config) => onChange({ ...widget, config })} />;
     case "form":
       return <FormForm {...common} config={widget.config} onChange={(config) => onChange({ ...widget, config })} />;
+    case "database":
+      return (
+        <DatabaseWidgetForm {...common} config={widget.config} onChange={(config) => onChange({ ...widget, config })} />
+      );
     default: {
       const unhandled: never = widget;
       throw new Error(`No settings form for widget ${JSON.stringify(unhandled)}`);

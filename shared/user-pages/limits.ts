@@ -16,6 +16,10 @@ export const USER_PAGE_LIMITS = {
   labelLength: 80,
   imageAltLength: 300,
   links: 20,
+  /** Columns one database widget shows. */
+  databaseWidgetColumns: 8,
+  /** Rows one database widget shows; Convex keeps the newest 1000 to choose from. */
+  databaseWidgetRows: 200,
   formFields: 20,
   formSelectOptions: 50,
   /** The longest answer any form field may be configured to accept. */

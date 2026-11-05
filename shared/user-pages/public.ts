@@ -52,7 +52,25 @@ export type PublicPageWidget =
       config: Omit<PageWidgetConfig<"timer">, "resource">;
       state: PublicResourceState | null;
     }
-  | { id: string; type: "live-status"; config: PageWidgetConfig<"live-status">; live: PublicLiveStatus };
+  | { id: string; type: "live-status"; config: PageWidgetConfig<"live-status">; live: PublicLiveStatus }
+  | {
+      id: string;
+      type: "database";
+      label: string | null;
+      /** The widget's chosen columns that are public now, in its order. */
+      columns: PublicDatabaseColumn[];
+      /** Each row's cells in `columns` order; null for an empty cell. */
+      rows: (string | number | boolean | null)[][];
+    };
+
+/** A database column as a public page shows it. */
+export interface PublicDatabaseColumn {
+  id: string;
+  label: string;
+  type: "text" | "number" | "boolean" | "date" | "url" | "select";
+  /** A select column's options, so a cell shows its label. */
+  options?: { value: string; label: string }[];
+}
 
 /** Who a section that is not public is for. */
 export type SectionRequirement = Exclude<SectionVisibility, { kind: "public" }>;
@@ -116,3 +134,42 @@ export type PublicPageLookup =
     }
   | { kind: "unavailable" }
   | { kind: "unclaimed" };
+
+const PUBLIC_COLUMN_TYPES = new Set<string>(["text", "number", "boolean", "date", "url", "select"]);
+
+/**
+ * The columns a database's public settings carry (only public ones are ever
+ * published), read leniently: an entry that is not one is dropped.
+ */
+export function parsePublicDatabaseColumns(settings: Record<string, unknown>): PublicDatabaseColumn[] {
+  const raw = settings.columns;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.flatMap((entry): PublicDatabaseColumn[] => {
+    if (entry === null || typeof entry !== "object") {
+      return [];
+    }
+    const column = entry as Record<string, unknown>;
+    if (typeof column.id !== "string" || typeof column.label !== "string" || typeof column.type !== "string") {
+      return [];
+    }
+    if (!PUBLIC_COLUMN_TYPES.has(column.type) || column.public !== true) {
+      return [];
+    }
+    const parsed: PublicDatabaseColumn = {
+      id: column.id,
+      label: column.label,
+      type: column.type as PublicDatabaseColumn["type"],
+    };
+    if (column.type === "select" && Array.isArray(column.options)) {
+      parsed.options = column.options.flatMap((option) => {
+        const o = option as Record<string, unknown> | null;
+        return o && typeof o.value === "string" && typeof o.label === "string"
+          ? [{ value: o.value, label: o.label }]
+          : [];
+      });
+    }
+    return [parsed];
+  });
+}
