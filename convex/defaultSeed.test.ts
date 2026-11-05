@@ -169,7 +169,7 @@ class FakeEngine extends RpcTarget {
     if (this.modulesFailing) {
       throw new Error("the engine is restarting");
     }
-    return [{ moduleId: "woofx3", moduleKey: "woofx3:0.45.0:abc1234" }];
+    return [{ moduleId: "woofx3", moduleKey: "woofx3:0.46.0:abc1234" }];
   }
 
   getAvailableWidgets() {
@@ -178,7 +178,7 @@ class FakeEngine extends RpcTarget {
         {
           id: "cae7619f-41f4-4a6e-9f3a-0d5be1c7a2d1",
           manifestId: "alert",
-          createdByRef: "woofx3:0.45.0:abc1234",
+          createdByRef: "woofx3:0.46.0:abc1234",
           name: "Alert",
           hostsSurface: "alert",
         },
@@ -480,8 +480,13 @@ describe("applying the seed on a real engine connection", () => {
       const failed = await status();
       expect(failed?.scene.status).toBe("installed");
       expect(failed?.alerts.filter((alert) => alert.status === "failed").length).toBe(3);
-      expect(failed?.alerts.filter((alert) => alert.status === "installed").length).toBe(2);
-      await until(() => engine.enableCalls.length === 2, "the two that worked are enabled");
+      expect(failed?.alerts.filter((alert) => alert.status === "installed").length).toBe(
+        DEFAULT_ALERT_ITEMS.length - 3
+      );
+      await until(
+        () => engine.enableCalls.length === DEFAULT_ALERT_ITEMS.length - 3,
+        "the ones that worked are enabled"
+      );
 
       await t.withIdentity({ subject: `${ownerId}|session` }).mutation(api.setup.retryApply, { instanceId });
       expect((await status())?.alerts.some((alert) => alert.status === "failed")).toBe(false);

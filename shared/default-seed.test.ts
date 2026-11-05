@@ -29,20 +29,25 @@ function layoutOf(item: StarterItem | undefined): Record<string, unknown> {
 
 describe("default alert images", () => {
   test.each([
-    ["follows", `${BASE}/follows.webp`],
-    ["subs", `${BASE}/subs.webp`],
-    ["bits", `${BASE}/bits.webp`],
+    ["follow", `${BASE}/follow.svg`],
+    ["cheer", `${BASE}/cheer.svg`],
+    ["sub", `${BASE}/sub.svg`],
+    ["resub", `${BASE}/resub.svg`],
+    ["gift", `${BASE}/gift.svg`],
+    ["community-gift", `${BASE}/community-gift.svg`],
+    ["upgrade", `${BASE}/upgrade.svg`],
+    ["pay-it-forward", `${BASE}/pay-it-forward.svg`],
   ] as const)("the %s image is at the path the module ships it under", (art, url) => {
     const base = defaultAlertImagesBaseUrl({ overlayPublicUrl: "https://x.example/" }, [
-      { moduleId: "woofx3", moduleKey: "woofx3:0.45.0:abc1234" },
+      { moduleId: "woofx3", moduleKey: "woofx3:0.46.0:abc1234" },
     ]);
     expect(defaultAlertImageUrl(base ?? "", art)).toBe(url);
   });
 
   test.each([
-    ["0.44.9", null],
+    ["0.45.9", null],
     ["0.9.0", null],
-    ["0.45.0", BASE],
+    ["0.46.0", BASE],
     ["0.100.0", BASE],
     ["1.0.0", BASE],
   ])("module %s has images at %s", (version, expected) => {
@@ -59,19 +64,32 @@ describe("default alert images", () => {
     expect(() => defaultAlertImagesBaseUrl(info, [])).toThrow(/does not list/);
     expect(() => defaultAlertImagesBaseUrl(info, [{ moduleId: "woofx3", moduleKey: "woofx3" }])).toThrow(/no version/);
     expect(() =>
-      defaultAlertImagesBaseUrl({ overlayPublicUrl: "" }, [{ moduleId: "woofx3", moduleKey: "woofx3:0.45.0:a" }])
+      defaultAlertImagesBaseUrl({ overlayPublicUrl: "" }, [{ moduleId: "woofx3", moduleKey: "woofx3:0.46.0:a" }])
     ).toThrow(/overlay address/);
   });
 });
 
 describe("default alerts", () => {
-  test("there is one workflow per trigger, with subs covering sub, resub and gift", () => {
+  test("there is one workflow per trigger, with subs covering every kind of sub", () => {
     expect(DEFAULT_ALERT_ITEMS.map((item) => [item.id, item.trigger.event])).toEqual([
       ["follow", "channel.follow"],
       ["sub", "channel.subscribe"],
+      ["gifted-sub", "channel.subscribe"],
       ["resub", "channel.resub"],
       ["gift", "channel.subscriptionGift"],
+      ["prime-upgrade", "channel.primePaidUpgrade"],
+      ["gift-upgrade", "channel.giftPaidUpgrade"],
+      ["pay-it-forward", "channel.payItForward"],
       ["bits", "channel.cheer"],
+    ]);
+  });
+
+  test("a gifted sub alert skips the recipients of a community gift, which the gift alert shows once", () => {
+    const conditions = (id: string) => DEFAULT_ALERT_ITEMS.find((item) => item.id === id)?.trigger.conditions;
+    expect(conditions("sub")).toEqual([{ path: "isGift", operator: "eq", value: false }]);
+    expect(conditions("gifted-sub")).toEqual([
+      { path: "isGift", operator: "eq", value: true },
+      { path: "isCommunityGift", operator: "eq", value: false },
     ]);
   });
 
@@ -83,7 +101,7 @@ describe("default alerts", () => {
       "${trigger.data.isAnonymous ? 'An anonymous cheerer' : trigger.data.userName} cheered ${trigger.data.amount} ${trigger.data.amount > 1 ? 'bits' : 'bit'}!"
     );
     expect(widgets.image?.settings).toEqual({
-      src: { source: "url", name: "bits.webp", url: `${BASE}/bits.webp`, type: "image" },
+      src: { source: "url", name: "cheer.svg", url: `${BASE}/cheer.svg`, type: "image" },
       fit: "contain",
       duration: 0,
     });
@@ -125,23 +143,40 @@ describe("default alerts", () => {
   });
 
   test("leaves out an alert whose event already starts any workflow, paused or conditioned", () => {
-    const eventWorkflow = (event: string) => ({
+    const eventWorkflow = (id: string, event: string) => ({
+      id,
       definition: { name: event, trigger: { type: "event" as const, event, conditions: [] }, tasks: [] },
     });
-    const { pack, coveredItemIds } = defaultAlertsToInstall(defaultAlertsPack(null), [
-      eventWorkflow("channel.follow"),
-      eventWorkflow("channel.cheer"),
-      { definition: { name: "nightly", trigger: { type: "schedule" as const, schedule: "0 0 * * *" }, tasks: [] } },
-      { definition: null },
-    ]);
+    const { pack, coveredItemIds } = defaultAlertsToInstall(
+      defaultAlertsPack(null),
+      [
+        eventWorkflow("w-1", "channel.follow"),
+        eventWorkflow("w-2", "channel.cheer"),
+        {
+          id: "w-3",
+          definition: { name: "nightly", trigger: { type: "schedule" as const, schedule: "0 0 * * *" }, tasks: [] },
+        },
+        { id: "w-4", definition: null },
+      ],
+      new Set()
+    );
     expect(coveredItemIds).toEqual(["follow", "bits"]);
     expect(pack.items.map((item) => item.id)).toEqual(
       DEFAULT_ALERT_ITEMS.map((item) => item.id).filter((id) => !coveredItemIds.includes(id))
     );
   });
 
+  test("the seed's own workflow on an event does not cover the other defaults on it", () => {
+    const seededSub = {
+      id: "seeded-sub",
+      definition: { name: "Sub alert", trigger: { type: "event" as const, event: "channel.subscribe" }, tasks: [] },
+    };
+    const { coveredItemIds } = defaultAlertsToInstall(defaultAlertsPack(null), [seededSub], new Set(["seeded-sub"]));
+    expect(coveredItemIds).toEqual([]);
+  });
+
   test("an engine with no workflows gets every alert", () => {
-    const { pack, coveredItemIds } = defaultAlertsToInstall(defaultAlertsPack(null), []);
+    const { pack, coveredItemIds } = defaultAlertsToInstall(defaultAlertsPack(null), [], new Set());
     expect(coveredItemIds).toEqual([]);
     expect(pack.items.length).toBe(DEFAULT_ALERT_ITEMS.length);
   });

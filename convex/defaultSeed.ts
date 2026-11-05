@@ -78,9 +78,14 @@ async function applyAlerts(
   }
   try {
     const imagesBaseUrl = await readDefaultAlertImages(engine);
+    const seeded = await ctx.runQuery(internal.starterPacks.packEngineIds, {
+      instanceId,
+      packId: DEFAULT_ALERTS_PACK_ID,
+    });
     const { pack, coveredItemIds } = defaultAlertsToInstall(
       defaultAlertsPack(imagesBaseUrl),
-      await engine.listWorkflows()
+      await engine.listWorkflows(),
+      new Set(seeded)
     );
     const outcomes = await installSeedPack(ctx, instanceId, pack);
     return {

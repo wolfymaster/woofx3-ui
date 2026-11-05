@@ -127,9 +127,17 @@ export function directDefaultSeedGateway(runtime: DirectRuntime): DefaultSeedGat
     try {
       const imagesBaseUrl = await readDefaultAlertImages(engine);
       alertImagesOmitted = imagesBaseUrl === null;
+      const ledger = await runtime.call("listUISettings", (api) =>
+        api.listUISettings(UI_SETTING_NAMESPACES.starterPacks)
+      );
+      const seeded = DEFAULT_ALERT_ITEMS.flatMap((item) => {
+        const engineId = ledgerEngineId(ledger, starterItemKey(DEFAULT_ALERTS_PACK_ID, item.id));
+        return engineId === undefined ? [] : [engineId];
+      });
       const { pack, coveredItemIds } = defaultAlertsToInstall(
         defaultAlertsPack(imagesBaseUrl),
-        await engine.listWorkflows()
+        await engine.listWorkflows(),
+        new Set(seeded)
       );
       const outcomes = await installPackItems(runtime, pack, {}, claimed, true);
       alerts = [
