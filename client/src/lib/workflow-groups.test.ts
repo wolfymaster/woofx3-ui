@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Workflow, WorkflowGroup } from "@/engine/types";
-import { cardGroupIds, cardWorkflowIds, groupableCards, triggersReleasedBy } from "@/lib/workflow-groups";
+import { cardGroupIds, cardsInGroup, cardsReleasedBy, cardWorkflowIds, groupableCards } from "@/lib/workflow-groups";
 
 function workflow(id: string, event: string, groupIds: string[], conditions: unknown[] = []): Workflow {
   return {
@@ -50,7 +50,22 @@ describe("cardGroupIds", () => {
   });
 });
 
-describe("triggersReleasedBy", () => {
+describe("cardsInGroup", () => {
+  test("counts a card once however many workflows it has", () => {
+    const cards = groupableCards(
+      [
+        workflow("w-1", "channel.cheer", ["g-1"], bigCheer),
+        workflow("w-2", "channel.cheer", ["g-1"], bigCheer),
+        workflow("w-3", "channel.follow", ["g-1"]),
+        workflow("w-4", "channel.raid", []),
+      ],
+      []
+    );
+    expect(cardsInGroup(cards, "g-1").map(cardWorkflowIds)).toEqual([["w-1", "w-2"], ["w-3"]]);
+  });
+});
+
+describe("cardsReleasedBy", () => {
   const group = (id: string, enabled: boolean, memberIds: string[]): WorkflowGroup => ({
     engineGroupId: id,
     name: id,
@@ -58,14 +73,28 @@ describe("triggersReleasedBy", () => {
     enabled,
     memberIds,
   });
+  const cards = groupableCards(
+    [
+      workflow("w-1", "channel.cheer", ["a"], bigCheer),
+      workflow("w-2", "channel.cheer", ["a", "b"], bigCheer),
+      workflow("w-3", "channel.follow", ["a", "b"]),
+    ],
+    []
+  );
 
-  test("counts the triggers no other group that is on holds", () => {
-    const a = group("a", true, ["w-1", "w-2"]);
-    expect(triggersReleasedBy(a, [a, group("b", true, ["w-2"]), group("c", false, ["w-1"])])).toBe(1);
+  test("counts the cards with a workflow no other group that is on holds", () => {
+    const a = group("a", true, ["w-1", "w-2", "w-3"]);
+    const b = group("b", true, ["w-2", "w-3"]);
+    expect(cardsReleasedBy(a, [a, b], cards)).toBe(1);
+  });
+
+  test("a card of two workflows counts once", () => {
+    const a = group("a", true, ["w-1", "w-2", "w-3"]);
+    expect(cardsReleasedBy(a, [a], cards)).toBe(2);
   });
 
   test("a group that is off changes nothing", () => {
-    const a = group("a", false, ["w-1"]);
-    expect(triggersReleasedBy(a, [a])).toBe(0);
+    const a = group("a", false, ["w-1", "w-2", "w-3"]);
+    expect(cardsReleasedBy(a, [a], cards)).toBe(0);
   });
 });
