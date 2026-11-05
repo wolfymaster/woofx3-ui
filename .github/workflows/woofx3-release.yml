@@ -1,21 +1,33 @@
 name: woofx3 release
 
-# Builds, signs and publishes the woofx3 desktop app, the companion's crate
-# with an engine bundled and the identity in tauri.woofx3.conf.json, when a
-# `woofx3-v<version>` tag is pushed, then points installed desktop apps at it
-# through the woofx3-latest prerelease. See docs/ops/woofx3-releases.md.
+# Versions, builds, signs and publishes the woofx3 desktop app: the
+# companion's crate with an engine bundled and the identity in
+# tauri.woofx3.conf.json. See docs/ops/woofx3-releases.md.
+#
+# semantic-release settles the version from the conventional commits since
+# the last woofx3-v* tag that change what the desktop ships
+# (scripts/release/desktop-commits.mjs). A push to master releases when one
+# of them is a feat or breaking change; fixes wait for the next one, or for a
+# manual run of this workflow, which releases whatever is pending.
+#
+# Nothing is tagged until the installer is built, signed and its engine has
+# started: the tag goes on the release commit (companion/CHANGELOG.md and the
+# version in tauri.woofx3.conf.json), whose parent is the commit the
+# installer was built from. Installed apps move to it only in the last step,
+# through the woofx3-latest prerelease.
 on:
   push:
-    tags: ["woofx3-v*"]
+    branches: [master]
+  workflow_dispatch:
 
-# Releases queue behind each other and are never cancelled halfway, so two
-# can never race to write woofx3-latest.
+# Releases run one at a time, in push order, and are never cancelled
+# halfway, so two can never race to tag or to write woofx3-latest.
 concurrency:
   group: woofx3-release
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   BUN_VERSION: "1.3.14"
@@ -32,54 +44,73 @@ env:
   ENGINE_REF: master
 
 jobs:
-  check-version:
-    name: Check the tag against the app version
+  plan:
+    name: Settle the next version
     runs-on: ubuntu-latest
+    # The dry run pushes nothing, but checks it could push the tag.
     permissions:
-      contents: read
+      contents: write
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.next.outputs.version }}
+      release: ${{ steps.gate.outputs.release }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      # The updater compares the version the merged Tauri config sets, and
-      # the signature is bound to it, so a tag naming any other version would
-      # publish a release that does not say what it is. The desktop app's
-      # version is the overlay's own `version`; Cargo.toml's belongs to the
-      # companion, so the two products version independently. An overlay
-      # without a version would silently ship the companion's, so that fails
-      # too.
-      - name: Compare the tag with the desktop config's version
-        id: version
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # Only semantic-release and its plugins are needed, so the postinstall
+      # that requires the engine checkout beside this one is skipped.
+      - name: Install release dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # Sets `version` and `type` through scripts/release/next-version.sh;
+      # both are empty when no desktop commit since the last release calls
+      # for one.
+      - name: Dry-run semantic-release
+        id: next
         env:
-          TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bunx semantic-release --dry-run
+
+      - name: Decide whether to release
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          VERSION: ${{ steps.next.outputs.version }}
+          TYPE: ${{ steps.next.outputs.type }}
         run: |
-          semver='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?'
-          if [[ ! "$TAG" =~ ^woofx3-v${semver}$ ]]; then
-            echo "::error::Tag ${TAG} is not woofx3-v<semver>, e.g. woofx3-v1.2.3"
-            exit 1
+          if [[ -z "$VERSION" ]]; then
+            echo "::notice::No desktop changes call for a release."
+            release=false
+          elif [[ "$EVENT" == "workflow_dispatch" ]]; then
+            echo "::notice::Releasing ${VERSION} (${TYPE}) on request."
+            release=true
+          elif [[ "$TYPE" == "minor" || "$TYPE" == "major" ]]; then
+            echo "::notice::Releasing ${VERSION} (${TYPE})."
+            release=true
+          else
+            echo "::notice::${VERSION} (${TYPE}) is pending: fixes wait for a feature, or run this workflow to release them now."
+            release=false
           fi
-          version="${TAG#woofx3-v}"
-          config="companion/${DESKTOP_CONFIG}"
-          conf_version="$(jq -r '.version // empty' "$config")"
-          if [[ -z "$conf_version" ]]; then
-            echo "::error file=${config}::sets no version, so the build would carry the companion's"
-            exit 1
-          fi
-          if [[ "$conf_version" != "$version" ]]; then
-            echo "::error file=${config}::version is ${conf_version}, but the tag is ${TAG}"
-            exit 1
-          fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build, sign and release
-    needs: check-version
+    name: Build, test and sign
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
     runs-on: windows-latest
     environment: production
+    permissions:
+      contents: read
     defaults:
       run:
         shell: bash
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - name: Check signing secrets and build variables
         env:
@@ -101,6 +132,11 @@ jobs:
           exit "$missing"
 
       - uses: actions/checkout@v7
+
+      # The updater compares this version and the signature is bound to it.
+      # semantic-release writes the same one into the release commit.
+      - name: Set the release version
+        run: scripts/release/set-version.sh "$VERSION"
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -124,86 +160,149 @@ jobs:
         working-directory: companion
         run: bun run fetch-engine
 
-      # Signs the installer with the desktop config's version bound into the
-      # signature (the app requires that), uploads it with its .sig, and
-      # writes latest.json into the release. tauri-action reads the same
-      # `--config` overlay, so latest.json and the asset names follow it.
-      - name: Build and release
-        uses: tauri-apps/tauri-action@v1
+      # Starts the bundled engine as the app does, with nothing else set, on
+      # a fresh data directory and again over what that run wrote.
+      - name: Start the bundled engine
+        run: cargo run --manifest-path companion/core/Cargo.toml --example engine_smoke -- companion/src-tauri/engine
+
+      - name: Build and sign the installer
+        working-directory: companion
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WOOFX3_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
           # The deployment's HTTP origin, which the dashboard builds browser
           # source and sign-in URLs from; the same variable the web build uses.
           WOOFX3_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: companion
-          tagName: ${{ github.ref_name }}
-          args: --features bundled-engine --config ${{ env.DESKTOP_CONFIG }}
-          releaseName: woofx3 ${{ needs.check-version.outputs.version }}
-          releaseBody: Download the installer below (the file ending in -setup.exe). Installed copies of woofx3 update themselves.
-          releaseDraft: false
-          prerelease: false
-          uploadUpdaterJson: true
-          updaterJsonPreferNsis: true
+        run: bunx tauri build --bundles nsis --features bundled-engine --config "$DESKTOP_CONFIG"
 
-      # Tauri copies bundle resources next to the binary before packaging
-      # them. The release is already published by now, but woofx3-latest is
-      # not yet pointed at it, so no installed app updates to one without its
-      # engine.
+      # Tauri copies bundle resources next to the binary before packaging them.
       - name: Check the engine was bundled
         run: test -f companion/src-tauri/target/release/engine/orchestrator.exe
 
-  publish-latest:
-    name: Point woofx3-latest at this release
-    needs: [check-version, build]
+      # NSIS names the installer after the product and version, so this fails
+      # if the build kept the companion's identity or another version.
+      - name: Check the installer and its signature
+        run: |
+          installer="companion/src-tauri/target/release/bundle/nsis/woofx3_${VERSION}_x64-setup.exe"
+          test -f "$installer"
+          test -s "${installer}.sig"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: woofx3-installer
+          path: |
+            companion/src-tauri/target/release/bundle/nsis/woofx3_${{ env.VERSION }}_x64-setup.exe
+            companion/src-tauri/target/release/bundle/nsis/woofx3_${{ env.VERSION }}_x64-setup.exe.sig
+          if-no-files-found: error
+
+  release:
+    name: Tag and publish
+    needs: [plan, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
-      TAG: ${{ github.ref_name }}
-      VERSION: ${{ needs.check-version.outputs.version }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      TAG: woofx3-v${{ needs.plan.outputs.version }}
     steps:
-      # tauri-action writes API asset URLs (`/releases/assets/<id>`) into
-      # latest.json. The public download URL of the same asset needs no API
-      # call, so it is not subject to the API's rate limit for anonymous
-      # clients, and it names the release it belongs to.
-      - name: Point latest.json at this release's download URLs
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # .releaserc.json attaches dist/*-setup.exe and its .sig to the release.
+      - uses: actions/download-artifact@v7
+        with:
+          name: woofx3-installer
+          path: dist
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install release dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Tag and create the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_EXPECTED_VERSION: ${{ needs.plan.outputs.version }}
+        run: bunx semantic-release
+
+      # semantic-release exits cleanly without releasing when master moved on
+      # since the dry run, or when a rerun finds the tag already published.
+      # Only the second may go on to update installed apps. After a push, the
+      # first is routine: the run for the newer push, queued behind this one,
+      # sees the same feature and releases these commits with its own. A
+      # manual run has no such follow-up if the newer push holds only fixes,
+      # so it fails and asks to be run again.
+      - name: Check the release exists
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
-          mkdir release
-          gh release download "$TAG" --pattern latest.json --dir release
-          gh api "repos/${GH_REPO}/releases/tags/${TAG}" \
-            --jq '[.assets[] | {key: (.id | tostring), value: .name}] | from_entries' > release/asset-names.json
-          base="https://github.com/${GH_REPO}/releases/download/${TAG}/"
-          jq --arg base "$base" --arg version "$VERSION" --slurpfile names release/asset-names.json '
-            def asset_name:
-              if test("/releases/assets/[0-9]+$") then
-                $names[0][capture("/releases/assets/(?<id>[0-9]+)$").id]
-                  // error("latest.json names an asset this release does not have: \(.)")
-              elif startswith($base) then
-                ltrimstr($base)
-              else
-                error("latest.json has a download URL outside this release: \(.)")
-              end;
-            if (.version | ltrimstr("v")) != $version then
-              error("latest.json announces \(.version), not \($version)")
-            elif (.platforms["windows-x86_64"] | not) then
-              error("latest.json has no windows-x86_64 entry")
-            else
-              .platforms |= map_values(.url |= ($base + (asset_name | @uri)))
-            end
-          ' release/latest.json > release/latest.rewritten.json
-          mv release/latest.rewritten.json release/latest.json
-          cat release/latest.json
-          gh release upload "$TAG" release/latest.json --clobber
+          set -euo pipefail
+          git fetch --force --tags origin
+          if ! git rev-parse --quiet --verify "refs/tags/${TAG}" > /dev/null; then
+            head="$(git rev-parse origin/master)"
+            if [[ "$head" != "$GITHUB_SHA" ]] && git merge-base --is-ancestor "$GITHUB_SHA" "$head"; then
+              if [[ "$EVENT" == "workflow_dispatch" ]]; then
+                echo "::error::Not released: master moved on to ${head}. Run this workflow again to release it."
+                exit 1
+              fi
+              echo "::notice::Not released: master moved on to ${head}, whose run releases these commits."
+              echo "released=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::semantic-release published no ${TAG}, and master has not moved on."
+            exit 1
+          fi
+          released="$(git rev-parse "${TAG}^{commit}")"
+          test "$(git rev-parse "${released}^")" = "${GITHUB_SHA}"
+          if git diff --name-only "${GITHUB_SHA}" "$released" \
+            | grep -vx -e companion/CHANGELOG.md -e companion/src-tauri/tauri.woofx3.conf.json; then
+            echo "::error::The release commit changes more than the changelog and the desktop version."
+            exit 1
+          fi
+          echo "released=true" >> "$GITHUB_OUTPUT"
+
+      # The update feed, written here rather than by the build so its notes
+      # are the release's and its URLs are the public download URLs, which
+      # need no API call and so are not subject to the API's rate limit for
+      # anonymous clients.
+      - name: Write latest.json for this release
+        if: steps.check.outputs.released == 'true'
+        run: |
+          set -euo pipefail
+          installer="woofx3_${VERSION}_x64-setup.exe"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx "$installer"
+          notes="$(gh release view "$TAG" --json body --jq '.body')"
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$notes" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --rawfile signature "dist/${installer}.sig" \
+            --arg url "https://github.com/${GH_REPO}/releases/download/${TAG}/$(jq -rn --arg name "$installer" '$name | @uri')" '
+            {url: $url, signature: ($signature | rtrimstr("\n"))} as $platform
+            | {
+                version: $version,
+                notes: $notes,
+                pub_date: $pub_date,
+                platforms: {"windows-x86_64": $platform, "windows-x86_64-nsis": $platform}
+              }
+          ' > latest.json
+          cat latest.json
+          gh release upload "$TAG" latest.json --clobber
 
       # woofx3-latest is a prerelease so it can never become the
       # repository's "latest release": other releases in this repository must
       # not be able to change what installed desktop apps update to.
       - name: Publish latest.json to woofx3-latest
+        if: steps.check.outputs.released == 'true'
         run: |
+          set -euo pipefail
           if gh release view "$LATEST_TAG" > /dev/null 2>&1; then
             current="$(gh release download "$LATEST_TAG" --pattern latest.json --output - | jq -r '.version' || true)"
             newest="$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -n 1)"
@@ -220,4 +319,4 @@ jobs:
               --notes "Not a release to download. Installed copies of woofx3 read latest.json here to find their next update."
           fi
           gh release edit "$LATEST_TAG" --prerelease
-          gh release upload "$LATEST_TAG" release/latest.json --clobber
+          gh release upload "$LATEST_TAG" latest.json --clobber
