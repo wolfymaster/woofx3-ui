@@ -52,6 +52,7 @@ export class FakeApi extends RpcTarget implements FakeEngineSurface {
 
   async getEngineCapabilities(): Promise<EngineCapabilities> {
     await this.engine.answering("getEngineCapabilities");
+    this.engine.capabilityReads += 1;
     return {
       schema: this.engine.capabilitySchema as typeof ENGINE_CAPABILITIES_SCHEMA,
       capabilities: supportedEngineCapabilities("local"),
@@ -105,6 +106,8 @@ export class FakeEngine {
   readonly answers: Array<{ requestId: string; answer: EngineRequestAnswer }> = [];
   readonly sessions: FakeApi[] = [];
   sessionsOpened = 0;
+  /** getEngineCapabilities calls answered, the session's own connect check included. */
+  capabilityReads = 0;
   subscribeCalls = 0;
   private readonly serverPorts: MessagePort[] = [];
 

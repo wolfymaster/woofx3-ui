@@ -1,5 +1,6 @@
+import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { useEngineGateway } from "@/engine/context";
-import { useFetched } from "./use-fetched";
+import { useEngineCapability } from "./use-engine-capabilities";
 
 /** Every alert group on the instance. */
 export function useWorkflowGroups() {
@@ -7,13 +8,12 @@ export function useWorkflowGroups() {
 }
 
 /**
- * Whether the engine has alert groups. False until it answers, and when it
- * cannot be asked, so a screen shows nothing of groups rather than offering
- * what an older engine would refuse.
+ * Whether the engine has alert groups. False until the engine has reported,
+ * so a screen shows nothing of groups rather than offering what an older
+ * engine would refuse.
  */
 export function useWorkflowGroupsSupported(): boolean {
-  const supported = useEngineGateway().workflows.useGroupsSupportedRequest();
-  return useFetched(supported, {}).data === true;
+  return useEngineCapability(ENGINE_CAPABILITIES.workflowsGroups);
 }
 
 export function useCreateWorkflowGroupRequest() {

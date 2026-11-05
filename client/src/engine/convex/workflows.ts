@@ -304,11 +304,6 @@ function useGroups() {
   return useMappedList(rows, toWorkflowGroup);
 }
 
-function useGroupsSupportedRequest() {
-  const supported = useInstanceAction(api.workflowGroupActions.supported);
-  return useCallback(() => supported({}), [supported]);
-}
-
 function useCreateGroupRequest() {
   const create = useInstanceAction(api.workflowGroupActions.create);
   return useCallback(async (group: WorkflowGroupText) => answeredGroup(await create(group)), [create]);
@@ -372,7 +367,6 @@ export const convexWorkflowsGateway: WorkflowsGateway = {
   useNotRunning,
   useHealthResyncRequest,
   useGroups,
-  useGroupsSupportedRequest,
   useCreateGroupRequest,
   useUpdateGroupRequest,
   useRemoveGroupRequest,

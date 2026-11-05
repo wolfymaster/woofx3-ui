@@ -1,7 +1,20 @@
 import { useEffect } from "react";
 import type { SessionGateway } from "@/engine/gateway";
-import { useConnected } from "./query";
+import { directKeys as k } from "./keys";
+import { type EngineRead, useConnected, useEngineQuery } from "./query";
 import type { DirectRuntime } from "./runtime";
+
+/**
+ * Cached like every direct read: asked once per session, and asked again when
+ * a resync invalidates the cache (a new session, or a new engine).
+ */
+function capabilitiesRead(runtime: DirectRuntime): EngineRead<readonly string[]> {
+  return {
+    queryKey: k.session.capabilities(),
+    queryFn: async () =>
+      (await runtime.call("getEngineCapabilities", (api) => api.getEngineCapabilities())).capabilities,
+  };
+}
 
 /**
  * The live connection is the runtime's own engine session. Its engine and
@@ -24,5 +37,6 @@ export function directSessionGateway(runtime: DirectRuntime): SessionGateway {
     },
     useReconnectRequest: () => reconnectNow,
     useConnected: () => useConnected(runtime),
+    useCapabilities: () => useEngineQuery(runtime, capabilitiesRead(runtime)),
   };
 }

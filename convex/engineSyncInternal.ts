@@ -913,6 +913,7 @@ export const startRun = internalMutation({
         // Must list every step in SYNC_STEPS: updateRunStep patches the entry
         // whose name matches and silently does nothing when there is none, so
         // a step missing here runs but reports neither progress nor failure.
+        { name: "engineCapabilities", status: "pending", itemsProcessed: 0 },
         { name: "modules", status: "pending", itemsProcessed: 0 },
         { name: "commands", status: "pending", itemsProcessed: 0 },
         { name: "groups", status: "pending", itemsProcessed: 0 },
@@ -935,6 +936,7 @@ export const updateRunStep = internalMutation({
   args: {
     runId: v.id("syncRuns"),
     stepName: v.union(
+      v.literal("engineCapabilities"),
       v.literal("modules"),
       v.literal("commands"),
       v.literal("groups"),

@@ -38,6 +38,7 @@ import type * as dashboardNotes from "../dashboardNotes.js";
 import type * as debug from "../debug.js";
 import type * as defaultSeed from "../defaultSeed.js";
 import type * as engineAlerts from "../engineAlerts.js";
+import type * as engineCapabilities from "../engineCapabilities.js";
 import type * as engineEventLog from "../engineEventLog.js";
 import type * as engineEventQueue from "../engineEventQueue.js";
 import type * as engineEvents from "../engineEvents.js";
@@ -83,6 +84,7 @@ import type * as lib_engineSync_steps from "../lib/engineSync/steps.js";
 import type * as lib_engineSync_steps_actions from "../lib/engineSync/steps/actions.js";
 import type * as lib_engineSync_steps_commands from "../lib/engineSync/steps/commands.js";
 import type * as lib_engineSync_steps_databases from "../lib/engineSync/steps/databases.js";
+import type * as lib_engineSync_steps_engineCapabilities from "../lib/engineSync/steps/engineCapabilities.js";
 import type * as lib_engineSync_steps_eventQueue from "../lib/engineSync/steps/eventQueue.js";
 import type * as lib_engineSync_steps_functions from "../lib/engineSync/steps/functions.js";
 import type * as lib_engineSync_steps_groups from "../lib/engineSync/steps/groups.js";
@@ -95,6 +97,7 @@ import type * as lib_engineSync_steps_workflowGroups from "../lib/engineSync/ste
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_engineSync_syncRow from "../lib/engineSync/syncRow.js";
 import type * as lib_engineSync_trigger from "../lib/engineSync/trigger.js";
+import type * as lib_engineWorkflows from "../lib/engineWorkflows.js";
 import type * as lib_entitlementAccess from "../lib/entitlementAccess.js";
 import type * as lib_entitlements from "../lib/entitlements.js";
 import type * as lib_featureFlagAccess from "../lib/featureFlagAccess.js";
@@ -338,6 +341,7 @@ declare const fullApi: ApiFromModules<{
   debug: typeof debug;
   defaultSeed: typeof defaultSeed;
   engineAlerts: typeof engineAlerts;
+  engineCapabilities: typeof engineCapabilities;
   engineEventLog: typeof engineEventLog;
   engineEventQueue: typeof engineEventQueue;
   engineEvents: typeof engineEvents;
@@ -383,6 +387,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/actions": typeof lib_engineSync_steps_actions;
   "lib/engineSync/steps/commands": typeof lib_engineSync_steps_commands;
   "lib/engineSync/steps/databases": typeof lib_engineSync_steps_databases;
+  "lib/engineSync/steps/engineCapabilities": typeof lib_engineSync_steps_engineCapabilities;
   "lib/engineSync/steps/eventQueue": typeof lib_engineSync_steps_eventQueue;
   "lib/engineSync/steps/functions": typeof lib_engineSync_steps_functions;
   "lib/engineSync/steps/groups": typeof lib_engineSync_steps_groups;
@@ -395,6 +400,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/engineSync/syncRow": typeof lib_engineSync_syncRow;
   "lib/engineSync/trigger": typeof lib_engineSync_trigger;
+  "lib/engineWorkflows": typeof lib_engineWorkflows;
   "lib/entitlementAccess": typeof lib_entitlementAccess;
   "lib/entitlements": typeof lib_entitlements;
   "lib/featureFlagAccess": typeof lib_featureFlagAccess;

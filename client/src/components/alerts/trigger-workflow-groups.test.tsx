@@ -20,15 +20,15 @@ const sponsor: WorkflowGroup = {
 };
 
 function gatewayWith(supported: boolean, onGroupsRead: () => void = () => {}): EngineGateway {
-  const ask = async () => supported;
+  const capabilities = supported ? ["workflows.groups"] : [];
   const write = async () => holiday;
   return {
+    session: { useCapabilities: () => capabilities },
     workflows: {
       useGroups: () => {
         onGroupsRead();
         return [holiday, sponsor];
       },
-      useGroupsSupportedRequest: () => ask,
       useAddGroupMembersRequest: () => write,
       useRemoveGroupMembersRequest: () => write,
     },
