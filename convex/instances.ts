@@ -12,6 +12,7 @@ import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
+import { markFirstRun } from "./provisioningInternal";
 
 /**
  * An instance row as members may see it. `webhookSecret` authenticates the
@@ -118,10 +119,27 @@ export const create = mutation({
       .query("instances")
       .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
       .take(50);
-    const unregistered = existing.find((instance) => !instance.clientId && instance.hosting !== "managed");
+    let unregistered = existing.find((instance) => !instance.clientId && instance.hosting !== "managed");
+    // Onboarding's managed placeholder has no engine behind it until a
+    // provisioning row exists, so it can become this engine's row too.
+    for (const instance of existing) {
+      if (!unregistered && instance.hosting === "managed" && !instance.clientId) {
+        const provisioning = await ctx.db
+          .query("engineProvisioning")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
+          .first();
+        unregistered = provisioning ? undefined : instance;
+      }
+    }
+    // This form is how an account with no engine yet starts: its own server or
+    // a preview's paired engine are first runs just as a managed engine is.
+    const firstEngine = !existing.some((instance) => instance.clientId);
     if (unregistered) {
       await ctx.db.patch(unregistered._id, { name: args.name, url: args.url, hosting: "external" });
       await ensureInstanceMember(ctx, unregistered._id, userId, "owner");
+      if (firstEngine) {
+        await markFirstRun(ctx, unregistered._id);
+      }
       return unregistered._id;
     }
 
@@ -148,6 +166,9 @@ export const create = mutation({
         continue;
       }
       await ensureInstanceMember(ctx, instanceId, m.userId, mapAccountRoleToInstanceRole(m.role));
+    }
+    if (firstEngine) {
+      await markFirstRun(ctx, instanceId);
     }
 
     return instanceId;
@@ -233,6 +254,13 @@ export const deleteInstanceData = internalMutation({
       .first();
     if (provisioning) {
       await ctx.db.delete(provisioning._id);
+    }
+    const heldSlugs = await ctx.db
+      .query("engineHeldSlugs")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const held of heldSlugs) {
+      await ctx.db.delete(held._id);
     }
 
     const companions = await ctx.db

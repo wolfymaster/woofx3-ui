@@ -9,6 +9,7 @@ import {
   type StarterCatalog,
   type StarterCommandItem,
   type StarterItem,
+  type StarterPack,
   starterItemKey,
   validateStarterValues,
 } from "@shared/starter-packs";
@@ -28,7 +29,9 @@ import { catalogRead, workflowsRead } from "./workflows";
 // An engine does not remember which of its commands and workflows a starter
 // pack made, so the dashboard keeps that ledger in the engine's UI settings:
 // one setting per pack item, naming what it created. An item counts as
-// installed only while that object still exists on the engine.
+// installed only while that object still exists on the engine, except in a
+// pack seeded once (shared/default-seed.ts), where the setting alone counts,
+// so that what the streamer deleted stays deleted.
 
 const MEMBER = "starterPacks.useInstallRequest";
 
@@ -122,6 +125,126 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * Creates the items of `pack` that are not in place, recording each in the
+ * ledger. `claimed` holds the items an install in this window is creating.
+ */
+export async function installPackItems(
+  runtime: DirectRuntime,
+  pack: StarterPack,
+  values: Record<string, string | number>,
+  claimed: Set<string>,
+  seedOnce = false
+): Promise<StarterPackInstallOutcome[]> {
+  const checked = validateStarterValues(pack, values);
+  if (!checked.ok) {
+    throw new Error(Object.values(checked.errors).join(" "));
+  }
+  const catalog = toStarterCatalog(await runtime.queryClient.fetchQuery({ ...catalogRead(runtime), staleTime: 0 }));
+  const [settings, commands, groups, workflows] = await Promise.all([
+    runtime.call("listUISettings", (api) => api.listUISettings(UI_SETTING_NAMESPACES.starterPacks)),
+    runtime.call("listCommands", (api) => api.listCommands()),
+    runtime.queryClient.fetchQuery({ ...groupsRead(runtime), staleTime: 0 }),
+    readAllWorkflows(runtime),
+  ]);
+  const ledger = ledgerOf(settings);
+  const holdings: EngineHoldings = {
+    workflowIds: new Set(workflows.map((workflow) => workflow.id)),
+    commandIds: new Set(commands.map((command) => command.id)),
+    commandNames: new Set(commands.map((command) => command.command.toLowerCase())),
+  };
+
+  const groupIdsFor = (names: readonly string[]): string[] =>
+    names.map((name) => {
+      const group = groups.find((candidate) => candidate.isBuiltIn === true && candidate.name === name);
+      if (group === undefined) {
+        throw new Error(`The ${name} command group is not on the engine yet.`);
+      }
+      return group.engineGroupId;
+    });
+
+  const installCommand = async (item: StarterCommandItem): Promise<string> => {
+    const built = buildStarterCommand(item, checked.values, catalog);
+    const groupIds = groupIdsFor(built.restrictTo);
+    const created = await runtime.call("createCommand", (api) =>
+      api.createCommand({
+        command: built.command,
+        actions: built.actions,
+        cooldown: built.cooldown,
+        enabled: true,
+        visibility: groupIds.length > 0 ? "restricted" : "public",
+        groupIds,
+        correlationKey: crypto.randomUUID(),
+      })
+    );
+    return created.id;
+  };
+
+  // The engine creates every workflow off; a pack's is installed to work.
+  const installWorkflow = async (definition: Omit<WorkflowDefinition, "id">): Promise<string> => {
+    const created = await runtime.call("createWorkflow", (api) =>
+      api.createWorkflow({ definition, correlationKey: crypto.randomUUID() })
+    );
+    await runtime.call("setWorkflowEnabled", (api) => api.setWorkflowEnabled(created.id, true, crypto.randomUUID()));
+    return created.id;
+  };
+
+  const installItem = async (item: StarterItem): Promise<StarterPackInstallOutcome> => {
+    const missing = missingRequirements(item, catalog);
+    const key = starterItemKey(pack.id, item.id);
+    if (isInPlace(ledger.get(key), holdings) || (seedOnce && ledger.has(key))) {
+      return { itemId: item.id, outcome: "already-installed" };
+    }
+    if (!hasRequirements(missing)) {
+      return { itemId: item.id, outcome: "unavailable", message: requirementsMessage(missing) ?? undefined };
+    }
+    if (item.kind === "command" && holdings.commandNames.has(item.command.toLowerCase())) {
+      return { itemId: item.id, outcome: "conflict", message: "A command with this name already exists." };
+    }
+    if (claimed.has(key)) {
+      return { itemId: item.id, outcome: "busy", message: "Another install of this item is in progress." };
+    }
+    claimed.add(key);
+    try {
+      const engineId =
+        item.kind === "workflow"
+          ? await installWorkflow(
+              // Carries a delay wait, which the shared WorkflowDefinition type does not model yet.
+              buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<WorkflowDefinition, "id">
+            )
+          : await installCommand(item);
+      await putUISetting(
+        runtime,
+        UI_SETTING_NAMESPACES.starterPacks,
+        key,
+        ledgerValue({ kind: item.kind, engineId }),
+        MEMBER
+      );
+      return { itemId: item.id, outcome: "installed" };
+    } catch (error) {
+      return { itemId: item.id, outcome: "failed", message: errorMessage(error) };
+    } finally {
+      claimed.delete(key);
+    }
+  };
+
+  const results: StarterPackInstallOutcome[] = [];
+  for (const item of pack.items) {
+    results.push(await installItem(item));
+  }
+  await Promise.all([
+    runtime.queryClient.invalidateQueries({ queryKey: k.commands.list() }),
+    runtime.queryClient.invalidateQueries({ queryKey: k.workflows.list() }),
+    runtime.queryClient.invalidateQueries({ queryKey: k.workflows.health() }),
+  ]);
+  return results;
+}
+
+/** The engine id the ledger's settings name for an item, whether or not that object still exists. */
+export function ledgerEngineId(settings: readonly UISetting[], key: string): string | undefined {
+  return ledgerOf(settings).get(key)?.engineId;
+}
+
 export function directStarterPacksGateway(runtime: DirectRuntime): StarterPacksGateway {
   const ledgerRead = uiSettingsRead(runtime, UI_SETTING_NAMESPACES.starterPacks);
   const commandsListRead = {
@@ -152,107 +275,7 @@ export function directStarterPacksGateway(runtime: DirectRuntime): StarterPacksG
     if (pack === undefined) {
       throw new Error(`Unknown starter pack "${packId}"`);
     }
-    const checked = validateStarterValues(pack, values);
-    if (!checked.ok) {
-      throw new Error(Object.values(checked.errors).join(" "));
-    }
-    const catalog = toStarterCatalog(await runtime.queryClient.fetchQuery({ ...catalogRead(runtime), staleTime: 0 }));
-    const [settings, commands, groups, workflows] = await Promise.all([
-      runtime.call("listUISettings", (api) => api.listUISettings(UI_SETTING_NAMESPACES.starterPacks)),
-      runtime.call("listCommands", (api) => api.listCommands()),
-      runtime.queryClient.fetchQuery({ ...groupsRead(runtime), staleTime: 0 }),
-      readAllWorkflows(runtime),
-    ]);
-    const ledger = ledgerOf(settings);
-    const holdings: EngineHoldings = {
-      workflowIds: new Set(workflows.map((workflow) => workflow.id)),
-      commandIds: new Set(commands.map((command) => command.id)),
-      commandNames: new Set(commands.map((command) => command.command.toLowerCase())),
-    };
-
-    const groupIdsFor = (names: readonly string[]): string[] =>
-      names.map((name) => {
-        const group = groups.find((candidate) => candidate.isBuiltIn === true && candidate.name === name);
-        if (group === undefined) {
-          throw new Error(`The ${name} command group is not on the engine yet.`);
-        }
-        return group.engineGroupId;
-      });
-
-    const installCommand = async (item: StarterCommandItem): Promise<string> => {
-      const built = buildStarterCommand(item, checked.values, catalog);
-      const groupIds = groupIdsFor(built.restrictTo);
-      const created = await runtime.call("createCommand", (api) =>
-        api.createCommand({
-          command: built.command,
-          actions: built.actions,
-          cooldown: built.cooldown,
-          enabled: true,
-          visibility: groupIds.length > 0 ? "restricted" : "public",
-          groupIds,
-          correlationKey: crypto.randomUUID(),
-        })
-      );
-      return created.id;
-    };
-
-    const installItem = async (item: StarterItem): Promise<StarterPackInstallOutcome> => {
-      const missing = missingRequirements(item, catalog);
-      if (!hasRequirements(missing)) {
-        return { itemId: item.id, outcome: "unavailable", message: requirementsMessage(missing) ?? undefined };
-      }
-      const key = starterItemKey(pack.id, item.id);
-      if (isInPlace(ledger.get(key), holdings)) {
-        return { itemId: item.id, outcome: "already-installed" };
-      }
-      if (item.kind === "command" && holdings.commandNames.has(item.command.toLowerCase())) {
-        return { itemId: item.id, outcome: "conflict", message: "A command with this name already exists." };
-      }
-      if (claimed.has(key)) {
-        return { itemId: item.id, outcome: "busy", message: "Another install of this item is in progress." };
-      }
-      claimed.add(key);
-      try {
-        const engineId =
-          item.kind === "workflow"
-            ? (
-                await runtime.call("createWorkflow", (api) =>
-                  api.createWorkflow({
-                    // Carries a delay wait, which the shared WorkflowDefinition type does not model yet.
-                    definition: buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<
-                      WorkflowDefinition,
-                      "id"
-                    >,
-                    correlationKey: crypto.randomUUID(),
-                  })
-                )
-              ).id
-            : await installCommand(item);
-        await putUISetting(
-          runtime,
-          UI_SETTING_NAMESPACES.starterPacks,
-          key,
-          ledgerValue({ kind: item.kind, engineId }),
-          MEMBER
-        );
-        return { itemId: item.id, outcome: "installed" };
-      } catch (error) {
-        return { itemId: item.id, outcome: "failed", message: errorMessage(error) };
-      } finally {
-        claimed.delete(key);
-      }
-    };
-
-    const results: StarterPackInstallOutcome[] = [];
-    for (const item of pack.items) {
-      results.push(await installItem(item));
-    }
-    await Promise.all([
-      runtime.queryClient.invalidateQueries({ queryKey: k.commands.list() }),
-      runtime.queryClient.invalidateQueries({ queryKey: k.workflows.list() }),
-      runtime.queryClient.invalidateQueries({ queryKey: k.workflows.health() }),
-    ]);
-    return results;
+    return installPackItems(runtime, pack, values, claimed);
   };
 
   return {

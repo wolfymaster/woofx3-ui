@@ -1,10 +1,12 @@
 import { api } from "@convex/_generated/api";
 import { useAction, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { OverlaysGateway } from "@/engine/gateway";
-import type { SceneId } from "@/engine/types";
+import type { OverlayFacts, ReadOptions, SceneId } from "@/engine/types";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { fromSceneId } from "./ids";
+import { useMappedValue } from "./mapped";
 import { useScopeInstanceId } from "./scope";
 
 // The engine mints the overlay token a scene's URL carries; Convex keeps it
@@ -42,7 +44,25 @@ function useKnownPreviewUrl(engineSceneId: string) {
   return useQuery(api.scenes.previewUrlByEngineSceneId, instanceId ? { instanceId, engineSceneId } : "skip");
 }
 
+type FactsRow = NonNullable<FunctionReturnType<typeof api.browserSource.overlayFacts>>;
+
+export function toOverlayFacts(row: FactsRow): OverlayFacts {
+  return {
+    hasScene: row.hasScene,
+    browserSourceKeyCount: row.browserSourceKeyCount,
+    featuredUrl: row.featuredKey ? browserSourceUrlForKey(row.featuredKey) : null,
+    lastLoadedAt: row.lastLoadedAt,
+  };
+}
+
+function useFacts({ enabled = true }: ReadOptions = {}) {
+  const instanceId = useScopeInstanceId();
+  const row = useQuery(api.browserSource.overlayFacts, enabled && instanceId ? { instanceId } : "skip");
+  return useMappedValue(row, toOverlayFacts);
+}
+
 export const convexOverlaysGateway: OverlaysGateway = {
+  useFacts,
   useKnownPreviewUrl,
   useBrowserSourceUrlRequest,
   useRotateBrowserSourceUrlRequest,

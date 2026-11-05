@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react
 import { useLocation } from "wouter";
 import { type SavedTrigger, TriggerEditor } from "@/components/alerts/trigger-editor";
 import { TriggerGroupCard } from "@/components/alerts/trigger-group-card";
+import { TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
 import { Button } from "@/components/ui/button";
@@ -464,6 +465,7 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
             {!row.isEnabled && (
               <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
             )}
+            <TriggerGroupChips workflows={[row]} />
             {health && (
               <span className="relative z-10 shrink-0">
                 <NotRunningBadge health={health} />

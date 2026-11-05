@@ -95,6 +95,9 @@ const upsertFromWebhookArgs = {
   definition: v.any(),
   isEnabled: v.boolean(),
   revision: v.optional(v.number()),
+  // Absent from an engine without groups, or a callback that does not know
+  // them; the stored list is then left as it is.
+  groupIds: v.optional(v.array(v.string())),
 };
 
 /**
@@ -103,7 +106,7 @@ const upsertFromWebhookArgs = {
  */
 export async function upsertWorkflowFromWebhook(
   ctx: MutationCtx,
-  { instanceId, engineWorkflowId, definition, isEnabled, revision }: ObjectType<typeof upsertFromWebhookArgs>
+  { instanceId, engineWorkflowId, definition, isEnabled, revision, groupIds }: ObjectType<typeof upsertFromWebhookArgs>
 ) {
   const storedDefinition = escapeDollarKeys(definition);
   const existing = await ctx.db
@@ -121,6 +124,7 @@ export async function upsertWorkflowFromWebhook(
       definition: storedDefinition,
       isEnabled,
       revision,
+      ...(groupIds === undefined ? {} : { groupIds }),
       updatedAt: now,
     });
     return existing._id;
@@ -131,6 +135,7 @@ export async function upsertWorkflowFromWebhook(
     definition: storedDefinition,
     isEnabled,
     revision,
+    groupIds,
     createdAt: now,
     updatedAt: now,
   });

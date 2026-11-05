@@ -1,6 +1,6 @@
 import { Layers, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useLocation, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
 import { HelpTip } from "@/components/common/help-tip";
 import { PageIntro } from "@/components/common/page-intro";
@@ -25,9 +25,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
+import { useDefaultSeedStatus } from "@/engine/hooks/use-default-seed";
 import { useDeleteSceneRequest, usePrewarmSceneEditor, useScenes } from "@/engine/hooks/use-scenes";
 import type { SceneRecord } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { OVERLAY_PAGE_PATH } from "@/lib/getting-started";
 
 type SceneRow = SceneRecord;
 
@@ -102,6 +104,7 @@ function SceneListScreen() {
   const { instanceId, isInstanceLoading } = useEngineScope();
 
   const scenesRaw = useScenes();
+  const seed = useDefaultSeedStatus();
   const deleteScene = useDeleteSceneRequest();
   const prewarmEditor = usePrewarmSceneEditor();
 
@@ -153,16 +156,23 @@ function SceneListScreen() {
         title="Scenes"
         description="Browser source overlays — pick one to lay out its widgets."
         actions={
-          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-            Adding a scene to OBS
-            <HelpTip term="browserSource" align="end">
-              <ol className="list-decimal pl-4 space-y-1">
-                <li>Open the scene and copy its browser source URL from the link button.</li>
-                <li>In OBS, add a source to your scene and choose Browser.</li>
-                <li>Paste the URL and set the width and height to the scene&apos;s size.</li>
-              </ol>
-            </HelpTip>
-          </span>
+          <div className="flex items-center gap-3">
+            {seed?.neverSeeded === false && (
+              <Button asChild variant="outline" size="sm" data-testid="link-your-overlay">
+                <Link href={OVERLAY_PAGE_PATH}>Your overlay</Link>
+              </Button>
+            )}
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              Adding a scene to OBS
+              <HelpTip term="browserSource" align="end">
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Open the scene and copy its browser source URL from the link button.</li>
+                  <li>In OBS, add a source to your scene and choose Browser.</li>
+                  <li>Paste the URL and set the width and height to the scene&apos;s size.</li>
+                </ol>
+              </HelpTip>
+            </span>
+          </div>
         }
       />
       <PageIntro introId="scenes" onTry={() => setCreateOpen(true)} />

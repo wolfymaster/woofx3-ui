@@ -29,6 +29,12 @@ const ENGINE_PREFIX = "alert cannot be published: ";
 
 const MISSING_TARGET = /^no alert widget named "(.+)" on a running scene$/;
 
+/** Whether the reason says no running scene has the alert widget the step plays on. */
+export function isMissingAlertTarget(reason: string): boolean {
+  const message = reason.startsWith(ENGINE_PREFIX) ? reason.slice(ENGINE_PREFIX.length) : reason;
+  return MISSING_TARGET.test(message);
+}
+
 export function describeAlertFailure(reason: string): AlertFailureCopy | null {
   const message = reason.startsWith(ENGINE_PREFIX) ? reason.slice(ENGINE_PREFIX.length) : reason;
 

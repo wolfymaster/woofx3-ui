@@ -82,10 +82,6 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.WORKFLOW_CREATED]: (event) => workflowKeys(event.workflow.id),
   [EngineEventType.WORKFLOW_UPDATED]: (event) => workflowKeys(event.workflow.id),
   [EngineEventType.WORKFLOW_DELETED]: (event) => workflowKeys(event.workflowId),
-  // Nothing here reads workflow groups yet; a member's own switch arrives as its `workflow.updated`.
-  [EngineEventType.WORKFLOW_GROUP_CREATED]: NONE,
-  [EngineEventType.WORKFLOW_GROUP_UPDATED]: NONE,
-  [EngineEventType.WORKFLOW_GROUP_DELETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_STARTED]: NONE,
   [EngineEventType.WORKFLOW_RUN_COMPLETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_FAILED]: NONE,
@@ -122,6 +118,10 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.GROUP_DELETED]: (event) => [k.commands.groups(), k.commands.members(event.groupId)],
   [EngineEventType.GROUP_MEMBER_ADDED]: (event) => [k.commands.members(event.groupId)],
   [EngineEventType.GROUP_MEMBER_REMOVED]: (event) => [k.commands.members(event.groupId)],
+  [EngineEventType.WORKFLOW_GROUP_CREATED]: () => [k.workflows.groups()],
+  [EngineEventType.WORKFLOW_GROUP_UPDATED]: () => [k.workflows.groups()],
+  // The members' group lists arrive on their own workflow.updated.
+  [EngineEventType.WORKFLOW_GROUP_DELETED]: () => [k.workflows.groups()],
   [EngineEventType.UI_SETTING_CHANGED]: (event) => [k.uiSettings.namespace(event.namespace)],
   [EngineEventType.TWITCH_LINK_CHANGED]: () => [k.twitch.link()],
 };

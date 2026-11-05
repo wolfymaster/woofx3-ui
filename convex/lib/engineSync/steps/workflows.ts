@@ -1,7 +1,6 @@
 import { escapeDollarKeys } from "@shared/dollar-keys";
 import { internal } from "../../../_generated/api";
-import type { EngineApi } from "../../engineInstanceUrl";
-import { ENGINE_SYNC_CONFIG } from "../config";
+import { readAllEngineWorkflows } from "../../engineWorkflows";
 import type { SyncStep, SyncStepContext } from "../steps";
 
 /**
@@ -24,28 +23,8 @@ import type { SyncStep, SyncStepContext } from "../steps";
 export const workflowsStep: SyncStep = {
   name: "workflows",
   run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
-    type WfPage = Awaited<ReturnType<EngineApi["getWorkflows"]>>;
     const snapshotStartedAt = Date.now();
-    const all: WfPage["workflows"] = [];
-    let page = 1;
-    while (true) {
-      // Each page is a separate engine RPC — capnweb sessions are single-use,
-      // so we must open a fresh session per page.
-      const api = newApi();
-      const res = (await api.getWorkflows({
-        page,
-        pageSize: ENGINE_SYNC_CONFIG.pageSize,
-      })) as WfPage;
-      const wfs = res.workflows ?? [];
-      all.push(...wfs);
-      if (wfs.length < ENGINE_SYNC_CONFIG.pageSize) {
-        break;
-      }
-      page++;
-      if (page > 1000) {
-        throw new Error("Workflow pagination exceeded 1000 pages — aborting to avoid runaway");
-      }
-    }
+    const all = await readAllEngineWorkflows(newApi);
 
     const upserts = all
       .filter((w) => w.definition !== null)
@@ -53,6 +32,7 @@ export const workflowsStep: SyncStep = {
         engineWorkflowId: w.id,
         definition: escapeDollarKeys(w.definition),
         isEnabled: w.isEnabled,
+        groupIds: w.groupIds,
       }));
     const engineIds = all.map((w) => w.id);
 

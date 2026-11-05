@@ -2,10 +2,7 @@
 
 A streamer moving to woofx3 can bring their setup from Firebot or Streamer.bot. The import rebuilds it as ordinary woofx3 objects (workflows, chat commands, command groups and counters), created through the same functions the workflow builder, command editor, groups page and counters page use. The engine cannot tell an imported item from one a person built, and nothing about it is a module.
 
-It is offered in two places, both using `SetupImportPanel` (`client/src/components/setup-import/`):
-
-- the **Bring your setup** step of the setup wizard (see [Auth & onboarding](/ui/auth-onboarding#setup));
-- a card on the **Backup** page (`/admin/backup`).
+It lives in a card on the **Backup** page (`/admin/backup`), which uses `SetupImportPanel` (`client/src/components/setup-import/`). The dashboard's Todo panel offers it as "Bring your setup from Firebot or Streamer.bot" (see [Dashboard](/ui/dashboard#getting-started-checklist)); onboarding no longer asks.
 
 Only owners and admins can import.
 
@@ -95,7 +92,7 @@ Each item's outcome is one of:
 
 Apply works in slices of about four minutes and schedules the next slice, so a large import is not cut off by action time limits.
 
-**Waiting.** An import queued during setup does not start until setup finishes (`setup.complete` schedules `setupImports.resumeQueued`). It then waits while setup's modules install and its starter packs are pending, as starter packs do for their triggers to sync. Outside setup it waits for the engine to register. Either wait gives up after 30 minutes and applies anyway, so what is still missing shows as `needs_module`. An engine that never registers leaves the import `stalled`, and **Try again** starts it.
+**Waiting.** An import queued before setup finishes does not start until it does (`setup.complete` schedules `setupImports.resumeQueued`). It then waits while setup's modules install and its starter packs are pending, as starter packs do for their triggers to sync. Outside setup it waits for the engine to register. Either wait gives up after 30 minutes and applies anyway, so what is still missing shows as `needs_module`. An engine that never registers leaves the import `stalled`, and **Try again** starts it.
 
 ## Source formats
 

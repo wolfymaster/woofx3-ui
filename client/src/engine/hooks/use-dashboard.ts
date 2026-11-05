@@ -1,8 +1,11 @@
+import { withoutRetiredPanelWidgets, withoutRetiredRailWidgets } from "@shared/dashboard-layout";
+import { useMemo } from "react";
 import { useEngineGateway } from "@/engine/context";
 
 /** The viewer's dashboard panels in order; empty until the first is added. */
 export function useDashboardPanels() {
-  return useEngineGateway().dashboard.usePanels();
+  const panels = useEngineGateway().dashboard.usePanels();
+  return useMemo(() => panels && withoutRetiredPanelWidgets(panels), [panels]);
 }
 
 export function useAddDashboardPanelRequest() {
@@ -23,7 +26,8 @@ export function useSetDashboardPanelWidgetsRequest() {
 
 /** Null until the rail is first edited. */
 export function useDashboardRailWidgets() {
-  return useEngineGateway().dashboard.useRailWidgets();
+  const widgets = useEngineGateway().dashboard.useRailWidgets();
+  return useMemo(() => widgets && withoutRetiredRailWidgets(widgets), [widgets]);
 }
 
 export function useSetDashboardRailWidgetsRequest() {

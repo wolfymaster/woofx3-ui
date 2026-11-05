@@ -146,19 +146,6 @@ position: number,
 alreadyQueued: boolean, };
 
 /**
- * Where the stream start marker stands. Times are milliseconds since the Unix
- * epoch on this PC's clock.
- */
-export type StreamStartMarker = { "kind": "idle" } | { "kind": "pending", requestedAt: number, } | { "kind": "dropping" } | { "kind": "dropped", droppedAt: number, } | { "kind": "failed", message: string, };
-
-/**
- * The answer to asking for the marker, as the checklist reports each step.
- * Must match `GoLiveStepOutcome` in client/src/engine/types.ts, which also
- * has `skipped` for a step not asked for.
- */
-export type MarkerRequestOutcome = { "status": "done" } | { "status": "queued", reason: string, } | { "status": "failed", message: string, };
-
-/**
  * A mode the streamer can choose, without the settings only a hand-written
  * configuration sets.
  */
@@ -240,7 +227,6 @@ export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
 export const OPEN_LOCAL_CONNECTIONS_EVENT = "companion://open-local-connections";
 export const SHOUTOUT_QUEUE_EVENT = "companion://shoutout-queue";
-export const STREAM_START_MARKER_EVENT = "companion://stream-start-marker";
 
 /** Every command the window may call, by its name. */
 export const COMMANDS = {
@@ -264,8 +250,6 @@ export const COMMANDS = {
   enqueue_shoutout: "enqueue_shoutout",
   remove_shoutout: "remove_shoutout",
   reorder_shoutouts: "reorder_shoutouts",
-  stream_start_marker: "stream_start_marker",
-  request_stream_start_marker: "request_stream_start_marker",
   host_mode: "host_mode",
   choose_host_mode: "choose_host_mode",
   companion_link_status: "companion_link_status",
@@ -298,8 +282,6 @@ export type CommandArgs = {
   enqueue_shoutout: EnqueueShoutoutArgs;
   remove_shoutout: RemoveShoutoutArgs;
   reorder_shoutouts: ReorderShoutoutsArgs;
-  stream_start_marker: null;
-  request_stream_start_marker: null;
   host_mode: null;
   choose_host_mode: ChooseHostModeArgs;
   companion_link_status: null;
@@ -330,8 +312,6 @@ export type CommandResults = {
   enqueue_shoutout: ShoutoutEnqueued;
   remove_shoutout: void;
   reorder_shoutouts: void;
-  stream_start_marker: StreamStartMarker;
-  request_stream_start_marker: MarkerRequestOutcome;
   host_mode: HostModeView;
   choose_host_mode: void;
   companion_link_status: CompanionLinkStatus;

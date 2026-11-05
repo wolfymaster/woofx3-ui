@@ -14,6 +14,7 @@ import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
+import { upsertWorkflowGroupFromWebhook, workflowGroupFields } from "./workflowGroups";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
 // pre-spec deployment. Safe to delete after the first prod deploy.
@@ -246,6 +247,7 @@ export const reconcileWorkflows = internalMutation({
         engineWorkflowId: v.string(),
         definition: v.any(),
         isEnabled: v.boolean(),
+        groupIds: v.optional(v.array(v.string())),
       })
     ),
   },
@@ -264,6 +266,7 @@ export const reconcileWorkflows = internalMutation({
         await ctx.db.patch(existing._id, {
           definition: u.definition,
           isEnabled: u.isEnabled,
+          ...(u.groupIds === undefined ? {} : { groupIds: u.groupIds }),
           updatedAt: now,
         });
       } else {
@@ -272,6 +275,7 @@ export const reconcileWorkflows = internalMutation({
           engineWorkflowId: u.engineWorkflowId,
           definition: u.definition,
           isEnabled: u.isEnabled,
+          groupIds: u.groupIds,
           createdAt: now,
           updatedAt: now,
         });
@@ -914,6 +918,7 @@ export const startRun = internalMutation({
         { name: "groups", status: "pending", itemsProcessed: 0 },
         { name: "functions", status: "pending", itemsProcessed: 0 },
         { name: "workflows", status: "pending", itemsProcessed: 0 },
+        { name: "workflowGroups", status: "pending", itemsProcessed: 0 },
         { name: "scenes", status: "pending", itemsProcessed: 0 },
         { name: "triggers", status: "pending", itemsProcessed: 0 },
         { name: "actions", status: "pending", itemsProcessed: 0 },
@@ -934,6 +939,7 @@ export const updateRunStep = internalMutation({
       v.literal("groups"),
       v.literal("functions"),
       v.literal("workflows"),
+      v.literal("workflowGroups"),
       v.literal("scenes"),
       v.literal("triggers"),
       v.literal("actions"),
@@ -1142,5 +1148,41 @@ export const reconcileModules = internalMutation({
     }
 
     return { itemsProcessed: processed };
+  },
+});
+
+/**
+ * Reconcile the local `workflowGroups` mirror against the engine's
+ * `listWorkflowGroups()`. The engine is the source of truth: groups are
+ * upserted by `engineGroupId` and groups it no longer has are deleted. A row
+ * written after `snapshotStartedAt` (a webhook or an action's answer) is
+ * newer than the snapshot and is left alone.
+ */
+export const reconcileWorkflowGroups = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    snapshotStartedAt: v.number(),
+    snapshots: v.array(v.object(workflowGroupFields)),
+  },
+  handler: async (ctx, { instanceId, snapshotStartedAt, snapshots }) => {
+    const local = await ctx.db
+      .query("workflowGroups")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    const localByEngineId = new Map(local.map((row) => [row.engineGroupId, row]));
+    for (const snap of snapshots) {
+      const found = localByEngineId.get(snap.engineGroupId);
+      if (found && found.updatedAt >= snapshotStartedAt) {
+        continue;
+      }
+      await upsertWorkflowGroupFromWebhook(ctx, { instanceId, ...snap });
+    }
+    const live = new Set(snapshots.map((snap) => snap.engineGroupId));
+    for (const row of local) {
+      if (!live.has(row.engineGroupId) && row.updatedAt < snapshotStartedAt) {
+        await ctx.db.delete(row._id);
+      }
+    }
+    return { itemsProcessed: snapshots.length };
   },
 });

@@ -8,7 +8,7 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
-import { firstIncompleteStep, setupStepPath } from "@/lib/setup-steps";
+import { firstIncompleteStep, overlayPageRedirects, setupStepPath } from "@/lib/setup-steps";
 import { $dashboardLayoutHint } from "@/lib/stores";
 
 /**
@@ -45,28 +45,37 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  * only uses another account's instance, such as a moderator who does not
  * stream, never owns an account or an instance and is never sent there.
  *
- * An instance row alone is not onboarding done: a managed engine has one from
- * the moment provisioning starts, and a failed bring-your-own registration
- * leaves one behind too. Only `clientId` says the handshake happened, which is
- * what every screen past this point depends on, so anything short of that goes
- * back to onboarding, which hands over to setup while the engine is built.
+ * An instance row alone is not onboarding done: a new user has one before
+ * Twitch is connected, a managed engine has one from the moment provisioning
+ * starts, and a failed bring-your-own registration leaves one behind too. Only
+ * `clientId` says the handshake happened, which is what every screen past this
+ * point depends on, so anything short of that goes back to onboarding, which
+ * passes the user on to wherever setup is: connecting, or the overlay page while
+ * the engine is built. That holds across a refresh or a return days later,
+ * because all of it is read from the server.
  *
  * The app also depends on Twitch, so an instance with no Twitch link goes to
  * setup until one exists. Only an owner or admin can connect it; anyone else
  * is told to ask one rather than sent somewhere they cannot act. The check is
  * that a link exists, not that it still works: a revoked or under-scoped link
  * is the reconnect banner's job, and must never bounce an established user
- * into setup. A preview deployment set up without Twitch does not need a link
- * (`SetupStatus.twitchRequired`).
+ * into setup. A preview deployment where Twitch was skipped does not need a
+ * link (`SetupStatus.twitchRequired`).
  *
  * Setup also opens by itself once per user while the instance's setup is
  * unfinished, so a returning user is not sent back to it on every visit.
+ *
+ * A finished setup that was seeded sends an owner or admin to the overlay page
+ * until one of them has seen a test alert play or skipped it
+ * (`SetupStatus.overlayPending`), so someone who left midway comes back to it
+ * and someone who passed it never does. The alerts page is exempt, since the
+ * overlay page sends them there to make the follow alert it needs.
  */
 export function OnboardingGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
   const { instance, instances, isLoading: instancesLoading } = useInstance();
   const setup = useQuery(api.setup.status, instance ? { instanceId: instance._id } : "skip");
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [onDashboard] = useRoute("/");
   const hasRegisteredInstance = instances.some((candidate) => Boolean(candidate?.clientId));
   const isChecking = instancesLoading || (instance !== null && setup === undefined);
@@ -91,8 +100,12 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     }
     if (setup.completedAt === null && !setup.setupSeen) {
       navigate("/setup");
+      return;
     }
-  }, [isAuthenticated, isChecking, needsOnboarding, needsTwitch, setup, navigate]);
+    if (overlayPageRedirects(setup.overlayPending, location)) {
+      navigate(setupStepPath("overlay"));
+    }
+  }, [isAuthenticated, isChecking, needsOnboarding, needsTwitch, setup, location, navigate]);
 
   let content: ReactNode = children;
   if (isChecking) {

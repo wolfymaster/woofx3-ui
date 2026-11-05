@@ -14,7 +14,7 @@ The SPA is built with **React 18**, **Vite**, and **Wouter** for client-side rou
 | `/companion/pair` | `AuthGuard` only | Approve a companion app's pairing request; outside `OnboardingGuard` (see [Companion app](/ui/companion)) |
 | Everything under the main shell | `AuthGuard` → `BroadcastShell` → `OnboardingGuard` | Product UI inside `BroadcastShell` |
 
-**AuthGuard** redirects unauthenticated users to `/auth/login`. **OnboardingGuard** sits inside `BroadcastShell` and gates only the content area, so the shell paints as soon as auth resolves. It loads `instances.listForCurrentUser` (instances the user owns or was invited to), showing a content placeholder (dashboard zone outlines on `/`) while it loads; if none of them is registered, it sends the user to `/auth/onboarding`, and if the current instance has no Twitch link it sends an owner or admin to `/setup` (see [Auth and onboarding](/ui/auth-onboarding#setup)). Queries that must start before the instance list arrives (the dashboard's panels, the status bar's live state) read `useInstance().optimisticInstanceId` through `useOptimisticInstanceQuery`: the id cached from the last session, which those queries answer with nothing when the caller is not a member.
+**AuthGuard** redirects unauthenticated users to `/auth/login`. **OnboardingGuard** sits inside `BroadcastShell` and gates only the content area, so the shell paints as soon as auth resolves. It loads `instances.listForCurrentUser` (instances the user owns or was invited to), showing a content placeholder (dashboard zone outlines on `/`) while it loads; if none of them is registered, it sends the user to `/auth/onboarding`, and if the current instance has no Twitch link it sends an owner or admin to `/setup` (see [Auth and onboarding](/ui/auth-onboarding#setup)). Queries that must start before the instance list arrives (the dashboard's panels, the status bar's live state) read `useInstance().optimisticInstanceId` through `useOptimisticInstanceQuery`: the id cached from the last session, which those queries answer with nothing when the caller is not a member. What is left after onboarding (the overlay in the streaming app, a test alert, import, starter packs, optional platforms) lives in the dashboard's Todo panel; see [Dashboard](/ui/dashboard#getting-started-checklist).
 
 Protected routes render inside **`BroadcastShell`** (`client/src/components/layout/broadcast-shell.tsx`): primary nav, utility links (Team, Admin), instance switcher, the [quick actions](./quick-actions.md) palette (⌘K), and stream status UI (currently a placeholder that does not yet call the real transport).
 
@@ -27,7 +27,7 @@ The menu is declared in one place — `client/src/components/layout/nav-config.t
 | Dashboard | `/` | — |
 | Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Supporters, Media, Workflows |
 | Marketplace | `/marketplace` | — (the page renders its own category sidebar) |
-| Help | `/help` | Learning, Setup, Logs, Feedback |
+| Help | `/help` | Learning, Logs, Feedback |
 | Admin | `/admin` | Engine, Integrations, Storage, Appearance |
 
 Admin and Team are not in the primary nav — they are the icon buttons in the header's utility cluster (`UTILITY_SECTIONS`), but Admin renders the same section sidebar as Stream and Help.

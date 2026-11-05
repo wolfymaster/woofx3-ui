@@ -129,11 +129,10 @@ export function curatedForDeployment<T extends { required: boolean }>(curated: r
 
 /**
  * Whether setup needs the instance's Twitch account connected before it can finish.
- * Always, except on a preview deployment where Twitch was not among the chosen
- * platforms.
+ * Always, except on a preview deployment where it was skipped.
  */
-export function setupNeedsTwitch(chosenModuleIds: readonly string[], preview: boolean): boolean {
-  return !preview || chosenModuleIds.includes(TWITCH_SETUP_MODULE_ID);
+export function setupNeedsTwitch(skipped: boolean, preview: boolean): boolean {
+  return !(preview && skipped);
 }
 
 /**

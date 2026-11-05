@@ -2,10 +2,12 @@ import type {
   AlertComposition,
   AlertListPage,
   AlertListQuery,
+  AlertQueueState,
   AlertSnapshot,
   AvailableFunction,
   CommandSnapshot,
   CreateCommandInput,
+  EngineInfo,
   EngineModuleSummary,
   EventLogPage,
   EventLogQuery,
@@ -27,6 +29,7 @@ import type {
   PaginatedWorkflows,
   ResourceInstanceDefinition,
   RunActionsInput,
+  Scene,
   SceneSnapshot,
   StreamEventFrame,
   StreamEventSubscriber,
@@ -64,6 +67,7 @@ import type {
   Woofx3EngineApi,
   Workflow,
   WorkflowCatalog,
+  WorkflowGroup,
   WorkflowHealth,
   WorkflowMutationResult,
   WorkflowRunDetail,
@@ -93,6 +97,7 @@ type DirectFakeSurface = Pick<
   | "getStreamSession"
   | "getStreamSessionTotals"
   | "listAlerts"
+  | "getAlertQueue"
   | "subscribeStreamEvents"
   | "dispatchFieldOptionsRequest"
   | "listAlertCompositions"
@@ -108,6 +113,9 @@ type DirectFakeSurface = Pick<
   | "listSceneSnapshots"
   | "getSceneSnapshot"
   | "getAvailableWidgets"
+  | "createScene"
+  | "getEngineInfo"
+  | "getScenes"
   | "listWidgetThemes"
   | "listUISettings"
   | "getUISetting"
@@ -120,6 +128,10 @@ type DirectFakeSurface = Pick<
   | "createWorkflow"
   | "updateWorkflow"
   | "setWorkflowEnabled"
+  | "listWorkflowGroups"
+  | "createWorkflowGroup"
+  | "setWorkflowGroupEnabled"
+  | "addWorkflowGroupMembers"
   | "triggerWorkflowByName"
   | "getWorkflowRun"
   | "getWorkflowHealth"
@@ -222,6 +234,8 @@ export class FakeEngineState {
   widgetThemes: Record<string, WidgetThemes["themes"]> = {};
   modules: EngineModuleSummary[] = [];
   workflows: Workflow[] = [];
+  /** Alert groups. The fake stores what it is told; the hold and release rules are the engine's. */
+  workflowGroups: WorkflowGroup[] = [];
   workflowCatalog: WorkflowCatalog = { triggers: [], actions: [], functions: [] };
   /** Recorded runs by execution id; an id not here answers null. */
   workflowRuns: Record<string, WorkflowRunDetail> = {};
@@ -277,6 +291,7 @@ export class FakeEngineState {
   });
   /** Every call the fake served, by method, with its arguments. */
   readonly calls: Array<{ method: keyof DirectFakeSurface; args: unknown[] }> = [];
+  alertQueue: AlertQueueState = { ok: false, playing: [], waiting: [], reason: "no overlay is open" };
   /** The latest stream subscription of each session, in the order they were made. */
   readonly streamSubscriptions: StreamSubscription[] = [];
 
@@ -383,6 +398,11 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     return { alerts: this.state.alerts.slice(0, limit), totalCount: this.state.alerts.length, limit, offset: 0 };
   }
 
+  async getAlertQueue(): Promise<AlertQueueState> {
+    this.state.record("getAlertQueue");
+    return this.state.alertQueue;
+  }
+
   async subscribeStreamEvents(callback: StreamEventSubscriber, types?: string[]): Promise<void> {
     this.state.record("subscribeStreamEvents", types);
     // capnweb disposes a stub received as a parameter when the call returns;
@@ -482,6 +502,37 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   async getAvailableWidgets(): Promise<{ widgets: AvailableWidget[] }> {
     this.state.record("getAvailableWidgets");
     return { widgets: this.state.widgets };
+  }
+
+  async createScene(data: { name: string; widgetsJson?: string; layoutJson?: string }): Promise<never> {
+    this.state.record("createScene", data);
+    const id = `scene-${this.state.scenes.length + 1}`;
+    this.state.scenes = [
+      ...this.state.scenes,
+      {
+        id,
+        name: data.name,
+        widgetsJson: data.widgetsJson ?? "[]",
+        layoutJson: data.layoutJson ?? "{}",
+      } as SceneSnapshot,
+    ];
+    return { id } as never;
+  }
+
+  async getEngineInfo(): Promise<EngineInfo> {
+    this.state.record("getEngineInfo");
+    return { engineSceneOverlayBaseUrl: "", overlayPublicUrl: "https://overlay.test", version: "dev" };
+  }
+
+  async getScenes(): Promise<{ scenes: Scene[]; total: number; page: number; pageSize: number }> {
+    this.state.record("getScenes");
+    const scenes = this.state.scenes.map((scene) => ({
+      id: scene.id,
+      name: scene.name,
+      widgets: JSON.parse(scene.widgetsJson),
+      createdAt: "",
+    }));
+    return { scenes, total: scenes.length, page: 1, pageSize: scenes.length };
   }
 
   async listUISettings(namespace: string): Promise<UISetting[]> {
@@ -614,6 +665,47 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     found.definition = data.definition;
     found.revision = (found.revision ?? 0) + 1;
     return { id, definition: data.definition, isEnabled: found.isEnabled, revision: found.revision };
+  }
+
+  async listWorkflowGroups(): Promise<WorkflowGroup[]> {
+    this.state.record("listWorkflowGroups");
+    return this.state.workflowGroups;
+  }
+
+  async createWorkflowGroup(input: { name: string; description?: string }): Promise<WorkflowGroup> {
+    this.state.record("createWorkflowGroup", input);
+    const group: WorkflowGroup = {
+      id: `group-${this.state.workflowGroups.length + 1}`,
+      name: input.name,
+      description: input.description ?? "",
+      enabled: false,
+      memberIds: [],
+    };
+    this.state.workflowGroups.push(group);
+    return group;
+  }
+
+  async setWorkflowGroupEnabled(id: string, enabled: boolean): Promise<WorkflowGroup> {
+    this.state.record("setWorkflowGroupEnabled", id, enabled);
+    return this.groupWith(id, (group) => ({ ...group, enabled }));
+  }
+
+  async addWorkflowGroupMembers(groupId: string, workflowIds: string[]): Promise<WorkflowGroup> {
+    this.state.record("addWorkflowGroupMembers", groupId, workflowIds);
+    return this.groupWith(groupId, (group) => ({
+      ...group,
+      memberIds: [...new Set([...group.memberIds, ...workflowIds])].sort(),
+    }));
+  }
+
+  private groupWith(id: string, change: (group: WorkflowGroup) => WorkflowGroup): WorkflowGroup {
+    const index = this.state.workflowGroups.findIndex((group) => group.id === id);
+    if (index < 0) {
+      throw new Error(`workflow group ${id} not found`);
+    }
+    const changed = change(this.state.workflowGroups[index]);
+    this.state.workflowGroups[index] = changed;
+    return changed;
   }
 
   async setWorkflowEnabled(id: string, isEnabled: boolean): Promise<{ id: string; isEnabled: boolean }> {

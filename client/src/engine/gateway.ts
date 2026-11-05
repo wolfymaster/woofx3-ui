@@ -37,6 +37,7 @@ import type {
   DashboardPanelWidget,
   DashboardRailWidget,
   DeclaredResourceKind,
+  DefaultSeedStatus,
   EngineAlert,
   EngineConnectionTest,
   EngineInfo,
@@ -52,13 +53,6 @@ import type {
   FormSubmission,
   FormSubmissionId,
   FormSubmissionQueueStatus,
-  GoLiveCheckId,
-  GoLiveChecklistState,
-  GoLiveCompletion,
-  GoLiveFinish,
-  GoLiveOverlayFacts,
-  GoLiveStreamInfoFacts,
-  GoLiveTwitchFacts,
   HostedStorageUsage,
   InstalledModule,
   InstanceLiveState,
@@ -98,6 +92,9 @@ import type {
   NotRunningWorkflow,
   ObsStatus,
   OpenSessionRefresh,
+  OverlayDoneOutcome,
+  OverlayFacts,
+  OverlayPresence,
   Paginated,
   PinHistoryEntry,
   PinHistoryEntryId,
@@ -159,6 +156,8 @@ import type {
   Workflow,
   WorkflowCancelResult,
   WorkflowCatalog,
+  WorkflowGroup,
+  WorkflowGroupText,
   WorkflowHealthResyncResult,
   WorkflowHealthResyncTrigger,
   WorkflowReplay,
@@ -254,6 +253,7 @@ export interface EngineGateway {
   readonly moduleOAuth: ModuleOAuthGateway;
   readonly setupImports: SetupImportsGateway;
   readonly starterPacks: StarterPacksGateway;
+  readonly defaultSeed: DefaultSeedGateway;
   readonly adBreaks: AdBreaksGateway;
   readonly moderation: ModerationGateway;
   readonly pins: PinsGateway;
@@ -262,7 +262,6 @@ export interface EngineGateway {
   readonly clips: ClipsGateway;
   readonly formSubmissions: FormSubmissionsGateway;
   readonly streamInfo: StreamInfoGateway;
-  readonly goLive: GoLiveGateway;
   readonly pageIntros: PageIntrosGateway;
   readonly dashboard: DashboardGateway;
 }
@@ -350,6 +349,13 @@ export interface AlertQueueGateway {
   useSkipCurrentRequest(): () => Promise<AlertSkipResult>;
   /** Drops every alert still waiting; the one playing keeps playing. */
   useClearQueueRequest(): () => Promise<AlertClearResult>;
+  /**
+   * Whether any overlay page is open on the engine, asked every
+   * OVERLAY_PRESENCE_POLL_MS while mounted. Undefined until the first answer.
+   * Any scene counts, and so does the scene editor's preview, because the
+   * engine cannot tell them from a browser source.
+   */
+  useOverlayOpen(options?: ReadOptions): Live<OverlayPresence>;
 }
 
 /**
@@ -625,6 +631,20 @@ export interface WorkflowsGateway {
   useNotRunning(): Live<NotRunningWorkflow[]>;
   /** Asks the engine for current workflow health. Throttled per instance; never rejects for an engine problem. */
   useHealthResyncRequest(): (trigger: WorkflowHealthResyncTrigger) => Promise<WorkflowHealthResyncResult>;
+  /** Every alert group. Empty when the caller cannot see the instance. */
+  useGroups(): Live<WorkflowGroup[]>;
+  /** Whether the engine has alert groups at all (its `workflows.groups` capability). */
+  useGroupsSupportedRequest(): () => Promise<boolean>;
+  /**
+   * The group writes. Each resolves with the group as the engine stored it,
+   * already mirrored; the members' switches follow on their own workflows.
+   */
+  useCreateGroupRequest(): (group: WorkflowGroupText) => Promise<WorkflowGroup>;
+  useUpdateGroupRequest(): (engineGroupId: string, group: WorkflowGroupText) => Promise<WorkflowGroup>;
+  useRemoveGroupRequest(): (engineGroupId: string) => Promise<{ deleted: true }>;
+  useSetGroupEnabledRequest(): (engineGroupId: string, enabled: boolean) => Promise<WorkflowGroup>;
+  useAddGroupMembersRequest(): (engineGroupId: string, engineWorkflowIds: string[]) => Promise<WorkflowGroup>;
+  useRemoveGroupMembersRequest(): (engineGroupId: string, engineWorkflowIds: string[]) => Promise<WorkflowGroup>;
 }
 
 /**
@@ -806,6 +826,8 @@ export interface TwitchLinkGateway {
 
 /** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
 export interface OverlaysGateway {
+  /** The instance's scenes and browser sources; null when the caller cannot see the instance. */
+  useFacts(options?: ReadOptions): Live<OverlayFacts | null>;
   /**
    * The scene's preview URL when one is already known, without asking for one
    * to be made. Null when `usePreviewUrlRequest` has to be asked.
@@ -870,6 +892,20 @@ export interface StarterPacksGateway {
   useStatus(): Live<Record<string, StarterPackItemState> | null>;
   /** Installs a pack's items and resolves with how each went; an item can still be pending on the engine. */
   useInstallRequest(): (install: StarterPackInstall) => Promise<StarterPackInstallOutcome[]>;
+}
+
+/**
+ * The overlay scene and alerts a new engine starts with
+ * (`shared/default-seed.ts`). Each is seeded once: what the streamer deleted
+ * is not recreated by applying again.
+ */
+export interface DefaultSeedGateway {
+  /** Where the seed stands; null when the caller cannot see the instance. */
+  useStatus(): Live<DefaultSeedStatus | null>;
+  /** Applies the seed again, for what is pending or failed. Resolves once it has been asked for, not once it is done. */
+  useApplyRequest(): () => Promise<void>;
+  /** Records that setup passed the overlay page. A "finished" stays, whatever is recorded after it. */
+  useMarkOverlayDoneRequest(): (outcome: OverlayDoneOutcome) => Promise<void>;
 }
 
 // The namespaces below act on the linked Twitch channel as its broadcaster.
@@ -980,23 +1016,4 @@ export interface StreamInfoGateway {
   usePresets(options?: ReadOptions): Live<StreamInfoPreset[]>;
   useSavePresetRequest(): (preset: NewStreamInfoPreset) => Promise<StreamInfoPresetId>;
   useRemovePresetRequest(): (presetId: StreamInfoPresetId) => Promise<void>;
-}
-
-/**
- * The go-live checklist run just before a stream: each check that asks
- * Twitch is its own request so the checks run side by side, and finishing it
- * posts the announcement and drops the start marker.
- */
-export interface GoLiveGateway {
-  /** Null when the caller cannot see the instance. */
-  useChecklist(options?: ReadOptions): Live<GoLiveChecklistState | null>;
-  /** The instance's scenes and browser sources; null when the caller cannot see the instance. */
-  useOverlays(options?: ReadOptions): Live<GoLiveOverlayFacts | null>;
-  /** Hides a check from the checklist, or shows it again. */
-  useSetCheckDismissedRequest(): (checkId: GoLiveCheckId, dismissed: boolean) => Promise<void>;
-  /** Whether Twitch still accepts the link and it holds every required scope. */
-  useCheckTwitchRequest(): () => Promise<GoLiveTwitchFacts>;
-  useCheckStreamInfoRequest(): () => Promise<GoLiveStreamInfoFacts>;
-  /** Each step reports its own outcome rather than rejecting. */
-  useCompleteRequest(): (finish: GoLiveFinish) => Promise<GoLiveCompletion>;
 }

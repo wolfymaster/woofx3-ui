@@ -162,6 +162,22 @@ export function checkSlugAvailability(slug: string): Promise<SlugAvailability> {
   return request<SlugAvailability>(`/v1/slugs/${encodeURIComponent(slug)}?kind=customer`, { method: "GET" });
 }
 
+/**
+ * Give a ready engine a new name. The old one stays routed to the engine. Its
+ * `publicUrl` does not change: that is where it is served from for good.
+ */
+export function renameEngine(
+  engineId: string,
+  slug: string,
+  idempotencyKey: string
+): Promise<{ engine: MaintenanceEngine }> {
+  return request<{ engine: MaintenanceEngine }>(`/v1/engines/${encodeURIComponent(engineId)}/rename`, {
+    method: "POST",
+    idempotencyKey,
+    body: { slug },
+  });
+}
+
 /** Slugs are stored and compared lowercase, so what a person types is normalized the same way everywhere. */
 export function normalizeSlug(slug: string): string {
   return slug.trim().toLowerCase();
