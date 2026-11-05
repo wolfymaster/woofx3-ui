@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { escapeDollarKeys } from "@shared/dollar-keys";
 import type { FormField } from "@shared/user-pages";
+import type { DatabaseColumn } from "@woofx3/api/databases";
 import type { Workflow } from "@/engine/types";
 import { eventTriggers } from "@/lib/alert-triggers";
 import {
@@ -81,6 +82,104 @@ describe("formDatabaseColumns", () => {
     const ids = formDatabaseColumns([named], []).columns.map((column) => column.id);
     expect(ids).toEqual(["viewer", "viewer_2"]);
   });
+});
+
+describe("formDatabaseColumns reusing the streamer's own columns", () => {
+  const text = (id: string, label: string): FormField => ({ id, label, type: "text", required: false, maxLength: 500 });
+  const column = (id: string, label: string, type: DatabaseColumn["type"], extra = {}): DatabaseColumn => ({
+    id,
+    label,
+    type,
+    public: false,
+    ...extra,
+  });
+  const rows: Array<{
+    name: string;
+    fields: FormField[];
+    existing: DatabaseColumn[];
+    added: string[];
+    values: Record<string, string>;
+  }> = [
+    {
+      name: "a column with the question's id is its own, whatever it is called",
+      fields: [text("tickets", "Tickets")],
+      existing: [column("tickets", "Entries", "number")],
+      added: ["viewer"],
+      values: { tickets: "tickets" },
+    },
+    {
+      name: "a column named like the question, ignoring case and spaces, is reused",
+      fields: [text("viewer_name", "viewer name")],
+      existing: [column("col_1", "  Viewer Name ", "text")],
+      added: ["viewer"],
+      values: { col_1: "viewer_name" },
+    },
+    {
+      name: "a name match of a type the answer doesn't fit gets a column of its own",
+      fields: [text("tickets", "tickets")],
+      existing: [column("col_2", "tickets", "number")],
+      added: ["tickets", "viewer"],
+      values: { tickets: "tickets" },
+    },
+    {
+      name: "a yes/no question reuses a yes/no column",
+      fields: [{ id: "vip_q", label: "VIP", type: "checkbox", required: false }],
+      existing: [column("vip", "vip", "boolean")],
+      added: ["viewer"],
+      values: { vip: "vip_q" },
+    },
+    {
+      name: "a choice reuses a choice column holding every option, and text",
+      fields: [fields[2] as FormField],
+      existing: [
+        column("mood_col", "mood", "select", {
+          options: [
+            { value: "chill", label: "Chill" },
+            { value: "hype", label: "Hype" },
+            { value: "sad", label: "Sad" },
+          ],
+        }),
+      ],
+      added: ["viewer"],
+      values: { mood_col: "mood" },
+    },
+    {
+      name: "a choice column missing an option is not reused",
+      fields: [fields[2] as FormField],
+      existing: [column("mood_col", "Mood", "select", { options: [{ value: "chill", label: "Chill" }] })],
+      added: ["mood", "viewer"],
+      values: { mood: "mood" },
+    },
+    {
+      name: "one column fills one question",
+      fields: [text("a", "Name"), text("b", "name")],
+      existing: [column("col", "name", "text")],
+      added: ["b", "viewer"],
+      values: { col: "a", b: "b" },
+    },
+    {
+      name: "the viewer column is never taken for an answer",
+      fields: [text("who", "Viewer")],
+      existing: [column("viewer", "Viewer", "text")],
+      added: ["who"],
+      values: { who: "who" },
+    },
+  ];
+  for (const row of rows) {
+    test(row.name, () => {
+      const { columns, added } = formDatabaseColumns(row.fields, row.existing);
+      expect(added.map((entry) => entry.id)).toEqual(row.added);
+      const values = formDatabaseValues(row.fields, columns);
+      const viewer = values.viewer ?? values.viewer_2;
+      expect(viewer).toBe(["$", "{trigger.data.viewer.displayName}"].join(""));
+      const answers = Object.fromEntries(
+        Object.entries(values)
+          .filter(([, reference]) => reference !== viewer)
+          .map(([columnId, reference]) => [columnId, reference.slice("${trigger.data.answers.".length, -1)])
+      );
+      expect(answers).toEqual(row.values);
+    });
+  }
 });
 
 const formTrigger: TriggerPreset = {
