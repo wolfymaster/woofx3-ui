@@ -1,8 +1,9 @@
-import { COUNTER_KIND, FORM_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
+import { COUNTER_KIND, DATABASE_KIND, FORM_KIND, QUEUE_KIND, SCHEDULE_KIND, TIMER_KIND } from "@shared/resource-kinds";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
 import { counterView } from "@/components/resources/views/counter-view";
+import { databaseView } from "@/components/resources/views/database-view";
 import { formView } from "@/components/resources/views/form-view";
 import { queueView } from "@/components/resources/views/queue-view";
 import { scheduleView } from "@/components/resources/views/schedule-view";
@@ -36,6 +37,7 @@ const KIND_VIEWS: Readonly<Record<string, KindView>> = {
   [QUEUE_KIND]: queueView,
   [SCHEDULE_KIND]: scheduleView,
   [FORM_KIND]: formView,
+  [DATABASE_KIND]: databaseView,
 };
 
 /** The view made for a kind, as `module:kind`; null for a kind shown from its declarations. */

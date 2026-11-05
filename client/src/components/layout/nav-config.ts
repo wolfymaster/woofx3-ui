@@ -98,6 +98,7 @@ export const STREAM_ITEMS: NavItem[] = [
       { id: "queues", label: "Queues", icon: STREAM_OBJECT_ICONS.queues, href: "/stream/queues" },
       { id: "schedules", label: "Schedules", icon: STREAM_OBJECT_ICONS.schedules, href: "/stream/schedules" },
       { id: "forms", label: "Forms", icon: STREAM_OBJECT_ICONS.forms, href: "/stream/forms" },
+      { id: "databases", label: "Databases", icon: STREAM_OBJECT_ICONS.databases, href: "/stream/databases" },
       { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
     ],
   },
