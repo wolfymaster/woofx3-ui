@@ -5,6 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordEngineEvent } from "./engineEventLog";
 import { RECEIPT_CLEANUP_BATCH, RECEIPT_RETENTION_MS } from "./lib/engineEvents/config";
+import { type BatchEventResult, REJECTION_REASONS } from "./lib/engineEvents/contract";
 import { applyEngineEvent, type EngineEventOutcome } from "./lib/engineEvents/dispatch";
 import { engineActivityPatch } from "./lib/engineSync/activity";
 import { logger } from "./logger";
@@ -101,5 +102,58 @@ export const cleanupOldReceipts = internalMutation({
     if (old.length === RECEIPT_CLEANUP_BATCH) {
       await ctx.scheduler.runAfter(0, internal.engineEvents.cleanupOldReceipts, {});
     }
+  },
+});
+
+function toBatchResult(queueId: string, outcome: ReceivedEventOutcome): BatchEventResult {
+  switch (outcome.kind) {
+    case "applied":
+    case "duplicate":
+    case "ignored":
+      return { queueId, outcome: outcome.kind };
+    case "invalid":
+      return { queueId, outcome: "rejected", reason: outcome.reason };
+  }
+}
+
+/**
+ * One batch from the maintenance event queue, in queue order, as one
+ * transaction: every event of it applies or none does, so the relay can
+ * resend or split a failed batch without anything having been half-applied.
+ * Each event is attributed to the instance the queue names, and only applies
+ * while that instance's events token hash still matches the queue's.
+ * `envelopeJson` is raw JSON for the same reason as applyFromWebhook's body.
+ */
+export const applyBatch = internalMutation({
+  args: {
+    events: v.array(
+      v.object({ queueId: v.string(), instanceId: v.string(), tokenHash: v.string(), envelopeJson: v.string() })
+    ),
+  },
+  handler: async (ctx, { events }): Promise<BatchEventResult[]> => {
+    const instances = new Map<string, Doc<"instances"> | null>();
+    const results: BatchEventResult[] = [];
+    for (const event of events) {
+      let instance = instances.get(event.instanceId);
+      if (instance === undefined) {
+        const id = ctx.db.normalizeId("instances", event.instanceId);
+        instance = id === null ? null : await ctx.db.get(id);
+        instances.set(event.instanceId, instance);
+        if (instance) {
+          await recordEngineActivityIfDue(ctx, instance);
+        }
+      }
+      if (!instance) {
+        results.push({ queueId: event.queueId, outcome: "rejected", reason: REJECTION_REASONS.unknownInstance });
+        continue;
+      }
+      if (instance.eventsTokenHash !== event.tokenHash) {
+        results.push({ queueId: event.queueId, outcome: "rejected", reason: REJECTION_REASONS.staleToken });
+        continue;
+      }
+      const envelope = JSON.parse(event.envelopeJson) as CallbackEnvelope;
+      results.push(toBatchResult(event.queueId, await receiveEngineEvent(ctx, instance, envelope)));
+    }
+    return results;
   },
 });

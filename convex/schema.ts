@@ -165,6 +165,12 @@ export default defineSchema({
     clientId: v.optional(v.string()),
     clientSecret: v.optional(v.string()),
     webhookSecret: v.optional(v.string()),
+    // Hex SHA-256 of the token the engine sends its events to the maintenance
+    // event queue with; the queue sends the same hash with every event, and a
+    // mismatch (a token rotated since) rejects the event. Absent while the
+    // engine still posts its events to the webhook route.
+    eventsTokenHash: v.optional(v.string()),
+    eventsTargetSetAt: v.optional(v.number()),
     // Who runs the engine. Absent means "external": every instance predates
     // managed engines, so the user pasted the URL of an engine they host.
     // "managed" engines are created by the woofx3 maintenance API and are the
