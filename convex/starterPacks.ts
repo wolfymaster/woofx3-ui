@@ -212,6 +212,18 @@ export const releaseItem = internalMutation({
   },
 });
 
+/** Engine ids of what a pack's items made on this instance. */
+export const packEngineIds = internalQuery({
+  args: { instanceId: v.id("instances"), packId: v.string() },
+  handler: async (ctx, { instanceId, packId }): Promise<string[]> => {
+    const rows = await ctx.db
+      .query("starterPackItems")
+      .withIndex("by_instance_item", (q) => q.eq("instanceId", instanceId).eq("packId", packId))
+      .take(100);
+    return rows.flatMap((row) => (row.engineId === undefined ? [] : [row.engineId]));
+  },
+});
+
 /** Engine ids of the named built-in command groups, as mirrored from the engine. */
 export const builtInGroupIds = internalQuery({
   args: { instanceId: v.id("instances"), names: v.array(v.string()) },

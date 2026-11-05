@@ -21,8 +21,8 @@ export const DEFAULT_ALERT_WIDGET_BOX = { x: 1240, y: 40, width: 640, height: 36
 
 export const DEFAULT_ALERTS_PACK_ID = "default-alerts";
 
-/** The first release of the bundled woofx3 module to ship the default alert images. */
-const FIRST_MODULE_WITH_IMAGES = { major: 0, minor: 45 } as const;
+/** The first release of the bundled woofx3 module to ship the default alert images as SVG. */
+const FIRST_MODULE_WITH_IMAGES = { major: 0, minor: 46 } as const;
 
 const WOOFX3_MODULE_ID = "woofx3";
 
@@ -35,7 +35,16 @@ const ALERT_SECONDS = 5;
 const ENTER_MS = 400;
 const EXIT_MS = 400;
 
-export type DefaultAlertArt = "follows" | "subs" | "bits";
+/** Must match the SVG files in the module's widgets/image/defaults folder. */
+export type DefaultAlertArt =
+  | "follow"
+  | "cheer"
+  | "sub"
+  | "resub"
+  | "gift"
+  | "community-gift"
+  | "upgrade"
+  | "pay-it-forward";
 
 /** The first dashboard panel: macro pad docked left, Events in the middle, channel controls right. */
 export const DEFAULT_DASHBOARD_LAYOUT_ID = "dock-activity-controls";
@@ -53,7 +62,7 @@ export const DEFAULT_DASHBOARD_WIDGETS = [
  * engine serves under /assets/modules.
  */
 export function defaultAlertImageUrl(imagesBaseUrl: string, art: DefaultAlertArt): string {
-  return `${imagesBaseUrl}/${art}.webp`;
+  return `${imagesBaseUrl}/${art}.svg`;
 }
 
 /**
@@ -145,7 +154,7 @@ function alertComposition(text: string, art: DefaultAlertArt, imagesBaseUrl: str
       behaviors: { "text-in": enter("text", "a0", "fade"), "text-out": exit("text", "a1") },
     };
   }
-  const name = `${art}.webp`;
+  const name = `${art}.svg`;
   return {
     layout,
     widgets: {
@@ -201,7 +210,7 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
     trigger: { event: "channel.follow", label: "Someone follows you" },
     tokens: { user: "${trigger.data.userName}" },
     text: "{user} just followed!",
-    art: "follows",
+    art: "follow",
   },
   {
     id: "sub",
@@ -214,7 +223,23 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
     },
     tokens: { user: "${trigger.data.userName}" },
     text: "{user} just subscribed!",
-    art: "subs",
+    art: "sub",
+  },
+  {
+    id: "gifted-sub",
+    name: "Gifted sub alert",
+    description: "Shows a sub gifted to one viewer. A community gift shows once, through its gifter.",
+    trigger: {
+      event: "channel.subscribe",
+      label: "Someone is gifted a sub",
+      conditions: [
+        { path: "isGift", operator: "eq", value: true },
+        { path: "isCommunityGift", operator: "eq", value: false },
+      ],
+    },
+    tokens: { user: "${trigger.data.userName}" },
+    text: "{user} was gifted a sub!",
+    art: "gift",
   },
   {
     id: "resub",
@@ -227,12 +252,12 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
       monthUnit: "${trigger.data.cumulativeMonths > 1 ? 'months' : 'month'}",
     },
     text: "{user} resubscribed for {months} {monthUnit}!",
-    art: "subs",
+    art: "resub",
   },
   {
     id: "gift",
-    name: "Gift sub alert",
-    description: "Shows gifted subs on your overlay.",
+    name: "Community gift alert",
+    description: "Shows a gift of subs to the community, once for the whole gift.",
     trigger: { event: "channel.subscriptionGift", label: "Someone gifts subs" },
     tokens: {
       user: "${trigger.data.isAnonymous ? 'An anonymous gifter' : trigger.data.gifterName}",
@@ -240,7 +265,40 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
       subUnit: "${trigger.data.amount > 1 ? 'subs' : 'sub'}",
     },
     text: "{user} gifted {count} {subUnit}!",
-    art: "subs",
+    art: "community-gift",
+  },
+  {
+    id: "prime-upgrade",
+    name: "Prime upgrade alert",
+    description: "Shows a Prime sub turned into a paid one.",
+    trigger: { event: "channel.primePaidUpgrade", label: "Someone upgrades a Prime sub" },
+    tokens: { user: "${trigger.data.chatterName}" },
+    text: "{user} upgraded their Prime sub!",
+    art: "upgrade",
+  },
+  {
+    id: "gift-upgrade",
+    name: "Gift upgrade alert",
+    description: "Shows a gifted sub the viewer now pays for themselves.",
+    trigger: { event: "channel.giftPaidUpgrade", label: "Someone keeps a gifted sub" },
+    tokens: {
+      user: "${trigger.data.chatterName}",
+      gifter: "${trigger.data.isGifterAnonymous ? 'an anonymous gifter' : trigger.data.gifterName}",
+    },
+    text: "{user} is keeping the sub from {gifter}!",
+    art: "upgrade",
+  },
+  {
+    id: "pay-it-forward",
+    name: "Pay it forward alert",
+    description: "Shows a viewer gifting a sub on after receiving one.",
+    trigger: { event: "channel.payItForward", label: "Someone pays a gifted sub forward" },
+    tokens: {
+      user: "${trigger.data.chatterName}",
+      gifter: "${trigger.data.isGifterAnonymous ? 'an anonymous gifter' : trigger.data.gifterName}",
+    },
+    text: "{user} paid forward the gift from {gifter}!",
+    art: "pay-it-forward",
   },
   {
     id: "bits",
@@ -253,20 +311,21 @@ const DEFAULT_ALERT_SPECS: readonly DefaultAlertSpec[] = [
       bitUnit: "${trigger.data.amount > 1 ? 'bits' : 'bit'}",
     },
     text: "{user} cheered {bits} {bitUnit}!",
-    art: "bits",
+    art: "cheer",
   },
 ];
 
 /**
  * The default alerts, each its own workflow: one per trigger, so "Subs" is a
- * new sub, a shared resub and a gift, which the Alerts page groups by trigger.
+ * new sub, a gifted sub, a shared resub, a community gift, both upgrades and a
+ * gift paid forward, which the Alerts page groups by trigger.
  * `imagesBaseUrl` null leaves the image layers out.
  */
 export function defaultAlertsPack(imagesBaseUrl: string | null): StarterPack {
   return {
     id: DEFAULT_ALERTS_PACK_ID,
     name: "Default alerts",
-    why: "An alert for follows, subs and bits from the first minute.",
+    why: "An alert for follows, cheers and every kind of sub from the first minute.",
     fields: [],
     items: DEFAULT_ALERT_SPECS.map((spec) => alertItem(spec, imagesBaseUrl)),
   };
@@ -280,16 +339,19 @@ export const DEFAULT_ALERT_ITEMS: readonly Pick<StarterWorkflowItem, "id" | "tri
  * engine, and the ids of those left out. The engine merges workflows on the
  * same event into one list of steps, so a default added beside the streamer's
  * own alert would play with it on every event. Any workflow counts, paused or
- * conditioned, because the streamer already chose what that event does.
+ * conditioned, because the streamer already chose what that event does. The
+ * seed's own workflows (`seededWorkflowIds`) never count, since several
+ * defaults share an event under different conditions.
  */
 export function defaultAlertsToInstall(
   pack: StarterPack,
-  workflows: readonly Pick<Workflow, "definition">[]
+  workflows: readonly Pick<Workflow, "id" | "definition">[],
+  seededWorkflowIds: ReadonlySet<string>
 ): { pack: StarterPack; coveredItemIds: string[] } {
   const events = new Set<string>();
   for (const workflow of workflows) {
     const trigger = workflow.definition?.trigger;
-    if (trigger?.type === "event") {
+    if (trigger?.type === "event" && !seededWorkflowIds.has(workflow.id)) {
       events.add(trigger.event);
     }
   }
@@ -314,7 +376,7 @@ export interface DefaultSeedEngine {
   listSceneSnapshots(): PromiseLike<{ scenes: { id: string; name: string; widgetsJson: string }[] }>;
   createScene(scene: { name: string; widgetsJson: string; layoutJson: string }): PromiseLike<{ id: string }>;
   /** Every workflow on the engine, whatever made it. */
-  listWorkflows(): PromiseLike<readonly Pick<Workflow, "definition">[]>;
+  listWorkflows(): PromiseLike<readonly Pick<Workflow, "id" | "definition">[]>;
 }
 
 export type DefaultSeedItemStatus = "installed" | "pending" | "failed";
