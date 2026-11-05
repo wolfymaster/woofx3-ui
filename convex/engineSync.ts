@@ -6,6 +6,7 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import { isEngineActive } from "./lib/engineSync/activity";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
+import { reconcileDatabase } from "./lib/engineSync/steps/databases";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
@@ -86,6 +87,24 @@ export const runSync = internalAction({
     });
 
     return { runId, status: runErrored ? "error" : "success" } as const;
+  },
+});
+
+/**
+ * Reconciles one database's public rows outside a full sync, for a database
+ * that just gained a public column: rows already written carry no value for
+ * it until the engine's listing is read again.
+ */
+export const reconcileDatabaseNow = internalAction({
+  args: { instanceId: v.id("instances"), databaseId: v.string() },
+  handler: async (ctx, { instanceId, databaseId }) => {
+    const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, { instanceId });
+    if (!bundle) {
+      return { skipped: true, reason: "no-bundle" } as const;
+    }
+    const newApi = (): EngineApi => createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const listed = await reconcileDatabase({ ctx, newApi, instanceId }, databaseId);
+    return { skipped: false, listed } as const;
   },
 });
 
