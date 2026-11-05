@@ -76,10 +76,16 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   // Only a write under a resource value's key changes a value anything here reads.
   [EngineEventType.MODULE_STORAGE_CHANGED]: (event) =>
     canonicalIdForStorageKey(event.key) === null ? [] : [k.moduleResources.values()],
+  // Nothing here reads a module's database rows yet.
+  [EngineEventType.DATABASE_RECORD_CHANGED]: NONE,
   [EngineEventType.ENGINE_RESPONSE_RECEIVED]: NONE,
   [EngineEventType.WORKFLOW_CREATED]: (event) => workflowKeys(event.workflow.id),
   [EngineEventType.WORKFLOW_UPDATED]: (event) => workflowKeys(event.workflow.id),
   [EngineEventType.WORKFLOW_DELETED]: (event) => workflowKeys(event.workflowId),
+  // Nothing here reads workflow groups yet; a member's own switch arrives as its `workflow.updated`.
+  [EngineEventType.WORKFLOW_GROUP_CREATED]: NONE,
+  [EngineEventType.WORKFLOW_GROUP_UPDATED]: NONE,
+  [EngineEventType.WORKFLOW_GROUP_DELETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_STARTED]: NONE,
   [EngineEventType.WORKFLOW_RUN_COMPLETED]: NONE,
   [EngineEventType.WORKFLOW_RUN_FAILED]: NONE,
