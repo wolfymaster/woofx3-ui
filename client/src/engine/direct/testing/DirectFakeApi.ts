@@ -77,6 +77,12 @@ import type {
   WorkflowUpdateConflict,
 } from "@woofx3/api";
 import { formatMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
+import {
+  DEFAULT_MODERATION_CONFIG,
+  type ModerationActionRecord,
+  type ModerationConfig,
+  parseModerationConfig,
+} from "@woofx3/api/moderation-config";
 import type {
   TwitchDeviceLoginStartResult,
   TwitchDeviceLoginState,
@@ -88,6 +94,9 @@ import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngin
 /** The engine methods the direct gateway's tests serve beyond every session's. */
 type DirectFakeSurface = Pick<
   Woofx3EngineApi,
+  | "getModerationConfig"
+  | "setModerationConfig"
+  | "listModerationActions"
   | "listCommands"
   | "listGroups"
   | "listEvents"
@@ -200,6 +209,10 @@ interface StreamSubscription {
 
 /** What the fake engine holds, shared by every session a test opens. */
 export class FakeEngineState {
+  /** Stored as the engine stores it: checked by the shared parser on every set. */
+  moderationConfig: ModerationConfig = DEFAULT_MODERATION_CONFIG;
+  /** Newest first. */
+  moderationActions: ModerationActionRecord[] = [];
   commands: CommandSnapshot[] = [];
   groups: GroupSnapshot[] = [];
   /** The engine's event log, newest first. */
@@ -325,6 +338,26 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     private readonly state: FakeEngineState
   ) {
     super(engine);
+  }
+
+  async getModerationConfig(): Promise<ModerationConfig> {
+    this.state.record("getModerationConfig");
+    return this.state.moderationConfig;
+  }
+
+  async setModerationConfig(config: ModerationConfig): Promise<ModerationConfig> {
+    this.state.record("setModerationConfig", config);
+    const parsed = parseModerationConfig(config);
+    if (!parsed.ok) {
+      throw new Error(parsed.error);
+    }
+    this.state.moderationConfig = parsed.value;
+    return parsed.value;
+  }
+
+  async listModerationActions(limit?: number): Promise<ModerationActionRecord[]> {
+    this.state.record("listModerationActions", limit);
+    return this.state.moderationActions.slice(0, limit);
   }
 
   async listCommands(): Promise<CommandSnapshot[]> {

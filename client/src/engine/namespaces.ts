@@ -79,6 +79,7 @@ export const ENGINE_NAMESPACE_MODULES = {
   ],
   adBreaks: ["adBreaks"],
   moderation: ["moderation"],
+  chatModeration: ["chatModerationActions"],
   pins: ["pins"],
   shoutouts: [
     // listChatters is twitchChat's.

@@ -16,6 +16,7 @@ import { hostedEngineGateway, InstanceEngineScope } from "@/engine/boot/hosted";
 import { EngineGatewayProvider } from "@/engine/context";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
+import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import {
   COMMAND_EDITOR_ROUTE,
   COMMAND_GROUP_EDITOR_ROUTE,
@@ -58,6 +59,7 @@ const TwitchDesktopSignIn = lazy(() => import("@/pages/auth/twitch-desktop"));
 const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
+const Moderation = lazy(() => import("@/pages/moderation"));
 const CompanionPair = lazy(() => import("@/pages/companion-pair"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
@@ -243,6 +245,7 @@ function AppRoutes() {
                     <Route path={COMMAND_NEW_ROUTE} component={CommandEditor} />
                     <Route path={COMMAND_EDITOR_ROUTE} component={CommandEditor} />
                     <Route path="/stream/commands" component={Commands} />
+                    <Route path={MODERATION_PATH} component={Moderation} />
                     {builtInKindRoutes().flatMap(({ moduleName, kind, path }) =>
                       [path, `${path}/*`].map((pattern) => (
                         <Route key={pattern} path={pattern}>

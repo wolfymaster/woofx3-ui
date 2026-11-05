@@ -31,6 +31,10 @@ export const TWITCH_INTEGRATION_SCOPES = [
   // The read half below shows the current modes; a link granted before this
   // was added can see them but not change them.
   "moderator:manage:chat_settings",
+  // Twitch's own warning for chat moderation's warn action. A link granted
+  // before this was added still deletes, times out and bans; only warnings
+  // wait for a reconnect.
+  "moderator:manage:warnings",
   "moderator:read:chatters",
   "moderator:read:chat_messages",
   "moderator:read:chat_settings",

@@ -36,7 +36,7 @@ describe("missingTwitchCapabilities", () => {
     );
     expect(missingTwitchCapabilities(granted)).toEqual([
       { label: "Clips", optional: false, missingScopes: ["clips:edit"] },
-      { label: "Pinned messages", optional: false, missingScopes: ["moderator:manage:chat_messages"] },
+      { label: "Pinned and removed messages", optional: false, missingScopes: ["moderator:manage:chat_messages"] },
     ]);
   });
 
@@ -60,6 +60,14 @@ describe("missingTwitchCapabilities", () => {
         { label: "Ad breaks", optional: true, missingScopes: ["channel:read:ads", "channel:manage:ads"] },
       ],
     });
+  });
+
+  // Every link made before chat moderation lacks the warnings scope; it must not nag every instance.
+  test("a link made before warnings misses only the optional warnings capability, and needs no reconnect", () => {
+    const granted = TWITCH_INTEGRATION_SCOPES.filter((scope) => scope !== "moderator:manage:warnings");
+    const warnings = { label: "Moderation: warnings", optional: true, missingScopes: ["moderator:manage:warnings"] };
+    expect(missingTwitchCapabilities(granted)).toEqual([warnings]);
+    expect(twitchScopeHealth({ scopes: granted })).toEqual({ state: "ok", optionalMissing: [warnings] });
   });
 
   test("ignores extra scopes the link happens to hold", () => {

@@ -27,6 +27,7 @@ import type {
   ChatCommandChanges,
   ChatCommandGroup,
   ChatCommandGroupChanges,
+  ChatModerationRead,
   ChatSettings,
   ChatSettingsPatch,
   Chatter,
@@ -80,6 +81,8 @@ import type {
   MarketplaceSearchQuery,
   ModeratedUser,
   ModerationAccess,
+  ModerationActionRecord,
+  ModerationConfig,
   ModuleArchiveInstall,
   ModuleAsset,
   ModuleDetail,
@@ -266,6 +269,7 @@ export interface EngineGateway {
   readonly defaultSeed: DefaultSeedGateway;
   readonly adBreaks: AdBreaksGateway;
   readonly moderation: ModerationGateway;
+  readonly chatModeration: ChatModerationGateway;
   readonly pins: PinsGateway;
   readonly shoutouts: ShoutoutsGateway;
   readonly twitchChat: TwitchChatGateway;
@@ -802,6 +806,19 @@ export interface ConfigGateway {
   useStorageConfigRequest(): () => Promise<StorageConfig | null>;
   /** Replaces the storage backend, and its credentials, for everyone on the instance. */
   useSetStorageConfigRequest(): (config: Record<string, unknown>) => Promise<{ success: boolean }>;
+}
+
+/**
+ * Chat moderation: the filters the engine runs on every chat line, and what
+ * they recently did. The engine holds the config and is its authority;
+ * everyone on the instance reads it, and owners and admins change it.
+ */
+export interface ChatModerationGateway {
+  useConfigRequest(): () => Promise<ChatModerationRead>;
+  /** Replaces the config; resolves with it as the engine stored it. Rejects with the first problem in it. */
+  useSetConfigRequest(): (config: ModerationConfig) => Promise<ModerationConfig>;
+  /** The latest moderated lines, newest first. */
+  useRecentActionsRequest(): (limit?: number) => Promise<ModerationActionRecord[]>;
 }
 
 /**
