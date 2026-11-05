@@ -339,6 +339,12 @@ jobs:
           workspaces: companion/src-tauri -> target
           key: woofx3-installer
 
+      # Starts the bundled engine as the app does, with nothing else set, on
+      # a fresh data directory and again over what that run wrote, so a pin
+      # whose engine cannot start in the app fails here, not after release.
+      - name: Start the bundled engine
+        run: cargo run --manifest-path companion/core/Cargo.toml --example engine_smoke -- companion/src-tauri/engine
+
       # tauri.woofx3.conf.json gives the build the desktop app's identity:
       # its own identifier, product name, version and update feed.
       - name: Build installer
