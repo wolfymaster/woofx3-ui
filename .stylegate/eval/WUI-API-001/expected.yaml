@@ -1,0 +1,14 @@
+reviewed: false
+findings:
+  - file: bad/convex/sceneBackup.ts
+    line_start: 12
+    line_end: 12
+    note: An async helper returns the session, so awaiting it sends a batch holding only authenticate.
+  - file: bad/convex/overlaySeed.ts
+    line_start: 12
+    line_end: 12
+    note: One session is used by two sequential awaited calls.
+  - file: bad/convex/overlaySeed.ts
+    line_start: 19
+    line_end: 19
+    note: The session itself is awaited before the call.

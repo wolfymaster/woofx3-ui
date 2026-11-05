@@ -1,0 +1,88 @@
+id: WUI-API-004
+title: Platform secrets and refresh tokens never leave Convex
+lang: typescript
+scope:
+  include: ["convex/**/*.ts"]
+  exclude: ["convex/_generated/**", "convex/migrations/**"]
+  skip_tests: true
+category: api
+severity: error
+enforcement: llm
+statement: >
+  A secret that woofx3 owns leaves Convex: the Twitch app secret
+  (`TWITCH_CLIENT_SECRET`) or another woofx3-owned app's client secret
+  (`integrationCredentials.clientSecret`), a platform or viewer refresh
+  token (`platformLinks.sealedRefreshToken` once unsealed,
+  `twitchPendingAuth.refreshToken`, `viewerPlatformTokens`,
+  `oauthConnectHandoffs`), an instance's `webhookSecret` (the engine's
+  callback Bearer token), `RELAY_SIGNING_KEY`, an engine
+  `registrationToken`, or the token-sealing key. Leaving means: returned
+  from a public `query`, `mutation` or `action` (directly, or inside a
+  whole document of a table that holds it, such as returning `ctx.db.get`
+  of an `instances` or `platformLinks` row unmapped); sent to an engine
+  call or written into an engine setting; placed in a URL, redirect or
+  HTML; or written to a log line or error message. An engine gets a Twitch
+  access token only through the token grant (`twitch.token.requested`,
+  `grantTokenToEngine`); Convex keeps the refresh token and renews.
+  Returning a public shape built from named, non-secret fields is the
+  expected pattern. Not violations: the engine's own `clientId` and
+  `clientSecret` going to an instance member's browser for the live
+  WebSocket transport (the engine issued them to this instance); a hash or
+  a masked "set" flag; a short-lived access token handed to the engine
+  through the grant.
+rationale: >
+  An engine may be self-hosted and a browser is anyone's, so a secret that
+  reaches either is out of woofx3's control: a leaked refresh token or app
+  secret lets its holder act as the streamer's channel or as woofx3's app
+  long after the session ends, and a leaked callback token lets anyone post
+  forged engine events for the instance.
+violation_examples:
+  - note: A public query returns the whole instance row, callback token included.
+    code: |
+      export const get = query({
+        args: { instanceId: v.id("instances") },
+        handler: async (ctx, args) => {
+          await requireInstanceRole(ctx, args.instanceId);
+          return ctx.db.get(args.instanceId);
+        },
+      });
+  - note: The refresh token is unsealed and pushed to the engine with the access token.
+    code: |
+      const link = await unsealPlatformLink(ctx, linkRow);
+      await createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret).setTwitchCredentials({
+        accessToken: link.accessToken,
+        refreshToken: link.refreshToken,
+      });
+  - note: The token exchange's failure logs the request body, app secret included.
+    code: |
+      const body = new URLSearchParams({ client_id: clientId, client_secret: env.TWITCH_CLIENT_SECRET, code, grant_type: "authorization_code" });
+      const response = await fetch(TWITCH_TOKEN_URL, { method: "POST", body });
+      if (!response.ok) {
+        logger.error("twitch token exchange failed", { body: body.toString(), status: response.status });
+      }
+non_violation_examples:
+  - note: The public query maps the link to named fields and leaves the tokens out.
+    code: |
+      return links.map((link) => ({
+        _id: link._id,
+        platform: link.platform,
+        platformUsername: link.platformUsername,
+        scopes: link.scopes,
+        expiresAt: link.expiresAt,
+      }));
+  - note: Near miss. The instance row goes to a member without the callback token; its engine credentials feed the browser's live transport.
+    code: |
+      function withoutWebhookSecret(instance: Doc<"instances">): Omit<Doc<"instances">, "webhookSecret"> {
+        const { webhookSecret: _webhookSecret, ...rest } = instance;
+        return rest;
+      }
+  - note: Near miss. The engine asked for a token and is answered with the current access token only.
+    code: |
+      return { accessToken: grant.accessToken, expiresAt: grant.expiresAt, login: grant.login };
+context_needs: [enclosing_decl, package_decls]
+trigger:
+  - '[Ss]ecret|[Rr]efresh_?[Tt]oken|refresh_token|SIGNING_KEY|registrationToken|[Ss]ealed|[Uu]nseal'
+  - 'ctx\.db\.get\(|\.unique\(\)|\.first\(\)|return (instance|link|row|doc|record)\b'
+  - '\b(log(ger)?\.\w+|console\.\w+)\('
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

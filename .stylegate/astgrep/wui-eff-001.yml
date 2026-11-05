@@ -1,0 +1,24 @@
+id: WUI-EFF-001
+language: typescript
+severity: warning
+message: A Convex query is filtered without an index.
+rule:
+  pattern: $ROWS.filter($$$PREDICATE)
+  has:
+    field: function
+    has:
+      field: object
+      stopBy: end
+      pattern: $CTX.db.query($$$TABLE)
+  not:
+    has:
+      field: function
+      has:
+        field: object
+        stopBy: end
+        kind: call_expression
+        has:
+          field: function
+          has:
+            field: property
+            regex: ^(withIndex|withSearchIndex)$

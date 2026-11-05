@@ -1,0 +1,100 @@
+id: WUI-CON-001
+title: A request effect does not depend on the state it sets
+lang: typescript
+scope:
+  include: ["client/src/**/*.ts", "client/src/**/*.tsx"]
+  exclude: ["client/src/components/ui/**"]
+  skip_tests: true
+category: concurrency
+severity: warn
+enforcement: llm
+statement: >
+  A `useEffect` (or `useLayoutEffect`) that starts an asynchronous request
+  (a gateway request function from `useEngineGateway()`, a Convex action,
+  `fetch`) and cancels it in its cleanup (a `cancelled` flag, an
+  `AbortController`, an ignore guard) also lists in its dependency array a
+  piece of state that the effect itself sets while the request runs, most
+  often `loading`, `pending`, `error` or the result. Setting that state
+  re-runs the effect: the cleanup cancels the request just started, and
+  either a guard on that state stops a new one, so the screen stays on its
+  loading state, or the request restarts in a loop. Dependencies are the
+  request's inputs (the request function, its arguments, the scope's
+  instance), never its own progress. Reading the state through a ref or a
+  functional `setState` update is not a violation, nor is an effect that
+  sets state it does not depend on, nor one whose request is not cancelled
+  on re-run.
+rationale: >
+  The bug passes type checks and lint (the exhaustive-deps lint even asks
+  for the state the effect reads), and shows only as a screen that never
+  leaves its skeleton. The marketplace's counts and author page both
+  shipped with it in the same hook file.
+violation_examples:
+  - note: loading is read as a guard, set by the effect, and listed as a dependency, so the effect cancels its own request.
+    code: |
+      useEffect(() => {
+        if (loading) {
+          return;
+        }
+        let cancelled = false;
+        setLoading(true);
+        requestCounts()
+          .then((next) => {
+            if (!cancelled) {
+              setCounts(next);
+            }
+          })
+          .finally(() => {
+            if (!cancelled) {
+              setLoading(false);
+            }
+          });
+        return () => {
+          cancelled = true;
+        };
+      }, [requestCounts, loading]);
+  - note: The effect stores the result it depends on, so every answer cancels and restarts the request.
+    code: |
+      useEffect(() => {
+        const controller = new AbortController();
+        fetchSupporters(instanceId, supporters?.cursor, controller.signal).then(setSupporters);
+        return () => controller.abort();
+      }, [instanceId, supporters]);
+non_violation_examples:
+  - note: The dependencies are the request and its input; loading is cleared in the cleanup.
+    code: |
+      useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        requestAuthor(slug)
+          .then((page) => {
+            if (!cancelled) {
+              setPage(page);
+            }
+          })
+          .finally(() => {
+            if (!cancelled) {
+              setLoading(false);
+            }
+          });
+        return () => {
+          cancelled = true;
+          setLoading(false);
+        };
+      }, [requestAuthor, slug]);
+  - note: Near miss. An effect depends on a value it never sets.
+    code: |
+      useEffect(() => {
+        if (!open) {
+          return;
+        }
+        const controller = new AbortController();
+        void loadHistory(controller.signal).then(setHistory);
+        return () => controller.abort();
+      }, [open, loadHistory]);
+context_needs: [enclosing_decl]
+trigger:
+  - 'use(Layout)?Effect\('
+  - '^\s*\}, \['
+  - 'set(Loading|Pending)\b|set[A-Z]\w*\(true\)'
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

@@ -1,0 +1,10 @@
+reviewed: false
+findings:
+  - file: bad/convex/invitesList.ts
+    line_start: 10
+    line_end: 10
+    note: The invitations query is filtered with no index, scanning the whole table.
+  - file: bad/convex/invitesList.ts
+    line_start: 19
+    line_end: 19
+    note: Every alert of every instance is collected and filtered in memory.

@@ -1,0 +1,19 @@
+id: WUI-LAY-003
+language: tsx
+severity: warning
+message: A dashboard widget folds content in place instead of opening a WidgetOverlay.
+rule:
+  kind: import_statement
+  has:
+    field: source
+    regex: ^['"](@/components/ui/(collapsible|accordion)|@radix-ui/react-(collapsible|accordion))['"]
+---
+id: WUI-LAY-003
+language: typescript
+severity: warning
+message: A dashboard widget folds content in place instead of opening a WidgetOverlay.
+rule:
+  kind: import_statement
+  has:
+    field: source
+    regex: ^['"](@/components/ui/(collapsible|accordion)|@radix-ui/react-(collapsible|accordion))['"]

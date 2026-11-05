@@ -1,0 +1,18 @@
+reviewed: false
+findings:
+  - file: bad/shared/user-pages/sections.ts
+    line_start: 1
+    line_end: 1
+    note: shared/ imports Convex's validators.
+  - file: bad/shared/user-pages/sections.ts
+    line_start: 2
+    line_end: 2
+    note: shared/ imports a Convex module.
+  - file: bad/shared/user-pages/sections.ts
+    line_start: 3
+    line_end: 3
+    note: shared/ imports client code.
+  - file: bad/shared/viewer-badge.ts
+    line_start: 1
+    line_end: 1
+    note: shared/ imports React.

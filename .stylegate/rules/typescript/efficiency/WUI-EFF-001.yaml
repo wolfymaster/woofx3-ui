@@ -1,0 +1,57 @@
+id: WUI-EFF-001
+title: Convex queries narrow by an index, not by filter alone
+lang: typescript
+scope:
+  include: ["convex/**/*.ts"]
+  exclude: ["convex/_generated/**", "convex/migrations/**"]
+  skip_tests: true
+category: efficiency
+severity: warn
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-eff-001.yml
+statement: >
+  A `ctx.db.query(table)` chain is narrowed with `.filter(...)` and no
+  `.withIndex(...)` or `.withSearchIndex(...)` in the chain, or its
+  collected rows are filtered in JavaScript
+  (`(await ctx.db.query("t").collect()).filter(...)`), so the read scans
+  the whole table. Express the predicate as an index range with
+  `.withIndex()`, adding an index to `convex/schema.ts` if none fits. A
+  `.filter()` after `.withIndex()` for a predicate the index cannot express
+  is allowed (the Convex guidelines' own exception).
+rationale: >
+  A filter runs after the scan and reduces no rows read: the query costs
+  the whole table on every run, and a reactive query reruns on every write
+  to that table, across every tenant. Convex's transaction read limits turn
+  that into a hard failure as tables grow.
+violation_examples:
+  - note: Filter on a full table scan.
+    code: |
+      const pending = await ctx.db
+        .query("invitations")
+        .filter((q) => q.eq(q.field("accountId"), args.accountId))
+        .take(50);
+  - note: The whole table is collected and filtered in memory.
+    code: |
+      const rows = (await ctx.db.query("engineAlerts").collect()).filter((row) => row.instanceId === instanceId);
+non_violation_examples:
+  - note: The predicate is an index range.
+    code: |
+      const pending = await ctx.db
+        .query("invitations")
+        .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+        .take(50);
+  - note: Near miss. A filter after an index for a field the index does not cover.
+    code: |
+      const recent = await ctx.db
+        .query("engineAlerts")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+        .filter((q) => q.neq(q.field("status"), "dismissed"))
+        .take(100);
+  - note: Near miss. A plain array filter that has nothing to do with a query.
+    code: |
+      const enabled = definitions.filter((definition) => definition.enabled);
+context_needs: [enclosing_decl]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-03" }

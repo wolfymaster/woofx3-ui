@@ -224,9 +224,8 @@ export function toRecapTimelineEvents(answer: StreamSessionEvents | null): Recap
 /**
  * Whether a recapped session is a stream that is live right now.
  *
- * The engine keeps a session open after its stream goes offline, until the next
- * broadcast either continues it (a dropout inside its grace window) or replaces
- * it, so `status: "open"` says only that the engine has not closed it yet. A
+ * The engine keeps a session open through a grace window after its stream goes
+ * offline, in case the stream comes back (a dropout), so `status: "open"` says only that the engine has not closed it yet. A
  * session is in progress only while the instance is live, and, when the engine
  * has announced which session it is in, only if it is that one: an older row
  * still stored as open (its closing summary never arrived) is not live just

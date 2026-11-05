@@ -1,0 +1,6 @@
+reviewed: false
+findings:
+  - file: bad/client/src/components/dashboard/widgets/raid-history.tsx
+    line_start: 3
+    line_end: 3
+    note: The widget folds its raid history in place instead of opening a WidgetOverlay.

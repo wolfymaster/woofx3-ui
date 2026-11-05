@@ -134,6 +134,21 @@ Toolchains are pinned in `mise.toml`. Create worktrees with the engine repo's `s
 
 Verify changes with `scripts/check.sh`. It runs CI's lint, type checks, tests and build for what changed against `master`, plus `companion/core` when that changed. It prints one PASS/FAIL line per check with a log path. `--quick` skips tests and the build; `--all` checks everything.
 
+### stylegate: style and quality gate
+
+[stylegate](https://github.com/wolfymaster/stylegate) reviews changes against versioned rules: its general rules, layered with this repository's own in `.stylegate/rules/` (`WUI-*`). It runs locally only, never in CI. Its LLM rules run on the logged-in `claude` CLI's subscription (`provider: claude_code`), never with an API key. Always run it through `scripts/stylegate.sh`, which finds the stylegate checkout next to this repository's main clone (`~/code/stylegate`) and its rules. Drafts are enforced and warnings fail.
+
+- **Every turn:** the Stop hook in `.claude/settings.json` runs the deterministic rules on uncommitted changes and blocks on findings. `scripts/stylegate.sh quick` runs the same check by hand.
+- **Before opening a feature PR:** run `scripts/stylegate.sh review` (the whole branch against `origin/master`, LLM rules included) and resolve every finding.
+- **Resolving a finding:** fix a real violation. Mark a justified exception with `// stylegate:ignore <RULE-ID> reason="..."` on the line above it. Never silence a wrong finding to get a pass: it is a false positive, a defect in the rule.
+- **Record every decision** stylegate shaped, in the local ledger (outside the repository, shared by all worktrees):
+  ```bash
+  scripts/stylegate.sh decisions add --rule <RULE-ID> --outcome <outcome> --at <path:line> --summary "<what was decided and why>"
+  ```
+  Outcomes: `fixed` (code changed to follow a rule), `shaped` (a design chosen to follow a rule before any finding), `exception`, `false_positive`, and `missed` (a real problem stylegate stayed silent on; `--rule` optional).
+- **Report it:** when a feature is done, include the output of `scripts/stylegate.sh decisions summary` in your report to the user, with noteworthy hits and misses.
+- **Improve the rules:** fix a false positive or a miss where it belongs. A general rule is fixed in the stylegate repository. A convention specific to this repository becomes or improves a `WUI-*` draft rule in `.stylegate/rules/`, with violation and near-miss examples, validated with `scripts/stylegate.sh rules lint` and run against real history before you rely on it. `scripts/stylegate.sh rules explain <ID>` shows any rule.
+
 ## Testing Pull Requests
 
 Pull requests are browser-tested in their preview environment with [Kernel](https://kernel.sh) cloud browsers. Never use local Playwright or headless Chromium. `docs/ops/previews.md` covers previews in depth.
@@ -229,7 +244,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **Formatting**: Biome — 2-space indent, double quotes, semicolons, trailing commas (ES5), 120 char line width.
 - **Braces on all branches and loops**: `if (!x) { return null; }` — never `if (!x) return null;`. Same for `for`, `while`, `else` — always use a block body. No exceptions.
 - **Routing**: Wouter v3. Redirect with its `<Redirect to="..." />` component, or `navigate` from `useLocation` inside an effect when the redirect follows other logic.
-- **Logging**: client code logs through `logger` (or `scopedLogger(scope)` where a `Logger` is injected) from `@/lib/logger`, never through `console`; Biome's `noConsole` enforces it. Pass errors and context as fields (`logger.error("Failed to install module", { error })`) so remote sinks receive them structured.
+- **Logging**: client code never calls `console` (Biome's `noConsole` enforces it); it logs through the one app logger, which it receives rather than imports. Components and hooks call `useLogger()` from `@/lib/logger-context`, and `.scoped(scope)` labels a child logger; other code takes a `Logger` (`@/lib/logger`) from its caller. Only entry points import `appLogger` from `@/lib/app-logger`, where sinks are chosen. Pass errors and context as fields (`logger.error("Failed to install module", { error })`) so remote sinks receive them structured.
 - **State**: Nanostores (`$`-prefixed atoms) for UI-only state (theme, sidebar, engine URL, current instance ID). Convex for all server-persisted data.
 - **Engine access**: Screens reach the engine through the engine gateway (`useEngineGateway()` and the hooks in `client/src/engine/hooks/`; see `docs/patterns/engine-gateway.md`). `client/src/lib/transport/` (`WoofxTransport`, the realtime browser↔engine channel) is the Convex gateway's own and only `client/src/engine/convex/` imports it. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
 - **Shadcn/ui**: Components in `client/src/components/ui/` — extend via composition, never modify directly.

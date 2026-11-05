@@ -1,0 +1,18 @@
+reviewed: false
+findings:
+  - file: bad/convex/platformStatus.ts
+    line_start: 10
+    line_end: 12
+    note: A public query returns the whole pending-auth row, Twitch access and refresh tokens included.
+  - file: bad/convex/platformStatus.ts
+    line_start: 20
+    line_end: 20
+    note: A public query returns the whole instance row, the engine callback token (webhookSecret) included.
+  - file: bad/convex/twitchSync.ts
+    line_start: 17
+    line_end: 17
+    note: The unsealed Twitch refresh token is sent to the engine.
+  - file: bad/convex/twitchSync.ts
+    line_start: 35
+    line_end: 35
+    note: The log line carries the request body, the Twitch app secret included.

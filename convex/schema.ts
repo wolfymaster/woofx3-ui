@@ -198,12 +198,6 @@ export default defineSchema({
     // entitlements. Operator-only: set through the ops API, never from the
     // dashboard. See lib/hostedStorage.ts.
     hostedStorageLimits: v.optional(hostedStorageOverrideValidator),
-    // Nothing reads or writes these; migrations/dropEngineReports clears
-    // them, and the fields go once that has run.
-    engineVersion: v.optional(v.string()),
-    engineCapabilityIds: v.optional(v.array(v.string())),
-    engineCapabilitiesSeenAt: v.optional(v.number()),
-    engineSeenAt: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
     .index("by_webhook_secret", ["webhookSecret"]),
