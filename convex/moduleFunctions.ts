@@ -79,7 +79,7 @@ async function disableFunctionForInstance(ctx: MutationCtx, instanceId: Id<"inst
   }
 }
 
-const upsertFromWebhookArgs = {
+const upsertModuleFunctionsFromWebhookArgs = {
   instanceId: v.id("instances"),
   moduleKey: v.string(),
   moduleName: v.string(),
@@ -89,7 +89,7 @@ const upsertFromWebhookArgs = {
 
 export async function upsertModuleFunctionsFromWebhook(
   ctx: MutationCtx,
-  { instanceId, moduleKey, moduleName, version, functions }: ObjectType<typeof upsertFromWebhookArgs>
+  { instanceId, moduleKey, moduleName, version, functions }: ObjectType<typeof upsertModuleFunctionsFromWebhookArgs>
 ) {
   const moduleRecord = await ctx.db
     .query("moduleRepository")
@@ -142,19 +142,14 @@ export async function upsertModuleFunctionsFromWebhook(
   }
 }
 
-export const upsertFromWebhook = internalMutation({
-  args: upsertFromWebhookArgs,
-  handler: upsertModuleFunctionsFromWebhook,
-});
-
-const deleteFromWebhookArgs = {
+const deleteModuleFunctionsFromWebhookArgs = {
   instanceId: v.id("instances"),
   functions: v.array(functionValidator),
 };
 
 export async function deleteModuleFunctionsFromWebhook(
   ctx: MutationCtx,
-  { instanceId, functions }: ObjectType<typeof deleteFromWebhookArgs>
+  { instanceId, functions }: ObjectType<typeof deleteModuleFunctionsFromWebhookArgs>
 ) {
   for (const fn of functions) {
     const existing = await ctx.db
@@ -167,11 +162,6 @@ export async function deleteModuleFunctionsFromWebhook(
     await disableFunctionForInstance(ctx, instanceId, fn.id);
   }
 }
-
-export const deleteFromWebhook = internalMutation({
-  args: deleteFromWebhookArgs,
-  handler: deleteModuleFunctionsFromWebhook,
-});
 
 export const cascadeOnModuleDelete = internalMutation({
   args: {

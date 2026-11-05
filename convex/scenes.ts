@@ -137,7 +137,7 @@ async function findScene(ctx: QueryCtx, instanceId: Id<"instances">, engineScene
     .first();
 }
 
-const upsertFromWebhookArgs = {
+const upsertSceneFromWebhookArgs = {
   instanceId: v.id("instances"),
   engineSceneId: v.string(),
   /** `scene` or `alert`; absent from an engine that predates alert compositions. */
@@ -159,7 +159,7 @@ const upsertFromWebhookArgs = {
 // so redelivery is idempotent and renames never create duplicates. An alert
 // goes to `alertCompositions`; a scene row under its id (cached before alerts
 // were told apart) is removed, since a row's kind never changes.
-export async function upsertSceneFromWebhook(ctx: MutationCtx, args: ObjectType<typeof upsertFromWebhookArgs>) {
+export async function upsertSceneFromWebhook(ctx: MutationCtx, args: ObjectType<typeof upsertSceneFromWebhookArgs>) {
   const existing = await findScene(ctx, args.instanceId, args.engineSceneId);
 
   if (parseCompositionKind(args.kind) === "alert") {
@@ -202,9 +202,7 @@ export async function upsertSceneFromWebhook(ctx: MutationCtx, args: ObjectType<
   }
 }
 
-export const upsertFromWebhook = internalMutation({ args: upsertFromWebhookArgs, handler: upsertSceneFromWebhook });
-
-const deleteFromWebhookArgs = {
+const deleteSceneFromWebhookArgs = {
   instanceId: v.id("instances"),
   engineSceneId: v.string(),
   kind: v.optional(v.string()),
@@ -212,7 +210,7 @@ const deleteFromWebhookArgs = {
 
 // Populated by the engine SCENE_DELETED webhook. Deletes the specific scene by
 // engineSceneId — never a positional .first(), which could destroy a sibling.
-export async function deleteSceneFromWebhook(ctx: MutationCtx, args: ObjectType<typeof deleteFromWebhookArgs>) {
+export async function deleteSceneFromWebhook(ctx: MutationCtx, args: ObjectType<typeof deleteSceneFromWebhookArgs>) {
   if (parseCompositionKind(args.kind) === "alert") {
     await deleteAlertCompositionRow(ctx, args.instanceId, args.engineSceneId);
     return;
@@ -222,8 +220,6 @@ export async function deleteSceneFromWebhook(ctx: MutationCtx, args: ObjectType<
     await deleteSceneAndChildren(ctx, scene._id);
   }
 }
-
-export const deleteFromWebhook = internalMutation({ args: deleteFromWebhookArgs, handler: deleteSceneFromWebhook });
 
 // Continuation of a cascade that exceeded its per-transaction budget. Reschedules
 // itself until every child row of the (already deleted) scene is gone.

@@ -79,7 +79,7 @@ export const listForModule = query({
   },
 });
 
-const upsertFromWebhookArgs = {
+const upsertModuleAssetsFromWebhookArgs = {
   // The delivering instance, from the webhook's Bearer token. Required to
   // resolve the owning module: moduleKey and name+version are both shared
   // between tenants that installed the same module.
@@ -92,7 +92,7 @@ const upsertFromWebhookArgs = {
 
 export async function upsertModuleAssetsFromWebhook(
   ctx: MutationCtx,
-  { instanceId, moduleKey, moduleName, version, assets }: ObjectType<typeof upsertFromWebhookArgs>
+  { instanceId, moduleKey, moduleName, version, assets }: ObjectType<typeof upsertModuleAssetsFromWebhookArgs>
 ) {
   const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
   if (!moduleId) {
@@ -128,12 +128,7 @@ export async function upsertModuleAssetsFromWebhook(
   }
 }
 
-export const upsertFromWebhook = internalMutation({
-  args: upsertFromWebhookArgs,
-  handler: upsertModuleAssetsFromWebhook,
-});
-
-const deleteFromWebhookArgs = {
+const deleteModuleAssetsFromWebhookArgs = {
   instanceId: v.id("instances"),
   moduleKey: v.string(),
   moduleName: v.string(),
@@ -150,7 +145,7 @@ const deleteFromWebhookArgs = {
  */
 export async function deleteModuleAssetsFromWebhook(
   ctx: MutationCtx,
-  { instanceId, moduleKey, moduleName, version, assets }: ObjectType<typeof deleteFromWebhookArgs>
+  { instanceId, moduleKey, moduleName, version, assets }: ObjectType<typeof deleteModuleAssetsFromWebhookArgs>
 ) {
   const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
   if (!moduleId) {
@@ -167,11 +162,6 @@ export async function deleteModuleAssetsFromWebhook(
     }
   }
 }
-
-export const deleteFromWebhook = internalMutation({
-  args: deleteFromWebhookArgs,
-  handler: deleteModuleAssetsFromWebhook,
-});
 
 export const cascadeOnModuleDelete = internalMutation({
   args: { moduleId: v.id("moduleRepository") },

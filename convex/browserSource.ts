@@ -135,7 +135,7 @@ export const deleteKeys = internalMutation({
   },
 });
 
-const clearOverlayUrlByTokenIdArgs = { engineTokenId: v.string() };
+const clearOverlayUrlForTokenArgs = { engineTokenId: v.string() };
 
 // Best-effort consistency for the OVERLAY_TOKEN_REVOKED webhook — a token
 // might be revoked through a channel other than this file's own
@@ -147,7 +147,7 @@ const clearOverlayUrlByTokenIdArgs = { engineTokenId: v.string() };
 // mints a fresh token in its place).
 export async function clearOverlayUrlForToken(
   ctx: MutationCtx,
-  { engineTokenId }: ObjectType<typeof clearOverlayUrlByTokenIdArgs>
+  { engineTokenId }: ObjectType<typeof clearOverlayUrlForTokenArgs>
 ) {
   const row = await ctx.db
     .query("browserSourceKeys")
@@ -157,11 +157,6 @@ export async function clearOverlayUrlForToken(
     await ctx.db.patch(row._id, { overlayUrl: undefined });
   }
 }
-
-export const clearOverlayUrlByTokenId = internalMutation({
-  args: clearOverlayUrlByTokenIdArgs,
-  handler: clearOverlayUrlForToken,
-});
 
 // Busts every cached overlayUrl for an instance — called after
 // setOverlayPublicUrl changes what every URL should resolve to. Every

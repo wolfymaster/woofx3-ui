@@ -66,7 +66,7 @@ async function withInProgress(ctx: QueryCtx, instanceId: Id<"instances">, rows: 
   return rows.map((row) => ({ ...row, inProgress: isSummaryInProgress(row, liveState) }));
 }
 
-const upsertFromWebhookArgs = {
+const upsertSessionSummaryFromWebhookArgs = {
   instanceId: v.id("instances"),
   data: v.any(),
 };
@@ -78,15 +78,10 @@ const upsertFromWebhookArgs = {
  */
 export async function upsertSessionSummaryFromWebhook(
   ctx: MutationCtx,
-  { instanceId, data }: ObjectType<typeof upsertFromWebhookArgs>
+  { instanceId, data }: ObjectType<typeof upsertSessionSummaryFromWebhookArgs>
 ) {
   return storeSummary(ctx, instanceId, data, planSummaryWrite);
 }
-
-export const upsertFromWebhook = internalMutation({
-  args: upsertFromWebhookArgs,
-  handler: upsertSessionSummaryFromWebhook,
-});
 
 /**
  * Stores a snapshot of the engine's open session that the UI took itself

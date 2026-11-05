@@ -113,7 +113,7 @@ async function applyReplaceAll(
   return { written: plan.writes.length, cleared: plan.clears.length };
 }
 
-const recordChangedFromWebhookArgs = {
+const recordWorkflowHealthChangeArgs = {
   instanceId: v.id("instances"),
   data: v.any(),
 };
@@ -121,7 +121,7 @@ const recordChangedFromWebhookArgs = {
 /** One `workflow.health.changed` delivery. */
 export async function recordWorkflowHealthChange(
   ctx: MutationCtx,
-  { instanceId, data }: ObjectType<typeof recordChangedFromWebhookArgs>
+  { instanceId, data }: ObjectType<typeof recordWorkflowHealthChangeArgs>
 ) {
   const parsed = parseWorkflowHealthChanged(data);
   if (!parsed.ok) {
@@ -135,12 +135,7 @@ export async function recordWorkflowHealthChange(
   return { outcome: plan };
 }
 
-export const recordChangedFromWebhook = internalMutation({
-  args: recordChangedFromWebhookArgs,
-  handler: recordWorkflowHealthChange,
-});
-
-const recordSnapshotFromWebhookArgs = {
+const recordWorkflowHealthSnapshotArgs = {
   instanceId: v.id("instances"),
   data: v.any(),
 };
@@ -148,7 +143,7 @@ const recordSnapshotFromWebhookArgs = {
 /** One `workflow.health.snapshot` delivery: replaces the instance's health. */
 export async function recordWorkflowHealthSnapshot(
   ctx: MutationCtx,
-  { instanceId, data }: ObjectType<typeof recordSnapshotFromWebhookArgs>
+  { instanceId, data }: ObjectType<typeof recordWorkflowHealthSnapshotArgs>
 ) {
   const parsed = parseWorkflowHealthSnapshot(data);
   if (!parsed.ok) {
@@ -159,11 +154,6 @@ export async function recordWorkflowHealthSnapshot(
   const counts = await applyReplaceAll(ctx, instanceId, rows, plan);
   return { outcome: "applied" as const, ...counts };
 }
-
-export const recordSnapshotFromWebhook = internalMutation({
-  args: recordSnapshotFromWebhookArgs,
-  handler: recordWorkflowHealthSnapshot,
-});
 
 /** Drop a deleted workflow's health so nothing is left to count against it. */
 export async function deleteWorkflowHealth(

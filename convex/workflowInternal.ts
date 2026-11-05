@@ -38,7 +38,7 @@ export const findCompletion = internalQuery({
   },
 });
 
-const resolveCorrelationArgs = {
+const resolveWorkflowCorrelationArgs = {
   correlationKey: v.string(),
   engineWorkflowId: v.string(),
   op: v.union(v.literal("create"), v.literal("update"), v.literal("delete")),
@@ -51,7 +51,7 @@ const resolveCorrelationArgs = {
  */
 export async function resolveWorkflowCorrelation(
   ctx: MutationCtx,
-  { correlationKey, engineWorkflowId, op }: ObjectType<typeof resolveCorrelationArgs>
+  { correlationKey, engineWorkflowId, op }: ObjectType<typeof resolveWorkflowCorrelationArgs>
 ) {
   const pending = await ctx.db
     .query("pendingWorkflowOperations")
@@ -71,11 +71,6 @@ export async function resolveWorkflowCorrelation(
     await completeImportItemByCorrelation(ctx, correlationKey, engineWorkflowId);
   }
 }
-
-export const resolveCorrelation = internalMutation({
-  args: resolveCorrelationArgs,
-  handler: resolveWorkflowCorrelation,
-});
 
 /**
  * Delete a completion record. Intended for action-side cleanup once the
@@ -226,7 +221,7 @@ export const sweepExpiredPending = internalMutation({
   },
 });
 
-const resolveCorrelationForDeleteArgs = { correlationKey: v.string(), engineWorkflowId: v.string() };
+const resolveWorkflowDeleteCorrelationArgs = { correlationKey: v.string(), engineWorkflowId: v.string() };
 
 /**
  * Resolve a pending delete op. Separate from resolveCorrelation because
@@ -234,7 +229,7 @@ const resolveCorrelationForDeleteArgs = { correlationKey: v.string(), engineWork
  */
 export async function resolveWorkflowDeleteCorrelation(
   ctx: MutationCtx,
-  { correlationKey, engineWorkflowId }: ObjectType<typeof resolveCorrelationForDeleteArgs>
+  { correlationKey, engineWorkflowId }: ObjectType<typeof resolveWorkflowDeleteCorrelationArgs>
 ) {
   const pending = await ctx.db
     .query("pendingWorkflowOperations")
@@ -250,8 +245,3 @@ export async function resolveWorkflowDeleteCorrelation(
     completedAt: Date.now(),
   });
 }
-
-export const resolveCorrelationForDelete = internalMutation({
-  args: resolveCorrelationForDeleteArgs,
-  handler: resolveWorkflowDeleteCorrelation,
-});

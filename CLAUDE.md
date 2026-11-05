@@ -76,17 +76,16 @@ Browser → Convex Action → capnweb HTTP batch RPC → Engine ApiGateway → A
 - **Never call the engine directly from the browser.**
 - **Never use `WoofxTransport` for Convex-proxied calls.** `WoofxTransport` is reserved for real-time browser↔engine WebSocket channels only (e.g. live workflow status streams).
 
-### Channel 2: Engine → UI (Webhook Callbacks)
+### Channel 2: Engine → UI (Events and Requests)
 
 ```
-Engine → POST <webhookUrl> (read from engine settings table at call time)
+Engine → POST <eventsUrl> (maintenance event queue) → relay, every few seconds → POST /api/engine-events/batch
+Engine → POST <callbackUrl> (/api/webhooks/woofx3), requests only
 ```
 
-- `callbackUrl` is a **single shared endpoint** for all engine instances: `POST /api/webhooks/woofx3` on the Convex HTTP surface.
-- Auth: the engine includes the per-instance `callbackToken` (established during registration) in the `Authorization: Bearer <token>` header.
-- The Convex webhook handler looks up the instance by the Bearer token, validates the request, upserts the relevant data, and Convex's reactive subscriptions automatically push updates to connected browser clients with no additional polling.
-- The webhook endpoint must be **idempotent** — duplicate deliveries must not create duplicate records (use entity `id` as upsert key).
-- A callback can also be a **request** the engine waits on, answered in the response body. `twitch.token.requested` returns the linked Twitch account's current access token (`twitchIntegration.grantTokenToEngine`): Convex alone holds the refresh token and the Twitch app secret, and renews the token for the engine.
+- **Events** go to the client's events target: the woofx3 maintenance event queue, with a per-instance events token. The queue keeps them until Convex acknowledges them, and its relay posts them in batches, signed with `MAINTENANCE_WEBHOOK_SECRET`, to `POST /api/engine-events/batch`. One mutation applies a whole batch, so Convex usage grows with batches, not with engines. `engineEventQueue.moveToQueue` sets the target after registration, or at the first sync after the engine advertises `callbacks.eventsTarget`.
+- Each event is applied by `applyEngineEvent` (`convex/lib/engineEvents/dispatch.ts`), one plain function per event type, inside the batch's transaction. It must be **idempotent**: events are deduplicated on the envelope id, and upserts still key on the entity `id`.
+- **Requests** are the callbacks the engine waits on for an answer in the response body. They stay on the single shared endpoint `POST /api/webhooks/woofx3`, authenticated by the per-instance `callbackToken` as `Authorization: Bearer <token>`. `twitch.token.requested` returns the linked Twitch account's current access token (`twitchIntegration.grantTokenToEngine`): Convex alone holds the refresh token and the Twitch app secret, and renews the token for the engine. Events sent there answer 410.
 
 ### Channel 3: Engine → Companion (the bridge)
 
@@ -109,7 +108,7 @@ Multiple users can be members of the same Account. Account membership grants ful
 | `instanceId` is the Convex `_id` of the instance record | No separate generation step; Convex is the authority |
 | Engine stores exactly one `instanceId`, one `webhookUrl`, one `webhookSecret` | Each engine is single-tenant; fixed for the lifetime of the deployment |
 | Proxied requests and callbacks carry no tenant or application id | Each engine is single-tenant; its credentials already identify it |
-| Convex webhook resolves the instance from the Bearer token before processing | The endpoint is public-facing; the per-instance callback token is the trust boundary |
+| Convex resolves the instance before processing: by Bearer token for requests, by the queue-attested instance and token hash for events | Both endpoints are public-facing; the per-instance tokens are the trust boundary |
 | UI-only metadata (trigger/action display settings) never enters the engine DB | Engine DB is engine-concerns only; Convex persists UI fields on webhook callback arrival |
 | Account sharing changes only Convex membership — never the engine | Engine has no user/account concept |
 | App secrets and refresh tokens for apps woofx3 owns (Twitch) never leave Convex | An engine may be self-hosted; it asks Convex for access tokens instead |
@@ -265,7 +264,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 
 ### Backend (`convex/`)
 - Auth via `convex/auth.ts` + `convex/auth.config.ts` (self-issued JWTs from CONVEX_SITE_URL)
-- HTTP API surface in `convex/http.ts`: Twitch OAuth flow, engine callbacks (`/api/webhooks/woofx3`), browser source redirects, widget asset serving
+- HTTP API surface in `convex/http.ts`: Twitch OAuth flow, engine requests (`/api/webhooks/woofx3`) and event batches (`/api/engine-events/batch`), browser source redirects, widget asset serving
 - Alert system: the engine queues and plays alerts in its own overlay; the `/browser-source/{key}` route sends OBS there, and the engine reports each alert's lifecycle as `alert.*` callbacks mirrored into `engineAlerts`
 - Storage adapters in `convex/lib/storage/` — Convex native, R2, or local file storage per instance config
 

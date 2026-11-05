@@ -10,6 +10,7 @@ import { RECEIPT_RETENTION_MS } from "./lib/engineEvents/config";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 
 const SECRET = "webhook-secret";
+const TOKEN_HASH = "a".repeat(64);
 const NOW = "2026-11-04T10:00:00.000Z";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -26,6 +27,7 @@ async function backendWithInstance(): Promise<Backend> {
       hosting: "managed",
       createdAt: 1,
       webhookSecret: SECRET,
+      eventsTokenHash: TOKEN_HASH,
     });
   });
   return t;
@@ -42,11 +44,27 @@ function envelope(data: Record<string, unknown>) {
   return { specversion: "1.0", id: `env-${envelopeSeq}`, source: "engine", type: data.type, time: NOW, data };
 }
 
-async function apply(t: Backend, data: Record<string, unknown>) {
-  return t.mutation(internal.engineEvents.applyFromWebhook, {
-    webhookSecret: SECRET,
-    body: JSON.stringify(envelope(data)),
+type Applied = { kind: "applied" | "ignored" | "duplicate" } | { kind: "invalid"; reason?: string };
+
+/** One envelope through the batch apply, for the instance whose webhook secret is `secret`. */
+async function applyEnvelope(t: Backend, body: Record<string, unknown>, secret = SECRET): Promise<Applied> {
+  const instance = await t.run((ctx) =>
+    ctx.db
+      .query("instances")
+      .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", secret))
+      .first()
+  );
+  if (!instance) {
+    throw new Error(`no instance with secret ${secret}`);
+  }
+  const [result] = await t.mutation(internal.engineEvents.applyBatch, {
+    events: [{ queueId: "1", instanceId: instance._id, tokenHash: TOKEN_HASH, envelopeJson: JSON.stringify(body) }],
   });
+  return result.outcome === "rejected" ? { kind: "invalid", reason: result.reason } : { kind: result.outcome };
+}
+
+async function apply(t: Backend, data: Record<string, unknown>): Promise<Applied> {
+  return applyEnvelope(t, envelope(data));
 }
 
 async function count(t: Backend, table: TableNames): Promise<number> {
@@ -445,7 +463,7 @@ const PARITY_CASES: { name: string; events: Record<string, unknown>[]; table: Ta
   },
 ];
 
-describe("applyFromWebhook", () => {
+describe("applyBatch, one event at a time", () => {
   for (const testCase of PARITY_CASES) {
     test(`applies ${testCase.name}`, async () => {
       const t = await backendWithInstance();
@@ -482,17 +500,6 @@ describe("applyFromWebhook", () => {
     expect((await apply(t, { type: WORKFLOW_HEALTH_CHANGED_EVENT_TYPE })).kind).toBe("invalid");
   });
 
-  test("an unknown secret is unauthorized and writes nothing", async () => {
-    const t = await backendWithInstance();
-    const result = await t.mutation(internal.engineEvents.applyFromWebhook, {
-      webhookSecret: "wrong",
-      body: JSON.stringify(envelope({ type: EngineEventType.SCENE_CREATED, scene })),
-    });
-    expect(result).toEqual({ kind: "unauthorized" });
-    expect(await count(t, "engineEventLog")).toBe(0);
-    expect(await count(t, "scenes")).toBe(0);
-  });
-
   test("$-prefixed keys are escaped before they are stored", async () => {
     const t = await backendWithInstance();
     const definition = { steps: [{ $ref: "x" }] };
@@ -503,43 +510,16 @@ describe("applyFromWebhook", () => {
 });
 
 describe("POST /api/webhooks/woofx3", () => {
-  async function post(t: Backend, data: Record<string, unknown>, secret = SECRET) {
-    return t.fetch("/api/webhooks/woofx3", {
+  test("an event answers 410 and applies nothing", async () => {
+    const t = await backendWithInstance();
+    const response = await t.fetch("/api/webhooks/woofx3", {
       method: "POST",
-      headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
-      body: JSON.stringify(envelope(data)),
+      headers: { Authorization: `Bearer ${SECRET}`, "Content-Type": "application/json" },
+      body: JSON.stringify(envelope({ type: EngineEventType.SCENE_CREATED, scene })),
     });
-  }
-
-  test("an applied event answers 200", async () => {
-    const t = await backendWithInstance();
-    const response = await post(t, { type: EngineEventType.SCENE_CREATED, scene });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ success: true, type: EngineEventType.SCENE_CREATED });
-  });
-
-  test("an ignored event answers handled: false", async () => {
-    const t = await backendWithInstance();
-    const response = await post(t, { type: "something.new" });
-    expect(await response.json()).toEqual({ success: true, type: "something.new", handled: false });
-  });
-
-  test("an invalid alert snapshot keeps answering 400", async () => {
-    const t = await backendWithInstance();
-    const response = await post(t, { type: EngineEventType.ALERT_RECORDED, alert: {} });
-    expect(response.status).toBe(400);
-  });
-
-  test("an invalid session summary keeps answering 400", async () => {
-    const t = await backendWithInstance();
-    const response = await post(t, { type: SESSION_SUMMARY_EVENT_TYPE });
-    expect(response.status).toBe(400);
-  });
-
-  test("an unknown secret answers 401", async () => {
-    const t = await backendWithInstance();
-    const response = await post(t, { type: EngineEventType.SCENE_CREATED, scene }, "wrong");
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(410);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe("events_moved");
+    expect(await count(t, "scenes")).toBe(0);
   });
 });
 
@@ -550,10 +530,6 @@ describe("envelope receipts", () => {
     runId: "run-1",
     workflowId: "wf-1",
   };
-
-  async function applyEnvelope(t: Backend, body: Record<string, unknown>, webhookSecret = SECRET) {
-    return t.mutation(internal.engineEvents.applyFromWebhook, { webhookSecret, body: JSON.stringify(body) });
-  }
 
   test("the same envelope twice applies once", async () => {
     const t = await backendWithInstance();
@@ -618,6 +594,6 @@ describe("envelope receipts", () => {
 test("an invalid event leaves no receipt", async () => {
   const t = await backendWithInstance();
   const body = envelope({ type: EngineEventType.ALERT_RECORDED, alert: {} });
-  await t.mutation(internal.engineEvents.applyFromWebhook, { webhookSecret: SECRET, body: JSON.stringify(body) });
+  await applyEnvelope(t, body);
   expect(await count(t, "engineEventReceipts")).toBe(0);
 });

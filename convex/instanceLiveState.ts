@@ -40,7 +40,7 @@ async function scheduleOfflineSnapshot(ctx: MutationCtx, instanceId: Id<"instanc
   });
 }
 
-const onStreamOnlineArgs = {
+const applyStreamOnlineArgs = {
   instanceId: v.id("instances"),
   twitchUserId: v.string(),
   startedAt: v.string(),
@@ -51,7 +51,7 @@ const onStreamOnlineArgs = {
 
 export async function applyStreamOnline(
   ctx: MutationCtx,
-  { instanceId, twitchUserId, startedAt, streamTitle, gameName, viewerCount }: ObjectType<typeof onStreamOnlineArgs>
+  { instanceId, twitchUserId, startedAt, streamTitle, gameName, viewerCount }: ObjectType<typeof applyStreamOnlineArgs>
 ) {
   const existing = await ctx.db
     .query("instanceLiveState")
@@ -79,8 +79,6 @@ export async function applyStreamOnline(
     await claimPendingStreamStartMarker(ctx, instanceId, patch.lastUpdatedAt);
   }
 }
-
-export const onStreamOnline = internalMutation({ args: onStreamOnlineArgs, handler: applyStreamOnline });
 
 type PolledFields = Pick<
   Doc<"instanceLiveState">,
@@ -151,7 +149,7 @@ export const recordPoll = internalMutation({
   },
 });
 
-const onSessionStartedArgs = {
+const applySessionStartedArgs = {
   instanceId: v.id("instances"),
   sessionId: v.string(),
   sessionStartedAt: v.string(),
@@ -167,7 +165,7 @@ const onSessionStartedArgs = {
 // the stream writers, and a session can legitimately start while offline.
 export async function applySessionStarted(
   ctx: MutationCtx,
-  { instanceId, sessionId, sessionStartedAt }: ObjectType<typeof onSessionStartedArgs>
+  { instanceId, sessionId, sessionStartedAt }: ObjectType<typeof applySessionStartedArgs>
 ) {
   const existing = await ctx.db
     .query("instanceLiveState")
@@ -190,16 +188,14 @@ export async function applySessionStarted(
   });
 }
 
-export const onSessionStarted = internalMutation({ args: onSessionStartedArgs, handler: applySessionStarted });
-
-const onStreamOfflineArgs = {
+const applyStreamOfflineArgs = {
   instanceId: v.id("instances"),
   twitchUserId: v.string(),
 };
 
 export async function applyStreamOffline(
   ctx: MutationCtx,
-  { instanceId, twitchUserId }: ObjectType<typeof onStreamOfflineArgs>
+  { instanceId, twitchUserId }: ObjectType<typeof applyStreamOfflineArgs>
 ) {
   const existing = await ctx.db
     .query("instanceLiveState")
@@ -227,5 +223,3 @@ export async function applyStreamOffline(
     await scheduleOfflineSnapshot(ctx, instanceId);
   }
 }
-
-export const onStreamOffline = internalMutation({ args: onStreamOfflineArgs, handler: applyStreamOffline });

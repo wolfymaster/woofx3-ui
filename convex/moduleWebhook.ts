@@ -181,7 +181,7 @@ async function findSupersededModule(
   return installed.find((m) => m.moduleKey?.split(":")[0] === bareKey) ?? null;
 }
 
-const processModuleInstalledArgs = {
+const applyModuleInstalledArgs = {
   instanceId: v.id("instances"),
   correlationKey: v.string(),
   moduleName: v.string(),
@@ -213,7 +213,7 @@ export async function applyModuleInstalled(
     moduleVersion,
     triggers,
     actions,
-  }: ObjectType<typeof processModuleInstalledArgs>
+  }: ObjectType<typeof applyModuleInstalledArgs>
 ) {
   // Check if this instance already has the row (idempotency)
   const record = await ctx.db
@@ -313,12 +313,7 @@ export async function applyModuleInstalled(
   return moduleId;
 }
 
-export const processModuleInstalled = internalMutation({
-  args: processModuleInstalledArgs,
-  handler: applyModuleInstalled,
-});
-
-const processDeregisteredDefinitionsArgs = {
+const applyDeregisteredDefinitionsArgs = {
   instanceId: v.id("instances"),
   triggers: v.array(triggerValidator),
   actions: v.array(actionValidator),
@@ -336,7 +331,7 @@ const processDeregisteredDefinitionsArgs = {
  */
 export async function applyDeregisteredDefinitions(
   ctx: MutationCtx,
-  { instanceId, triggers, actions }: ObjectType<typeof processDeregisteredDefinitionsArgs>
+  { instanceId, triggers, actions }: ObjectType<typeof applyDeregisteredDefinitionsArgs>
 ) {
   // Disable first, prune second: the shared-catalog check asks whether any
   // instance still enables the definition, and this one no longer should
@@ -358,12 +353,7 @@ export async function applyDeregisteredDefinitions(
   await pruneActionDefinitions(ctx, uniqueIds(actions.map((a) => a.id)));
 }
 
-export const processDeregisteredDefinitions = internalMutation({
-  args: processDeregisteredDefinitionsArgs,
-  handler: applyDeregisteredDefinitions,
-});
-
-const processRegisteredDefinitionsArgs = {
+const applyRegisteredDefinitionsArgs = {
   instanceId: v.id("instances"),
   moduleName: v.string(),
   moduleVersion: v.string(),
@@ -378,7 +368,7 @@ const processRegisteredDefinitionsArgs = {
  */
 export async function applyRegisteredDefinitions(
   ctx: MutationCtx,
-  { instanceId, moduleName, moduleVersion, triggers, actions }: ObjectType<typeof processRegisteredDefinitionsArgs>
+  { instanceId, moduleName, moduleVersion, triggers, actions }: ObjectType<typeof applyRegisteredDefinitionsArgs>
 ) {
   // Try to find this instance's module record to link definitions to it
   const record = await ctx.db
@@ -428,12 +418,7 @@ export async function applyRegisteredDefinitions(
   }
 }
 
-export const processRegisteredDefinitions = internalMutation({
-  args: processRegisteredDefinitionsArgs,
-  handler: applyRegisteredDefinitions,
-});
-
-const processModuleInstallFailedArgs = {
+const applyModuleInstallFailedArgs = {
   instanceId: v.id("instances"),
   correlationKey: v.string(),
   moduleName: v.string(),
@@ -455,7 +440,7 @@ export async function applyModuleInstallFailed(
     moduleName,
     moduleVersion,
     statusMessage,
-  }: ObjectType<typeof processModuleInstallFailedArgs>
+  }: ObjectType<typeof applyModuleInstallFailedArgs>
 ) {
   const transient = moduleInstallFailedTransient({ correlationKey, moduleName, moduleVersion }, statusMessage);
 
@@ -469,11 +454,6 @@ export async function applyModuleInstallFailed(
 
   await ctx.runMutation(internal.transientEvents.emit, { instanceId, ...transient });
 }
-
-export const processModuleInstallFailed = internalMutation({
-  args: processModuleInstallFailedArgs,
-  handler: applyModuleInstallFailed,
-});
 
 /**
  * Process a module.deleted webhook callback from the engine.
@@ -684,7 +664,7 @@ export const reconcileUninstalledModule = internalMutation({
   },
 });
 
-const processModuleDeleteFailedArgs = {
+const applyModuleDeleteFailedArgs = {
   instanceId: v.id("instances"),
   correlationKey: v.string(),
   moduleName: v.string(),
@@ -708,15 +688,10 @@ export async function applyModuleDeleteFailed(
     moduleVersion,
     error,
     conflicts,
-  }: ObjectType<typeof processModuleDeleteFailedArgs>
+  }: ObjectType<typeof applyModuleDeleteFailedArgs>
 ) {
   await ctx.runMutation(internal.transientEvents.emit, {
     instanceId,
     ...moduleDeleteFailedTransient({ correlationKey, moduleName, moduleVersion }, error, conflicts),
   });
 }
-
-export const processModuleDeleteFailed = internalMutation({
-  args: processModuleDeleteFailedArgs,
-  handler: applyModuleDeleteFailed,
-});
