@@ -128,7 +128,13 @@ Same correlated-async pattern as install:
 3. The engine uninstalls in the background and POSTs `module.deleted` or `module.delete_failed`. The webhook processor cascade-deletes the repository row, storage blob, and trigger/action definitions (on success), or emits an `error` transient carrying the engine's conflict list (on failure).
 4. The dialog watches the transient event and closes on success / displays the conflict list on failure. A 60 s engine-response timeout guards against the engine never responding.
 
-A conflict entry with `resourceType: "module"` means other installed modules declare this one in their `requires` (theme packs, for example). Its `usedBy` entries name each dependent with the range it requires, and the dialog lists them under **Required by** rather than **Used by** (`client/src/lib/uninstall-conflicts.ts`).
+The conflict list shows one row for each thing still using the module (`usageRows` in `client/src/lib/uninstall-conflicts.ts`, rows in `components/modules/uninstall-usage-row.tsx`). Where the dialog can clear a row, the row has its own button:
+
+- **A workflow step** (`context: "step[i]"`) reads as the workflow's trigger and its summary lines, then the titles of the steps running the module's action. **Remove** takes every action step with that `$ref` or `function` out of the workflow and saves it at the revision it was read at. When no action step would be left, the button says **Delete** and deletes the workflow, since the engine refuses a workflow with no steps.
+- **A workflow on the module's trigger** (`context: "trigger"`) can only go whole, so its button is **Delete**. It also covers that workflow's step rows.
+- **A scene wearing the module's theme** lists the widgets wearing it. **Remove** takes those widgets off the scene at any depth: a widget inside an alert layout leaves the layout, not the widget holding it.
+
+Other rows only say where to clear them: a chat command, a counter or other resource made with the module, a library alert the scene cache does not hold, or another module that requires this one (`resourceType: "module"`, whose `usedBy` names each dependent with the range it requires). A cleared row stays in the list, dashed, marked **Removed**. Once every row is cleared the footer offers **Uninstall** directly; until then **Try again** asks the engine again.
 
 ## Module storage limit
 
