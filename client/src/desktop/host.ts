@@ -14,7 +14,9 @@ import {
   type ShoutoutEnqueued,
   type ShoutoutEntryId,
   type ShoutoutQueueView,
+  STATE_EVENT,
   type TestResult,
+  type WindowState,
 } from "@/desktop/generated/window";
 import { call } from "./invoke";
 
@@ -29,6 +31,7 @@ export type {
   IntegrationsView,
   LocalEngineSession,
   ModuleView,
+  ReadyUpdate,
   RelayView,
   ShoutoutChannel,
   ShoutoutEnqueued,
@@ -36,6 +39,7 @@ export type {
   ShoutoutEntryId,
   ShoutoutQueueView,
   TestResult,
+  WindowState,
 } from "@/desktop/generated/window";
 
 // Calls into the desktop app's Rust host from the dashboard, its one window.
@@ -161,4 +165,22 @@ export async function finishAppLink(link: FinishAppLinkArgs): Promise<void> {
 /** Opens the system browser at Convex's Twitch sign-in, bound to the nonce behind `nonceHash`. */
 export async function openTwitchSignIn(nonceHash: string): Promise<void> {
   await call(COMMANDS.open_twitch_sign_in, { nonceHash });
+}
+
+// ==================== Updates ====================
+// The host checks for, downloads and verifies updates by itself; the
+// dashboard only offers one that is ready.
+
+/** Whether this computer is linked, and the update ready to install, if any. */
+export async function appState(): Promise<WindowState> {
+  return call(COMMANDS.get_state);
+}
+
+export function onAppStateChange(handler: (state: WindowState) => void): Promise<() => void> {
+  return listen<WindowState>(STATE_EVENT, (event) => handler(event.payload));
+}
+
+/** Installs the ready update and restarts into it, so this resolves only if that fails. */
+export async function installUpdate(): Promise<void> {
+  await call(COMMANDS.install_update);
 }

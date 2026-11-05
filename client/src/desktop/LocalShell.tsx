@@ -13,6 +13,7 @@ import { useLiveState } from "@/engine/hooks/use-live-state";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { cn } from "@/lib/utils";
 import { LOCAL_NAV_SECTIONS } from "./local-routes";
+import UpdateBanner from "./UpdateBanner";
 
 function LocalHeader({ location }: { location: string }) {
   return (
@@ -107,6 +108,7 @@ export function LocalShell({ children }: { children: ReactNode }) {
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
         <LocalStatusBar />
+        <UpdateBanner />
       </div>
     </StatusBarSlotProvider>
   );
