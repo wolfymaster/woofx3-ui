@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { type GettingStartedFacts, gettingStartedItems, gettingStartedProgress } from "./getting-started";
+import {
+  type GettingStartedFacts,
+  gettingStartedItems,
+  gettingStartedProgress,
+  VISIBLE_ITEM_COUNT,
+} from "./getting-started";
 
 const twitch = { marketplaceModuleId: "woofx3_twitch", name: "Twitch", approvedPermissions: [] };
 const obs = { marketplaceModuleId: "woofx3_obs", name: "OBS", approvedPermissions: [] };
@@ -7,22 +12,20 @@ const obs = { marketplaceModuleId: "woofx3_obs", name: "OBS", approvedPermission
 function facts(overrides: Partial<GettingStartedFacts> = {}, setup: Partial<GettingStartedFacts["setup"]> = {}) {
   const base: GettingStartedFacts = {
     setup: {
-      platformsChosenAt: 1,
-      completedAt: 2,
       platforms: [twitch],
       moduleInstalls: [{ marketplaceModuleId: "woofx3_twitch", status: "installed" }],
       twitchUsername: "streamer",
       engineRegistered: true,
       platformsNeedingSettings: [],
     },
-    overlays: {
-      hasScene: true,
-      browserSourceKeyCount: 1,
-      featuredUrl: "https://example.test/browser-source/k",
-      lastLoadedAt: 3,
-    },
-    doneItemIds: ["test-follow", "chat-command"],
+    overlayFinished: false,
+    overlaySeeded: true,
+    doneItemIds: [],
     obsStatus: null,
+    hasImport: false,
+    hasStarterPack: false,
+    installedModuleIds: [],
+    pagePublished: false,
   };
   return { ...base, ...overrides, setup: { ...base.setup, ...setup } };
 }
@@ -32,22 +35,56 @@ function byId(input: GettingStartedFacts) {
 }
 
 describe("gettingStartedItems", () => {
-  test("is all done for a finished first session", () => {
-    const items = gettingStartedItems(facts());
+  test("lists the post-onboarding items for a fresh account, with no problem items", () => {
+    const ids = gettingStartedItems(facts()).map((entry) => entry.id);
+    expect(ids).toEqual([
+      "overlay",
+      "test-alert",
+      "alerts",
+      "import",
+      "starter-packs",
+      "optional-platforms",
+      "your-page",
+    ]);
+  });
+
+  test("is all done once everything was done or dismissed", () => {
+    const items = gettingStartedItems(
+      facts({
+        overlayFinished: true,
+        doneItemIds: ["alerts", "dismissed:import", "dismissed:your-page"],
+        hasStarterPack: true,
+        installedModuleIds: ["woofx3_obs"],
+      })
+    );
     expect(items.every((entry) => entry.status === "done")).toBe(true);
-    expect(gettingStartedProgress(items)).toEqual({ done: 6, total: 6 });
+    expect(gettingStartedProgress(items).done).toBe(gettingStartedProgress(items).total);
   });
 
-  test("points unfinished setup back to the wizard", () => {
-    const item = byId(facts({}, { completedAt: null })).setup;
-    expect(item.status).toBe("todo");
-    expect(item.fixes).toEqual([{ kind: "route", label: "Continue setup", href: "/setup" }]);
+  test("leaves a dismissed optional item out", () => {
+    const items = byId(facts({ doneItemIds: ["dismissed:import", "dismissed:starter-packs"] }));
+    expect(items.import).toBeUndefined();
+    expect(items["starter-packs"]).toBeUndefined();
+    expect(items["your-page"].actions).toEqual([{ kind: "dismiss-item", label: "Not for me", itemId: "your-page" }]);
   });
 
-  test("waits for the engine before installing platforms", () => {
-    const item = byId(facts({}, { moduleInstalls: [], engineRegistered: false })).platforms;
-    expect(item.status).toBe("todo");
-    expect(item.summary).toBe("They install as soon as your engine is ready");
+  test("shows a problem before anything to do, and done items last but the overlay", () => {
+    const items = gettingStartedItems(facts({ overlayFinished: true }, { twitchUsername: null }));
+    expect(items[0].id).toBe("twitch");
+    expect(items[0].status).toBe("problem");
+    expect(items[items.length - 1].status).toBe("done");
+    expect(
+      items
+        .slice(0, VISIBLE_ITEM_COUNT)
+        .filter((entry) => entry.status === "done")
+        .map((entry) => entry.id)
+    ).toEqual(["overlay"]);
+  });
+
+  test("has no item for twitch or platforms unless something is wrong", () => {
+    const items = byId(facts());
+    expect(items.twitch).toBeUndefined();
+    expect(items.platforms).toBeUndefined();
   });
 
   test("offers a retry when a platform failed to install", () => {
@@ -81,36 +118,56 @@ describe("gettingStartedItems", () => {
     ]);
   });
 
-  test("offers the browser-source URL while OBS has not loaded an overlay", () => {
-    const item = byId(
-      facts({
-        overlays: {
-          hasScene: true,
-          browserSourceKeyCount: 1,
-          featuredUrl: "https://example.test/browser-source/k",
-          lastLoadedAt: null,
-        },
-      })
-    ).overlay;
+  test("sends Twitch back to the connect page when it is not linked", () => {
+    const item = byId(facts({}, { twitchUsername: null })).twitch;
+    expect(item.title).toBe("Connect Twitch");
+    expect(item.fixes).toEqual([{ kind: "route", label: "Connect Twitch", href: "/setup/connect" }]);
+  });
+
+  test("offers the overlay link and the overlay page until a test finished", () => {
+    const item = byId(facts()).overlay;
     expect(item.status).toBe("todo");
-    expect(item.fixes[0]).toEqual({
-      kind: "copy",
-      label: "Copy browser-source URL",
-      text: "https://example.test/browser-source/k",
-    });
+    expect(item.actions).toEqual([{ kind: "copy-overlay-link", label: "Copy link" }]);
+    expect(item.fixes).toEqual([{ kind: "route", label: "Show me how", href: "/setup/overlay" }]);
   });
 
-  test("asks for a scene first when there is none", () => {
-    const item = byId(
-      facts({ overlays: { hasScene: false, browserSourceKeyCount: 0, featuredUrl: null, lastLoadedAt: null } })
-    ).overlay;
-    expect(item.fixes).toEqual([{ kind: "route", label: "Open scenes", href: "/stream/scenes" }]);
+  test("counts the overlay and the test alert done once the overlay page finished", () => {
+    const items = byId(facts({ overlayFinished: true }));
+    expect(items.overlay.status).toBe("done");
+    expect(items["test-alert"].status).toBe("done");
   });
 
-  test("keeps the recorded items to do until the card records them", () => {
-    const items = byId(facts({ doneItemIds: [] }));
-    expect(items["test-follow"].actions).toEqual([{ kind: "fire-test-follow", label: "Send a test follow" }]);
-    expect(items["chat-command"].actions).toEqual([{ kind: "mark-command-done", label: "I've tried it" }]);
+  test("a finished overlay item stays in reach, ahead of what is left, with its page and link", () => {
+    const items = gettingStartedItems(facts({ overlayFinished: true }));
+    const overlay = items[0];
+    expect(overlay?.id).toBe("overlay");
+    expect(overlay?.status).toBe("done");
+    expect(overlay?.summary).toBe("Your overlay is working");
+    expect(overlay?.fixes).toEqual([{ kind: "route", label: "Open your overlay", href: "/setup/overlay" }]);
+    expect(overlay?.actions).toEqual([{ kind: "copy-overlay-link", label: "Copy link" }]);
+    expect(items.indexOf(overlay as (typeof items)[number])).toBeLessThan(VISIBLE_ITEM_COUNT);
+  });
+
+  test("sends the test alert to the overlay page, where it can be matched to its alert", () => {
+    const item = byId(facts())["test-alert"];
+    expect(item.actions).toEqual([]);
+    expect(item.fixes).toEqual([{ kind: "route", label: "Send a test alert", href: "/setup/overlay" }]);
+  });
+
+  test("leaves out the overlay items for an instance that was never seeded", () => {
+    const items = byId(facts({ overlaySeeded: false }));
+    expect(items.overlay).toBeUndefined();
+    expect(items["test-alert"]).toBeUndefined();
+  });
+
+  test("finishes the optional items from what exists", () => {
+    const items = byId(
+      facts({ hasImport: true, hasStarterPack: true, installedModuleIds: ["woofx3_spotify"], pagePublished: true })
+    );
+    expect(items.import.status).toBe("done");
+    expect(items["starter-packs"].status).toBe("done");
+    expect(items["optional-platforms"].status).toBe("done");
+    expect(items["your-page"].status).toBe("done");
   });
 
   test("asks for the settings of a platform that declares them until marked done", () => {
@@ -125,10 +182,41 @@ describe("gettingStartedItems", () => {
       { kind: "mark-platform-settings-done", label: "Done", marketplaceModuleId: "woofx3_spotify" },
     ]);
 
-    const done = byId(
-      facts({ doneItemIds: ["test-follow", "chat-command", "platform-settings:woofx3_spotify"] }, setup)
-    )["platform-settings:woofx3_spotify"];
+    const done = byId(facts({ doneItemIds: ["platform-settings:woofx3_spotify"] }, setup))[
+      "platform-settings:woofx3_spotify"
+    ];
     expect(done.status).toBe("done");
+  });
+
+  test("puts the overlay above per-platform settings, unless a platform has a real problem", () => {
+    const spotify = { marketplaceModuleId: "woofx3_spotify", name: "Spotify Platform", approvedPermissions: [] };
+    const setup = { platforms: [twitch, spotify, obs], platformsNeedingSettings: ["woofx3_spotify", "woofx3_obs"] };
+    const todo = gettingStartedItems(facts({}, setup));
+    expect(todo.slice(0, 3).map((entry) => entry.id)).toEqual([
+      "overlay",
+      "test-alert",
+      "platform-settings:woofx3_spotify",
+    ]);
+    const obsRefused = facts(
+      { obsStatus: { state: "retrying", failure: "authentication", address: "obs.lan:4455" } },
+      setup
+    );
+    expect(gettingStartedItems(obsRefused)[0]?.id).toBe("platform-settings:woofx3_obs");
+  });
+
+  test("drops the word Platform from a module's name", () => {
+    const spotify = { marketplaceModuleId: "woofx3_spotify", name: "Spotify Platform", approvedPermissions: [] };
+    const setup = { platforms: [spotify], platformsNeedingSettings: ["woofx3_spotify"] };
+    expect(byId(facts({}, setup))["platform-settings:woofx3_spotify"].title).toBe("Set up Spotify");
+  });
+
+  test("never asks to set up Twitch: connecting it is the setup", () => {
+    const named = { ...twitch, name: "Twitch Platform" };
+    const setup = { platforms: [named], platformsNeedingSettings: ["woofx3_twitch"] };
+    expect(byId(facts({}, setup))["platform-settings:woofx3_twitch"]).toBeUndefined();
+    const unlinked = byId(facts({}, { ...setup, twitchUsername: null }));
+    expect(unlinked["platform-settings:woofx3_twitch"]).toBeUndefined();
+    expect(unlinked.twitch?.status).toBe("problem");
   });
 
   test("completes setting up OBS once the engine reports it connected", () => {

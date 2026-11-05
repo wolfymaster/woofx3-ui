@@ -2,9 +2,23 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { type ActionCtx, action, internalMutation, internalQuery } from "./_generated/server";
+import { type ActionCtx, action, internalMutation, internalQuery, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { roleSatisfies } from "./lib/instanceRoles";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
+import { getInstanceMembership } from "./lib/teamAccess";
+
+const MAX_SOURCE_KEYS_READ = 500;
+
+export interface OverlayFacts {
+  hasScene: boolean;
+  /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
+  browserSourceKeyCount: number;
+  /** The key most recently loaded by a browser source, else the newest one. */
+  featuredKey: string | null;
+  /** When any browser source last loaded one of those keys. */
+  lastLoadedAt: number | null;
+}
 
 export const getSourceKeyByKey = internalQuery({
   args: { key: v.string() },
@@ -455,5 +469,44 @@ export const rotateBrowserSourceKey = action({
     });
 
     return key;
+  },
+});
+
+/** A query of its own because a browser source loading its URL rewrites lastUsedAt, and only this reruns then. */
+export const overlayFacts = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<OverlayFacts | null> => {
+    const userId = await getAuthUserId(ctx);
+    const membership = userId ? await getInstanceMembership(ctx, args.instanceId, userId) : null;
+    if (!membership) {
+      return null;
+    }
+
+    const scene = await ctx.db
+      .query("scenes")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .first();
+
+    // Preview keys belong to the scene editor's own canvas; only the others
+    // are what a streamer pastes into OBS.
+    const sourceKeys = (
+      await ctx.db
+        .query("browserSourceKeys")
+        .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+        .take(MAX_SOURCE_KEYS_READ)
+    ).filter((key) => key.purpose !== "preview");
+
+    const byRecentUse = [...sourceKeys].sort(
+      (a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || b.createdAt - a.createdAt
+    );
+    const featured = byRecentUse[0] ?? null;
+
+    return {
+      hasScene: scene !== null,
+      browserSourceKeyCount: sourceKeys.length,
+      // The key is the overlay's whole credential, and only admins read it here.
+      featuredKey: roleSatisfies(membership.role, "admin") ? (featured?.key ?? null) : null,
+      lastLoadedAt: featured?.lastUsedAt ?? null,
+    };
   },
 });

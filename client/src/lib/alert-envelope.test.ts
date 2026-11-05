@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { alertEvent, alertEventData, alertEventType, alertTarget } from "./alert-envelope";
+import { alertEvent, alertEventData, alertEventType, alertOfTestEvent, alertTarget } from "./alert-envelope";
 
 const envelope = JSON.stringify({
   id: "env-1",
@@ -90,5 +90,20 @@ describe("alertEvent", () => {
       time: null,
       data: null,
     });
+  });
+});
+
+describe("alertOfTestEvent", () => {
+  const envelope = (triggerId?: string) => JSON.stringify({ id: "e", event: { type: "channel.follow", triggerId } });
+
+  test("finds the alert whose event carries the test's trigger id", () => {
+    const real = { id: "real", payload: envelope() };
+    const other = { id: "other", payload: envelope("not-this-one") };
+    const mine = { id: "mine", payload: envelope("test-1") };
+    expect(alertOfTestEvent([real, other, mine], "test-1")).toBe(mine);
+  });
+
+  test("finds nothing among alerts with no payload or no event", () => {
+    expect(alertOfTestEvent([{}, { payload: "{}" }, { payload: "not json" }], "test-1")).toBeUndefined();
   });
 });

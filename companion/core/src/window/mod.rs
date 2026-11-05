@@ -49,8 +49,6 @@ pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
     "enqueue_shoutout",
     "remove_shoutout",
     "reorder_shoutouts",
-    "stream_start_marker",
-    "request_stream_start_marker",
     "host_mode",
     "choose_host_mode",
     "companion_link_status",
@@ -209,10 +207,6 @@ pub const OPEN_LOCAL_CONNECTIONS_EVENT: &str = "companion://open-local-connectio
 /// Carries the shoutout queue's view after every change. Local mode
 /// only.
 pub const SHOUTOUT_QUEUE_EVENT: &str = "companion://shoutout-queue";
-
-/// Carries the stream start marker's state after every change. Local mode
-/// only.
-pub const STREAM_START_MARKER_EVENT: &str = "companion://stream-start-marker";
 
 /// What the Integrations tab and the Status tab's relay row render. Sent on
 /// its own event, apart from `WindowState`, because it changes with every

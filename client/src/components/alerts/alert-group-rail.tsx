@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
@@ -24,6 +24,10 @@ interface AlertGroupRailProps {
   /** Whether `tree` has been pruned to the entries with a configured alert. */
   hideUnused: boolean;
   onHideUnusedChange: (hideUnused: boolean) => void;
+  /** Where the alert group pages are, or null on an engine without groups. */
+  groupsHref: string | null;
+  /** Whether a group page is showing. */
+  groupsActive: boolean;
 }
 
 /** Indent per nesting level, in pixels. */
@@ -47,6 +51,8 @@ export function AlertGroupRail({
   onAnchorSelect,
   hideUnused,
   onHideUnusedChange,
+  groupsHref,
+  groupsActive,
 }: AlertGroupRailProps) {
   return (
     <nav className={SIDEBAR_RAIL} aria-label="Alert groups">
@@ -63,6 +69,20 @@ export function AlertGroupRail({
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
+          {groupsHref !== null && (
+            <Link
+              href={groupsHref}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2.5 py-2 text-[15px] hover:bg-accent",
+                groupsActive && "bg-accent font-medium"
+              )}
+              aria-current={groupsActive ? "page" : undefined}
+              data-testid="alert-rail-groups"
+            >
+              <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+              Groups
+            </Link>
+          )}
           {hideUnused && tree.length === 0 && (
             <p className="px-1 py-2 text-[13px] text-muted-foreground" data-testid="alert-rail-empty">
               No alerts set up yet. Turn off <em>Hide unused alerts</em> to see everything you can alert on.

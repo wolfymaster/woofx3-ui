@@ -77,6 +77,22 @@ export function alertEvent(payload: string | undefined): AlertEnvelopeEvent | nu
   };
 }
 
+/**
+ * The alert a fired test event played: the one whose originating event carries
+ * the `triggerId` the test minted (`useFireTestEvent`). The engine copies the
+ * whole event into the envelope, so a test matches its own alert and never
+ * one a real follow played alongside it.
+ */
+export function alertOfTestEvent<T extends { payload?: string }>(
+  alerts: readonly T[],
+  triggerId: string
+): T | undefined {
+  return alerts.find((alert) => {
+    const event = parseEnvelope(alert.payload)?.event;
+    return typeof event === "object" && event !== null && (event as { triggerId?: unknown }).triggerId === triggerId;
+  });
+}
+
 /** The CloudEvent type that led to the alert, e.g. `channel.follow`, or null; see `alertEvent`. */
 export function alertEventType(payload: string | undefined): string | null {
   return alertEvent(payload)?.type ?? null;

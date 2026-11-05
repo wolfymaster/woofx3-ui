@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { AlertQueueState } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -64,6 +65,21 @@ export const replay = action({
 
     const rpc = createEngineRpcSession<AlertQueueEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     return readReplayResult(await rpc.replayAlert(engineAlertId));
+  },
+});
+
+/**
+ * What the open overlays are playing and what waits behind it. `ok: false` says
+ * the queue could not be read, and `reason` why: no overlay is open, or the
+ * scene manager did not answer. Read fresh from the engine, not from a mirror,
+ * because no callback reports an overlay opening or closing.
+ */
+export const queueState = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<AlertQueueState> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+    const rpc = createEngineRpcSession<AlertQueueEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return await rpc.getAlertQueue();
   },
 });
 

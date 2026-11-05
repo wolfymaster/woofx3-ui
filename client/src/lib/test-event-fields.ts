@@ -2,6 +2,9 @@ import type { ConfigField, ConfigFieldOption, DataShapeField, DataShapeFieldType
 import { emptyValueOf } from "@/lib/test-event-payload";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
+/** Who a test event is about when its trigger declares no example, matching the Twitch module's own examples. */
+export const SAMPLE_VIEWER_NAME = "viewer42";
+
 /**
  * One editable field of a test event, derived from the trigger's own declaration
  * of what it emits.
@@ -41,19 +44,21 @@ export function testEventFields(preset: TriggerPreset): TestEventField[] {
   const configFields = preset.config?.fields ?? [];
   const samples = examplePayloads(configFields);
   const configByPath = configFieldsByEventPath(configFields);
+  const viewerNames = new Set(emits.filter((field) => field.identity === "viewer").map((field) => field.displayName));
 
   return emits
     .filter((field) => !isDescribedByItsChildren(field, emits))
     .map((field) => {
       const config = configByPath.get(field.path);
-      const options = config?.type === "select" ? config.options : undefined;
+      // A select on a boolean path is a workflow filter, whose "any" choice is no value the event can carry.
+      const options = config?.type === "select" && field.type !== "boolean" ? config.options : undefined;
       return {
         path: field.path,
         label: humanize(field.path),
         type: field.type,
         description: field.description ?? undefined,
         options,
-        initial: seedValue(field, samples, options, config),
+        initial: seedValue(field, samples, options, config, viewerNames.has(field.path)),
       };
     });
 }
@@ -116,18 +121,28 @@ function isDescribedByItsChildren(field: DataShapeField, emits: readonly DataSha
 /**
  * What a field starts at: its declared example, else the same path in an
  * example payload the trigger's config carries, else the first valid choice,
- * else an empty value of its type.
+ * else a sample viewer for a field naming who the event is about (an alert
+ * reading " just followed!" tests nothing a streamer can judge), else an empty
+ * value of its type.
  *
  * A `null` example counts as no example. The engine stores an undeclared one as
  * null, and a form that opens on `null` asks the user to fill in what the
  * declaration was supposed to supply.
+ *
+ * A boolean only ever starts as a boolean. Its control is a switch, which shows
+ * anything else as off and fires it as it is, failing a condition on the value.
  */
 function seedValue(
   field: DataShapeField,
   samples: readonly Record<string, unknown>[],
   options: ConfigFieldOption[] | undefined,
-  config: ConfigField | undefined
+  config: ConfigField | undefined,
+  namesViewer: boolean
 ): unknown {
+  if (field.type === "boolean") {
+    const declared = [field.example, ...samples.map((sample) => readPath(sample, field.path))];
+    return declared.find((value) => typeof value === "boolean") ?? false;
+  }
   if (field.example !== undefined && field.example !== null) {
     return field.example;
   }
@@ -140,6 +155,9 @@ function seedValue(
   if (options && options.length > 0) {
     const preferred = options.find((option) => option.value === config?.defaultValue);
     return (preferred ?? options[0]).value;
+  }
+  if (namesViewer) {
+    return SAMPLE_VIEWER_NAME;
   }
   return emptyValueOf(field.type);
 }

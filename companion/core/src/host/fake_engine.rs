@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use futures::future::BoxFuture;
 use tokio::sync::{mpsc, Notify};
 
-use super::gateway::{ClientCredentials, EngineGateway, StreamLiveness, TwitchHelixResult};
+use super::gateway::{ClientCredentials, EngineGateway, TwitchHelixResult};
 use super::registration::{CredentialStore, LocalSession};
 use super::HostError;
 
@@ -18,8 +18,6 @@ pub enum EngineCall {
     Verify(String),
     RegisterClient,
     SendShoutout(String),
-    CreateStreamMarker(String),
-    StreamLiveness,
 }
 
 /// The replies for one kind of call, by the order the calls arrived: the
@@ -53,7 +51,6 @@ pub struct FakeEngine {
     replies: Mutex<Script<Result<TwitchHelixResult, HostError>>>,
     /// The client id each shoutout was sent with, in order.
     senders: Mutex<Vec<String>>,
-    liveness: Mutex<Script<Result<StreamLiveness, HostError>>>,
     calls: mpsc::UnboundedSender<EngineCall>,
     /// Signalled when a reply is scripted, for calls waiting on one.
     scripted: Notify,
@@ -67,7 +64,6 @@ impl FakeEngine {
             registrations: Script::new(),
             replies: Script::new(),
             senders: Mutex::new(Vec::new()),
-            liveness: Script::new(),
             calls,
             scripted: Notify::new(),
         };
@@ -86,27 +82,9 @@ impl FakeEngine {
         self.senders.lock().expect("senders lock").clone()
     }
 
-    /// The reply to the next Twitch write (shoutout or marker) not yet
-    /// scripted.
+    /// The reply to the next Twitch write (a shoutout) not yet scripted.
     pub fn reply(&self, reply: Result<TwitchHelixResult, HostError>) {
         self.push(&self.replies, reply);
-    }
-
-    /// The reply to the next `stream_liveness` call not yet scripted.
-    pub fn live(&self, reply: Result<StreamLiveness, HostError>) {
-        self.push(&self.liveness, reply);
-    }
-
-    /// The reply to `stream_liveness` call number `ticket`, counting from 0.
-    pub fn live_for(&self, ticket: usize, reply: Result<StreamLiveness, HostError>) {
-        let mut script = self.liveness.lock().expect("script lock");
-        assert!(
-            script.replies.insert(ticket, reply).is_none(),
-            "call {ticket} already has a reply"
-        );
-        script.next_scripted = script.next_scripted.max(ticket + 1);
-        drop(script);
-        self.scripted.notify_waiters();
     }
 
     fn push<T>(&self, script: &Mutex<Script<T>>, reply: T) {
@@ -171,25 +149,6 @@ impl EngineGateway for FakeEngine {
             .calls
             .send(EngineCall::SendShoutout(to_broadcaster_id.to_string()));
         self.answer(&self.replies)
-    }
-
-    fn create_stream_marker<'a>(
-        &'a self,
-        _credentials: &'a ClientCredentials,
-        description: &'a str,
-    ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
-        let _ = self
-            .calls
-            .send(EngineCall::CreateStreamMarker(description.to_string()));
-        self.answer(&self.replies)
-    }
-
-    fn stream_liveness<'a>(
-        &'a self,
-        _credentials: &'a ClientCredentials,
-    ) -> BoxFuture<'a, Result<StreamLiveness, HostError>> {
-        let _ = self.calls.send(EngineCall::StreamLiveness);
-        self.answer(&self.liveness)
     }
 }
 

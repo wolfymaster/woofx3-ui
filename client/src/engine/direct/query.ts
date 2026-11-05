@@ -16,6 +16,8 @@ export interface EngineQueryOptions<T, Selected> {
   enabled?: boolean;
   /** Derives what the caller gets from the cached value; must be module-level so its result keeps its identity. */
   select?: (data: T) => Selected;
+  /** Reads again this often while mounted, for what no event reports. */
+  refetchIntervalMs?: number;
 }
 
 /** True while the runtime's session has completed an authenticated round trip. */
@@ -44,6 +46,7 @@ export function useEngineQuery<T, Selected = T>(
       queryKey: read.queryKey,
       queryFn: read.queryFn,
       select: options.select,
+      refetchInterval: options.refetchIntervalMs,
       enabled: instanceId !== null && connected && options.enabled !== false,
       throwOnError: (error) => !(error instanceof EngineDisconnectedError),
     },

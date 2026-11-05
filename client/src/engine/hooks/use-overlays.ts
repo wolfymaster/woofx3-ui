@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useEngineGateway } from "@/engine/context";
-import type { SceneId } from "@/engine/types";
+import type { ReadOptions, SceneId } from "@/engine/types";
 
 /** The URL OBS loads a scene from; the same URL until it is rotated. */
 export function useBrowserSourceUrlRequest() {
@@ -47,4 +47,9 @@ export function useScenePreviewUrl(engineSceneId: string, sceneId: SceneId | und
 /** A short-lived URL of a scene's live overlay, for previews. */
 export function useOverlayPreviewUrlRequest() {
   return useEngineGateway().overlays.usePreviewUrlRequest();
+}
+
+/** The instance's scenes and browser sources, as Getting Started checks them. */
+export function useOverlayFacts(options?: ReadOptions) {
+  return useEngineGateway().overlays.useFacts(options);
 }

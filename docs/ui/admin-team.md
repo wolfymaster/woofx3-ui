@@ -22,6 +22,10 @@ These are instance settings, for the instance's owners and admins only. Members 
 
 The old `/settings` page also had Profile, Notifications, and Security tabs. Those were unwired mockups and were removed; `/settings` and `/settings/:tab` now redirect into `/admin`.
 
+### Renaming a managed engine
+
+The instance's owner can change the engine's name from `ManagedEngineCard`, at most once every 30 days (`provisioning.renameManagedEngine`). The name is what appears at `<name>.woofx3.tv` and `/u/<name>`. The engine does not restart. It keeps the URL it was first published at (`publicUrl`, `instances.url`), because stored scene links and asset URLs name it and it is the only same-host origin the engine admits, so the card builds the address it shows from the name (`engineAddress`). The maintenance API keeps every old name routed to the engine and out of anyone else's reach until the engine is deleted. `engineHeldSlugs` does the same for pages: `/u/<old name>` shows the same page, with no redirect.
+
 ### Upgrading a managed engine
 
 A managed engine runs the release it was built with until its owner or an admin upgrades it from `ManagedEngineCard`. The user picks when, never which release: the target is always the one release the maintenance API offers. The engine is offline for a few minutes, so the card always asks for confirmation; while the channel is live it asks a second time, warning that alerts stay offline until the engine is back. Offered only when the Convex variable `ENGINE_UPGRADES_ENABLED` is `"true"`.
