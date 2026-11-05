@@ -81,6 +81,7 @@ import type * as lib_engineSync_steps_resources from "../lib/engineSync/steps/re
 import type * as lib_engineSync_steps_scenes from "../lib/engineSync/steps/scenes.js";
 import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/triggers.js";
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
+import type * as lib_engineSync_steps_workflowGroups from "../lib/engineSync/steps/workflowGroups.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_engineSync_syncRow from "../lib/engineSync/syncRow.js";
 import type * as lib_engineSync_trigger from "../lib/engineSync/trigger.js";
@@ -280,6 +281,8 @@ import type * as webhookAuth from "../webhookAuth.js";
 import type * as workflowActions from "../workflowActions.js";
 import type * as workflowCatalog from "../workflowCatalog.js";
 import type * as workflowCatalogContext from "../workflowCatalogContext.js";
+import type * as workflowGroupActions from "../workflowGroupActions.js";
+import type * as workflowGroups from "../workflowGroups.js";
 import type * as workflowHealth from "../workflowHealth.js";
 import type * as workflowInternal from "../workflowInternal.js";
 import type * as workflowRuns from "../workflowRuns.js";
@@ -365,6 +368,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/scenes": typeof lib_engineSync_steps_scenes;
   "lib/engineSync/steps/triggers": typeof lib_engineSync_steps_triggers;
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
+  "lib/engineSync/steps/workflowGroups": typeof lib_engineSync_steps_workflowGroups;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/engineSync/syncRow": typeof lib_engineSync_syncRow;
   "lib/engineSync/trigger": typeof lib_engineSync_trigger;
@@ -564,6 +568,8 @@ declare const fullApi: ApiFromModules<{
   workflowActions: typeof workflowActions;
   workflowCatalog: typeof workflowCatalog;
   workflowCatalogContext: typeof workflowCatalogContext;
+  workflowGroupActions: typeof workflowGroupActions;
+  workflowGroups: typeof workflowGroups;
   workflowHealth: typeof workflowHealth;
   workflowInternal: typeof workflowInternal;
   workflowRuns: typeof workflowRuns;

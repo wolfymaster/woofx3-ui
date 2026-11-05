@@ -156,6 +156,8 @@ import type {
   Workflow,
   WorkflowCancelResult,
   WorkflowCatalog,
+  WorkflowGroup,
+  WorkflowGroupText,
   WorkflowHealthResyncResult,
   WorkflowHealthResyncTrigger,
   WorkflowReplay,
@@ -629,6 +631,20 @@ export interface WorkflowsGateway {
   useNotRunning(): Live<NotRunningWorkflow[]>;
   /** Asks the engine for current workflow health. Throttled per instance; never rejects for an engine problem. */
   useHealthResyncRequest(): (trigger: WorkflowHealthResyncTrigger) => Promise<WorkflowHealthResyncResult>;
+  /** Every alert group. Empty when the caller cannot see the instance. */
+  useGroups(): Live<WorkflowGroup[]>;
+  /** Whether the engine has alert groups at all (its `workflows.groups` capability). */
+  useGroupsSupportedRequest(): () => Promise<boolean>;
+  /**
+   * The group writes. Each resolves with the group as the engine stored it,
+   * already mirrored; the members' switches follow on their own workflows.
+   */
+  useCreateGroupRequest(): (group: WorkflowGroupText) => Promise<WorkflowGroup>;
+  useUpdateGroupRequest(): (engineGroupId: string, group: WorkflowGroupText) => Promise<WorkflowGroup>;
+  useRemoveGroupRequest(): (engineGroupId: string) => Promise<{ deleted: true }>;
+  useSetGroupEnabledRequest(): (engineGroupId: string, enabled: boolean) => Promise<WorkflowGroup>;
+  useAddGroupMembersRequest(): (engineGroupId: string, engineWorkflowIds: string[]) => Promise<WorkflowGroup>;
+  useRemoveGroupMembersRequest(): (engineGroupId: string, engineWorkflowIds: string[]) => Promise<WorkflowGroup>;
 }
 
 /**

@@ -817,6 +817,7 @@ http.route({
           definition: event.workflow.definition,
           isEnabled: event.workflow.isEnabled,
           revision: event.workflow.revision,
+          groupIds: event.workflow.groupIds,
         });
         if (event.correlationKey) {
           await ctx.runMutation(internal.workflowInternal.resolveCorrelation, {
@@ -956,6 +957,27 @@ http.route({
           instanceId: instance._id,
           engineGroupId: event.groupId,
           username: event.username,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_GROUP_CREATED:
+      case EngineEventType.WORKFLOW_GROUP_UPDATED: {
+        await ctx.runMutation(internal.workflowGroups.upsertFromWebhook, {
+          instanceId: instance._id,
+          engineGroupId: event.group.id,
+          name: event.group.name,
+          description: event.group.description,
+          enabled: event.group.enabled,
+          memberIds: event.group.memberIds,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_GROUP_DELETED: {
+        await ctx.runMutation(internal.workflowGroups.deleteFromWebhook, {
+          instanceId: instance._id,
+          engineGroupId: event.groupId,
         });
         return corsJson({ success: true, type: event.type });
       }

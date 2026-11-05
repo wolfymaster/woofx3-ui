@@ -32,6 +32,7 @@ export const workflowsStep: SyncStep = {
         engineWorkflowId: w.id,
         definition: escapeDollarKeys(w.definition),
         isEnabled: w.isEnabled,
+        groupIds: w.groupIds,
       }));
     const engineIds = all.map((w) => w.id);
 
