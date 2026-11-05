@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import { hasRecordedTriggerEvent } from "./lib/runTriggerEvent";
 import { getInstanceMembership } from "./lib/teamAccess";
 
@@ -188,129 +188,144 @@ export const listForWorkflow = query({
   },
 });
 
-export const recordFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    run: runSnapshot,
-  },
-  handler: async (ctx, { instanceId, run }) => {
-    const row = {
-      instanceId,
-      engineRunId: run.id,
-      workflowId: run.workflowId,
-      status: run.status,
-      triggeredBy: run.triggeredBy,
-      triggerEvent: run.triggerEvent,
-      dryRun: run.dryRun,
-      error: run.error,
-      startedAt: run.startedAt,
-      completedAt: run.completedAt,
-      engineCreatedAt: run.createdAt,
-      engineUpdatedAt: run.updatedAt,
-      createdAt: Date.now(),
-    };
+const recordFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  run: runSnapshot,
+};
 
-    const existing = await ctx.db
-      .query("workflowRuns")
-      .withIndex("by_engine_id", (q) => q.eq("engineRunId", run.id))
-      .first();
+export async function recordRunFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, run }: ObjectType<typeof recordFromWebhookArgs>
+) {
+  const row = {
+    instanceId,
+    engineRunId: run.id,
+    workflowId: run.workflowId,
+    status: run.status,
+    triggeredBy: run.triggeredBy,
+    triggerEvent: run.triggerEvent,
+    dryRun: run.dryRun,
+    error: run.error,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    engineCreatedAt: run.createdAt,
+    engineUpdatedAt: run.updatedAt,
+    createdAt: Date.now(),
+  };
 
-    if (existing) {
-      if (isAtLeastAsNew(run.updatedAt, existing.engineUpdatedAt)) {
-        await ctx.db.patch(existing._id, row);
-      }
-    } else {
-      await ctx.db.insert("workflowRuns", row);
+  const existing = await ctx.db
+    .query("workflowRuns")
+    .withIndex("by_engine_id", (q) => q.eq("engineRunId", run.id))
+    .first();
+
+  if (existing) {
+    if (isAtLeastAsNew(run.updatedAt, existing.engineUpdatedAt)) {
+      await ctx.db.patch(existing._id, row);
     }
-  },
-});
+  } else {
+    await ctx.db.insert("workflowRuns", row);
+  }
+}
 
-export const updateFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    run: runSnapshot,
-  },
-  handler: async (ctx, { instanceId, run }) => {
-    const existing = await ctx.db
-      .query("workflowRuns")
-      .withIndex("by_engine_id", (q) => q.eq("engineRunId", run.id))
-      .first();
+export const recordFromWebhook = internalMutation({ args: recordFromWebhookArgs, handler: recordRunFromWebhook });
 
-    const patch = {
-      status: run.status,
-      error: run.error,
-      completedAt: run.completedAt,
-      triggeredBy: run.triggeredBy,
-      triggerEvent: run.triggerEvent,
-      dryRun: run.dryRun,
-      engineUpdatedAt: run.updatedAt,
-    };
+const updateFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  run: runSnapshot,
+};
 
-    if (existing) {
-      if (isAtLeastAsNew(run.updatedAt, existing.engineUpdatedAt)) {
-        await ctx.db.patch(existing._id, patch);
-      }
-      return;
+export async function updateRunFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, run }: ObjectType<typeof updateFromWebhookArgs>
+) {
+  const existing = await ctx.db
+    .query("workflowRuns")
+    .withIndex("by_engine_id", (q) => q.eq("engineRunId", run.id))
+    .first();
+
+  const patch = {
+    status: run.status,
+    error: run.error,
+    completedAt: run.completedAt,
+    triggeredBy: run.triggeredBy,
+    triggerEvent: run.triggerEvent,
+    dryRun: run.dryRun,
+    engineUpdatedAt: run.updatedAt,
+  };
+
+  if (existing) {
+    if (isAtLeastAsNew(run.updatedAt, existing.engineUpdatedAt)) {
+      await ctx.db.patch(existing._id, patch);
     }
+    return;
+  }
 
-    // The settle arrived before the record. The outbox is at-least-once and
-    // unordered, so insert what we have rather than dropping the run: a run
-    // that only ever shows its outcome is better than one that vanishes.
-    await ctx.db.insert("workflowRuns", {
-      instanceId,
-      engineRunId: run.id,
-      workflowId: run.workflowId,
-      startedAt: run.startedAt,
-      engineCreatedAt: run.createdAt,
-      createdAt: Date.now(),
-      ...patch,
-    });
-  },
-});
+  // The settle arrived before the record. The outbox is at-least-once and
+  // unordered, so insert what we have rather than dropping the run: a run
+  // that only ever shows its outcome is better than one that vanishes.
+  await ctx.db.insert("workflowRuns", {
+    instanceId,
+    engineRunId: run.id,
+    workflowId: run.workflowId,
+    startedAt: run.startedAt,
+    engineCreatedAt: run.createdAt,
+    createdAt: Date.now(),
+    ...patch,
+  });
+}
+
+export const updateFromWebhook = internalMutation({ args: updateFromWebhookArgs, handler: updateRunFromWebhook });
+
+const recordStepFromWebhookArgs = {
+  instanceId: v.id("instances"),
+  step: stepSnapshot,
+};
+
+export async function recordRunStepFromWebhook(
+  ctx: MutationCtx,
+  { instanceId, step }: ObjectType<typeof recordStepFromWebhookArgs>
+) {
+  const row = {
+    instanceId,
+    engineStepId: step.id,
+    runId: step.executionId,
+    taskId: step.taskId,
+    name: step.name,
+    status: step.status,
+    attempt: step.attempt,
+    stepIndex: step.stepIndex,
+    inputs: step.inputs,
+    outputs: step.outputs,
+    error: step.error,
+    startedAt: step.startedAt,
+    completedAt: step.completedAt,
+    durationMs: step.durationMs,
+    engineCreatedAt: step.createdAt,
+    engineUpdatedAt: step.updatedAt,
+    createdAt: Date.now(),
+  };
+
+  // Keyed on the attempt, not the step's id: a repeated report of an attempt
+  // Postgres already stored arrives carrying a different id than the one the
+  // row kept. Matching on (run, task, attempt) collapses copies into the one
+  // row the Postgres unique index also enforces.
+  const existing = await ctx.db
+    .query("workflowRunSteps")
+    .withIndex("by_attempt", (q) =>
+      q.eq("runId", step.executionId).eq("taskId", step.taskId).eq("attempt", step.attempt)
+    )
+    .first();
+
+  if (existing) {
+    if (isAtLeastAsNew(step.updatedAt, existing.engineUpdatedAt)) {
+      await ctx.db.patch(existing._id, row);
+    }
+  } else {
+    await ctx.db.insert("workflowRunSteps", row);
+  }
+}
 
 export const recordStepFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    step: stepSnapshot,
-  },
-  handler: async (ctx, { instanceId, step }) => {
-    const row = {
-      instanceId,
-      engineStepId: step.id,
-      runId: step.executionId,
-      taskId: step.taskId,
-      name: step.name,
-      status: step.status,
-      attempt: step.attempt,
-      stepIndex: step.stepIndex,
-      inputs: step.inputs,
-      outputs: step.outputs,
-      error: step.error,
-      startedAt: step.startedAt,
-      completedAt: step.completedAt,
-      durationMs: step.durationMs,
-      engineCreatedAt: step.createdAt,
-      engineUpdatedAt: step.updatedAt,
-      createdAt: Date.now(),
-    };
-
-    // Keyed on the attempt, not the step's id: a repeated report of an attempt
-    // Postgres already stored arrives carrying a different id than the one the
-    // row kept. Matching on (run, task, attempt) collapses copies into the one
-    // row the Postgres unique index also enforces.
-    const existing = await ctx.db
-      .query("workflowRunSteps")
-      .withIndex("by_attempt", (q) =>
-        q.eq("runId", step.executionId).eq("taskId", step.taskId).eq("attempt", step.attempt)
-      )
-      .first();
-
-    if (existing) {
-      if (isAtLeastAsNew(step.updatedAt, existing.engineUpdatedAt)) {
-        await ctx.db.patch(existing._id, row);
-      }
-    } else {
-      await ctx.db.insert("workflowRunSteps", row);
-    }
-  },
+  args: recordStepFromWebhookArgs,
+  handler: recordRunStepFromWebhook,
 });

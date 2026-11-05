@@ -70,7 +70,10 @@ const emitArgs = {
   ttlMs: v.optional(v.number()),
 };
 
-async function insertEvent(ctx: MutationCtx, args: ObjectType<typeof emitArgs>): Promise<Id<"transientEvents">> {
+export async function emitTransientEvent(
+  ctx: MutationCtx,
+  args: ObjectType<typeof emitArgs>
+): Promise<Id<"transientEvents">> {
   const ttl = args.ttlMs ?? DEFAULT_TTL_MS;
   const expiresAt = Date.now() + ttl;
 
@@ -96,7 +99,7 @@ async function insertEvent(ctx: MutationCtx, args: ObjectType<typeof emitArgs>):
 export const emit = internalMutation({
   args: emitArgs,
   handler: async (ctx, args) => {
-    return await insertEvent(ctx, args);
+    return await emitTransientEvent(ctx, args);
   },
 });
 
@@ -120,7 +123,7 @@ export const emitUnlessNewer = internalMutation({
     if (latest !== null && latest._creationTime >= since) {
       return null;
     }
-    return await insertEvent(ctx, args);
+    return await emitTransientEvent(ctx, args);
   },
 });
 
