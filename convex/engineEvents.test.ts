@@ -556,15 +556,24 @@ describe("applyBatch, one event at a time", () => {
 });
 
 describe("POST /api/webhooks/woofx3", () => {
-  test("an event answers 410 and applies nothing", async () => {
-    const t = await backendWithInstance();
-    const response = await t.fetch("/api/webhooks/woofx3", {
+  async function post(t: Backend, secret: string) {
+    return t.fetch("/api/webhooks/woofx3", {
       method: "POST",
-      headers: { Authorization: `Bearer ${SECRET}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
       body: JSON.stringify(envelope({ type: EngineEventType.SCENE_CREATED, scene })),
     });
-    expect(response.status).toBe(410);
-    expect(((await response.json()) as { error: { code: string } }).error.code).toBe("events_moved");
+  }
+
+  test("an engine not yet on the queue still has its events applied", async () => {
+    const t = await backendWithInstance();
+    const response = await post(t, SECRET);
+    expect(response.status).toBe(200);
+    expect(await count(t, "scenes")).toBe(1);
+  });
+
+  test("an unknown secret is refused and applies nothing", async () => {
+    const t = await backendWithInstance();
+    expect((await post(t, "wrong")).status).toBe(401);
     expect(await count(t, "scenes")).toBe(0);
   });
 });
