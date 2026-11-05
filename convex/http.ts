@@ -493,6 +493,8 @@ function legacyEventResponse(result: WebhookEventResult, eventType: string): Res
       return corsJson({ error: result.reason }, 400);
     case "ignored":
       return corsJson({ success: true, type: eventType, handled: false });
+    case "duplicate":
+      return corsJson({ success: true, type: eventType, duplicate: true });
     case "applied":
       return corsJson({ success: true, type: eventType });
   }

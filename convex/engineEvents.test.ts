@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE } from "@shared/workflow-health";
 import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "@shared/workflow-test-run";
 import { EngineEventType } from "@woofx3/api/webhooks";
+import type { WithoutSystemFields } from "convex/server";
 import { internal } from "./_generated/api";
-import type { TableNames } from "./_generated/dataModel";
+import type { Doc, TableNames } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
+import { RECEIPT_RETENTION_MS } from "./lib/engineEvents/config";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 
 const SECRET = "webhook-secret";
@@ -27,6 +29,11 @@ async function backendWithInstance(): Promise<Backend> {
     });
   });
   return t;
+}
+
+function withoutSystemFields(doc: Doc<"instances">): WithoutSystemFields<Doc<"instances">> {
+  const { _id, _creationTime, ...fields } = doc;
+  return fields;
 }
 
 let envelopeSeq = 0;
@@ -534,4 +541,83 @@ describe("POST /api/webhooks/woofx3", () => {
     const response = await post(t, { type: EngineEventType.SCENE_CREATED, scene }, "wrong");
     expect(response.status).toBe(401);
   });
+});
+
+describe("envelope receipts", () => {
+  const created = {
+    type: EngineEventType.WORKFLOW_RUN_STARTED,
+    triggerId: "trig-1",
+    runId: "run-1",
+    workflowId: "wf-1",
+  };
+
+  async function applyEnvelope(t: Backend, body: Record<string, unknown>, webhookSecret = SECRET) {
+    return t.mutation(internal.engineEvents.applyFromWebhook, { webhookSecret, body: JSON.stringify(body) });
+  }
+
+  test("the same envelope twice applies once", async () => {
+    const t = await backendWithInstance();
+    const body = envelope(created);
+    expect(await applyEnvelope(t, body)).toEqual({ kind: "applied" });
+    expect(await applyEnvelope(t, body)).toEqual({ kind: "duplicate" });
+    expect(await count(t, "transientEvents")).toBe(1);
+    expect(await count(t, "engineEventLog")).toBe(1);
+  });
+
+  test("another instance with the same envelope id applies", async () => {
+    const t = await backendWithInstance();
+    await t.run(async (ctx) => {
+      const instance = await ctx.db.query("instances").first();
+      if (!instance) {
+        throw new Error("no instance");
+      }
+      await ctx.db.insert("instances", { ...withoutSystemFields(instance), webhookSecret: "second-secret" });
+    });
+    const body = envelope(created);
+    expect(await applyEnvelope(t, body)).toEqual({ kind: "applied" });
+    expect(await applyEnvelope(t, body, "second-secret")).toEqual({ kind: "applied" });
+    expect(await count(t, "transientEvents")).toBe(2);
+  });
+
+  test("an envelope without an id applies every time, with no receipt", async () => {
+    const t = await backendWithInstance();
+    const { id: _omitted, ...body } = envelope(created);
+    expect(await applyEnvelope(t, body)).toEqual({ kind: "applied" });
+    expect(await applyEnvelope(t, body)).toEqual({ kind: "applied" });
+    expect(await count(t, "engineEventReceipts")).toBe(0);
+  });
+
+  test("a failed event leaves no receipt, so its retry applies", async () => {
+    const t = await backendWithInstance();
+    const body = envelope({ type: EngineEventType.SCENE_CREATED, scene: { ...scene, name: undefined } });
+    await expect(applyEnvelope(t, body)).rejects.toThrow("Missing required field `name`");
+    expect(await count(t, "engineEventReceipts")).toBe(0);
+  });
+
+  test("cleanup deletes receipts past retention and keeps recent ones", async () => {
+    const t = await backendWithInstance();
+    await t.run(async (ctx) => {
+      const instance = await ctx.db.query("instances").first();
+      if (!instance) {
+        throw new Error("no instance");
+      }
+      const now = Date.now();
+      await ctx.db.insert("engineEventReceipts", {
+        instanceId: instance._id,
+        envelopeId: "old",
+        receivedAt: now - RECEIPT_RETENTION_MS - 1,
+      });
+      await ctx.db.insert("engineEventReceipts", { instanceId: instance._id, envelopeId: "new", receivedAt: now });
+    });
+    await t.mutation(internal.engineEvents.cleanupOldReceipts, {});
+    const left = await t.run((ctx) => ctx.db.query("engineEventReceipts").collect());
+    expect(left.map((row) => row.envelopeId)).toEqual(["new"]);
+  });
+});
+
+test("an invalid event leaves no receipt", async () => {
+  const t = await backendWithInstance();
+  const body = envelope({ type: EngineEventType.ALERT_RECORDED, alert: {} });
+  await t.mutation(internal.engineEvents.applyFromWebhook, { webhookSecret: SECRET, body: JSON.stringify(body) });
+  expect(await count(t, "engineEventReceipts")).toBe(0);
 });
