@@ -115,6 +115,7 @@ import type * as lib_instanceAccess from "../lib/instanceAccess.js";
 import type * as lib_instanceRoles from "../lib/instanceRoles.js";
 import type * as lib_instanceTeardown from "../lib/instanceTeardown.js";
 import type * as lib_integrationClientId from "../lib/integrationClientId.js";
+import type * as lib_invitationEngine from "../lib/invitationEngine.js";
 import type * as lib_invitationTarget from "../lib/invitationTarget.js";
 import type * as lib_knownDiscoverers from "../lib/knownDiscoverers.js";
 import type * as lib_macroExecution from "../lib/macroExecution.js";
@@ -222,6 +223,7 @@ import type * as migrations_backfillSharedMacros from "../migrations/backfillSha
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
 import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
 import type * as migrations_index from "../migrations/index.js";
+import type * as migrations_invitations from "../migrations/invitations.js";
 import type * as migrations_moveEnginesToEventQueue from "../migrations/moveEnginesToEventQueue.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
 import type * as moderation from "../moderation.js";
@@ -422,6 +424,7 @@ declare const fullApi: ApiFromModules<{
   "lib/instanceRoles": typeof lib_instanceRoles;
   "lib/instanceTeardown": typeof lib_instanceTeardown;
   "lib/integrationClientId": typeof lib_integrationClientId;
+  "lib/invitationEngine": typeof lib_invitationEngine;
   "lib/invitationTarget": typeof lib_invitationTarget;
   "lib/knownDiscoverers": typeof lib_knownDiscoverers;
   "lib/macroExecution": typeof lib_macroExecution;
@@ -529,6 +532,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
   "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
   "migrations/index": typeof migrations_index;
+  "migrations/invitations": typeof migrations_invitations;
   "migrations/moveEnginesToEventQueue": typeof migrations_moveEnginesToEventQueue;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
   moderation: typeof moderation;
