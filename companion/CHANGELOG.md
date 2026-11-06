@@ -1,5 +1,11 @@
 # woofx3 desktop changelog
 
+## [0.2.1](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.2.0...woofx3-v0.2.1) (2026-11-06)
+
+### Bug Fixes
+
+* **desktop:** bundle engine v0.68.2 ([99a87c2](https://github.com/wolfymaster/woofx3-ui/commit/99a87c2572f7aea9e3af34f59c6e0bfdde000f76))
+
 ## [0.2.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.1.6...woofx3-v0.2.0) (2026-11-06)
 
 ### ⚠ BREAKING CHANGES
