@@ -34,6 +34,7 @@ import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
 import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { BillingBanner } from "./billing-banner";
 import { ConnectionStatusBar } from "./connection-status";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
 import {
@@ -329,6 +330,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
         <AppHeader />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />
+        <BillingBanner />
         <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
