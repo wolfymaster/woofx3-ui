@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { ENGINE_EFFECT_RETRY, engineRetryDelay } from "./billing";
 import { newBackend } from "./lib/convexTest.testing";
 import { stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
@@ -195,5 +196,14 @@ describe("maintenance callbacks", () => {
     await callback(t, "e1", "engine.failed", "start");
     const row = await t.run((ctx) => ctx.db.get(s.provisioningId));
     expect(row).toMatchObject({ status: "failed", error: "deploy: health check timed out" });
+  });
+});
+
+describe("engineRetryDelay", () => {
+  test("doubles, stays at the cap, and jitters within half of it", () => {
+    expect(engineRetryDelay(0, 1)).toBe(ENGINE_EFFECT_RETRY.baseDelayMs);
+    expect(engineRetryDelay(1, 1)).toBe(ENGINE_EFFECT_RETRY.baseDelayMs * 2);
+    expect(engineRetryDelay(30, 1)).toBe(ENGINE_EFFECT_RETRY.maxDelayMs);
+    expect(engineRetryDelay(30, 0)).toBe(ENGINE_EFFECT_RETRY.maxDelayMs / 2);
   });
 });

@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
+import { switchedStatus } from "./lib/engineSwitch";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
 import {
   decideRedeployEvent,
@@ -669,18 +670,19 @@ export const applyCallbackEvent = internalMutation({
         return { handled: true, duplicate: false };
       }
 
-      case "engine.stopped": {
-        await ctx.db.patch(row._id, { status: "stopped", error: undefined, updatedAt: Date.now() });
-        return { handled: true, duplicate: false };
-      }
-
+      // stylegate:ignore ANY-ABS-002 reason="Follows applyCallbackEvent's existing switch over maintenance event types; moving every case to a handler table is its own refactor"
+      case "engine.stopped":
       case "engine.started": {
-        // A started engine keeps its database and its registration, so it is
-        // not registered again: it is back as it was before it stopped.
+        const move = args.eventType === "engine.stopped" ? "stopped" : "started";
+        const status = switchedStatus(row.status, move);
+        if (status === null) {
+          logger.warn("maintenance webhook: engine switch doesn't apply", { status: row.status, move });
+          return { handled: false, duplicate: false };
+        }
         await ctx.db.patch(row._id, {
-          status: "registered",
+          status,
           error: undefined,
-          ...(args.version ? { reportedVersion: args.version } : {}),
+          ...(move === "started" && args.version ? { reportedVersion: args.version } : {}),
           updatedAt: Date.now(),
         });
         return { handled: true, duplicate: false };
