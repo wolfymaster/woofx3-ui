@@ -32,7 +32,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
 | `GET /api/ops/users?q=&cursor=` | Users, newest first. `q` is an email address exactly, a Twitch user id exactly, or words of the name. |
 | `GET /api/ops/users/:id` | A user, their account and instance memberships, and how many sessions are active. |
 | `GET /api/ops/accounts?q=&cursor=` | Accounts with owner, member count, plan and managed engine count; `q` searches the name. |
-| `GET /api/ops/accounts/:id` | An account, its members, pending invitations, resolved entitlements, instances, and each instance's provisioning. |
+| `GET /api/ops/accounts/:id` | An account, its members, pending invitations, resolved entitlements, instances, each instance's provisioning, its subscription and its last 20 subscription transitions. |
 | `GET /api/ops/engines?status=&cursor=` | Every `engineProvisioning` row, or those in one status, for drift checks against the maintenance API. |
 | `GET /api/ops/engines/module-storage-limits?cursor=` | Each managed engine's module storage limit (`storage.moduleStorageBytes` after its override), by maintenance engine id, a page at a time; `null` is unlimited. A page may hold fewer rows than its size: rows without a maintenance engine are skipped. The backoffice compares these with maintenance's replica sizes to flag engines over their limit. |
 | `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply). |
@@ -55,7 +55,12 @@ Operators also set what only an operator may:
 | Route | Does |
 |---|---|
 | `POST /api/ops/instances/:instanceId/storage-limits` | Replaces a managed engine's hosted storage override, `{ totalBytes?, fileBytes?, moduleStorageBytes? }` in bytes. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears the override. An engine someone else hosts answers `409 not_managed`. |
+| `POST /api/ops/accounts/:id/plan` | `{ plan: "starter" \| "pro" }`: the tier of an organization no provider bills, such as an exempt one. A provider-billed one answers `409 provider_managed` (its plan changes in the customer portal or Stripe), a trial asked for Pro answers `409 trial_is_starter`, and an organization with no subscription `409 no_subscription`. |
+| `POST /api/ops/accounts/:id/exemption` | `{ plan, until? }` grants or changes an exemption: free access on `plan`, never billed, until `until` (epoch ms) or indefinitely. `{ revoke: true }` ends it, and the organization is evaluated at once: active with a provider subscription in good standing, otherwise past due. |
+| `POST /api/ops/accounts/:id/suspend` | `{ reason }`: suspends the organization now. Its managed engines stop after the usual spin-down grace. |
+| `POST /api/ops/accounts/:id/discount` | `{ key, spec }`: attaches a discount to the organization's provider subscription, creating the provider's coupon for `key` if it is missing. `spec` is `{ kind: "percent_off", percent, duration }` or `{ kind: "amount_off", amountCents, currency: "usd", duration }`, with `duration` `{ kind: "once" }`, `{ kind: "forever" }` or `{ kind: "months", months }`. Without a provider subscription it answers `409 no_subscription`; a provider failure answers `502`. |
 
+- **Subscription writes** go through the billing lifecycle (`convex/lib/subscriptions.ts` `applyTransition`), the same path the evaluator and provider webhooks use, so an operator can't put a subscription into a state the lifecycle can't reach. A write the lifecycle has no transition for answers `409 illegal_transition`. Each one is audited with its outcome, refusals included.
 - **One implementation:** both paths run `convex/lib/managedEngineActions.ts`. The provisioning row, the runs, the callbacks and a rollback are identical; only `upgrade.requestedBy` names the operator, as `{ operator: email }`.
 - **Not shown to the customer:** `provisioning.forInstance` strips `requestedBy`, and the customer sees the run like any other.
 - **No duplicates:** the maintenance API's idempotency keys come from the row's state, so a repeated request is answered by the run already started.

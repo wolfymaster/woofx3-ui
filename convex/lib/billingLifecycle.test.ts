@@ -96,7 +96,7 @@ const EXPECTED: Record<SubscriptionState | "none", Partial<Record<LifecycleEvent
     SpinDownDue: "suspended",
     ExemptionGranted: "exempt",
   },
-  exempt: { ExemptionExpired: "past_due", ExemptionRevoked: "past_due" },
+  exempt: { ExemptionExpired: "past_due", ExemptionRevoked: "past_due", ExemptionGranted: "exempt" },
 };
 
 describe("every (state, event) pair", () => {

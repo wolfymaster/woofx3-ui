@@ -446,6 +446,8 @@ export const TRANSITIONS: Record<SubscriptionState | "none", Partial<Record<Life
   exempt: {
     ExemptionExpired: evaluateNow,
     ExemptionRevoked: evaluateNow,
+    // An operator changing an exemption's plan or end.
+    ExemptionGranted: grantExemption,
   },
 };
 
