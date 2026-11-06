@@ -28,6 +28,7 @@ import {
   warningNotification,
   warningVariables,
 } from "./lib/billingWarnings";
+import { switchedStatus } from "./lib/engineSwitch";
 import { engineAvailability } from "./lib/entitlementAccess";
 import { ADD_ONS } from "./lib/entitlements";
 import {
@@ -258,16 +259,6 @@ export const ENGINE_EFFECT_RETRY = {
 type EngineEffect = "stopEngines" | "resumeEngines";
 const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
 
-/** Engine statuses a stop applies to: built and not already stopping, stopped or being removed. */
-const STOPPABLE: ReadonlySet<Doc<"engineProvisioning">["status"]> = new Set([
-  "ready",
-  "registering",
-  "registered",
-  "upgrading",
-  "failed",
-  "starting",
-]);
-
 interface ManagedEngine {
   provisioningId: Id<"engineProvisioning">;
   maintenanceEngineId: string;
@@ -303,16 +294,21 @@ export const engineEffectTargets = internalQuery({
   },
 });
 
-/** Moves a provisioning row to `to` if it is still in one of `from`; a row that moved on meanwhile is left alone. */
+const engineSwitchMoveValidator = v.union(
+  v.literal("stopRequested"),
+  v.literal("stopped"),
+  v.literal("startRequested"),
+  v.literal("started"),
+  v.literal("foundRunning")
+);
+
+/** Applies a declared engine switch move; a row that has moved on since is left alone. */
 export const switchEngineStatus = internalMutation({
-  args: {
-    provisioningId: v.id("engineProvisioning"),
-    from: v.array(v.string()),
-    to: v.union(v.literal("stopping"), v.literal("starting"), v.literal("registered")),
-  },
-  handler: async (ctx, { provisioningId, from, to }): Promise<boolean> => {
+  args: { provisioningId: v.id("engineProvisioning"), move: engineSwitchMoveValidator },
+  handler: async (ctx, { provisioningId, move }): Promise<boolean> => {
     const row = await ctx.db.get(provisioningId);
-    if (row === null || !from.includes(row.status)) {
+    const to = row === null ? null : switchedStatus(row.status, move);
+    if (to === null) {
       return false;
     }
     await ctx.db.patch(provisioningId, { status: to, error: undefined, updatedAt: Date.now() });
@@ -373,7 +369,7 @@ async function switchEngine(
   idempotencyKey: string
 ): Promise<"acted" | "skipped" | "retry"> {
   const stopping = effect === "stopEngines";
-  if (stopping ? !STOPPABLE.has(engine.status) : engine.status !== "stopped") {
+  if (switchedStatus(engine.status, stopping ? "stopRequested" : "startRequested") === null) {
     return "skipped";
   }
   try {
@@ -388,8 +384,7 @@ async function switchEngine(
       // The engine is running already, so the row catches up with it.
       await ctx.runMutation(internal.billing.switchEngineStatus, {
         provisioningId: engine.provisioningId,
-        from: ["stopped"],
-        to: "registered",
+        move: "foundRunning",
       });
       return "skipped";
     }
@@ -402,8 +397,7 @@ async function switchEngine(
   }
   await ctx.runMutation(internal.billing.switchEngineStatus, {
     provisioningId: engine.provisioningId,
-    from: stopping ? [...STOPPABLE] : ["stopped"],
-    to: stopping ? "stopping" : "starting",
+    move: stopping ? "stopRequested" : "startRequested",
   });
   return "acted";
 }
