@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
-import { LOCAL_HOME_PATH, LOCAL_NAV_SECTIONS, LOCAL_ROUTES, servesLocally } from "./local-routes";
+import {
+  LOCAL_HOME_PATH,
+  LOCAL_NAV_SECTIONS,
+  LOCAL_ROUTES,
+  LOCAL_UTILITY_SECTIONS,
+  servesLocally,
+} from "./local-routes";
 
 // Local mode runs with no Convex client, so nothing it loads may reach one: a
 // Convex hook there throws for want of a provider. This walks every import
@@ -121,18 +127,21 @@ describe("local mode", () => {
   });
 });
 
-describe("LOCAL_NAV_SECTIONS", () => {
-  const hrefs = LOCAL_NAV_SECTIONS.flatMap((section) => [
-    section.href,
-    ...(section.children ?? []).map((child) => child.href),
-  ]);
+describe("local navigation", () => {
+  const sections = [...LOCAL_NAV_SECTIONS, ...LOCAL_UTILITY_SECTIONS];
+  const hrefs = sections.flatMap((section) => [section.href, ...(section.children ?? []).map((child) => child.href)]);
 
   // Twitch is connected on Integrations; without a way there, local mode
   // cannot link Twitch at all.
-  test("reaches Integrations through Admin", () => {
-    const admin = LOCAL_NAV_SECTIONS.find((section) => section.id === "admin");
+  test("reaches Integrations through Admin, in the utility cluster", () => {
+    const admin = LOCAL_UTILITY_SECTIONS.find((section) => section.id === "admin");
     expect(admin?.href).toBe("/admin/integrations");
     expect(admin?.children?.map((child) => child.href)).toEqual(["/admin/integrations", "/admin/appearance"]);
+  });
+
+  // The signed-in header shows Admin as an icon on the right, never as a main tab.
+  test("keeps utility sections out of the main tabs", () => {
+    expect(LOCAL_NAV_SECTIONS.some((section) => section.id === "admin" || section.id === "team")).toBe(false);
   });
 
   test("links only to pages local mode serves", () => {
@@ -142,6 +151,6 @@ describe("LOCAL_NAV_SECTIONS", () => {
   });
 
   test("leaves out Team, which needs an account", () => {
-    expect(LOCAL_NAV_SECTIONS.some((section) => section.id === "team")).toBe(false);
+    expect(LOCAL_UTILITY_SECTIONS.some((section) => section.id === "team")).toBe(false);
   });
 });

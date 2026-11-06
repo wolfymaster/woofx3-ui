@@ -20,7 +20,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
@@ -52,6 +51,7 @@ import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
 import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
+import { UtilityNav } from "./utility-nav";
 
 function InstanceBar() {
   const { instance, instances, setInstance, isLoading } = useInstance();
@@ -237,29 +237,7 @@ function AppHeader() {
       </nav>
 
       <div className="flex items-center gap-2 shrink-0">
-        <div className="hidden md:flex items-center gap-1">
-          {sectionsFor(UTILITY_SECTIONS, isAdmin).map((item) => {
-            const isActive = isSectionActive(item, location);
-
-            return (
-              <Link key={item.id} href={item.href}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={isActive ? "secondary" : "ghost"}
-                      size="icon"
-                      className={cn("h-8 w-8", isActive && "bg-background shadow-sm")}
-                      data-testid={`nav-${item.id}`}
-                    >
-                      <item.icon className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{item.label}</TooltipContent>
-                </Tooltip>
-              </Link>
-            );
-          })}
-        </div>
+        <UtilityNav sections={sectionsFor(UTILITY_SECTIONS, isAdmin)} location={location} />
 
         <Separator orientation="vertical" className="h-6 hidden md:block" />
 
