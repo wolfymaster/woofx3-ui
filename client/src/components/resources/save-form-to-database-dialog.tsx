@@ -29,6 +29,7 @@ import {
   DATABASE_INSERT_ACTION_REF,
   FORM_SUBMITTED_EVENT,
   formDatabaseColumns,
+  formDatabaseTarget,
   formDatabaseValues,
   formDatabaseWorkflow,
   formDatabaseWorkflowTree,
@@ -71,13 +72,27 @@ export function SaveFormToDatabaseDialog({
   const setEnabled = useSetWorkflowEnabledRequest();
 
   const fields = useMemo(() => parseFormFields(settings.fields), [settings.fields]);
-  const [target, setTarget] = useState(NEW_DATABASE);
+  const current = useMemo(
+    () =>
+      workflows === undefined || databases === undefined
+        ? null
+        : formDatabaseTarget(
+            eventTriggers(workflows, FORM_SUBMITTED_EVENT),
+            formId,
+            databases.map((row) => row.canonicalId)
+          ),
+    [workflows, databases, formId]
+  );
+  // Until the streamer picks, the dialog shows where the answers already go, so Save updates that.
+  const [picked, setPicked] = useState<string | null>(null);
+  const target = picked ?? current ?? NEW_DATABASE;
   const [name, setName] = useState(`${formName} answers`);
   const [saving, setSaving] = useState(false);
 
   const creating = target === NEW_DATABASE;
   const newDatabaseId = suggestInstanceId(name);
-  const ready = !loading && workflows !== undefined && (!creating || newDatabaseId !== "") && !saving;
+  const ready =
+    !loading && workflows !== undefined && databases !== undefined && (!creating || newDatabaseId !== "") && !saving;
 
   const onSave = async () => {
     const trigger = resourceTriggers(triggerPresets, FORM_KIND).find(
@@ -185,7 +200,11 @@ export function SaveFormToDatabaseDialog({
           </p>
           <div className="space-y-2">
             <Label htmlFor={`${id}-database`}>Database</Label>
-            <Select value={target} onValueChange={setTarget} disabled={databases === undefined}>
+            <Select
+              value={target}
+              onValueChange={setPicked}
+              disabled={databases === undefined || workflows === undefined}
+            >
               <SelectTrigger id={`${id}-database`} data-testid="select-form-database">
                 <SelectValue />
               </SelectTrigger>
