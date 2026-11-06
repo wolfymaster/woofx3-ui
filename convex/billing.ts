@@ -355,7 +355,10 @@ export const runEngineEffect = internalAction({
     }
     if (pending > 0) {
       const attempt = args.attempt ?? 0;
-      const delay = Math.min(ENGINE_EFFECT_RETRY.baseDelayMs * 2 ** attempt, ENGINE_EFFECT_RETRY.maxDelayMs);
+      // Stays at the cap while the effect still fits the subscription: a stopped
+      // org's engines must stop, and a paying org's must start, however long it takes.
+      const capped = Math.min(ENGINE_EFFECT_RETRY.baseDelayMs * 2 ** attempt, ENGINE_EFFECT_RETRY.maxDelayMs);
+      const delay = Math.round(capped * (0.5 + Math.random() / 2));
       await ctx.scheduler.runAfter(delay, internal.billing.runEngineEffect, { ...args, attempt: attempt + 1 });
     }
     return { acted, pending };
