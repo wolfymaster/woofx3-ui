@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { DatabaseColumn } from "@woofx3/api/databases";
-import { valuesOfDrafts } from "./database-view";
+import type { DatabaseColumn, DatabaseRecord } from "@woofx3/api/databases";
+import { draftsOf, valuesOfDrafts } from "./database-view";
 
 const columns: DatabaseColumn[] = [
   { id: "game", label: "Game", type: "text", public: true },
@@ -22,5 +22,28 @@ describe("valuesOfDrafts", () => {
     if (!result.ok) {
       expect(Object.keys(result.errors).sort()).toEqual(["score", "vod"]);
     }
+  });
+});
+
+describe("draftsOf", () => {
+  const vip: DatabaseColumn = { id: "vip", label: "VIP", type: "boolean", public: false };
+  const record = (values: DatabaseRecord["values"]): DatabaseRecord => ({
+    id: "r1",
+    databaseId: "woofx3:database:giveaway",
+    revision: 1,
+    createdAt: "2026-11-05T00:00:00Z",
+    updatedAt: "2026-11-05T00:00:00Z",
+    values,
+  });
+
+  test("starts an empty yes/no cell as no, so the switch saves what it shows", () => {
+    const drafts = draftsOf([vip, ...columns], null);
+    expect(drafts).toEqual({ vip: "false", game: "", score: "", vod: "" });
+    expect(valuesOfDrafts([vip], drafts)).toEqual({ ok: true, values: { vip: false } });
+  });
+
+  test("keeps a stored yes", () => {
+    const drafts = draftsOf([vip], record({ vip: true }));
+    expect(valuesOfDrafts([vip], drafts)).toEqual({ ok: true, values: { vip: true } });
   });
 });

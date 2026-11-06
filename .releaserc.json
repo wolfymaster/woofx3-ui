@@ -1,0 +1,41 @@
+{
+  "branches": ["master"],
+  "tagFormat": "woofx3-v${version}",
+  "plugins": [
+    [
+      "./scripts/release/desktop-commits.mjs",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [{ "breaking": true, "release": "minor" }]
+      }
+    ],
+    [
+      "@semantic-release/changelog",
+      { "changelogFile": "companion/CHANGELOG.md", "changelogTitle": "# woofx3 desktop changelog" }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "verifyReleaseCmd": "scripts/release/next-version.sh ${nextRelease.version} ${nextRelease.type}",
+        "prepareCmd": "scripts/release/set-version.sh ${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["companion/CHANGELOG.md", "companion/src-tauri/tauri.woofx3.conf.json"],
+        "message": "chore(release): woofx3-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [{ "path": "dist/*-setup.exe" }, { "path": "dist/*-setup.exe.sig" }],
+        "releaseNameTemplate": "woofx3 <%= nextRelease.version %>",
+        "successComment": false,
+        "failComment": false,
+        "releasedLabels": false
+      }
+    ]
+  ]
+}

@@ -208,7 +208,6 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <h1 className="text-2xl font-semibold tracking-tight truncate">{resourceName(selected)}</h1>
-                  <p className="text-xs font-mono text-muted-foreground break-all">{selected.canonicalId}</p>
                 </div>
                 <Button
                   variant="ghost"
