@@ -3,6 +3,9 @@ import type { QueryCtx } from "../_generated/server";
 
 export type InvitedEngineRole = "admin" | "member";
 
+/** Engines read when choosing a landing engine. Orgs hold a handful, so this is a backstop, not a page size. */
+const LANDING_ENGINE_SCAN = 50;
+
 /**
  * The engine an org-wide invitation (one from before invitations named an
  * engine) lands on: a registered engine first, in case an unfinished one
@@ -16,7 +19,7 @@ export async function landingEngine(
   const instances = await ctx.db
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .take(50);
+    .take(LANDING_ENGINE_SCAN);
   const chosen = instances.find((instance) => instance.clientId) ?? instances[0];
   return chosen ? { instanceId: chosen._id, engineCount: instances.length } : null;
 }
