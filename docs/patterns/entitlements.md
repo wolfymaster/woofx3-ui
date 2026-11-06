@@ -30,7 +30,7 @@ The engine never enforces a plan. A self-hosted engine has every capability its 
 ```bash
 bunx convex run plans:list
 bunx convex run plans:setAccount '{"accountId": "…", "planKey": "pro", "addFeatures": [], "removeFeatures": [], "limits": []}'
-bunx convex run entitlements:get '{"accountId": "…"}'
+bunx convex run entitlements:get "{\"accountId\": \"…\", \"now\": $(date +%s000)}"
 ```
 
 ### The tier plans

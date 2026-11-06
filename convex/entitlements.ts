@@ -11,8 +11,8 @@ import { getInstanceMembership } from "./lib/teamAccess";
  * instance: an instance id is not a secret.
  */
 export const forViewer = query({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<EngineAvailability | null> => {
+  args: { instanceId: v.id("instances"), now: v.number() },
+  handler: async (ctx, { instanceId, now }): Promise<EngineAvailability | null> => {
     const userId = await getAuthUserId(ctx);
     if (!userId || (await getInstanceMembership(ctx, instanceId, userId)) === null) {
       return null;
@@ -20,14 +20,17 @@ export const forViewer = query({
     if ((await ctx.db.get(instanceId)) === null) {
       return null;
     }
-    return engineAvailability(ctx, instanceId, Date.now());
+    return engineAvailability(ctx, instanceId, now);
   },
 });
 
-/** An account's entitlements, for operators: `bunx convex run entitlements:get '{"accountId": "…"}'` */
+/**
+ * An account's entitlements at `now` (ms), for operators:
+ * `bunx convex run entitlements:get "{\"accountId\": \"…\", \"now\": $(date +%s000)}"`
+ */
 export const get = internalQuery({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, { accountId }): Promise<Entitlements> => {
-    return accountEntitlements(ctx, accountId, Date.now());
+  args: { accountId: v.id("accounts"), now: v.number() },
+  handler: async (ctx, { accountId, now }): Promise<Entitlements> => {
+    return accountEntitlements(ctx, accountId, now);
   },
 });
