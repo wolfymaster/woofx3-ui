@@ -5,7 +5,7 @@
 //! `javascript:`, a custom scheme that would start another program) is
 //! refused rather than handed to the operating system.
 
-use reqwest::Url;
+use url::{ParseError, Url};
 
 /// A page address is at most this long: browsers and servers reject far
 /// shorter ones, so anything longer is not a link a person clicked.
@@ -15,8 +15,12 @@ const MAX_URL_LENGTH: usize = 8 * 1024;
 pub enum ExternalUrlError {
     #[error("the address is longer than {MAX_URL_LENGTH} characters")]
     TooLong,
-    #[error("{0:?} is not a valid address")]
-    Invalid(String),
+    #[error("{url:?} is not a valid address")]
+    Invalid {
+        url: String,
+        #[source]
+        source: ParseError,
+    },
     #[error("only web pages open in the browser, not {0:?} addresses")]
     SchemeRefused(String),
     #[error("{0:?} names no host")]
@@ -28,7 +32,10 @@ pub fn external_url(raw: &str) -> Result<Url, ExternalUrlError> {
     if raw.len() > MAX_URL_LENGTH {
         return Err(ExternalUrlError::TooLong);
     }
-    let url = Url::parse(raw).map_err(|_| ExternalUrlError::Invalid(raw.to_string()))?;
+    let url = Url::parse(raw).map_err(|source| ExternalUrlError::Invalid {
+        url: raw.to_string(),
+        source,
+    })?;
     if url.scheme() != "http" && url.scheme() != "https" {
         return Err(ExternalUrlError::SchemeRefused(url.scheme().to_string()));
     }
@@ -77,11 +84,17 @@ mod tests {
     fn test_external_url_refuses_what_is_not_an_address() {
         assert!(matches!(
             external_url("/admin/integrations"),
-            Err(ExternalUrlError::Invalid(_))
+            Err(ExternalUrlError::Invalid {
+                source: ParseError::RelativeUrlWithoutBase,
+                ..
+            })
         ));
         assert!(matches!(
             external_url(""),
-            Err(ExternalUrlError::Invalid(_))
+            Err(ExternalUrlError::Invalid {
+                source: ParseError::RelativeUrlWithoutBase,
+                ..
+            })
         ));
     }
 
