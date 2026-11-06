@@ -9,6 +9,7 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
+import { engineRoleValidator, orgRoleValidator } from "./lib/organization";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -113,7 +114,8 @@ export default defineSchema({
   // Ops search by name; the email index comes with authTables.
   users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
-  // accounts: tenant/organization level
+  // accounts: the organization. It owns the engines and, later, the
+  // subscription. Its id never changes: it is the marketplace buyer identity.
   accounts: defineTable({
     name: v.string(),
     ownerId: v.id("users"),
@@ -122,11 +124,12 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .searchIndex("search_name", { searchField: "name" }),
 
-  // accountMembers: users with access to an account (team). Owner also has accounts.ownerId.
+  // accountMembers: the organization's members and their org role. The owner
+  // (accounts.ownerId) has exactly one row, with role "owner" (invariant I1).
   accountMembers: defineTable({
     accountId: v.id("accounts"),
     userId: v.id("users"),
-    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    role: orgRoleValidator,
     createdAt: v.number(),
   })
     .index("by_account", ["accountId"])
@@ -378,10 +381,14 @@ export default defineSchema({
     .index("by_received_at", ["receivedAt"]),
 
   // instanceMembers: users who have access to an instance
+  // instanceMembers: a user's role on one engine. It is independent of their
+  // org role except where lib/teamAccess.ts grantEngineRole's invariants tie them.
   instanceMembers: defineTable({
     instanceId: v.id("instances"),
     userId: v.id("users"),
-    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    role: engineRoleValidator,
+    // Absent on rows written before it was recorded.
+    createdAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_instance", ["instanceId"])
