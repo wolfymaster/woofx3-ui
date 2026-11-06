@@ -272,6 +272,7 @@ import type * as resources from "../resources.js";
 import type * as sceneActions from "../sceneActions.js";
 import type * as sceneWidgets from "../sceneWidgets.js";
 import type * as scenes from "../scenes.js";
+import type * as seeds_plans from "../seeds/plans.js";
 import type * as seeds_preview from "../seeds/preview.js";
 import type * as seeds_triggerActions from "../seeds/triggerActions.js";
 import type * as setup from "../setup.js";
@@ -586,6 +587,7 @@ declare const fullApi: ApiFromModules<{
   sceneActions: typeof sceneActions;
   sceneWidgets: typeof sceneWidgets;
   scenes: typeof scenes;
+  "seeds/plans": typeof seeds_plans;
   "seeds/preview": typeof seeds_preview;
   "seeds/triggerActions": typeof seeds_triggerActions;
   setup: typeof setup;
