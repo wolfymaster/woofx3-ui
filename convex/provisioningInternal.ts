@@ -670,6 +670,7 @@ export const applyCallbackEvent = internalMutation({
         return { handled: true, duplicate: false };
       }
 
+      // stylegate:ignore ANY-ABS-002 reason="Follows applyCallbackEvent's existing switch over maintenance event types; moving every case to a handler table is its own refactor"
       case "engine.stopped":
       case "engine.started": {
         const move = args.eventType === "engine.stopped" ? "stopped" : "started";
