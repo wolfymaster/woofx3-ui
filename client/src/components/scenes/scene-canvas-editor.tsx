@@ -1,4 +1,5 @@
 import { alertWidgetNamesOf, orphanedAlertTargets } from "@shared/alert-widgets";
+import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
@@ -20,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
 import { useBrowserSourceUrlRequest, useRotateBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import {
   useAlertTargetUsage,
@@ -168,10 +170,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
   // The overlay follows the draft from sceneManager, and is told only where
   // widgets are being dragged; editing live, it gets the editor's widgets whole.
+  // An engine that switches the overlay's version by message keeps its widgets
+  // running across the switch; an older one is reloaded at the other version's URL.
   const followDraft = !live;
+  const previewViewByMessage = useEngineCapability(ENGINE_CAPABILITIES.scenesPreviewView);
   const previewMessage = useMemo(
-    () => (editorState === null || editor === null ? null : editor.preview.layoutMessage({ placements: !followDraft })),
-    [editor, editorState, followDraft]
+    () =>
+      editorState === null || editor === null
+        ? null
+        : editor.preview.layoutMessage({
+            placements: !followDraft,
+            view: previewViewByMessage ? uiVersion : undefined,
+          }),
+    [editor, editorState, followDraft, previewViewByMessage, uiVersion]
   );
 
   const updateSceneAction = useUpdateSceneRequest();
@@ -617,6 +628,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
           height={canvasSettings.height}
           layoutMessage={previewMessage}
           followDraft={followDraft}
+          viewByMessage={previewViewByMessage}
         />
       }
     />
