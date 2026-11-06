@@ -380,7 +380,6 @@ export default defineSchema({
     .index("by_event", ["eventId"])
     .index("by_received_at", ["receivedAt"]),
 
-  // instanceMembers: users who have access to an instance
   // instanceMembers: a user's role on one engine. It is independent of their
   // org role except where lib/teamAccess.ts grantEngineRole's invariants tie them.
   instanceMembers: defineTable({
