@@ -114,13 +114,13 @@ export function servesLocally(href: string): boolean {
   return href === MARKETPLACE_PATH || LOCAL_ROUTES.some((route) => route.path === href);
 }
 
+/** The app's main sections, cut down to the pages local mode serves. */
+export const LOCAL_NAV_SECTIONS: NavSection[] = navItemsServed(MAIN_NAV_SECTIONS, servesLocally);
+
 /**
- * The app's sections, main and utility alike, cut down to the pages local
- * mode serves. A section keeps only the children served here and opens at the
- * first of them, so Admin opens at Integrations, where Twitch is connected.
- * Admin's role gate does not apply: whoever runs the local engine owns it.
+ * The header's utility sections, cut down the same way. A section keeps only
+ * the children served here and opens at the first of them, so Admin opens at
+ * Integrations, where Twitch is connected. Admin's role gate does not apply:
+ * whoever runs the local engine owns it.
  */
-export const LOCAL_NAV_SECTIONS: NavSection[] = navItemsServed(
-  [...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS],
-  servesLocally
-);
+export const LOCAL_UTILITY_SECTIONS: NavSection[] = navItemsServed(UTILITY_SECTIONS, servesLocally);
