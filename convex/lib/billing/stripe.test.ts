@@ -102,17 +102,19 @@ describe("discount to coupon", () => {
 
   test("the coupon id is deterministic and refuses unsafe keys", () => {
     expect(couponId("referral-pro-month")).toBe(couponId("referral-pro-month"));
-    expect(() => couponId("Has Spaces")).toThrow();
+    expect(() => couponId("Has Spaces")).toThrow('Discount key "Has Spaces"');
   });
 
   test("refuses amounts Stripe would reject", () => {
-    expect(() => couponParams("x", { kind: "percent_off", percent: 0, duration: { kind: "once" } })).toThrow();
+    expect(() => couponParams("x", { kind: "percent_off", percent: 0, duration: { kind: "once" } })).toThrow(
+      "percent_off must be in (0, 100]"
+    );
     expect(() =>
       couponParams("x", { kind: "amount_off", amountCents: 1.5, currency: "usd", duration: { kind: "once" } })
-    ).toThrow();
+    ).toThrow("amount_off must be a whole number");
     expect(() =>
       couponParams("x", { kind: "percent_off", percent: 10, duration: { kind: "months", months: 0 } })
-    ).toThrow();
+    ).toThrow("months must be a whole number");
   });
 });
 

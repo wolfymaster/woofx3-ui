@@ -9,6 +9,7 @@ import {
   type BillingEvent,
   type BillingProvider,
   type CheckoutRequest,
+  type DiscountDuration,
   type DiscountSpec,
   err,
   ok,
@@ -116,14 +117,22 @@ export function couponParams(key: string, spec: DiscountSpec): Stripe.CouponCrea
   return { id: couponId(key), amount_off: spec.amountCents, currency: spec.currency, ...duration };
 }
 
+function durationOfCoupon(coupon: Stripe.Coupon): DiscountDuration {
+  switch (coupon.duration) {
+    case "repeating":
+      return { kind: "months", months: coupon.duration_in_months ?? 0 };
+    case "once":
+      return { kind: "once" };
+    case "forever":
+      return { kind: "forever" };
+    default:
+      throw new Error(`Unmapped Stripe coupon duration "${coupon.duration}"`);
+  }
+}
+
 /** Our spec for a Stripe coupon; null for a coupon shape we never create (another currency). */
 export function specOfCoupon(coupon: Stripe.Coupon): DiscountSpec | null {
-  const duration =
-    coupon.duration === "repeating"
-      ? { kind: "months" as const, months: coupon.duration_in_months ?? 0 }
-      : coupon.duration === "once"
-        ? { kind: "once" as const }
-        : { kind: "forever" as const };
+  const duration = durationOfCoupon(coupon);
   if (coupon.percent_off !== null) {
     return { kind: "percent_off", percent: coupon.percent_off, duration };
   }
@@ -146,7 +155,10 @@ function appliedDiscount(discount: Stripe.Discount | string): AppliedDiscount | 
 }
 
 function idOf(value: string | { id: string } | null): string | null {
-  return value === null ? null : typeof value === "string" ? value : value.id;
+  if (value === null) {
+    return null;
+  }
+  return typeof value === "string" ? value : value.id;
 }
 
 /** A Stripe subscription in our terms. Ignored (null) while `incomplete`. */
