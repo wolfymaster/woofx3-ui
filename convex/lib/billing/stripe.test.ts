@@ -3,11 +3,13 @@ import Stripe from "stripe";
 import { parseBillingConfig } from "./config";
 import type { DiscountSpec } from "./provider";
 import {
+  type CouponFields,
   couponId,
   couponParams,
   parsePriceLookupKey,
   priceLookupKey,
   StripeBillingProvider,
+  type SubscriptionFields,
   specOfCoupon,
   standingOf,
   toProviderSubscription,
@@ -89,13 +91,13 @@ describe("discount to coupon", () => {
     });
     test(`${name} reads back as the same spec`, () => {
       const params = couponParams("spring", spec);
-      const coupon = {
+      const coupon: CouponFields = {
         percent_off: params.percent_off ?? null,
         amount_off: params.amount_off ?? null,
         currency: params.currency ?? null,
         duration: params.duration,
         duration_in_months: params.duration_in_months ?? null,
-      } as Stripe.Coupon;
+      };
       expect(specOfCoupon(coupon)).toEqual(spec);
     });
   }
@@ -118,7 +120,7 @@ describe("discount to coupon", () => {
   });
 });
 
-function subscription(overrides: Partial<Stripe.Subscription> = {}): Stripe.Subscription {
+function subscription(overrides: Partial<SubscriptionFields> = {}): SubscriptionFields {
   return {
     id: "sub_1",
     status: "active",
@@ -130,7 +132,7 @@ function subscription(overrides: Partial<Stripe.Subscription> = {}): Stripe.Subs
       data: [{ price: { id: "price_1", lookup_key: "woofx3_pro_year" }, current_period_end: 1_800_000_000 }],
     },
     ...overrides,
-  } as unknown as Stripe.Subscription;
+  };
 }
 
 describe("toProviderSubscription", () => {
@@ -153,7 +155,7 @@ describe("toProviderSubscription", () => {
   test("an unknown price is an error, not a guess", () => {
     const unknown = subscription({
       items: { data: [{ price: { id: "price_x", lookup_key: "other" }, current_period_end: 1 }] },
-    } as unknown as Partial<Stripe.Subscription>);
+    });
     expect(toProviderSubscription(unknown, 0)).toMatchObject({ ok: false, error: { code: "unknown_price" } });
   });
 

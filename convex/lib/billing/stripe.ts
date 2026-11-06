@@ -117,7 +117,13 @@ export function couponParams(key: string, spec: DiscountSpec): Stripe.CouponCrea
   return { id: couponId(key), amount_off: spec.amountCents, currency: spec.currency, ...duration };
 }
 
-function durationOfCoupon(coupon: Stripe.Coupon): DiscountDuration {
+/** The coupon fields a discount is read from. */
+export type CouponFields = Pick<
+  Stripe.Coupon,
+  "percent_off" | "amount_off" | "currency" | "duration" | "duration_in_months"
+>;
+
+function durationOfCoupon(coupon: CouponFields): DiscountDuration {
   switch (coupon.duration) {
     case "repeating":
       return { kind: "months", months: coupon.duration_in_months ?? 0 };
@@ -131,7 +137,7 @@ function durationOfCoupon(coupon: Stripe.Coupon): DiscountDuration {
 }
 
 /** Our spec for a Stripe coupon; null for a coupon shape we never create (another currency). */
-export function specOfCoupon(coupon: Stripe.Coupon): DiscountSpec | null {
+export function specOfCoupon(coupon: CouponFields): DiscountSpec | null {
   const duration = durationOfCoupon(coupon);
   if (coupon.percent_off !== null) {
     return { kind: "percent_off", percent: coupon.percent_off, duration };
@@ -161,9 +167,17 @@ function idOf(value: string | { id: string } | null): string | null {
   return typeof value === "string" ? value : value.id;
 }
 
+/** The subscription fields this adapter reads. */
+export type SubscriptionFields = Pick<
+  Stripe.Subscription,
+  "id" | "status" | "cancel_at_period_end" | "customer" | "metadata" | "discounts"
+> & {
+  items: { data: Array<{ price: Pick<Stripe.Price, "id" | "lookup_key">; current_period_end: number }> };
+};
+
 /** A Stripe subscription in our terms. Ignored (null) while `incomplete`. */
 export function toProviderSubscription(
-  subscription: Stripe.Subscription,
+  subscription: SubscriptionFields,
   observedAt: number
 ): Result<ProviderSubscription | null> {
   const standing = standingOf(subscription.status, subscription.cancel_at_period_end);
