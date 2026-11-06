@@ -54,7 +54,7 @@ else
   for path in "${changed[@]}"; do
     case "$path" in
       # The window's bindings are checked against core's types by a core test.
-      companion/core/* | companion/ui/src/generated/*) companion_core=true ;;
+      companion/core/* | client/src/desktop/generated/*) companion_core=true ;;
       companion/* | docs/*) ;;
       *) web=true ;;
     esac

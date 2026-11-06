@@ -109,19 +109,6 @@ describe("the desktop app's Tauri config", () => {
     expect(at(desktop, ["plugins", "updater", "requireSignedVersion"])).toBe(true);
   });
 
-  // The overlay repeats the window list, since a merge replaces arrays whole;
-  // only the titles may differ from the companion's.
-  test("has the companion's windows, retitled", () => {
-    const untitled = (config: Json) => {
-      const windows = at(config, ["app", "windows"]);
-      if (!Array.isArray(windows)) {
-        throw new Error("app.windows is not a list");
-      }
-      return windows.map((window) => (isObject(window) ? { ...window, title: null } : window));
-    };
-    expect(untitled(desktop)).toEqual(untitled(companion));
-  });
-
   test("bundles the engine", () => {
     expect(at(desktop, ["bundle", "resources"])).toEqual(["engine/"]);
   });

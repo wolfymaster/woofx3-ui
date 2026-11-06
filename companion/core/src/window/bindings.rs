@@ -14,7 +14,7 @@ use super::{
     ModuleView, OpenTwitchSignInArgs, ReadyUpdate, RelayView, RemoveShoutoutArgs,
     ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
     TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES, INTEGRATIONS_EVENT,
-    OPEN_LOCAL_CONNECTIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT,
+    SHOUTOUT_QUEUE_EVENT, STATE_EVENT,
 };
 use crate::host::{
     HostModeKind, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
@@ -22,8 +22,9 @@ use crate::host::{
 };
 use crate::AddressOrigin;
 
-/// Where the bindings live, relative to the companion directory.
-pub const BINDINGS_FILE: &str = "ui/src/generated/window.ts";
+/// Where the bindings live, relative to the companion directory: in the
+/// dashboard, the one window that calls the host.
+pub const BINDINGS_FILE: &str = "../client/src/desktop/generated/window.ts";
 
 const HEADER: &str = "\
 // Generated from the Rust wire types in companion/core (src/window/bindings.rs).
@@ -112,7 +113,6 @@ pub fn window_bindings() -> String {
     let events = [
         ("STATE_EVENT", STATE_EVENT),
         ("INTEGRATIONS_EVENT", INTEGRATIONS_EVENT),
-        ("OPEN_LOCAL_CONNECTIONS_EVENT", OPEN_LOCAL_CONNECTIONS_EVENT),
         ("SHOUTOUT_QUEUE_EVENT", SHOUTOUT_QUEUE_EVENT),
     ];
 
