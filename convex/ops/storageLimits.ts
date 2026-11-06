@@ -28,7 +28,7 @@ export async function hostedStorageLimitsDto(
   ctx: QueryCtx,
   instance: Doc<"instances">
 ): Promise<HostedStorageLimitsDto> {
-  const entitlements = await accountEntitlements(ctx, instance.accountId);
+  const entitlements = await accountEntitlements(ctx, instance.accountId, Date.now());
   const override = instance.hostedStorageLimits ?? {};
   return {
     inherited: hostedStorageLimits(entitlements),

@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { canReadChannelRole, normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -12,6 +12,7 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
+import { orgSeatsFull } from "./lib/entitlementAccess";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
@@ -297,6 +298,33 @@ export const lookupTwitchUser = action({
 // Create
 // ---------------------------------------------------------------------------
 
+const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove someone to invite more people";
+
+/** Whether the person an invitation names already has a seat in the engine's org. */
+async function inviteeInOrg(
+  ctx: QueryCtx,
+  instance: Doc<"instances">,
+  target: Infer<typeof TARGET_VALIDATOR>
+): Promise<boolean> {
+  const userId =
+    target.kind === "email"
+      ? (
+          await ctx.db
+            .query("users")
+            .withIndex("email", (q) => q.eq("email", normalizeEmail(target.email)))
+            .first()
+        )?._id
+      : (
+          await ctx.db
+            .query("authAccounts")
+            .withIndex("providerAndAccountId", (q) =>
+              q.eq("provider", "twitch").eq("providerAccountId", target.twitchUserId)
+            )
+            .first()
+        )?.userId;
+  return userId !== undefined && (await getAccountMembership(ctx, instance.accountId, userId)) !== null;
+}
+
 const TARGET_VALIDATOR = v.union(
   v.object({ kind: v.literal("email"), email: v.string() }),
   v.object({
@@ -329,6 +357,9 @@ export const insertInvitation = internalMutation({
     }
 
     const now = Date.now();
+    if (!(await inviteeInOrg(ctx, instance, args.target)) && (await orgSeatsFull(ctx, instance._id, now))) {
+      throw new Error(SEATS_FULL);
+    }
     const token = randomToken();
     const expiresAt = now + INVITATION_LIFETIME_MS;
     const common = {
@@ -509,6 +540,9 @@ export const accept = mutation({
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
+    if (!existingMember && (await orgSeatsFull(ctx, engine.instanceId, now))) {
+      throw new Error(SEATS_FULL);
+    }
     if (account.ownerId !== userId) {
       await grantEngineRole(ctx, engine.instanceId, userId, engine.engineRole);
     }

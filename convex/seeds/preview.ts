@@ -1,5 +1,6 @@
 import { internalMutation } from "../_generated/server";
 import { seedDefaultSetupPlatforms } from "../setupPlatforms";
+import { seedMissingTierPlans } from "./plans";
 
 /**
  * Seeds a pull request's preview deployment with the product data the app
@@ -18,9 +19,11 @@ import { seedDefaultSetupPlatforms } from "../setupPlatforms";
  */
 export default internalMutation({
   args: {},
-  handler: async (ctx): Promise<{ setupPlatforms: string[] }> => {
+  handler: async (ctx): Promise<{ setupPlatforms: string[]; plans: string[] }> => {
     const setupPlatforms = await seedDefaultSetupPlatforms(ctx);
     console.log(`Preview seed: setupPlatforms inserted [${setupPlatforms.join(", ")}]`);
-    return { setupPlatforms };
+    const plans = await seedMissingTierPlans(ctx, "preview-seed");
+    console.log(`Preview seed: plans inserted [${plans.join(", ")}]`);
+    return { setupPlatforms, plans };
   },
 });

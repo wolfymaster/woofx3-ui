@@ -206,7 +206,7 @@ export const getAccount = internalQuery({
       account: await toAccountSummary(ctx, account),
       members,
       invitations: invitations.filter((invitation) => invitation.status === "pending").map(invitationDto),
-      entitlements: planSummaryDto(await accountEntitlements(ctx, accountId)),
+      entitlements: planSummaryDto(await accountEntitlements(ctx, accountId, Date.now())),
       instances,
     };
   },
@@ -444,7 +444,7 @@ async function toAccountSummary(ctx: QueryCtx, account: Doc<"accounts">): Promis
     account,
     owner,
     members.length,
-    await accountEntitlements(ctx, account._id),
+    await accountEntitlements(ctx, account._id, Date.now()),
     engines.filter((engine) => engine.status !== "deleted").length
   );
 }

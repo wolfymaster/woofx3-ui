@@ -34,7 +34,10 @@ async function loadLimits(ctx: QueryCtx, instanceId: Id<"instances">): Promise<H
   }
   return {
     hosting: instance.hosting,
-    limits: hostedStorageLimits(await accountEntitlements(ctx, instance.accountId), instance.hostedStorageLimits),
+    limits: hostedStorageLimits(
+      await accountEntitlements(ctx, instance.accountId, Date.now()),
+      instance.hostedStorageLimits
+    ),
   };
 }
 
