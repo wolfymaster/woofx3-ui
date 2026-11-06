@@ -10,7 +10,7 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
 export const BILLING_LIFECYCLE = {
-  // Decision 7: 30 days of Starter, no card.
+  // The trial is 30 days of Starter and needs no card.
   trialDays: 30,
   // Existing engines: their first billing evaluation is 30 days after migration.
   migrationBillingDelayDays: 30,
