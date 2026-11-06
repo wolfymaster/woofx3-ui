@@ -195,6 +195,12 @@ export const update = mutation({
     }
 
     const { instanceId, ...updates } = args;
+    if (updates.name !== undefined) {
+      updates.name = updates.name.trim();
+      if (!updates.name) {
+        throw new Error("An engine needs a name");
+      }
+    }
     await ctx.db.patch(instanceId, updates);
   },
 });

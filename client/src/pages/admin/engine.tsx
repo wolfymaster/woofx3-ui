@@ -32,6 +32,67 @@ import { $engineUrl } from "@/lib/stores";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
+function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; name: string }) {
+  const updateInstance = useConvexMutation(api.instances.update);
+  const { toast } = useToast();
+  const [draft, setDraft] = useState(name);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(name);
+  }, [name]);
+
+  const trimmed = draft.trim();
+  const save = async () => {
+    setSaving(true);
+    try {
+      await updateInstance({ instanceId, name: trimmed });
+    } catch (e) {
+      toast({
+        title: "Couldn't rename engine",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Engine name</CardTitle>
+        <CardDescription>The name shown when you switch between engines.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <Input
+            aria-label="Engine name"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="flex-1 min-w-[200px]"
+            data-testid="input-engine-name"
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            disabled={saving || !trimmed || trimmed === name}
+            data-testid="button-save-engine-name"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save name"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function EngineSettings() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { instanceId: engineInstanceId } = useEngineScope();
@@ -162,6 +223,7 @@ function EngineSettings() {
   if (instance.hosting === "managed") {
     return (
       <div className="space-y-4">
+        <EngineNameCard instanceId={instance._id} name={instance.name} />
         <ManagedEngineCard instanceId={instance._id} />
         {instance.clientId && engineInstanceId && <ModuleStorageCard />}
         {instance.clientId && engineInstanceId && <EngineSyncCard />}
@@ -173,6 +235,7 @@ function EngineSettings() {
 
   return (
     <div className="space-y-4">
+      <EngineNameCard instanceId={instance._id} name={instance.name} />
       <Card>
         <CardHeader>
           <CardTitle>Engine Configuration</CardTitle>
