@@ -256,6 +256,16 @@ export const ENGINE_EFFECT_RETRY = {
   maxDelayMs: 6 * 60 * 60_000,
 } as const;
 
+/**
+ * Capped exponential backoff with jitter (`jitter` in [0, 1)). It stays at
+ * the cap while the effect still fits the subscription: a suspended org's
+ * engines must stop, and a paying org's must start, however long it takes.
+ */
+export function engineRetryDelay(attempt: number, jitter: number): number {
+  const capped = Math.min(ENGINE_EFFECT_RETRY.baseDelayMs * 2 ** attempt, ENGINE_EFFECT_RETRY.maxDelayMs);
+  return Math.round(capped * (0.5 + jitter / 2));
+}
+
 type EngineEffect = "stopEngines" | "resumeEngines";
 const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
 
@@ -355,11 +365,10 @@ export const runEngineEffect = internalAction({
     }
     if (pending > 0) {
       const attempt = args.attempt ?? 0;
-      // Stays at the cap while the effect still fits the subscription: a stopped
-      // org's engines must stop, and a paying org's must start, however long it takes.
-      const capped = Math.min(ENGINE_EFFECT_RETRY.baseDelayMs * 2 ** attempt, ENGINE_EFFECT_RETRY.maxDelayMs);
-      const delay = Math.round(capped * (0.5 + Math.random() / 2));
-      await ctx.scheduler.runAfter(delay, internal.billing.runEngineEffect, { ...args, attempt: attempt + 1 });
+      await ctx.scheduler.runAfter(engineRetryDelay(attempt, Math.random()), internal.billing.runEngineEffect, {
+        ...args,
+        attempt: attempt + 1,
+      });
     }
     return { acted, pending };
   },
