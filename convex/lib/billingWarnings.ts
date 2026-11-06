@@ -77,16 +77,16 @@ const COPY: Record<WarningTemplate, (vars: WarningVariables, day: string) => { h
     }),
   };
 
-/** The in-app notice. Only the owner, who can act on billing, gets the link to it. */
+/** Who a warning goes to: the owner can act on billing; org admins are told. */
+export type WarningRecipient = "owner" | "admin";
+
+/** The in-app notice. Only the owner gets the link to Billing. */
 export function warningNotification(
   template: WarningTemplate,
   vars: WarningVariables,
-  withBillingLink: boolean
+  recipient: WarningRecipient
 ): NotificationContent {
   const day = vars.dateIso.slice(0, 10);
-  return {
-    ...COPY[template](vars, day),
-    link: withBillingLink ? BILLING_PATH : null,
-    actionLabel: withBillingLink ? "Billing" : null,
-  };
+  const link = recipient === "owner" ? BILLING_PATH : null;
+  return { ...COPY[template](vars, day), link, actionLabel: link === null ? null : "Billing" };
 }

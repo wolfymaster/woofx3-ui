@@ -1,13 +1,12 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, type MutationCtx } from "./_generated/server";
+import { internalAction, internalMutation } from "./_generated/server";
 import { dueEvent, isWarningCurrent, WARNING_TEMPLATES } from "./lib/billingLifecycle";
 import { warningNotification, warningVariables } from "./lib/billingWarnings";
 import { subscriptionStateValidator } from "./lib/organization";
 import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
 import { logger } from "./logger";
-import { sendNotification } from "./notifications";
+import { sendNotificationOnce } from "./notifications";
 
 /** Orgs whose timers are due, scheduled per evaluator tick; the next tick takes the rest. */
 const EVALUATOR_BATCH = 200;
@@ -60,23 +59,6 @@ export const evaluateOrg = internalMutation({
   },
 });
 
-async function notifyOnce(
-  ctx: MutationCtx,
-  requestId: string,
-  userId: Id<"users">,
-  content: ReturnType<typeof warningNotification>
-): Promise<boolean> {
-  const sent = await ctx.db
-    .query("notifications")
-    .withIndex("by_request_id", (q) => q.eq("requestId", requestId))
-    .first();
-  if (sent !== null) {
-    return false;
-  }
-  await sendNotification(ctx, { ...content, audience: { kind: "user", userId }, createdBy: EVALUATOR, requestId });
-  return true;
-}
-
 /**
  * Sends one billing warning in-app: the owner gets it with a link to Billing,
  * org admins without. Skipped when the org has left the stint that scheduled
@@ -100,19 +82,24 @@ export const deliverWarning = internalMutation({
     }
     const vars = warningVariables(template, account, subscription, Date.now());
     const requestId = `${transitionId}:${template}`;
-    const sent = await notifyOnce(ctx, requestId, account.ownerId, warningNotification(template, vars, true));
+    const sent = await sendNotificationOnce(ctx, {
+      ...warningNotification(template, vars, "owner"),
+      audience: { kind: "user", userId: account.ownerId },
+      createdBy: EVALUATOR,
+      requestId,
+    });
     const members = await ctx.db
       .query("accountMembers")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
       .collect();
     for (const member of members) {
       if (member.role === "admin" && member.userId !== account.ownerId) {
-        await notifyOnce(
-          ctx,
-          `${requestId}:${member.userId}`,
-          member.userId,
-          warningNotification(template, vars, false)
-        );
+        await sendNotificationOnce(ctx, {
+          ...warningNotification(template, vars, "admin"),
+          audience: { kind: "user", userId: member.userId },
+          createdBy: EVALUATOR,
+          requestId: `${requestId}:${member.userId}`,
+        });
       }
     }
     return { sent };
