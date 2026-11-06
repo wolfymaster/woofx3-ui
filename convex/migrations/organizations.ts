@@ -3,6 +3,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type QueryCtx } from "../_generated/server";
 import { orgRoleOf } from "../lib/orgRoles";
+import { subscriptionFor } from "../lib/subscriptions";
 import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
 import { logger } from "../logger";
 import { migrations } from "./index";
@@ -112,7 +113,8 @@ export type InvariantViolation =
       userId: Id<"users">;
       detail: "owner_not_engine_owner" | "non_owner_engine_owner";
     }
-  | { invariant: "I4"; accountId: Id<"accounts">; instanceId: Id<"instances">; userId: Id<"users"> };
+  | { invariant: "I4"; accountId: Id<"accounts">; instanceId: Id<"instances">; userId: Id<"users"> }
+  | { invariant: "subscription"; accountId: Id<"accounts">; detail: "managed_engine_without_subscription" };
 
 async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<InvariantViolation[]> {
   const violations: InvariantViolation[] = [];
@@ -133,6 +135,14 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
     }
   }
   const orgAdmins = orgRows.filter((row) => row.role === "admin").map((row) => row.userId);
+
+  const provisioning = await ctx.db
+    .query("engineProvisioning")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .take(50);
+  if (provisioning.some((row) => row.status !== "deleted") && (await subscriptionFor(ctx, accountId)) === null) {
+    violations.push({ invariant: "subscription", accountId, detail: "managed_engine_without_subscription" });
+  }
 
   const instances = await ctx.db
     .query("instances")
@@ -181,7 +191,8 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
 const CHECK_PAGE_SIZE = 50;
 
 /**
- * M5, one page of orgs: the invariant violations it finds. Read-only. I5
+ * M5, one page of orgs: the invariant violations it finds, and orgs with a
+ * managed engine but no subscription. Read-only. I5
  * (members hold only engines they were granted) has no stored trace to check.
  */
 export const checkOrgInvariants = internalQuery({
