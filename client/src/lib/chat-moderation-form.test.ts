@@ -6,6 +6,7 @@ import {
 } from "@woofx3/api/moderation-config";
 import {
   actionsMissingScope,
+  canSaveConfig,
   configActionsMissingScope,
   configProblem,
   DEFAULT_TIMEOUT_SECONDS,
@@ -86,9 +87,41 @@ describe("configProblem and rules", () => {
     expect(configProblem(withRule(DEFAULT_MODERATION_CONFIG, "links", { ...rule, enabled: true }))).toBeNull();
   });
 
-  test("names the engine's problem with a config", () => {
+  test("names the card a problem is on, in plain words", () => {
     const rule = { ...ruleOf(DEFAULT_MODERATION_CONFIG, "caps"), actions: [{ kind: "warn", reason: "/ban" } as const] };
-    expect(configProblem(withRule(DEFAULT_MODERATION_CONFIG, "caps", rule))).toContain('must not start with "/"');
+    const config = withRule(DEFAULT_MODERATION_CONFIG, "caps", rule);
+    expect(canSaveConfig(config)).toBe(false);
+    expect(configProblem(config)).toBe(
+      "Something under Capital letters can't be saved yet. Check those settings, then save again."
+    );
+  });
+
+  test("says nothing above the page for a bad phrase, which is shown beside it, but still blocks saving", () => {
+    const rule = {
+      ...ruleOf(DEFAULT_MODERATION_CONFIG, "banned_phrases"),
+      enabled: true,
+      params: {
+        phrases: [
+          { pattern: "spoil*", wholeWord: true },
+          { pattern: "bad\\Bphrase", wholeWord: true },
+        ],
+      },
+    };
+    const config = withRule(DEFAULT_MODERATION_CONFIG, "banned_phrases", rule);
+    expect(phraseProblem("bad\\Bphrase")).not.toBeNull();
+    expect(canSaveConfig(config)).toBe(false);
+    expect(configProblem(config)).toBeNull();
+  });
+
+  test("names Banned phrases while its card is off, since its phrases aren't shown", () => {
+    const rule = {
+      ...ruleOf(DEFAULT_MODERATION_CONFIG, "banned_phrases"),
+      enabled: false,
+      params: { phrases: [{ pattern: "bad\\Bphrase", wholeWord: true }] },
+    };
+    expect(configProblem(withRule(DEFAULT_MODERATION_CONFIG, "banned_phrases", rule))).toBe(
+      "Something under Banned phrases can't be saved yet. Check those settings, then save again."
+    );
   });
 });
 
