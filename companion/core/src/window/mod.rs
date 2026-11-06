@@ -19,8 +19,8 @@ use crate::host::{EnginePhase, HostModeKind, LocalSession, StopCause};
 pub use bindings::{window_bindings, BINDINGS_FILE};
 pub use command_args::{
     ChooseHostModeArgs, ConfirmAddressArgs, EnqueueShoutoutArgs, FinishAppLinkArgs,
-    OpenTwitchSignInArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs,
-    SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
+    OpenExternalUrlArgs, OpenTwitchSignInArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs,
+    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
 };
 
 /// The largest integer a JavaScript number holds exactly, 2^53 - 1
