@@ -58,14 +58,12 @@ export const signInMethods = query({
     if (!userId) {
       return null;
     }
-    const accounts = await ctx.db
-      .query("authAccounts")
-      .filter((q) => q.eq(q.field("userId"), userId))
-      .collect();
-    return {
-      password: accounts.some((account) => account.provider === "password"),
-      twitch: accounts.some((account) => account.provider === "twitch"),
-    };
+    const hasAccount = async (provider: string) =>
+      (await ctx.db
+        .query("authAccounts")
+        .withIndex("userIdAndProvider", (q) => q.eq("userId", userId).eq("provider", provider))
+        .first()) !== null;
+    return { password: await hasAccount("password"), twitch: await hasAccount("twitch") };
   },
 });
 
