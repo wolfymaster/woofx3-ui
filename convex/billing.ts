@@ -168,6 +168,7 @@ function providerFailure(error: BillingError): ConvexError<BillingError> {
   return new ConvexError<BillingError>(error);
 }
 
+// stylegate:ignore ANY-LAY-004 reason="A Convex action handler is the composition root: no process outlives one call to inject a shared client from"
 function configuredProvider(): { provider: BillingProvider; portalUrl: string } {
   const config = billingConfig();
   return { provider: billingProvider(config), portalUrl: config.ORG_PORTAL_URL };
