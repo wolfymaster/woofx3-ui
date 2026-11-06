@@ -126,7 +126,9 @@ describe("org role resolution", () => {
       return orgRoleOf(ctx, account, userId);
     });
     expect(role).toBe("admin");
-    await expect(t.run((ctx) => requireOrgActionFor(ctx, org.accountId, userId, "manageBilling"))).rejects.toThrow();
+    await expect(t.run((ctx) => requireOrgActionFor(ctx, org.accountId, userId, "manageBilling"))).rejects.toThrow(
+      "Your organization role doesn't allow this"
+    );
   });
 
   test("the owner is the owner even before their membership row exists", async () => {
