@@ -1,11 +1,12 @@
-//! The woofx3 companion: a tray app that pairs this computer with a woofx3
-//! instance through the browser and stays connected to Convex while paired.
-//! An unpaired companion holds no Convex connection. Its window
-//! renders `WindowState`; all work happens here, in Rust commands.
+//! The woofx3 desktop host: a tray app whose one window shows the dashboard.
+//! Signed in to an account, the dashboard links this computer to its
+//! instance as the companion, and the host stays connected to Convex while
+//! linked; an unlinked computer holds no Convex connection. All work happens
+//! here, in Rust commands the dashboard calls.
 //!
 //! In local mode, chosen by the host configuration file, it also runs the
 //! engine's orchestrator as its sidecar (`engine_host`), and stops it before
-//! it quits. There it also keeps the shoutout queue for the window, which
+//! it quits. There it also keeps the shoutout queue for the dashboard, which
 //! reaches it through the local-mode commands.
 //!
 //! The same crate builds two products: the companion, and the desktop app
@@ -33,7 +34,6 @@ mod tray;
 mod update;
 
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
@@ -78,21 +78,15 @@ pub struct Companion {
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
     integrations: Arc<Integrations>,
-    /// The pairing state and the ready update's version under one lock, so
-    /// every snapshot sent to the window is consistent.
+    /// The link state and the ready update's version under one lock, so
+    /// every snapshot sent to the dashboard is consistent.
     view: Mutex<WindowState>,
     /// The update behind `view.update`, kept apart because it holds the
     /// installer's bytes and only `install_update` needs them.
     ready_update: Mutex<Option<Arc<Downloaded>>>,
-    /// The pairing attempt or paired session in progress. Starting another
-    /// aborts it, so there is only ever one subscription set per token.
+    /// The paired session in progress. Starting another aborts it, so there
+    /// is only ever one subscription set per token.
     flow: Mutex<Option<JoinHandle<()>>>,
-    /// Set from a start request until its code is showing, so a double click
-    /// cannot start two pairings.
-    starting: AtomicBool,
-    /// The pending pairing's device code, kept so cancelling can tell Convex.
-    device_code: Mutex<Option<String>>,
-    verification_url: Mutex<Option<String>>,
     /// The token `begin_app_link` handed out the hash of, until
     /// `finish_app_link` stores it. Only in memory: a link that never
     /// finishes leaves nothing behind on this PC.
@@ -123,11 +117,11 @@ impl Companion {
 
     fn send_to_window(&self, view: &WindowState) {
         if let Err(err) = self.app.emit(STATE_EVENT, view) {
-            eprintln!("[companion] could not send state to the window: {err}");
+            eprintln!("[companion] could not send state to the dashboard: {err}");
         }
     }
 
-    /// Stores the state, pushes it to the window and refreshes the tray.
+    /// Stores the state, pushes it to the dashboard and refreshes the tray.
     pub fn set_state(&self, next: CompanionState) {
         let label = next.tray_label();
         let view = {
@@ -148,7 +142,7 @@ impl Companion {
     }
 
     /// Keeps a downloaded update for `install_update` and offers it in the
-    /// window and the tray. A newer download replaces an older one.
+    /// dashboard and the tray. A newer download replaces an older one.
     fn set_ready_update(&self, downloaded: Downloaded) {
         let ready = ReadyUpdate {
             product_name: self.identity.product_name().to_string(),
@@ -168,40 +162,11 @@ impl Companion {
         }
     }
 
-    /// Claims the right to start pairing: only from Unpaired or Error, and
-    /// only once until the claim is released.
-    fn try_begin_start(&self) -> bool {
-        let view = lock(&self.view);
-        if !matches!(
-            view.state,
-            CompanionState::Unpaired | CompanionState::Error { .. }
-        ) {
-            return false;
-        }
-        !self.starting.swap(true, Ordering::SeqCst)
-    }
-
-    fn end_start(&self) {
-        self.starting.store(false, Ordering::SeqCst);
-    }
-
     fn replace_flow(&self, next: Option<JoinHandle<()>>) {
         let previous = std::mem::replace(&mut *lock(&self.flow), next);
         if let Some(handle) = previous {
             handle.abort();
         }
-    }
-
-    fn verification_url(&self) -> Option<String> {
-        lock(&self.verification_url).clone()
-    }
-
-    fn set_verification_url(&self, url: Option<String>) {
-        *lock(&self.verification_url) = url;
-    }
-
-    fn set_device_code(&self, device_code: Option<String>) {
-        *lock(&self.device_code) = device_code;
     }
 
     fn pending_link(&self) -> Option<String> {
@@ -217,26 +182,20 @@ impl Companion {
         }
     }
 
-    /// Shows the companion window: pairing, its confirmation and errors need
-    /// the streamer there.
-    pub fn show_window(&self) {
-        show_window(&self.app, COMPANION_WINDOW);
-    }
-
     /// Picks up where the last run left off, from the stored token. Only a
-    /// stored token opens the Convex connection; without one the companion
-    /// stays off the cloud until a pairing starts.
+    /// stored token opens the Convex connection; without one this computer
+    /// stays off the cloud until the signed-in dashboard links it. A token
+    /// that was never confirmed belongs to a pairing nobody can finish any
+    /// more, so it is given up.
     async fn resume(self: Arc<Self>) {
         match self.credentials.load().await {
-            // The dashboard window is already open; pairing waits until the
-            // streamer asks for it.
             Ok(None) => {
                 self.set_state(CompanionState::Unpaired);
             }
+            Ok(Some(stored)) if !stored.confirmed => {
+                pairing::forget_and_unpair(&self, Some(stored.token)).await;
+            }
             Ok(Some(stored)) => {
-                if !stored.confirmed {
-                    self.show_window();
-                }
                 let session =
                     tauri::async_runtime::spawn(pairing::run_session(Arc::clone(&self), stored));
                 self.replace_flow(Some(session));
@@ -245,35 +204,28 @@ impl Companion {
                 self.set_state(CompanionState::Error {
                     message: format!("{err:#}"),
                 });
-                self.show_window();
             }
         }
     }
 
-    /// Stops whatever is running and gives up the stored token and any
-    /// pending pairing, locally at once and on the server in the background.
+    /// Stops whatever is running and gives up the stored token, locally at
+    /// once and on the server in the background.
     async fn stop_and_forget(self: &Arc<Self>) -> Result<(), String> {
         self.replace_flow(None);
-        self.end_start();
-        self.set_verification_url(None);
-        let device_code = lock(&self.device_code).take();
         let token = self
             .credentials
             .load()
             .await
             .map_err(|err| format!("{err:#}"))?
             .map(|stored| stored.token);
-        pairing::forget_and_unpair(self, token, device_code).await;
+        pairing::forget_and_unpair(self, token).await;
         Ok(())
     }
 }
 
-/// The window that shows the dashboard. Must match tauri.conf.json.
+/// The window that shows the dashboard. Must match tauri.conf.json and
+/// capabilities/dashboard.json.
 pub const DASHBOARD_WINDOW: &str = "main";
-/// The window that shows pairing and connection status. Must match
-/// tauri.conf.json and capabilities/companion.json, which grants the
-/// companion's commands to it alone.
-pub const COMPANION_WINDOW: &str = "companion";
 
 pub fn show_window(app: &AppHandle, label: &str) {
     let Some(window) = app.get_webview_window(label) else {
@@ -287,49 +239,6 @@ pub fn show_window(app: &AppHandle, label: &str) {
 #[tauri::command]
 async fn get_state(companion: State<'_, Arc<Companion>>) -> Result<WindowState, String> {
     Ok(companion.window_state())
-}
-
-/// Ignored unless the companion is unpaired or showing an error, and while
-/// another start is still asking for a code.
-#[tauri::command]
-async fn start_pairing(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    if !companion.try_begin_start() {
-        return Ok(());
-    }
-    let flow = tauri::async_runtime::spawn(pairing::pair(Arc::clone(&companion)));
-    companion.replace_flow(Some(flow));
-    Ok(())
-}
-
-#[tauri::command]
-async fn cancel_pairing(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    companion.stop_and_forget().await
-}
-
-#[tauri::command]
-async fn open_verification_url(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    pairing::open_verification_url(&companion);
-    Ok(())
-}
-
-/// The person at this PC accepts who approved the pairing; only now does the
-/// token count as this computer's.
-#[tauri::command]
-async fn confirm_pairing(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    let CompanionState::ConfirmPairing { instance_name, .. } = companion.state() else {
-        return Err("There is no pairing waiting to be confirmed.".to_string());
-    };
-    pairing::confirm(Arc::clone(&companion), instance_name).await
-}
-
-#[tauri::command]
-async fn reject_pairing(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    companion.stop_and_forget().await
-}
-
-#[tauri::command]
-async fn unpair(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    companion.stop_and_forget().await
 }
 
 /// Installs the downloaded update and restarts into it. Returns only if that
@@ -405,8 +314,7 @@ async fn test_endpoint(
         .await
 }
 
-/// What the window needs to open a capnweb session with the local engine.
-/// Only the companion window can call it (capabilities/companion.json).
+/// What the dashboard needs to open a capnweb session with the local engine.
 #[tauri::command]
 async fn local_engine_session(
     companion: State<'_, Arc<Companion>>,
@@ -657,9 +565,6 @@ pub fn run() {
                 }),
                 ready_update: Mutex::new(None),
                 flow: Mutex::new(None),
-                starting: AtomicBool::new(false),
-                device_code: Mutex::new(None),
-                verification_url: Mutex::new(None),
                 pending_link: Mutex::new(None),
                 tray: Mutex::new(None),
             });
@@ -768,9 +673,7 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
 
 #[cfg(test)]
 mod tests {
-    use woofx3_companion_core::window::{
-        COMMAND_NAMES, DASHBOARD_COMMAND_NAMES, SHARED_COMMAND_NAMES,
-    };
+    use woofx3_companion_core::window::COMMAND_NAMES;
 
     use super::convex_url::check_convex_url;
 
@@ -793,52 +696,31 @@ mod tests {
     }
 
     #[test]
-    fn test_capabilities_split_the_declared_commands_between_the_windows() {
+    fn test_dashboard_capability_grants_every_declared_command() {
         let (dashboard, dashboard_windows) =
             granted(include_str!("../capabilities/dashboard.json"));
-        let (companion, companion_windows) =
-            granted(include_str!("../capabilities/companion.json"));
-        assert!(DASHBOARD_COMMAND_NAMES
-            .iter()
-            .all(|name| COMMAND_NAMES.contains(name)));
-        assert!(SHARED_COMMAND_NAMES
-            .iter()
-            .all(|name| COMMAND_NAMES.contains(name) && !DASHBOARD_COMMAND_NAMES.contains(name)));
-        let expected_dashboard: Vec<String> = DASHBOARD_COMMAND_NAMES
-            .iter()
-            .chain(SHARED_COMMAND_NAMES)
-            .map(|name| permission(name))
-            .collect();
-        let expected_companion: Vec<String> = COMMAND_NAMES
-            .iter()
-            .filter(|name| !DASHBOARD_COMMAND_NAMES.contains(name))
-            .map(|name| permission(name))
-            .collect();
-        assert_eq!(dashboard, expected_dashboard);
-        assert_eq!(companion, expected_companion);
+        let expected: Vec<String> = COMMAND_NAMES.iter().map(|name| permission(name)).collect();
+        assert_eq!(dashboard, expected);
         assert_eq!(
             dashboard_windows,
             serde_json::json!([super::DASHBOARD_WINDOW])
         );
-        assert_eq!(
-            companion_windows,
-            serde_json::json!([super::COMPANION_WINDOW])
-        );
     }
 
+    /// tauri.woofx3.conf.json declares no windows, so the desktop app gets
+    /// these too.
     #[test]
-    fn test_product_configs_leave_creating_windows_to_setup() {
-        for config in [
-            include_str!("../tauri.conf.json"),
-            include_str!("../tauri.woofx3.conf.json"),
-        ] {
-            let config: serde_json::Value = serde_json::from_str(config).expect("valid JSON");
-            let windows = config["app"]["windows"].as_array().expect("a window list");
-            assert!(!windows.is_empty());
-            for window in windows {
-                assert_eq!(window["create"], serde_json::json!(false), "{window}");
-            }
+    fn test_product_config_leaves_creating_windows_to_setup() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("valid JSON");
+        let windows = config["app"]["windows"].as_array().expect("a window list");
+        assert!(!windows.is_empty());
+        for window in windows {
+            assert_eq!(window["create"], serde_json::json!(false), "{window}");
         }
+        let overlay: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.woofx3.conf.json")).expect("valid JSON");
+        assert!(overlay["app"]["windows"].is_null());
     }
 
     #[test]

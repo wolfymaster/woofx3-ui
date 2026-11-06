@@ -3,6 +3,7 @@ import {
   DEFAULT_FILTER_PARAMS,
   FILTER_IDS,
   type FilterId,
+  isFilterId,
   MODERATION_ACTION_KINDS,
   type ModerationAction,
   type ModerationActionKind,
@@ -122,10 +123,33 @@ export function phraseProblem(pattern: string): string | null {
   return parsed.ok ? null : `This phrase ${parsed.error}.`;
 }
 
-/** Why the config cannot be saved, by the engine's own parser, or null. */
+/** Whether the engine's own parser accepts the config, so Save may send it. */
+export function canSaveConfig(config: ModerationConfig): boolean {
+  return parseModerationConfig(config).ok;
+}
+
+/** The filter a parser error is about, from the `rules.<filter>` its path starts with. */
+const RULE_PATH = /^rules\.([a-z_]+)/;
+
+/**
+ * What the page says above the filters when the config can't be saved, or
+ * null. A banned phrase's problem is already shown beside the phrase, so the
+ * page says nothing more while one is. Any other problem names the card it is
+ * on in plain words: the parser's own message carries the config's paths.
+ */
 export function configProblem(config: ModerationConfig): string | null {
   const parsed = parseModerationConfig(config);
-  return parsed.ok ? null : parsed.error;
+  if (parsed.ok) {
+    return null;
+  }
+  const phrases = ruleOf(config, "banned_phrases");
+  const phrasesParams = phrases.params as { phrases?: readonly { pattern: string }[] };
+  if (phrases.enabled && (phrasesParams.phrases ?? []).some((phrase) => phraseProblem(phrase.pattern) !== null)) {
+    return null;
+  }
+  const filter = RULE_PATH.exec(parsed.error)?.[1];
+  const card = isFilterId(filter) ? FILTER_COPY[filter].title : "General";
+  return `Something under ${card} can't be saved yet. Check those settings, then save again.`;
 }
 
 /** Names typed one per line or separated by commas, as the config keeps them. */

@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import {
   type AppLinkStart,
   COMMANDS,
@@ -8,15 +9,15 @@ import {
   INTEGRATIONS_EVENT,
   type IntegrationsView,
   type LocalEngineSession,
-  OPEN_LOCAL_CONNECTIONS_EVENT,
   SHOUTOUT_QUEUE_EVENT,
   type ShoutoutChannel,
   type ShoutoutEnqueued,
   type ShoutoutEntryId,
   type ShoutoutQueueView,
+  STATE_EVENT,
   type TestResult,
-} from "@desktop-host/window";
-import { listen } from "@tauri-apps/api/event";
+  type WindowState,
+} from "@/desktop/generated/window";
 import { call } from "./invoke";
 
 export type {
@@ -30,6 +31,7 @@ export type {
   IntegrationsView,
   LocalEngineSession,
   ModuleView,
+  ReadyUpdate,
   RelayView,
   ShoutoutChannel,
   ShoutoutEnqueued,
@@ -37,10 +39,11 @@ export type {
   ShoutoutEntryId,
   ShoutoutQueueView,
   TestResult,
-} from "@desktop-host/window";
+  WindowState,
+} from "@/desktop/generated/window";
 
-// Calls into the desktop app's Rust host, for the dashboard window. The
-// dashboard's capability grants exactly these commands
+// Calls into the desktop app's Rust host from the dashboard, its one window.
+// The dashboard's capability grants every host command
 // (companion/src-tauri/capabilities/dashboard.json).
 
 /** The mode this run of the app started in, and whether the streamer chose it. */
@@ -130,11 +133,6 @@ export async function testEndpoint(moduleId: string, endpointId: string): Promis
   return call(COMMANDS.test_endpoint, { moduleId, endpointId });
 }
 
-/** The tray's "Local connections" item. */
-export function onOpenLocalConnections(handler: () => void): Promise<() => void> {
-  return listen(OPEN_LOCAL_CONNECTIONS_EVENT, handler);
-}
-
 // ==================== Linking the companion ====================
 // Signed in to an account, the dashboard makes this computer the instance's
 // companion. The host keeps the companion token; only its hash reaches the
@@ -167,4 +165,22 @@ export async function finishAppLink(link: FinishAppLinkArgs): Promise<void> {
 /** Opens the system browser at Convex's Twitch sign-in, bound to the nonce behind `nonceHash`. */
 export async function openTwitchSignIn(nonceHash: string): Promise<void> {
   await call(COMMANDS.open_twitch_sign_in, { nonceHash });
+}
+
+// ==================== Updates ====================
+// The host checks for, downloads and verifies updates by itself; the
+// dashboard only offers one that is ready.
+
+/** Whether this computer is linked, and the update ready to install, if any. */
+export async function appState(): Promise<WindowState> {
+  return call(COMMANDS.get_state);
+}
+
+export function onAppStateChange(handler: (state: WindowState) => void): Promise<() => void> {
+  return listen<WindowState>(STATE_EVENT, (event) => handler(event.payload));
+}
+
+/** Installs the ready update and restarts into it, so this resolves only if that fails. */
+export async function installUpdate(): Promise<void> {
+  await call(COMMANDS.install_update);
 }

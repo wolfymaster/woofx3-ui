@@ -1,9 +1,9 @@
 //! The companion's connection to Convex. The Rust process owns it, so it lives
 //! as long as the tray icon, not the window.
 //!
-//! The connection is optional: a companion that is not paired holds no
-//! Convex connection. [`CloudLink`] opens it when a pairing starts or a stored
-//! one resumes, and closes it again when the companion unpairs.
+//! The connection is optional: a computer that is not linked holds no Convex
+//! connection. [`CloudLink`] opens it when a link finishes or a stored one
+//! resumes, and closes it again when the link is given up.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -21,13 +21,9 @@ pub(crate) const CONVEX_URL: &str = env!("WOOFX3_CONVEX_URL");
 
 // Convex function names, in one place so a rename in convex/ has one place to
 // update here.
-const PAIRING_START: &str = "companionPairing:start";
-const PAIRING_STATUS: &str = "companionPairing:status";
-const PAIRING_CANCEL: &str = "companionPairing:cancel";
 const COMPANION_SELF: &str = "companions:self";
 const COMPANION_HEARTBEAT: &str = "companions:heartbeat";
 const COMPANION_UNPAIR: &str = "companions:unpair";
-const COMPANION_CONFIRM: &str = "companions:confirm";
 const INTEGRATIONS_FOR_COMPANION: &str = "companionIntegrations:forCompanion";
 const INTEGRATIONS_SET_ENDPOINT: &str = "companionIntegrations:setEndpoint";
 const INTEGRATIONS_REPORT: &str = "companionIntegrationsActions:reportDiscovered";
@@ -72,24 +68,6 @@ impl Cloud {
         self.connected.clone()
     }
 
-    pub async fn start_pairing(&self, request: &StartRequest<'_>) -> Result<PairingStart> {
-        let args = string_args(&[
-            ("deviceName", request.device_name),
-            ("companionVersion", request.companion_version),
-            ("installationId", request.installation_id),
-            ("tokenHash", request.token_hash),
-        ]);
-        let result = with_timeout(self.client.clone().action(PAIRING_START, args)).await?;
-        decode(result)
-    }
-
-    pub async fn watch_pairing_status(&self, device_code: &str) -> Result<QuerySubscription> {
-        self.client
-            .clone()
-            .subscribe(PAIRING_STATUS, string_args(&[("deviceCode", device_code)]))
-            .await
-    }
-
     pub async fn watch_self(&self, token: &str) -> Result<QuerySubscription> {
         self.client
             .clone()
@@ -111,18 +89,6 @@ impl Cloud {
         )
         .await?;
         decode::<serde_json::Value>(result).map(|_| ())
-    }
-
-    /// Marks the pairing confirmed on the server; `paired: false` means the
-    /// row is gone or its approval no longer stands.
-    pub async fn confirm(&self, token: &str) -> Result<PairedReply> {
-        let result = with_timeout(
-            self.client
-                .clone()
-                .mutation(COMPANION_CONFIRM, string_args(&[("token", token)])),
-        )
-        .await?;
-        decode(result)
     }
 
     /// The installed modules' local endpoints, as the Integrations tab lists
@@ -203,17 +169,6 @@ impl Cloud {
         .await?;
         decode_integration(result)
     }
-
-    /// Stops a pending pairing from being approved. Idempotent on the server.
-    pub async fn cancel_pairing(&self, device_code: &str) -> Result<()> {
-        let result = with_timeout(
-            self.client
-                .clone()
-                .mutation(PAIRING_CANCEL, string_args(&[("deviceCode", device_code)])),
-        )
-        .await?;
-        decode::<serde_json::Value>(result).map(|_| ())
-    }
 }
 
 /// Whether this host talks to Convex. It starts [`LinkState::Dormant`], moves
@@ -274,45 +229,12 @@ pub struct CloudSession {
     pub token: String,
 }
 
-pub struct StartRequest<'a> {
-    pub device_name: &'a str,
-    pub companion_version: &'a str,
-    pub installation_id: &'a str,
-    pub token_hash: &'a str,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PairingStart {
-    pub device_code: String,
-    pub user_code: String,
-    pub verification_url: String,
-    pub expires_in_ms: f64,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum PairingStatus {
-    Pending,
-    Approved,
-    Denied,
-    Cancelled,
-    Unknown,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PairingStatusReply {
-    pub status: PairingStatus,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanionInfo {
     pub companion_id: String,
     pub instance_id: String,
     pub instance_name: String,
-    pub approved_by_name: String,
-    pub confirmed: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -598,34 +520,15 @@ mod tests {
             ("companionId", Value::from("c1")),
             ("instanceId", Value::from("i1")),
             ("instanceName", Value::from("Main")),
-            ("approvedByName", Value::from("Wolfy")),
-            ("confirmed", Value::from(false)),
         ]));
         match paired {
             SelfUpdate::Paired(info) => {
                 assert_eq!(info.companion_id, "c1");
                 assert_eq!(info.instance_id, "i1");
                 assert_eq!(info.instance_name, "Main");
-                assert_eq!(info.approved_by_name, "Wolfy");
             }
             other => panic!("expected Paired, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn decodes_start_and_status_replies() {
-        let start: PairingStart = decode(object(&[
-            ("deviceCode", Value::from("d")),
-            ("userCode", Value::from("BCDF-GHJK")),
-            ("verificationUrl", Value::from("https://example.test")),
-            ("expiresAt", Value::from(1.0)),
-            ("expiresInMs", Value::from(600000.0)),
-        ]))
-        .expect("start decodes");
-        assert_eq!(start.expires_in_ms, 600000.0);
-        let status: PairingStatusReply =
-            decode(object(&[("status", Value::from("denied"))])).expect("status");
-        assert_eq!(status.status, PairingStatus::Denied);
     }
 
     #[test]

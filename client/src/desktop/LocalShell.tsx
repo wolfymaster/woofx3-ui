@@ -5,14 +5,17 @@ import { Uptime } from "@/components/common/uptime";
 import { isSectionActive } from "@/components/layout/nav-config";
 import { SectionSidebar } from "@/components/layout/section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "@/components/layout/status-bar-slot";
+import { UtilityNav } from "@/components/layout/utility-nav";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { cn } from "@/lib/utils";
-import { LOCAL_NAV_SECTIONS } from "./local-routes";
+import { LOCAL_NAV_SECTIONS, LOCAL_UTILITY_SECTIONS } from "./local-routes";
+import UpdateBanner from "./UpdateBanner";
 
 function LocalHeader({ location }: { location: string }) {
   return (
@@ -35,6 +38,8 @@ function LocalHeader({ location }: { location: string }) {
           );
         })}
       </nav>
+      <UtilityNav sections={LOCAL_UTILITY_SECTIONS} location={location} />
+      <Separator orientation="vertical" className="h-6 hidden md:block" />
       <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0" data-testid="local-mode-badge">
         <Monitor className="h-4 w-4" />
         <span>On this computer</span>
@@ -94,7 +99,9 @@ function LocalStatusBar() {
 export function LocalShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   useLiveConnection();
-  const activeSection = LOCAL_NAV_SECTIONS.find((section) => isSectionActive(section, location));
+  const activeSection = [...LOCAL_NAV_SECTIONS, ...LOCAL_UTILITY_SECTIONS].find((section) =>
+    isSectionActive(section, location)
+  );
 
   return (
     <StatusBarSlotProvider>
@@ -107,6 +114,7 @@ export function LocalShell({ children }: { children: ReactNode }) {
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
         <LocalStatusBar />
+        <UpdateBanner />
       </div>
     </StatusBarSlotProvider>
   );

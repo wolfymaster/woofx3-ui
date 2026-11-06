@@ -90,18 +90,78 @@ export function viewerColumnId(fields: readonly FormField[]): string {
   return columnIdFor(VIEWER_COLUMN_ID, new Set(fields.map((field) => field.id)));
 }
 
+/** Whether answers to `field` can be written to `column`: text takes any typed answer or choice. */
+function columnFits(column: DatabaseColumn, field: FormField): boolean {
+  switch (field.type) {
+    case "checkbox":
+      return column.type === "boolean";
+    case "text":
+    case "textarea":
+      return column.type === "text";
+    case "select": {
+      const values = new Set((column.options ?? []).map((option) => option.value));
+      return (
+        column.type === "text" ||
+        (column.type === "select" && field.options.every((option) => values.has(option.value)))
+      );
+    }
+  }
+}
+
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * The existing column each question's answers fill, by question id. A column
+ * with the question's id is always its own; otherwise a column the streamer
+ * named like the question is reused when its type fits, so a hand-made
+ * "Tickets" column is not joined by a second one. Each column fills at most one
+ * question, the viewer column none, and a question with no match is left out.
+ */
+export function questionColumns(
+  fields: readonly FormField[],
+  columns: readonly DatabaseColumn[]
+): Map<string, DatabaseColumn> {
+  const matched = new Map<string, DatabaseColumn>();
+  // The viewer column holds who sent the answers, never an answer.
+  const claimed = new Set([viewerColumnId(fields)]);
+  for (const field of fields) {
+    const column = columns.find((candidate) => candidate.id === field.id);
+    if (column) {
+      matched.set(field.id, column);
+      claimed.add(column.id);
+    }
+  }
+  for (const field of fields) {
+    if (matched.has(field.id)) {
+      continue;
+    }
+    const column = columns.find(
+      (candidate) =>
+        !claimed.has(candidate.id) && sameName(candidate.label, field.label || field.id) && columnFits(candidate, field)
+    );
+    if (column) {
+      matched.set(field.id, column);
+      claimed.add(column.id);
+    }
+  }
+  return matched;
+}
+
 /**
  * The columns a database keeping a form's answers needs: `existing`, then a
- * column for each question it lacks and the viewer's name, all private. A
- * column already there is left as it is, so running this again adds only new
- * questions.
+ * column for each question it has none for (see questionColumns) and the
+ * viewer's name, all private. A column already there is left as it is, so
+ * running this again adds only new questions.
  */
 export function formDatabaseColumns(
   fields: readonly FormField[],
   existing: readonly DatabaseColumn[]
 ): { columns: DatabaseColumn[]; added: DatabaseColumn[] } {
   const have = new Set(existing.map((column) => column.id));
-  const added = fields.filter((field) => !have.has(field.id)).map(questionColumn);
+  const matched = questionColumns(fields, existing);
+  const added = fields.filter((field) => !matched.has(field.id)).map(questionColumn);
   const viewerId = viewerColumnId(fields);
   if (!have.has(viewerId)) {
     added.push({ id: viewerId, label: "Viewer", type: "text", public: false });
@@ -109,20 +169,17 @@ export function formDatabaseColumns(
   return { columns: [...existing, ...added], added };
 }
 
-/** What a `database.insert` step writes for a form: each question's answer, and who sent it. */
+/** What a `database.insert` step writes for a form: each question's answer in its column, and who sent it. */
 export function formDatabaseValues(
   fields: readonly FormField[],
   columns: readonly DatabaseColumn[]
 ): Record<string, string> {
-  const ids = new Set(columns.map((column) => column.id));
   const values: Record<string, string> = {};
-  for (const field of fields) {
-    if (ids.has(field.id)) {
-      values[field.id] = formAnswerReference(field.id);
-    }
+  for (const [fieldId, column] of questionColumns(fields, columns)) {
+    values[column.id] = formAnswerReference(fieldId);
   }
   const viewerId = viewerColumnId(fields);
-  if (ids.has(viewerId)) {
+  if (columns.some((column) => column.id === viewerId)) {
     values[viewerId] = VIEWER_NAME_REFERENCE;
   }
   return values;
@@ -158,6 +215,16 @@ export function formDatabaseWorkflowTree(options: FormDatabaseWorkflowOptions): 
   };
 }
 
+function savesForm(trigger: EventTrigger, formId: string): boolean {
+  return trigger.conditions.some((condition) => condition.field === FORM_CONDITION_FIELD && condition.value === formId);
+}
+
+function insertTasks(trigger: EventTrigger): WorkflowDefinition["tasks"] {
+  return trigger.definition.tasks.filter(
+    (candidate) => (candidate as { $ref?: unknown }).$ref === DATABASE_INSERT_ACTION_REF
+  );
+}
+
 /**
  * The workflow saving `formId`'s answers to `databaseId`, and its insert
  * step, so running the shortcut again updates that step instead of adding a
@@ -169,18 +236,36 @@ export function formDatabaseWorkflow(
   databaseId: string
 ): { trigger: EventTrigger; taskId: string } | null {
   for (const trigger of triggers) {
-    if (
-      !trigger.conditions.some((condition) => condition.field === FORM_CONDITION_FIELD && condition.value === formId)
-    ) {
+    if (!savesForm(trigger, formId)) {
       continue;
     }
-    const task = trigger.definition.tasks.find(
-      (candidate) =>
-        (candidate as { $ref?: unknown }).$ref === DATABASE_INSERT_ACTION_REF &&
-        candidate.parameters?.target === databaseId
-    );
+    const task = insertTasks(trigger).find((candidate) => candidate.parameters?.target === databaseId);
     if (task) {
       return { trigger, taskId: task.id };
+    }
+  }
+  return null;
+}
+
+/**
+ * The database `formId`'s answers already save to, of those in `databases`, so
+ * the shortcut opens on it and a second run updates that workflow instead of
+ * making a new database. Null when they save to none of them.
+ */
+export function formDatabaseTarget(
+  triggers: readonly EventTrigger[],
+  formId: string,
+  databases: readonly string[]
+): string | null {
+  for (const trigger of triggers) {
+    if (!savesForm(trigger, formId)) {
+      continue;
+    }
+    for (const task of insertTasks(trigger)) {
+      const target = task.parameters?.target;
+      if (typeof target === "string" && databases.includes(target)) {
+        return target;
+      }
     }
   }
   return null;

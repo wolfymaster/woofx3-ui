@@ -18,16 +18,14 @@ fn wire<T: Serialize>(value: &T) -> serde_json::Value {
 #[test]
 fn test_window_wire_tagged_unions_carry_their_kind_and_camel_case_fields() {
     assert_eq!(
-        wire(&CompanionState::Pairing {
-            user_code: "BCDF-GHJK".into(),
-            verification_url: "https://example.test/pair".into(),
-            expires_at: 1_700_000_000_000,
+        wire(&CompanionState::Paired {
+            instance_name: "Main".into(),
+            cloud_connected: true,
         }),
         json!({
-            "kind": "pairing",
-            "userCode": "BCDF-GHJK",
-            "verificationUrl": "https://example.test/pair",
-            "expiresAt": 1_700_000_000_000u64,
+            "kind": "paired",
+            "instanceName": "Main",
+            "cloudConnected": true,
         })
     );
     assert_eq!(
