@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
@@ -18,27 +18,29 @@ const ENV = {
   ORG_PORTAL_URL: "https://woofx3.tv/org",
 };
 
-let saved: Record<string, string | undefined> = {};
-let quiet: ReturnType<typeof spyOn>[] = [];
-
-beforeEach(() => {
-  saved = Object.fromEntries(Object.keys(ENV).map((key) => [key, process.env[key]]));
+/** Runs `fn` with the mail service configured and billing's warning logs muted, restoring both after. */
+async function withMailService<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = Object.fromEntries(Object.keys(ENV).map((key) => [key, process.env[key]]));
   Object.assign(process.env, ENV);
-  quiet = [spyOn(logger, "warn").mockImplementation(() => {}), spyOn(logger, "error").mockImplementation(() => {})];
-});
-
-afterEach(() => {
-  for (const [key, value] of Object.entries(saved)) {
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
+  const muted = [
+    spyOn(logger, "warn").mockImplementation(() => {}),
+    spyOn(logger, "error").mockImplementation(() => {}),
+  ];
+  try {
+    return await fn();
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    for (const spy of muted) {
+      spy.mockRestore();
     }
   }
-  for (const spy of quiet) {
-    spy.mockRestore();
-  }
-});
+}
 
 async function trialOrg(t: Backend, ownerEmail: string | undefined) {
   return t.run(async (ctx) => {
@@ -125,13 +127,15 @@ describe("warning email", () => {
     const org = await trialOrg(t, "owner@example.com");
     const fetchStub = stubFetch(() => new Response("down", { status: 503 }));
     try {
-      await t.action(internal.billing.sendWarningEmail, {
-        template: "billing-trial-ending",
-        to: "owner@example.com",
-        variables: { orgName: "Wolfy Streams", planName: "Starter", dateIso: new Date(T0).toISOString() },
-        idempotencyKey: `${org.transitionId}:billing-trial-ending`,
-        attempt: 0,
-      });
+      await withMailService(() =>
+        t.action(internal.billing.sendWarningEmail, {
+          template: "billing-trial-ending",
+          to: "owner@example.com",
+          variables: { orgName: "Wolfy Streams", planName: "Starter", dateIso: new Date(T0).toISOString() },
+          idempotencyKey: `${org.transitionId}:billing-trial-ending`,
+          attempt: 0,
+        })
+      );
     } finally {
       fetchStub.restore();
     }
@@ -153,13 +157,15 @@ describe("warning email", () => {
       Response.json({ error: { code: "unknown_template", message: "no such template" } }, { status: 422 })
     );
     try {
-      await t.action(internal.billing.sendWarningEmail, {
-        template: "billing-trial-ending",
-        to: "owner@example.com",
-        variables: { orgName: "Org", planName: "Starter", dateIso: new Date(T0).toISOString() },
-        idempotencyKey: `${org.transitionId}:billing-trial-ending`,
-        attempt: 0,
-      });
+      await withMailService(() =>
+        t.action(internal.billing.sendWarningEmail, {
+          template: "billing-trial-ending",
+          to: "owner@example.com",
+          variables: { orgName: "Org", planName: "Starter", dateIso: new Date(T0).toISOString() },
+          idempotencyKey: `${org.transitionId}:billing-trial-ending`,
+          attempt: 0,
+        })
+      );
     } finally {
       fetchStub.restore();
     }
