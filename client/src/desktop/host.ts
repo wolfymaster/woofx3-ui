@@ -167,6 +167,16 @@ export async function openTwitchSignIn(nonceHash: string): Promise<void> {
   await call(COMMANDS.open_twitch_sign_in, { nonceHash });
 }
 
+// ==================== External links ====================
+// The webview opens no new windows, so a link that leaves the app goes to the
+// system browser through the host, which opens only web pages
+// (external-links.ts sends every such link here).
+
+/** Opens `url` in the system browser; the host refuses anything but an http or https page. */
+export async function openExternalUrl(url: string): Promise<void> {
+  await call(COMMANDS.open_external_url, { url });
+}
+
 // ==================== Updates ====================
 // The host checks for, downloads and verifies updates by itself; the
 // dashboard only offers one that is ready.
