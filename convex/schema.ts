@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { appliedDiscountValidator } from "./lib/billing/provider";
 import {
   lifecycleEventKindValidator,
   lifecycleReasonValidator,
@@ -1577,6 +1578,8 @@ export default defineSchema({
     nextCheckAt: v.optional(v.number()),
     // AddOnKey values, validated against ADD_ONS on write.
     addOns: v.array(v.string()),
+    // The provider's active discount, mirrored for display.
+    discount: v.optional(appliedDiscountValidator),
     provider: v.optional(v.literal("stripe")),
     providerCustomerId: v.optional(v.string()),
     providerSubscriptionId: v.optional(v.string()),
@@ -1621,7 +1624,8 @@ export default defineSchema({
     schemaVersion: v.number(),
     rawPayload: v.string(),
     accountId: v.optional(v.id("accounts")),
-    outcome: v.union(v.literal("applied"), v.literal("ignored"), v.literal("failed")),
+    // "received" until it has been processed; a failed one is processed again on redelivery.
+    outcome: v.union(v.literal("received"), v.literal("applied"), v.literal("ignored"), v.literal("failed")),
     error: v.optional(v.string()),
     receivedAt: v.number(),
   })
