@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { canReadChannelRole, normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   type ActionCtx,
   action,
@@ -12,9 +12,19 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
+import { requireInstanceRole } from "./lib/instanceAccess";
+import { roleSatisfies } from "./lib/instanceRoles";
+import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import { orgCan, orgRoleOf, requireOrgAction, requireOrgActionFor } from "./lib/orgRoles";
-import { canAccessAccount, grantInstanceAccessForAccount, normalizeEmail } from "./lib/teamAccess";
+import { requireOrgAction } from "./lib/orgRoles";
+import {
+  applyOrgRoleToEngines,
+  canAccessAccount,
+  getAccountMembership,
+  getInstanceMembership,
+  grantEngineRole,
+  normalizeEmail,
+} from "./lib/teamAccess";
 import {
   fetchHasChannelRole,
   fetchTwitchAppCredentials,
@@ -55,6 +65,8 @@ export const listForAccount = query({
         platformDisplayName: r.platformDisplayName,
         platformProfileImageUrl: r.platformProfileImageUrl,
         role: r.role,
+        instanceId: r.instanceId ?? null,
+        engineRole: r.engineRole ?? null,
         createdAt: r.createdAt,
         expiresAt: r.expiresAt,
       }));
@@ -79,9 +91,12 @@ export const previewByToken = query({
       return null;
     }
     const account = await ctx.db.get(inv.accountId);
+    const engine = await invitationEngine(ctx, inv);
+    const instance = engine ? await ctx.db.get(engine.instanceId) : null;
     const target = invitationTarget(inv);
     return {
       accountName: account?.name ?? null,
+      engineName: instance?.name ?? null,
       target:
         target.kind === "email"
           ? { kind: "email" as const }
@@ -105,38 +120,33 @@ interface TwitchLinkSummary {
 }
 
 /**
- * Whether the user may manage the account's team and, when they may, the
- * account's Twitch link (if any) for a lookup to borrow. Tokens stay out of
- * the result: the action fetches them through `ensureFreshTwitchToken`.
+ * The engine's org and Twitch link (if any) for a lookup to borrow, when the
+ * user is an admin of the engine, or null when they aren't. Tokens stay out
+ * of the result: the action fetches them through `ensureFreshTwitchToken`.
  */
-export const teamManagerContext = internalQuery({
-  args: { accountId: v.id("accounts"), userId: v.id("users") },
-  handler: async (ctx, args): Promise<{ twitchLink: TwitchLinkSummary | null } | null> => {
-    const account = await ctx.db.get(args.accountId);
-    if (account === null || !orgCan(await orgRoleOf(ctx, account, args.userId), "manageMembers")) {
+export const engineInviterContext = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, args): Promise<{ accountId: Id<"accounts">; twitchLink: TwitchLinkSummary | null } | null> => {
+    const membership = await getInstanceMembership(ctx, args.instanceId, args.userId);
+    const instance = await ctx.db.get(args.instanceId);
+    if (instance === null || !roleSatisfies(membership?.role, "admin")) {
       return null;
     }
-    const instances = await ctx.db
-      .query("instances")
-      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
-      .take(10);
-    for (const instance of instances) {
-      const link = await ctx.db
-        .query("platformLinks")
-        .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
-        .filter((q) => q.eq(q.field("platform"), "twitch"))
-        .first();
-      if (link) {
-        return { twitchLink: { instanceId: instance._id, scopes: link.scopes ?? [] } };
-      }
-    }
-    return { twitchLink: null };
+    const link = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
+      .filter((q) => q.eq(q.field("platform"), "twitch"))
+      .first();
+    return {
+      accountId: instance.accountId,
+      twitchLink: link ? { instanceId: instance._id, scopes: link.scopes ?? [] } : null,
+    };
   },
 });
 
 async function twitchInviteRefusal(
   ctx: QueryCtx,
-  accountId: Id<"accounts">,
+  instance: Doc<"instances">,
   inviterUserId: Id<"users">,
   twitchUserId: string
 ): Promise<string | null> {
@@ -146,37 +156,43 @@ async function twitchInviteRefusal(
     .first();
   if (authAccount) {
     if (authAccount.userId === inviterUserId) {
-      return "You're already on this team";
+      return "You're already on this engine";
     }
-    const account = await ctx.db.get(accountId);
-    const isOwner = account?.ownerId === authAccount.userId;
-    const membership = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_account_user", (q) => q.eq("accountId", accountId).eq("userId", authAccount.userId))
-      .first();
-    if (isOwner || membership) {
-      return "That Twitch user is already on this team";
+    if ((await getInstanceMembership(ctx, instance._id, authAccount.userId)) !== null) {
+      return "That Twitch user is already on this engine";
     }
   }
 
   const invites = await ctx.db
     .query("invitations")
     .withIndex("by_account_platform_user", (q) =>
-      q.eq("accountId", accountId).eq("platform", "twitch").eq("platformUserId", twitchUserId)
+      q.eq("accountId", instance.accountId).eq("platform", "twitch").eq("platformUserId", twitchUserId)
     )
     .take(50);
-  const now = Date.now();
-  if (invites.some((r) => r.status === "pending" && r.expiresAt > now)) {
-    return "An invitation is already pending for that Twitch account";
+  if (invites.some((r) => isPendingFor(r, instance._id, Date.now()))) {
+    return "An invitation to this engine is already pending for that Twitch account";
   }
   return null;
 }
 
-/** Why the Twitch user cannot be invited to the account, or null when they can. */
+/** A live invitation to this engine. An org-wide one from before engine invites counts for every engine. */
+function isPendingFor(invitation: Doc<"invitations">, instanceId: Id<"instances">, now: number): boolean {
+  return (
+    invitation.status === "pending" &&
+    invitation.expiresAt > now &&
+    (invitation.instanceId === undefined || invitation.instanceId === instanceId)
+  );
+}
+
+/** Why the Twitch user cannot be invited to the engine, or null when they can. */
 export const twitchInviteRefusalFor = internalQuery({
-  args: { accountId: v.id("accounts"), inviterUserId: v.id("users"), twitchUserId: v.string() },
+  args: { instanceId: v.id("instances"), inviterUserId: v.id("users"), twitchUserId: v.string() },
   handler: async (ctx, args): Promise<string | null> => {
-    return twitchInviteRefusal(ctx, args.accountId, args.inviterUserId, args.twitchUserId);
+    const instance = await ctx.db.get(args.instanceId);
+    if (instance === null) {
+      throw new Error("Engine not found");
+    }
+    return twitchInviteRefusal(ctx, instance, args.inviterUserId, args.twitchUserId);
   },
 });
 
@@ -209,17 +225,17 @@ async function lookupCredentials(ctx: ActionCtx, twitchLink: TwitchLinkSummary |
   return { credentials: await fetchTwitchAppCredentials(), broadcasterUserId: null };
 }
 
-async function requireTeamManager(
+async function requireEngineInviter(
   ctx: ActionCtx,
-  accountId: Id<"accounts">
+  instanceId: Id<"instances">
 ): Promise<{ userId: Id<"users">; twitchLink: TwitchLinkSummary | null }> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Not authenticated");
   }
-  const context = await ctx.runQuery(internal.invitations.teamManagerContext, { accountId, userId });
+  const context = await ctx.runQuery(internal.invitations.engineInviterContext, { instanceId, userId });
   if (!context) {
-    throw new Error("Not authorized");
+    throw new Error("Not authorized for this instance");
   }
   return { userId, twitchLink: context.twitchLink };
 }
@@ -235,13 +251,13 @@ export interface TwitchInviteCandidate extends TwitchUser {
 
 /**
  * The person a Twitch login names, for the inviter to confirm before an
- * invitation exists. Limited to people who manage the account's team so it
- * cannot serve as an open Twitch lookup.
+ * invitation exists. Limited to the engine's admins so it cannot serve as an
+ * open Twitch lookup.
  */
 export const lookupTwitchUser = action({
-  args: { accountId: v.id("accounts"), login: v.string() },
+  args: { instanceId: v.id("instances"), login: v.string() },
   handler: async (ctx, args): Promise<TwitchInviteCandidate | null> => {
-    const { userId, twitchLink } = await requireTeamManager(ctx, args.accountId);
+    const { userId, twitchLink } = await requireEngineInviter(ctx, args.instanceId);
 
     const login = normalizeTwitchLogin(args.login);
     if (!login) {
@@ -255,7 +271,7 @@ export const lookupTwitchUser = action({
     }
 
     const refusal: string | null = await ctx.runQuery(internal.invitations.twitchInviteRefusalFor, {
-      accountId: args.accountId,
+      instanceId: args.instanceId,
       inviterUserId: userId,
       twitchUserId: user.twitchUserId,
     });
@@ -281,37 +297,46 @@ export const lookupTwitchUser = action({
 // Create
 // ---------------------------------------------------------------------------
 
+const TARGET_VALIDATOR = v.union(
+  v.object({ kind: v.literal("email"), email: v.string() }),
+  v.object({
+    kind: v.literal("twitch"),
+    twitchUserId: v.string(),
+    login: v.string(),
+    displayName: v.string(),
+    profileImageUrl: v.optional(v.string()),
+  })
+);
+
 /**
  * Writes the invitation after re-checking, inside the transaction, that the
- * inviter still manages the team and the invitee is neither on it nor already
- * invited. A Twitch target's profile comes from the server's own Helix lookup
- * in `create`, never from the client.
+ * inviter is still an admin of the engine and the invitee is neither on it
+ * nor already invited to it. A Twitch target's profile comes from the
+ * server's own Helix lookup in `create`, never from the client.
  */
 export const insertInvitation = internalMutation({
   args: {
-    accountId: v.id("accounts"),
+    instanceId: v.id("instances"),
     inviterUserId: v.id("users"),
-    role: ROLE_VALIDATOR,
-    target: v.union(
-      v.object({ kind: v.literal("email"), email: v.string() }),
-      v.object({
-        kind: v.literal("twitch"),
-        twitchUserId: v.string(),
-        login: v.string(),
-        displayName: v.string(),
-        profileImageUrl: v.optional(v.string()),
-      })
-    ),
+    engineRole: ROLE_VALIDATOR,
+    target: TARGET_VALIDATOR,
   },
   handler: async (ctx, args): Promise<{ token: string; expiresAt: number }> => {
-    await requireOrgActionFor(ctx, args.accountId, args.inviterUserId, "manageMembers");
+    const instance = await ctx.db.get(args.instanceId);
+    const inviter = await getInstanceMembership(ctx, args.instanceId, args.inviterUserId);
+    if (instance === null || !roleSatisfies(inviter?.role, "admin")) {
+      throw new Error("Not authorized for this instance");
+    }
 
     const now = Date.now();
     const token = randomToken();
     const expiresAt = now + INVITATION_LIFETIME_MS;
     const common = {
-      accountId: args.accountId,
-      role: args.role,
+      accountId: instance.accountId,
+      instanceId: instance._id,
+      engineRole: args.engineRole,
+      // Access is the engine grant; the invitee joins the org as a member.
+      role: "member" as const,
       token,
       invitedByUserId: args.inviterUserId,
       status: "pending" as const,
@@ -325,33 +350,30 @@ export const insertInvitation = internalMutation({
         throw new Error("Invalid email");
       }
 
-      const memberRows = await ctx.db
-        .query("accountMembers")
-        .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+      const engineMembers = await ctx.db
+        .query("instanceMembers")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
         .collect();
-      for (const row of memberRows) {
+      for (const row of engineMembers) {
         const user = await ctx.db.get(row.userId);
-        if (!user) continue;
-        const u = user as Record<string, unknown>;
-        const em = typeof u.email === "string" ? normalizeEmail(u.email) : "";
-        if (em === normalized) {
-          throw new Error("That user is already a member of this account");
+        if (user?.email !== undefined && normalizeEmail(user.email) === normalized) {
+          throw new Error("That user is already on this engine");
         }
       }
 
       const existing = await ctx.db
         .query("invitations")
-        .withIndex("by_account_email", (q) => q.eq("accountId", args.accountId).eq("email", normalized))
+        .withIndex("by_account_email", (q) => q.eq("accountId", instance.accountId).eq("email", normalized))
         .collect();
-      if (existing.some((r) => r.status === "pending" && r.expiresAt > now)) {
-        throw new Error("An invitation is already pending for this email");
+      if (existing.some((r) => isPendingFor(r, instance._id, now))) {
+        throw new Error("An invitation to this engine is already pending for this email");
       }
 
       await ctx.db.insert("invitations", { ...common, email: normalized });
       return { token, expiresAt };
     }
 
-    const refusal = await twitchInviteRefusal(ctx, args.accountId, args.inviterUserId, args.target.twitchUserId);
+    const refusal = await twitchInviteRefusal(ctx, instance, args.inviterUserId, args.target.twitchUserId);
     if (refusal) {
       throw new Error(refusal);
     }
@@ -369,27 +391,28 @@ export const insertInvitation = internalMutation({
 });
 
 /**
- * An invitation for one person, by email or by Twitch account. A Twitch target
- * is given by id only; the login, name and avatar stored with it come from a
- * fresh Helix lookup here, so a client cannot label an invite as someone else.
+ * An invitation to one engine for one person, by email or by Twitch account.
+ * A Twitch target is given by id only; the login, name and avatar stored with
+ * it come from a fresh Helix lookup here, so a client cannot label an invite
+ * as someone else.
  */
 export const create = action({
   args: {
-    accountId: v.id("accounts"),
-    role: ROLE_VALIDATOR,
+    instanceId: v.id("instances"),
+    engineRole: ROLE_VALIDATOR,
     target: v.union(
       v.object({ kind: v.literal("email"), email: v.string() }),
       v.object({ kind: v.literal("twitch"), twitchUserId: v.string() })
     ),
   },
   handler: async (ctx, args): Promise<{ token: string; expiresAt: number }> => {
-    const { userId, twitchLink } = await requireTeamManager(ctx, args.accountId);
+    const { userId, twitchLink } = await requireEngineInviter(ctx, args.instanceId);
 
     if (args.target.kind === "email") {
       return ctx.runMutation(internal.invitations.insertInvitation, {
-        accountId: args.accountId,
+        instanceId: args.instanceId,
         inviterUserId: userId,
-        role: args.role,
+        engineRole: args.engineRole,
         target: args.target,
       });
     }
@@ -400,9 +423,9 @@ export const create = action({
       throw new Error("No Twitch user by that name");
     }
     return ctx.runMutation(internal.invitations.insertInvitation, {
-      accountId: args.accountId,
+      instanceId: args.instanceId,
       inviterUserId: userId,
-      role: args.role,
+      engineRole: args.engineRole,
       target: {
         kind: "twitch",
         twitchUserId: user.twitchUserId,
@@ -424,7 +447,12 @@ export const revoke = mutation({
     const inv = await ctx.db.get(args.invitationId);
     if (!inv) throw new Error("Invitation not found");
 
-    await requireOrgAction(ctx, inv.accountId, "manageMembers");
+    // An engine's admins manage its invitations; an org-wide one is the org's.
+    if (inv.instanceId === undefined) {
+      await requireOrgAction(ctx, inv.accountId, "manageMembers");
+    } else {
+      await requireInstanceRole(ctx, inv.instanceId, "admin");
+    }
 
     if (inv.status !== "pending") {
       throw new Error("Invitation is no longer pending");
@@ -451,7 +479,6 @@ export const accept = mutation({
 
     const now = Date.now();
     if (inv.expiresAt <= now) {
-      await ctx.db.patch(inv._id, { status: "expired" });
       throw new Error("This invitation has expired");
     }
 
@@ -471,35 +498,31 @@ export const accept = mutation({
       throw new Error(refusal);
     }
 
-    const existingMember = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_account_user", (q) => q.eq("accountId", inv.accountId).eq("userId", userId))
-      .first();
-
-    // The account's engine, so the invitee lands on it. An account has one
-    // instance; a registered one is preferred in case an unfinished one lingers.
-    const accountInstances = await ctx.db
-      .query("instances")
-      .withIndex("by_account", (q) => q.eq("accountId", inv.accountId))
-      .take(10);
-    const instanceId = (accountInstances.find((instance) => instance.clientId) ?? accountInstances[0])?._id ?? null;
-
-    if (existingMember) {
-      await ctx.db.patch(inv._id, { status: "accepted" });
-      return { accountId: inv.accountId, instanceId, alreadyMember: true as const };
+    const account = await ctx.db.get(inv.accountId);
+    if (account === null) {
+      throw new Error("Invalid or expired invitation");
+    }
+    const engine = await invitationEngine(ctx, inv);
+    if (engine === null) {
+      throw new Error("The engine this invitation was for no longer exists");
     }
 
-    await ctx.db.insert("accountMembers", {
-      accountId: inv.accountId,
-      userId,
-      role: inv.role,
-      createdAt: now,
-    });
-
-    await grantInstanceAccessForAccount(ctx, inv.accountId, userId, inv.role);
+    const existingMember =
+      account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
+    if (account.ownerId !== userId) {
+      await grantEngineRole(ctx, engine.instanceId, userId, engine.engineRole);
+    }
+    // Only an org-wide invitation from before engine invites can say "admin".
+    if (!existingMember && inv.role === "admin") {
+      const row = await getAccountMembership(ctx, inv.accountId, userId);
+      if (row === null) {
+        throw new Error(`accept: ${userId} has no org membership after the engine grant`);
+      }
+      await ctx.db.patch(row._id, { role: "admin" });
+      await applyOrgRoleToEngines(ctx, inv.accountId, userId, "admin");
+    }
 
     await ctx.db.patch(inv._id, { status: "accepted" });
-
-    return { accountId: inv.accountId, instanceId, alreadyMember: false as const };
+    return { accountId: inv.accountId, instanceId: engine.instanceId, alreadyMember: existingMember };
   },
 });

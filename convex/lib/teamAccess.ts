@@ -56,22 +56,6 @@ export async function canAccessAccount(
   return m !== null;
 }
 
-/** Grants every engine of the org to the user at `role`, as an org-wide invitation does. */
-export async function grantInstanceAccessForAccount(
-  ctx: MutationCtx,
-  accountId: Id<"accounts">,
-  userId: Id<"users">,
-  role: "admin" | "member"
-) {
-  const instances = await ctx.db
-    .query("instances")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .collect();
-  for (const inst of instances) {
-    await grantEngineRole(ctx, inst._id, userId, role);
-  }
-}
-
 /**
  * Gives the user `role` on the engine, the one way engine access is granted.
  * Holds the membership invariants:
