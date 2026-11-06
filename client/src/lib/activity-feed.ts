@@ -1,6 +1,7 @@
 import type { EventLogSelection, StreamEventFrame } from "@woofx3/api";
 import { alertEvent } from "@/lib/alert-envelope";
 import type { EventFacts } from "@/lib/alert-summary";
+import { eventMatchesPattern } from "@/lib/wait-event";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
 /**
@@ -197,6 +198,30 @@ export function triggersByEventType(presets: readonly TriggerPreset[]): Map<stri
     }
   }
   return triggers;
+}
+
+/**
+ * The trigger an event type is read through: the one declaring exactly that type, else
+ * one whose wildcard covers it. A chat command fires on `chat.command.hug`, which only
+ * the catalog's `chat.command.*` trigger names.
+ */
+export function triggerForEvent(
+  triggers: ReadonlyMap<string, TriggerPreset>,
+  type: string | null | undefined
+): TriggerPreset | undefined {
+  if (!type) {
+    return undefined;
+  }
+  const exact = triggers.get(type);
+  if (exact) {
+    return exact;
+  }
+  for (const [pattern, trigger] of triggers) {
+    if (eventMatchesPattern(pattern, type)) {
+      return trigger;
+    }
+  }
+  return undefined;
 }
 
 /** Engines that predate the trigger's `transport` field only sent eventbus triggers. */
