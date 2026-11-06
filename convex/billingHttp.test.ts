@@ -53,11 +53,7 @@ function deliver(t: Backend, provider: FakeBillingProvider, eventId: string) {
     type: "invoice.paid",
     subscriptionRef: "sub_1",
   });
-  return handleBillingWebhook(
-    { provider, runMutation: t.mutation, now: () => T0 },
-    body,
-    SIGNED
-  );
+  return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
 }
 
 async function events(t: Backend) {

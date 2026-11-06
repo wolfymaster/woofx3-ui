@@ -325,7 +325,8 @@ export const applyProviderSubscription = internalMutation({
       origin: "signup",
       provider: providerViewFor(subscription),
     });
-    const row = await subscriptionFor(ctx, subscription.accountId);
+    // An illegal event from an org with no row leaves nothing to mirror onto.
+    const row = result.ok ? result.subscription : before;
     if (row !== null) {
       await ctx.db.patch(row._id, {
         interval: subscription.interval,
