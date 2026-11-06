@@ -31,12 +31,7 @@ export function TestEventPicker({ sections, selectedId, onSelect, id = "test-eve
       <div className="space-y-2 border-b pb-4">
         <Label htmlFor={id}>Trigger</Label>
         <TriggerPicker id={id} sections={sections} selectedId={selectedId} onSelect={onSelect} />
-        {preset && (
-          <p className="text-xs text-muted-foreground">
-            {preset.description}
-            <span className="mt-1 block font-mono text-muted-foreground/80">{preset.event}</span>
-          </p>
-        )}
+        {preset && <p className="text-xs text-muted-foreground">{preset.description}</p>}
       </div>
 
       {preset && Form ? (

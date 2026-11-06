@@ -492,8 +492,8 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
             <div className="flex flex-col gap-3">
               {storedTogether > 1 ? (
                 <p className="text-sm text-muted-foreground" data-testid="text-triggers-saved-together">
-                  These triggers were saved together in one workflow in a way that can't be edited here. To change them,
-                  delete this workflow and add each trigger again.
+                  These triggers were saved together in a way that can't be edited here. Open the full editor to change
+                  them, or delete them there and add each trigger again.
                 </p>
               ) : (
                 <WorkflowNotEditable reason={read.message} />
@@ -504,7 +504,7 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
                 onClick={() => navigate(`/stream/workflows/${row.engineWorkflowId}`)}
               >
                 <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                Open in workflow editor
+                Open the full editor
               </Button>
             </div>
           )}

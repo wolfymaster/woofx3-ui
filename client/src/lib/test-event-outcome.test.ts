@@ -51,7 +51,7 @@ describe("describeTestEventOutcome", () => {
     const outcome = describeTestEventOutcome({ status: "error", message: "barkloader: function timed out" }, false);
     expect(outcome).toMatchObject({
       kind: "failed",
-      title: "The workflow failed",
+      title: "Its steps didn't finish",
       detail: "barkloader: function timed out",
     });
   });

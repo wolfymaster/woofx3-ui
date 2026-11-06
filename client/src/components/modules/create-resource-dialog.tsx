@@ -153,7 +153,7 @@ export function CreateResourceForm({
             }
           >
             {idIsValid || resourceInstanceId === ""
-              ? "What workflows and actions refer to it by. It can't be changed later."
+              ? "What triggers and actions refer to it by. It can't be changed later."
               : "Use only letters, numbers, dots, dashes and underscores."}
           </p>
         </div>
