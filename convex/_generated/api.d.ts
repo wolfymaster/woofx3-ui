@@ -218,6 +218,7 @@ import type * as migrations_backfillCommandActions from "../migrations/backfillC
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
 import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
+import type * as migrations_index from "../migrations/index.js";
 import type * as migrations_moveEnginesToEventQueue from "../migrations/moveEnginesToEventQueue.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
 import type * as moderation from "../moderation.js";
@@ -521,6 +522,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
   "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
+  "migrations/index": typeof migrations_index;
   "migrations/moveEnginesToEventQueue": typeof migrations_moveEnginesToEventQueue;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
   moderation: typeof moderation;
@@ -767,6 +769,93 @@ export declare const components: {
     };
     time: {
       getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+    };
+  };
+  migrations: {
+    lib: {
+      cancel: FunctionReference<
+        "mutation",
+        "internal",
+        { name: string },
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }
+      >;
+      cancelAll: FunctionReference<
+        "mutation",
+        "internal",
+        { sinceTs?: number },
+        Array<{
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }>
+      >;
+      clearAll: FunctionReference<
+        "mutation",
+        "internal",
+        { before?: number },
+        null
+      >;
+      getStatus: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; names?: Array<string> },
+        Array<{
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }>
+      >;
+      migrate: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          dryRun: boolean;
+          fnHandle: string;
+          name: string;
+          next?: Array<{ fnHandle: string; name: string }>;
+          oneBatchOnly?: boolean;
+          reset?: boolean;
+        },
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }
+      >;
     };
   };
 };
