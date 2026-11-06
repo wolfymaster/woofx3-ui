@@ -77,3 +77,7 @@ Without `PLATFORM_TOKEN_ENCRYPTION_KEY`, connecting Twitch and every Twitch call
 - **Convex**: there is no automatic rollback. Revert the change on `master` and merge; the revert deploys like any other commit. A schema change that existing documents cannot satisfy fails `convex deploy`, which also stops the UI job, so fix the data or the schema before retrying.
 
 A UI rollback that predates a Convex change can call functions whose arguments have since changed. Roll back both together when a change touched both.
+
+## Data migrations
+
+Tracked migrations use the `@convex-dev/migrations` component: each one is defined in a file under `convex/migrations/` and run by name with `bunx convex run migrations/index:run '{"fn": "migrations/<file>:<name>"}'` (add `--prod` for production). The component records progress, so a run resumes where it stopped and a finished migration is skipped.
