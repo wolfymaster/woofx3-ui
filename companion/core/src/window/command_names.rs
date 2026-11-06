@@ -39,7 +39,8 @@ macro_rules! with_command_names {
             companion_link_status(()) -> CompanionLinkStatus,
             begin_app_link(()) -> AppLinkStart,
             finish_app_link(FinishAppLinkArgs) -> (),
-            open_twitch_sign_in(OpenTwitchSignInArgs) -> ()
+            open_twitch_sign_in(OpenTwitchSignInArgs) -> (),
+            open_external_url(OpenExternalUrlArgs) -> ()
         }
     };
 }

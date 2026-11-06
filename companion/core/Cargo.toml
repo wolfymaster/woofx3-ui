@@ -27,6 +27,9 @@ ts-rs = { version = "12", optional = true }
 # Plain HTTP to the local engine on loopback, so no TLS. The version the
 # updater plugin already pulls in.
 reqwest = { version = "0.13", default-features = false }
+# Parses the links the dashboard asks the host to open; the version reqwest
+# already pulls in.
+url = "2"
 
 [features]
 # Derives the window's TypeScript bindings. The generator example and the

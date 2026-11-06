@@ -92,6 +92,15 @@ pub struct OpenTwitchSignInArgs {
     pub nonce_hash: String,
 }
 
+/// A link the dashboard asks the host to open in the system browser. The
+/// host opens only web pages (`external_url`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct OpenExternalUrlArgs {
+    pub url: String,
+}
+
 /// The instance the signed-in dashboard made this computer the companion
 /// of, as Convex named it when it recorded the link.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

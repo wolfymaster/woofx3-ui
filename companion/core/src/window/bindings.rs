@@ -11,10 +11,10 @@ use super::{
     AddressView, AppLinkStart, Availability, ChooseHostModeArgs, CompanionLinkStatus,
     CompanionState, ConfirmAddressArgs, DiscoveryView, EndpointView, EnqueueShoutoutArgs,
     FinishAppLinkArgs, HostModeView, IntegrationsView, LinkedInstance, LocalEngineSession,
-    ModuleView, OpenTwitchSignInArgs, ReadyUpdate, RelayView, RemoveShoutoutArgs,
-    ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
-    TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES, INTEGRATIONS_EVENT,
-    SHOUTOUT_QUEUE_EVENT, STATE_EVENT,
+    ModuleView, OpenExternalUrlArgs, OpenTwitchSignInArgs, ReadyUpdate, RelayView,
+    RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs,
+    TestEndpointArgs, TestResult, UseDiscoveredArgs, WindowState, COMMAND_NAMES,
+    INTEGRATIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT,
 };
 use crate::host::{
     HostModeKind, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
@@ -109,6 +109,7 @@ pub fn window_bindings() -> String {
         declaration::<ChooseHostModeArgs>(&cfg),
         declaration::<FinishAppLinkArgs>(&cfg),
         declaration::<OpenTwitchSignInArgs>(&cfg),
+        declaration::<OpenExternalUrlArgs>(&cfg),
     ];
     let events = [
         ("STATE_EVENT", STATE_EVENT),
