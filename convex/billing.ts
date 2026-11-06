@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   type ActionCtx,
   action,
@@ -30,7 +30,13 @@ import {
 } from "./lib/billingWarnings";
 import { engineAvailability } from "./lib/entitlementAccess";
 import { ADD_ONS } from "./lib/entitlements";
-import { MaintenanceApiError, sendTransactionalEmail } from "./lib/maintenanceClient";
+import {
+  engineSwitchRefusal,
+  MaintenanceApiError,
+  sendTransactionalEmail,
+  startEngine,
+  stopEngine,
+} from "./lib/maintenanceClient";
 import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./lib/organization";
 import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
 import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
@@ -243,19 +249,164 @@ export const bannerForViewer = query({
   },
 });
 
-/** Stops or starts the org's managed engines with its subscription. */
+/** Retries of an engine stop or start the maintenance API couldn't take yet (an upgrade running, an outage). */
+export const ENGINE_EFFECT_RETRY = {
+  baseDelayMs: 5 * 60_000,
+  maxDelayMs: 6 * 60 * 60_000,
+} as const;
+
+type EngineEffect = "stopEngines" | "resumeEngines";
+const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
+
+/** Engine statuses a stop applies to: built and not already stopping, stopped or being removed. */
+const STOPPABLE: ReadonlySet<Doc<"engineProvisioning">["status"]> = new Set([
+  "ready",
+  "registering",
+  "registered",
+  "upgrading",
+  "failed",
+  "starting",
+]);
+
+interface ManagedEngine {
+  provisioningId: Id<"engineProvisioning">;
+  maintenanceEngineId: string;
+  status: Doc<"engineProvisioning">["status"];
+}
+
+/**
+ * The org's managed engines an effect would act on, or null when the effect
+ * no longer fits the subscription (a payment arrived before the stop ran, or
+ * the org was suspended again before the start). Self-hosted engines have no
+ * provisioning row and are never billed, locked or stopped.
+ */
+export const engineEffectTargets = internalQuery({
+  args: { accountId: v.id("accounts"), effect: engineEffectValidator },
+  handler: async (ctx, { accountId, effect }): Promise<ManagedEngine[] | null> => {
+    const subscription = await subscriptionFor(ctx, accountId);
+    const wanted =
+      effect === "stopEngines"
+        ? subscription?.state === "suspended" && subscription.spinDownAt === undefined
+        : subscription !== null && subscription.state !== "suspended";
+    if (!wanted) {
+      return null;
+    }
+    const rows = await ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .take(50);
+    return rows.flatMap((row) =>
+      row.maintenanceEngineId === undefined
+        ? []
+        : [{ provisioningId: row._id, maintenanceEngineId: row.maintenanceEngineId, status: row.status }]
+    );
+  },
+});
+
+/** Moves a provisioning row to `to` if it is still in one of `from`; a row that moved on meanwhile is left alone. */
+export const switchEngineStatus = internalMutation({
+  args: {
+    provisioningId: v.id("engineProvisioning"),
+    from: v.array(v.string()),
+    to: v.union(v.literal("stopping"), v.literal("starting"), v.literal("registered")),
+  },
+  handler: async (ctx, { provisioningId, from, to }): Promise<boolean> => {
+    const row = await ctx.db.get(provisioningId);
+    if (row === null || !from.includes(row.status)) {
+      return false;
+    }
+    await ctx.db.patch(provisioningId, { status: to, error: undefined, updatedAt: Date.now() });
+    return true;
+  },
+});
+
+/**
+ * Stops or starts the org's managed engines with its subscription. Each call
+ * is keyed `${transitionId}:${engineId}`, so a retry asks the maintenance API
+ * for the same run. An engine already stopped is not stopped again; only
+ * stopped engines are started. Engines the API couldn't take yet are retried
+ * with backoff while the effect still fits the subscription.
+ */
 export const runEngineEffect = internalAction({
   args: {
     accountId: v.id("accounts"),
     transitionId: v.id("subscriptionTransitions"),
-    effect: v.union(v.literal("stopEngines"), v.literal("resumeEngines")),
+    effect: engineEffectValidator,
+    attempt: v.optional(v.number()),
   },
-  handler: async (_ctx, args) => {
-    // TODO: call the maintenance stop and start endpoints for each managed
-    // engine; they are added with the engine stop/start contract, later in this stack.
-    logger.info("billing engine effect", args);
+  handler: async (ctx, args): Promise<{ acted: number; pending: number }> => {
+    const targets = await ctx.runQuery(internal.billing.engineEffectTargets, {
+      accountId: args.accountId,
+      effect: args.effect,
+    });
+    if (targets === null) {
+      return { acted: 0, pending: 0 };
+    }
+    let acted = 0;
+    let pending = 0;
+    for (const engine of targets) {
+      const outcome = await switchEngine(
+        ctx,
+        args.effect,
+        engine,
+        `${args.transitionId}:${engine.maintenanceEngineId}`
+      );
+      if (outcome === "acted") {
+        acted += 1;
+      } else if (outcome === "retry") {
+        pending += 1;
+      }
+    }
+    if (pending > 0) {
+      const attempt = args.attempt ?? 0;
+      const delay = Math.min(ENGINE_EFFECT_RETRY.baseDelayMs * 2 ** attempt, ENGINE_EFFECT_RETRY.maxDelayMs);
+      await ctx.scheduler.runAfter(delay, internal.billing.runEngineEffect, { ...args, attempt: attempt + 1 });
+    }
+    return { acted, pending };
   },
 });
+
+async function switchEngine(
+  ctx: ActionCtx,
+  effect: EngineEffect,
+  engine: ManagedEngine,
+  idempotencyKey: string
+): Promise<"acted" | "skipped" | "retry"> {
+  const stopping = effect === "stopEngines";
+  if (stopping ? !STOPPABLE.has(engine.status) : engine.status !== "stopped") {
+    return "skipped";
+  }
+  try {
+    if (stopping) {
+      await stopEngine(engine.maintenanceEngineId, idempotencyKey);
+    } else {
+      await startEngine(engine.maintenanceEngineId, idempotencyKey);
+    }
+  } catch (error) {
+    const refusal = engineSwitchRefusal(error);
+    if (refusal === "engine_not_stopped") {
+      // The engine is running already, so the row catches up with it.
+      await ctx.runMutation(internal.billing.switchEngineStatus, {
+        provisioningId: engine.provisioningId,
+        from: ["stopped"],
+        to: "registered",
+      });
+      return "skipped";
+    }
+    logger.warn("billing engine effect: will retry", {
+      effect,
+      engineId: engine.maintenanceEngineId,
+      reason: refusal ?? (error instanceof Error ? error.message : String(error)),
+    });
+    return "retry";
+  }
+  await ctx.runMutation(internal.billing.switchEngineStatus, {
+    provisioningId: engine.provisioningId,
+    from: stopping ? [...STOPPABLE] : ["stopped"],
+    to: stopping ? "stopping" : "starting",
+  });
+  return "acted";
+}
 
 // ---------------------------------------------------------------------------
 // Checkout, promotion codes and the customer portal (owner only)

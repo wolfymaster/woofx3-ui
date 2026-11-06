@@ -679,11 +679,13 @@ http.route({
 });
 
 /** Which kind of run an event came from; a failure means opposite things for a build and a teardown. */
-function maintenanceRunKind(value: unknown): "provision" | "deprovision" | "redeploy" | null {
+function maintenanceRunKind(value: unknown): "provision" | "deprovision" | "redeploy" | "stop" | "start" | null {
   switch (value) {
     case "provision":
     case "deprovision":
     case "redeploy":
+    case "stop":
+    case "start":
       return value;
     default:
       return null;

@@ -544,7 +544,15 @@ export const applyCallbackEvent = internalMutation({
     ),
     url: v.optional(v.string()),
     version: v.optional(v.string()),
-    runKind: v.optional(v.union(v.literal("provision"), v.literal("deprovision"), v.literal("redeploy"))),
+    runKind: v.optional(
+      v.union(
+        v.literal("provision"),
+        v.literal("deprovision"),
+        v.literal("redeploy"),
+        v.literal("stop"),
+        v.literal("start")
+      )
+    ),
     error: v.optional(v.string()),
     runId: v.optional(v.string()),
     // Why a running step is still waiting.
@@ -598,6 +606,10 @@ export const applyCallbackEvent = internalMutation({
           error: args.error,
           detail: args.detail,
         };
+        if (args.runKind === "stop") {
+          // A stop has nothing to show while it runs; engine.stopped settles it.
+          return { handled: true, duplicate: false };
+        }
         if (args.runKind === "redeploy") {
           await applyRedeployEvent(ctx, row, {
             type: "engine.run.step",
@@ -646,11 +658,29 @@ export const applyCallbackEvent = internalMutation({
         }
         // A failed teardown leaves the engine deprovisioning until a retry
         // finishes, so the row says so too: presenting it as an engine that
-        // failed to be built would offer the user the opposite repair.
+        // failed to be built would offer the user the opposite repair. A
+        // failed stop or start is `failed`, which provisioning.retry resumes.
         const status = args.runKind === "deprovision" ? "deprovisioning" : "failed";
         await ctx.db.patch(row._id, {
           status,
           error: `${step}: ${args.error ?? "the maintenance API reported a failure"}`,
+          updatedAt: Date.now(),
+        });
+        return { handled: true, duplicate: false };
+      }
+
+      case "engine.stopped": {
+        await ctx.db.patch(row._id, { status: "stopped", error: undefined, updatedAt: Date.now() });
+        return { handled: true, duplicate: false };
+      }
+
+      case "engine.started": {
+        // A started engine keeps its database and its registration, so it is
+        // not registered again: it is back as it was before it stopped.
+        await ctx.db.patch(row._id, {
+          status: "registered",
+          error: undefined,
+          ...(args.version ? { reportedVersion: args.version } : {}),
           updatedAt: Date.now(),
         });
         return { handled: true, duplicate: false };

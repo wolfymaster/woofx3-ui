@@ -21,7 +21,14 @@ export class MaintenanceApiError extends Error {
   }
 }
 
-export type MaintenanceEngineStatus = "provisioning" | "ready" | "upgrading" | "failed" | "deprovisioning" | "deleted";
+export type MaintenanceEngineStatus =
+  | "provisioning"
+  | "ready"
+  | "upgrading"
+  | "failed"
+  | "deprovisioning"
+  | "deleted"
+  | "stopped";
 export type MaintenanceStepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 export type MaintenanceRunStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -49,7 +56,7 @@ export interface MaintenanceRunStep {
 
 export interface MaintenanceRun {
   id: string;
-  kind: "provision" | "deprovision" | "redeploy";
+  kind: "provision" | "deprovision" | "redeploy" | "stop" | "start";
   status: MaintenanceRunStatus;
   currentStep: string;
   error: { code: string; message: string; step: string } | null;
@@ -335,4 +342,36 @@ export interface TransactionalEmail {
  */
 export function sendTransactionalEmail(email: TransactionalEmail, idempotencyKey: string): Promise<{ id: string }> {
   return request<{ id: string }>("/v1/email/messages", { method: "POST", idempotencyKey, body: email });
+}
+
+/**
+ * Stop a ready or failed engine: its route answers "paused", the host stops
+ * it, and its data stays. Stopping an engine that is stopped or stopping
+ * returns that run. Refused with `run_in_progress` during an upgrade.
+ */
+export function stopEngine(
+  engineId: string,
+  idempotencyKey: string
+): Promise<{ engine: MaintenanceEngine; run: MaintenanceRun }> {
+  return request(`/v1/engines/${encodeURIComponent(engineId)}/stop`, { method: "POST", idempotencyKey });
+}
+
+/** Start a stopped engine on its current release. Refused with `engine_not_stopped` in any other state. */
+export function startEngine(
+  engineId: string,
+  idempotencyKey: string
+): Promise<{ engine: MaintenanceEngine; run: MaintenanceRun }> {
+  return request(`/v1/engines/${encodeURIComponent(engineId)}/start`, { method: "POST", idempotencyKey });
+}
+
+/** The maintenance API's reasons for declining a stop or a start without touching the engine. */
+export type EngineSwitchRefusal = "run_in_progress" | "engine_not_stopped";
+
+export function engineSwitchRefusal(error: unknown): EngineSwitchRefusal | null {
+  if (error instanceof MaintenanceApiError && error.status === 409) {
+    if (error.code === "run_in_progress" || error.code === "engine_not_stopped") {
+      return error.code;
+    }
+  }
+  return null;
 }
