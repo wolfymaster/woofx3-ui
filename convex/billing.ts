@@ -269,6 +269,9 @@ export function engineRetryDelay(attempt: number, jitter: number): number {
 type EngineEffect = "stopEngines" | "resumeEngines";
 const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
 
+/** Provisioning rows read per org. An org holds a handful of engines, so this is a backstop, not a page size. */
+const ENGINES_PER_ORG_SCAN = 50;
+
 interface ManagedEngine {
   provisioningId: Id<"engineProvisioning">;
   maintenanceEngineId: string;
@@ -295,7 +298,7 @@ export const engineEffectTargets = internalQuery({
     const rows = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
-      .take(50);
+      .take(ENGINES_PER_ORG_SCAN);
     return rows.flatMap((row) =>
       row.maintenanceEngineId === undefined
         ? []
