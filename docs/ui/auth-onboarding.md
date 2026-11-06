@@ -61,7 +61,7 @@ After it come the [overlay page](#the-overlay-page) and [the wait for a build](#
 
 ### The overlay page
 
-`/setup/overlay` (`client/src/components/setup/overlay-page.tsx`) is a state machine in `client/src/lib/overlay-onboarding.ts` with the UI over it. It uses gateway hooks only, and `local-routes.test.ts` holds it to that, so local mode can adopt it. The two things it needs from the hosted app are props: `engine` (the build, from `useEngineBuild`) and `onExit`.
+`/setup/overlay` (`client/src/components/setup/overlay-page.tsx`) is a state machine in `client/src/lib/overlay-onboarding.ts` with the UI over it. It uses gateway hooks only, and `local-routes.test.ts` holds it to that, so local mode uses it as it is (see [Local mode's first run](./companion.md#the-dashboard-s-two-modes)). The two things it needs from the hosted app are props: `engine` (the build, from `useEngineBuild`) and `onExit`.
 
 | Phase | Shown when | Next |
 |---|---|---|
