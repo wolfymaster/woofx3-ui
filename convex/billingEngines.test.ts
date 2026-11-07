@@ -188,7 +188,38 @@ describe("resuming engines", () => {
     });
   });
 
-
+  test("a payment while a stop is running starts the engine once the stop settles", async () => {
+    const t = newBackend();
+    const s = await seed(t, "active", "stopping");
+    const first = await withMaintenance(ACCEPTED, () => run(t, s, "resumeEngines"));
+    expect(first.result).toEqual({ acted: 0, pending: 1 });
+    expect(first.calls).toEqual([]);
+    const retry = await t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).find(
+        (job) => job.name === "billing:runEngineEffect"
+      )
+    );
+    expect(retry?.args[0]).toMatchObject({ effect: "resumeEngines", attempt: 1 });
+    await t.mutation(internal.provisioningInternal.applyCallbackEvent, {
+      eventId: "e_stopped",
+      eventType: "engine.stopped",
+      maintenanceEngineId: "eng_1",
+    });
+    expect(await status(t, s)).toBe("stopped");
+    const second = await withMaintenance(ACCEPTED, () =>
+      t.action(
+        internal.billing.runEngineEffect,
+        retry?.args[0] as {
+          accountId: Id<"accounts">;
+          transitionId: Id<"subscriptionTransitions">;
+          effect: "resumeEngines";
+          attempt: number;
+        }
+      )
+    );
+    expect(second.calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/start"]);
+    expect(await status(t, s)).toBe("starting");
+  });
 });
 
 describe("maintenance callbacks", () => {

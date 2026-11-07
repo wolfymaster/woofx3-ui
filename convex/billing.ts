@@ -387,6 +387,10 @@ async function switchEngine(
   idempotencyKey: string
 ): Promise<"acted" | "skipped" | "retry"> {
   const stopping = effect === "stopEngines";
+  if (!stopping && engine.status === "stopping") {
+    // A stop still running settles first (engine.stopped); the start goes out on a retry after it.
+    return "retry";
+  }
   if (switchedStatus(engine.status, stopping ? "stopRequested" : "startRequested") === null) {
     return "skipped";
   }
