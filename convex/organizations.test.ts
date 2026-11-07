@@ -140,10 +140,10 @@ describe("organizations.rename", () => {
     expect((await mine(t, org.ownerId)).name).toBe("Mod Squad");
     await expect(
       as(t, memberId).mutation(api.organizations.rename, { accountId: org.accountId, name: "Mine now" })
-    ).rejects.toThrow();
+    ).rejects.toThrow("doesn't allow this");
     await expect(
       as(t, adminId).mutation(api.organizations.rename, { accountId: org.accountId, name: "   " })
-    ).rejects.toThrow();
+    ).rejects.toThrow("1 to 64 characters");
   });
 });
 
@@ -175,6 +175,6 @@ describe("billing.invoices", () => {
     provider.invoices.set("cus_1", [invoice]);
     expect(await listOrgInvoices(provider, "cus_1")).toEqual([invoice]);
     provider.outage = { ok: false, error: { code: "provider_unavailable", message: "down" } };
-    await expect(listOrgInvoices(provider, "cus_1")).rejects.toThrow();
+    await expect(listOrgInvoices(provider, "cus_1")).rejects.toMatchObject({ data: { code: "provider_unavailable" } });
   });
 });
