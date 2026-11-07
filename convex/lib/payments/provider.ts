@@ -170,6 +170,18 @@ export interface PaymentEvent {
   subscriptionRef: string | null;
 }
 
+export type InvoiceStatus = "draft" | "open" | "paid" | "uncollectible" | "void";
+
+/** One of a customer's invoices, read live from the provider for display. woofx3 stores none. */
+export interface Invoice {
+  id: string;
+  periodStart: number;
+  amountCents: number;
+  status: InvoiceStatus;
+  /** The provider's page for the invoice; null while it is a draft. */
+  hostedUrl: string | null;
+}
+
 export interface PaymentProvider {
   readonly id: PaymentProviderId;
   createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>>;
@@ -190,4 +202,6 @@ export interface PaymentProvider {
   }): Promise<Result<AppliedDiscount>>;
   /** A promotion code's discount, to show before checkout; null when it doesn't exist or is inactive. */
   lookupPromotionCode(code: string): Promise<Result<AppliedDiscount | null>>;
+  /** The customer's newest invoices first, at most `limit`. */
+  listInvoices(customerRef: string, limit: number): Promise<Result<Invoice[]>>;
 }

@@ -11,6 +11,8 @@ import {
   type DiscountDuration,
   type DiscountSpec,
   err,
+  type Invoice,
+  type InvoiceStatus,
   ok,
   type PaymentError,
   type PaymentEvent,
@@ -297,6 +299,44 @@ export function subscriptionRefOf(event: Stripe.Event): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Invoices
+// ---------------------------------------------------------------------------
+
+const INVOICE_STATUSES: Record<InvoiceStatus, true> = {
+  draft: true,
+  open: true,
+  paid: true,
+  uncollectible: true,
+  void: true,
+};
+
+function invoiceStatus(status: InvoiceFields["status"]): InvoiceStatus | null {
+  // Stripe leaves the status unset only before an invoice is first saved, which is still a draft.
+  if (status === null) {
+    return "draft";
+  }
+  return (Object.keys(INVOICE_STATUSES) as InvoiceStatus[]).find((known) => known === status) ?? null;
+}
+
+/** The invoice fields toInvoice reads. */
+export type InvoiceFields = Pick<Stripe.Invoice, "id" | "status" | "period_start" | "total" | "hosted_invoice_url">;
+
+/** A Stripe invoice in our terms; an error for a status this API version doesn't define. */
+export function toInvoice(invoice: InvoiceFields): Result<Invoice> {
+  const status = invoiceStatus(invoice.status);
+  if (status === null) {
+    return err("invalid_request", `Stripe invoice ${invoice.id} has unknown status ${invoice.status}`);
+  }
+  return ok({
+    id: invoice.id,
+    periodStart: invoice.period_start * 1000,
+    amountCents: invoice.total,
+    status,
+    hostedUrl: invoice.hosted_invoice_url ?? null,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // The adapter
 // ---------------------------------------------------------------------------
 
@@ -502,6 +542,23 @@ export class StripePaymentProvider implements PaymentProvider {
       }
       const spec = specOfCoupon(coupon);
       return ok(spec === null ? null : { spec, code: promotion.code, endsAt: null });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async listInvoices(customerRef: string, limit: number): Promise<Result<Invoice[]>> {
+    try {
+      const page = await this.stripe.invoices.list({ customer: customerRef, limit });
+      const invoices: Invoice[] = [];
+      for (const invoice of page.data) {
+        const mapped = toInvoice(invoice);
+        if (!mapped.ok) {
+          return mapped;
+        }
+        invoices.push(mapped.value);
+      }
+      return ok(invoices);
     } catch (error) {
       return failure(error);
     }

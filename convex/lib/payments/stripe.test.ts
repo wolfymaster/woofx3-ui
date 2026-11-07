@@ -7,6 +7,7 @@ import {
   type CouponFields,
   couponId,
   couponParams,
+  type InvoiceFields,
   parsePriceLookupKey,
   priceLookupKey,
   StripePaymentProvider,
@@ -14,6 +15,7 @@ import {
   sameDiscount,
   specOfCoupon,
   standingOf,
+  toInvoice,
   toProviderSubscription,
 } from "./stripe";
 
@@ -448,5 +450,45 @@ describe("sameDiscount", () => {
     };
     expect(sameDiscount(three, three)).toBe(true);
     expect(sameDiscount({ ...three, duration: { kind: "months", months: 6 } }, three)).toBe(false);
+  });
+});
+
+describe("toInvoice", () => {
+  const invoice = (overrides: Partial<InvoiceFields> = {}): InvoiceFields => ({
+    id: "in_1",
+    status: "paid",
+    period_start: 1_800_000_000,
+    total: 3000,
+    hosted_invoice_url: "https://invoice.stripe.com/i/1",
+    ...overrides,
+  });
+
+  const cases: Array<[string, Partial<InvoiceFields>, unknown]> = [
+    [
+      "a paid invoice",
+      {},
+      {
+        ok: true,
+        value: {
+          id: "in_1",
+          periodStart: 1_800_000_000_000,
+          amountCents: 3000,
+          status: "paid",
+          hostedUrl: "https://invoice.stripe.com/i/1",
+        },
+      },
+    ],
+    ["an unsaved draft", { status: null, hosted_invoice_url: null }, expect.objectContaining({ ok: true })],
+    ["an unknown status", { status: "mystery" }, expect.objectContaining({ ok: false })],
+  ];
+  for (const [name, overrides, expected] of cases) {
+    test(name, () => {
+      expect(toInvoice(invoice(overrides))).toEqual(expected);
+    });
+  }
+
+  test("an unsaved draft reads as a draft with no page", () => {
+    const mapped = toInvoice(invoice({ status: null, hosted_invoice_url: undefined }));
+    expect(mapped.ok && mapped.value).toEqual(expect.objectContaining({ status: "draft", hostedUrl: null }));
   });
 });

@@ -42,6 +42,7 @@ import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
 import { orgPortalUrl, paymentsConfig } from "./lib/payments/config";
 import {
   type AppliedDiscount,
+  type Invoice,
   type PaymentError,
   type PaymentProvider,
   providerSubscriptionValidator,
@@ -730,6 +731,52 @@ export const openPortal = action({
       throw providerFailure(result.error);
     }
     return result.value;
+  },
+});
+
+/** How many invoices the portal lists; older ones are in the provider's portal. */
+export const INVOICE_PAGE_SIZE = 24;
+
+/** The customer whose invoices the caller may read, as an org owner; `allowed` false for anyone else. */
+export const invoiceCustomer = internalQuery({
+  args: { accountId: v.id("accounts"), userId: v.id("users") },
+  handler: async (ctx, { accountId, userId }): Promise<{ allowed: boolean; customerRef: string | null }> => {
+    const account = await ctx.db.get(accountId);
+    if (account === null || !orgCan(await orgRoleOf(ctx, account, userId), "manageBilling")) {
+      return { allowed: false, customerRef: null };
+    }
+    return { allowed: true, customerRef: (await subscriptionFor(ctx, accountId))?.providerCustomerId ?? null };
+  },
+});
+
+/** The customer's newest invoices, read live: woofx3 stores none. */
+export async function listOrgInvoices(provider: PaymentProvider, customerRef: string): Promise<Invoice[]> {
+  const result = await provider.listInvoices(customerRef, INVOICE_PAGE_SIZE);
+  if (!result.ok) {
+    throw providerFailure(result.error);
+  }
+  return result.value;
+}
+
+/** The org's invoices for its owner; null for anyone else, so the portal hides the page. */
+export const invoices = action({
+  args: { accountId: v.id("accounts") },
+  handler: async (ctx, { accountId }): Promise<Invoice[] | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      return null;
+    }
+    const customer: { allowed: boolean; customerRef: string | null } = await ctx.runQuery(
+      internal.billing.invoiceCustomer,
+      { accountId, userId }
+    );
+    if (!customer.allowed) {
+      return null;
+    }
+    if (customer.customerRef === null) {
+      return [];
+    }
+    return listOrgInvoices(configuredProvider().provider, customer.customerRef);
   },
 });
 
