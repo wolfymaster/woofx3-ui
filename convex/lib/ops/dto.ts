@@ -120,7 +120,6 @@ export interface InstanceDto {
   url: string;
   hosting: "managed" | "external";
   createdAt: number;
-  lastViewedAt: number | null;
   lastEngineActivityAt: number | null;
   companionHostname: string | null;
   marketplaceDevAccess: boolean;
@@ -134,7 +133,6 @@ export function instanceDto(instance: Doc<"instances">): InstanceDto {
     url: instance.url,
     hosting: instance.hosting ?? "external",
     createdAt: instance.createdAt,
-    lastViewedAt: instance.lastViewedAt ?? null,
     lastEngineActivityAt: instance.lastEngineActivityAt ?? null,
     companionHostname: instance.companionHostname ?? null,
     marketplaceDevAccess: instance.marketplaceDevAccess ?? false,
