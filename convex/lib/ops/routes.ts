@@ -18,7 +18,18 @@ export type OpsRoute =
   | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
   | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
   | { method: "POST"; name: "notifications.create" }
-  | { method: "POST"; name: "notifications.delete"; notificationId: string };
+  | { method: "POST"; name: "notifications.delete"; notificationId: string }
+  | { method: "POST"; name: "accounts.billing"; accountId: string; write: AccountBillingWrite };
+
+/** What an operator can change about an organization's subscription. */
+export type AccountBillingWrite = "plan" | "exemption" | "suspend" | "discount";
+
+const ACCOUNT_BILLING_WRITES: ReadonlySet<string> = new Set<AccountBillingWrite>([
+  "plan",
+  "exemption",
+  "suspend",
+  "discount",
+]);
 
 /** What an operator can do to a customer's managed engine, exactly as the customer could. */
 export type EngineAction = "upgrade" | "retry" | "delete";
@@ -43,6 +54,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     }
     if (segments.length === 3 && first === "instances" && second && third === "storage-limits") {
       return { method, name: "instances.setStorageLimits", instanceId: second };
+    }
+    if (segments.length === 3 && first === "accounts" && second && third && ACCOUNT_BILLING_WRITES.has(third)) {
+      return { method, name: "accounts.billing", accountId: second, write: third as AccountBillingWrite };
     }
     if (segments.length === 1 && first === "notifications") {
       return { method, name: "notifications.create" };

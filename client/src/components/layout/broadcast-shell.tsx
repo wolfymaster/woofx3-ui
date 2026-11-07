@@ -1,5 +1,5 @@
 import { useStore } from "@nanostores/react";
-import { Activity, Command, Search } from "lucide-react";
+import { Activity, ArrowUpRight, Command, Search } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { CommandPalette } from "@/components/command-palette/command-palette";
@@ -23,12 +23,14 @@ import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
+import { useCanManageOrganization } from "@/hooks/use-manage-organization";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
 import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { BillingBanner } from "./billing-banner";
 import { ConnectionStatusBar } from "./connection-status";
 import { EngineMenuSection } from "./engine-menu";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
@@ -117,6 +119,7 @@ function AppHeader() {
     .toUpperCase();
 
   const isAdmin = useIsInstanceAdmin() ?? false;
+  const canManageOrganization = useCanManageOrganization();
 
   const openCommandPalette = useCallback(() => {
     $commandPaletteOpen.set(true);
@@ -190,6 +193,14 @@ function AppHeader() {
             <DropdownMenuItem asChild>
               <Link href="/team">Team Settings</Link>
             </DropdownMenuItem>
+            {canManageOrganization && (
+              <DropdownMenuItem asChild>
+                <Link href="/org" data-testid="menu-manage-organization">
+                  Manage organization
+                  <ArrowUpRight className="h-4 w-4 ml-auto" />
+                </Link>
+              </DropdownMenuItem>
+            )}
             {isAdmin && (
               <DropdownMenuItem asChild>
                 <Link href="/admin">Admin</Link>
@@ -238,6 +249,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
         <AppHeader />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />
+        <BillingBanner />
         <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">

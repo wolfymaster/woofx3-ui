@@ -37,13 +37,13 @@ function inviteUrl(token: string): string {
 }
 
 /**
- * Invites one person to the account's team, by Twitch username or by email.
+ * Invites one person to the current engine's team, by Twitch username or by email.
  * A Twitch invite is only created after the inviter has seen who the name
  * belongs to, so a typo cannot hand access to a stranger.
  */
 export default function TeamInvite() {
   const { instance } = useInstance();
-  const accountId = instance?.accountId;
+  const instanceId = instance?._id;
 
   const lookupTwitchUser = useAction(api.invitations.lookupTwitchUser);
   const createInvite = useAction(api.invitations.create);
@@ -65,12 +65,12 @@ export default function TeamInvite() {
   }
 
   async function runLookup() {
-    if (!accountId || login.trim() === "") {
+    if (!instanceId || login.trim() === "") {
       return;
     }
     setLookup({ state: "looking" });
     try {
-      const candidate = await lookupTwitchUser({ accountId, login });
+      const candidate = await lookupTwitchUser({ instanceId, login });
       setLookup(candidate ? { state: "found", candidate } : { state: "not-found" });
     } catch (err) {
       setLookup({ state: "failed", message: errorMessage(err) });
@@ -78,12 +78,12 @@ export default function TeamInvite() {
   }
 
   async function submit(target: { kind: "twitch"; twitchUserId: string } | { kind: "email"; email: string }) {
-    if (!accountId) {
+    if (!instanceId) {
       return;
     }
     setSubmitting(true);
     try {
-      const { token } = await createInvite({ accountId, role, target });
+      const { token } = await createInvite({ instanceId, engineRole: role, target });
       setLink(inviteUrl(token));
       toast({ title: "Invitation created", description: "Share the link with your teammate." });
     } catch (err) {
@@ -114,11 +114,11 @@ export default function TeamInvite() {
     </Button>
   );
 
-  if (!accountId) {
+  if (!instanceId) {
     return (
       <div className="p-6 lg:p-8 max-w-2xl mx-auto">
         <PageHeader title="Invite a team member" actions={backLink} />
-        <p className="text-sm text-muted-foreground">No instance available yet.</p>
+        <p className="text-sm text-muted-foreground">No engine available yet.</p>
       </div>
     );
   }
@@ -307,8 +307,8 @@ function RoleField({ role, onChange }: { role: InviteRole; onChange: (role: Invi
       </Select>
       <p className="text-xs text-muted-foreground">
         {role === "admin"
-          ? "Can manage team settings and members."
-          : "Can use workflows, assets, and engine features for this account."}
+          ? "Can manage this engine, its settings and its team."
+          : "Can use this engine's alerts, scenes, media and other features."}
       </p>
     </div>
   );

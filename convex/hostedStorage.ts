@@ -27,14 +27,14 @@ export interface HostedStorageContext {
   limits: HostedStorageLimits;
 }
 
-async function loadLimits(ctx: QueryCtx, instanceId: Id<"instances">): Promise<HostedStorageContext> {
+async function loadLimits(ctx: QueryCtx, instanceId: Id<"instances">, now: number): Promise<HostedStorageContext> {
   const instance = await ctx.db.get(instanceId);
   if (!instance) {
     throw new Error("Instance not found");
   }
   return {
     hosting: instance.hosting,
-    limits: hostedStorageLimits(await accountEntitlements(ctx, instance.accountId), instance.hostedStorageLimits),
+    limits: hostedStorageLimits(await accountEntitlements(ctx, instance.accountId, now), instance.hostedStorageLimits),
   };
 }
 
@@ -56,9 +56,9 @@ async function outstandingBytes(ctx: QueryCtx, instanceId: Id<"instances">, read
 }
 
 export const context = internalQuery({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<HostedStorageContext> => {
-    return loadLimits(ctx, instanceId);
+  args: { instanceId: v.id("instances"), now: v.number() },
+  handler: async (ctx, { instanceId, now }): Promise<HostedStorageContext> => {
+    return loadLimits(ctx, instanceId, now);
   },
 });
 
@@ -93,7 +93,7 @@ export const reserve = internalMutation({
     if (!Number.isSafeInteger(engineBytes) || engineBytes < 0) {
       throw new Error(`Engine usage must be a whole number of bytes; got ${engineBytes}`);
     }
-    const { limits } = await loadLimits(ctx, instanceId);
+    const { limits } = await loadLimits(ctx, instanceId, Date.now());
     const outstanding = await outstandingBytes(ctx, instanceId, readAt);
     if (outstanding === null) {
       return { refusal: "Too many uploads are in progress. Wait for them to finish, then try again." };

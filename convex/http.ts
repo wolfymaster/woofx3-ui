@@ -6,6 +6,7 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
+import { registerBillingRoutes } from "./billingHttp";
 import type { WebhookEventResult } from "./engineEvents";
 import { registerEngineEventRoutes } from "./engineEventsHttp";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
@@ -678,11 +679,13 @@ http.route({
 });
 
 /** Which kind of run an event came from; a failure means opposite things for a build and a teardown. */
-function maintenanceRunKind(value: unknown): "provision" | "deprovision" | "redeploy" | null {
+function maintenanceRunKind(value: unknown): "provision" | "deprovision" | "redeploy" | "stop" | "start" | null {
   switch (value) {
     case "provision":
     case "deprovision":
     case "redeploy":
+    case "stop":
+    case "start":
       return value;
     default:
       return null;
@@ -958,6 +961,7 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macr
 
 registerViewerAuthRoutes(http);
 registerUserPageFormRoutes(http);
+registerBillingRoutes(http);
 registerEngineEventRoutes(http);
 
 export default http;

@@ -270,3 +270,71 @@ export const FORBIDDEN_RESPONSE_KEYS: ReadonlySet<string> = new Set([
   "sessionId",
   "clientId",
 ]);
+
+export interface SubscriptionDto {
+  plan: string;
+  interval: string | null;
+  state: string;
+  stateReason: string | null;
+  stateSince: number;
+  trialStartedAt: number | null;
+  nextBillingAt: number | null;
+  graceEndsAt: number | null;
+  nextRetryAt: number | null;
+  exemptUntil: number | null;
+  spinDownAt: number | null;
+  addOns: string[];
+  discount: Doc<"subscriptions">["discount"] | null;
+  provider: string | null;
+  providerCustomerId: string | null;
+  providerSubscriptionId: string | null;
+  providerStatus: string | null;
+  origin: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export function subscriptionDto(row: Doc<"subscriptions">): SubscriptionDto {
+  return {
+    plan: row.plan,
+    interval: row.interval ?? null,
+    state: row.state,
+    stateReason: row.stateReason ?? null,
+    stateSince: row.stateSince,
+    trialStartedAt: row.trialStartedAt ?? null,
+    nextBillingAt: row.nextBillingAt ?? null,
+    graceEndsAt: row.graceEndsAt ?? null,
+    nextRetryAt: row.nextRetryAt ?? null,
+    exemptUntil: row.exemptUntil ?? null,
+    spinDownAt: row.spinDownAt ?? null,
+    addOns: row.addOns,
+    discount: row.discount ?? null,
+    provider: row.provider ?? null,
+    providerCustomerId: row.providerCustomerId ?? null,
+    providerSubscriptionId: row.providerSubscriptionId ?? null,
+    providerStatus: row.providerStatus ?? null,
+    origin: row.origin,
+    updatedAt: row.updatedAt,
+    updatedBy: row.updatedBy,
+  };
+}
+
+export interface SubscriptionTransitionDto {
+  from: string | null;
+  to: string;
+  event: string;
+  reason: string | null;
+  actor: string;
+  at: number;
+}
+
+export function subscriptionTransitionDto(row: Doc<"subscriptionTransitions">): SubscriptionTransitionDto {
+  return {
+    from: row.from ?? null,
+    to: row.to,
+    event: row.event,
+    reason: row.reason ?? null,
+    actor: row.actor,
+    at: row.at,
+  };
+}

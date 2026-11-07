@@ -27,7 +27,7 @@ export const usage = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<ModuleStorageUsage | null> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
-    const { hosting, limits } = await ctx.runQuery(internal.hostedStorage.context, { instanceId });
+    const { hosting, limits } = await ctx.runQuery(internal.hostedStorage.context, { instanceId, now: Date.now() });
     if (hosting !== "managed") {
       return null;
     }

@@ -43,7 +43,11 @@ A managed engine runs the release it was built with until its owner or an admin 
 
 ## Team (`/team`)
 
-- Members and pending invitations for the selected instance's account, from `convex/accountMembers.ts` and `convex/invitations.ts`. Sharing is Convex-only; the engine is never involved.
+- Members of the selected engine with their engine role (`engineMembers.listForEngine`), and its pending invitations (`invitations.listForEngine`). Sharing is Convex-only; the engine is never involved.
+  - Engine admins change a plain org member's engine role and remove them from the engine (`engineMembers.setRole` / `remove`). The org owner's and org admins' engine roles follow their org role, so they change only in the organization.
+  - Invitee emails are personal data: an engine's admins see its invitations, and an org owner or admin also sees org-wide invitations from before engine-scoped invites. Engine members see none.
+  - The header names the engine from `useInstance`, the same source as the profile menu.
+  - "Manage organization" opens `/org` for org owners and admins, on a hosted engine, in the web build only.
 - **Invite** (`/team/invite`, `client/src/pages/team-invite.tsx`) invites one person by **Twitch username** (the default) or by **email**, and returns a link for the inviter to share.
   - Twitch: `invitations.lookupTwitchUser` (team managers only) looks the login up on Helix and returns a confirmation card, with partner/affiliate badges, plus moderator/VIP when the account's Twitch link already has a scope that can read them. `invitations.create` takes only the Twitch user id and looks the profile up again on the server, so the stored name and avatar never come from the client. The lookup uses the account's Twitch link token when there is one, and an app token (client credentials) otherwise.
   - An invitation targets exactly one of an email or a platform account (`convex/lib/invitationTarget.ts`). A Twitch invite is accepted only by a user whose `twitch` auth account has the same Twitch user id. Logins can change, so they are only used for display.

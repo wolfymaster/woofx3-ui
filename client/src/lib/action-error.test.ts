@@ -7,6 +7,12 @@ describe("actionErrorMessage", () => {
     expect(actionErrorMessage(new ConvexError("That user is already banned."))).toBe("That user is already banned.");
   });
 
+  test("uses a coded ConvexError's message", () => {
+    expect(actionErrorMessage(new ConvexError({ code: "no_customer", message: "Choose a plan first." }))).toBe(
+      "Choose a plan first."
+    );
+  });
+
   test("cuts the message out of Convex's wrapper around a plain Error", () => {
     const wrapped = new Error(
       "[CONVEX A(moderation:banUser)] [Request ID: abc] Server Error\nUncaught Error: Twitch is not connected for this instance\n    at handler (../convex/moderation.ts:10:5)"
