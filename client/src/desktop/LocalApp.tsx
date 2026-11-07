@@ -1,18 +1,21 @@
 import { Loader2 } from "lucide-react";
-import { Suspense, useEffect, useMemo } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useMemo } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocalEngineGatewayProvider } from "@/engine/boot/local";
+import { useDefaultSeedStatus } from "@/engine/hooks/use-default-seed";
 import type { EngineTargetSource } from "@/lib/engine-session/target";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
+import { overlayPageRedirects } from "@/lib/setup-steps";
 import { ViewerNameProvider } from "@/lib/viewer-name";
 import type { LocalEngineSession } from "./host";
 import { LocalShell } from "./LocalShell";
 import { localGatewayHost } from "./local-gateway-host";
 import { localMarketplaceMode } from "./local-marketplace-mode";
 import { LOCAL_HOME_PATH, LOCAL_ROUTES } from "./local-routes";
+import { localSetupPending } from "./local-setup";
 import { useLocalEngineSession } from "./use-local-engine-session";
 
 /** How this computer's editor is named to anyone else editing the same scene: local mode has no account to name it. */
@@ -60,6 +63,33 @@ function PageLoading() {
   );
 }
 
+const LocalSetup = lazy(() => import("./LocalSetup"));
+
+/** Where the guard sends a first run; setup itself picks the step. */
+const LOCAL_SETUP_PATH = "/setup";
+
+/**
+ * Keeps a first run in setup until the overlay page is finished or skipped,
+ * as OnboardingGuard does for a hosted account. The alerts page stays
+ * reachable, since the overlay page links there to make a follow alert.
+ */
+function LocalSetupGuard({ children }: { children: ReactNode }) {
+  const seed = useDefaultSeedStatus();
+  const [location, navigate] = useLocation();
+  const redirect = seed !== undefined && seed !== null && overlayPageRedirects(localSetupPending(seed), location);
+
+  useEffect(() => {
+    if (redirect) {
+      navigate(LOCAL_SETUP_PATH, { replace: true });
+    }
+  }, [redirect, navigate]);
+
+  if (seed === undefined) {
+    return <PageLoading />;
+  }
+  return redirect ? null : children;
+}
+
 /** Sends a path local mode does not serve to its home page. */
 function ToLocalHome() {
   const [, navigate] = useLocation();
@@ -85,18 +115,29 @@ function LocalPages({ session }: { session: ReadySession }) {
       <ViewerNameProvider name={LOCAL_VIEWER_NAME}>
         <MarketplaceModeProvider mode={localMarketplaceMode}>
           <TooltipProvider>
-            <LocalShell>
-              <Suspense fallback={<PageLoading />}>
-                <Switch>
-                  {LOCAL_ROUTES.map((route) => (
-                    <Route key={route.path} path={route.path}>
-                      {(params) => route.render(params)}
-                    </Route>
-                  ))}
-                  <Route component={ToLocalHome} />
-                </Switch>
-              </Suspense>
-            </LocalShell>
+            <Switch>
+              <Route path={`${LOCAL_SETUP_PATH}/:step?`}>
+                <Suspense fallback={<PageLoading />}>
+                  <LocalSetup />
+                </Suspense>
+              </Route>
+              <Route>
+                <LocalSetupGuard>
+                  <LocalShell>
+                    <Suspense fallback={<PageLoading />}>
+                      <Switch>
+                        {LOCAL_ROUTES.map((route) => (
+                          <Route key={route.path} path={route.path}>
+                            {(params) => route.render(params)}
+                          </Route>
+                        ))}
+                        <Route component={ToLocalHome} />
+                      </Switch>
+                    </Suspense>
+                  </LocalShell>
+                </LocalSetupGuard>
+              </Route>
+            </Switch>
             <Toaster />
           </TooltipProvider>
         </MarketplaceModeProvider>
