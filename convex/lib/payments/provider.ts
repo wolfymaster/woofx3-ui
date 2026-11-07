@@ -12,7 +12,14 @@ import type { BillingInterval, PlanTier } from "../organization";
 export type PaymentProviderId = "stripe";
 
 export type PaymentError = {
-  code: "provider_unavailable" | "invalid_request" | "bad_signature" | "unknown_price" | "unknown_discount";
+  code:
+    | "provider_unavailable"
+    | "invalid_request"
+    | "bad_signature"
+    | "unknown_price"
+    | "unknown_discount"
+    // A checkout under the same idempotency key is open with other parameters.
+    | "checkout_in_progress";
   message: string;
 };
 
@@ -102,7 +109,14 @@ export interface CheckoutRequest {
   allowPromotionCodes: boolean;
   successUrl: string;
   cancelUrl: string;
+  /**
+   * Shared by every request for the same checkout attempt, so concurrent or
+   * repeated requests get the one session the first opened. Requests under it
+   * must carry identical parameters, `expiresAt` included.
+   */
   idempotencyKey: string;
+  /** When the session closes unpaid. */
+  expiresAt: number;
 }
 
 /** The provider's truth about one subscription, mapped into our terms. */

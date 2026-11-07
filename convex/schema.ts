@@ -1565,6 +1565,7 @@ export default defineSchema({
     // Set once; a second trial is refused.
     trialStartedAt: v.optional(v.number()),
     // The next billing evaluation: trial end, migration date or period end.
+    // Absent on an active subscription while a renewal check with the provider is out.
     nextBillingAt: v.optional(v.number()),
     // past_due: when it is suspended.
     graceEndsAt: v.optional(v.number()),

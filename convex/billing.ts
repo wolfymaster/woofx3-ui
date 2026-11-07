@@ -22,7 +22,13 @@ import {
 import { engineAvailability } from "./lib/entitlementAccess";
 import { ADD_ONS } from "./lib/entitlements";
 import { MaintenanceApiError, sendTransactionalEmail } from "./lib/maintenanceClient";
-import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./lib/organization";
+import {
+  type BillingInterval,
+  billingIntervalValidator,
+  type PlanTier,
+  planTierValidator,
+  subscriptionStateValidator,
+} from "./lib/organization";
 import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
 import { orgPortalUrl, paymentsConfig } from "./lib/payments/config";
 import {
@@ -258,6 +264,105 @@ export const runEngineEffect = internalAction({
 });
 
 // ---------------------------------------------------------------------------
+// Renewal check: one request to the provider before an active org whose
+// period end passed is deactivated
+// ---------------------------------------------------------------------------
+
+/** Retries of a renewal check the provider couldn't answer yet, with capped exponential backoff. */
+export const RENEWAL_CHECK_RETRY = {
+  baseDelayMs: 5 * 60_000,
+  maxDelayMs: 6 * 60 * 60_000,
+} as const;
+
+/** Capped exponential backoff with jitter (`jitter` in [0, 1)); it stays at the cap until the provider answers. */
+export function renewalRetryDelay(attempt: number, jitter: number): number {
+  const capped = Math.min(RENEWAL_CHECK_RETRY.baseDelayMs * 2 ** attempt, RENEWAL_CHECK_RETRY.maxDelayMs);
+  return Math.round(capped * (0.5 + jitter / 2));
+}
+
+/**
+ * The provider subscription an active org is waiting on a renewal check for,
+ * or null when there is nothing to check: the org left active, or a renewal
+ * set its next billing date again.
+ */
+export const renewalCheckTarget = internalQuery({
+  args: { accountId: v.id("accounts") },
+  handler: async (ctx, { accountId }): Promise<string | null> => {
+    const row = await subscriptionFor(ctx, accountId);
+    if (row?.state !== "active" || row.nextBillingAt !== undefined) {
+      return null;
+    }
+    if (row.providerSubscriptionId === undefined) {
+      throw new Error(`renewalCheckTarget: active subscription ${row._id} has no provider subscription`);
+    }
+    return row.providerSubscriptionId;
+  },
+});
+
+export interface RenewalCheckDeps {
+  provider: PaymentProvider;
+  runQuery: ActionCtx["runQuery"];
+  runMutation: ActionCtx["runMutation"];
+  now: () => number;
+}
+
+/**
+ * Asks the provider about the org's subscription and applies the answer
+ * through the usual path: renewed stays active, ended or failed takes the
+ * lifecycle's path for that. "retry" when the provider couldn't say yet
+ * (unreachable, or the renewal not yet charged), leaving the org as it is.
+ */
+export async function checkRenewal(deps: RenewalCheckDeps, accountId: Id<"accounts">): Promise<"settled" | "retry"> {
+  const subscriptionRef = await deps.runQuery(internal.billing.renewalCheckTarget, { accountId });
+  if (subscriptionRef === null) {
+    return "settled";
+  }
+  const fetched = await deps.provider.fetchSubscription(subscriptionRef);
+  if (!fetched.ok) {
+    logger.warn("billing renewal check: provider unavailable, will retry", { accountId, code: fetched.error.code });
+    return "retry";
+  }
+  const subscription = fetched.value;
+  if (subscription === null || (subscription.standing === "good" && subscription.currentPeriodEnd <= deps.now())) {
+    logger.info("billing renewal check: not renewed yet, will retry", { accountId, subscriptionRef });
+    return "retry";
+  }
+  await deps.runMutation(internal.billing.applyProviderSubscription, { subscription });
+  return (await deps.runQuery(internal.billing.renewalCheckTarget, { accountId })) === null ? "settled" : "retry";
+}
+
+export const confirmRenewal = internalAction({
+  args: { accountId: v.id("accounts"), attempt: v.number() },
+  handler: async (ctx, { accountId, attempt }): Promise<void> => {
+    let outcome: "settled" | "retry";
+    try {
+      outcome = await checkRenewal(
+        {
+          provider: paymentProvider(paymentsConfig()),
+          runQuery: ctx.runQuery,
+          runMutation: ctx.runMutation,
+          now: Date.now,
+        },
+        accountId
+      );
+    } catch (error) {
+      // Never deactivate on our own failure: the org stays active and the check runs again.
+      logger.error("billing renewal check: failed, will retry", {
+        accountId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      outcome = "retry";
+    }
+    if (outcome === "retry") {
+      await ctx.scheduler.runAfter(renewalRetryDelay(attempt, Math.random()), internal.billing.confirmRenewal, {
+        accountId,
+        attempt: attempt + 1,
+      });
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Checkout, promotion codes and the customer portal (owner only)
 // ---------------------------------------------------------------------------
 
@@ -298,6 +403,65 @@ function configuredProvider(): { provider: PaymentProvider; portalUrl: string } 
   return { provider: paymentProvider(config), portalUrl: config.ORG_PORTAL_URL };
 }
 
+/**
+ * One checkout attempt per org at a time: every request in the same window
+ * shares an idempotency key, so the provider hands concurrent and repeated
+ * requests the one session the first opened. The session's expiry is derived
+ * from the window too, because a replay must repeat every parameter.
+ */
+export const CHECKOUT_ATTEMPT = {
+  windowMs: 30 * 60_000,
+  // Keeps the expiry clear of Stripe's 30-minute minimum, which it measures from session creation.
+  expiryMarginMs: 5 * 60_000,
+} as const;
+
+/** The key and expiry of the org's checkout attempt at `nowMs`; the expiry lands 35-65 minutes out. */
+export function checkoutAttempt(
+  accountId: Id<"accounts">,
+  nowMs: number
+): { idempotencyKey: string; expiresAt: number } {
+  const windowStart = Math.floor(nowMs / CHECKOUT_ATTEMPT.windowMs) * CHECKOUT_ATTEMPT.windowMs;
+  return {
+    idempotencyKey: `checkout:${accountId}:${windowStart}`,
+    expiresAt: windowStart + 2 * CHECKOUT_ATTEMPT.windowMs + CHECKOUT_ATTEMPT.expiryMarginMs,
+  };
+}
+
+export interface CheckoutArgs {
+  accountId: Id<"accounts">;
+  plan: PlanTier;
+  interval: BillingInterval;
+  promotionCode?: string;
+}
+
+/** Opens (or replays) the org's subscription checkout with the provider. */
+export async function openSubscriptionCheckout(
+  provider: PaymentProvider,
+  portalUrl: string,
+  customerRef: string | null,
+  { accountId, plan, interval, promotionCode }: CheckoutArgs,
+  nowMs: number
+): Promise<{ url: string }> {
+  const result = await provider.createCheckout({
+    purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
+    customerRef,
+    allowPromotionCodes: true,
+    successUrl: `${portalUrl}/billing?checkout=done`,
+    cancelUrl: `${portalUrl}/billing`,
+    ...checkoutAttempt(accountId, nowMs),
+  });
+  if (!result.ok && result.error.code === "checkout_in_progress") {
+    throw new ConvexError<PaymentError>({
+      code: "checkout_in_progress",
+      message: "A checkout for this organization is already open. Finish it, or start again in half an hour.",
+    });
+  }
+  if (!result.ok) {
+    throw providerFailure(result.error);
+  }
+  return result.value;
+}
+
 /** A provider checkout for a plan, for an org with no subscription in good standing. Returns its URL. */
 export const startCheckout = action({
   args: {
@@ -306,8 +470,8 @@ export const startCheckout = action({
     interval: billingIntervalValidator,
     promotionCode: v.optional(v.string()),
   },
-  handler: async (ctx, { accountId, plan, interval, promotionCode }): Promise<{ url: string }> => {
-    const context = await requireBillingManager(ctx, accountId);
+  handler: async (ctx, args): Promise<{ url: string }> => {
+    const context = await requireBillingManager(ctx, args.accountId);
     if (context.paidUp) {
       throw new ConvexError({
         code: "already_subscribed",
@@ -315,18 +479,7 @@ export const startCheckout = action({
       });
     }
     const { provider, portalUrl } = configuredProvider();
-    const result = await provider.createCheckout({
-      purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
-      customerRef: context.customerRef,
-      allowPromotionCodes: true,
-      successUrl: `${portalUrl}/billing?checkout=done`,
-      cancelUrl: `${portalUrl}/billing`,
-      idempotencyKey: `checkout:${accountId}:${crypto.randomUUID()}`,
-    });
-    if (!result.ok) {
-      throw providerFailure(result.error);
-    }
-    return result.value;
+    return openSubscriptionCheckout(provider, portalUrl, context.customerRef, args, Date.now());
   },
 });
 
