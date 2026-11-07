@@ -75,14 +75,6 @@ export type PaymentEvent =
   | { kind: "subscription.changed"; eventId: string; type: string; subscriptionRef: string }
   | { kind: "ignored"; eventId: string; type: string };
 
-export interface Invoice {
-  id: string;
-  periodStart: number;
-  amountCents: number;
-  status: string;
-  hostedUrl: string | null;
-}
-
 export interface PaymentProvider {
   readonly id: PaymentProviderId;
   createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>>;
