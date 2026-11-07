@@ -8,9 +8,9 @@ import { paymentProvider } from "./lib/payments/registry";
 import { STRIPE_SCHEMA_VERSION } from "./lib/payments/stripe";
 import { logger } from "./logger";
 
-export const STRIPE_WEBHOOK_PATH = "/api/webhooks/billing/stripe";
+export const STRIPE_WEBHOOK_PATH = "/payments/stripe/webhook";
 
-export interface BillingWebhookDeps {
+export interface PaymentWebhookDeps {
   provider: PaymentProvider;
   runMutation: ActionCtx["runMutation"];
   now: () => number;
@@ -26,18 +26,18 @@ function json(status: number, body: unknown): Response {
  * answers 200. A failure is recorded and answers 500, so the provider
  * delivers it again.
  */
-export async function handleBillingWebhook(
-  deps: BillingWebhookDeps,
+export async function handlePaymentWebhook(
+  deps: PaymentWebhookDeps,
   rawBody: string,
   headers: Headers
 ): Promise<Response> {
   const verified = await deps.provider.verifyWebhook(rawBody, headers);
   if (!verified.ok) {
-    logger.warn("billing webhook: rejected", { code: verified.error.code });
+    logger.warn("payments webhook: rejected", { code: verified.error.code });
     return json(400, { error: verified.error });
   }
   const event = verified.value;
-  const { duplicate } = await deps.runMutation(internal.billing.recordEvent, {
+  const { duplicate } = await deps.runMutation(internal.payments.recordEvent, {
     eventId: event.eventId,
     type: event.type,
     rawPayload: rawBody,
@@ -49,7 +49,7 @@ export async function handleBillingWebhook(
   }
   const handler = event.purpose === null ? null : PURPOSE_HANDLERS[event.purpose];
   if (handler === null) {
-    await deps.runMutation(internal.billing.finishEvent, {
+    await deps.runMutation(internal.payments.finishEvent, {
       eventId: event.eventId,
       outcome: "ignored",
       error: "no purpose of ours",
@@ -58,13 +58,17 @@ export async function handleBillingWebhook(
   }
   try {
     const result = await handler(deps, event);
-    await deps.runMutation(internal.billing.finishEvent, { eventId: event.eventId, ...result });
+    await deps.runMutation(internal.payments.finishEvent, { eventId: event.eventId, ...result });
     return json(200, { received: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error("billing webhook: failed", { eventId: event.eventId, type: event.type, error: message });
-    await deps.runMutation(internal.billing.finishEvent, { eventId: event.eventId, outcome: "failed", error: message });
-    // The detail stays in billingEvents and the log; the provider only needs to know to redeliver.
+    logger.error("payments webhook: failed", { eventId: event.eventId, type: event.type, error: message });
+    await deps.runMutation(internal.payments.finishEvent, {
+      eventId: event.eventId,
+      outcome: "failed",
+      error: message,
+    });
+    // The detail stays in paymentEvents and the log; the provider only needs to know to redeliver.
     return json(500, { error: { code: "failed", message: "The event could not be applied; it will be retried" } });
   }
 }
@@ -76,7 +80,7 @@ interface EventOutcome {
   accountId?: Id<"accounts">;
 }
 
-type PurposeHandler = (deps: BillingWebhookDeps, event: PaymentEvent) => Promise<EventOutcome>;
+type PurposeHandler = (deps: PaymentWebhookDeps, event: PaymentEvent) => Promise<EventOutcome>;
 
 /**
  * How each purpose's events are applied, keyed by the purpose stamped on the
@@ -88,7 +92,7 @@ const PURPOSE_HANDLERS: Record<PaymentPurposeKind, PurposeHandler> = {
 };
 
 /** Fetches the subscription the event is about and applies the provider's truth about it. */
-async function applySubscriptionEvent(deps: BillingWebhookDeps, event: PaymentEvent): Promise<EventOutcome> {
+async function applySubscriptionEvent(deps: PaymentWebhookDeps, event: PaymentEvent): Promise<EventOutcome> {
   if (event.subscriptionRef === null) {
     return { outcome: "ignored", error: "about no subscription" };
   }
@@ -102,7 +106,7 @@ async function applySubscriptionEvent(deps: BillingWebhookDeps, event: PaymentEv
   return deps.runMutation(internal.billing.applyProviderSubscription, { subscription: fetched.value });
 }
 
-export function registerBillingRoutes(http: HttpRouter): void {
+export function registerPaymentRoutes(http: HttpRouter): void {
   http.route({
     path: STRIPE_WEBHOOK_PATH,
     method: "POST",
@@ -111,10 +115,10 @@ export function registerBillingRoutes(http: HttpRouter): void {
       try {
         provider = paymentProvider(paymentsConfig());
       } catch (error) {
-        logger.error("billing webhook: billing is not configured", { error: String(error) });
-        return json(503, { error: { code: "not_configured", message: "Billing is not configured" } });
+        logger.error("payments webhook: payments are not configured", { error: String(error) });
+        return json(503, { error: { code: "not_configured", message: "Payments are not configured" } });
       }
-      return handleBillingWebhook(
+      return handlePaymentWebhook(
         { provider, runMutation: ctx.runMutation, now: Date.now },
         await request.text(),
         request.headers

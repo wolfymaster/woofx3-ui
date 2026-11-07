@@ -1629,9 +1629,9 @@ export default defineSchema({
     ownerEmailMissing: v.optional(v.boolean()),
   }).index("by_account_at", ["accountId", "at"]),
 
-  // billingEvents: every provider webhook as received, deduplicated on its
+  // paymentEvents: every provider webhook as received, deduplicated on its
   // event id, with what applying it did.
-  billingEvents: defineTable({
+  paymentEvents: defineTable({
     provider: v.literal("stripe"),
     eventId: v.string(),
     type: v.string(),

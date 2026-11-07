@@ -9,12 +9,12 @@ import {
   RENEWAL_CHECK_RETRY,
   renewalRetryDelay,
 } from "./billing";
-import { handleBillingWebhook } from "./billingHttp";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
 import { FakePaymentProvider } from "./lib/payments/fake";
 import { err, type ProviderSubscription } from "./lib/payments/provider";
 import { applyTransition, subscriptionFor } from "./lib/subscriptions";
+import { handlePaymentWebhook } from "./paymentsHttp";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -61,7 +61,7 @@ function deliver(t: Backend, provider: FakePaymentProvider, eventId: string) {
     purpose: "subscription",
     subscriptionRef: "sub_1",
   });
-  return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+  return handlePaymentWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
 }
 
 function deliverAbout(t: Backend, provider: FakePaymentProvider, eventId: string, subscriptionRef: string) {
@@ -71,11 +71,11 @@ function deliverAbout(t: Backend, provider: FakePaymentProvider, eventId: string
     purpose: "subscription",
     subscriptionRef,
   });
-  return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+  return handlePaymentWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
 }
 
 async function events(t: Backend) {
-  return t.run(async (ctx) => (await ctx.db.query("billingEvents").collect()).map((e) => [e.eventId, e.outcome]));
+  return t.run(async (ctx) => (await ctx.db.query("paymentEvents").collect()).map((e) => [e.eventId, e.outcome]));
 }
 
 async function transitions(t: Backend, accountId: Id<"accounts">) {
@@ -89,7 +89,7 @@ async function transitions(t: Backend, accountId: Id<"accounts">) {
   );
 }
 
-describe("billing webhook", () => {
+describe("payments webhook", () => {
   test("a marketplace-style purchase (a payment-mode checkout) is acknowledged and touches no subscription", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
@@ -111,7 +111,7 @@ describe("billing webhook", () => {
       purpose: null,
       subscriptionRef: null,
     });
-    const response = await handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+    const response = await handlePaymentWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
     expect(response.status).toBe(200);
     expect(await events(t)).toEqual([["evt_market", "ignored"]]);
     expect(provider.calls).toEqual([]);
@@ -260,7 +260,7 @@ describe("billing webhook", () => {
   test("a bad signature is refused before anything is recorded", async () => {
     const t = newBackend();
     const provider = new FakePaymentProvider();
-    const response = await handleBillingWebhook(
+    const response = await handlePaymentWebhook(
       { provider, runMutation: t.mutation, now: () => T0 },
       "{}",
       new Headers()

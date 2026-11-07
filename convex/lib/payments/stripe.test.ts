@@ -21,7 +21,7 @@ import {
 
 const SECRET = "whsec_test_secret";
 const VALID_ENV = {
-  BILLING_PROVIDER: "stripe",
+  PAYMENTS_PROVIDER: "stripe",
   STRIPE_SECRET_KEY: "sk_test_123",
   STRIPE_WEBHOOK_SECRET: SECRET,
   ORG_PORTAL_URL: "https://woofx3.tv/org",
@@ -278,18 +278,18 @@ describe("verifyWebhook", () => {
 
 describe("billing config", () => {
   test("accepts a complete config", () => {
-    expect(parsePaymentsConfig(VALID_ENV).BILLING_PROVIDER).toBe("stripe");
+    expect(parsePaymentsConfig(VALID_ENV).PAYMENTS_PROVIDER).toBe("stripe");
   });
 
   test("names every missing or malformed variable", () => {
     expect(() => parsePaymentsConfig({})).toThrow(
-      /BILLING_PROVIDER.*STRIPE_SECRET_KEY.*STRIPE_WEBHOOK_SECRET.*ORG_PORTAL_URL/
+      /PAYMENTS_PROVIDER.*STRIPE_SECRET_KEY.*STRIPE_WEBHOOK_SECRET.*ORG_PORTAL_URL/
     );
     expect(() => parsePaymentsConfig({ ...VALID_ENV, STRIPE_WEBHOOK_SECRET: "nope" })).toThrow("STRIPE_WEBHOOK_SECRET");
     expect(() => parsePaymentsConfig({ ...VALID_ENV, ORG_PORTAL_URL: "http://woofx3.tv/org" })).toThrow(
       "ORG_PORTAL_URL"
     );
-    expect(() => parsePaymentsConfig({ ...VALID_ENV, BILLING_PROVIDER: "paypal" })).toThrow("BILLING_PROVIDER");
+    expect(() => parsePaymentsConfig({ ...VALID_ENV, PAYMENTS_PROVIDER: "paypal" })).toThrow("PAYMENTS_PROVIDER");
   });
 });
 
