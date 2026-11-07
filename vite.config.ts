@@ -49,11 +49,6 @@ export default defineConfig(async ({ mode }) => {
         { find: /^@\/(.*)$/, replacement: path.resolve(import.meta.dirname, "client", "src") + "/$1" },
         { find: /^@assets\/(.*)$/, replacement: path.resolve(import.meta.dirname, "attached_assets") + "/$1" },
         { find: /^@convex\/(.*)$/, replacement: path.resolve(import.meta.dirname, "convex") + "/$1" },
-        // The desktop app's window types, generated from its Rust host.
-        {
-          find: /^@desktop-host\/(.*)$/,
-          replacement: path.resolve(import.meta.dirname, "companion", "ui", "src", "generated") + "/$1.ts",
-        },
         { find: /^@shared\/(.*)$/, replacement: path.resolve(import.meta.dirname, "shared") + "/$1" },
         // `@woofx3/api` → index.ts; `@woofx3/api/<sub>` → <sub>.ts
         {
@@ -80,13 +75,10 @@ export default defineConfig(async ({ mode }) => {
       emptyOutDir: true,
     },
     server: {
-      // Desktop: must match the companion window's dev port and base
-      // (companion/ui/vite.config.ts). Web: the public user page is its own app
-      // (vite.user-page.config.ts); forwarding its path to `bun run dev:user-page`
-      // keeps the dashboard from answering it.
-      proxy: desktop
-        ? { "/companion": { target: "http://localhost:1420", ws: true } }
-        : { "/u/": { target: `http://localhost:${userPageDevPort(process.env)}`, ws: true } },
+      // The public user page is its own app (vite.user-page.config.ts);
+      // forwarding its path to `bun run dev:user-page` keeps the dashboard from
+      // answering it. The desktop build has no user page.
+      proxy: desktop ? undefined : { "/u/": { target: `http://localhost:${userPageDevPort(process.env)}`, ws: true } },
       allowedHosts: ["ui.dev.woofx3.tv"],
       host: true,
       fs: {
