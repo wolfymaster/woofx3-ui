@@ -2,6 +2,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
+  assertLifecycle,
   type Lifecycle,
   type LifecycleEffect,
   type LifecycleEvent,
@@ -9,6 +10,7 @@ import {
   type TransitionResult,
   transition,
 } from "./billingLifecycle";
+import type { PlanTier } from "./organization";
 
 // The one writer of `subscriptions`: loads an org's lifecycle, runs the state
 // machine, and writes the row, its history and its scheduled effects in the
@@ -143,4 +145,28 @@ async function scheduleEffects(
         break;
     }
   }
+}
+
+/**
+ * Changes the plan of a subscription no provider bills: an operator moving an
+ * exempt or unbilled org between tiers. Not a lifecycle event, so the state
+ * and its timers stay; the write invariants are asserted as for any write.
+ */
+export async function setSubscriptionPlan(
+  ctx: MutationCtx,
+  row: Doc<"subscriptions">,
+  plan: PlanTier,
+  now: number,
+  actor: string
+): Promise<Doc<"subscriptions">> {
+  if (row.providerSubscriptionId !== undefined) {
+    throw new Error(`setSubscriptionPlan: ${row._id} is billed by its provider; its plan changes there`);
+  }
+  assertLifecycle({ ...lifecycleOf(row), plan });
+  await ctx.db.patch(row._id, { plan, updatedAt: now, updatedBy: actor });
+  const updated = await ctx.db.get(row._id);
+  if (updated === null) {
+    throw new Error(`setSubscriptionPlan: ${row._id} vanished inside its own mutation`);
+  }
+  return updated;
 }
