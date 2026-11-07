@@ -444,8 +444,24 @@ http.route({
   path: "/api/webhooks/woofx3",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    // Checked before the body is read: an anonymous caller gets a 401, not a parse or a log line.
+    const authHeader = request.headers.get("Authorization");
+    const providedSecret = authHeader?.replace("Bearer ", "");
+    if (!providedSecret) {
+      logger.warn("webhook: missing Authorization header");
+      return corsJson({ error: "Missing Authorization header" }, 401);
+    }
+
     const body = await request.text();
-    const payload = JSON.parse(body);
+    let payload: { type?: string; data?: { type?: string } };
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      return corsJson({ error: "Body must be JSON" }, 400);
+    }
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      return corsJson({ error: "Body must be a JSON object" }, 400);
+    }
 
     logger.info("webhook: incoming request", {
       type: payload.type,
@@ -453,16 +469,9 @@ http.route({
     });
 
     if (!payload.type) {
-      logger.warn("webhook: missing type field", { payload: body });
+      // Field names only: the body may carry anything the sender chose.
+      logger.warn("webhook: missing type field", { fields: Object.keys(payload) });
       return corsJson({ error: "Missing required field: type" }, 400);
-    }
-
-    // Validate webhook secret (callbackToken) via Bearer token
-    const authHeader = request.headers.get("Authorization");
-    const providedSecret = authHeader?.replace("Bearer ", "");
-    if (!providedSecret) {
-      logger.warn("webhook: missing Authorization header");
-      return corsJson({ error: "Missing Authorization header" }, 401);
     }
 
     // An engine on the maintenance event queue sends its events there; one

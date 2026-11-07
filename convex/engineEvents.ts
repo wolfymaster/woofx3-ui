@@ -80,7 +80,7 @@ export const applyFromWebhook = internalMutation({
       return { kind: "unauthorized" };
     }
     const envelope = JSON.parse(body) as CallbackEnvelope;
-    logger.info("webhook: event received", { instanceId: instance._id, type: envelope.type, payload: body });
+    logger.info("webhook: event received", { instanceId: instance._id, type: envelope.type });
     // Any event shows the engine is running and may hold changes a scheduled
     // sync would mirror.
     await recordEngineActivityIfDue(ctx, instance);
