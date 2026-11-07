@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import Stripe from "stripe";
-import { parseBillingConfig } from "./config";
+import { parsePaymentsConfig } from "./config";
 import type { DiscountSpec } from "./provider";
 import {
   type CouponFields,
@@ -8,7 +8,7 @@ import {
   couponParams,
   parsePriceLookupKey,
   priceLookupKey,
-  StripeBillingProvider,
+  StripePaymentProvider,
   type SubscriptionFields,
   specOfCoupon,
   standingOf,
@@ -173,7 +173,7 @@ describe("toProviderSubscription", () => {
 
 describe("verifyWebhook", () => {
   const stripe = new Stripe("sk_test_123", { httpClient: Stripe.createFetchHttpClient() });
-  const provider = new StripeBillingProvider(stripe, SECRET, () => 0);
+  const provider = new StripePaymentProvider(stripe, SECRET, () => 0);
   const payload = JSON.stringify({
     id: "evt_1",
     object: "event",
@@ -230,17 +230,17 @@ describe("verifyWebhook", () => {
 
 describe("billing config", () => {
   test("accepts a complete config", () => {
-    expect(parseBillingConfig(VALID_ENV).BILLING_PROVIDER).toBe("stripe");
+    expect(parsePaymentsConfig(VALID_ENV).BILLING_PROVIDER).toBe("stripe");
   });
 
   test("names every missing or malformed variable", () => {
-    expect(() => parseBillingConfig({})).toThrow(
+    expect(() => parsePaymentsConfig({})).toThrow(
       /BILLING_PROVIDER.*STRIPE_SECRET_KEY.*STRIPE_WEBHOOK_SECRET.*ORG_PORTAL_URL/
     );
-    expect(() => parseBillingConfig({ ...VALID_ENV, STRIPE_WEBHOOK_SECRET: "nope" })).toThrow("STRIPE_WEBHOOK_SECRET");
-    expect(() => parseBillingConfig({ ...VALID_ENV, ORG_PORTAL_URL: "http://woofx3.tv/org" })).toThrow(
+    expect(() => parsePaymentsConfig({ ...VALID_ENV, STRIPE_WEBHOOK_SECRET: "nope" })).toThrow("STRIPE_WEBHOOK_SECRET");
+    expect(() => parsePaymentsConfig({ ...VALID_ENV, ORG_PORTAL_URL: "http://woofx3.tv/org" })).toThrow(
       "ORG_PORTAL_URL"
     );
-    expect(() => parseBillingConfig({ ...VALID_ENV, BILLING_PROVIDER: "paypal" })).toThrow("BILLING_PROVIDER");
+    expect(() => parsePaymentsConfig({ ...VALID_ENV, BILLING_PROVIDER: "paypal" })).toThrow("BILLING_PROVIDER");
   });
 });

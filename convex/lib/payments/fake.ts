@@ -1,7 +1,7 @@
 import type {
   AppliedDiscount,
-  BillingEvent,
-  BillingProvider,
+  PaymentEvent,
+  PaymentProvider,
   CheckoutRequest,
   DiscountSpec,
   ProviderSubscription,
@@ -10,12 +10,12 @@ import type {
 import { err, ok } from "./provider";
 
 /**
- * An in-memory BillingProvider for tests. Tests set what the provider holds
+ * An in-memory PaymentProvider for tests. Tests set what the provider holds
  * (`subscriptions`, `promotionCodes`) and read what was asked of it (`calls`).
- * A webhook body is a JSON BillingEvent and its signature header must be
+ * A webhook body is a JSON PaymentEvent and its signature header must be
  * `x-fake-signature: valid`.
  */
-export class FakeBillingProvider implements BillingProvider {
+export class FakePaymentProvider implements PaymentProvider {
   readonly id = "stripe" as const;
   readonly subscriptions = new Map<string, ProviderSubscription>();
   readonly promotionCodes = new Map<string, AppliedDiscount>();
@@ -33,11 +33,11 @@ export class FakeBillingProvider implements BillingProvider {
     return this.outage ?? ok({ url: `https://portal.example/${req.customerRef}` });
   }
 
-  async verifyWebhook(rawBody: string, headers: Headers): Promise<Result<BillingEvent>> {
+  async verifyWebhook(rawBody: string, headers: Headers): Promise<Result<PaymentEvent>> {
     if (headers.get("x-fake-signature") !== "valid") {
       return err("bad_signature", "fake signature mismatch");
     }
-    return ok(JSON.parse(rawBody) as BillingEvent);
+    return ok(JSON.parse(rawBody) as PaymentEvent);
   }
 
   async fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription>> {

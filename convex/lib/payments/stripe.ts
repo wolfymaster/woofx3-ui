@@ -3,11 +3,11 @@ import type { Id } from "../../_generated/dataModel";
 import type { ProviderEndedReason, ProviderStanding } from "../billingLifecycle";
 import { ADD_ONS, type AddOnKey } from "../entitlements";
 import { BILLING_INTERVALS, type BillingInterval, PLAN_TIERS, type PlanTier } from "../organization";
-import type { BillingConfig } from "./config";
+import type { PaymentsConfig } from "./config";
 import {
   type AppliedDiscount,
-  type BillingEvent,
-  type BillingProvider,
+  type PaymentEvent,
+  type PaymentProvider,
   type CheckoutRequest,
   type DiscountDuration,
   type DiscountSpec,
@@ -249,7 +249,7 @@ export function subscriptionRefOf(event: Stripe.Event): string | null {
 // The adapter
 // ---------------------------------------------------------------------------
 
-export function stripeClient(config: BillingConfig): Stripe {
+export function stripeClient(config: PaymentsConfig): Stripe {
   return new Stripe(config.STRIPE_SECRET_KEY, {
     apiVersion: STRIPE_API_VERSION,
     httpClient: Stripe.createFetchHttpClient(),
@@ -266,7 +266,7 @@ function failure<T>(error: unknown): Result<T> {
   throw error;
 }
 
-export class StripeBillingProvider implements BillingProvider {
+export class StripePaymentProvider implements PaymentProvider {
   readonly id = "stripe" as const;
   private readonly crypto = Stripe.createSubtleCryptoProvider();
 
@@ -342,7 +342,7 @@ export class StripeBillingProvider implements BillingProvider {
     }
   }
 
-  async verifyWebhook(rawBody: string, headers: Headers): Promise<Result<BillingEvent>> {
+  async verifyWebhook(rawBody: string, headers: Headers): Promise<Result<PaymentEvent>> {
     const signature = headers.get("stripe-signature");
     if (signature === null) {
       return err("bad_signature", "Missing Stripe-Signature header");

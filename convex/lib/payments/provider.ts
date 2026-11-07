@@ -3,24 +3,25 @@ import type { ProviderEndedReason, ProviderStanding } from "../billingLifecycle"
 import type { AddOnKey } from "../entitlements";
 import type { BillingInterval, PlanTier } from "../organization";
 
-// The payment provider, seen from billing: domain code imports only this file.
-// Each provider (Stripe today) implements BillingProvider at the edge, and
-// woofx3 never touches card data or holds money: the provider does.
+// The payments module: every flow that moves money (subscriptions today)
+// goes through it, and domain code imports only this file. Each provider
+// (Stripe today) implements PaymentProvider at the edge, and woofx3 never
+// touches card data or holds money: the provider does.
 
-export type BillingProviderId = "stripe";
+export type PaymentProviderId = "stripe";
 
-export interface BillingError {
+export interface PaymentError {
   code: "provider_unavailable" | "invalid_request" | "bad_signature" | "unknown_price" | "unknown_discount";
   message: string;
 }
 
-export type Result<T> = { ok: true; value: T } | { ok: false; error: BillingError };
+export type Result<T> = { ok: true; value: T } | { ok: false; error: PaymentError };
 
 export function ok<T>(value: T): Result<T> {
   return { ok: true, value };
 }
 
-export function err<T>(code: BillingError["code"], message: string): Result<T> {
+export function err<T>(code: PaymentError["code"], message: string): Result<T> {
   return { ok: false, error: { code, message } };
 }
 
@@ -70,7 +71,7 @@ export interface ProviderSubscription {
   observedAt: number;
 }
 
-export type BillingEvent =
+export type PaymentEvent =
   | { kind: "subscription.changed"; eventId: string; type: string; subscriptionRef: string }
   | { kind: "ignored"; eventId: string; type: string };
 
@@ -82,11 +83,11 @@ export interface Invoice {
   hostedUrl: string | null;
 }
 
-export interface BillingProvider {
-  readonly id: BillingProviderId;
+export interface PaymentProvider {
+  readonly id: PaymentProviderId;
   createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>>;
   createPortalSession(req: { customerRef: string; returnUrl: string }): Promise<Result<{ url: string }>>;
-  verifyWebhook(rawBody: string, headers: Headers): Promise<Result<BillingEvent>>;
+  verifyWebhook(rawBody: string, headers: Headers): Promise<Result<PaymentEvent>>;
   fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription>>;
   /** Creates the provider's coupon for `key` if missing (a deterministic id), then attaches it. */
   applyDiscount(req: {
