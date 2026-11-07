@@ -17,6 +17,11 @@ interface LiveScenePreviewProps {
   layoutMessage: PreviewLayoutMessage | null;
   /** The overlay follows the scene's draft as sceneManager sequences it (an engine with editor sessions). */
   followDraft?: boolean;
+  /**
+   * `layoutMessage` names the version the overlay follows, so the frame stays
+   * at one URL and switching versions never reloads its widgets.
+   */
+  viewByMessage?: boolean;
 }
 
 /**
@@ -53,6 +58,7 @@ export function LiveScenePreview({
   height,
   layoutMessage,
   followDraft = false,
+  viewByMessage = false,
 }: LiveScenePreviewProps) {
   // undefined = loading; null = not ready yet (scene not synced, or mint failed).
   const overlayUrl = useScenePreviewUrl(engineSceneId, sceneId);
@@ -105,7 +111,7 @@ export function LiveScenePreview({
       // it could not apply in place); the reloaded page knows only the saved
       // scene, not the draft.
       onLoad={() => postLayout(messageRef.current)}
-      src={followDraft ? withDraftView(overlayUrl) : overlayUrl}
+      src={followDraft || viewByMessage ? withDraftView(overlayUrl) : overlayUrl}
       title="Scene preview"
       sandbox="allow-scripts allow-same-origin"
       // Chrome gates a public page reaching a private address behind the Local

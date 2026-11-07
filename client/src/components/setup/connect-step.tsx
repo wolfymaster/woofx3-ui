@@ -3,16 +3,15 @@ import type { Id } from "@convex/_generated/dataModel";
 import { type ResolvedSetupPlatforms, TWITCH_SETUP_MODULE_ID } from "@convex/lib/setupPlatforms";
 import type { SetupStatus } from "@convex/setup";
 import { useAction, useMutation } from "convex/react";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ManagedEngineStep } from "@/components/onboarding/managed-engine-step";
+import { TwitchConnectCard, type TwitchPermissionsLoad } from "@/components/setup/twitch-connect-card";
 import { AskAdminToConnectTwitch, AskOwnerToChooseUsername } from "@/components/setup/twitch-step";
-import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 import { useLogger } from "@/lib/logger-context";
-import { describePermissions } from "@/lib/module-permissions";
 import { setupStepPath } from "@/lib/setup-steps";
 
 interface ConnectStepProps {
@@ -28,6 +27,14 @@ function chosenFrom(load: Load) {
       ? load.data.platforms.find((candidate) => candidate.marketplaceModuleId === TWITCH_SETUP_MODULE_ID)
       : undefined;
   return platform ?? null;
+}
+
+function permissionsLoad(load: Load): TwitchPermissionsLoad {
+  if (load.state === "loading") {
+    return load;
+  }
+  const twitch = chosenFrom(load);
+  return twitch === null ? { state: "failed" } : { state: "ready", permissions: twitch.permissions };
 }
 
 /**
@@ -126,72 +133,18 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">This is where your alerts come from.</p>
-
-      <div className="rounded-lg border p-4 space-y-3" data-testid="card-connect-twitch">
-        <div className="flex items-center gap-2 font-medium">
-          <TwitchGlyph className="h-5 w-5" />
-          Twitch
-        </div>
-
-        {load.state === "loading" && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Getting things ready…
-          </p>
-        )}
-
-        {(load.state === "error" || (load.state === "ready" && twitch === null)) && (
-          <div className="space-y-2">
-            <p className="flex items-start gap-2 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              We can't reach Twitch setup right now.
-            </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void fetchPlatforms()}
-              data-testid="button-retry-platforms"
-            >
-              Try again
-            </Button>
-          </div>
-        )}
-
-        {twitch && (
-          <div className="text-sm">
-            <p className="font-medium">What woofx3 can do on your channel:</p>
-            <ul className="list-disc pl-5 text-muted-foreground" data-testid="list-twitch-permissions">
-              <li>Read your chat and stream events, so alerts can play</li>
-              {describePermissions(twitch.permissions).map((permission) => (
-                <li key={permission.id} className={permission.known ? undefined : "text-amber-500"}>
-                  {permission.description}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {failure && <p className="text-sm text-destructive">{failure}</p>}
-
-        <Button
-          className="w-full"
-          disabled={busy || twitch === null}
-          onClick={() =>
-            void run(async () => {
-              await prepareConnect({ instanceId, platforms: consent });
-              await connect(setupStepPath("connect"));
-            })
-          }
-          data-testid="button-connect-twitch"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-          Connect Twitch
-        </Button>
-      </div>
-
-      <p className="text-xs text-muted-foreground">More platforms are on the way.</p>
-      <p className="text-xs text-muted-foreground">Connecting means you approve what's listed.</p>
+      <TwitchConnectCard
+        load={permissionsLoad(load)}
+        onRetry={() => void fetchPlatforms()}
+        failure={failure}
+        busy={busy}
+        onConnect={() =>
+          void run(async () => {
+            await prepareConnect({ instanceId, platforms: consent });
+            await connect(setupStepPath("connect"));
+          })
+        }
+      />
 
       {status.canSkipTwitch && (
         <Button
