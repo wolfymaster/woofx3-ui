@@ -3,6 +3,7 @@ import { Loader2, Store, Upload, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { PageIntro } from "@/components/common/page-intro";
+import { LIST_RAIL_FRAME } from "@/components/layout/sidebar-rail";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
@@ -280,7 +281,7 @@ export default function Modules() {
   const removableModule = shownModule && shownModule.provenance !== "builtIn" ? shownModule : null;
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className={LIST_RAIL_FRAME}>
       <ModuleSidebar selectedId={selectedModule?.source === "installed" ? selectedModule.module.id : null} />
 
       <div className="flex-1 flex flex-col overflow-hidden">

@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Layers } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
+import { LIST_RAIL } from "@/components/layout/sidebar-rail";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -55,7 +55,7 @@ export function AlertGroupRail({
   groupsActive,
 }: AlertGroupRailProps) {
   return (
-    <nav className={SIDEBAR_RAIL} aria-label="Alert groups">
+    <nav className={LIST_RAIL} aria-label="Alert groups">
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <Label htmlFor="alert-rail-hide-unused" className="text-[13px] font-normal text-muted-foreground">
           Hide unused alerts

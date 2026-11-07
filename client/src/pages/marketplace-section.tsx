@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
+import { LIST_RAIL_FRAME } from "@/components/layout/sidebar-rail";
 import { countByType, MarketplaceSidebar, moduleCategories } from "@/components/marketplace/marketplace-sidebar";
 import { useEngineScope } from "@/engine/context";
 import { useMarketplaceCounts, useMarketplaceSearch } from "@/hooks/use-marketplace";
@@ -45,7 +46,7 @@ export default function MarketplaceSection() {
   const selection = location === MARKETPLACE_PATH ? parseMarketplaceFilter(searchString) : null;
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className={LIST_RAIL_FRAME}>
       <MarketplaceSidebar
         typeCounts={typeCounts}
         categories={categories}

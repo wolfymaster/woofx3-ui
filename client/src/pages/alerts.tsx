@@ -9,6 +9,7 @@ import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { ALERT_GROUPS_PATH, WorkflowGroupPages } from "@/components/alerts/workflow-group-pages";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { LIST_RAIL_FRAME } from "@/components/layout/sidebar-rail";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
 import { useWorkflowGroupsSupported } from "@/engine/hooks/use-workflow-groups";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
@@ -155,7 +156,7 @@ export default function Alerts() {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className={LIST_RAIL_FRAME}>
       <AlertGroupRail
         tree={railTree}
         counts={counts}

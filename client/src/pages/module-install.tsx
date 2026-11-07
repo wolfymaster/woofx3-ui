@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import { LIST_RAIL_FRAME } from "@/components/layout/sidebar-rail";
 import {
   ApproveModulePermissionsDialog,
   ModuleLocalEndpointsSection,
@@ -288,7 +289,7 @@ export default function ModuleInstall() {
   // An upload installs onto the engine rather than into the catalog, so this
   // page sits beside what is installed, not beside the storefront's rail.
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className={LIST_RAIL_FRAME}>
       <ModuleSidebar selectedId={null} />
       <div className="h-full min-w-0 flex-1 overflow-auto">
         <ModuleUpload />

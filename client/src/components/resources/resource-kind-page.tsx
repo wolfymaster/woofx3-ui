@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
 import { EmptyState } from "@/components/common/empty-state";
-import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
+import { LIST_RAIL, LIST_RAIL_FRAME } from "@/components/layout/sidebar-rail";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { GenericResourceDetail } from "@/components/resources/generic-resource-detail";
 import { type KindView, kindViewFor } from "@/components/resources/kind-views";
@@ -147,8 +147,8 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <nav className={SIDEBAR_RAIL} aria-label={title}>
+    <div className={LIST_RAIL_FRAME}>
+      <nav className={LIST_RAIL} aria-label={title}>
         <div className="flex items-center justify-between gap-2 border-b p-3">
           <span className="text-sm font-semibold">{title}</span>
           <Button size="sm" variant="outline" onClick={() => setCreating(true)} data-testid={`button-new-${kindName}`}>
