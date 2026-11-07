@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { checkoutPurposeValidator } from "./lib/payments/provider";
+import { checkoutPurposeValidator, strayPaymentValidator } from "./lib/payments/provider";
 import {
   closeSession,
   openSessionsFor,
@@ -46,8 +46,12 @@ export const finishEvent = internalMutation({
     outcome: outcomeValidator,
     error: v.optional(v.string()),
     accountId: v.optional(v.id("accounts")),
+    stray: v.optional(strayPaymentValidator),
   },
-  handler: async (ctx, { eventId, outcome, error, accountId }) => {
+  handler: async (ctx, { eventId, outcome, error, accountId, stray }) => {
+    if ((outcome === "stray") !== (stray !== undefined)) {
+      throw new Error(`finishEvent: payment event ${eventId} is ${outcome} with${stray ? "" : "out"} stray details`);
+    }
     const row = await ctx.db
       .query("paymentEvents")
       .withIndex("by_provider_event", (q) => q.eq("provider", "stripe").eq("eventId", eventId))
@@ -55,7 +59,7 @@ export const finishEvent = internalMutation({
     if (row === null) {
       throw new Error(`finishEvent: payment event ${eventId} was never recorded`);
     }
-    await ctx.db.patch(row._id, { outcome, error, accountId });
+    await ctx.db.patch(row._id, { outcome, error, accountId, stray });
   },
 });
 
