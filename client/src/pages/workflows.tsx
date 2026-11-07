@@ -600,9 +600,10 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* On a phone the actions wrap to a second row under the name rather than
-          overlapping it. */}
+          overlapping it. The name group's minimum width is what forces the wrap: with
+          none it would shrink to nothing and the badge would spill over the actions. */}
       <div className="min-h-14 border-b border-border bg-background flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2 shrink-0">
-        <div className="flex flex-1 items-center gap-3 min-w-0">
+        <div className="flex flex-1 items-center gap-3 min-w-[12rem] overflow-hidden">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={() => navigate(LIST_PATH)} aria-label="Back to workflows">
