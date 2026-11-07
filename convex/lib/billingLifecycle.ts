@@ -377,11 +377,6 @@ const retry: Handler = (current, _event, ctx) => {
   };
 };
 
-const activeEvaluation: Handler = (_current, _event, ctx) => {
-  const evaluation = evaluateBilling(ctx.provider);
-  return evaluation.ok ? enterActive(evaluation.currentPeriodEnd, ctx) : enterPastDue(evaluation.reason, ctx);
-};
-
 const spinDown: Handler = (current, _event, ctx) => ({
   state: "suspended",
   reason: current?.stateReason,
@@ -422,7 +417,8 @@ export const TRANSITIONS: Record<SubscriptionState | "none", Partial<Record<Life
   },
   active: {
     PaymentSucceeded: activate,
-    EvaluationDue: activeEvaluation,
+    // A period end passed before its renewal webhook: re-checked against the stored provider view.
+    EvaluationDue: evaluateNow,
     PaymentFailed: paymentFailed,
     ProviderEnded: providerEnded,
     ExemptionGranted: grantExemption,
