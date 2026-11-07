@@ -301,19 +301,22 @@ export const finishEvent = internalMutation({
  */
 export const applyProviderSubscription = internalMutation({
   args: { subscription: providerSubscriptionValidator },
-  handler: async (ctx, { subscription }): Promise<{ outcome: "applied" | "ignored"; error?: string }> => {
-    if ((await ctx.db.get(subscription.accountId)) === null) {
-      throw new Error(
-        `Provider subscription ${subscription.subscriptionRef} names missing org ${subscription.accountId}`
-      );
+  handler: async (
+    ctx,
+    { subscription: read }
+  ): Promise<{ outcome: "applied" | "ignored"; error?: string; accountId?: Id<"accounts"> }> => {
+    const accountId = ctx.db.normalizeId("accounts", read.accountId);
+    if (accountId === null || (await ctx.db.get(accountId)) === null) {
+      return { outcome: "ignored", error: `no org ${read.accountId} for subscription ${read.subscriptionRef}` };
     }
+    const subscription = { ...read, accountId };
     const unknownAddOn = subscription.addOns.find((key) => !Object.keys(ADD_ONS).includes(key));
     if (unknownAddOn !== undefined) {
       throw new Error(`Provider subscription ${subscription.subscriptionRef} has unknown add-on ${unknownAddOn}`);
     }
     const before = await subscriptionFor(ctx, subscription.accountId);
     if (before?.providerSyncedAt !== undefined && subscription.observedAt <= before.providerSyncedAt) {
-      return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already" };
+      return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already", accountId };
     }
     const result = await applyTransition(ctx, {
       accountId: subscription.accountId,
@@ -341,8 +344,8 @@ export const applyProviderSubscription = internalMutation({
       });
     }
     if (!result.ok) {
-      return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}` };
+      return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}`, accountId };
     }
-    return { outcome: "applied" };
+    return { outcome: "applied", accountId };
   },
 });

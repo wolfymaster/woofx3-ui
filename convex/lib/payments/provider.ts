@@ -123,11 +123,15 @@ export interface ProviderSubscription {
   observedAt: number;
 }
 
-/** A ProviderSubscription as a function argument. Add-on keys are checked against ADD_ONS where it is applied. */
+/**
+ * A ProviderSubscription as a function argument. The org id came from provider
+ * metadata, so it is a plain string here and looked up where it is applied,
+ * as are the add-on keys against ADD_ONS.
+ */
 export const providerSubscriptionValidator = v.object({
   customerRef: v.string(),
   subscriptionRef: v.string(),
-  accountId: v.id("accounts"),
+  accountId: v.string(),
   plan: v.union(v.literal("starter"), v.literal("pro")),
   interval: v.union(v.literal("month"), v.literal("year")),
   addOns: v.array(v.string()),

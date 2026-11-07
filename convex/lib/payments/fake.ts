@@ -17,7 +17,8 @@ import { err, ok } from "./provider";
  */
 export class FakePaymentProvider implements PaymentProvider {
   readonly id = "stripe" as const;
-  readonly subscriptions = new Map<string, ProviderSubscription>();
+  /** A subscription set to null reads as nothing to apply (still incomplete, or another purpose's). */
+  readonly subscriptions = new Map<string, ProviderSubscription | null>();
   readonly promotionCodes = new Map<string, AppliedDiscount>();
   readonly calls: Array<{ method: string; args: unknown }> = [];
   /** When set, every call fails with this. */
@@ -65,7 +66,7 @@ export class FakePaymentProvider implements PaymentProvider {
       return this.outage;
     }
     const subscription = this.subscriptions.get(req.subscriptionRef);
-    if (subscription === undefined) {
+    if (subscription === undefined || subscription === null) {
       return err("invalid_request", `No fake subscription ${req.subscriptionRef}`);
     }
     const applied: AppliedDiscount = { spec: req.spec, code: null, endsAt: null };

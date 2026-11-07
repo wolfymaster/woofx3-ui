@@ -72,6 +72,45 @@ async function transitions(t: Backend, accountId: Id<"accounts">) {
 }
 
 describe("billing webhook", () => {
+  test("a marketplace-style purchase (a payment-mode checkout) is acknowledged and touches no subscription", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    await t.run((ctx) =>
+      applyTransition(ctx, {
+        accountId,
+        event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
+        now: T0,
+        actor: "test",
+        origin: "signup",
+      })
+    );
+    const before = await t.run((ctx) => subscriptionFor(ctx, accountId));
+    const provider = new FakePaymentProvider();
+    // The provider reads the purpose off a session no purpose of ours created: it knows none.
+    const body = JSON.stringify({
+      eventId: "evt_market",
+      type: "checkout.session.completed",
+      purpose: null,
+      subscriptionRef: null,
+    });
+    const response = await handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+    expect(response.status).toBe(200);
+    expect(await events(t)).toEqual([["evt_market", "ignored"]]);
+    expect(provider.calls).toEqual([]);
+    expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toEqual(before);
+    expect(await transitions(t, accountId)).toEqual(["TrialStarted"]);
+  });
+
+  test("a subscription that reads as nothing to apply is acknowledged", async () => {
+    const t = newBackend();
+    await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", null);
+    expect((await deliver(t, provider, "evt_incomplete")).status).toBe(200);
+    expect(await events(t)).toEqual([["evt_incomplete", "ignored"]]);
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
+  });
+
   test("a checkout with no subscription row activates the org and mirrors the provider", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
@@ -202,12 +241,16 @@ describe("billing actions", () => {
 });
 
 describe("internal mutations", () => {
-  test("applyProviderSubscription refuses an org that doesn't exist", async () => {
+  test("applyProviderSubscription ignores an org that doesn't exist, or a ref that is no org id", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
     await t.run((ctx) => ctx.db.delete(accountId));
-    await expect(
-      t.mutation(internal.billing.applyProviderSubscription, { subscription: providerSubscription(accountId) })
-    ).rejects.toThrow("names missing org");
+    for (const ref of [accountId, "not-an-org"]) {
+      const subscription = { ...providerSubscription(accountId), accountId: ref as Id<"accounts"> };
+      expect(await t.mutation(internal.billing.applyProviderSubscription, { subscription })).toMatchObject({
+        outcome: "ignored",
+      });
+    }
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
   });
 });
