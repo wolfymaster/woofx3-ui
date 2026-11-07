@@ -164,13 +164,16 @@ function PackCard({ entry, onOpen }: { entry: PackViews; onOpen: () => void }) {
           </li>
         ))}
       </ul>
+      {/* Outline rather than primary: every card offers the same action, so a grid of
+          filled buttons would make nothing on the page stand out. A blocked pack says
+          why in its badge, so the button does not repeat it. */}
       <Button
-        variant={fullyInstalled ? "outline" : "default"}
+        variant="outline"
         onClick={onOpen}
         disabled={summary.blockedReason !== null && summary.installed === 0}
         data-testid={`button-open-starter-pack-${pack.id}`}
       >
-        {fullyInstalled ? "View" : summary.blockedReason && summary.installed === 0 ? summary.blockedReason : "Set up"}
+        {fullyInstalled ? "View" : "Set up"}
       </Button>
     </Card>
   );
