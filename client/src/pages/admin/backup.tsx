@@ -177,7 +177,7 @@ function ExportCard({ instanceName, canExportMembers }: { instanceName: string; 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Export</CardTitle>
+        <CardTitle className="text-lg">Export</CardTitle>
         <CardDescription>
           Download what you have built as one file. Tokens, passwords, module settings and the current values of
           counters, timers and queues are never included.
@@ -488,7 +488,7 @@ function ImportCard({ canImport }: { canImport: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Import</CardTitle>
+        <CardTitle className="text-lg">Import</CardTitle>
         <CardDescription>
           Restore a backup or bring in a setup someone shared with you. You see what will change before anything is
           written.
@@ -646,7 +646,7 @@ export default function AdminBackup() {
           <ImportCard canImport={access.canImport} />
           <Card>
             <CardHeader>
-              <CardTitle>Bring your setup from Firebot or Streamer.bot</CardTitle>
+              <CardTitle className="text-lg">Bring your setup from Firebot or Streamer.bot</CardTitle>
               <CardDescription>
                 Your commands, alerts, timers, counters and roles are rebuilt as woofx3 workflows, commands, counters
                 and groups. You see what comes over, and what can&apos;t, before anything is created.
