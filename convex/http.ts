@@ -12,6 +12,7 @@ import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from ".
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { engineActivityPatch } from "./lib/engineSync/activity";
+import { inboundWebhookRateLimiter } from "./lib/inboundWebhookLimits";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
   buildForwardedRequest,
@@ -800,6 +801,13 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
   const endpoint = await ctx.runQuery(internal.inboundWebhooks.getByEndpointId, { endpointId: path.endpointId });
   if (!endpoint || !endpoint.isEnabled) {
     return new Response(null, { status: 404 });
+  }
+  const limit = await inboundWebhookRateLimiter.limit(ctx, "inboundWebhookDelivery", { key: endpoint._id });
+  if (!limit.ok) {
+    return new Response(null, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil(limit.retryAfter / 1000)) },
+    });
   }
 
   if (Number(request.headers.get("content-length") ?? "0") > MAX_INBOUND_BODY_BYTES) {
