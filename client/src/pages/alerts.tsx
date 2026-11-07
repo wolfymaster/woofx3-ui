@@ -8,8 +8,8 @@ import { AlertsDashboard } from "@/components/alerts/dashboard/alerts-dashboard"
 import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { ALERT_GROUPS_PATH, WorkflowGroupPages } from "@/components/alerts/workflow-group-pages";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListDetail } from "@/components/layout/list-detail";
 import { PageHeader } from "@/components/layout/page-header";
-import { LIST_RAIL_FRAME } from "@/components/layout/sidebar-rail";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
 import { useWorkflowGroupsSupported } from "@/engine/hooks/use-workflow-groups";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
@@ -156,69 +156,79 @@ export default function Alerts() {
   }
 
   return (
-    <div className={LIST_RAIL_FRAME}>
-      <AlertGroupRail
-        tree={railTree}
-        counts={counts}
-        selectedId={selectedId}
-        basePath={BASE_PATH}
-        activeAnchor={activeAnchor}
-        onAnchorSelect={requestScroll}
-        hideUnused={hideUnused}
-        onHideUnusedChange={(hide) => $hideUnusedAlerts.set(hide)}
-        groupsHref={groupsSupported ? ALERT_GROUPS_PATH : null}
-        groupsActive={groupsRoute !== null}
-      />
-
-      <div className="flex-1 overflow-auto">
-        {/* The dashboard lays out three panels side by side; one event's
+    <>
+      <ListDetail
+        hasSelection={selectedId !== null || groupsRoute !== null}
+        back={{ href: BASE_PATH, label: "Alerts" }}
+        overviewBelowList
+        list={
+          <AlertGroupRail
+            tree={railTree}
+            counts={counts}
+            selectedId={selectedId}
+            basePath={BASE_PATH}
+            activeAnchor={activeAnchor}
+            onAnchorSelect={requestScroll}
+            hideUnused={hideUnused}
+            onHideUnusedChange={(hide) => $hideUnusedAlerts.set(hide)}
+            groupsHref={groupsSupported ? ALERT_GROUPS_PATH : null}
+            groupsActive={groupsRoute !== null}
+          />
+        }
+        detail={
+          <div className="flex-1 overflow-auto">
+            {/* The dashboard lays out three panels side by side; one event's
             triggers are prose, and prose needs a measure. */}
-        <div
-          className={cn(
-            "mx-auto w-full px-4 pb-8 pt-6 sm:px-6",
-            selectedId === null && groupsRoute === null ? "max-w-[1200px]" : "max-w-[880px] sm:pt-16"
-          )}
-        >
-          {groupsRoute !== null ? (
-            <WorkflowGroupPages route={groupsRoute} />
-          ) : loading ? (
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          ) : selectedId === null ? (
-            <>
-              <PageHeader
-                title="Alerts"
-                description="How your alerts have been going, and a way to fire one yourself. Pick a kind of event on the left to configure what it does."
-              />
-              <AlertsDashboard sections={sections} />
-            </>
-          ) : !node ? (
-            <EmptyState
-              icon={Bell}
-              title="No such event type"
-              description="Nothing registered reports this kind of event. It may have come from a module that is no longer installed."
-              action={{ label: "Back to alerts", onClick: () => navigate(BASE_PATH) }}
-            />
-          ) : (
-            <div className="flex flex-col gap-16">
-              {nodePresets.length > 1 && (
-                <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-4xl">{nodeTrail}</h1>
+            <div
+              className={cn(
+                "mx-auto w-full px-4 pb-8 pt-6 sm:px-6",
+                selectedId === null && groupsRoute === null ? "max-w-[1200px]" : "max-w-[880px] sm:pt-16"
               )}
-              {nodePresets.map((preset) => (
-                <EventTriggerList
-                  key={preset.id}
-                  triggerPreset={preset}
-                  workflows={rows}
-                  breadcrumb={nodePresets.length > 1 ? [] : breadcrumb}
-                  headingLevel={nodePresets.length > 1 ? "h2" : "h1"}
-                  onTest={() => openTest(preset.id)}
-                >
-                  {preset.event === CHAT_MESSAGE_EVENT && <ChatCommandTriggers />}
-                </EventTriggerList>
-              ))}
+            >
+              {groupsRoute !== null ? (
+                <WorkflowGroupPages route={groupsRoute} />
+              ) : loading ? (
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              ) : selectedId === null ? (
+                <>
+                  <PageHeader
+                    title="Alerts"
+                    description="How your alerts have been going, and a way to fire one yourself. Pick a kind of event from the list to configure what it does."
+                  />
+                  <AlertsDashboard sections={sections} />
+                </>
+              ) : !node ? (
+                <EmptyState
+                  icon={Bell}
+                  title="No such event type"
+                  description="Nothing registered reports this kind of event. It may have come from a module that is no longer installed."
+                  action={{ label: "Back to alerts", onClick: () => navigate(BASE_PATH) }}
+                />
+              ) : (
+                <div className="flex flex-col gap-16">
+                  {nodePresets.length > 1 && (
+                    <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-4xl">
+                      {nodeTrail}
+                    </h1>
+                  )}
+                  {nodePresets.map((preset) => (
+                    <EventTriggerList
+                      key={preset.id}
+                      triggerPreset={preset}
+                      workflows={rows}
+                      breadcrumb={nodePresets.length > 1 ? [] : breadcrumb}
+                      headingLevel={nodePresets.length > 1 ? "h2" : "h1"}
+                      onTest={() => openTest(preset.id)}
+                    >
+                      {preset.event === CHAT_MESSAGE_EVENT && <ChatCommandTriggers />}
+                    </EventTriggerList>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <TestEventSheet
         open={isTestOpen}
@@ -227,7 +237,7 @@ export default function Alerts() {
         selectedId={testPresetId}
         onSelect={setTestPresetId}
       />
-    </div>
+    </>
   );
 }
 
