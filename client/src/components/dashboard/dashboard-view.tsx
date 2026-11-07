@@ -414,7 +414,7 @@ export function DashboardView() {
         {/* Swiping between panels is off while editing, so dragging a widget
             does not also drag the carousel. */}
         <Carousel className="flex-1 min-h-0" setApi={setCarouselApi} opts={{ watchDrag: !isEditing }}>
-          <CarouselContent>
+          <CarouselContent className="ml-0">
             {panels.map((panel, index) => (
               // Every slide keeps its item so Embla's geometry is unchanged; only
               // panels near the selected one render widgets (see isPanelMounted).
