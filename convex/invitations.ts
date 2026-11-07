@@ -17,10 +17,9 @@ import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import { requireOrgAction } from "./lib/orgRoles";
+import { orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
 import {
   applyOrgRoleToEngines,
-  canAccessAccount,
   getAccountMembership,
   getInstanceMembership,
   grantEngineRole,
@@ -41,37 +40,70 @@ function randomToken(): string {
   return `${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-export const listForAccount = query({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, args) => {
+type PendingInvitation = Pick<
+  Doc<"invitations">,
+  | "_id"
+  | "email"
+  | "platform"
+  | "platformLogin"
+  | "platformDisplayName"
+  | "platformProfileImageUrl"
+  | "role"
+  | "createdAt"
+  | "expiresAt"
+> & { instanceId: Id<"instances"> | null; engineRole: "admin" | "member" | null };
+
+function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
+  return {
+    _id: r._id,
+    email: r.email,
+    platform: r.platform,
+    platformLogin: r.platformLogin,
+    platformDisplayName: r.platformDisplayName,
+    platformProfileImageUrl: r.platformProfileImageUrl,
+    role: r.role,
+    instanceId: r.instanceId ?? null,
+    engineRole: r.engineRole ?? null,
+    createdAt: r.createdAt,
+    expiresAt: r.expiresAt,
+  };
+}
+
+/**
+ * Pending invitations the caller may manage on this engine's team page, or
+ * null when they may manage none. Invitee emails are personal data, so the
+ * list follows `revoke`: an engine's admins see its invitations, and only an
+ * org role with `manageMembers` also sees the org-wide ones that predate
+ * engine-scoped invites. `now` (ms) decides which have expired; a query
+ * can't read the clock without losing its cache.
+ */
+export const listForEngine = query({
+  args: { instanceId: v.id("instances"), now: v.number() },
+  handler: async (ctx, { instanceId, now }): Promise<{ invitations: PendingInvitation[] } | null> => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
-
-    const allowed = await canAccessAccount(ctx, args.accountId, userId);
-    if (!allowed) return null;
-
-    const rows = await ctx.db
+    if (userId === null) {
+      return null;
+    }
+    const instance = await ctx.db.get(instanceId);
+    const membership = await getInstanceMembership(ctx, instanceId, userId);
+    if (instance === null || !roleSatisfies(membership?.role, "admin")) {
+      return null;
+    }
+    const engineRows = await ctx.db
       .query("invitations")
-      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId).eq("status", "pending"))
       .collect();
-
-    const now = Date.now();
-    const invitations = rows
-      .filter((r) => r.status === "pending" && r.expiresAt > now)
-      .map((r) => ({
-        _id: r._id,
-        email: r.email,
-        platform: r.platform,
-        platformLogin: r.platformLogin,
-        platformDisplayName: r.platformDisplayName,
-        platformProfileImageUrl: r.platformProfileImageUrl,
-        role: r.role,
-        instanceId: r.instanceId ?? null,
-        engineRole: r.engineRole ?? null,
-        createdAt: r.createdAt,
-        expiresAt: r.expiresAt,
-      }));
-
+    const account = await ctx.db.get(instance.accountId);
+    const orgWideRows =
+      account !== null && orgCan(await orgRoleOf(ctx, account, userId), "manageMembers")
+        ? (
+            await ctx.db
+              .query("invitations")
+              .withIndex("by_account", (q) => q.eq("accountId", instance.accountId))
+              .collect()
+          ).filter((r) => r.instanceId === undefined && r.status === "pending")
+        : [];
+    const invitations = [...engineRows, ...orgWideRows].filter((r) => r.expiresAt > now).map(toPendingInvitation);
     return { invitations };
   },
 });

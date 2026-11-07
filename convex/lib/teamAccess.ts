@@ -39,23 +39,6 @@ export async function getAccountMembership(ctx: QueryCtx, accountId: Id<"account
     .first();
 }
 
-/** True if the user may view this account's team data. */
-export async function canAccessAccount(
-  ctx: QueryCtx,
-  accountId: Id<"accounts">,
-  userId: Id<"users">
-): Promise<boolean> {
-  const account = await ctx.db.get(accountId);
-  if (!account) {
-    return false;
-  }
-  if (account.ownerId === userId) {
-    return true;
-  }
-  const m = await getAccountMembership(ctx, accountId, userId);
-  return m !== null;
-}
-
 /**
  * Gives the user `role` on the engine, the one way engine access is granted.
  * Holds the membership invariants:
