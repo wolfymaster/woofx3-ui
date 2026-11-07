@@ -6,7 +6,13 @@ import { type ActionCtx, action, internalAction, internalMutation, internalQuery
 import { dueEvent, isWarningCurrent, WARNING_TEMPLATES } from "./lib/billingLifecycle";
 import { warningNotification, warningVariables } from "./lib/billingWarnings";
 import { ADD_ONS } from "./lib/entitlements";
-import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./lib/organization";
+import {
+  type BillingInterval,
+  billingIntervalValidator,
+  type PlanTier,
+  planTierValidator,
+  subscriptionStateValidator,
+} from "./lib/organization";
 import { requireOrgActionFor } from "./lib/orgRoles";
 import { paymentsConfig } from "./lib/payments/config";
 import {
@@ -174,6 +180,65 @@ function configuredProvider(): { provider: PaymentProvider; portalUrl: string } 
   return { provider: paymentProvider(config), portalUrl: config.ORG_PORTAL_URL };
 }
 
+/**
+ * One checkout attempt per org at a time: every request in the same window
+ * shares an idempotency key, so the provider hands concurrent and repeated
+ * requests the one session the first opened. The session's expiry is derived
+ * from the window too, because a replay must repeat every parameter.
+ */
+export const CHECKOUT_ATTEMPT = {
+  windowMs: 30 * 60_000,
+  // Keeps the expiry clear of Stripe's 30-minute minimum, which it measures from session creation.
+  expiryMarginMs: 5 * 60_000,
+} as const;
+
+/** The key and expiry of the org's checkout attempt at `nowMs`; the expiry lands 35-65 minutes out. */
+export function checkoutAttempt(
+  accountId: Id<"accounts">,
+  nowMs: number
+): { idempotencyKey: string; expiresAt: number } {
+  const windowStart = Math.floor(nowMs / CHECKOUT_ATTEMPT.windowMs) * CHECKOUT_ATTEMPT.windowMs;
+  return {
+    idempotencyKey: `checkout:${accountId}:${windowStart}`,
+    expiresAt: windowStart + 2 * CHECKOUT_ATTEMPT.windowMs + CHECKOUT_ATTEMPT.expiryMarginMs,
+  };
+}
+
+export interface CheckoutArgs {
+  accountId: Id<"accounts">;
+  plan: PlanTier;
+  interval: BillingInterval;
+  promotionCode?: string;
+}
+
+/** Opens (or replays) the org's subscription checkout with the provider. */
+export async function openSubscriptionCheckout(
+  provider: PaymentProvider,
+  portalUrl: string,
+  customerRef: string | null,
+  { accountId, plan, interval, promotionCode }: CheckoutArgs,
+  nowMs: number
+): Promise<{ url: string }> {
+  const result = await provider.createCheckout({
+    purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
+    customerRef,
+    allowPromotionCodes: true,
+    successUrl: `${portalUrl}/billing?checkout=done`,
+    cancelUrl: `${portalUrl}/billing`,
+    ...checkoutAttempt(accountId, nowMs),
+  });
+  if (!result.ok && result.error.code === "checkout_in_progress") {
+    throw new ConvexError<PaymentError>({
+      code: "checkout_in_progress",
+      message: "A checkout for this organization is already open. Finish it, or start again in half an hour.",
+    });
+  }
+  if (!result.ok) {
+    throw providerFailure(result.error);
+  }
+  return result.value;
+}
+
 /** A provider checkout for a plan, for an org with no subscription in good standing. Returns its URL. */
 export const startCheckout = action({
   args: {
@@ -182,8 +247,8 @@ export const startCheckout = action({
     interval: billingIntervalValidator,
     promotionCode: v.optional(v.string()),
   },
-  handler: async (ctx, { accountId, plan, interval, promotionCode }): Promise<{ url: string }> => {
-    const context = await requireBillingManager(ctx, accountId);
+  handler: async (ctx, args): Promise<{ url: string }> => {
+    const context = await requireBillingManager(ctx, args.accountId);
     if (context.paidUp) {
       throw new ConvexError({
         code: "already_subscribed",
@@ -191,18 +256,7 @@ export const startCheckout = action({
       });
     }
     const { provider, portalUrl } = configuredProvider();
-    const result = await provider.createCheckout({
-      purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
-      customerRef: context.customerRef,
-      allowPromotionCodes: true,
-      successUrl: `${portalUrl}/billing?checkout=done`,
-      cancelUrl: `${portalUrl}/billing`,
-      idempotencyKey: `checkout:${accountId}:${crypto.randomUUID()}`,
-    });
-    if (!result.ok) {
-      throw providerFailure(result.error);
-    }
-    return result.value;
+    return openSubscriptionCheckout(provider, portalUrl, context.customerRef, args, Date.now());
   },
 });
 

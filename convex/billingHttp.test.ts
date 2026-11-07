@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { CHECKOUT_ATTEMPT, checkoutAttempt, openSubscriptionCheckout } from "./billing";
 import { handleBillingWebhook } from "./billingHttp";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
@@ -303,5 +304,42 @@ describe("internal mutations", () => {
       });
     }
     expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
+  });
+});
+
+describe("one checkout per org at a time", () => {
+  const WINDOW = CHECKOUT_ATTEMPT.windowMs;
+
+  test("requests in one window share a key and an expiry 35-65 minutes out; the next window gets a new key", () => {
+    const accountId = "acct_1" as Id<"accounts">;
+    const start = Math.ceil(T0 / WINDOW) * WINDOW;
+    const first = checkoutAttempt(accountId, start);
+    const late = checkoutAttempt(accountId, start + WINDOW - 1);
+    expect(late).toEqual(first);
+    expect(first.expiresAt - start).toBe(65 * 60_000);
+    expect(first.expiresAt - (start + WINDOW - 1)).toBeGreaterThan(35 * 60_000 - 1);
+    expect(checkoutAttempt(accountId, start + WINDOW).idempotencyKey).not.toBe(first.idempotencyKey);
+    expect(checkoutAttempt("acct_2" as Id<"accounts">, start).idempotencyKey).not.toBe(first.idempotencyKey);
+  });
+
+  test("two concurrent requests get one session, so at most one subscription", async () => {
+    const provider = new FakePaymentProvider();
+    const args = { accountId: "acct_1" as Id<"accounts">, plan: "pro" as const, interval: "month" as const };
+    const [a, b] = await Promise.all([
+      openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, args, T0),
+      openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, args, T0 + 1000),
+    ]);
+    expect(a).toEqual(b);
+    expect(provider.checkouts.size).toBe(1);
+  });
+
+  test("another plan while a checkout is open is refused, not a second session", async () => {
+    const provider = new FakePaymentProvider();
+    const args = { accountId: "acct_1" as Id<"accounts">, plan: "pro" as const, interval: "month" as const };
+    await openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, args, T0);
+    await expect(
+      openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, { ...args, plan: "starter" }, T0 + 1000)
+    ).rejects.toThrow("already open");
+    expect(provider.checkouts.size).toBe(1);
   });
 });
