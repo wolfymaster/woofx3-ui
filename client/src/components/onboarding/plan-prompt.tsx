@@ -1,16 +1,19 @@
 import { CreditCard, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { formatDay } from "@/org-portal/format";
 
 const BILLING_PATH = "/org/billing";
+
+function day(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
 
 /** Shown while a hosted engine is built on the org's free trial. */
 export function TrialNote({ endsAt }: { endsAt: number }) {
   return (
     <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-trial-note">
       <Sparkles className="h-4 w-4 shrink-0" />
-      30-day Starter trial, no card needed. It ends {formatDay(endsAt)}.
+      30-day Starter trial, no card needed. It ends {day(endsAt)}.
     </p>
   );
 }
