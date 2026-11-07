@@ -18,6 +18,8 @@ import type * as alertCompositionActions from "../alertCompositionActions.js";
 import type * as alertCompositions from "../alertCompositions.js";
 import type * as alertLog from "../alertLog.js";
 import type * as auth from "../auth.js";
+import type * as billing from "../billing.js";
+import type * as billingHttp from "../billingHttp.js";
 import type * as browserSource from "../browserSource.js";
 import type * as chatCommandActions from "../chatCommandActions.js";
 import type * as chatCommandGroups from "../chatCommandGroups.js";
@@ -45,6 +47,7 @@ import type * as engineEvents from "../engineEvents.js";
 import type * as engineEventsHttp from "../engineEventsHttp.js";
 import type * as engineHealth from "../engineHealth.js";
 import type * as engineInfo from "../engineInfo.js";
+import type * as engineMembers from "../engineMembers.js";
 import type * as engineSync from "../engineSync.js";
 import type * as engineSyncInternal from "../engineSyncInternal.js";
 import type * as entitlements from "../entitlements.js";
@@ -60,6 +63,8 @@ import type * as instances from "../instances.js";
 import type * as integrationCredentials from "../integrationCredentials.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_alertQueueResults from "../lib/alertQueueResults.js";
+import type * as lib_billingLifecycle from "../lib/billingLifecycle.js";
+import type * as lib_billingWarnings from "../lib/billingWarnings.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
 import type * as lib_commandWorkflow from "../lib/commandWorkflow.js";
 import type * as lib_companionAuth from "../lib/companionAuth.js";
@@ -78,6 +83,7 @@ import type * as lib_engineEvents_move from "../lib/engineEvents/move.js";
 import type * as lib_engineInstanceUrl from "../lib/engineInstanceUrl.js";
 import type * as lib_engineObsStatus from "../lib/engineObsStatus.js";
 import type * as lib_engineRelay from "../lib/engineRelay.js";
+import type * as lib_engineSwitch from "../lib/engineSwitch.js";
 import type * as lib_engineSync_activity from "../lib/engineSync/activity.js";
 import type * as lib_engineSync_config from "../lib/engineSync/config.js";
 import type * as lib_engineSync_steps from "../lib/engineSync/steps.js";
@@ -114,6 +120,7 @@ import type * as lib_instanceAccess from "../lib/instanceAccess.js";
 import type * as lib_instanceRoles from "../lib/instanceRoles.js";
 import type * as lib_instanceTeardown from "../lib/instanceTeardown.js";
 import type * as lib_integrationClientId from "../lib/integrationClientId.js";
+import type * as lib_invitationEngine from "../lib/invitationEngine.js";
 import type * as lib_invitationTarget from "../lib/invitationTarget.js";
 import type * as lib_knownDiscoverers from "../lib/knownDiscoverers.js";
 import type * as lib_macroExecution from "../lib/macroExecution.js";
@@ -140,11 +147,20 @@ import type * as lib_oauthHandoff from "../lib/oauthHandoff.js";
 import type * as lib_oauthState from "../lib/oauthState.js";
 import type * as lib_ops_audit from "../lib/ops/audit.js";
 import type * as lib_ops_auth from "../lib/ops/auth.js";
+import type * as lib_ops_billingRequests from "../lib/ops/billingRequests.js";
 import type * as lib_ops_dto from "../lib/ops/dto.js";
 import type * as lib_ops_notificationRequest from "../lib/ops/notificationRequest.js";
 import type * as lib_ops_planCounts from "../lib/ops/planCounts.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
+import type * as lib_orgRoles from "../lib/orgRoles.js";
+import type * as lib_organization from "../lib/organization.js";
+import type * as lib_payments_config from "../lib/payments/config.js";
+import type * as lib_payments_fake from "../lib/payments/fake.js";
+import type * as lib_payments_provider from "../lib/payments/provider.js";
+import type * as lib_payments_providerEvents from "../lib/payments/providerEvents.js";
+import type * as lib_payments_registry from "../lib/payments/registry.js";
+import type * as lib_payments_stripe from "../lib/payments/stripe.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_placementOpacity from "../lib/placementOpacity.js";
@@ -182,6 +198,7 @@ import type * as lib_setupPlatforms from "../lib/setupPlatforms.js";
 import type * as lib_shoutoutEngineRequest from "../lib/shoutoutEngineRequest.js";
 import type * as lib_shoutoutSchedule from "../lib/shoutoutSchedule.js";
 import type * as lib_starterPackLedger from "../lib/starterPackLedger.js";
+import type * as lib_subscriptions from "../lib/subscriptions.js";
 import type * as lib_teamAccess from "../lib/teamAccess.js";
 import type * as lib_tokenCipher from "../lib/tokenCipher.js";
 import type * as lib_turnstile from "../lib/turnstile.js";
@@ -213,13 +230,16 @@ import type * as macros from "../macros.js";
 import type * as marketplace from "../marketplace.js";
 import type * as marketplaceCatalog from "../marketplaceCatalog.js";
 import type * as marketplaceInstalls from "../marketplaceInstalls.js";
-import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
 import type * as migrations_backfillCommandActions from "../migrations/backfillCommandActions.js";
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
 import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
+import type * as migrations_index from "../migrations/index.js";
+import type * as migrations_invitations from "../migrations/invitations.js";
 import type * as migrations_moveEnginesToEventQueue from "../migrations/moveEnginesToEventQueue.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
+import type * as migrations_organizations from "../migrations/organizations.js";
+import type * as migrations_subscriptions from "../migrations/subscriptions.js";
 import type * as moderation from "../moderation.js";
 import type * as moduleAssets from "../moduleAssets.js";
 import type * as moduleDetail from "../moduleDetail.js";
@@ -241,12 +261,14 @@ import type * as notifications from "../notifications.js";
 import type * as oauthConnectHandoff from "../oauthConnectHandoff.js";
 import type * as obsStatus from "../obsStatus.js";
 import type * as ops_audit from "../ops/audit.js";
+import type * as ops_billing from "../ops/billing.js";
 import type * as ops_engines from "../ops/engines.js";
 import type * as ops_eventRate from "../ops/eventRate.js";
 import type * as ops_http from "../ops/http.js";
 import type * as ops_notifications from "../ops/notifications.js";
 import type * as ops_reads from "../ops/reads.js";
 import type * as ops_storageLimits from "../ops/storageLimits.js";
+import type * as organizations from "../organizations.js";
 import type * as pageIntros from "../pageIntros.js";
 import type * as pins from "../pins.js";
 import type * as plans from "../plans.js";
@@ -261,6 +283,7 @@ import type * as resources from "../resources.js";
 import type * as sceneActions from "../sceneActions.js";
 import type * as sceneWidgets from "../sceneWidgets.js";
 import type * as scenes from "../scenes.js";
+import type * as seeds_plans from "../seeds/plans.js";
 import type * as seeds_preview from "../seeds/preview.js";
 import type * as seeds_triggerActions from "../seeds/triggerActions.js";
 import type * as setup from "../setup.js";
@@ -321,6 +344,8 @@ declare const fullApi: ApiFromModules<{
   alertCompositions: typeof alertCompositions;
   alertLog: typeof alertLog;
   auth: typeof auth;
+  billing: typeof billing;
+  billingHttp: typeof billingHttp;
   browserSource: typeof browserSource;
   chatCommandActions: typeof chatCommandActions;
   chatCommandGroups: typeof chatCommandGroups;
@@ -348,6 +373,7 @@ declare const fullApi: ApiFromModules<{
   engineEventsHttp: typeof engineEventsHttp;
   engineHealth: typeof engineHealth;
   engineInfo: typeof engineInfo;
+  engineMembers: typeof engineMembers;
   engineSync: typeof engineSync;
   engineSyncInternal: typeof engineSyncInternal;
   entitlements: typeof entitlements;
@@ -363,6 +389,8 @@ declare const fullApi: ApiFromModules<{
   integrationCredentials: typeof integrationCredentials;
   invitations: typeof invitations;
   "lib/alertQueueResults": typeof lib_alertQueueResults;
+  "lib/billingLifecycle": typeof lib_billingLifecycle;
+  "lib/billingWarnings": typeof lib_billingWarnings;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
   "lib/commandWorkflow": typeof lib_commandWorkflow;
   "lib/companionAuth": typeof lib_companionAuth;
@@ -381,6 +409,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineInstanceUrl": typeof lib_engineInstanceUrl;
   "lib/engineObsStatus": typeof lib_engineObsStatus;
   "lib/engineRelay": typeof lib_engineRelay;
+  "lib/engineSwitch": typeof lib_engineSwitch;
   "lib/engineSync/activity": typeof lib_engineSync_activity;
   "lib/engineSync/config": typeof lib_engineSync_config;
   "lib/engineSync/steps": typeof lib_engineSync_steps;
@@ -417,6 +446,7 @@ declare const fullApi: ApiFromModules<{
   "lib/instanceRoles": typeof lib_instanceRoles;
   "lib/instanceTeardown": typeof lib_instanceTeardown;
   "lib/integrationClientId": typeof lib_integrationClientId;
+  "lib/invitationEngine": typeof lib_invitationEngine;
   "lib/invitationTarget": typeof lib_invitationTarget;
   "lib/knownDiscoverers": typeof lib_knownDiscoverers;
   "lib/macroExecution": typeof lib_macroExecution;
@@ -443,11 +473,20 @@ declare const fullApi: ApiFromModules<{
   "lib/oauthState": typeof lib_oauthState;
   "lib/ops/audit": typeof lib_ops_audit;
   "lib/ops/auth": typeof lib_ops_auth;
+  "lib/ops/billingRequests": typeof lib_ops_billingRequests;
   "lib/ops/dto": typeof lib_ops_dto;
   "lib/ops/notificationRequest": typeof lib_ops_notificationRequest;
   "lib/ops/planCounts": typeof lib_ops_planCounts;
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
+  "lib/orgRoles": typeof lib_orgRoles;
+  "lib/organization": typeof lib_organization;
+  "lib/payments/config": typeof lib_payments_config;
+  "lib/payments/fake": typeof lib_payments_fake;
+  "lib/payments/provider": typeof lib_payments_provider;
+  "lib/payments/providerEvents": typeof lib_payments_providerEvents;
+  "lib/payments/registry": typeof lib_payments_registry;
+  "lib/payments/stripe": typeof lib_payments_stripe;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
   "lib/placementOpacity": typeof lib_placementOpacity;
@@ -485,6 +524,7 @@ declare const fullApi: ApiFromModules<{
   "lib/shoutoutEngineRequest": typeof lib_shoutoutEngineRequest;
   "lib/shoutoutSchedule": typeof lib_shoutoutSchedule;
   "lib/starterPackLedger": typeof lib_starterPackLedger;
+  "lib/subscriptions": typeof lib_subscriptions;
   "lib/teamAccess": typeof lib_teamAccess;
   "lib/tokenCipher": typeof lib_tokenCipher;
   "lib/turnstile": typeof lib_turnstile;
@@ -516,13 +556,16 @@ declare const fullApi: ApiFromModules<{
   marketplace: typeof marketplace;
   marketplaceCatalog: typeof marketplaceCatalog;
   marketplaceInstalls: typeof marketplaceInstalls;
-  "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
   "migrations/backfillCommandActions": typeof migrations_backfillCommandActions;
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
   "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
+  "migrations/index": typeof migrations_index;
+  "migrations/invitations": typeof migrations_invitations;
   "migrations/moveEnginesToEventQueue": typeof migrations_moveEnginesToEventQueue;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
+  "migrations/organizations": typeof migrations_organizations;
+  "migrations/subscriptions": typeof migrations_subscriptions;
   moderation: typeof moderation;
   moduleAssets: typeof moduleAssets;
   moduleDetail: typeof moduleDetail;
@@ -544,12 +587,14 @@ declare const fullApi: ApiFromModules<{
   oauthConnectHandoff: typeof oauthConnectHandoff;
   obsStatus: typeof obsStatus;
   "ops/audit": typeof ops_audit;
+  "ops/billing": typeof ops_billing;
   "ops/engines": typeof ops_engines;
   "ops/eventRate": typeof ops_eventRate;
   "ops/http": typeof ops_http;
   "ops/notifications": typeof ops_notifications;
   "ops/reads": typeof ops_reads;
   "ops/storageLimits": typeof ops_storageLimits;
+  organizations: typeof organizations;
   pageIntros: typeof pageIntros;
   pins: typeof pins;
   plans: typeof plans;
@@ -564,6 +609,7 @@ declare const fullApi: ApiFromModules<{
   sceneActions: typeof sceneActions;
   sceneWidgets: typeof sceneWidgets;
   scenes: typeof scenes;
+  "seeds/plans": typeof seeds_plans;
   "seeds/preview": typeof seeds_preview;
   "seeds/triggerActions": typeof seeds_triggerActions;
   setup: typeof setup;
@@ -767,6 +813,93 @@ export declare const components: {
     };
     time: {
       getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+    };
+  };
+  migrations: {
+    lib: {
+      cancel: FunctionReference<
+        "mutation",
+        "internal",
+        { name: string },
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }
+      >;
+      cancelAll: FunctionReference<
+        "mutation",
+        "internal",
+        { sinceTs?: number },
+        Array<{
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }>
+      >;
+      clearAll: FunctionReference<
+        "mutation",
+        "internal",
+        { before?: number },
+        null
+      >;
+      getStatus: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; names?: Array<string> },
+        Array<{
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }>
+      >;
+      migrate: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          dryRun: boolean;
+          fnHandle: string;
+          name: string;
+          next?: Array<{ fnHandle: string; name: string }>;
+          oneBatchOnly?: boolean;
+          reset?: boolean;
+        },
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }
+      >;
     };
   };
 };

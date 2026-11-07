@@ -49,6 +49,25 @@ export async function sendNotification(
   return notificationId;
 }
 
+/**
+ * `sendNotification` unless one with this `requestId` was already sent, for
+ * senders that may run more than once. Returns whether it sent.
+ */
+export async function sendNotificationOnce(
+  ctx: MutationCtx,
+  notification: NotificationContent & { audience: NotificationAudience; createdBy: string; requestId: string }
+): Promise<boolean> {
+  const sent = await ctx.db
+    .query("notifications")
+    .withIndex("by_request_id", (q) => q.eq("requestId", notification.requestId))
+    .first();
+  if (sent !== null) {
+    return false;
+  }
+  await sendNotification(ctx, notification);
+  return true;
+}
+
 /** Deletes a notification at once and removes it from every inbox in the background. */
 export async function retractNotification(ctx: MutationCtx, notificationId: Id<"notifications">): Promise<void> {
   await ctx.db.delete(notificationId);

@@ -25,7 +25,9 @@ import {
   COMMAND_NEW_ROUTE,
 } from "@/lib/command-editor-route";
 import { IS_DESKTOP } from "@/lib/desktop";
+import { FeatureSourceProvider } from "@/lib/feature-source";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
+import { hostedFeatureSource } from "@/lib/hosted-feature-source";
 import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import {
@@ -91,6 +93,12 @@ const DesktopAppLink = IS_DESKTOP ? lazy(() => import("@/desktop/AppLink")) : nu
 const DesktopRelayWatch = IS_DESKTOP ? lazy(() => import("@/desktop/RelayWatch")) : null;
 const DesktopUpdateBanner = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateBanner")) : null;
 const DesktopLocalConnectionsGuide = IS_DESKTOP ? lazy(() => import("@/desktop/LocalConnectionsGuide")) : null;
+
+// The organization and billing portal is web only: the desktop app never shows
+// billing, so its build carries no /org route (org-portal/boundary.test.ts).
+const OrgPortal = IS_DESKTOP ? null : lazy(() => import("@/org-portal/OrgPortal"));
+/** `/org` and every path under it. */
+const ORG_PORTAL_ROUTE = /^\/org(?:\/.*)?$/;
 
 function SplashScreen() {
   return (
@@ -220,6 +228,17 @@ function AppRoutes() {
       </Route>
 
       <Route path={`${USER_PAGE_PREFIX}*`} component={UserPageHandoff} />
+
+      {/* Outside BroadcastShell: the portal has its own slim layout and needs no engine. */}
+      {OrgPortal && (
+        <Route path={ORG_PORTAL_ROUTE}>
+          <AuthGuard>
+            <PageBoundary resetKey={location}>
+              <OrgPortal />
+            </PageBoundary>
+          </AuthGuard>
+        </Route>
+      )}
 
       {/* Protected app routes */}
       <Route>
@@ -395,32 +414,34 @@ function App() {
         <EngineGatewayProvider gateway={hostedEngineGateway}>
           <AccountViewerName>
             <MarketplaceModeProvider mode={hostedMarketplaceMode}>
-              <TooltipProvider>
-                <Suspense fallback={<SplashScreen />}>
-                  <AppRoutes />
-                </Suspense>
-                {DesktopAppLink && (
-                  <Suspense fallback={null}>
-                    <DesktopAppLink />
+              <FeatureSourceProvider source={hostedFeatureSource}>
+                <TooltipProvider>
+                  <Suspense fallback={<SplashScreen />}>
+                    <AppRoutes />
                   </Suspense>
-                )}
-                {DesktopRelayWatch && (
-                  <Suspense fallback={null}>
-                    <DesktopRelayWatch />
-                  </Suspense>
-                )}
-                {DesktopUpdateBanner && (
-                  <Suspense fallback={null}>
-                    <DesktopUpdateBanner />
-                  </Suspense>
-                )}
-                {DesktopLocalConnectionsGuide && (
-                  <Suspense fallback={null}>
-                    <DesktopLocalConnectionsGuide />
-                  </Suspense>
-                )}
-                <Toaster />
-              </TooltipProvider>
+                  {DesktopAppLink && (
+                    <Suspense fallback={null}>
+                      <DesktopAppLink />
+                    </Suspense>
+                  )}
+                  {DesktopRelayWatch && (
+                    <Suspense fallback={null}>
+                      <DesktopRelayWatch />
+                    </Suspense>
+                  )}
+                  {DesktopUpdateBanner && (
+                    <Suspense fallback={null}>
+                      <DesktopUpdateBanner />
+                    </Suspense>
+                  )}
+                  {DesktopLocalConnectionsGuide && (
+                    <Suspense fallback={null}>
+                      <DesktopLocalConnectionsGuide />
+                    </Suspense>
+                  )}
+                  <Toaster />
+                </TooltipProvider>
+              </FeatureSourceProvider>
             </MarketplaceModeProvider>
           </AccountViewerName>
         </EngineGatewayProvider>

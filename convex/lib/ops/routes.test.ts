@@ -36,6 +36,19 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/notifications")).toEqual({ method: "GET", name: "notifications.list" });
   });
 
+  it("names each account billing write, and nothing else under an account", () => {
+    for (const write of ["plan", "exemption", "suspend", "discount"] as const) {
+      expect(matchOpsRoute("POST", `/api/ops/accounts/k1/${write}`)).toEqual({
+        method: "POST",
+        name: "accounts.billing",
+        accountId: "k1",
+        write,
+      });
+    }
+    expect(matchOpsRoute("POST", "/api/ops/accounts/k1/delete")).toBeNull();
+    expect(matchOpsRoute("GET", "/api/ops/accounts/k1/plan")).toBeNull();
+  });
+
   it("names each notification write", () => {
     expect(matchOpsRoute("POST", "/api/ops/notifications")).toEqual({ method: "POST", name: "notifications.create" });
     expect(matchOpsRoute("POST", "/api/ops/notifications/n1/delete")).toEqual({
