@@ -71,7 +71,7 @@ export function EngineSyncCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Engine Sync</CardTitle>
+        <CardTitle className="text-lg">Engine Sync</CardTitle>
         <CardDescription>
           Reconciles the Convex mirror with the engine. Runs automatically every ~8 hours when the instance has
           activity.

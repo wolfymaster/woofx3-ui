@@ -33,7 +33,7 @@ export function ModuleStorageCard() {
   return (
     <Card data-testid="module-storage-card">
       <CardHeader>
-        <CardTitle>Module storage</CardTitle>
+        <CardTitle className="text-lg">Module storage</CardTitle>
         <CardDescription>What your installed modules save, such as counters, lists and settings.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

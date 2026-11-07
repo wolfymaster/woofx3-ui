@@ -175,7 +175,7 @@ function EngineSettings() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Engine Configuration</CardTitle>
+          <CardTitle className="text-lg">Engine Configuration</CardTitle>
           <CardDescription>
             Endpoint for the selected instance ({instance.name}). Each instance has its own engine URL.
           </CardDescription>
@@ -301,7 +301,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
     <>
       <Card className="border-destructive/50">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-lg text-destructive">Danger Zone</CardTitle>
           <CardDescription>Irreversible actions for this instance.</CardDescription>
         </CardHeader>
         <CardContent>

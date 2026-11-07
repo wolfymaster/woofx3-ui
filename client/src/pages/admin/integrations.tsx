@@ -21,7 +21,7 @@ export default function AdminIntegrations() {
       <PageHeader title="Integrations" description="Connect the platforms and services this instance talks to." />
       <Card>
         <CardHeader>
-          <CardTitle>Connected Services</CardTitle>
+          <CardTitle className="text-lg">Connected Services</CardTitle>
           <CardDescription>Manage your connected streaming platforms.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -70,7 +70,7 @@ export default function AdminIntegrations() {
       )}
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>API Keys</CardTitle>
+          <CardTitle className="text-lg">API Keys</CardTitle>
           <CardDescription>Manage API keys for external integrations.</CardDescription>
         </CardHeader>
         <CardContent>
