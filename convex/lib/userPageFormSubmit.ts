@@ -15,7 +15,7 @@ import { sectionsForViewer } from "./publicPage";
 import type { PageViewer } from "./sectionAccess";
 import { turnstileSecret } from "./turnstile";
 import { submissionQueueFor, viewerRoleNames } from "./userPageSubmissions";
-import { instanceAllowsUserPages, instanceForPageSlug, requireRevision, userPageForInstance } from "./userPages";
+import { instanceForPageSlug, requireRevision, userPageForInstance, userPagesAllowed } from "./userPages";
 import { pageViewerFor, viewerFromSession } from "./viewerSessionAuth";
 
 /** One submit as the route read it. Answers stay entries here because Convex records refuse some key names. */
@@ -102,7 +102,7 @@ export async function evaluateSubmission(ctx: QueryCtx, attempt: SubmissionAttem
     return { kind: "repeat" };
   }
   const instance = await ctx.db.get(instanceId);
-  if (!instance || !page.publishedRevisionId || !(await instanceAllowsUserPages(ctx, instance))) {
+  if (!instance || !page.publishedRevisionId || !userPagesAllowed(instance.hosting)) {
     return refused("page_unavailable");
   }
 

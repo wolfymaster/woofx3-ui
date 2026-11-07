@@ -3,7 +3,6 @@ import { type PageContent, type PageProblem, type ResourceBinding, widgetBinding
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { accountEntitlements } from "./entitlementAccess";
 import { normalizeSlug } from "./maintenanceClient";
 import { rebuildPageState } from "./userPageState";
 import { deletePageSubmissions } from "./userPageSubmissions";
@@ -85,22 +84,13 @@ export async function instanceForPageSlug(
 }
 
 /**
- * Whether an instance may have a live page. Every hosted plan includes pages,
- * so a managed engine always may; any other engine (self-hosted, or a local
- * one linked to an account) needs the account's `userPages` feature, the
- * paid subscription. Publishing and the public read both ask this, so a page
- * whose account loses the feature goes offline without being unpublished.
+ * Whether an instance may have a live page: managed engines only. Self-hosted
+ * engines offer no hosted features, and a page is one. This is the one place
+ * that rule lives. Publishing and the public read both ask it, so a page
+ * whose engine stops qualifying goes offline without being unpublished.
  */
-export function userPagesAllowed(hosting: Doc<"instances">["hosting"], features: readonly string[]): boolean {
-  return hosting === "managed" || features.includes("userPages");
-}
-
-export async function instanceAllowsUserPages(ctx: QueryCtx, instance: Doc<"instances">): Promise<boolean> {
-  // Hosting alone decides for a managed engine, so its plan is not read.
-  if (userPagesAllowed(instance.hosting, [])) {
-    return true;
-  }
-  return userPagesAllowed(instance.hosting, (await accountEntitlements(ctx, instance.accountId)).features);
+export function userPagesAllowed(hosting: Doc<"instances">["hosting"]): boolean {
+  return hosting === "managed";
 }
 
 export async function userPageForInstance(

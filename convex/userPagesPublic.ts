@@ -8,7 +8,7 @@ import { action, type QueryCtx, query } from "./_generated/server";
 import { slugAvailability } from "./lib/maintenanceClient";
 import { openSections, type PublicPageSources, toPublicPage } from "./lib/publicPage";
 import { turnstileSecret } from "./lib/turnstile";
-import { instanceAllowsUserPages, instanceForPageSlug, requireRevision, userPageForInstance } from "./lib/userPages";
+import { instanceForPageSlug, requireRevision, userPageForInstance, userPagesAllowed } from "./lib/userPages";
 import { pageViewerFor, viewerFromSession } from "./lib/viewerSessionAuth";
 import { PUBLIC_DATABASE_RECORDS } from "./userPageDatabases";
 
@@ -104,7 +104,7 @@ export const bySlug = query({
     if (!instance || !page?.publishedRevisionId || page.publishedAt === undefined) {
       return { kind: "unavailable" };
     }
-    if (!(await instanceAllowsUserPages(ctx, instance))) {
+    if (!userPagesAllowed(instance.hosting)) {
       return { kind: "unavailable" };
     }
     const { content } = await requireRevision(ctx, page.publishedRevisionId);
