@@ -199,7 +199,7 @@ function LeaderboardCard(props: {
     <Card>
       <CardHeader className="space-y-4">
         <div className="space-y-1">
-          <CardTitle>Top supporters</CardTitle>
+          <CardTitle className="text-lg">Top supporters</CardTitle>
           <CardDescription>
             Anonymous cheers and gifts count toward stream totals but never rank anyone.
           </CardDescription>
@@ -383,7 +383,7 @@ function ViewerCard({
     <Card>
       <CardHeader className="space-y-4">
         <div className="space-y-1">
-          <CardTitle>Viewer lookup</CardTitle>
+          <CardTitle className="text-lg">Viewer lookup</CardTitle>
           <CardDescription>Pick a supporter, or look anyone up by their Twitch name.</CardDescription>
         </div>
         <form

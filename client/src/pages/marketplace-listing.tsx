@@ -30,8 +30,10 @@ import { useModuleInstall } from "@/hooks/use-module-install";
 import { actionErrorMessage } from "@/lib/action-error";
 import { listingInstallState } from "@/lib/listing-install-state";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
+import { BANNER_ASPECT } from "@/lib/marketplace-banner";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from "@/lib/marketplace-route";
+import { cn } from "@/lib/utils";
 
 // One listing's page, for any of the five types.
 //
@@ -71,7 +73,13 @@ export default function MarketplaceListing() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="w-full space-y-6 p-6 lg:p-8">
-        <Button variant="ghost" size="sm" className="gap-2 -ml-2" onClick={() => navigate(MARKETPLACE_PATH)}>
+        {/* A phone gets the list's back link above the page instead (ListDetail). */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="hidden gap-2 -ml-2 md:inline-flex"
+          onClick={() => navigate(MARKETPLACE_PATH)}
+        >
           <ArrowLeft className="h-4 w-4" />
           Marketplace
         </Button>
@@ -242,8 +250,8 @@ function ListingBody({
 
   return (
     <>
-      <div className="relative h-40 overflow-hidden rounded-2xl border bg-neutral-950">
-        <ListingArt listing={listing} sizes="100vw" scale={1.3} />
+      <div className={cn("relative overflow-hidden rounded-2xl border bg-neutral-950", BANNER_ASPECT.hero)}>
+        <ListingArt listing={listing} rendition="hero" scale={1.3} />
         <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-background/20" />
       </div>
 

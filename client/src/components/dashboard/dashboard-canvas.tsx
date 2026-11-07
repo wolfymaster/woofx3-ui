@@ -316,14 +316,14 @@ const DashboardZone = memo(function DashboardZone({
 
   if (widgets.length === 0) {
     if (!isEditing) {
-      return <div style={growStyle} data-testid={`canvas-zone-${zoneId}`} />;
+      return <div className="max-md:hidden" style={growStyle} data-testid={`canvas-zone-${zoneId}`} />;
     }
 
     return (
       <div
         ref={setNodeRef}
         className={cn(
-          "rounded-lg border-2 border-dashed flex items-center justify-center transition-colors",
+          "rounded-lg border-2 border-dashed flex items-center justify-center transition-colors max-md:!flex-none max-md:h-24",
           isDropTarget ? "border-primary bg-primary/5" : "border-border"
         )}
         style={growStyle}
@@ -368,7 +368,7 @@ const DashboardZone = memo(function DashboardZone({
   return (
     <div
       ref={setNodeRef}
-      className="relative flex flex-col min-h-0"
+      className="relative flex flex-col min-h-0 max-md:!flex-none max-md:h-[28rem]"
       style={growStyle}
       data-testid={`canvas-zone-${zoneId}`}
     >
@@ -517,12 +517,15 @@ export const DashboardCanvas = memo(function DashboardCanvas({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="h-full p-4 flex flex-col gap-4">
+      {/* A phone stacks every zone at a fixed height and scrolls the panel, since columns
+          squeezed to its width leave each widget too narrow to use. The `!` overrides the
+          inline grow weights that size rows and zones on wider screens. */}
+      <div className="h-full p-4 flex flex-col gap-4 overflow-y-auto md:overflow-visible">
         {layout.rows.map((row, rowIndex) => (
           <div
             // biome-ignore lint/suspicious/noArrayIndexKey: rows are a static, never-reordered layout definition
             key={`row-${rowIndex}`}
-            className="flex gap-4 min-h-0"
+            className="flex flex-col gap-4 min-h-0 max-md:!flex-none md:flex-row"
             style={{ flexGrow: rowWeight(row), flexBasis: 0 }}
           >
             {Array.from({ length: row.columns }).map((_, columnIndex) => {

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authorInitials, hasStats, type ListingBadge, listingStats } from "@/lib/listing-signals";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
+import { BANNER_ASPECT } from "@/lib/marketplace-banner";
 import { cn } from "@/lib/utils";
 
 export interface ListingCardState {
@@ -31,7 +32,7 @@ interface ListingCardProps {
 /**
  * One listing in the storefront, whatever its type.
  *
- * The scan path is art, name, price: the art gets 16:10 because on a creator
+ * The scan path is art, name, price: the art gets the banner's card shape because on a creator
  * marketplace the thumbnail is the product, the name is one line because a
  * second line of description moves the price below the fold, and the action is
  * a real button because a text link does not read as something you can press.
@@ -65,10 +66,10 @@ export function ListingCard({ listing, state, badge, size = "default", onClick, 
         }
       }}
     >
-      <div className="relative aspect-[16/10] shrink-0 overflow-hidden bg-neutral-950">
+      <div className={cn("relative shrink-0 overflow-hidden bg-neutral-950", BANNER_ASPECT.card)}>
         <ListingArt
           listing={listing}
-          sizes={size === "rail" ? "272px" : "(min-width: 1280px) 320px, (min-width: 820px) 33vw, 50vw"}
+          rendition="card"
           className="transition-transform duration-500 group-hover:scale-[1.05]"
         />
         {/* Taxonomy, quietly: a streamer filters by type in the rail, so on

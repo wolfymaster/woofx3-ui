@@ -29,6 +29,7 @@ import { useTriggerWorkflowRequest, useWorkflowRun } from "@/engine/hooks/use-wo
 import type { WorkflowRunDetail, WorkflowTriggerResult } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
+import { SHEET_MOTION } from "@/lib/sheet-motion";
 import {
   settleTestEventOutcome,
   TEST_EVENT_PUBLISH_TIMEOUT_MS,
@@ -94,7 +95,7 @@ export function TestRunSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
-        className="w-full sm:max-w-md flex flex-col"
+        className={cn("w-full sm:max-w-md flex flex-col", SHEET_MOTION)}
         onInteractOutside={(e) => e.preventDefault()}
         data-testid="workflow-test-run-sheet"
       >

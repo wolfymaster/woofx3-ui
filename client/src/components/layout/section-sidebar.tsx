@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { isNavGroupOpen, isNavItemActive, type NavItem } from "./nav-config";
+import { isNavItemActive, type NavItem } from "./nav-config";
 import { SIDEBAR_RAIL } from "./sidebar-rail";
 
 interface SectionSidebarProps {
@@ -16,8 +16,10 @@ interface SectionSidebarProps {
 export function SectionSidebar({ title, items, location }: SectionSidebarProps) {
   const collapsed = useStore($sidebarShownCollapsed);
 
+  // A phone opens the section from the header's menu instead (SectionMenu), since a rail
+  // beside the page leaves the content no room.
   return (
-    <nav className={cn(SIDEBAR_RAIL, collapsed && "w-14")} aria-label={`${title} navigation`}>
+    <nav className={cn(SIDEBAR_RAIL, "hidden md:flex", collapsed && "w-14")} aria-label={`${title} navigation`}>
       <div className="flex-1 overflow-y-auto">
         {!collapsed && (
           <div className="px-4 py-3 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
@@ -25,20 +27,7 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
           </div>
         )}
 
-        <div className={cn("px-2 pb-2 space-y-0.5", collapsed && "pt-3")}>
-          {items.map((item) => (
-            <div key={item.id} className="space-y-0.5">
-              <NavRow item={item} location={location} collapsed={collapsed} nested={false} />
-              {item.children && isNavGroupOpen(item, location) && (
-                <div className="space-y-0.5" data-testid={`subnav-group-${item.id}`}>
-                  {item.children.map((child) => (
-                    <NavRow key={child.id} item={child} location={location} collapsed={collapsed} nested />
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        <SectionNavList items={items} location={location} collapsed={collapsed} className={cn(collapsed && "pt-3")} />
       </div>
 
       <div className="border-t border-border p-2">
@@ -62,17 +51,56 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
   );
 }
 
+interface SectionNavListProps {
+  items: NavItem[];
+  location: string;
+  /** Icons only, each labelled by a tooltip. */
+  collapsed: boolean;
+  /** Called when an entry is followed, so a menu holding the list can close. */
+  onNavigate?: () => void;
+  className?: string;
+}
+
+/** A section's entries, with each entry's children indented under it and the current page marked. */
+export function SectionNavList({ items, location, collapsed, onNavigate, className }: SectionNavListProps) {
+  return (
+    <div className={cn("px-2 pb-2 space-y-0.5", className)}>
+      {items.map((item) => (
+        <div key={item.id} className="space-y-0.5">
+          <NavRow item={item} location={location} collapsed={collapsed} nested={false} onNavigate={onNavigate} />
+          {item.children && (
+            <div className="space-y-0.5" data-testid={`subnav-group-${item.id}`}>
+              {item.children.map((child) => (
+                <NavRow
+                  key={child.id}
+                  item={child}
+                  location={location}
+                  collapsed={collapsed}
+                  nested
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NavRow({
   item,
   location,
   collapsed,
   nested,
+  onNavigate,
 }: {
   item: NavItem;
   location: string;
   collapsed: boolean;
   /** Sits under a parent entry, so it is indented when the sidebar has room to show it. */
   nested: boolean;
+  onNavigate?: () => void;
 }) {
   const isActive = isNavItemActive(item, location);
   const row = (
@@ -92,7 +120,7 @@ function NavRow({
   );
 
   return (
-    <Link href={item.href} className="block">
+    <Link href={item.href} className="block" onClick={onNavigate}>
       {collapsed ? (
         <Tooltip>
           <TooltipTrigger asChild>{row}</TooltipTrigger>

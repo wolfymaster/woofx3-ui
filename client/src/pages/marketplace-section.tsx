@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
+import { ListDetail } from "@/components/layout/list-detail";
 import { countByType, MarketplaceSidebar, moduleCategories } from "@/components/marketplace/marketplace-sidebar";
 import { useEngineScope } from "@/engine/context";
 import { useMarketplaceCounts, useMarketplaceSearch } from "@/hooks/use-marketplace";
 import {
+  isMarketplaceFront,
   MARKETPLACE_AUTHOR_ROUTE,
   MARKETPLACE_LISTING_ROUTE,
   MARKETPLACE_PATH,
@@ -45,23 +47,30 @@ export default function MarketplaceSection() {
   const selection = location === MARKETPLACE_PATH ? parseMarketplaceFilter(searchString) : null;
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      <MarketplaceSidebar
-        typeCounts={typeCounts}
-        categories={categories}
-        total={overview.page?.total ?? 0}
-        selection={selection}
-      />
-      <Switch>
-        <Route path={MARKETPLACE_AUTHOR_ROUTE} component={MarketplaceAuthor} />
-        <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
-        <Route path={MARKETPLACE_PATH}>
-          <Marketplace overview={overview} typeCounts={typeCounts} />
-        </Route>
-        <Route>
-          <Redirect to={MARKETPLACE_PATH} />
-        </Route>
-      </Switch>
-    </div>
+    <ListDetail
+      hasSelection={!isMarketplaceFront(location, searchString)}
+      back={{ href: MARKETPLACE_PATH, label: "Marketplace" }}
+      overviewBelowList
+      list={
+        <MarketplaceSidebar
+          typeCounts={typeCounts}
+          categories={categories}
+          total={overview.page?.total ?? 0}
+          selection={selection}
+        />
+      }
+      detail={
+        <Switch>
+          <Route path={MARKETPLACE_AUTHOR_ROUTE} component={MarketplaceAuthor} />
+          <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
+          <Route path={MARKETPLACE_PATH}>
+            <Marketplace overview={overview} typeCounts={typeCounts} />
+          </Route>
+          <Route>
+            <Redirect to={MARKETPLACE_PATH} />
+          </Route>
+        </Switch>
+      }
+    />
   );
 }

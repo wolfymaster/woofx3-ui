@@ -59,7 +59,7 @@ export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateScene
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Scene</DialogTitle>
+          <DialogTitle>Create a scene</DialogTitle>
           <DialogDescription>Enter a name for your new scene. You can customize it after creation.</DialogDescription>
         </DialogHeader>
         <div className="py-4">
