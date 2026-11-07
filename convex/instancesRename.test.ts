@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { api } from "./_generated/api";
+import { ENGINE_NAME_MAX_LENGTH } from "./instances";
 import { newBackend } from "./lib/convexTest.testing";
 
 async function fixture() {
@@ -34,8 +35,19 @@ describe("instances.update name", () => {
   test("a blank name is refused", async () => {
     const f = await fixture();
     await expect(f.owner.mutation(api.instances.update, { instanceId: f.instanceId, name: "   " })).rejects.toThrow(
-      "needs a name"
+      "engine name"
     );
+  });
+
+  test("a name over the cap is refused", async () => {
+    const f = await fixture();
+    await expect(
+      f.owner.mutation(api.instances.update, { instanceId: f.instanceId, name: "x".repeat(ENGINE_NAME_MAX_LENGTH + 1) })
+    ).rejects.toThrow("engine name");
+    await f.owner.mutation(api.instances.update, {
+      instanceId: f.instanceId,
+      name: "x".repeat(ENGINE_NAME_MAX_LENGTH),
+    });
   });
 
   test("a plain member cannot rename", async () => {
