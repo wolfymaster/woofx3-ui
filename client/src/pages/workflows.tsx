@@ -373,7 +373,7 @@ function WorkflowListScreen() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setDeleteTarget(workflow);

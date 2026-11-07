@@ -415,7 +415,7 @@ function CommandsTab({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={() => setDeleteTarget(cmd)}
                         aria-label={`Delete !${cmd.command}`}
                       >
@@ -696,7 +696,7 @@ function GroupTable({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
                           onClick={() => onDelete(group)}
                           aria-label={`Delete ${group.name}`}
                         >
