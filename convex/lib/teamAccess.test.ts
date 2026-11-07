@@ -131,6 +131,17 @@ describe("org role resolution", () => {
     );
   });
 
+  test("a user with two membership rows resolves to a role instead of throwing", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const userId = await addUser(t, org, "member");
+    await t.run((ctx) =>
+      ctx.db.insert("accountMembers", { accountId: org.accountId, userId, role: "member", createdAt: 2 })
+    );
+    const actor = await t.run((ctx) => requireOrgActionFor(ctx, org.accountId, userId, "viewOrganization"));
+    expect(actor.role).toBe("member");
+  });
+
   test("the owner is the owner even before their membership row exists", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
