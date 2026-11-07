@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!convex/_generated", "!companion/ui/src/generated", "!.stylegate/eval"]
+    "includes": ["**", "!convex/_generated", "!client/src/desktop/generated", "!.stylegate/eval"]
   },
   "formatter": {
     "enabled": true,

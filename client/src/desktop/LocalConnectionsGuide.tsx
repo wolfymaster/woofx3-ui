@@ -1,10 +1,9 @@
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useInstance } from "@/hooks/use-instance";
 import { getStoredValue } from "@/lib/stores";
-import { onOpenLocalConnections } from "./host";
 import { endpointsToSetUp } from "./local-connections";
 import { useIntegrationsFor } from "./use-integrations";
 
@@ -15,21 +14,13 @@ const DISMISSED_KEY = "woofx3-local-connections-dismissed";
 
 /**
  * Gets people to their local connections: asks once per endpoint nobody has set
- * up, since the relay stays off until one is on and nothing else would say so,
- * and answers the tray's "Local connections" item.
+ * up, since the relay stays off until one is on and nothing else would say so.
  */
 export default function LocalConnectionsGuide() {
   const { instance } = useInstance();
   const view = useIntegrationsFor(instance?._id);
   const [location, navigate] = useLocation();
   const [dismissed, setDismissed] = useState<string[]>(() => getStoredValue<string[]>(DISMISSED_KEY, []));
-
-  useEffect(() => {
-    const unlisten = onOpenLocalConnections(() => navigate(LOCAL_CONNECTIONS_PATH));
-    return () => {
-      void unlisten.then((stop) => stop());
-    };
-  }, [navigate]);
 
   const toSetUp = view ? endpointsToSetUp(view, new Set(dismissed)) : [];
   if (toSetUp.length === 0 || location === LOCAL_CONNECTIONS_PATH) {

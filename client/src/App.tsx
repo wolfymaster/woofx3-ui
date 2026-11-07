@@ -89,6 +89,7 @@ const Workflows = lazy(() => import("@/pages/workflows"));
 // IS_DESKTOP is a build constant, so the web build carries none of it.
 const DesktopAppLink = IS_DESKTOP ? lazy(() => import("@/desktop/AppLink")) : null;
 const DesktopRelayWatch = IS_DESKTOP ? lazy(() => import("@/desktop/RelayWatch")) : null;
+const DesktopUpdateBanner = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateBanner")) : null;
 const DesktopLocalConnectionsGuide = IS_DESKTOP ? lazy(() => import("@/desktop/LocalConnectionsGuide")) : null;
 
 function SplashScreen() {
@@ -406,6 +407,11 @@ function App() {
                 {DesktopRelayWatch && (
                   <Suspense fallback={null}>
                     <DesktopRelayWatch />
+                  </Suspense>
+                )}
+                {DesktopUpdateBanner && (
+                  <Suspense fallback={null}>
+                    <DesktopUpdateBanner />
                   </Suspense>
                 )}
                 {DesktopLocalConnectionsGuide && (
