@@ -64,7 +64,8 @@ export async function handleBillingWebhook(
     const message = error instanceof Error ? error.message : String(error);
     logger.error("billing webhook: failed", { eventId: event.eventId, type: event.type, error: message });
     await deps.runMutation(internal.billing.finishEvent, { eventId: event.eventId, outcome: "failed", error: message });
-    return json(500, { error: { code: "failed", message } });
+    // The detail stays in billingEvents and the log; the provider only needs to know to redeliver.
+    return json(500, { error: { code: "failed", message: "The event could not be applied; it will be retried" } });
   }
 }
 
