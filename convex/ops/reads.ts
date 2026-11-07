@@ -15,8 +15,10 @@ import {
   type ProvisioningDto,
   planSummaryDto,
   provisioningDto,
+  type StrayPaymentDto,
   type SubscriptionDto,
   type SubscriptionTransitionDto,
+  strayPaymentDto,
   subscriptionDto,
   subscriptionTransitionDto,
   type UserDto,
@@ -436,6 +438,24 @@ export const listAudit = internalQuery({
           : base.withIndex("by_at").order("desc");
     const result = await ordered.paginate({ numItems: PAGE_SIZE * 2, cursor });
     return { page: result.page.map(auditEntryDto), cursor: result.isDone ? null : result.continueCursor };
+  },
+});
+
+/** Stray payments, newest first, at most `limit` a page. */
+export const listStrayPayments = internalQuery({
+  args: { cursor: cursorArg, limit: v.number() },
+  handler: async (ctx, { cursor, limit }): Promise<Page<StrayPaymentDto>> => {
+    const result = await ctx.db
+      .query("paymentEvents")
+      .withIndex("by_outcome", (index) => index.eq("outcome", "stray"))
+      .order("desc")
+      .paginate({ numItems: limit, cursor });
+    const page = await Promise.all(
+      result.page.map(async (event) =>
+        strayPaymentDto(event, event.accountId === undefined ? null : await ctx.db.get(event.accountId))
+      )
+    );
+    return { page, cursor: result.isDone ? null : result.continueCursor };
   },
 });
 

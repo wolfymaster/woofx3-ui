@@ -21,7 +21,8 @@ import {
   planTierValidator,
   subscriptionStateValidator,
 } from "./lib/organization";
-import { appliedDiscountValidator } from "./lib/payments/provider";
+import { appliedDiscountValidator, checkoutPurposeValidator, strayPaymentValidator } from "./lib/payments/provider";
+import { paymentSessionStateValidator } from "./lib/payments/sessions";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -1630,9 +1631,9 @@ export default defineSchema({
     ownerEmailMissing: v.optional(v.boolean()),
   }).index("by_account_at", ["accountId", "at"]),
 
-  // billingEvents: every provider webhook as received, deduplicated on its
+  // paymentEvents: every provider webhook as received, deduplicated on its
   // event id, with what applying it did.
-  billingEvents: defineTable({
+  paymentEvents: defineTable({
     provider: v.literal("stripe"),
     eventId: v.string(),
     type: v.string(),
@@ -1641,12 +1642,40 @@ export default defineSchema({
     rawPayload: v.string(),
     accountId: v.optional(v.id("accounts")),
     // "received" until it has been processed; a failed one is processed again on redelivery.
-    outcome: v.union(v.literal("received"), v.literal("applied"), v.literal("ignored"), v.literal("failed")),
+    // "stray": about a subscription of ours the org's row doesn't follow, for an operator to settle.
+    outcome: v.union(
+      v.literal("received"),
+      v.literal("applied"),
+      v.literal("ignored"),
+      v.literal("stray"),
+      v.literal("failed")
+    ),
     error: v.optional(v.string()),
+    // Set exactly when the outcome is "stray".
+    stray: v.optional(strayPaymentValidator),
     receivedAt: v.number(),
   })
     .index("by_provider_event", ["provider", "eventId"])
-    .index("by_received_at", ["receivedAt"]),
+    .index("by_received_at", ["receivedAt"])
+    .index("by_outcome", ["outcome", "receivedAt"]),
+
+  // paymentSessions: every checkout we opened, unique on the provider's
+  // session id. `purpose` is the quote the session charges, and decides what
+  // its payment grants; `ref` is the id of our row it is for (the org, for a
+  // subscription).
+  paymentSessions: defineTable({
+    provider: v.literal("stripe"),
+    providerSessionId: v.string(),
+    purpose: checkoutPurposeValidator,
+    ref: v.string(),
+    state: paymentSessionStateValidator,
+    amountCents: v.number(),
+    currency: v.literal("usd"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_provider_session", ["provider", "providerSessionId"])
+    .index("by_purpose_ref_state", ["purpose.kind", "ref", "state"]),
 
   // accountPlans: an account's plan, at most one row per account. No row, or
   // an expired one, means the default plan with no overrides.
