@@ -2,13 +2,13 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
-import { billingConfig } from "../lib/billing/config";
-import { appliedDiscountValidator, discountSpecValidator } from "../lib/billing/provider";
-import { billingProvider } from "../lib/billing/registry";
 import type { LifecycleEvent } from "../lib/billingLifecycle";
 import { recordOpsAudit } from "../lib/ops/audit";
 import { type SubscriptionDto, subscriptionDto } from "../lib/ops/dto";
 import { planTierValidator } from "../lib/organization";
+import { paymentsConfig } from "../lib/payments/config";
+import { appliedDiscountValidator, discountSpecValidator } from "../lib/payments/provider";
+import { paymentProvider } from "../lib/payments/registry";
 import { applyTransition, setSubscriptionPlan, subscriptionFor } from "../lib/subscriptions";
 
 // Operator writes to an org's subscription, from the backoffice through the
@@ -211,7 +211,7 @@ export const applyDiscount = internalAction({
         outcome: { kind: "refused", status, code, message },
       });
     }
-    const result = await billingProvider(billingConfig()).applyDiscount({
+    const result = await paymentProvider(paymentsConfig()).applyDiscount({
       subscriptionRef: target.subscriptionRef,
       key: args.key,
       spec: args.spec,

@@ -1,6 +1,6 @@
-import type { DiscountSpec } from "../billing/provider";
 import type { ParseResult } from "../notifications";
 import { PLAN_TIERS, type PlanTier } from "../organization";
+import type { DiscountSpec } from "../payments/provider";
 
 // Bodies of the ops API's billing writes, as the backoffice sends them.
 // Shape and range checks happen here, before anything is written; whether the
