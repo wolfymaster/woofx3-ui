@@ -20,51 +20,6 @@ export const getMyAccount = query({
   },
 });
 
-/** Owned account plus accounts shared via accountMembers (deduped). */
-export const listAccessibleForUser = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
-
-    const owned = await ctx.db
-      .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-      .collect();
-
-    const memberRows = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-
-    const byId = new Map<Id<"accounts">, { account: Doc<"accounts">; isOwner: boolean }>();
-
-    for (const account of owned) {
-      byId.set(account._id, { account, isOwner: true });
-    }
-
-    for (const row of memberRows) {
-      const account = await ctx.db.get(row.accountId);
-      if (!account) continue;
-      const existing = byId.get(account._id);
-      if (existing) {
-        if (account.ownerId === userId) {
-          existing.isOwner = true;
-        }
-        continue;
-      }
-      byId.set(account._id, { account, isOwner: account.ownerId === userId });
-    }
-
-    return Array.from(byId.values()).map(({ account, isOwner }) => ({
-      _id: account._id,
-      name: account.name,
-      createdAt: account.createdAt,
-      isOwner,
-    }));
-  },
-});
-
 export const createAccount = mutation({
   args: { name: v.string() },
   handler: async (ctx, args) => {

@@ -8,16 +8,16 @@ import { getInstanceMembership } from "./lib/teamAccess";
 import { rebuildPageState } from "./lib/userPageState";
 import {
   bindingProblems,
-  instanceAllowsUserPages,
   pageSlugForInstance,
   requireRevision,
   userPageForInstance,
   userPageRefusal,
+  userPagesAllowed,
 } from "./lib/userPages";
 
 // The owner's side of a user page. Any member may edit the draft; publishing
 // puts the instance's name on a public page, so it takes an admin, and it
-// alone is gated by plan (instanceAllowsUserPages).
+// alone is gated by hosting (userPagesAllowed).
 
 export interface UserPageForEditing {
   /** The name the page is published under, or null when the instance has none (it is not a managed engine). */
@@ -41,7 +41,7 @@ export const forEditing = query({
       return null;
     }
     const slug = await pageSlugForInstance(ctx, instanceId);
-    const canPublish = await instanceAllowsUserPages(ctx, instance);
+    const canPublish = userPagesAllowed(instance.hosting);
     const page = await userPageForInstance(ctx, instanceId);
     if (!page) {
       return {
@@ -132,10 +132,10 @@ export const publish = mutation({
     if (!instance) {
       throw new Error("Instance not found");
     }
-    if (!(await instanceAllowsUserPages(ctx, instance))) {
+    if (!userPagesAllowed(instance.hosting)) {
       throw userPageRefusal({
         code: "not_entitled",
-        message: "Your plan does not include a public page for this engine",
+        message: "Public pages are available on hosted engines",
       });
     }
     if ((await pageSlugForInstance(ctx, instanceId)) === null) {
