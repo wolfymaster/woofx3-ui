@@ -156,6 +156,11 @@ function hasWildcard(event: string): boolean {
   return event.split(".").includes(WILDCARD);
 }
 
+/** Whether `event` is one of the family a wildcard `pattern` names, as `chat.command.hug` is of `chat.command.*`. */
+export function eventMatchesPattern(pattern: string, event: string): boolean {
+  return hasWildcard(pattern) && patternRegex(pattern).test(event);
+}
+
 /** The pattern's wildcard segment as a regex group; a wildcard at the end may span dots. */
 function patternRegex(pattern: string): RegExp {
   const segments = pattern.split(".");

@@ -3,9 +3,9 @@
 //   cargo run --features ts --example write_window_bindings
 
 /**
- * Where pairing stands.
+ * Whether this computer is linked to an instance as its companion.
  */
-export type CompanionState = { "kind": "starting" } | { "kind": "offline" } | { "kind": "unpaired" } | { "kind": "pairing", userCode: string, verificationUrl: string, expiresAt: number, } | { "kind": "confirmPairing", instanceName: string, approvedBy: string, } | { "kind": "paired", instanceName: string, cloudConnected: boolean, } | { "kind": "error", message: string, };
+export type CompanionState = { "kind": "starting" } | { "kind": "offline" } | { "kind": "unpaired" } | { "kind": "paired", instanceName: string, cloudConnected: boolean, } | { "kind": "error", message: string, };
 
 /**
  * A newer release, downloaded and verified, that installs on Restart to
@@ -15,11 +15,10 @@ export type CompanionState = { "kind": "starting" } | { "kind": "offline" } | { 
 export type ReadyUpdate = { productName: string, version: string, };
 
 /**
- * What the window renders: where pairing stands, plus the update waiting to
- * be installed, if any. The pairing state's fields sit at the top level next
- * to `update`.
+ * Where the link stands, plus the update waiting to be installed, if any.
+ * The link state's fields sit at the top level next to `update`.
  */
-export type WindowState = { update: ReadyUpdate | null, } & ({ "kind": "starting" } | { "kind": "offline" } | { "kind": "unpaired" } | { "kind": "pairing", userCode: string, verificationUrl: string, expiresAt: number, } | { "kind": "confirmPairing", instanceName: string, approvedBy: string, } | { "kind": "paired", instanceName: string, cloudConnected: boolean, } | { "kind": "error", message: string, });
+export type WindowState = { update: ReadyUpdate | null, } & ({ "kind": "starting" } | { "kind": "offline" } | { "kind": "unpaired" } | { "kind": "paired", instanceName: string, cloudConnected: boolean, } | { "kind": "error", message: string, });
 
 export type Availability = { "kind": "off" } | { "kind": "loading" } | { "kind": "ready" } | { "kind": "unavailable" } | { "kind": "failed", message: string, };
 
@@ -223,20 +222,19 @@ export type FinishAppLinkArgs = { instanceId: string, instanceName: string, };
  */
 export type OpenTwitchSignInArgs = { nonceHash: string, };
 
+/**
+ * A link the dashboard asks the host to open in the system browser. The
+ * host opens only web pages (`external_url`).
+ */
+export type OpenExternalUrlArgs = { url: string, };
+
 export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
-export const OPEN_LOCAL_CONNECTIONS_EVENT = "companion://open-local-connections";
 export const SHOUTOUT_QUEUE_EVENT = "companion://shoutout-queue";
 
 /** Every command the window may call, by its name. */
 export const COMMANDS = {
   get_state: "get_state",
-  start_pairing: "start_pairing",
-  cancel_pairing: "cancel_pairing",
-  open_verification_url: "open_verification_url",
-  confirm_pairing: "confirm_pairing",
-  reject_pairing: "reject_pairing",
-  unpair: "unpair",
   install_update: "install_update",
   get_integrations: "get_integrations",
   set_endpoint_enabled: "set_endpoint_enabled",
@@ -256,6 +254,7 @@ export const COMMANDS = {
   begin_app_link: "begin_app_link",
   finish_app_link: "finish_app_link",
   open_twitch_sign_in: "open_twitch_sign_in",
+  open_external_url: "open_external_url",
 } as const;
 
 export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
@@ -263,12 +262,6 @@ export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
 /** Each command's arguments, its one `args` parameter; null for none. */
 export type CommandArgs = {
   get_state: null;
-  start_pairing: null;
-  cancel_pairing: null;
-  open_verification_url: null;
-  confirm_pairing: null;
-  reject_pairing: null;
-  unpair: null;
   install_update: null;
   get_integrations: null;
   set_endpoint_enabled: SetEndpointEnabledArgs;
@@ -288,17 +281,12 @@ export type CommandArgs = {
   begin_app_link: null;
   finish_app_link: FinishAppLinkArgs;
   open_twitch_sign_in: OpenTwitchSignInArgs;
+  open_external_url: OpenExternalUrlArgs;
 };
 
 /** What each command resolves to. */
 export type CommandResults = {
   get_state: WindowState;
-  start_pairing: void;
-  cancel_pairing: void;
-  open_verification_url: void;
-  confirm_pairing: void;
-  reject_pairing: void;
-  unpair: void;
   install_update: void;
   get_integrations: IntegrationsView;
   set_endpoint_enabled: void;
@@ -318,4 +306,5 @@ export type CommandResults = {
   begin_app_link: AppLinkStart;
   finish_app_link: void;
   open_twitch_sign_in: void;
+  open_external_url: void;
 };
