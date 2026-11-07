@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
+import { switchedStatus } from "./lib/engineSwitch";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
 import {
   decideRedeployEvent,
@@ -10,7 +12,8 @@ import {
   type RedeployEvent,
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
-import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { applyTransition, subscriptionFor } from "./lib/subscriptions";
+import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { performRegistration } from "./registration";
 
@@ -100,7 +103,8 @@ export const reserveManagedInstance = internalMutation({
       throw new Error("Not authorized");
     }
 
-    const { instanceId } = await findOrCreateManagedInstance(ctx, account, userId);
+    const { instanceId } = await findOrCreateManagedInstance(ctx, account);
+    await startTrialIfNew(ctx, accountId, Date.now());
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -182,10 +186,29 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
   }
 }
 
+/**
+ * An org's first managed engine starts its Starter trial. An org that already
+ * has a subscription row, in any state, gets no second one.
+ */
+async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">, now: number): Promise<void> {
+  if ((await subscriptionFor(ctx, accountId)) !== null) {
+    return;
+  }
+  const result = await applyTransition(ctx, {
+    accountId,
+    event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
+    now,
+    actor: "signup",
+    origin: "signup",
+  });
+  if (!result.ok) {
+    throw new Error(`startTrialIfNew: ${result.error.event} is illegal from ${result.error.from}`);
+  }
+}
+
 export async function findOrCreateManagedInstance(
   ctx: MutationCtx,
-  account: Doc<"accounts">,
-  userId: Id<"users">
+  account: Doc<"accounts">
 ): Promise<{ instanceId: Id<"instances">; created: boolean }> {
   const instances = await ctx.db
     .query("instances")
@@ -205,18 +228,7 @@ export async function findOrCreateManagedInstance(
     hosting: "managed",
     createdAt: Date.now(),
   });
-  await ensureInstanceMember(ctx, instanceId, userId, "owner");
-
-  const teammates = await ctx.db
-    .query("accountMembers")
-    .withIndex("by_account", (q) => q.eq("accountId", account._id))
-    .collect();
-  for (const teammate of teammates) {
-    if (teammate.userId === userId) {
-      continue;
-    }
-    await ensureInstanceMember(ctx, instanceId, teammate.userId, mapAccountRoleToInstanceRole(teammate.role));
-  }
+  await grantNewEngineMembers(ctx, instanceId);
   return { instanceId, created: true };
 }
 
@@ -533,7 +545,15 @@ export const applyCallbackEvent = internalMutation({
     ),
     url: v.optional(v.string()),
     version: v.optional(v.string()),
-    runKind: v.optional(v.union(v.literal("provision"), v.literal("deprovision"), v.literal("redeploy"))),
+    runKind: v.optional(
+      v.union(
+        v.literal("provision"),
+        v.literal("deprovision"),
+        v.literal("redeploy"),
+        v.literal("stop"),
+        v.literal("start")
+      )
+    ),
     error: v.optional(v.string()),
     runId: v.optional(v.string()),
     // Why a running step is still waiting.
@@ -587,6 +607,10 @@ export const applyCallbackEvent = internalMutation({
           error: args.error,
           detail: args.detail,
         };
+        if (args.runKind === "stop") {
+          // A stop has nothing to show while it runs; engine.stopped settles it.
+          return { handled: true, duplicate: false };
+        }
         if (args.runKind === "redeploy") {
           await applyRedeployEvent(ctx, row, {
             type: "engine.run.step",
@@ -635,11 +659,30 @@ export const applyCallbackEvent = internalMutation({
         }
         // A failed teardown leaves the engine deprovisioning until a retry
         // finishes, so the row says so too: presenting it as an engine that
-        // failed to be built would offer the user the opposite repair.
+        // failed to be built would offer the user the opposite repair. A
+        // failed stop or start is `failed`, which provisioning.retry resumes.
         const status = args.runKind === "deprovision" ? "deprovisioning" : "failed";
         await ctx.db.patch(row._id, {
           status,
           error: `${step}: ${args.error ?? "the maintenance API reported a failure"}`,
+          updatedAt: Date.now(),
+        });
+        return { handled: true, duplicate: false };
+      }
+
+      // stylegate:ignore ANY-ABS-002 reason="Follows applyCallbackEvent's existing switch over maintenance event types; moving every case to a handler table is its own refactor"
+      case "engine.stopped":
+      case "engine.started": {
+        const move = args.eventType === "engine.stopped" ? "stopped" : "started";
+        const status = switchedStatus(row.status, move);
+        if (status === null) {
+          logger.warn("maintenance webhook: engine switch doesn't apply", { status: row.status, move });
+          return { handled: false, duplicate: false };
+        }
+        await ctx.db.patch(row._id, {
+          status,
+          error: undefined,
+          ...(move === "started" && args.version ? { reportedVersion: args.version } : {}),
           updatedAt: Date.now(),
         });
         return { handled: true, duplicate: false };

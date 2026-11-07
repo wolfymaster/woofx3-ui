@@ -1,14 +1,11 @@
-import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
-import { useMutation } from "convex/react";
-import { Activity, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Activity, Command, Search } from "lucide-react";
+import { useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import { Uptime } from "@/components/common/uptime";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,14 +14,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
+import { useDefaultEngineOnSignIn } from "@/hooks/use-default-engine";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
@@ -34,7 +30,9 @@ import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
 import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { BillingBanner } from "./billing-banner";
 import { ConnectionStatusBar } from "./connection-status";
+import { EngineMenuSection } from "./engine-menu";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
 import {
   findActiveSection,
@@ -52,94 +50,6 @@ import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
 import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
 import { UtilityNav } from "./utility-nav";
-
-function InstanceBar() {
-  const { instance, instances, setInstance, isLoading } = useInstance();
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editName, setEditName] = useState("");
-
-  const updateInstance = useMutation(api.instances.update);
-
-  // Blank while the list loads: the shell paints before it arrives, and "No
-  // Instance" would flash for everyone who has one.
-  const instanceDisplayName = instance?.name || (isLoading ? "" : "No Instance");
-
-  const handleEditInstance = () => {
-    setEditName(instance?.name || "");
-    setEditDialogOpen(true);
-  };
-
-  const handleSaveInstance = async () => {
-    if (instance && editName.trim()) {
-      await updateInstance({ instanceId: instance._id, name: editName.trim() });
-      setEditDialogOpen(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="h-9 bg-background border-b border-border flex items-center justify-center shrink-0">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 px-2 h-7">
-              <div className="flex items-center justify-center w-5 h-5 rounded bg-primary text-primary-foreground">
-                <MonitorPlay className="h-3 w-3" />
-              </div>
-              <span className="font-semibold text-sm tracking-tight">{instanceDisplayName}</span>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="center" className="w-64">
-            <DropdownMenuLabel>Switch Instance</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {instances.map(
-              (inst) =>
-                inst && (
-                  <DropdownMenuItem
-                    key={inst._id}
-                    onClick={() => setInstance(inst._id)}
-                    className="flex items-center justify-between"
-                  >
-                    <span>{inst.name}</span>
-                    {inst._id === instance?._id && <Check className="h-4 w-4 text-primary" />}
-                  </DropdownMenuItem>
-                )
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleEditInstance}>
-              <Pencil className="h-4 w-4 mr-2" />
-              Rename Instance
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Instance</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="instance-name">Name</Label>
-            <Input
-              id="instance-name"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              placeholder="Enter instance name"
-              className="mt-2"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveInstance}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 
 type EngineConnection = "connected" | "limited" | "upgrading" | "disconnected";
 
@@ -275,8 +185,15 @@ function AppHeader() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <EngineMenuSection />
+            <DropdownMenuSeparator />
             <ThemeMenuSub />
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/settings/profile" data-testid="menu-your-settings">
+                Your settings
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/team">Team Settings</Link>
             </DropdownMenuItem>
@@ -306,6 +223,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const activeSection = findActiveSection(location);
   const { instance } = useInstance();
   const resourceKindItems = useResourceKindNavItems();
+  useDefaultEngineOnSignIn();
   useLiveConnection();
   useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
@@ -325,10 +243,10 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   return (
     <StatusBarSlotProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-        <InstanceBar />
         <AppHeader />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />
+        <BillingBanner />
         <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">

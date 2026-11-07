@@ -186,7 +186,7 @@ async function readHostedUsage(
   instanceId: Id<"instances">,
   bundle: InstanceContext
 ): Promise<{ engineBytes: number; readAt: number; limits: HostedStorageLimits } | null> {
-  const { hosting, limits } = await ctx.runQuery(internal.hostedStorage.context, { instanceId });
+  const { hosting, limits } = await ctx.runQuery(internal.hostedStorage.context, { instanceId, now: Date.now() });
   if (hosting !== "managed") {
     return null;
   }

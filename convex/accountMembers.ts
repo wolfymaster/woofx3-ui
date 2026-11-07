@@ -2,12 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
-import {
-  assertCanManageAccountTeam,
-  canAccessAccount,
-  ensureInstanceMember,
-  mapAccountRoleToInstanceRole,
-} from "./lib/teamAccess";
+import { orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
+import { applyOrgRoleToEngines, canAccessAccount } from "./lib/teamAccess";
 
 export const listForAccount = query({
   args: { accountId: v.id("accounts") },
@@ -67,12 +63,10 @@ export const listForAccount = query({
       }
     }
 
-    const manager = await assertCanManageAccountTeam(ctx, args.accountId, userId);
-
     return {
       account: { _id: account._id, name: account.name, ownerId: account.ownerId },
       members,
-      canManage: manager !== null,
+      canManage: orgCan(await orgRoleOf(ctx, account, userId), "manageMembers"),
     };
   },
 });
@@ -83,13 +77,7 @@ export const removeMember = mutation({
     targetUserId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const gate = await assertCanManageAccountTeam(ctx, args.accountId, userId);
-    if (!gate) throw new Error("Not authorized");
-
-    const account = gate.account;
+    const { account } = await requireOrgAction(ctx, args.accountId, "manageMembers");
     if (args.targetUserId === account.ownerId) {
       throw new Error("Cannot remove the account owner");
     }
@@ -129,13 +117,7 @@ export const updateMemberRole = mutation({
     role: v.union(v.literal("admin"), v.literal("member")),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const gate = await assertCanManageAccountTeam(ctx, args.accountId, userId);
-    if (!gate) throw new Error("Not authorized");
-
-    const account = gate.account;
+    const { account } = await requireOrgAction(ctx, args.accountId, "manageMembers");
     if (args.targetUserId === account.ownerId) {
       throw new Error("Cannot change the account owner's role");
     }
@@ -152,16 +134,9 @@ export const updateMemberRole = mutation({
 
     await ctx.db.patch(row._id, { role: args.role });
 
-    const instanceRole = mapAccountRoleToInstanceRole(args.role);
-    const instances = await ctx.db
-      .query("instances")
-      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
-      .collect();
-
-    for (const inst of instances) {
-      await ensureInstanceMember(ctx, inst._id, args.targetUserId, instanceRole);
-      // A companion this member approved bridges only while they are an admin.
-      await resyncRelayIfBridging(ctx, inst._id);
+    // A companion this member approved bridges only while they are an engine admin.
+    for (const instanceId of await applyOrgRoleToEngines(ctx, args.accountId, args.targetUserId, args.role)) {
+      await resyncRelayIfBridging(ctx, instanceId);
     }
   },
 });

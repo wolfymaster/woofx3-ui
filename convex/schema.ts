@@ -2,6 +2,11 @@ import { authTables } from "@convex-dev/auth/server";
 import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+  lifecycleEventKindValidator,
+  lifecycleReasonValidator,
+  providerStandingValidator,
+} from "./lib/billingLifecycle";
 import { defaultSeedValidator, overlayDoneValidator } from "./lib/defaultSeedValidator";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { limitValuesValidator } from "./lib/entitlements";
@@ -9,6 +14,14 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
+import {
+  billingIntervalValidator,
+  engineRoleValidator,
+  orgRoleValidator,
+  planTierValidator,
+  subscriptionStateValidator,
+} from "./lib/organization";
+import { appliedDiscountValidator } from "./lib/payments/provider";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -113,7 +126,15 @@ export default defineSchema({
   // Ops search by name; the email index comes with authTables.
   users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
-  // accounts: tenant/organization level
+  // Personal preferences. A table rather than extra `users` fields so authTables stays stock.
+  userSettings: defineTable({
+    userId: v.id("users"),
+    defaultInstanceId: v.optional(v.id("instances")),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // accounts: the organization. It owns the engines and, later, the
+  // subscription. Its id never changes: it is the marketplace buyer identity.
   accounts: defineTable({
     name: v.string(),
     ownerId: v.id("users"),
@@ -122,11 +143,12 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .searchIndex("search_name", { searchField: "name" }),
 
-  // accountMembers: users with access to an account (team). Owner also has accounts.ownerId.
+  // accountMembers: the organization's members and their org role. The owner
+  // (accounts.ownerId) has exactly one row, with role "owner" (invariant I1).
   accountMembers: defineTable({
     accountId: v.id("accounts"),
     userId: v.id("users"),
-    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    role: orgRoleValidator,
     createdAt: v.number(),
   })
     .index("by_account", ["accountId"])
@@ -146,7 +168,14 @@ export default defineSchema({
     platformLogin: v.optional(v.string()),
     platformDisplayName: v.optional(v.string()),
     platformProfileImageUrl: v.optional(v.string()),
+    // The org role the invitee gets on accept when not already in the org.
+    // New invitations always say "member"; access comes from the engine grant.
     role: v.union(v.literal("admin"), v.literal("member")),
+    // The one engine the invitation grants, at engineRole. Absent only on
+    // invitations from before engine-scoped invites, until
+    // migrations/invitations backfills them.
+    instanceId: v.optional(v.id("instances")),
+    engineRole: v.optional(v.union(v.literal("admin"), v.literal("member"))),
     token: v.string(),
     invitedByUserId: v.id("users"),
     status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("revoked"), v.literal("expired")),
@@ -156,7 +185,8 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_account", ["accountId"])
     .index("by_account_email", ["accountId", "email"])
-    .index("by_account_platform_user", ["accountId", "platform", "platformUserId"]),
+    .index("by_account_platform_user", ["accountId", "platform", "platformUserId"])
+    .index("by_instance", ["instanceId", "status"]),
 
   // instances: a single woofx3 deployment
   instances: defineTable({
@@ -294,7 +324,12 @@ export default defineSchema({
       v.literal("upgrading"),
       v.literal("failed"),
       v.literal("deprovisioning"),
-      v.literal("deleted")
+      v.literal("deleted"),
+      // A suspended org's managed engine being stopped, stopped (its data
+      // kept), and being started again after reactivation.
+      v.literal("stopping"),
+      v.literal("stopped"),
+      v.literal("starting")
     ),
     // Mirrors the maintenance API's run steps, in run order. Bounded by the
     // number of steps in a run (nine today), so it stays a field rather than
@@ -377,11 +412,14 @@ export default defineSchema({
     .index("by_event", ["eventId"])
     .index("by_received_at", ["receivedAt"]),
 
-  // instanceMembers: users who have access to an instance
+  // instanceMembers: a user's role on one engine. It is independent of their
+  // org role except where lib/teamAccess.ts grantEngineRole's invariants tie them.
   instanceMembers: defineTable({
     instanceId: v.id("instances"),
     userId: v.id("users"),
-    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    role: engineRoleValidator,
+    // Absent on rows written before it was recorded.
+    createdAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_instance", ["instanceId"])
@@ -1521,6 +1559,93 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_default", ["isDefault"]),
+
+  // subscriptions: an organization's plan and billing state, at most one per
+  // org, created when it first asks for a managed engine. Only
+  // lib/subscriptions.ts applyTransition writes it; its lifecycle fields are
+  // the state machine's (lib/billingLifecycle.ts), asserted on every write.
+  subscriptions: defineTable({
+    accountId: v.id("accounts"),
+    // What is billed, or what an exemption grants.
+    plan: planTierValidator,
+    // Set once a provider subscription exists.
+    interval: v.optional(billingIntervalValidator),
+    state: subscriptionStateValidator,
+    // Why past_due or suspended.
+    stateReason: v.optional(lifecycleReasonValidator),
+    stateSince: v.number(),
+    // Set once; a second trial is refused.
+    trialStartedAt: v.optional(v.number()),
+    // The next billing evaluation: trial end, migration date or period end.
+    // Absent on an active subscription while a renewal check with the provider is out.
+    nextBillingAt: v.optional(v.number()),
+    // past_due: when it is suspended.
+    graceEndsAt: v.optional(v.number()),
+    // past_due: the next re-evaluation.
+    nextRetryAt: v.optional(v.number()),
+    // exempt: absent means indefinitely.
+    exemptUntil: v.optional(v.number()),
+    // suspended: when managed engines stop. Absent while suspended once they have.
+    spinDownAt: v.optional(v.number()),
+    // The earliest timer above: the only field the evaluator reads.
+    nextCheckAt: v.optional(v.number()),
+    // AddOnKey values, validated against ADD_ONS on write.
+    addOns: v.array(v.string()),
+    // The provider's active discount, mirrored for display.
+    discount: v.optional(appliedDiscountValidator),
+    provider: v.optional(v.literal("stripe")),
+    providerCustomerId: v.optional(v.string()),
+    providerSubscriptionId: v.optional(v.string()),
+    // The raw provider status, for operators; providerStanding is its mapping.
+    providerStatus: v.optional(v.string()),
+    providerStanding: v.optional(providerStandingValidator),
+    providerEndedReason: v.optional(v.union(v.literal("subscription_canceled"), v.literal("provider_ended"))),
+    providerPeriodEnd: v.optional(v.number()),
+    // Provider state observed at or before this is stale and ignored.
+    providerSyncedAt: v.optional(v.number()),
+    origin: v.union(v.literal("signup"), v.literal("migration"), v.literal("operator")),
+    updatedAt: v.number(),
+    // "provider:stripe", "evaluator", an operator's email, or "migration".
+    updatedBy: v.string(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_next_check", ["nextCheckAt"])
+    .index("by_state", ["state"])
+    .index("by_provider_subscription", ["provider", "providerSubscriptionId"])
+    .index("by_provider_customer", ["provider", "providerCustomerId"]),
+
+  // subscriptionTransitions: append-only history of every lifecycle change,
+  // for audit, support and counting paid orgs. `from` is absent when the
+  // transition created the subscription.
+  subscriptionTransitions: defineTable({
+    accountId: v.id("accounts"),
+    from: v.optional(subscriptionStateValidator),
+    to: subscriptionStateValidator,
+    event: lifecycleEventKindValidator,
+    reason: v.optional(lifecycleReasonValidator),
+    actor: v.string(),
+    at: v.number(),
+    // Set when its warnings went out in-app only, because the owner has no email address.
+    ownerEmailMissing: v.optional(v.boolean()),
+  }).index("by_account_at", ["accountId", "at"]),
+
+  // billingEvents: every provider webhook as received, deduplicated on its
+  // event id, with what applying it did.
+  billingEvents: defineTable({
+    provider: v.literal("stripe"),
+    eventId: v.string(),
+    type: v.string(),
+    // The provider API version we pinned, as a number we bump.
+    schemaVersion: v.number(),
+    rawPayload: v.string(),
+    accountId: v.optional(v.id("accounts")),
+    // "received" until it has been processed; a failed one is processed again on redelivery.
+    outcome: v.union(v.literal("received"), v.literal("applied"), v.literal("ignored"), v.literal("failed")),
+    error: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_provider_event", ["provider", "eventId"])
+    .index("by_received_at", ["receivedAt"]),
 
   // accountPlans: an account's plan, at most one row per account. No row, or
   // an expired one, means the default plan with no overrides.

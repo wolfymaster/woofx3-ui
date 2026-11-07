@@ -25,7 +25,9 @@ import {
   COMMAND_NEW_ROUTE,
 } from "@/lib/command-editor-route";
 import { IS_DESKTOP } from "@/lib/desktop";
+import { FeatureSourceProvider } from "@/lib/feature-source";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
+import { hostedFeatureSource } from "@/lib/hosted-feature-source";
 import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import {
@@ -81,6 +83,7 @@ const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
+const ProfileSettings = lazy(() => import("@/pages/settings/profile"));
 const UserPage = lazy(() => import("@/pages/user-page"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
@@ -328,6 +331,7 @@ function AppRoutes() {
 
                     <Route path="/team" component={Team} />
                     <Route path="/team/invite" component={TeamInvite} />
+                    <Route path="/settings/profile" component={ProfileSettings} />
 
                     {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
                     <Route path="/alerts">
@@ -395,32 +399,34 @@ function App() {
         <EngineGatewayProvider gateway={hostedEngineGateway}>
           <AccountViewerName>
             <MarketplaceModeProvider mode={hostedMarketplaceMode}>
-              <TooltipProvider>
-                <Suspense fallback={<SplashScreen />}>
-                  <AppRoutes />
-                </Suspense>
-                {DesktopAppLink && (
-                  <Suspense fallback={null}>
-                    <DesktopAppLink />
+              <FeatureSourceProvider source={hostedFeatureSource}>
+                <TooltipProvider>
+                  <Suspense fallback={<SplashScreen />}>
+                    <AppRoutes />
                   </Suspense>
-                )}
-                {DesktopRelayWatch && (
-                  <Suspense fallback={null}>
-                    <DesktopRelayWatch />
-                  </Suspense>
-                )}
-                {DesktopUpdateBanner && (
-                  <Suspense fallback={null}>
-                    <DesktopUpdateBanner />
-                  </Suspense>
-                )}
-                {DesktopLocalConnectionsGuide && (
-                  <Suspense fallback={null}>
-                    <DesktopLocalConnectionsGuide />
-                  </Suspense>
-                )}
-                <Toaster />
-              </TooltipProvider>
+                  {DesktopAppLink && (
+                    <Suspense fallback={null}>
+                      <DesktopAppLink />
+                    </Suspense>
+                  )}
+                  {DesktopRelayWatch && (
+                    <Suspense fallback={null}>
+                      <DesktopRelayWatch />
+                    </Suspense>
+                  )}
+                  {DesktopUpdateBanner && (
+                    <Suspense fallback={null}>
+                      <DesktopUpdateBanner />
+                    </Suspense>
+                  )}
+                  {DesktopLocalConnectionsGuide && (
+                    <Suspense fallback={null}>
+                      <DesktopLocalConnectionsGuide />
+                    </Suspense>
+                  )}
+                  <Toaster />
+                </TooltipProvider>
+              </FeatureSourceProvider>
             </MarketplaceModeProvider>
           </AccountViewerName>
         </EngineGatewayProvider>

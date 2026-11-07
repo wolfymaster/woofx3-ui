@@ -143,7 +143,7 @@ export async function clearAccountPlan(ctx: MutationCtx, accountId: Id<"accounts
   }
 }
 
-async function planByKey(ctx: MutationCtx, key: string) {
+export async function planByKey(ctx: MutationCtx, key: string) {
   return ctx.db
     .query("plans")
     .withIndex("by_key", (q) => q.eq("key", key))

@@ -386,7 +386,7 @@ export const ensureFirstRun = mutation({
       throw new Error("Managed engines are not configured");
     }
     const account = await ensureOwnAccount(ctx, userId);
-    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account, userId);
+    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account);
     if (created) {
       await markFirstRun(ctx, instanceId);
     }
