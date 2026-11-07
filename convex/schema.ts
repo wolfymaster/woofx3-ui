@@ -21,6 +21,7 @@ import {
   planTierValidator,
   subscriptionStateValidator,
 } from "./lib/organization";
+import { appliedDiscountValidator } from "./lib/payments/provider";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -1564,6 +1565,7 @@ export default defineSchema({
     // Set once; a second trial is refused.
     trialStartedAt: v.optional(v.number()),
     // The next billing evaluation: trial end, migration date or period end.
+    // Absent on an active subscription while a renewal check with the provider is out.
     nextBillingAt: v.optional(v.number()),
     // past_due: when it is suspended.
     graceEndsAt: v.optional(v.number()),
@@ -1577,6 +1579,8 @@ export default defineSchema({
     nextCheckAt: v.optional(v.number()),
     // AddOnKey values, validated against ADD_ONS on write.
     addOns: v.array(v.string()),
+    // The provider's active discount, mirrored for display.
+    discount: v.optional(appliedDiscountValidator),
     provider: v.optional(v.literal("stripe")),
     providerCustomerId: v.optional(v.string()),
     providerSubscriptionId: v.optional(v.string()),
@@ -1621,7 +1625,8 @@ export default defineSchema({
     schemaVersion: v.number(),
     rawPayload: v.string(),
     accountId: v.optional(v.id("accounts")),
-    outcome: v.union(v.literal("applied"), v.literal("ignored"), v.literal("failed")),
+    // "received" until it has been processed; a failed one is processed again on redelivery.
+    outcome: v.union(v.literal("received"), v.literal("applied"), v.literal("ignored"), v.literal("failed")),
     error: v.optional(v.string()),
     receivedAt: v.number(),
   })
