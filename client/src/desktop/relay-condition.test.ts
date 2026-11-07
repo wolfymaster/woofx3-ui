@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RelayView } from "@desktop-host/window";
+import type { RelayView } from "@/desktop/generated/window";
 import { RELAY_GRACE_MS, relayCondition, relayDownSince } from "./relay-condition";
 
 const RETRYING: RelayView = { kind: "retrying", retryAt: 0, error: "socket closed" };

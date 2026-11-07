@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CompanionLinkStatus } from "@desktop-host/window";
+import type { CompanionLinkStatus } from "@/desktop/generated/window";
 import { type AppLinkGate, type AppLinkViewer, appLinkGate, needsAppLink } from "./app-link";
 
 const NONE: ReadonlySet<string> = new Set();
