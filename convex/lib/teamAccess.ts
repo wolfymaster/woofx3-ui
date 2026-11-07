@@ -1,8 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { roleSatisfies } from "./instanceRoles";
-import type { EngineRole } from "./organization";
+import type { EngineRole, OrgRole } from "./organization";
 import { orgRoleOf } from "./orgRoles";
 
 export function normalizeEmail(email: string): string {
@@ -56,54 +56,19 @@ export async function canAccessAccount(
   return m !== null;
 }
 
-export type AccountTeamRole = "owner" | "admin" | "member";
-
-export function mapInviteRoleToInstanceRole(role: "admin" | "member"): "admin" | "member" {
-  return role;
-}
-
-export function mapAccountRoleToInstanceRole(role: AccountTeamRole): "owner" | "admin" | "member" {
-  return role;
-}
-
-/** Ensure instanceMembers row exists for this user on this instance. */
-export async function ensureInstanceMember(
-  ctx: MutationCtx,
-  instanceId: Id<"instances">,
-  userId: Id<"users">,
-  role: "owner" | "admin" | "member"
-) {
-  const existing = await ctx.db
-    .query("instanceMembers")
-    .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
-    .first();
-  if (existing) {
-    if (existing.role !== role) {
-      await ctx.db.patch(existing._id, { role });
-    }
-    return;
-  }
-  await ctx.db.insert("instanceMembers", {
-    instanceId,
-    userId,
-    role,
-  });
-}
-
-/** Grant instance access for every instance belonging to the account. */
+/** Grants every engine of the org to the user at `role`, as an org-wide invitation does. */
 export async function grantInstanceAccessForAccount(
   ctx: MutationCtx,
   accountId: Id<"accounts">,
   userId: Id<"users">,
-  accountRole: AccountTeamRole
+  role: "admin" | "member"
 ) {
-  const instanceRole = mapAccountRoleToInstanceRole(accountRole);
   const instances = await ctx.db
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
   for (const inst of instances) {
-    await ensureInstanceMember(ctx, inst._id, userId, instanceRole);
+    await grantEngineRole(ctx, inst._id, userId, role);
   }
 }
 
@@ -155,4 +120,85 @@ export async function grantEngineRole(
     await ctx.db.patch(existing._id, { role: granted });
   }
   return granted;
+}
+
+/**
+ * Gives a new engine its standing members: the org owner as `owner` (I3) and
+ * every org admin as `admin` (I4). Org members get it only when granted (I5).
+ * Only an owner or admin can create an engine, so this covers its creator.
+ */
+export async function grantNewEngineMembers(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
+  const instance = await ctx.db.get(instanceId);
+  if (instance === null) {
+    throw new Error(`grantNewEngineMembers: instance ${instanceId} does not exist`);
+  }
+  const account = await ctx.db.get(instance.accountId);
+  if (account === null) {
+    throw new Error(`grantNewEngineMembers: instance ${instanceId} belongs to missing org ${instance.accountId}`);
+  }
+  await grantEngineRole(ctx, instanceId, account.ownerId, "owner");
+  const members = await ctx.db
+    .query("accountMembers")
+    .withIndex("by_account", (q) => q.eq("accountId", account._id))
+    .collect();
+  for (const member of members) {
+    if (member.userId !== account.ownerId && (await orgRoleOf(ctx, account, member.userId)) === "admin") {
+      await grantEngineRole(ctx, instanceId, member.userId, "admin");
+    }
+  }
+}
+
+/**
+ * Applies an org role change to the user's engine roles (I4): promotion to
+ * admin grants engine `admin` on every engine of the org; demotion to member
+ * lowers their engine `admin` rows to `member` and keeps their access.
+ */
+export async function applyOrgRoleToEngines(
+  ctx: MutationCtx,
+  accountId: Id<"accounts">,
+  userId: Id<"users">,
+  orgRole: "admin" | "member"
+): Promise<Array<Id<"instances">>> {
+  const instances = await ctx.db
+    .query("instances")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .collect();
+  const changed: Array<Id<"instances">> = [];
+  for (const instance of instances) {
+    const membership = await getInstanceMembership(ctx, instance._id, userId);
+    if (orgRole === "admin" && membership?.role !== "admin") {
+      await grantEngineRole(ctx, instance._id, userId, "admin");
+      changed.push(instance._id);
+    } else if (orgRole === "member" && membership?.role === "admin") {
+      await ctx.db.patch(membership._id, { role: "member" });
+      changed.push(instance._id);
+    }
+  }
+  return changed;
+}
+
+export interface TeamMemberDto {
+  userId: Id<"users">;
+  name: string;
+  email: string | null;
+  image: string | null;
+  orgRole: OrgRole | null;
+  engineRole: EngineRole;
+  createdAt: number | null;
+}
+
+export function toTeamMemberDto(
+  user: Doc<"users">,
+  membership: Doc<"instanceMembers">,
+  orgRole: OrgRole | null
+): TeamMemberDto {
+  return {
+    userId: user._id,
+    name: user.name ?? "User",
+    email: user.email ?? null,
+    image: user.image ?? null,
+    orgRole,
+    engineRole: membership.role,
+    createdAt: membership.createdAt ?? null,
+  };
 }

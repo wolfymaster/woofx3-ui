@@ -10,7 +10,7 @@ import {
   type RedeployEvent,
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
-import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { performRegistration } from "./registration";
 
@@ -100,7 +100,7 @@ export const reserveManagedInstance = internalMutation({
       throw new Error("Not authorized");
     }
 
-    const { instanceId } = await findOrCreateManagedInstance(ctx, account, userId);
+    const { instanceId } = await findOrCreateManagedInstance(ctx, account);
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -184,8 +184,7 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
 
 export async function findOrCreateManagedInstance(
   ctx: MutationCtx,
-  account: Doc<"accounts">,
-  userId: Id<"users">
+  account: Doc<"accounts">
 ): Promise<{ instanceId: Id<"instances">; created: boolean }> {
   const instances = await ctx.db
     .query("instances")
@@ -205,18 +204,7 @@ export async function findOrCreateManagedInstance(
     hosting: "managed",
     createdAt: Date.now(),
   });
-  await ensureInstanceMember(ctx, instanceId, userId, "owner");
-
-  const teammates = await ctx.db
-    .query("accountMembers")
-    .withIndex("by_account", (q) => q.eq("accountId", account._id))
-    .collect();
-  for (const teammate of teammates) {
-    if (teammate.userId === userId) {
-      continue;
-    }
-    await ensureInstanceMember(ctx, instanceId, teammate.userId, mapAccountRoleToInstanceRole(teammate.role));
-  }
+  await grantNewEngineMembers(ctx, instanceId);
   return { instanceId, created: true };
 }
 
