@@ -14,3 +14,23 @@ export const engineRoleValidator = v.union(v.literal("owner"), v.literal("admin"
 
 export type OrgRole = Infer<typeof orgRoleValidator>;
 export type EngineRole = Infer<typeof engineRoleValidator>;
+
+export const PLAN_TIERS = ["starter", "pro"] as const;
+export const BILLING_INTERVALS = ["month", "year"] as const;
+export const SUBSCRIPTION_STATES = ["trialing", "active", "past_due", "suspended", "exempt"] as const;
+
+/** The billed plan. Wire values, shared with the Stripe price lookup keys `woofx3_<tier>_<interval>`. */
+export const planTierValidator = v.union(v.literal("starter"), v.literal("pro"));
+/** Matches the backoffice's `backoffice_plan_prices.billing_interval`. */
+export const billingIntervalValidator = v.union(v.literal("month"), v.literal("year"));
+export const subscriptionStateValidator = v.union(
+  v.literal("trialing"),
+  v.literal("active"),
+  v.literal("past_due"),
+  v.literal("suspended"),
+  v.literal("exempt")
+);
+
+export type PlanTier = Infer<typeof planTierValidator>;
+export type BillingInterval = Infer<typeof billingIntervalValidator>;
+export type SubscriptionState = Infer<typeof subscriptionStateValidator>;
