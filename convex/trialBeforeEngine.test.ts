@@ -139,6 +139,57 @@ describe("provisioning while suspended", () => {
   });
 });
 
+describe("resuming a managed engine while suspended", () => {
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+
+  beforeEach(() => {
+    calls = 0;
+    // Typed as fetch's call signature; the cast adds only Bun's `preconnect`.
+    globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+      calls += 1;
+      throw new Error("no network in tests");
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test("a failed run is not resumed, and the maintenance API is never called", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const instanceId = await addEngine(t, accountId, [ownerId], "managed");
+    await t.run((ctx) =>
+      ctx.db.insert("engineProvisioning", {
+        instanceId,
+        accountId,
+        requestedBy: ownerId,
+        slug: "org",
+        status: "failed",
+        steps: [],
+        registrationToken: "token-0",
+        registrationAttempts: 0,
+        maintenanceEngineId: "eng_1",
+        runId: "run_1",
+        createdAt: 1,
+        updatedAt: 1,
+      })
+    );
+    await suspend(t, accountId);
+    await expect(as(t, ownerId).action(api.provisioning.retry, { instanceId })).rejects.toThrow(
+      "subscription_suspended"
+    );
+    expect(calls).toBe(0);
+  });
+
+  test("an org from before subscriptions may still resume", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    expect(await t.query(internal.provisioningInternal.assertCanResumeEngine, { accountId })).toBeNull();
+  });
+});
+
 describe("access.planPrompt", () => {
   test("asks the owner of a suspended org to choose a plan", async () => {
     const t = newBackend();

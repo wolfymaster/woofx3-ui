@@ -29,9 +29,8 @@ export type DashboardEntry =
     };
 
 /**
- * The engine to open: the selected one, else the user's default, else the one
- * viewed last (created last when none was ever viewed). Each must still be a
- * registered engine the user is a member of.
+ * The engine to open: the selected one, else the user's default, else the
+ * newest. Each must still be a registered engine the user is a member of.
  */
 function chooseEngine(
   engines: Doc<"instances">[],
@@ -39,9 +38,7 @@ function chooseEngine(
   defaultId: Id<"instances"> | undefined
 ): Doc<"instances"> | null {
   const byId = (id: Id<"instances"> | null | undefined) => engines.find((engine) => engine._id === id);
-  const latest = [...engines].sort(
-    (a, b) => (b.lastViewedAt ?? 0) - (a.lastViewedAt ?? 0) || b.createdAt - a.createdAt
-  )[0];
+  const latest = [...engines].sort((a, b) => b.createdAt - a.createdAt)[0];
   return byId(selectedId) ?? byId(defaultId) ?? latest ?? null;
 }
 

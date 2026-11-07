@@ -29,7 +29,7 @@ The portal is where an organization's owner and admins manage the organization a
 | Overview | everything | everything, no billing buttons | name, own role, own engines |
 | Plan & billing | full | read-only | hidden |
 | Members | change roles, remove | change roles (not the owner), remove | hidden |
-| Engines | rename, create, open | rename, create, open | open the ones they're on |
+| Engines | rename, create, open | rename, open | open the ones they're on |
 | Discounts & invoices | full | hidden | hidden |
 
 Plan & billing picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. List prices in `format.ts` must match the provider's prices and the marketing pricing page.

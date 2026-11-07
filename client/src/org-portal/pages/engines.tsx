@@ -50,7 +50,7 @@ export default function EnginesPage() {
         <div className="space-y-1.5">
           <CardTitle>Engines</CardTitle>
           <CardDescription>
-            {organization.can.createEngine
+            {organization.can.manageEngines
               ? "Every engine in this organization."
               : "The engines in this organization you can open."}
           </CardDescription>
@@ -84,7 +84,7 @@ export default function EnginesPage() {
                           Open dashboard
                         </Button>
                       ) : null}
-                      {organization.can.createEngine && engine.canOpen ? (
+                      {organization.can.manageEngines && engine.canOpen ? (
                         <RenameDialog
                           title="Rename engine"
                           current={engine.name}

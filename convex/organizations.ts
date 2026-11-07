@@ -135,7 +135,7 @@ async function myOrganization(
     name: account.name,
     role,
     can,
-    engines: await orgEngines(ctx, account, userId, can.createEngine),
+    engines: await orgEngines(ctx, account, userId, can.manageEngines),
     subscription: can.viewBilling ? await orgSubscription(ctx, account._id, role, entitlements) : null,
     seats: can.manageMembers ? await orgSeats(ctx, account._id, entitlements) : null,
   };

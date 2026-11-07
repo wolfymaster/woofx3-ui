@@ -209,6 +209,7 @@ export default defineSchema({
     // only ones engineProvisioning rows and deprovisioning apply to.
     hosting: v.optional(v.union(v.literal("managed"), v.literal("external"))),
     createdAt: v.number(),
+    // Never read: production rows written by old code still carry it, and the schema must accept them.
     lastViewedAt: v.optional(v.number()),
     lastEngineActivityAt: v.optional(v.number()),
     storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),

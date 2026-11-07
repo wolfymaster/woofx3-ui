@@ -101,6 +101,16 @@ describe("organizations.mine", () => {
     expect(organization.can.manageBilling).toBe(false);
   });
 
+  test("an admin sees and renames every engine but may not create one", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addMember(t, org, "admin", "admin");
+    const organization = await mine(t, adminId);
+    expect(organization.can).toMatchObject({ manageEngines: true, createEngine: false });
+    expect(organization.engines.map((e) => e.name).sort()).toEqual(["Hosted", "LAN Box"]);
+    expect((await mine(t, org.ownerId)).can.createEngine).toBe(true);
+  });
+
   test("a member sees no billing or seats, and only the engines they're on", async () => {
     const t = newBackend();
     const org = await seedOrg(t);

@@ -8,6 +8,7 @@ export type OrgAction =
   | "viewOrganization"
   | "renameOrganization"
   | "manageMembers"
+  | "manageEngines"
   | "createEngine"
   | "viewBilling"
   | "manageBilling"
@@ -18,7 +19,11 @@ const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   viewOrganization: ["owner", "admin", "member"],
   renameOrganization: ["owner", "admin"],
   manageMembers: ["owner", "admin"],
-  createEngine: ["owner", "admin"],
+  // See every engine of the org and rename them.
+  manageEngines: ["owner", "admin"],
+  // A new engine starts or extends what the org is billed for, so it is the
+  // billing holder's call.
+  createEngine: ["owner"],
   // The plan and its state, read-only; acting on them is manageBilling.
   viewBilling: ["owner", "admin"],
   manageBilling: ["owner"],
