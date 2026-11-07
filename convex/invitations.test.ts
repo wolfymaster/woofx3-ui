@@ -130,6 +130,41 @@ describe("invitations.create", () => {
   });
 });
 
+describe("invitations.listForEngine", () => {
+  async function listedEmails(t: Backend, userId: Id<"users">, instanceId: Id<"instances">) {
+    const result = await as(t, userId).query(api.invitations.listForEngine, { instanceId });
+    return result === null ? null : result.invitations.map((i) => i.email).sort();
+  }
+
+  test("an engine admin sees only that engine's invitations", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const secondId = await addEngine(t, org, "second");
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    await invite(t, org.ownerId, secondId, "there@example.com");
+    await legacyInvite(t, org, "orgwide@example.com", "member");
+    expect(await listedEmails(t, adminId, org.instanceId)).toEqual(["here@example.com"]);
+  });
+
+  test("an engine member sees no invitations", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const memberId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    expect(await listedEmails(t, memberId, org.instanceId)).toBeNull();
+  });
+
+  test("manageMembers also sees the org-wide invitations, but not expired ones", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    await legacyInvite(t, org, "orgwide@example.com", "member");
+    await legacyInvite(t, org, "stale@example.com", "member", 1);
+    expect(await listedEmails(t, org.ownerId, org.instanceId)).toEqual(["here@example.com", "orgwide@example.com"]);
+  });
+});
+
 describe("invitations.accept", () => {
   test("a new user joins the org as a member and gets only the invited engine", async () => {
     const t = newBackend();
