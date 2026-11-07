@@ -187,6 +187,9 @@ const PROVISIONING_STATUSES: ReadonlySet<string> = new Set<ProvisioningStatus>([
   "failed",
   "deprovisioning",
   "deleted",
+  "stopping",
+  "stopped",
+  "starting",
 ]);
 
 function isProvisioningStatus(status: string): status is ProvisioningStatus {
