@@ -295,6 +295,8 @@ export const deleteInstanceData = internalMutation({
 
     await deleteUserPage(ctx, instanceId);
 
+    await ctx.scheduler.runAfter(0, internal.workflowRuns.deleteForInstance, { instanceId });
+
     const instance = await ctx.db.get(instanceId);
     if (instance?.companionHostname) {
       await ctx.scheduler.runAfter(0, internal.companionRelayActions.removeRoute, { instanceId });
