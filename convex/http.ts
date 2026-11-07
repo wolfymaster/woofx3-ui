@@ -6,6 +6,7 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
+import { registerBillingRoutes } from "./billingHttp";
 import type { WebhookEventResult } from "./engineEvents";
 import { registerEngineEventRoutes } from "./engineEventsHttp";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
@@ -958,6 +959,7 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macr
 
 registerViewerAuthRoutes(http);
 registerUserPageFormRoutes(http);
+registerBillingRoutes(http);
 registerEngineEventRoutes(http);
 
 export default http;

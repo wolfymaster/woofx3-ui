@@ -1,3 +1,4 @@
+import { type Infer, v } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { ProviderEndedReason, ProviderStanding } from "../billingLifecycle";
 import type { AddOnKey } from "../entitlements";
@@ -10,7 +11,7 @@ import type { BillingInterval, PlanTier } from "../organization";
 
 export type PaymentProviderId = "stripe";
 
-export interface PaymentError {
+export type PaymentError = {
   code:
     | "provider_unavailable"
     | "invalid_request"
@@ -20,7 +21,7 @@ export interface PaymentError {
     // A checkout under the same idempotency key is open with other parameters.
     | "checkout_in_progress";
   message: string;
-}
+};
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: PaymentError };
 
@@ -32,19 +33,32 @@ export function err<T>(code: PaymentError["code"], message: string): Result<T> {
   return { ok: false, error: { code, message } };
 }
 
-export type DiscountDuration = { kind: "once" } | { kind: "months"; months: number } | { kind: "forever" };
+const discountDurationValidator = v.union(
+  v.object({ kind: v.literal("once") }),
+  v.object({ kind: v.literal("months"), months: v.number() }),
+  v.object({ kind: v.literal("forever") })
+);
+export type DiscountDuration = Infer<typeof discountDurationValidator>;
 
 /** Ours, not the provider's: what a discount does. */
-export type DiscountSpec =
-  | { kind: "percent_off"; percent: number; duration: DiscountDuration }
-  | { kind: "amount_off"; amountCents: number; currency: "usd"; duration: DiscountDuration };
+export const discountSpecValidator = v.union(
+  v.object({ kind: v.literal("percent_off"), percent: v.number(), duration: discountDurationValidator }),
+  v.object({
+    kind: v.literal("amount_off"),
+    amountCents: v.number(),
+    currency: v.literal("usd"),
+    duration: discountDurationValidator,
+  })
+);
+export type DiscountSpec = Infer<typeof discountSpecValidator>;
 
 /** A discount on a subscription, mirrored onto `subscriptions.discount` for display. */
-export interface AppliedDiscount {
-  spec: DiscountSpec;
-  code: string | null;
-  endsAt: number | null;
-}
+export const appliedDiscountValidator = v.object({
+  spec: discountSpecValidator,
+  code: v.union(v.string(), v.null()),
+  endsAt: v.union(v.number(), v.null()),
+});
+export type AppliedDiscount = Infer<typeof appliedDiscountValidator>;
 
 /**
  * What a checkout is for. Each purpose is one kind of money movement with the
@@ -122,6 +136,26 @@ export interface ProviderSubscription {
   /** When this was read from the provider; older reads are stale. */
   observedAt: number;
 }
+
+/**
+ * A ProviderSubscription as a function argument. The org id came from provider
+ * metadata, so it is a plain string here and looked up where it is applied,
+ * as are the add-on keys against ADD_ONS.
+ */
+export const providerSubscriptionValidator = v.object({
+  customerRef: v.string(),
+  subscriptionRef: v.string(),
+  accountId: v.string(),
+  plan: v.union(v.literal("starter"), v.literal("pro")),
+  interval: v.union(v.literal("month"), v.literal("year")),
+  addOns: v.array(v.string()),
+  standing: v.union(v.literal("good"), v.literal("payment_failed"), v.literal("ended")),
+  endedReason: v.union(v.literal("subscription_canceled"), v.literal("provider_ended"), v.null()),
+  providerStatus: v.string(),
+  currentPeriodEnd: v.number(),
+  discount: v.union(appliedDiscountValidator, v.null()),
+  observedAt: v.number(),
+});
 
 /** A verified provider event, with what the webhook routes it on. */
 export interface PaymentEvent {
