@@ -516,6 +516,7 @@ export const accept = mutation({
       .query("invitations")
       .withIndex("by_token", (q) => q.eq("token", args.token))
       .first();
+    const now = Date.now();
 
     if (!inv) {
       return { status: "not_found" };
@@ -523,7 +524,7 @@ export const accept = mutation({
     if (inv.status === "revoked") {
       return { status: "revoked" };
     }
-    if (inv.status === "expired" || (inv.status === "pending" && inv.expiresAt <= Date.now())) {
+    if (inv.status === "expired" || (inv.status === "pending" && inv.expiresAt <= now)) {
       return { status: "expired" };
     }
     if (inv.status === "accepted") {
