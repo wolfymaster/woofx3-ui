@@ -17,7 +17,13 @@ import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
 import type { EngineAlert } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { type ActivityRow, eventTypeGroups, mergeActivity, triggersByEventType } from "@/lib/activity-feed";
+import {
+  type ActivityRow,
+  eventTypeGroups,
+  mergeActivity,
+  triggerForEvent,
+  triggersByEventType,
+} from "@/lib/activity-feed";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { alertRunPath } from "@/lib/alert-run-route";
 import { engineAlertStyle } from "@/lib/alert-status";
@@ -105,7 +111,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
             <EmptyFeed>Nothing has happened yet. Test alerts don&apos;t appear here.</EmptyFeed>
           ) : (
             rows.map((row) => {
-              const trigger = row.event?.type ? byEvent.get(row.event.type) : undefined;
+              const trigger = triggerForEvent(byEvent, row.event?.type);
               return (
                 <EventsRowItem
                   key={row.key}

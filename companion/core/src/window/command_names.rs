@@ -5,7 +5,7 @@
 /// - the host passes the names to `generate_handler!`
 ///   (companion/src-tauri/src/lib.rs);
 /// - its build script turns them into the `allow-<name>` permissions that
-///   companion/src-tauri/capabilities/companion.json grants, since a handler
+///   companion/src-tauri/capabilities/dashboard.json grants, since a handler
 ///   missing a permission would be denied at runtime;
 /// - the window's generated bindings name each command, its arguments and
 ///   its result from it.
@@ -21,12 +21,6 @@ macro_rules! with_command_names {
     ($callback:ident) => {
         $callback! {
             get_state(()) -> WindowState,
-            start_pairing(()) -> (),
-            cancel_pairing(()) -> (),
-            open_verification_url(()) -> (),
-            confirm_pairing(()) -> (),
-            reject_pairing(()) -> (),
-            unpair(()) -> (),
             install_update(()) -> (),
             get_integrations(()) -> IntegrationsView,
             set_endpoint_enabled(SetEndpointEnabledArgs) -> (),
@@ -45,7 +39,8 @@ macro_rules! with_command_names {
             companion_link_status(()) -> CompanionLinkStatus,
             begin_app_link(()) -> AppLinkStart,
             finish_app_link(FinishAppLinkArgs) -> (),
-            open_twitch_sign_in(OpenTwitchSignInArgs) -> ()
+            open_twitch_sign_in(OpenTwitchSignInArgs) -> (),
+            open_external_url(OpenExternalUrlArgs) -> ()
         }
     };
 }
