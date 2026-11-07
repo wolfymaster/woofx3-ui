@@ -13,12 +13,8 @@ import {
   query,
 } from "./_generated/server";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import {
-  assertCanManageAccountTeam,
-  canAccessAccount,
-  grantInstanceAccessForAccount,
-  normalizeEmail,
-} from "./lib/teamAccess";
+import { orgCan, orgRoleOf, requireOrgAction, requireOrgActionFor } from "./lib/orgRoles";
+import { canAccessAccount, grantInstanceAccessForAccount, normalizeEmail } from "./lib/teamAccess";
 import {
   fetchHasChannelRole,
   fetchTwitchAppCredentials,
@@ -116,8 +112,8 @@ interface TwitchLinkSummary {
 export const teamManagerContext = internalQuery({
   args: { accountId: v.id("accounts"), userId: v.id("users") },
   handler: async (ctx, args): Promise<{ twitchLink: TwitchLinkSummary | null } | null> => {
-    const gate = await assertCanManageAccountTeam(ctx, args.accountId, args.userId);
-    if (!gate) {
+    const account = await ctx.db.get(args.accountId);
+    if (account === null || !orgCan(await orgRoleOf(ctx, account, args.userId), "manageMembers")) {
       return null;
     }
     const instances = await ctx.db
@@ -308,10 +304,7 @@ export const insertInvitation = internalMutation({
     ),
   },
   handler: async (ctx, args): Promise<{ token: string; expiresAt: number }> => {
-    const gate = await assertCanManageAccountTeam(ctx, args.accountId, args.inviterUserId);
-    if (!gate) {
-      throw new Error("Not authorized");
-    }
+    await requireOrgActionFor(ctx, args.accountId, args.inviterUserId, "manageMembers");
 
     const now = Date.now();
     const token = randomToken();
@@ -428,14 +421,10 @@ export const create = action({
 export const revoke = mutation({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
     const inv = await ctx.db.get(args.invitationId);
     if (!inv) throw new Error("Invitation not found");
 
-    const gate = await assertCanManageAccountTeam(ctx, inv.accountId, userId);
-    if (!gate) throw new Error("Not authorized");
+    await requireOrgAction(ctx, inv.accountId, "manageMembers");
 
     if (inv.status !== "pending") {
       throw new Error("Invitation is no longer pending");

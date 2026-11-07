@@ -145,6 +145,8 @@ import type * as lib_ops_notificationRequest from "../lib/ops/notificationReques
 import type * as lib_ops_planCounts from "../lib/ops/planCounts.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
+import type * as lib_orgRoles from "../lib/orgRoles.js";
+import type * as lib_organization from "../lib/organization.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_placementOpacity from "../lib/placementOpacity.js";
@@ -449,6 +451,8 @@ declare const fullApi: ApiFromModules<{
   "lib/ops/planCounts": typeof lib_ops_planCounts;
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
+  "lib/orgRoles": typeof lib_orgRoles;
+  "lib/organization": typeof lib_organization;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
   "lib/placementOpacity": typeof lib_placementOpacity;
