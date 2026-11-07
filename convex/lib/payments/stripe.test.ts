@@ -15,6 +15,7 @@ import {
   sameDiscount,
   specOfCoupon,
   standingOf,
+  toCheckoutSession,
   toInvoice,
   toProviderSubscription,
 } from "./stripe";
@@ -208,6 +209,7 @@ describe("verifyWebhook", () => {
         type: "customer.subscription.updated",
         purpose: "subscription",
         subscriptionRef: "sub_1",
+        session: null,
       },
     });
   });
@@ -233,7 +235,7 @@ describe("verifyWebhook", () => {
     const body = JSON.stringify({ id: "evt_2", object: "event", type: "customer.created", data: { object: {} } });
     expect(await provider.verifyWebhook(body, await signed(body))).toEqual({
       ok: true,
-      value: { eventId: "evt_2", type: "customer.created", purpose: null, subscriptionRef: null },
+      value: { eventId: "evt_2", type: "customer.created", purpose: null, subscriptionRef: null, session: null },
     });
   });
 
@@ -262,8 +264,10 @@ describe("verifyWebhook", () => {
       type: "checkout.session.completed",
       data: {
         object: {
+          id: "cs_market",
           object: "checkout.session",
           mode: "payment",
+          payment_status: "paid",
           subscription: null,
           metadata: { purpose: "marketplace", ref: "listing_1" },
         },
@@ -271,7 +275,40 @@ describe("verifyWebhook", () => {
     });
     expect(await provider.verifyWebhook(body, await signed(body))).toEqual({
       ok: true,
-      value: { eventId: "evt_4", type: "checkout.session.completed", purpose: null, subscriptionRef: null },
+      value: {
+        eventId: "evt_4",
+        type: "checkout.session.completed",
+        purpose: null,
+        subscriptionRef: null,
+        session: { sessionRef: "cs_market", change: "paid" },
+      },
+    });
+  });
+
+  test.each([
+    ["checkout.session.completed", "unpaid", "awaiting_payment"],
+    ["checkout.session.completed", "no_payment_required", "paid"],
+    ["checkout.session.async_payment_succeeded", "paid", "paid"],
+    ["checkout.session.expired", "unpaid", "expired"],
+  ])("%s with payment status %s is a %s session", async (type, paymentStatus, change) => {
+    const body = JSON.stringify({
+      id: "evt_5",
+      object: "event",
+      type,
+      data: {
+        object: {
+          id: "cs_1",
+          object: "checkout.session",
+          mode: "subscription",
+          payment_status: paymentStatus,
+          subscription: "sub_1",
+          metadata: { purpose: "subscription", ref: "acct_1" },
+        },
+      },
+    });
+    expect(await provider.verifyWebhook(body, await signed(body))).toMatchObject({
+      ok: true,
+      value: { purpose: "subscription", session: { sessionRef: "cs_1", change } },
     });
   });
 });
@@ -324,7 +361,13 @@ describe("purpose metadata", () => {
   test("a subscription checkout stamps its purpose and org on the session and the subscription", async () => {
     const { provider, requests } = recordingStripe({
       "/v1/prices": { object: "list", data: [{ id: "price_pro_month", object: "price" }] },
-      "/v1/checkout/sessions": { id: "cs_1", object: "checkout.session", url: "https://checkout.stripe.test/cs_1" },
+      "/v1/checkout/sessions": {
+        id: "cs_1",
+        object: "checkout.session",
+        url: "https://checkout.stripe.test/cs_1",
+        amount_total: 1500,
+        currency: "usd",
+      },
     });
     const result = await provider.createCheckout({
       purpose: {
@@ -341,7 +384,10 @@ describe("purpose metadata", () => {
       idempotencyKey: "checkout:acct_1:1",
       expiresAt: 1_800_003_600_000,
     });
-    expect(result).toEqual({ ok: true, value: { url: "https://checkout.stripe.test/cs_1" } });
+    expect(result).toEqual({
+      ok: true,
+      value: { url: "https://checkout.stripe.test/cs_1", sessionRef: "cs_1", amountCents: 1500 },
+    });
     const session = requests.find((request) => request.path === "/v1/checkout/sessions")?.body;
     expect(session?.get("metadata[purpose]")).toBe("subscription");
     expect(session?.get("metadata[ref]")).toBe("acct_1");
@@ -385,6 +431,24 @@ describe("purpose metadata", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "checkout_in_progress" } });
   });
 
+  test("expiring a checkout closes it, and one no longer open is invalid_request", async () => {
+    const { provider, requests } = recordingStripe({
+      "/v1/checkout/sessions/cs_1/expire": { id: "cs_1", object: "checkout.session", status: "expired" },
+      "/v1/checkout/sessions/cs_done/expire": new Response(
+        JSON.stringify({
+          error: {
+            type: "invalid_request_error",
+            message: "Only Checkout Sessions with a status of open can be expired",
+          },
+        }),
+        { status: 400 }
+      ),
+    });
+    expect(await provider.expireCheckout("cs_1")).toEqual({ ok: true, value: null });
+    expect(requests.map((request) => request.path)).toEqual(["/v1/checkout/sessions/cs_1/expire"]);
+    expect(await provider.expireCheckout("cs_done")).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+  });
+
   test("a coupon created for a discount carries the purpose and our discount key", async () => {
     const { provider, requests } = recordingStripe({
       "/v1/coupons": { id: "woofx3_spring", object: "coupon" },
@@ -424,6 +488,16 @@ describe("purpose metadata", () => {
     const result = await provider.applyDiscount({ subscriptionRef: "sub_1", key: "spring", spec, idempotencyKey: "k" });
     expect(result).toMatchObject({ ok: false, error: { code: "invalid_request" } });
     expect(requests.map((request) => request.path)).toEqual(["/v1/coupons/woofx3_spring"]);
+  });
+});
+
+describe("toCheckoutSession", () => {
+  test.each([
+    [{ url: null, amount_total: 1500, currency: "usd" }, "provider_unavailable"],
+    [{ url: "https://checkout.stripe.test/cs_1", amount_total: null, currency: "usd" }, "invalid_request"],
+    [{ url: "https://checkout.stripe.test/cs_1", amount_total: 1500, currency: "eur" }, "invalid_request"],
+  ])("refuses a session it can't record: %o", (fields, code) => {
+    expect(toCheckoutSession({ id: "cs_1", ...fields })).toMatchObject({ ok: false, error: { code } });
   });
 });
 
