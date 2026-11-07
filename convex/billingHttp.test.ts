@@ -56,6 +56,16 @@ function deliver(t: Backend, provider: FakePaymentProvider, eventId: string) {
   return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
 }
 
+function deliverAbout(t: Backend, provider: FakePaymentProvider, eventId: string, subscriptionRef: string) {
+  const body = JSON.stringify({
+    eventId,
+    type: "customer.subscription.updated",
+    purpose: "subscription",
+    subscriptionRef,
+  });
+  return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+}
+
 async function events(t: Backend) {
   return t.run(async (ctx) => (await ctx.db.query("billingEvents").collect()).map((e) => [e.eventId, e.outcome]));
 }
@@ -140,6 +150,47 @@ describe("billing webhook", () => {
     expect(await again.json()).toEqual({ received: true, duplicate: true });
     expect(await transitions(t, accountId)).toEqual(["ProviderActivated"]);
     expect(provider.calls.filter((c) => c.method === "fetchSubscription").length).toBe(1);
+  });
+
+  test("a late event about an ended subscription doesn't suspend an org that subscribed again", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    const old = providerSubscription(accountId, { subscriptionRef: "sub_old" });
+    provider.subscriptions.set("sub_old", old);
+    await deliverAbout(t, provider, "evt_1", "sub_old");
+    provider.subscriptions.set("sub_old", {
+      ...old,
+      standing: "ended",
+      endedReason: "subscription_canceled",
+      providerStatus: "canceled",
+      observedAt: T0 + 2 * DAY,
+    });
+    await deliverAbout(t, provider, "evt_2", "sub_old");
+    provider.subscriptions.set(
+      "sub_new",
+      providerSubscription(accountId, { subscriptionRef: "sub_new", observedAt: T0 + 3 * DAY })
+    );
+    await deliverAbout(t, provider, "evt_3", "sub_new");
+    // Stripe redelivers an event about the old subscription; the read is fresh, and still ended.
+    provider.subscriptions.set("sub_old", {
+      ...old,
+      standing: "ended",
+      endedReason: "subscription_canceled",
+      observedAt: T0 + 4 * DAY,
+    });
+    await deliverAbout(t, provider, "evt_4", "sub_old");
+    expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toMatchObject({
+      state: "active",
+      providerSubscriptionId: "sub_new",
+      providerStanding: "good",
+    });
+    expect(await events(t)).toEqual([
+      ["evt_1", "applied"],
+      ["evt_2", "applied"],
+      ["evt_3", "applied"],
+      ["evt_4", "ignored"],
+    ]);
   });
 
   test("an older provider read arriving later is ignored as stale", async () => {

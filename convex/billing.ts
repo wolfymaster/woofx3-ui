@@ -318,6 +318,20 @@ export const applyProviderSubscription = internalMutation({
     if (before?.providerSyncedAt !== undefined && subscription.observedAt <= before.providerSyncedAt) {
       return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already", accountId };
     }
+    // The row follows one provider subscription. Another one replaces it only
+    // once it has ended, so a late event about an old, ended subscription
+    // can't suspend an org that has subscribed again.
+    if (
+      before?.providerSubscriptionId !== undefined &&
+      before.providerSubscriptionId !== subscription.subscriptionRef &&
+      before.providerStanding !== "ended"
+    ) {
+      return {
+        outcome: "ignored",
+        error: `subscription ${subscription.subscriptionRef} is not the org's current ${before.providerSubscriptionId}`,
+        accountId,
+      };
+    }
     const result = await applyTransition(ctx, {
       accountId: subscription.accountId,
       event: lifecycleEventFor(before?.state ?? null, subscription),
