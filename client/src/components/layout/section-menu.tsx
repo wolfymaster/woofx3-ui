@@ -2,6 +2,8 @@ import { Menu } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { SHEET_MOTION } from "@/lib/sheet-motion";
+import { cn } from "@/lib/utils";
 import type { NavItem } from "./nav-config";
 import { SectionNavList } from "./section-sidebar";
 
@@ -14,7 +16,6 @@ interface SectionMenuProps {
 /**
  * A phone's way into the active section: a header button opening the same entries the
  * section rail shows from tablet width up, with their labels, in a sheet from the left.
- * The sheet opens in half the shared sheet's time, since it is opened often.
  */
 export function SectionMenu({ title, items, location }: SectionMenuProps) {
   const [open, setOpen] = useState(false);
@@ -32,11 +33,7 @@ export function SectionMenu({ title, items, location }: SectionMenuProps) {
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent
-        side="left"
-        className="w-72 overflow-y-auto p-0 ease-out data-[state=closed]:duration-[250ms] data-[state=open]:duration-[250ms]"
-        aria-describedby={undefined}
-      >
+      <SheetContent side="left" className={cn("w-72 overflow-y-auto p-0", SHEET_MOTION)} aria-describedby={undefined}>
         <SheetHeader className="px-4 py-4">
           <SheetTitle className="text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             {title}
