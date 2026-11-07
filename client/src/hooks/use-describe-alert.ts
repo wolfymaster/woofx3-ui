@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { triggerForEvent } from "@/lib/activity-feed";
 import { alertEventType } from "@/lib/alert-envelope";
 import { type AlertSummary, describeAlert } from "@/lib/alert-summary";
 import type { TriggerPreset } from "@/lib/workflow-presets";
@@ -26,7 +27,7 @@ export function useTriggersByEvent(): ReadonlyMap<string, TriggerPreset> {
 export function useDescribeAlert(): (payload: string | undefined) => AlertSummary {
   const byEvent = useTriggersByEvent();
   return useCallback(
-    (payload: string | undefined) => describeAlert(payload, byEvent.get(alertEventType(payload) ?? "")),
+    (payload: string | undefined) => describeAlert(payload, triggerForEvent(byEvent, alertEventType(payload))),
     [byEvent]
   );
 }

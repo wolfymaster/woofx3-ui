@@ -1,4 +1,4 @@
-import type { RelayView } from "@desktop-host/window";
+import type { RelayView } from "@/desktop/generated/window";
 
 /** Long enough that a network blip or a credential renewal doesn't flash a warning in the status bar. */
 export const RELAY_GRACE_MS = 30_000;
