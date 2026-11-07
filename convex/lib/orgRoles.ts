@@ -25,6 +25,8 @@ const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   deleteOrganization: ["owner"],
 };
 
+export const ORG_ACTIONS = Object.keys(ALLOWED) as OrgAction[];
+
 /** Whether `role` (null when not in the org) may take `action`. Pure. */
 export function orgCan(role: OrgRole | null, action: OrgAction): boolean {
   return role !== null && ALLOWED[action].includes(role);

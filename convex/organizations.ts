@@ -5,7 +5,7 @@ import { mutation, type QueryCtx, query } from "./_generated/server";
 import { accountEntitlements } from "./lib/entitlementAccess";
 import type { Entitlements, SubscriptionSummary } from "./lib/entitlements";
 import type { EngineRole, OrgRole } from "./lib/organization";
-import { type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
+import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
 import type { AppliedDiscount } from "./lib/payments/provider";
 import { subscriptionFor } from "./lib/subscriptions";
 
@@ -50,16 +50,6 @@ export interface MyOrganization {
   /** Null for a role that can't manage members. `limit` null is unlimited. */
   seats: { used: number; limit: number | null } | null;
 }
-
-const ORG_ACTIONS: readonly OrgAction[] = [
-  "viewOrganization",
-  "renameOrganization",
-  "manageMembers",
-  "createEngine",
-  "viewBilling",
-  "manageBilling",
-  "deleteOrganization",
-];
 
 function capabilities(role: OrgRole): OrgCapabilities {
   return Object.fromEntries(ORG_ACTIONS.map((action) => [action, orgCan(role, action)])) as OrgCapabilities;
