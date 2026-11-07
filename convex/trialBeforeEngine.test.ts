@@ -145,10 +145,11 @@ describe("resuming a managed engine while suspended", () => {
 
   beforeEach(() => {
     calls = 0;
-    globalThis.fetch = (async () => {
+    // Typed as fetch's call signature; the cast adds only Bun's `preconnect`.
+    globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
       calls += 1;
       throw new Error("no network in tests");
-    }) as unknown as typeof fetch;
+    }) as typeof fetch;
   });
 
   afterEach(() => {
