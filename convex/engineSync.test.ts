@@ -65,6 +65,29 @@ describe("sweep", () => {
   });
 });
 
+describe("sweep chaining", () => {
+  test("a full batch sweeps again at once until the due rows are handled", async () => {
+    const t = newBackend();
+    await seedDue(t, ENGINE_SYNC_CONFIG.sweepBatchSize + 3);
+    const first = await t.mutation(internal.engineSync.sweep, {});
+    expect(first.scheduled).toBe(ENGINE_SYNC_CONFIG.sweepBatchSize);
+    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    const chained = jobs.filter((job) => job.name === "engineSync:sweep");
+    expect(chained.map((job) => job.args)).toEqual([[{ chainedRun: 1 }]]);
+
+    const second = await t.mutation(internal.engineSync.sweep, { chainedRun: 1 });
+    expect(second.scheduled).toBe(3);
+    expect((await scheduledNames(t)).filter((name) => name === "engineSync:sweep")).toHaveLength(1);
+  });
+
+  test("stops chaining at the per-tick cap", async () => {
+    const t = newBackend();
+    await seedDue(t, ENGINE_SYNC_CONFIG.sweepBatchSize + 1);
+    await t.mutation(internal.engineSync.sweep, { chainedRun: ENGINE_SYNC_CONFIG.sweepMaxChainedRuns });
+    expect(await scheduledNames(t)).not.toContain("engineSync:sweep");
+  });
+});
+
 describe("runSync", () => {
   test("an instance without engine credentials is pushed out by its sync interval", async () => {
     const t = newBackend();

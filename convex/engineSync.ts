@@ -111,9 +111,11 @@ export const reconcileDatabaseNow = internalAction({
 });
 
 /**
- * Cron entry point. One mutation per tick, reading only rows whose
+ * Cron entry point. Each pass reads at most `sweepBatchSize` rows whose
  * nextEligibleAt has passed, so an idle fleet costs a single empty index read
- * however many instances exist. Instances get their row at registration (see
+ * however many instances exist. A full batch schedules the next pass at once,
+ * up to `sweepMaxChainedRuns` passes per tick, so a large fleet is not capped
+ * at one batch per tick. Instances get their row at registration (see
  * ensureSyncRow), so nothing here has to look for instances without one.
  *
  * An instance whose engine has not called the woofx3 webhook within the
@@ -126,21 +128,17 @@ export const reconcileDatabaseNow = internalAction({
  * other.
  */
 export const sweep = internalMutation({
-  args: {},
-  handler: async (ctx): Promise<{ scheduled: number; deferred: number }> => {
+  args: { chainedRun: v.optional(v.number()) },
+  handler: async (ctx, { chainedRun = 0 }): Promise<{ scheduled: number; deferred: number }> => {
     const now = Date.now();
     const due = await ctx.db
       .query("instanceSync")
       .withIndex("by_next_eligible", (q) => q.lte("nextEligibleAt", now))
-      // Over-read: rows whose instance is gone are deleted and do not count toward the batch.
-      .take(ENGINE_SYNC_CONFIG.sweepBatchSize * 4);
+      .take(ENGINE_SYNC_CONFIG.sweepBatchSize);
 
     let scheduled = 0;
     let deferred = 0;
     for (const row of due) {
-      if (scheduled + deferred >= ENGINE_SYNC_CONFIG.sweepBatchSize) {
-        break;
-      }
       const instance = await ctx.db.get(row.instanceId);
       if (!instance) {
         // Its instance is gone and its nextEligibleAt will never move again,
@@ -163,6 +161,11 @@ export const sweep = internalMutation({
       scheduled++;
     }
 
+    // Every row read is now deleted, deferred or claimed, so the next pass
+    // reads the rows behind them.
+    if (due.length === ENGINE_SYNC_CONFIG.sweepBatchSize && chainedRun < ENGINE_SYNC_CONFIG.sweepMaxChainedRuns) {
+      await ctx.scheduler.runAfter(0, internal.engineSync.sweep, { chainedRun: chainedRun + 1 });
+    }
     return { scheduled, deferred };
   },
 });

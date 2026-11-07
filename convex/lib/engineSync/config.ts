@@ -19,8 +19,14 @@ export const ENGINE_SYNC_CONFIG = {
    * it the run has died without finalizing and the instance is idle again.
    */
   runLeaseMs: 15 * 60 * 1000,
-  /** Max instances handled per sweep tick. */
+  /** Max instances handled per sweep pass. */
   sweepBatchSize: 10,
+  /**
+   * Further passes a tick may chain while each pass fills its batch. With
+   * the batch size and tick interval, this bounds syncs started per day to
+   * 10 * 21 * 96 = 20,160: about 6,700 active engines at the default interval.
+   */
+  sweepMaxChainedRuns: 20,
   /** ± jitter applied to nextEligibleAt so instances don't re-align. */
   jitterMs: 5 * 60 * 1000,
   /** Page size for paginated engine reads. */
