@@ -74,11 +74,12 @@ function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
  * null when they may manage none. Invitee emails are personal data, so the
  * list follows `revoke`: an engine's admins see its invitations, and only an
  * org role with `manageMembers` also sees the org-wide ones that predate
- * engine-scoped invites.
+ * engine-scoped invites. `now` (ms) decides which have expired; a query
+ * can't read the clock without losing its cache.
  */
 export const listForEngine = query({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<{ invitations: PendingInvitation[] } | null> => {
+  args: { instanceId: v.id("instances"), now: v.number() },
+  handler: async (ctx, { instanceId, now }): Promise<{ invitations: PendingInvitation[] } | null> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       return null;
@@ -88,7 +89,6 @@ export const listForEngine = query({
     if (instance === null || !roleSatisfies(membership?.role, "admin")) {
       return null;
     }
-    const now = Date.now();
     const engineRows = await ctx.db
       .query("invitations")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId).eq("status", "pending"))

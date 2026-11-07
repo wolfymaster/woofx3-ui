@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { toast } from "@/hooks/use-toast";
 import { useBillingUi } from "@/lib/feature-source";
 import { cn } from "@/lib/utils";
@@ -61,7 +62,8 @@ export default function Team() {
   const instanceId = instance?._id;
 
   const teamData = useQuery(api.engineMembers.listForEngine, instanceId ? { instanceId } : "skip");
-  const inviteData = useQuery(api.invitations.listForEngine, instanceId ? { instanceId } : "skip");
+  const now = useMinuteClock();
+  const inviteData = useQuery(api.invitations.listForEngine, instanceId ? { instanceId, now } : "skip");
 
   const revokeInvite = useMutation(api.invitations.revoke);
   const removeMember = useMutation(api.engineMembers.remove);

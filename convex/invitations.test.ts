@@ -132,7 +132,7 @@ describe("invitations.create", () => {
 
 describe("invitations.listForEngine", () => {
   async function listedEmails(t: Backend, userId: Id<"users">, instanceId: Id<"instances">) {
-    const result = await as(t, userId).query(api.invitations.listForEngine, { instanceId });
+    const result = await as(t, userId).query(api.invitations.listForEngine, { instanceId, now: Date.now() });
     return result === null ? null : result.invitations.map((i) => i.email).sort();
   }
 
