@@ -65,6 +65,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
 import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
+import { SHEET_MOTION } from "@/lib/sheet-motion";
 import { cn } from "@/lib/utils";
 import {
   UNTRIGGERED_LABEL,
@@ -718,7 +719,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       />
 
       <Sheet open={showJson} onOpenChange={setShowJson}>
-        <SheetContent className="w-[500px] sm:max-w-none">
+        <SheetContent className={cn("w-[500px] sm:max-w-none", SHEET_MOTION)}>
           <SheetHeader>
             <SheetTitle>Workflow JSON</SheetTitle>
           </SheetHeader>
