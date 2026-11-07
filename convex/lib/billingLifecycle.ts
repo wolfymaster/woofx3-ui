@@ -130,9 +130,12 @@ export interface Lifecycle {
   nextCheckAt: number | undefined;
 }
 
+export const providerStandingValidator = v.union(v.literal("good"), v.literal("payment_failed"), v.literal("ended"));
+export type ProviderStanding = Infer<typeof providerStandingValidator>;
+
 /** What the provider last said about the org's subscription, or null when it has none. */
 export type ProviderView = {
-  standing: "good" | "payment_failed" | "ended";
+  standing: ProviderStanding;
   endedReason: ProviderEndedReason | null;
   currentPeriodEnd: number;
 } | null;

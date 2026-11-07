@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
 import {
   decideRedeployEvent,
@@ -10,6 +11,7 @@ import {
   type RedeployEvent,
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
+import { applyTransition, subscriptionFor } from "./lib/subscriptions";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { performRegistration } from "./registration";
@@ -101,6 +103,7 @@ export const reserveManagedInstance = internalMutation({
     }
 
     const { instanceId } = await findOrCreateManagedInstance(ctx, account);
+    await startTrialIfNew(ctx, accountId, Date.now());
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -179,6 +182,26 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
     .collect();
   for (const row of held) {
     await ctx.db.delete(row._id);
+  }
+}
+
+/**
+ * An org's first managed engine starts its Starter trial. An org that already
+ * has a subscription row, in any state, gets no second one.
+ */
+async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">, now: number): Promise<void> {
+  if ((await subscriptionFor(ctx, accountId)) !== null) {
+    return;
+  }
+  const result = await applyTransition(ctx, {
+    accountId,
+    event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
+    now,
+    actor: "signup",
+    origin: "signup",
+  });
+  if (!result.ok) {
+    throw new Error(`startTrialIfNew: ${result.error.event} is illegal from ${result.error.from}`);
   }
 }
 
