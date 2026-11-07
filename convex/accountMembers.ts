@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
-import { canAccessAccount, ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { applyOrgRoleToEngines, canAccessAccount } from "./lib/teamAccess";
 
 export const listForAccount = query({
   args: { accountId: v.id("accounts") },
@@ -134,16 +134,9 @@ export const updateMemberRole = mutation({
 
     await ctx.db.patch(row._id, { role: args.role });
 
-    const instanceRole = mapAccountRoleToInstanceRole(args.role);
-    const instances = await ctx.db
-      .query("instances")
-      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
-      .collect();
-
-    for (const inst of instances) {
-      await ensureInstanceMember(ctx, inst._id, args.targetUserId, instanceRole);
-      // A companion this member approved bridges only while they are an admin.
-      await resyncRelayIfBridging(ctx, inst._id);
+    // A companion this member approved bridges only while they are an engine admin.
+    for (const instanceId of await applyOrgRoleToEngines(ctx, args.accountId, args.targetUserId, args.role)) {
+      await resyncRelayIfBridging(ctx, instanceId);
     }
   },
 });

@@ -45,6 +45,7 @@ import type * as engineEvents from "../engineEvents.js";
 import type * as engineEventsHttp from "../engineEventsHttp.js";
 import type * as engineHealth from "../engineHealth.js";
 import type * as engineInfo from "../engineInfo.js";
+import type * as engineMembers from "../engineMembers.js";
 import type * as engineSync from "../engineSync.js";
 import type * as engineSyncInternal from "../engineSyncInternal.js";
 import type * as entitlements from "../entitlements.js";
@@ -351,6 +352,7 @@ declare const fullApi: ApiFromModules<{
   engineEventsHttp: typeof engineEventsHttp;
   engineHealth: typeof engineHealth;
   engineInfo: typeof engineInfo;
+  engineMembers: typeof engineMembers;
   engineSync: typeof engineSync;
   engineSyncInternal: typeof engineSyncInternal;
   entitlements: typeof entitlements;
