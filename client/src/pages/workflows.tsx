@@ -454,6 +454,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const [currentDefinition, setCurrentDefinition] = useState<WorkflowDefinition | null>(null);
   const editedRevisionRef = useRef<number | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedSteps, setHasUnsavedSteps] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -664,7 +665,13 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
             <Play className="h-4 w-4 sm:mr-2" />
             <span className="sr-only sm:not-sr-only">Test run</span>
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={!currentDefinition || isSaving}>
+          <Button
+            size="sm"
+            variant={hasUnsavedSteps ? "default" : "outline"}
+            onClick={handleSave}
+            disabled={!currentDefinition || isSaving}
+            data-testid="button-workflow-save"
+          >
             <Save className="h-4 w-4 mr-2" />
             {isSaving ? "Saving…" : "Save"}
           </Button>
@@ -695,7 +702,11 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
         {instanceId ? (
-          <WorkflowFlowEditor engineWorkflowId={engineWorkflowId} onDefinitionChange={trackEdit} />
+          <WorkflowFlowEditor
+            engineWorkflowId={engineWorkflowId}
+            onDefinitionChange={trackEdit}
+            onUnsavedChange={setHasUnsavedSteps}
+          />
         ) : (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
