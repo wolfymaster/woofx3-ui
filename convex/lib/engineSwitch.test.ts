@@ -17,6 +17,8 @@ describe("switchedStatus", () => {
     ["deprovisioning", "started", null],
     ["stopped", "foundRunning", "registered"],
     ["starting", "foundRunning", null],
+    ["stopped", "foundFailed", "failed"],
+    ["stopping", "foundFailed", null],
   ];
   for (const [from, move, to] of cases) {
     test(`${from} + ${move} -> ${to ?? "refused"}`, () => {

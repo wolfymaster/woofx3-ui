@@ -6,7 +6,13 @@ import type { Doc } from "../_generated/dataModel";
 
 export type ProvisioningStatus = Doc<"engineProvisioning">["status"];
 
-export type EngineSwitchMove = "stopRequested" | "stopped" | "startRequested" | "started" | "foundRunning";
+export type EngineSwitchMove =
+  | "stopRequested"
+  | "stopped"
+  | "startRequested"
+  | "started"
+  | "foundRunning"
+  | "foundFailed";
 
 /** Built engines a stop applies to. */
 const RUNNING: readonly ProvisioningStatus[] = [
@@ -28,8 +34,10 @@ export const ENGINE_SWITCH_TRANSITIONS: Record<
   startRequested: { from: ["stopped"], to: "starting" },
   // A started engine keeps its database and registration, so it is registered again as it was.
   started: { from: ["starting", "stopped"], to: "registered" },
-  // The maintenance API refused a start because the engine was not stopped.
+  // The maintenance API refused a start because the engine was not stopped,
+  // and reports it running, or failed (which provisioning.retry resumes).
   foundRunning: { from: ["stopped"], to: "registered" },
+  foundFailed: { from: ["stopped"], to: "failed" },
 };
 
 /** The status `move` leads to from `current`, or null when the move doesn't apply from there. */

@@ -11,15 +11,6 @@ import {
   type MutationCtx,
   query,
 } from "./_generated/server";
-import { billingConfig, orgPortalUrl } from "./lib/billing/config";
-import {
-  type AppliedDiscount,
-  type BillingError,
-  type BillingProvider,
-  providerSubscriptionValidator,
-} from "./lib/billing/provider";
-import { lifecycleEventFor, providerViewFor } from "./lib/billing/providerEvents";
-import { billingProvider } from "./lib/billing/registry";
 import { dueEvent, isWarningCurrent, WARNING_TEMPLATES, type WarningTemplate } from "./lib/billingLifecycle";
 import {
   type BillingBanner,
@@ -33,13 +24,24 @@ import { engineAvailability } from "./lib/entitlementAccess";
 import { ADD_ONS } from "./lib/entitlements";
 import {
   engineSwitchRefusal,
+  getEngine,
   MaintenanceApiError,
+  type MaintenanceEngineStatus,
   sendTransactionalEmail,
   startEngine,
   stopEngine,
 } from "./lib/maintenanceClient";
 import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./lib/organization";
 import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
+import { orgPortalUrl, paymentsConfig } from "./lib/payments/config";
+import {
+  type AppliedDiscount,
+  type PaymentError,
+  type PaymentProvider,
+  providerSubscriptionValidator,
+} from "./lib/payments/provider";
+import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
+import { paymentProvider } from "./lib/payments/registry";
 import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
@@ -312,19 +314,20 @@ const engineSwitchMoveValidator = v.union(
   v.literal("stopped"),
   v.literal("startRequested"),
   v.literal("started"),
-  v.literal("foundRunning")
+  v.literal("foundRunning"),
+  v.literal("foundFailed")
 );
 
 /** Applies a declared engine switch move; a row that has moved on since is left alone. */
 export const switchEngineStatus = internalMutation({
-  args: { provisioningId: v.id("engineProvisioning"), move: engineSwitchMoveValidator },
-  handler: async (ctx, { provisioningId, move }): Promise<boolean> => {
+  args: { provisioningId: v.id("engineProvisioning"), move: engineSwitchMoveValidator, error: v.optional(v.string()) },
+  handler: async (ctx, { provisioningId, move, error }): Promise<boolean> => {
     const row = await ctx.db.get(provisioningId);
     const to = row === null ? null : switchedStatus(row.status, move);
     if (to === null) {
       return false;
     }
-    await ctx.db.patch(provisioningId, { status: to, error: undefined, updatedAt: Date.now() });
+    await ctx.db.patch(provisioningId, { status: to, error, updatedAt: Date.now() });
     return true;
   },
 });
@@ -384,6 +387,10 @@ async function switchEngine(
   idempotencyKey: string
 ): Promise<"acted" | "skipped" | "retry"> {
   const stopping = effect === "stopEngines";
+  if (!stopping && engine.status === "stopping") {
+    // A stop still running settles first (engine.stopped); the start goes out on a retry after it.
+    return "retry";
+  }
   if (switchedStatus(engine.status, stopping ? "stopRequested" : "startRequested") === null) {
     return "skipped";
   }
@@ -396,12 +403,7 @@ async function switchEngine(
   } catch (error) {
     const refusal = engineSwitchRefusal(error);
     if (refusal === "engine_not_stopped") {
-      // The engine is running already, so the row catches up with it.
-      await ctx.runMutation(internal.billing.switchEngineStatus, {
-        provisioningId: engine.provisioningId,
-        move: "foundRunning",
-      });
-      return "skipped";
+      return catchUpWithEngine(ctx, engine);
     }
     logger.warn("billing engine effect: will retry", {
       effect,
@@ -415,6 +417,41 @@ async function switchEngine(
     move: stopping ? "stopRequested" : "startRequested",
   });
   return "acted";
+}
+
+/**
+ * A start refused because the engine isn't stopped: the row catches up with
+ * what the maintenance API reports. A running engine is registered again; a
+ * failed one is failed, for provisioning.retry; anything else (a run still
+ * going) is asked again later.
+ */
+async function catchUpWithEngine(ctx: ActionCtx, engine: ManagedEngine): Promise<"skipped" | "retry"> {
+  let status: MaintenanceEngineStatus;
+  try {
+    status = (await getEngine(engine.maintenanceEngineId)).engine.status;
+  } catch (error) {
+    logger.warn("billing engine effect: couldn't read a refused engine, will retry", {
+      engineId: engine.maintenanceEngineId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "retry";
+  }
+  if (status === "ready") {
+    await ctx.runMutation(internal.billing.switchEngineStatus, {
+      provisioningId: engine.provisioningId,
+      move: "foundRunning",
+    });
+    return "skipped";
+  }
+  if (status === "failed") {
+    await ctx.runMutation(internal.billing.switchEngineStatus, {
+      provisioningId: engine.provisioningId,
+      move: "foundFailed",
+      error: "start: the engine is failed, so it couldn't be started",
+    });
+    return "skipped";
+  }
+  return "retry";
 }
 
 // ---------------------------------------------------------------------------
@@ -448,14 +485,14 @@ async function requireBillingManager(ctx: ActionCtx, accountId: Id<"accounts">) 
   return context;
 }
 
-function providerFailure(error: BillingError): ConvexError<BillingError> {
-  return new ConvexError<BillingError>(error);
+function providerFailure(error: PaymentError): ConvexError<PaymentError> {
+  return new ConvexError<PaymentError>(error);
 }
 
 // stylegate:ignore ANY-LAY-004 reason="A Convex action handler is the composition root: no process outlives one call to inject a shared client from"
-function configuredProvider(): { provider: BillingProvider; portalUrl: string } {
-  const config = billingConfig();
-  return { provider: billingProvider(config), portalUrl: config.ORG_PORTAL_URL };
+function configuredProvider(): { provider: PaymentProvider; portalUrl: string } {
+  const config = paymentsConfig();
+  return { provider: paymentProvider(config), portalUrl: config.ORG_PORTAL_URL };
 }
 
 /** A provider checkout for a plan, for an org with no subscription in good standing. Returns its URL. */
@@ -476,11 +513,8 @@ export const startCheckout = action({
     }
     const { provider, portalUrl } = configuredProvider();
     const result = await provider.createCheckout({
-      accountId,
+      purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
       customerRef: context.customerRef,
-      plan,
-      interval,
-      promotionCode: promotionCode?.trim() || null,
       allowPromotionCodes: true,
       successUrl: `${portalUrl}/billing?checkout=done`,
       cancelUrl: `${portalUrl}/billing`,
@@ -588,19 +622,36 @@ export const finishEvent = internalMutation({
  */
 export const applyProviderSubscription = internalMutation({
   args: { subscription: providerSubscriptionValidator },
-  handler: async (ctx, { subscription }): Promise<{ outcome: "applied" | "ignored"; error?: string }> => {
-    if ((await ctx.db.get(subscription.accountId)) === null) {
-      throw new Error(
-        `Provider subscription ${subscription.subscriptionRef} names missing org ${subscription.accountId}`
-      );
+  handler: async (
+    ctx,
+    { subscription: read }
+  ): Promise<{ outcome: "applied" | "ignored"; error?: string; accountId?: Id<"accounts"> }> => {
+    const accountId = ctx.db.normalizeId("accounts", read.accountId);
+    if (accountId === null || (await ctx.db.get(accountId)) === null) {
+      return { outcome: "ignored", error: `no org ${read.accountId} for subscription ${read.subscriptionRef}` };
     }
+    const subscription = { ...read, accountId };
     const unknownAddOn = subscription.addOns.find((key) => !Object.keys(ADD_ONS).includes(key));
     if (unknownAddOn !== undefined) {
       throw new Error(`Provider subscription ${subscription.subscriptionRef} has unknown add-on ${unknownAddOn}`);
     }
     const before = await subscriptionFor(ctx, subscription.accountId);
     if (before?.providerSyncedAt !== undefined && subscription.observedAt <= before.providerSyncedAt) {
-      return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already" };
+      return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already", accountId };
+    }
+    // The row follows one provider subscription. Another one replaces it only
+    // once it has ended, so a late event about an old, ended subscription
+    // can't suspend an org that has subscribed again.
+    if (
+      before?.providerSubscriptionId !== undefined &&
+      before.providerSubscriptionId !== subscription.subscriptionRef &&
+      before.providerStanding !== "ended"
+    ) {
+      return {
+        outcome: "ignored",
+        error: `subscription ${subscription.subscriptionRef} is not the org's current ${before.providerSubscriptionId}`,
+        accountId,
+      };
     }
     const result = await applyTransition(ctx, {
       accountId: subscription.accountId,
@@ -628,8 +679,8 @@ export const applyProviderSubscription = internalMutation({
       });
     }
     if (!result.ok) {
-      return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}` };
+      return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}`, accountId };
     }
-    return { outcome: "applied" };
+    return { outcome: "applied", accountId };
   },
 });

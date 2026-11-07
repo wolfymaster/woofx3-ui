@@ -1,16 +1,17 @@
 import type { HttpRouter } from "convex/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, httpAction } from "./_generated/server";
-import { billingConfig } from "./lib/billing/config";
-import type { BillingProvider } from "./lib/billing/provider";
-import { billingProvider } from "./lib/billing/registry";
-import { STRIPE_SCHEMA_VERSION } from "./lib/billing/stripe";
+import { paymentsConfig } from "./lib/payments/config";
+import type { PaymentEvent, PaymentProvider, PaymentPurposeKind } from "./lib/payments/provider";
+import { paymentProvider } from "./lib/payments/registry";
+import { STRIPE_SCHEMA_VERSION } from "./lib/payments/stripe";
 import { logger } from "./logger";
 
 export const STRIPE_WEBHOOK_PATH = "/api/webhooks/billing/stripe";
 
 export interface BillingWebhookDeps {
-  provider: BillingProvider;
+  provider: PaymentProvider;
   runMutation: ActionCtx["runMutation"];
   now: () => number;
 }
@@ -46,24 +47,18 @@ export async function handleBillingWebhook(
   if (duplicate) {
     return json(200, { received: true, duplicate: true });
   }
-  if (event.kind === "ignored") {
-    await deps.runMutation(internal.billing.finishEvent, { eventId: event.eventId, outcome: "ignored" });
+  const handler = event.purpose === null ? null : PURPOSE_HANDLERS[event.purpose];
+  if (handler === null) {
+    await deps.runMutation(internal.billing.finishEvent, {
+      eventId: event.eventId,
+      outcome: "ignored",
+      error: "no purpose of ours",
+    });
     return json(200, { received: true });
   }
   try {
-    const fetched = await deps.provider.fetchSubscription(event.subscriptionRef);
-    if (!fetched.ok) {
-      throw new Error(`${fetched.error.code}: ${fetched.error.message}`);
-    }
-    const applied = await deps.runMutation(internal.billing.applyProviderSubscription, {
-      subscription: fetched.value,
-    });
-    await deps.runMutation(internal.billing.finishEvent, {
-      eventId: event.eventId,
-      outcome: applied.outcome,
-      error: applied.error,
-      accountId: fetched.value.accountId,
-    });
+    const result = await handler(deps, event);
+    await deps.runMutation(internal.billing.finishEvent, { eventId: event.eventId, ...result });
     return json(200, { received: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -73,14 +68,47 @@ export async function handleBillingWebhook(
   }
 }
 
+/** What applying one event did. A handler throws for a failure worth the provider's redelivery. */
+interface EventOutcome {
+  outcome: "applied" | "ignored";
+  error?: string;
+  accountId?: Id<"accounts">;
+}
+
+type PurposeHandler = (deps: BillingWebhookDeps, event: PaymentEvent) => Promise<EventOutcome>;
+
+/**
+ * How each purpose's events are applied, keyed by the purpose stamped on the
+ * object the event is about. An event without one of these is acknowledged
+ * and ignored.
+ */
+const PURPOSE_HANDLERS: Record<PaymentPurposeKind, PurposeHandler> = {
+  subscription: applySubscriptionEvent,
+};
+
+/** Fetches the subscription the event is about and applies the provider's truth about it. */
+async function applySubscriptionEvent(deps: BillingWebhookDeps, event: PaymentEvent): Promise<EventOutcome> {
+  if (event.subscriptionRef === null) {
+    return { outcome: "ignored", error: "about no subscription" };
+  }
+  const fetched = await deps.provider.fetchSubscription(event.subscriptionRef);
+  if (!fetched.ok) {
+    throw new Error(`${fetched.error.code}: ${fetched.error.message}`);
+  }
+  if (fetched.value === null) {
+    return { outcome: "ignored", error: "nothing to apply: still incomplete, or not a subscription of ours" };
+  }
+  return deps.runMutation(internal.billing.applyProviderSubscription, { subscription: fetched.value });
+}
+
 export function registerBillingRoutes(http: HttpRouter): void {
   http.route({
     path: STRIPE_WEBHOOK_PATH,
     method: "POST",
     handler: httpAction(async (ctx, request) => {
-      let provider: BillingProvider;
+      let provider: PaymentProvider;
       try {
-        provider = billingProvider(billingConfig());
+        provider = paymentProvider(paymentsConfig());
       } catch (error) {
         logger.error("billing webhook: billing is not configured", { error: String(error) });
         return json(503, { error: { code: "not_configured", message: "Billing is not configured" } });

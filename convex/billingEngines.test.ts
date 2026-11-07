@@ -160,12 +160,65 @@ describe("resuming engines", () => {
     expect(await status(t, s)).toBe("registered");
   });
 
-  test("an engine the API says isn't stopped is taken as running", async () => {
+  /** Refuses the start as not stopped, and reports the engine in `engineStatus`. */
+  const notStopped = (engineStatus: string) => (url: string) =>
+    url.endsWith("/start")
+      ? Response.json({ error: { code: "engine_not_stopped", message: engineStatus } }, { status: 409 })
+      : Response.json({ engine: { id: "eng_1", status: engineStatus } });
+
+  test("an engine the API refuses to start and reports ready is taken as running", async () => {
     const t = newBackend();
     const s = await seed(t, "active", "stopped");
-    const running = () => Response.json({ error: { code: "engine_not_stopped", message: "ready" } }, { status: 409 });
-    await withMaintenance(running, () => run(t, s, "resumeEngines"));
+    const { calls } = await withMaintenance(notStopped("ready"), () => run(t, s, "resumeEngines"));
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://maintenance.example/v1/engines/eng_1/start",
+      "https://maintenance.example/v1/engines/eng_1",
+    ]);
     expect(await status(t, s)).toBe("registered");
+  });
+
+  test("an engine the API refuses to start and reports failed is failed, not running", async () => {
+    const t = newBackend();
+    const s = await seed(t, "active", "stopped");
+    const { result } = await withMaintenance(notStopped("failed"), () => run(t, s, "resumeEngines"));
+    expect(result).toEqual({ acted: 0, pending: 0 });
+    expect(await t.run((ctx) => ctx.db.get(s.provisioningId))).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("failed"),
+    });
+  });
+
+  test("a payment while a stop is running starts the engine once the stop settles", async () => {
+    const t = newBackend();
+    const s = await seed(t, "active", "stopping");
+    const first = await withMaintenance(ACCEPTED, () => run(t, s, "resumeEngines"));
+    expect(first.result).toEqual({ acted: 0, pending: 1 });
+    expect(first.calls).toEqual([]);
+    const retry = await t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).find(
+        (job) => job.name === "billing:runEngineEffect"
+      )
+    );
+    expect(retry?.args[0]).toMatchObject({ effect: "resumeEngines", attempt: 1 });
+    await t.mutation(internal.provisioningInternal.applyCallbackEvent, {
+      eventId: "e_stopped",
+      eventType: "engine.stopped",
+      maintenanceEngineId: "eng_1",
+    });
+    expect(await status(t, s)).toBe("stopped");
+    const second = await withMaintenance(ACCEPTED, () =>
+      t.action(
+        internal.billing.runEngineEffect,
+        retry?.args[0] as {
+          accountId: Id<"accounts">;
+          transitionId: Id<"subscriptionTransitions">;
+          effect: "resumeEngines";
+          attempt: number;
+        }
+      )
+    );
+    expect(second.calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/start"]);
+    expect(await status(t, s)).toBe("starting");
   });
 });
 
