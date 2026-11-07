@@ -20,16 +20,6 @@
         "minHeight": 600,
         "resizable": true,
         "visible": true
-      },
-      {
-        "label": "companion",
-        "create": false,
-        "title": "woofx3 companion",
-        "url": "companion/index.html",
-        "width": 480,
-        "height": 560,
-        "resizable": false,
-        "visible": false
       }
     ],
     "security": {

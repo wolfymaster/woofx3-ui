@@ -5,16 +5,11 @@
 
 ## What it is
 
-The woofx3 app (Tauri 2), the desktop build of woofx3, runs on the streamer's PC and lives in the tray. It has two windows:
+The woofx3 app (Tauri 2), the desktop build of woofx3, runs on the streamer's PC and lives in the tray. It has one window, **the dashboard** (`main`): the same dashboard as the web app, built for the desktop (`bun run build:desktop`). It opens at launch and from the tray's **Open woofx3** or a left click on the icon.
 
-- **The dashboard** (`main`): the same dashboard as the web app, built for the desktop (`bun run build:desktop`). It opens at launch and from the tray's **Open woofx3**.
-- **The companion window** (`companion`): pairing and connection status. It opens from the tray's **Connection status…**, and by itself when pairing needs the streamer (a code to approve, a pairing to confirm, an error).
+The tray menu holds **Open woofx3**, a status line saying whether this computer is linked to an instance, **Restart to update to X** once an [update](#updates) is ready, and **Quit**. Everything else is in the dashboard.
 
-The tray's **Local connections…** opens the dashboard's Integrations page (`OPEN_LOCAL_CONNECTIONS_EVENT`).
-
-The companion part holds outbound connections from that PC to woofx3, so it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC. Its window shows its state and little else: a Status tab and an [Integrations](#integrations) tab, with Engine and Configuration tabs laid out but disabled until they have something to show.
-
-It pairs with one instance, shows that it is paired and connected, survives restarts, and [updates itself](#updates). Once paired and confirmed, it serves the [local endpoints](#integrations) of modules installed on its instance, such as OBS's WebSocket server, to a cloud engine through the relay. It does not carry a local engine's traffic yet.
+The companion part holds outbound connections from that PC to woofx3, so it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC. Signed in to an account, the dashboard [links](#linking-the-desktop-app) the PC to its instance by itself. Once linked, it serves the [local endpoints](#integrations) of modules installed on its instance, such as OBS's WebSocket server, to a cloud engine through the relay, survives restarts, and [updates itself](#updates). It does not carry a local engine's traffic yet.
 
 ## Two products
 
@@ -22,7 +17,7 @@ The same code builds two apps, which install side by side without sharing anythi
 
 | | Companion | woofx3 |
 |---|---|---|
-| What it is | The tray app that pairs a PC with a cloud instance | The companion with an engine bundled, starting in [local mode](#local-mode) |
+| What it is | The app without an engine, starting signed in to an account | The companion with an engine bundled, starting in [local mode](#local-mode) |
 | Identifier | `tv.woofx3.companion` | `tv.woofx3.app` |
 | Product name | woofx3 companion | woofx3 |
 | Tauri config | `src-tauri/tauri.conf.json` | the same, with `src-tauri/tauri.woofx3.conf.json` merged over it |
@@ -32,16 +27,14 @@ The same code builds two apps, which install side by side without sharing anythi
 
 The identifier decides where each keeps its state: Tauri derives the app's data, config and log directories from it, and the Rust side files its secrets in the OS credential store under it too (`AppIdentity` in `core/src/identity.rs`, read from the running app's config at startup). So the two never read each other's pairing token, engine client credentials, installation id, host configuration or engine data. The product name titles the startup failure message box and the update banner, and the Tauri config gives each its installer name, window titles and update endpoint. The app reports the version from its Tauri config to Convex, the same version the updater compares.
 
-Tauri merges `tauri.woofx3.conf.json` as a JSON merge patch, which replaces arrays whole, so it repeats the window list with its own titles. `companion/scripts/product-configs.test.ts` checks the merged config: its own identifier, product name, version and feed, the companion's windows apart from their titles, and the companion's updater key.
+Tauri merges `tauri.woofx3.conf.json` as a JSON merge patch. `companion/scripts/product-configs.test.ts` checks the merged config: its own identifier, product name, version and feed, and the companion's updater key.
 
 ## Layout
 
 ```
 companion/
-  package.json        companion window app (Vite + React), plus the Tauri CLI;
-                      its build also builds the dashboard
-  ui/                 the companion window: renders CompanionState, calls
-                      Rust commands; served under /companion/
+  package.json        the Tauri CLI and release scripts; its build builds the
+                      dashboard
   src-tauri/          the Rust process: Convex client, credential store, tray,
                       integrations (integrations.rs, integration_store.rs)
   core/               woofx3-companion-core: relay frames, the relay client,
@@ -49,7 +42,7 @@ companion/
                       supervision of a local engine (core/src/host). No Tauri.
 ```
 
-The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Unpairing, or a pairing that fails or is cancelled, closes it again once the calls that release the pairing on the server have finished. Closing a window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one's dashboard (`tauri-plugin-single-instance`).
+The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the app starts without it and opens it only when a link finishes or a stored one resumes (`CloudLink` in `cloud.rs`), so a computer that was never linked runs with no Convex connection at all. Giving up a link closes it again once the call that releases it on the server has finished. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one's dashboard (`tauri-plugin-single-instance`).
 
 The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails, and so does any build whose URL is not an `http` or `https` URL with a host; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
 
@@ -58,7 +51,7 @@ WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:build
 ```
 
-The companion builds on Windows only: its Tauri crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) typechecks and builds the window and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo clippy --all-targets --target x86_64-pc-windows-gnu` checks the crate (it needs `rustup target add x86_64-pc-windows-gnu`, but no MinGW linker).
+The companion builds on Windows only: its Tauri crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) builds the dashboard and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo clippy --all-targets --target x86_64-pc-windows-gnu` checks the crate (it needs `rustup target add x86_64-pc-windows-gnu`, but no MinGW linker).
 
 Everything that carries traffic lives in `companion/core`, which has no Tauri dependency, so its tests run on any OS. They run a fake relay and a fake OBS on loopback and drive the real relay client and bridge against them. CI's **Companion core** job runs `cargo fmt --check`, `clippy` and the tests on Linux.
 
@@ -68,13 +61,13 @@ bun run companion:test    # cargo test --manifest-path companion/core/Cargo.toml
 
 ### The desktop dashboard
 
-The repo-root `vite.config.ts` has a `desktop` mode. It writes the dashboard into `companion/dist/`, the app's `frontendDist`, and the companion window's build writes into `companion/dist/companion/` beside it. It sets `__WOOFX3_DESKTOP__` (`IS_DESKTOP` in `client/src/lib/desktop.ts`), which is false in the web build, so desktop-only code is dropped from it. And it points the dashboard at the Convex deployment the Rust side compiles in, `WOOFX3_CONVEX_URL` (plus `WOOFX3_CONVEX_SITE_URL` when the deployment's HTTP origin is not derived from it), so one variable configures both; the build fails without it.
+The repo-root `vite.config.ts` has a `desktop` mode. It writes the dashboard into `companion/dist/`, the app's `frontendDist`. It sets `__WOOFX3_DESKTOP__` (`IS_DESKTOP` in `client/src/lib/desktop.ts`), which is false in the web build, so desktop-only code is dropped from it. And it points the dashboard at the Convex deployment the Rust side compiles in, `WOOFX3_CONVEX_URL` (plus `WOOFX3_CONVEX_SITE_URL` when the deployment's HTTP origin is not derived from it), so one variable configures both; the build fails without it.
 
 Twitch sign-in runs in the system browser, since the window cannot follow twitch.tv and back; see [Twitch sign-in in the desktop app](#twitch-sign-in-in-the-desktop-app).
 
-In dev, `bun run dev` in `companion/` starts both dev servers: the dashboard on port 1421 (the app's `devUrl`), which proxies `/companion` to the companion window's server on 1420.
+In dev, `bun run dev` in `companion/` starts the dashboard's dev server on port 1421, the app's `devUrl`.
 
-The CSP covers both windows. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin. Frames may come from any `https:` origin or the local engine, because scene and alert previews frame a page served by the engine, whose address differs per deployment. A remote frame holds no capability, so it can't call the app's commands.
+The CSP covers the window. Scripts come only from the bundle (Tauri adds hashes for its inline scripts). Connections may go to any `https:` or `wss:` origin, because the Convex deployment is compiled in rather than known to the config, and to the local engine on `127.0.0.1` or `localhost`. Images and media may come from any `https:` origin. Frames may come from any `https:` origin or the local engine, because scene and alert previews frame a page served by the engine, whose address differs per deployment. A remote frame holds no capability, so it can't call the app's commands.
 
 ### Twitch sign-in in the desktop app
 
@@ -100,6 +93,13 @@ In the desktop build `client/src/main.tsx` starts at `client/src/desktop/Desktop
 - **On this computer** (`local` mode): `LocalApp.tsx`. It asks the host for `local_engine_session` every second until the engine is ready and registered, showing how startup is going (starting, updating its data, or why it stopped), then boots the direct engine gateway on those credentials (`LocalEngineGatewayProvider` in `client/src/engine/boot/local.tsx`). The engine session reconnects by itself if the engine restarts, under the same credentials.
 
 Local mode has no Convex client, so it serves only pages that reach the engine through its gateway: `client/src/desktop/local-routes.tsx` lists them, and `local-routes.test.ts` walks every import from `LocalApp.tsx` and fails on any that reaches Convex (its client or hooks, the generated API, `useInstance`, or the hosted gateway). `LocalShell.tsx` frames them with the app's sections cut down to those pages (`navItemsServed`), and a status bar fed by the engine alone. A path local mode does not serve leads to its home, the dashboard. A page joins local mode once nothing it loads reaches Convex.
+
+Local mode has a first run of its own, the same pages as hosted setup (see [Setup](./auth-onboarding.md)) without the account and engine-build parts. `LocalSetupGuard` in `LocalApp.tsx` sends every page but the alerts page to `/setup` until the overlay page is finished or skipped (the `overlay-done` key of the engine's `defaultSeed` UI settings). `LocalSetup.tsx` serves it outside `LocalShell`, keeping the live connection itself:
+
+1. **Connect Your Streaming Platform**: the same Twitch card as hosted setup (`TwitchConnectCard`), listing the Twitch module's permissions read from the engine's inspection of its listing. **Connect Twitch** starts the engine's device login and shows the code; once it is approved, setup moves on with no click. **Skip for now** moves on without a link. Either way the Twitch module is installed with the listed permissions approved, and the first dashboard panel is written unless there is one (the default widgets the local dashboard can show; pinned messages are left out). The module being installed is what marks this page done.
+2. **Your overlay**: the hosted `OverlayPage`, with no build to wait for. Leaving it opens the dashboard.
+
+While setup runs, the default seed (the overlay scene and alerts, `client/src/engine/direct/default-seed.ts`) is applied once connecting is done and again on a backoff while anything is pending, since the alerts wait for the Twitch module's install to land. What the seed recorded is never seeded again, so a deleted scene or alert stays deleted.
 
 Local mode's dashboard (`LocalDashboard.tsx`) is the hosted one with local mode's widget catalog (`client/src/lib/dashboard-widgets/local-catalog.ts`). It leaves out the widgets whose data only Convex keeps: pinned messages (their history). Its macro pad keeps its buttons on the engine and runs them there, but has no remote trigger URLs, which Convex serves. It has no getting started checklist or starter packs nudge either, which belong to an account's setup. A layout that names one of them shows it as not available here. The Starter Packs page itself is served, as are Logs (the engine's event log, without the hosted app's retrigger), Appearance and Integrations (linking Twitch with a code typed on any device).
 
@@ -232,7 +232,7 @@ The client secret stays in the Rust process and the credential store. The dashbo
 
 ### Window permissions
 
-The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the companion window's capability (`capabilities/companion.json`), and the window's generated bindings name each command from it. The capability grants the companion window only those commands plus listening for events, and nothing from Tauri's core or its plugins. The dashboard window's capability (`capabilities/dashboard.json`) grants the commands that run the app's local mode instead, listed in `DASHBOARD_COMMAND_NAMES` (`core/src/window/mod.rs`): the host mode, the local engine session, the shoutout queue, and in companion mode `open_twitch_sign_in` ([Twitch sign-in](#twitch-sign-in-in-the-desktop-app)) and the three commands that [link the app](#linking-the-desktop-app) as the instance's companion. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings it imports as `@desktop-host/window`. A test checks that the two capabilities split the command list between them exactly.
+The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, `build.rs` declares the same list to Tauri, which then checks each call against the dashboard's capability (`capabilities/dashboard.json`), and the generated bindings name each command from it. The dashboard is the app's one window, so its capability grants every command plus listening for events, and nothing from Tauri's core or its plugins; a test checks it grants exactly the list. The dashboard calls them through `client/src/desktop/host.ts`, typed by the generated bindings in `client/src/desktop/generated/window.ts`.
 
 ## Updates
 
@@ -240,13 +240,13 @@ The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/s
 
 - It checks `latest.json` on its product's feed (`companion-latest` or `woofx3-latest`) 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
-- Once downloaded, `WindowState.update` carries its version. The window shows "{product name} {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
+- Once downloaded, `WindowState.update` carries its version. The dashboard shows "{product name} {version} is ready" with **Restart to update** (`client/src/desktop/UpdateBanner.tsx`, in both the signed-in and local roots), and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The app never restarts on its own. A failed install keeps the update ready: the banner shows why, and one started from the tray opens the dashboard so the banner can offer it again.
 - A failed check, download or signature is logged and tried again on that backoff. It never becomes the `error` state, which is about pairing.
 - The installer is per user, so installs and updates need no administrator prompt.
 
 ## Pairing
 
-There are two ways to pair. Signed in to an account inside the desktop app, the app [links itself](#linking-the-desktop-app) to the instance it shows. Otherwise, from the companion window's **Pair**, pairing follows the OAuth device authorization shape (RFC 8628): the companion shows a short code, and a signed-in person approves it in the browser.
+The desktop app pairs only by [linking itself](#linking-the-desktop-app) to the instance it is signed in to. Convex also still serves pairing with a code, for companion apps installed before that, which pair from their own window's **Pair**. That flow follows the OAuth device authorization shape (RFC 8628): the companion shows a short code, and a signed-in person approves it in the browser.
 
 1. The companion generates its own token: 32 bytes from the OS RNG, base64url, prefixed `wfxc_`. It stores it in the OS credential store (Credential Manager on Windows) marked unconfirmed.
 2. It calls the action `companionPairing.start` with its device name, version, installation id and the token's SHA-256 hash. Convex draws a device code and an 8-character user code (`XXXX-XXXX`, from an alphabet with no vowels or look-alike characters), and returns them with the verification URL `<SITE_URL>/companion/pair?code=…` and how long the code is good for (10 minutes).
@@ -269,7 +269,7 @@ When an admin or owner of the selected instance is signed in to the dashboard in
 1. The dashboard asks the host `companion_link_status`: the instance this computer is the confirmed companion of (its id and name), plus its installation id, device name and version. If that is the selected instance, nothing happens. A stored pairing that names no instance id is left alone too, since which instance it belongs to cannot be told.
 2. `begin_app_link` generates a fresh token in the Rust process and keeps it in memory, not yet in the credential store. It returns only the token's hash, with the installation id, device name and version. Starting again replaces a token that never finished.
 3. The dashboard calls `companionPairing.linkSignedInApp` with the instance and those values. It requires the admin role on the instance, checks the hash, installation id, device name and version as `start` does, and is rate limited per user. It writes the `companions` row already confirmed, approved by the caller, through the same `writeCompanionCredential` (`convex/lib/companionRecords.ts`) an approval uses, so this installation's existing row keeps its id and gets the new token. Calling it again with the same installation and hash changes nothing.
-4. `finish_app_link` gives up any previous pairing as **Unpair** does, stores the token as confirmed with the instance's name and id, and starts the paired session.
+4. `finish_app_link` gives up any previous pairing, stores the token as confirmed with the instance's name and id, and starts the paired session.
 
 If another installation is the instance's companion, `linkSignedInApp` writes nothing and answers with that computer's name and last-seen time. The dashboard asks "Use this computer for local connections?" in a small prompt the person can dismiss. Choosing this computer calls the mutation again with `replaceOtherComputer`, which replaces the other companion as an approval does (see [One companion per instance](#one-companion-per-instance)); the other PC drops to Unpaired.
 
@@ -309,8 +309,8 @@ Only the token's hash is stored. The `companions` row is the credential: a token
 
 - `companions.self` — what the companion subscribes to. Null means unpaired; the companion forgets its token. A query error is not a revocation.
 - `companions.heartbeat` — every 60 seconds once confirmed. It writes `companionPresence`, a separate table, so the heartbeat does not re-run subscriptions that read the companion itself.
-- `companions.confirm` — the person at the PC confirmed the pairing; sets `confirmedAt`.
-- `companions.unpair` — the companion removing itself. It clears its local token first, so an offline Convex never keeps it.
+- `companions.confirm` — the person at the PC confirmed a pairing made with a code (older companion apps); sets `confirmedAt`.
+- `companions.unpair` — the companion giving up its token, as when the desktop app links again. It clears its local token first, so an offline Convex never keeps it.
 - `companions.revoke` — an admin removing the companion from the Companion card. Deleting the row is the revocation.
 - `companions.forInstance` — the instance's companion for its members (null when there is none), with device, version, pairing date, last heartbeat and whether the device confirmed it.
 
@@ -380,22 +380,18 @@ Every 15 minutes the `companion relay resync` cron (`companionRelay.resyncBridge
 
 ## Companion states
 
-The window renders `WindowState` (`companion/core/src/window/mod.rs`): the pairing state, `CompanionState`, with its fields at the top level, plus `update`, which is `null` or the [ready update](#updates)'s `{ version }`. Integrations and the relay arrive separately as `IntegrationsView` on the `companion://integrations` event (and from `get_integrations`), since they change far more often.
+The host sends the dashboard `WindowState` (`companion/core/src/window/mod.rs`): the link state, `CompanionState`, with its fields at the top level, plus `update`, which is `null` or the [ready update](#updates)'s `{ productName, version }`. Integrations and the relay arrive separately as `IntegrationsView` on the `companion://integrations` event (and from `get_integrations`), since they change far more often. The tray's status line is the link state's one-line summary.
 
-Every type the window receives or sends, the event names and the command names live in Rust, in `companion/core/src/window` and the host modules. The window's TypeScript types in `companion/ui/src/generated/window.ts` are generated from them with `ts-rs`, so serde's attributes decide the wire shape for both sides. Never edit the generated file. It also holds each command's argument and result types, which the window's `call` (`companion/ui/src/invoke.ts`) uses: a command with arguments takes them as one struct, its `args` parameter, so a renamed field changes both sides at once. After changing a wire type, regenerate it with `cargo run --features ts --example write_window_bindings` in `companion/core`. The `ts` feature carries the generator, so the app does not; with it, a core test fails while the committed file is stale, and CI runs that test.
+Every type the dashboard receives or sends, the event names and the command names live in Rust, in `companion/core/src/window` and the host modules. The dashboard's TypeScript types in `client/src/desktop/generated/window.ts` are generated from them with `ts-rs`, so serde's attributes decide the wire shape for both sides. Never edit the generated file. It also holds each command's argument and result types, which the dashboard's `call` (`client/src/desktop/invoke.ts`) uses: a command with arguments takes them as one struct, its `args` parameter, so a renamed field changes both sides at once. After changing a wire type, regenerate it with `cargo run --features ts --example write_window_bindings` in `companion/core`. The `ts` feature carries the generator, so the app does not; with it, a core test fails while the committed file is stale, and CI runs that test.
 
-| State | Shown when |
+| State | When |
 |---|---|
 | `starting` | Before the stored token has been read |
 | `offline` | A token is stored but Convex has not answered within a few seconds, so whether it is still paired cannot be told |
-| `unpaired` | No token. The window opens with a **Pair** button |
-| `pairing` | A code is showing; a countdown runs to its expiry on this PC's clock |
-| `confirmPairing` | Approved in the browser; waiting for Confirm or Reject |
-| `paired` | Confirmed. Shows the instance and whether Convex is connected |
-| `error` | Pairing was declined or expired, or the credential store failed; **Try again** starts over |
+| `unpaired` | No token: the dashboard has not linked this computer, or the link was revoked |
+| `paired` | Linked. Carries the instance and whether Convex is connected |
+| `error` | The credential store failed, or the connection to Convex could not be opened |
 
-On start, a confirmed token resumes the paired session without opening the window. An unconfirmed token returns to the confirm screen if `companions.self` still answers for it unconfirmed, goes straight to `paired` if the server says it was confirmed, and to `unpaired` (releasing the token on the server) if `self` is null.
+On start, a confirmed token resumes the paired session. An unconfirmed token, left by a code pairing nobody can finish any more, is given up and released on the server.
 
-**Pair** is honoured only from `unpaired` or `error`, and a second click while a code is being requested is ignored. A token left from an earlier pairing is released on the server before the new one replaces it.
-
-Every window command is async, and credential store and integration file calls run on Tokio's blocking pool in the order they were asked for. Convex calls are bounded by a timeout. Tray updates wait for the main thread, so nothing that holds a lock may run there.
+Every command is async, and credential store and integration file calls run on Tokio's blocking pool in the order they were asked for. Convex calls are bounded by a timeout. Tray updates wait for the main thread, so nothing that holds a lock may run there.
