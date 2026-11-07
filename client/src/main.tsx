@@ -17,6 +17,12 @@ if (container === null) {
 }
 
 startThemeSync();
+if (IS_DESKTOP) {
+  import("./desktop/external-links").then(
+    ({ installDesktopExternalLinks }) => installDesktopExternalLinks(appLogger),
+    (error: unknown) => appLogger.error("Couldn't set up opening links in the browser", { error })
+  );
+}
 createRoot(container).render(
   <LoggerProvider logger={appLogger}>
     <Suspense fallback={null}>
