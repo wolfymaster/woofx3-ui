@@ -597,8 +597,10 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* On a phone the actions wrap to a second row under the name rather than
+          overlapping it. */}
+      <div className="min-h-14 border-b border-border bg-background flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2 shrink-0">
+        <div className="flex flex-1 items-center gap-3 min-w-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={() => navigate(LIST_PATH)} aria-label="Back to workflows">
@@ -633,7 +635,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
           )}
           <Badge
             variant={workflow.isEnabled ? "secondary" : "outline"}
-            className={cn(!workflow.isEnabled && "text-muted-foreground")}
+            className={cn("shrink-0", !workflow.isEnabled && "text-muted-foreground")}
           >
             {workflow.isEnabled ? "Enabled" : "Disabled"}
           </Badge>
@@ -658,8 +660,8 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
             disabled={!instanceId}
             data-testid="button-workflow-test-run"
           >
-            <Play className="h-4 w-4 mr-2" />
-            Test run
+            <Play className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only">Test run</span>
           </Button>
           <Button size="sm" onClick={handleSave} disabled={!currentDefinition || isSaving}>
             <Save className="h-4 w-4 mr-2" />
