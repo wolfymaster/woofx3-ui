@@ -8,12 +8,21 @@ import schema from "../schema";
 const CONVEX_DIR = new URL("..", import.meta.url).pathname;
 
 /**
- * The rate limiter component's built modules. The package exports only its
- * config from there, so the directory is found through it.
+ * A component's built modules. Each package exports only its config from
+ * there, so the directory is found through it.
  */
-const RATE_LIMITER_DIR = dirname(createRequire(import.meta.url).resolve("@convex-dev/rate-limiter/convex.config"));
-const rateLimiterSchema: SchemaDefinition<GenericSchema, boolean> = (await import(`${RATE_LIMITER_DIR}/schema.js`))
-  .default;
+function componentDir(configSpecifier: string): string {
+  return dirname(createRequire(import.meta.url).resolve(configSpecifier));
+}
+
+async function componentSchema(dir: string): Promise<SchemaDefinition<GenericSchema, boolean>> {
+  return (await import(`${dir}/schema.js`)).default;
+}
+
+const RATE_LIMITER_DIR = componentDir("@convex-dev/rate-limiter/convex.config");
+const MIGRATIONS_DIR = componentDir("@convex-dev/migrations/convex.config");
+const rateLimiterSchema = await componentSchema(RATE_LIMITER_DIR);
+const migrationsSchema = await componentSchema(MIGRATIONS_DIR);
 
 /**
  * Every Convex module under `dir`, keyed as `import.meta.glob` would key them
@@ -37,13 +46,14 @@ function convexModules(): Record<string, () => Promise<unknown>> {
   );
 }
 
-function rateLimiterModules(): Record<string, () => Promise<unknown>> {
-  return modulesIn(RATE_LIMITER_DIR, (path) => path.endsWith(".js"));
+function componentModules(dir: string): Record<string, () => Promise<unknown>> {
+  return modulesIn(dir, (path) => path.endsWith(".js"));
 }
 
 /** An in-memory Convex backend with this app's schema, functions and components, for tests that need real queries and mutations. */
 export function newBackend() {
   const t = convexTest(schema, convexModules());
-  t.registerComponent("rateLimiter", rateLimiterSchema, rateLimiterModules());
+  t.registerComponent("rateLimiter", rateLimiterSchema, componentModules(RATE_LIMITER_DIR));
+  t.registerComponent("migrations", migrationsSchema, componentModules(MIGRATIONS_DIR));
   return t;
 }
