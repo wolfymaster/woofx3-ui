@@ -25,6 +25,8 @@ interface WorkflowFlowEditorProps {
   engineWorkflowId: string;
   /** Every edit as a full definition, for the header's Save. */
   onDefinitionChange?: (definition: WorkflowDefinition) => void;
+  /** Whether the steps differ from what is stored, so the header can tell when Save has work to do. */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }
 
 const LAST_ACTION_REASON = "A workflow needs at least one action. Add another action before removing this one.";
@@ -38,7 +40,7 @@ function lastActionReason(steps: StepNode[], id: string): string | null {
  * The workflow editor's steps as a flow (FlowEditor), read from and saved to the stored
  * definition. Saves go through the same action and key escaping as the header's Save.
  */
-export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: WorkflowFlowEditorProps) {
+export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange, onUnsavedChange }: WorkflowFlowEditorProps) {
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const { toast } = useToast();
   const conditionSupport = useEngineConditionSupport();
@@ -122,6 +124,11 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: Wor
   const save = useFlowSave(tree, handleCommit);
   const { markSaved } = save;
   markSavedRef.current = markSaved;
+
+  const { changed } = save;
+  useEffect(() => {
+    onUnsavedChange?.(changed);
+  }, [changed, onUnsavedChange]);
 
   useEffect(() => {
     if (workflow?.definition) {
