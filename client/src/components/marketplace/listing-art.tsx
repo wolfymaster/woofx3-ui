@@ -16,19 +16,24 @@ interface ListingArtProps {
   listing: Pick<CatalogListing, "type" | "images" | "name">;
   /** The `sizes` attribute for a real banner image. */
   sizes: string;
-  /** Scales the motif's type, for the hero's much larger surface. */
+  /** Scales the motif's type, for the listing page's much larger surface. */
   scale?: number;
+  /**
+   * False leaves out the motif, for a surface whose own copy covers the middle of the
+   * art, where the motif would sit under the text. The watermark glyph stays.
+   */
+  withMotif?: boolean;
   className?: string;
 }
 
-export function ListingArt({ listing, sizes, scale = 1, className }: ListingArtProps) {
+export function ListingArt({ listing, sizes, scale = 1, withMotif = true, className }: ListingArtProps) {
   const hue = listingTypeHue(listing.type);
   return (
     <div className={cn("absolute inset-0 overflow-hidden", className)} style={placeholderStyle(hue)}>
       {/* The type's own glyph, oversized and faint: it reads as art at the
           corner of a card and as a watermark on the hero. */}
       <span className="absolute -bottom-6 -right-5 text-white/10">{listingTypeIcon(listing.type, "h-32 w-32")}</span>
-      <Motif type={listing.type} hue={hue} scale={scale} />
+      {withMotif && <Motif type={listing.type} hue={hue} scale={scale} />}
       {listing.images.banner && <ModuleBannerImage banner={listing.images.banner} sizes={sizes} />}
     </div>
   );

@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
 // Curation is the marketplace's (`featuredRank`), so this renders whatever it
 // is handed, in order. With a single featured listing the hero is the single
 // listing full width, because two thirds of a hero and an empty column reads
-// as a page that failed to load.
+// as a page that failed to load. With one side listing the two share the row
+// equally: a third-width column the hero's full height is near square, and
+// cropping a 16:9 banner to that cuts off its edges.
 
 interface StorefrontHeroProps {
   /** Featured listings in curation order. */
@@ -31,7 +33,7 @@ export function StorefrontHero({ featured, state, onOpen }: StorefrontHeroProps)
   const side = rest.slice(0, 2);
 
   return (
-    <div className={cn("grid gap-4", side.length > 0 && "lg:grid-cols-[2fr_1fr]")}>
+    <div className={cn("grid gap-4", side.length === 1 && "lg:grid-cols-2", side.length > 1 && "lg:grid-cols-[2fr_1fr]")}>
       <HeroMain listing={main} state={state(main)} onOpen={onOpen} />
       {side.length > 0 && (
         <div className="flex flex-col gap-4">
@@ -54,7 +56,7 @@ function HeroMain({
   onOpen: (id: string) => void;
 }) {
   return (
-    <HeroPanel listing={listing} onOpen={onOpen} scale={1.6} className="min-h-[360px]">
+    <HeroPanel listing={listing} onOpen={onOpen} className="min-h-[360px]">
       <HeroKicker label={`Featured · ${listingTypeMeta(listing.type).label}`} />
       <h2 className="text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl">{listing.name}</h2>
       {listing.description && (
@@ -85,7 +87,7 @@ function HeroSide({
 }) {
   const stats = listingStats(listing);
   return (
-    <HeroPanel listing={listing} onOpen={onOpen} scale={0.8} className="min-h-[172px] flex-1">
+    <HeroPanel listing={listing} onOpen={onOpen} className="min-h-[172px] flex-1">
       <HeroKicker label="Featured" />
       <h3 className="line-clamp-2 text-lg font-bold leading-tight tracking-tight text-white">{listing.name}</h3>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
@@ -112,13 +114,11 @@ function HeroSide({
 function HeroPanel({
   listing,
   onOpen,
-  scale,
   className,
   children,
 }: {
   listing: CatalogListing;
   onOpen: (id: string) => void;
-  scale: number;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -143,7 +143,7 @@ function HeroPanel({
       <ListingArt
         listing={listing}
         sizes="(min-width: 1280px) 900px, 100vw"
-        scale={scale}
+        withMotif={false}
         className="transition-transform duration-500 group-hover:scale-[1.03]"
       />
       {/* The copy sits on a scrim rather than on the art: a featured listing's
