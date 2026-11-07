@@ -321,7 +321,8 @@ const engineSwitchMoveValidator = v.union(
   v.literal("startRequested"),
   v.literal("started"),
   v.literal("foundRunning"),
-  v.literal("foundFailed")
+  v.literal("foundFailed"),
+  v.literal("refused")
 );
 
 /** Applies a declared engine switch move; a row that has moved on since is left alone. */
@@ -386,6 +387,13 @@ export const runEngineEffect = internalAction({
   },
 });
 
+/** Why a refusal that retrying can't fix left the engine failed, for the row's error. */
+const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine", string> = {
+  engine_not_ready: "the maintenance API can't stop the engine from its current state (engine_not_ready)",
+  not_customer_engine:
+    "the maintenance API says this isn't a customer engine, so billing can't switch it (not_customer_engine)",
+};
+
 async function switchEngine(
   ctx: ActionCtx,
   effect: EngineEffect,
@@ -410,6 +418,14 @@ async function switchEngine(
     const refusal = engineSwitchRefusal(error);
     if (refusal === "engine_not_stopped") {
       return catchUpWithEngine(ctx, engine);
+    }
+    if (refusal === "engine_not_ready" || refusal === "not_customer_engine") {
+      await ctx.runMutation(internal.billing.switchEngineStatus, {
+        provisioningId: engine.provisioningId,
+        move: "refused",
+        error: `${stopping ? "stop" : "start"}: ${REFUSAL_REASONS[refusal]}`,
+      });
+      return "skipped";
     }
     logger.warn("billing engine effect: will retry", {
       effect,
