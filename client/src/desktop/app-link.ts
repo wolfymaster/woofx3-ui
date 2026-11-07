@@ -1,4 +1,4 @@
-import type { CompanionLinkStatus } from "@desktop-host/window";
+import type { CompanionLinkStatus } from "@/desktop/generated/window";
 
 /**
  * When the desktop dashboard makes its computer the selected instance's
