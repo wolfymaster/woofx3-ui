@@ -94,6 +94,16 @@ export const orgMembershipFromEngines = migrations.define({
     if (membership.userId === account.ownerId) {
       return;
     }
+    // Someone already on an engine keeps their access past the seat limit, so
+    // they join the org here rather than through grantEngineRole's seat check.
+    if ((await getAccountMembership(ctx, account._id, membership.userId)) === null) {
+      await ctx.db.insert("accountMembers", {
+        accountId: account._id,
+        userId: membership.userId,
+        role: "member",
+        createdAt: membership.createdAt ?? account.createdAt,
+      });
+    }
     if (membership.role === "owner") {
       await grantEngineRole(ctx, instance._id, membership.userId, "member");
       const orgRow = await getAccountMembership(ctx, account._id, membership.userId);

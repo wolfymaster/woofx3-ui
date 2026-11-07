@@ -3,7 +3,7 @@ import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
-import { accountEntitlements, engineAvailability, hasFeature, requireFeature } from "./entitlementAccess";
+import { accountEntitlements, engineAvailability, hasFeature, orgSeatsFull, requireFeature } from "./entitlementAccess";
 import {
   addOnFeatures,
   ENTITLEMENT_FEATURES,
@@ -12,6 +12,7 @@ import {
 } from "./entitlements";
 import type { SubscriptionState } from "./organization";
 import { upsertPlan } from "./plans";
+import { grantEngineRole } from "./teamAccess";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -145,8 +146,8 @@ describe("addOnFeatures", () => {
 });
 
 describe("seat limit", () => {
-  async function fullStarterOrg(t: Backend) {
-    const { accountId, managedId } = await seedOrg(t, "starter", "active");
+  async function starterOrgWithMembers(t: Backend, members: number) {
+    const { accountId, managedId, externalId } = await seedOrg(t, "starter", "active");
     const ownerId = await t.run(async (ctx) => {
       const account = await ctx.db.get(accountId);
       if (account === null) {
@@ -154,14 +155,92 @@ describe("seat limit", () => {
       }
       await ctx.db.insert("accountMembers", { accountId, userId: account.ownerId, role: "owner", createdAt: 1 });
       await ctx.db.insert("instanceMembers", { instanceId: managedId, userId: account.ownerId, role: "owner" });
-      for (let i = 0; i < 4; i++) {
+      await ctx.db.insert("instanceMembers", { instanceId: externalId, userId: account.ownerId, role: "owner" });
+      for (let i = 0; i < members; i++) {
         const userId = await ctx.db.insert("users", { name: `m${i}` });
         await ctx.db.insert("accountMembers", { accountId, userId, role: "member", createdAt: 1 });
       }
       return account.ownerId;
     });
-    return { accountId, managedId, ownerId };
+    return { accountId, managedId, externalId, ownerId };
   }
+
+  async function fullStarterOrg(t: Backend) {
+    return starterOrgWithMembers(t, 4);
+  }
+
+  function invite(t: Backend, ownerId: Id<"users">, instanceId: Id<"instances">, email: string) {
+    return t.withIdentity({ subject: `${ownerId}|s` }).action(api.invitations.create, {
+      instanceId,
+      engineRole: "member",
+      target: { kind: "email", email },
+    });
+  }
+
+  async function acceptAsNewUser(
+    t: Backend,
+    org: { accountId: Id<"accounts">; ownerId: Id<"users"> },
+    instanceId: Id<"instances">,
+    email: string
+  ) {
+    const inviteeId = await t.run(async (ctx) => {
+      await ctx.db.insert("invitations", {
+        accountId: org.accountId,
+        instanceId,
+        engineRole: "member",
+        email,
+        role: "member",
+        token: email,
+        invitedByUserId: org.ownerId,
+        status: "pending",
+        expiresAt: Date.now() + 60_000,
+        createdAt: 1,
+      });
+      return ctx.db.insert("users", { name: email, email });
+    });
+    return t.withIdentity({ subject: `${inviteeId}|s` }).mutation(api.invitations.accept, { token: email });
+  }
+
+  test("someone who joins through the self-hosted engine takes a seat", async () => {
+    const t = newBackend();
+    const org = await starterOrgWithMembers(t, 3);
+    await acceptAsNewUser(t, org, org.externalId, "fifth@example.com");
+    await expect(invite(t, org.ownerId, org.externalId, "sixth@example.com")).rejects.toThrow("seats are all taken");
+    await expect(invite(t, org.ownerId, org.managedId, "sixth@example.com")).rejects.toThrow("seats are all taken");
+    await expect(acceptAsNewUser(t, org, org.externalId, "sixth@example.com")).rejects.toThrow("seats are all taken");
+  });
+
+  test("a full org refuses every engine grant that would add someone", async () => {
+    const t = newBackend();
+    const { externalId } = await fullStarterOrg(t);
+    await expect(
+      t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { name: "Sixth" });
+        await grantEngineRole(ctx, externalId, userId, "member");
+      })
+    ).rejects.toThrow("seats are all taken");
+  });
+
+  test("an org with only self-hosted engines and no subscription has no seat limit", async () => {
+    const t = newBackend();
+    const accountId = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Owner" });
+      const accountId = await ctx.db.insert("accounts", { name: "Desk", ownerId, createdAt: 1 });
+      await ctx.db.insert("instances", {
+        accountId,
+        name: "Desk",
+        url: "https://e",
+        hosting: "external",
+        createdAt: 1,
+      });
+      for (let i = 0; i < 10; i++) {
+        const userId = await ctx.db.insert("users", { name: `m${i}` });
+        await ctx.db.insert("accountMembers", { accountId, userId, role: "member", createdAt: 1 });
+      }
+      return accountId;
+    });
+    expect(await t.run((ctx) => orgSeatsFull(ctx, accountId, NOW))).toBe(false);
+  });
 
   test("a full Starter org refuses the invite and the accept", async () => {
     const t = newBackend();
