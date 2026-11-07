@@ -6,14 +6,19 @@ import { BILLING_INTERVALS, type BillingInterval, PLAN_TIERS, type PlanTier } fr
 import type { PaymentsConfig } from "./config";
 import {
   type AppliedDiscount,
-  type PaymentEvent,
-  type PaymentProvider,
+  type CheckoutPurpose,
   type CheckoutRequest,
   type DiscountDuration,
   type DiscountSpec,
   err,
   ok,
+  type PaymentEvent,
+  type PaymentProvider,
+  type PaymentPurposeKind,
   type ProviderSubscription,
+  type PurposeMetadata,
+  parsePaymentPurposeKind,
+  purposeMetadata,
   type Result,
 } from "./provider";
 
@@ -175,18 +180,21 @@ export type SubscriptionFields = Pick<
   items: { data: Array<{ price: Pick<Stripe.Price, "id" | "lookup_key">; current_period_end: number }> };
 };
 
-/** A Stripe subscription in our terms. Ignored (null) while `incomplete`. */
+/** A Stripe subscription in our terms. Null while `incomplete`, and for one another purpose created. */
 export function toProviderSubscription(
   subscription: SubscriptionFields,
   observedAt: number
 ): Result<ProviderSubscription | null> {
+  if (parsePaymentPurposeKind(subscription.metadata.purpose) !== "subscription") {
+    return ok(null);
+  }
   const standing = standingOf(subscription.status, subscription.cancel_at_period_end);
   if (standing === "ignore") {
     return ok(null);
   }
-  const accountId = subscription.metadata.accountId;
+  const accountId = subscription.metadata.ref;
   if (accountId === undefined || accountId === "") {
-    return err("invalid_request", `Stripe subscription ${subscription.id} has no accountId metadata`);
+    return err("invalid_request", `Stripe subscription ${subscription.id} has no ref metadata`);
   }
   let tier: { plan: PlanTier; interval: BillingInterval; periodEnd: number } | null = null;
   const addOns: AddOnKey[] = [];
@@ -223,6 +231,31 @@ export function toProviderSubscription(
     discount,
     observedAt,
   });
+}
+
+/**
+ * The purpose stamped on the object an event is about. An invoice carries its
+ * subscription's metadata as it was when the invoice was finalized.
+ */
+export function purposeOf(event: Stripe.Event): PaymentPurposeKind | null {
+  const object = event.data.object;
+  switch (event.type) {
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted":
+    case "customer.subscription.paused":
+    case "customer.subscription.resumed":
+      return parsePaymentPurposeKind((object as Stripe.Subscription).metadata.purpose);
+    case "invoice.paid":
+    case "invoice.payment_failed":
+      return parsePaymentPurposeKind(
+        (object as Stripe.Invoice).parent?.subscription_details?.metadata?.purpose ?? null
+      );
+    case "checkout.session.completed":
+      return parsePaymentPurposeKind((object as Stripe.Checkout.Session).metadata?.purpose ?? null);
+    default:
+      return null;
+  }
 }
 
 /** The subscription an event is about, for the events that can change one. */
@@ -293,27 +326,38 @@ export class StripePaymentProvider implements PaymentProvider {
   }
 
   async createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>> {
+    switch (req.purpose.kind) {
+      case "subscription":
+        return this.createSubscriptionCheckout(req, req.purpose);
+    }
+  }
+
+  private async createSubscriptionCheckout(
+    req: CheckoutRequest,
+    purpose: Extract<CheckoutPurpose, { kind: "subscription" }>
+  ): Promise<Result<{ url: string }>> {
     try {
-      const price = await this.priceId(priceLookupKey(req.plan, req.interval));
+      const price = await this.priceId(priceLookupKey(purpose.plan, purpose.interval));
       if (!price.ok) {
         return price;
       }
       let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
-      if (req.promotionCode !== null) {
-        const promotion = await this.promotionCodeId(req.promotionCode);
+      if (purpose.promotionCode !== null) {
+        const promotion = await this.promotionCodeId(purpose.promotionCode);
         if (promotion === null) {
-          return err("unknown_discount", `No active promotion code ${req.promotionCode}`);
+          return err("unknown_discount", `No active promotion code ${purpose.promotionCode}`);
         }
         discounts = [{ promotion_code: promotion.id }];
       }
+      const metadata = { ...purposeMetadata(purpose) };
       const session = await this.stripe.checkout.sessions.create(
         {
           mode: "subscription",
           line_items: [{ price: price.value, quantity: 1 }],
           customer: req.customerRef ?? undefined,
-          client_reference_id: req.accountId,
-          subscription_data: { metadata: { accountId: req.accountId } },
-          metadata: { accountId: req.accountId },
+          client_reference_id: purpose.accountId,
+          subscription_data: { metadata },
+          metadata,
           discounts,
           // Stripe takes either discounts or allow_promotion_codes, never both.
           allow_promotion_codes: discounts === undefined ? req.allowPromotionCodes : undefined,
@@ -362,27 +406,20 @@ export class StripePaymentProvider implements PaymentProvider {
       }
       throw error;
     }
-    const subscriptionRef = subscriptionRefOf(event);
-    return ok(
-      subscriptionRef === null
-        ? { kind: "ignored", eventId: event.id, type: event.type }
-        : { kind: "subscription.changed", eventId: event.id, type: event.type, subscriptionRef }
-    );
+    return ok({
+      eventId: event.id,
+      type: event.type,
+      purpose: purposeOf(event),
+      subscriptionRef: subscriptionRefOf(event),
+    });
   }
 
-  async fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription>> {
+  async fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription | null>> {
     try {
       const subscription = await this.stripe.subscriptions.retrieve(subscriptionRef, {
         expand: ["discounts.source.coupon", "discounts.promotion_code"],
       });
-      const mapped = toProviderSubscription(subscription, this.now());
-      if (!mapped.ok) {
-        return mapped;
-      }
-      if (mapped.value === null) {
-        return err("invalid_request", `Stripe subscription ${subscriptionRef} is still incomplete`);
-      }
-      return ok(mapped.value);
+      return toProviderSubscription(subscription, this.now());
     } catch (error) {
       return failure(error);
     }
@@ -404,7 +441,12 @@ export class StripePaymentProvider implements PaymentProvider {
         throw error;
       });
       if (existing === null) {
-        await this.stripe.coupons.create(params, { idempotencyKey: `${req.idempotencyKey}:coupon` });
+        // A coupon is shared by every subscription it is applied to, so its ref is our discount key.
+        const metadata: PurposeMetadata = { purpose: "subscription", ref: req.key };
+        await this.stripe.coupons.create(
+          { ...params, metadata: { ...metadata } },
+          { idempotencyKey: `${req.idempotencyKey}:coupon` }
+        );
       }
       const subscription = await this.stripe.subscriptions.update(
         req.subscriptionRef,

@@ -39,13 +39,51 @@ export interface AppliedDiscount {
   endsAt: number | null;
 }
 
-export interface CheckoutRequest {
+/**
+ * What a checkout is for. Each purpose is one kind of money movement with the
+ * fields it needs; the webhook routes the provider's events on `kind`. A new
+ * way to take money (a marketplace purchase priced inline, a payment to a
+ * connected account) is a new member here and a new case in each provider,
+ * and callers of createCheckout don't change.
+ */
+export type CheckoutPurpose = {
+  kind: "subscription";
   accountId: Id<"accounts">;
-  customerRef: string | null;
   plan: PlanTier;
   interval: BillingInterval;
   /** A code the owner typed in our UI, if any. */
   promotionCode: string | null;
+};
+
+export type PaymentPurposeKind = CheckoutPurpose["kind"];
+
+const PAYMENT_PURPOSE_KINDS: Record<PaymentPurposeKind, true> = { subscription: true };
+
+/** A purpose kind read back from provider metadata; null for none, or one this deployment doesn't know. */
+export function parsePaymentPurposeKind(value: string | null | undefined): PaymentPurposeKind | null {
+  return (Object.keys(PAYMENT_PURPOSE_KINDS) as PaymentPurposeKind[]).find((kind) => kind === value) ?? null;
+}
+
+/**
+ * The metadata on every provider object we create: its purpose, and `ref`,
+ * the id of our own row it belongs to (the org, for a subscription). Who gets
+ * what is decided by that row, never by the metadata alone.
+ */
+export interface PurposeMetadata {
+  purpose: PaymentPurposeKind;
+  ref: string;
+}
+
+export function purposeMetadata(purpose: CheckoutPurpose): PurposeMetadata {
+  switch (purpose.kind) {
+    case "subscription":
+      return { purpose: "subscription", ref: purpose.accountId };
+  }
+}
+
+export interface CheckoutRequest {
+  purpose: CheckoutPurpose;
+  customerRef: string | null;
   /** Let the provider's checkout take a code too. */
   allowPromotionCodes: boolean;
   successUrl: string;
@@ -71,16 +109,30 @@ export interface ProviderSubscription {
   observedAt: number;
 }
 
-export type PaymentEvent =
-  | { kind: "subscription.changed"; eventId: string; type: string; subscriptionRef: string }
-  | { kind: "ignored"; eventId: string; type: string };
+/** A verified provider event, with what the webhook routes it on. */
+export interface PaymentEvent {
+  eventId: string;
+  type: string;
+  /**
+   * The purpose in the metadata of the object the event is about; null when
+   * it carries none we know, so the event isn't ours to act on.
+   */
+  purpose: PaymentPurposeKind | null;
+  /** The provider subscription the event is about, when it is about one. */
+  subscriptionRef: string | null;
+}
 
 export interface PaymentProvider {
   readonly id: PaymentProviderId;
   createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>>;
   createPortalSession(req: { customerRef: string; returnUrl: string }): Promise<Result<{ url: string }>>;
   verifyWebhook(rawBody: string, headers: Headers): Promise<Result<PaymentEvent>>;
-  fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription>>;
+  /**
+   * The subscription as the provider holds it now. Null when there is nothing
+   * to apply: its first payment is still unconfirmed, or another purpose
+   * created it.
+   */
+  fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription | null>>;
   /** Creates the provider's coupon for `key` if missing (a deterministic id), then attaches it. */
   applyDiscount(req: {
     subscriptionRef: string;

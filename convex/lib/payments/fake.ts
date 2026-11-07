@@ -1,9 +1,9 @@
 import type {
   AppliedDiscount,
-  PaymentEvent,
-  PaymentProvider,
   CheckoutRequest,
   DiscountSpec,
+  PaymentEvent,
+  PaymentProvider,
   ProviderSubscription,
   Result,
 } from "./provider";
@@ -25,7 +25,10 @@ export class FakePaymentProvider implements PaymentProvider {
 
   async createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>> {
     this.calls.push({ method: "createCheckout", args: req });
-    return this.outage ?? ok({ url: `https://checkout.example/${req.accountId}/${req.plan}_${req.interval}` });
+    const { purpose } = req;
+    return (
+      this.outage ?? ok({ url: `https://checkout.example/${purpose.accountId}/${purpose.plan}_${purpose.interval}` })
+    );
   }
 
   async createPortalSession(req: { customerRef: string; returnUrl: string }): Promise<Result<{ url: string }>> {
@@ -40,7 +43,7 @@ export class FakePaymentProvider implements PaymentProvider {
     return ok(JSON.parse(rawBody) as PaymentEvent);
   }
 
-  async fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription>> {
+  async fetchSubscription(subscriptionRef: string): Promise<Result<ProviderSubscription | null>> {
     this.calls.push({ method: "fetchSubscription", args: subscriptionRef });
     if (this.outage) {
       return this.outage;

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import Stripe from "stripe";
+import type { Id } from "../../_generated/dataModel";
 import { parsePaymentsConfig } from "./config";
 import type { DiscountSpec } from "./provider";
 import {
@@ -126,7 +127,7 @@ function subscription(overrides: Partial<SubscriptionFields> = {}): Subscription
     status: "active",
     cancel_at_period_end: false,
     customer: "cus_1",
-    metadata: { accountId: "acct_1" },
+    metadata: { purpose: "subscription", ref: "acct_1" },
     discounts: [],
     items: {
       data: [{ price: { id: "price_1", lookup_key: "woofx3_pro_year" }, current_period_end: 1_800_000_000 }],
@@ -159,11 +160,17 @@ describe("toProviderSubscription", () => {
     expect(toProviderSubscription(unknown, 0)).toMatchObject({ ok: false, error: { code: "unknown_price" } });
   });
 
-  test("a subscription without our org id is refused", () => {
-    expect(toProviderSubscription(subscription({ metadata: {} }), 0)).toMatchObject({
+  test("a subscription purpose without our org id is refused", () => {
+    expect(toProviderSubscription(subscription({ metadata: { purpose: "subscription" } }), 0)).toMatchObject({
       ok: false,
       error: { code: "invalid_request" },
     });
+  });
+
+  test("a subscription another purpose created, or none of ours, is not applied", () => {
+    for (const metadata of [{}, { purpose: "marketplace", ref: "acct_1" }]) {
+      expect(toProviderSubscription(subscription({ metadata }), 0)).toEqual({ ok: true, value: null });
+    }
   });
 
   test("incomplete is ignored", () => {
@@ -178,7 +185,7 @@ describe("verifyWebhook", () => {
     id: "evt_1",
     object: "event",
     type: "customer.subscription.updated",
-    data: { object: { id: "sub_1", object: "subscription" } },
+    data: { object: { id: "sub_1", object: "subscription", metadata: { purpose: "subscription", ref: "acct_1" } } },
   });
 
   async function signed(body: string, secret = SECRET): Promise<Headers> {
@@ -194,9 +201,9 @@ describe("verifyWebhook", () => {
     expect(await provider.verifyWebhook(payload, await signed(payload))).toEqual({
       ok: true,
       value: {
-        kind: "subscription.changed",
         eventId: "evt_1",
         type: "customer.subscription.updated",
+        purpose: "subscription",
         subscriptionRef: "sub_1",
       },
     });
@@ -223,7 +230,45 @@ describe("verifyWebhook", () => {
     const body = JSON.stringify({ id: "evt_2", object: "event", type: "customer.created", data: { object: {} } });
     expect(await provider.verifyWebhook(body, await signed(body))).toEqual({
       ok: true,
-      value: { kind: "ignored", eventId: "evt_2", type: "customer.created" },
+      value: { eventId: "evt_2", type: "customer.created", purpose: null, subscriptionRef: null },
+    });
+  });
+
+  test("an invoice carries its subscription's purpose", async () => {
+    const body = JSON.stringify({
+      id: "evt_3",
+      object: "event",
+      type: "invoice.paid",
+      data: {
+        object: {
+          object: "invoice",
+          parent: { subscription_details: { subscription: "sub_1", metadata: { purpose: "subscription" } } },
+        },
+      },
+    });
+    expect(await provider.verifyWebhook(body, await signed(body))).toMatchObject({
+      ok: true,
+      value: { purpose: "subscription", subscriptionRef: "sub_1" },
+    });
+  });
+
+  test("a payment-mode checkout from another purpose names no subscription and no purpose we know", async () => {
+    const body = JSON.stringify({
+      id: "evt_4",
+      object: "event",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          object: "checkout.session",
+          mode: "payment",
+          subscription: null,
+          metadata: { purpose: "marketplace", ref: "listing_1" },
+        },
+      },
+    });
+    expect(await provider.verifyWebhook(body, await signed(body))).toEqual({
+      ok: true,
+      value: { eventId: "evt_4", type: "checkout.session.completed", purpose: null, subscriptionRef: null },
     });
   });
 });
@@ -242,5 +287,79 @@ describe("billing config", () => {
       "ORG_PORTAL_URL"
     );
     expect(() => parsePaymentsConfig({ ...VALID_ENV, BILLING_PROVIDER: "paypal" })).toThrow("BILLING_PROVIDER");
+  });
+});
+
+describe("purpose metadata", () => {
+  /** A Stripe client whose requests are recorded and answered from `answers`, keyed by path. */
+  function recordingStripe(answers: Record<string, unknown>) {
+    const requests: Array<{ path: string; body: URLSearchParams }> = [];
+    const fetchFn = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+      requests.push({ path: url.pathname, body: new URLSearchParams(String(init?.body ?? "")) });
+      const answer = answers[url.pathname];
+      return answer === undefined
+        ? new Response(JSON.stringify({ error: { type: "invalid_request_error", code: "resource_missing" } }), {
+            status: 404,
+          })
+        : new Response(JSON.stringify(answer), { status: 200 });
+    };
+    const stripe = new Stripe("sk_test_123", {
+      httpClient: Stripe.createFetchHttpClient(fetchFn as typeof fetch),
+      maxNetworkRetries: 0,
+    });
+    return { provider: new StripePaymentProvider(stripe, SECRET, () => 0), requests };
+  }
+
+  test("a subscription checkout stamps its purpose and org on the session and the subscription", async () => {
+    const { provider, requests } = recordingStripe({
+      "/v1/prices": { object: "list", data: [{ id: "price_pro_month", object: "price" }] },
+      "/v1/checkout/sessions": { id: "cs_1", object: "checkout.session", url: "https://checkout.stripe.test/cs_1" },
+    });
+    const result = await provider.createCheckout({
+      purpose: {
+        kind: "subscription",
+        accountId: "acct_1" as Id<"accounts">,
+        plan: "pro",
+        interval: "month",
+        promotionCode: null,
+      },
+      customerRef: null,
+      allowPromotionCodes: true,
+      successUrl: "https://woofx3.tv/org/billing?checkout=done",
+      cancelUrl: "https://woofx3.tv/org/billing",
+      idempotencyKey: "checkout:acct_1:1",
+    });
+    expect(result).toEqual({ ok: true, value: { url: "https://checkout.stripe.test/cs_1" } });
+    const session = requests.find((request) => request.path === "/v1/checkout/sessions")?.body;
+    expect(session?.get("metadata[purpose]")).toBe("subscription");
+    expect(session?.get("metadata[ref]")).toBe("acct_1");
+    expect(session?.get("subscription_data[metadata][purpose]")).toBe("subscription");
+    expect(session?.get("subscription_data[metadata][ref]")).toBe("acct_1");
+    expect(session?.get("client_reference_id")).toBe("acct_1");
+  });
+
+  test("a coupon created for a discount carries the purpose and our discount key", async () => {
+    const { provider, requests } = recordingStripe({
+      "/v1/coupons": { id: "woofx3_spring", object: "coupon" },
+      "/v1/subscriptions/sub_1": {
+        id: "sub_1",
+        object: "subscription",
+        discounts: [
+          {
+            object: "discount",
+            end: null,
+            promotion_code: null,
+            source: { coupon: { percent_off: 20, amount_off: null, currency: null, duration: "once" } },
+          },
+        ],
+      },
+    });
+    const spec: DiscountSpec = { kind: "percent_off", percent: 20, duration: { kind: "once" } };
+    const result = await provider.applyDiscount({ subscriptionRef: "sub_1", key: "spring", spec, idempotencyKey: "k" });
+    expect(result).toMatchObject({ ok: true, value: { spec } });
+    const coupon = requests.find((request) => request.path === "/v1/coupons")?.body;
+    expect(coupon?.get("metadata[purpose]")).toBe("subscription");
+    expect(coupon?.get("metadata[ref]")).toBe("spring");
   });
 });
