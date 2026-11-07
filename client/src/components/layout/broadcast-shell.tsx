@@ -41,12 +41,14 @@ import {
   findActiveSection,
   isSectionActive,
   MAIN_NAV_SECTIONS,
+  type NavItem,
   navItemsFor,
   sectionsFor,
   UTILITY_SECTIONS,
   withAlertsChildren,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
+import { SectionMenu } from "./section-menu";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
@@ -196,7 +198,12 @@ function StatusBar() {
   );
 }
 
-function AppHeader() {
+interface SectionNav {
+  title: string;
+  items: NavItem[];
+}
+
+function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
   const { user } = useConvexUser();
   const { signOut } = useAuthActions();
   const [location] = useLocation();
@@ -217,6 +224,7 @@ function AppHeader() {
 
   return (
     <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
+      {sectionNav && <SectionMenu title={sectionNav.title} items={sectionNav.items} location={location} />}
       <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
         {MAIN_NAV_SECTIONS.map((item) => {
           const isActive = isSectionActive(item, location);
@@ -311,6 +319,12 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   useLiveConnection();
   useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
+  const sectionNav: SectionNav | null = activeSection?.children
+    ? {
+        title: activeSection.label,
+        items: navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting),
+      }
+    : null;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -328,19 +342,13 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
     <StatusBarSlotProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
         <InstanceBar />
-        <AppHeader />
+        <AppHeader sectionNav={sectionNav} />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />
         <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
-          {activeSection?.children && (
-            <SectionSidebar
-              title={activeSection.label}
-              items={navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting)}
-              location={location}
-            />
-          )}
+          {sectionNav && <SectionSidebar title={sectionNav.title} items={sectionNav.items} location={location} />}
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
 
