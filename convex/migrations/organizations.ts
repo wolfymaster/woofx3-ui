@@ -16,8 +16,9 @@ import { migrations } from "./index";
  * M1: every org's owner has an `owner` membership row and nobody else does
  * (I1); other `owner` rows become `admin`. Then the org's floors hold on each
  * of its engines: the owner owns it (I3) and every org admin is at least
- * engine admin (I4). An owner whose user is gone is reported and left for an
- * operator.
+ * engine admin (I4). An owner whose user is gone, or who has several
+ * membership rows, is reported and left for an operator; the other orgs still
+ * migrate.
  */
 export const orgOwnerRows = migrations.define({
   table: "accounts",
@@ -30,14 +31,19 @@ export const orgOwnerRows = migrations.define({
       .query("accountMembers")
       .withIndex("by_account", (q) => q.eq("accountId", account._id))
       .collect();
-    let ownerRow: Doc<"accountMembers"> | undefined;
+    const ownerRows = rows.filter((row) => row.userId === account.ownerId);
+    if (ownerRows.length > 1) {
+      // Migrations only insert and patch, so which row to keep is an operator's call.
+      logger.warn("orgOwnerRows: org has several membership rows for its owner", {
+        accountId: account._id,
+        ownerId: account.ownerId,
+        rows: ownerRows.length,
+      });
+      return;
+    }
+    const ownerRow: Doc<"accountMembers"> | undefined = ownerRows[0];
     for (const row of rows) {
-      if (row.userId === account.ownerId) {
-        if (ownerRow !== undefined) {
-          throw new Error(`orgOwnerRows: org ${account._id} has two membership rows for its owner`);
-        }
-        ownerRow = row;
-      } else if (row.role === "owner") {
+      if (row.userId !== account.ownerId && row.role === "owner") {
         await ctx.db.patch(row._id, { role: "admin" });
       }
     }
@@ -103,7 +109,11 @@ export const orgMembershipFromEngines = migrations.define({
 });
 
 export type InvariantViolation =
-  | { invariant: "I1"; accountId: Id<"accounts">; detail: "owner_row_missing" | "owner_row_not_owner" }
+  | {
+      invariant: "I1";
+      accountId: Id<"accounts">;
+      detail: "owner_row_missing" | "owner_row_not_owner" | "owner_row_duplicated";
+    }
   | { invariant: "I1"; accountId: Id<"accounts">; detail: "extra_owner_row"; userId: Id<"users"> }
   | { invariant: "I2"; accountId: Id<"accounts">; instanceId: Id<"instances">; userId: Id<"users"> }
   | {
@@ -123,7 +133,11 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
     .query("accountMembers")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
-  const ownerRow = orgRows.find((row) => row.userId === account.ownerId);
+  const ownerRows = orgRows.filter((row) => row.userId === account.ownerId);
+  const ownerRow = ownerRows[0];
+  if (ownerRows.length > 1) {
+    violations.push({ invariant: "I1", accountId, detail: "owner_row_duplicated" });
+  }
   if (ownerRow === undefined) {
     violations.push({ invariant: "I1", accountId, detail: "owner_row_missing" });
   } else if (ownerRow.role !== "owner") {
