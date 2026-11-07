@@ -147,17 +147,13 @@ jobs:
           engine-repository: ${{ env.ENGINE_REPOSITORY }}
           engine-ref: ${{ env.ENGINE_REF }}
 
-      - name: Typecheck window
-        working-directory: companion
-        run: bunx tsc -p ui
-
       - name: Typecheck and test scripts
         working-directory: companion
         run: bunx tsc -p scripts && bun test scripts
 
-      # Builds the dashboard and the companion window into the frontendDist that
-      # tauri's build script expects.
-      - name: Build windows
+      # Builds the dashboard into the frontendDist that tauri's build script
+      # expects.
+      - name: Build the dashboard
         working-directory: companion
         run: bun run build
 
@@ -400,7 +396,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: cargo clippy --all-targets --features ts -- -D warnings
 
-      # With `ts`, a test fails while companion/ui/src/generated is stale.
+      # With `ts`, a test fails while client/src/desktop/generated is stale.
       - name: Rust tests
         if: ${{ !cancelled() }}
         run: cargo test --features ts

@@ -6,6 +6,7 @@ import {
   type ActivityEvent,
   eventTypeGroups,
   mergeActivity,
+  triggerForEvent,
   triggersByEventType,
   withEventTypeEnabled,
 } from "./activity-feed";
@@ -220,5 +221,19 @@ describe("eventTypeGroups", () => {
     const command = { ...follow, id: "cmd", name: "Follow command", transport: "command" };
     expect(triggersByEventType([command, follow]).get("channel.follow")?.id).toBe("follow");
     expect(triggersByEventType([follow, command]).get("channel.follow")?.id).toBe("follow");
+  });
+});
+
+describe("triggerForEvent", () => {
+  const command = preset({ id: "cmd", name: "Chat command", event: "chat.command.*" });
+  const triggers = triggersByEventType([follow, command]);
+
+  test.each([
+    ["an exact type", "channel.follow", "follow"],
+    ["a type a wildcard covers", "chat.command.thatmommae", "cmd"],
+    ["a type nothing declares", "channel.raid", undefined],
+    ["no type", null, undefined],
+  ])("%s", (_, type, expected) => {
+    expect(triggerForEvent(triggers, type)?.id).toBe(expected);
   });
 });

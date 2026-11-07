@@ -19,8 +19,8 @@ use crate::host::{EnginePhase, HostModeKind, LocalSession, StopCause};
 pub use bindings::{window_bindings, BINDINGS_FILE};
 pub use command_args::{
     ChooseHostModeArgs, ConfirmAddressArgs, EnqueueShoutoutArgs, FinishAppLinkArgs,
-    OpenTwitchSignInArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs,
-    SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
+    OpenExternalUrlArgs, OpenTwitchSignInArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs,
+    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
 };
 
 /// The largest integer a JavaScript number holds exactly, 2^53 - 1
@@ -37,35 +37,6 @@ macro_rules! command_name_list {
 
 /// Every command a window may call, in the order the host registers them.
 pub const COMMAND_NAMES: &[&str] = crate::with_command_names!(command_name_list);
-
-/// The commands the dashboard window may call: running the app's local mode,
-/// and in companion mode signing in with Twitch through the system browser
-/// and making this computer the signed-in instance's companion, and managing
-/// its local connections. The companion window may call every other command. Each
-/// window's capability grants exactly its set (companion/src-tauri/capabilities).
-pub const DASHBOARD_COMMAND_NAMES: &[&str] = &[
-    "local_engine_session",
-    "shoutout_queue",
-    "enqueue_shoutout",
-    "remove_shoutout",
-    "reorder_shoutouts",
-    "host_mode",
-    "choose_host_mode",
-    "companion_link_status",
-    "begin_app_link",
-    "finish_app_link",
-    "open_twitch_sign_in",
-    "set_endpoint_enabled",
-    "confirm_address",
-    "use_discovered",
-    "set_share_password",
-    "test_endpoint",
-];
-
-/// The commands both windows may call, kept apart from
-/// [`DASHBOARD_COMMAND_NAMES`] because that list's commands are denied to the
-/// companion window. Both windows report the relay.
-pub const SHARED_COMMAND_NAMES: &[&str] = &["get_integrations", "reconnect_relay"];
 
 /// The mode this app runs in, and whether the streamer chose it. Until they
 /// have, it runs its build's default and the dashboard asks.
@@ -111,30 +82,16 @@ pub struct AppLinkStart {
     pub companion_version: String,
 }
 
-/// Where pairing stands.
+/// Whether this computer is linked to an instance as its companion.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CompanionState {
     Starting,
     /// A stored token exists but Convex has not answered yet, so whether it
-    /// is still paired, or confirmed, cannot be told.
+    /// is still paired cannot be told.
     Offline,
     Unpaired,
-    /// `expires_at` is milliseconds since the epoch on this PC's clock.
-    #[serde(rename_all = "camelCase")]
-    Pairing {
-        user_code: String,
-        verification_url: String,
-        expires_at: u64,
-    },
-    /// Approved in the browser; waiting for the person at this PC to confirm
-    /// that the instance and the approver are theirs.
-    #[serde(rename_all = "camelCase")]
-    ConfirmPairing {
-        instance_name: String,
-        approved_by: String,
-    },
     #[serde(rename_all = "camelCase")]
     Paired {
         instance_name: String,
@@ -152,8 +109,6 @@ impl CompanionState {
             CompanionState::Starting => "Starting…".to_string(),
             CompanionState::Offline => "Offline".to_string(),
             CompanionState::Unpaired | CompanionState::Error { .. } => "Not paired".to_string(),
-            CompanionState::Pairing { .. } => "Pairing…".to_string(),
-            CompanionState::ConfirmPairing { .. } => "Waiting for you to confirm".to_string(),
             CompanionState::Paired {
                 instance_name,
                 cloud_connected: true,
@@ -166,9 +121,8 @@ impl CompanionState {
     }
 }
 
-/// What the window renders: where pairing stands, plus the update waiting to
-/// be installed, if any. The pairing state's fields sit at the top level next
-/// to `update`.
+/// Where the link stands, plus the update waiting to be installed, if any.
+/// The link state's fields sit at the top level next to `update`.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct WindowState {
@@ -200,9 +154,6 @@ pub const STATE_EVENT: &str = "companion://state";
 
 /// Carries [`IntegrationsView`] after every change.
 pub const INTEGRATIONS_EVENT: &str = "companion://integrations";
-
-/// Asks the dashboard to show this computer's local connections. No payload.
-pub const OPEN_LOCAL_CONNECTIONS_EVENT: &str = "companion://open-local-connections";
 
 /// Carries the shoutout queue's view after every change. Local mode
 /// only.
