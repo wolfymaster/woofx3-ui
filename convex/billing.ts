@@ -11,15 +11,6 @@ import {
   type MutationCtx,
   query,
 } from "./_generated/server";
-import { billingConfig, orgPortalUrl } from "./lib/billing/config";
-import {
-  type AppliedDiscount,
-  type BillingError,
-  type BillingProvider,
-  providerSubscriptionValidator,
-} from "./lib/billing/provider";
-import { lifecycleEventFor, providerViewFor } from "./lib/billing/providerEvents";
-import { billingProvider } from "./lib/billing/registry";
 import { dueEvent, isWarningCurrent, WARNING_TEMPLATES, type WarningTemplate } from "./lib/billingLifecycle";
 import {
   type BillingBanner,
@@ -40,6 +31,15 @@ import {
 } from "./lib/maintenanceClient";
 import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./lib/organization";
 import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
+import { orgPortalUrl, paymentsConfig } from "./lib/payments/config";
+import {
+  type AppliedDiscount,
+  type PaymentError,
+  type PaymentProvider,
+  providerSubscriptionValidator,
+} from "./lib/payments/provider";
+import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
+import { paymentProvider } from "./lib/payments/registry";
 import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
@@ -448,14 +448,14 @@ async function requireBillingManager(ctx: ActionCtx, accountId: Id<"accounts">) 
   return context;
 }
 
-function providerFailure(error: BillingError): ConvexError<BillingError> {
-  return new ConvexError<BillingError>(error);
+function providerFailure(error: PaymentError): ConvexError<PaymentError> {
+  return new ConvexError<PaymentError>(error);
 }
 
 // stylegate:ignore ANY-LAY-004 reason="A Convex action handler is the composition root: no process outlives one call to inject a shared client from"
-function configuredProvider(): { provider: BillingProvider; portalUrl: string } {
-  const config = billingConfig();
-  return { provider: billingProvider(config), portalUrl: config.ORG_PORTAL_URL };
+function configuredProvider(): { provider: PaymentProvider; portalUrl: string } {
+  const config = paymentsConfig();
+  return { provider: paymentProvider(config), portalUrl: config.ORG_PORTAL_URL };
 }
 
 /** A provider checkout for a plan, for an org with no subscription in good standing. Returns its URL. */
@@ -476,11 +476,8 @@ export const startCheckout = action({
     }
     const { provider, portalUrl } = configuredProvider();
     const result = await provider.createCheckout({
-      accountId,
+      purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
       customerRef: context.customerRef,
-      plan,
-      interval,
-      promotionCode: promotionCode?.trim() || null,
       allowPromotionCodes: true,
       successUrl: `${portalUrl}/billing?checkout=done`,
       cancelUrl: `${portalUrl}/billing`,
@@ -588,19 +585,36 @@ export const finishEvent = internalMutation({
  */
 export const applyProviderSubscription = internalMutation({
   args: { subscription: providerSubscriptionValidator },
-  handler: async (ctx, { subscription }): Promise<{ outcome: "applied" | "ignored"; error?: string }> => {
-    if ((await ctx.db.get(subscription.accountId)) === null) {
-      throw new Error(
-        `Provider subscription ${subscription.subscriptionRef} names missing org ${subscription.accountId}`
-      );
+  handler: async (
+    ctx,
+    { subscription: read }
+  ): Promise<{ outcome: "applied" | "ignored"; error?: string; accountId?: Id<"accounts"> }> => {
+    const accountId = ctx.db.normalizeId("accounts", read.accountId);
+    if (accountId === null || (await ctx.db.get(accountId)) === null) {
+      return { outcome: "ignored", error: `no org ${read.accountId} for subscription ${read.subscriptionRef}` };
     }
+    const subscription = { ...read, accountId };
     const unknownAddOn = subscription.addOns.find((key) => !Object.keys(ADD_ONS).includes(key));
     if (unknownAddOn !== undefined) {
       throw new Error(`Provider subscription ${subscription.subscriptionRef} has unknown add-on ${unknownAddOn}`);
     }
     const before = await subscriptionFor(ctx, subscription.accountId);
     if (before?.providerSyncedAt !== undefined && subscription.observedAt <= before.providerSyncedAt) {
-      return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already" };
+      return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already", accountId };
+    }
+    // The row follows one provider subscription. Another one replaces it only
+    // once it has ended, so a late event about an old, ended subscription
+    // can't suspend an org that has subscribed again.
+    if (
+      before?.providerSubscriptionId !== undefined &&
+      before.providerSubscriptionId !== subscription.subscriptionRef &&
+      before.providerStanding !== "ended"
+    ) {
+      return {
+        outcome: "ignored",
+        error: `subscription ${subscription.subscriptionRef} is not the org's current ${before.providerSubscriptionId}`,
+        accountId,
+      };
     }
     const result = await applyTransition(ctx, {
       accountId: subscription.accountId,
@@ -628,8 +642,8 @@ export const applyProviderSubscription = internalMutation({
       });
     }
     if (!result.ok) {
-      return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}` };
+      return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}`, accountId };
     }
-    return { outcome: "applied" };
+    return { outcome: "applied", accountId };
   },
 });
