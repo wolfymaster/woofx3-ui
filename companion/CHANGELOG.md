@@ -1,5 +1,13 @@
 # woofx3 desktop changelog
 
+## [0.2.2](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.2.1...woofx3-v0.2.2) (2026-11-07)
+
+### Bug Fixes
+
+* **alerts:** read wildcard-named events through their trigger ([1c23f22](https://github.com/wolfymaster/woofx3-ui/commit/1c23f2215d7bb6e73fb5f44b9b6b43e45516b196))
+* **desktop:** bundle engine v0.68.4 ([8925ea2](https://github.com/wolfymaster/woofx3-ui/commit/8925ea2c0934703cef102cd04dbc67d5c560e447))
+* **scenes:** keep the preview's widgets running when toggling Live Update ([1acdcad](https://github.com/wolfymaster/woofx3-ui/commit/1acdcad46b221454fa642c1688284a7bfa9fe506))
+
 ## [0.2.1](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.2.0...woofx3-v0.2.1) (2026-11-06)
 
 ### Bug Fixes
