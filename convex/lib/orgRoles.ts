@@ -4,13 +4,23 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import type { OrgRole } from "./organization";
 
-export type OrgAction = "viewOrganization" | "manageMembers" | "createEngine" | "manageBilling" | "deleteOrganization";
+export type OrgAction =
+  | "viewOrganization"
+  | "renameOrganization"
+  | "manageMembers"
+  | "createEngine"
+  | "viewBilling"
+  | "manageBilling"
+  | "deleteOrganization";
 
 /** Which org roles may take each action. Admin is Owner minus billing and deletion. */
 const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   viewOrganization: ["owner", "admin", "member"],
+  renameOrganization: ["owner", "admin"],
   manageMembers: ["owner", "admin"],
   createEngine: ["owner", "admin"],
+  // The plan and its state, read-only; acting on them is manageBilling.
+  viewBilling: ["owner", "admin"],
   manageBilling: ["owner"],
   deleteOrganization: ["owner"],
 };
