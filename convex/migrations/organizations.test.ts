@@ -96,14 +96,28 @@ describe("organization role migrations", () => {
       const accountId = await ctx.db.insert("accounts", { name: "Doubled", ownerId, createdAt: 1 });
       await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
       await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "member", createdAt: 2 });
-      return accountId;
+      return { accountId, ownerId };
     });
     await runMigration(t, internal.migrations.organizations.orgOwnerRows);
     const after = await snapshot(t);
     expect(after.org).toContainEqual([s.ownerId, "owner"]);
     expect(after.org).toContainEqual([s.strayOwnerId, "admin"]);
-    const found = (await violations(t)).filter((x) => x.accountId === doubled);
-    expect(found).toEqual([{ invariant: "I1", accountId: doubled, detail: "owner_row_duplicated" }]);
+    const found = (await violations(t)).filter((x) => x.accountId === doubled.accountId);
+    expect(found).toEqual([
+      { invariant: "duplicate_membership", accountId: doubled.accountId, userId: doubled.ownerId, rows: 2 },
+    ]);
+  });
+
+  test("M5 reports a member with two org rows", async () => {
+    const t = newBackend();
+    const s = await seedAnomalies(t);
+    await migrateRoles(t);
+    await t.run((ctx) =>
+      ctx.db.insert("accountMembers", { accountId: s.accountId, userId: s.outsiderId, role: "member", createdAt: 2 })
+    );
+    expect(await violations(t)).toEqual([
+      { invariant: "duplicate_membership", accountId: s.accountId, userId: s.outsiderId, rows: 2 },
+    ]);
   });
 
   test("running them twice changes nothing", async () => {
