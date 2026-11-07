@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { handleBillingWebhook } from "./billingHttp";
-import { FakeBillingProvider } from "./lib/billing/fake";
-import { err, type ProviderSubscription } from "./lib/billing/provider";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
+import { FakePaymentProvider } from "./lib/payments/fake";
+import { err, type ProviderSubscription } from "./lib/payments/provider";
 import { applyTransition, subscriptionFor } from "./lib/subscriptions";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -46,12 +46,22 @@ function providerSubscription(
   };
 }
 
-function deliver(t: Backend, provider: FakeBillingProvider, eventId: string) {
+function deliver(t: Backend, provider: FakePaymentProvider, eventId: string) {
   const body = JSON.stringify({
-    kind: "subscription.changed",
     eventId,
     type: "invoice.paid",
+    purpose: "subscription",
     subscriptionRef: "sub_1",
+  });
+  return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+}
+
+function deliverAbout(t: Backend, provider: FakePaymentProvider, eventId: string, subscriptionRef: string) {
+  const body = JSON.stringify({
+    eventId,
+    type: "customer.subscription.updated",
+    purpose: "subscription",
+    subscriptionRef,
   });
   return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
 }
@@ -72,10 +82,49 @@ async function transitions(t: Backend, accountId: Id<"accounts">) {
 }
 
 describe("billing webhook", () => {
+  test("a marketplace-style purchase (a payment-mode checkout) is acknowledged and touches no subscription", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    await t.run((ctx) =>
+      applyTransition(ctx, {
+        accountId,
+        event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
+        now: T0,
+        actor: "test",
+        origin: "signup",
+      })
+    );
+    const before = await t.run((ctx) => subscriptionFor(ctx, accountId));
+    const provider = new FakePaymentProvider();
+    // The provider reads the purpose off a session no purpose of ours created: it knows none.
+    const body = JSON.stringify({
+      eventId: "evt_market",
+      type: "checkout.session.completed",
+      purpose: null,
+      subscriptionRef: null,
+    });
+    const response = await handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+    expect(response.status).toBe(200);
+    expect(await events(t)).toEqual([["evt_market", "ignored"]]);
+    expect(provider.calls).toEqual([]);
+    expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toEqual(before);
+    expect(await transitions(t, accountId)).toEqual(["TrialStarted"]);
+  });
+
+  test("a subscription that reads as nothing to apply is acknowledged", async () => {
+    const t = newBackend();
+    await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", null);
+    expect((await deliver(t, provider, "evt_incomplete")).status).toBe(200);
+    expect(await events(t)).toEqual([["evt_incomplete", "ignored"]]);
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
+  });
+
   test("a checkout with no subscription row activates the org and mirrors the provider", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     expect((await deliver(t, provider, "evt_1")).status).toBe(200);
     expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toMatchObject({
@@ -94,7 +143,7 @@ describe("billing webhook", () => {
   test("a duplicate delivery applies once", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     await deliver(t, provider, "evt_1");
     const again = await deliver(t, provider, "evt_1");
@@ -103,10 +152,51 @@ describe("billing webhook", () => {
     expect(provider.calls.filter((c) => c.method === "fetchSubscription").length).toBe(1);
   });
 
+  test("a late event about an ended subscription doesn't suspend an org that subscribed again", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    const old = providerSubscription(accountId, { subscriptionRef: "sub_old" });
+    provider.subscriptions.set("sub_old", old);
+    await deliverAbout(t, provider, "evt_1", "sub_old");
+    provider.subscriptions.set("sub_old", {
+      ...old,
+      standing: "ended",
+      endedReason: "subscription_canceled",
+      providerStatus: "canceled",
+      observedAt: T0 + 2 * DAY,
+    });
+    await deliverAbout(t, provider, "evt_2", "sub_old");
+    provider.subscriptions.set(
+      "sub_new",
+      providerSubscription(accountId, { subscriptionRef: "sub_new", observedAt: T0 + 3 * DAY })
+    );
+    await deliverAbout(t, provider, "evt_3", "sub_new");
+    // Stripe redelivers an event about the old subscription; the read is fresh, and still ended.
+    provider.subscriptions.set("sub_old", {
+      ...old,
+      standing: "ended",
+      endedReason: "subscription_canceled",
+      observedAt: T0 + 4 * DAY,
+    });
+    await deliverAbout(t, provider, "evt_4", "sub_old");
+    expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toMatchObject({
+      state: "active",
+      providerSubscriptionId: "sub_new",
+      providerStanding: "good",
+    });
+    expect(await events(t)).toEqual([
+      ["evt_1", "applied"],
+      ["evt_2", "applied"],
+      ["evt_3", "applied"],
+      ["evt_4", "ignored"],
+    ]);
+  });
+
   test("an older provider read arriving later is ignored as stale", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId, { observedAt: T0 + 2 * DAY }));
     await deliver(t, provider, "evt_new");
     provider.subscriptions.set(
@@ -136,7 +226,7 @@ describe("billing webhook", () => {
       await apply({ kind: "GraceExpired" }, T0 - 16 * DAY);
       await apply({ kind: "SpinDownDue" }, T0 - 9 * DAY);
     });
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     await deliver(t, provider, "evt_pay");
     expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.state).toBe("active");
@@ -152,7 +242,7 @@ describe("billing webhook", () => {
   test("an unknown price is recorded as failed and answers 500 so the provider retries", async () => {
     const t = newBackend();
     await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.outage = err("unknown_price", "price_x is not a woofx3 price");
     const response = await deliver(t, provider, "evt_bad");
     expect(response.status).toBe(500);
@@ -161,7 +251,7 @@ describe("billing webhook", () => {
 
   test("a bad signature is refused before anything is recorded", async () => {
     const t = newBackend();
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     const response = await handleBillingWebhook(
       { provider, runMutation: t.mutation, now: () => T0 },
       "{}",
@@ -188,7 +278,7 @@ describe("billing actions", () => {
   test("an org already paying is sent to the portal instead of a second checkout", async () => {
     const t = newBackend();
     const { accountId, ownerId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     await deliver(t, provider, "evt_1");
     await expect(
@@ -202,12 +292,16 @@ describe("billing actions", () => {
 });
 
 describe("internal mutations", () => {
-  test("applyProviderSubscription refuses an org that doesn't exist", async () => {
+  test("applyProviderSubscription ignores an org that doesn't exist, or a ref that is no org id", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
     await t.run((ctx) => ctx.db.delete(accountId));
-    await expect(
-      t.mutation(internal.billing.applyProviderSubscription, { subscription: providerSubscription(accountId) })
-    ).rejects.toThrow("names missing org");
+    for (const ref of [accountId, "not-an-org"]) {
+      const subscription = { ...providerSubscription(accountId), accountId: ref as Id<"accounts"> };
+      expect(await t.mutation(internal.billing.applyProviderSubscription, { subscription })).toMatchObject({
+        outcome: "ignored",
+      });
+    }
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
   });
 });
