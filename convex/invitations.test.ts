@@ -154,6 +154,16 @@ describe("invitations.accept", () => {
     expect(await roles(t, org, userId, secondId)).toEqual({ org: "member", engine: "member" });
   });
 
+  test("accepting a member invitation never lowers an engine admin", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "late@example.com");
+    // Made an engine admin by another route after the invitation was sent.
+    const userId = await addUser(t, "late@example.com", { org, orgRole: "member", engineRole: "admin" });
+    await as(t, userId).mutation(api.invitations.accept, { token });
+    expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: "member", engine: "admin" });
+  });
+
   test("an expired invitation is refused", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
