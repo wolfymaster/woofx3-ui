@@ -153,6 +153,23 @@ export function specOfCoupon(coupon: CouponFields): DiscountSpec | null {
   return null;
 }
 
+/** Whether two discounts give the same terms. */
+export function sameDiscount(a: DiscountSpec | null, b: DiscountSpec): boolean {
+  if (a === null || a.duration.kind !== b.duration.kind) {
+    return false;
+  }
+  if (a.duration.kind === "months" && b.duration.kind === "months" && a.duration.months !== b.duration.months) {
+    return false;
+  }
+  if (a.kind === "percent_off" && b.kind === "percent_off") {
+    return a.percent === b.percent;
+  }
+  if (a.kind === "amount_off" && b.kind === "amount_off") {
+    return a.amountCents === b.amountCents && a.currency === b.currency;
+  }
+  return false;
+}
+
 function appliedDiscount(discount: Stripe.Discount | string): AppliedDiscount | null {
   if (typeof discount === "string" || typeof discount.source.coupon !== "object" || discount.source.coupon === null) {
     return null;
@@ -440,6 +457,12 @@ export class StripePaymentProvider implements PaymentProvider {
         }
         throw error;
       });
+      if (existing !== null && !sameDiscount(specOfCoupon(existing), req.spec)) {
+        return err(
+          "invalid_request",
+          `Coupon ${id} already exists with different terms; use a new discount key for new terms`
+        );
+      }
       if (existing === null) {
         // A coupon is shared by every subscription it is applied to, so its ref is our discount key.
         const metadata: PurposeMetadata = { purpose: "subscription", ref: req.key };

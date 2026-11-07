@@ -11,6 +11,7 @@ import {
   priceLookupKey,
   StripePaymentProvider,
   type SubscriptionFields,
+  sameDiscount,
   specOfCoupon,
   standingOf,
   toProviderSubscription,
@@ -361,5 +362,48 @@ describe("purpose metadata", () => {
     const coupon = requests.find((request) => request.path === "/v1/coupons")?.body;
     expect(coupon?.get("metadata[purpose]")).toBe("subscription");
     expect(coupon?.get("metadata[ref]")).toBe("spring");
+  });
+
+  test("an existing coupon with other terms under the same key is refused, not silently reused", async () => {
+    const { provider, requests } = recordingStripe({
+      "/v1/coupons/woofx3_spring": {
+        id: "woofx3_spring",
+        object: "coupon",
+        percent_off: 20,
+        amount_off: null,
+        currency: null,
+        duration: "once",
+      },
+    });
+    const spec: DiscountSpec = { kind: "percent_off", percent: 50, duration: { kind: "once" } };
+    const result = await provider.applyDiscount({ subscriptionRef: "sub_1", key: "spring", spec, idempotencyKey: "k" });
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(requests.map((request) => request.path)).toEqual(["/v1/coupons/woofx3_spring"]);
+  });
+});
+
+describe("sameDiscount", () => {
+  const twentyOnce: DiscountSpec = { kind: "percent_off", percent: 20, duration: { kind: "once" } };
+  const cases: Array<[string, DiscountSpec | null, boolean]> = [
+    ["the same terms", { kind: "percent_off", percent: 20, duration: { kind: "once" } }, true],
+    ["another percent", { kind: "percent_off", percent: 25, duration: { kind: "once" } }, false],
+    ["another duration", { kind: "percent_off", percent: 20, duration: { kind: "forever" } }, false],
+    ["an amount instead", { kind: "amount_off", amountCents: 20, currency: "usd", duration: { kind: "once" } }, false],
+    ["a coupon we can't read", null, false],
+  ];
+  for (const [name, existing, expected] of cases) {
+    test(name, () => {
+      expect(sameDiscount(existing, twentyOnce)).toBe(expected);
+    });
+  }
+  test("months must match", () => {
+    const three: DiscountSpec = {
+      kind: "amount_off",
+      amountCents: 500,
+      currency: "usd",
+      duration: { kind: "months", months: 3 },
+    };
+    expect(sameDiscount(three, three)).toBe(true);
+    expect(sameDiscount({ ...three, duration: { kind: "months", months: 6 } }, three)).toBe(false);
   });
 });
