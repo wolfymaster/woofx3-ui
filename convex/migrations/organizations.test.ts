@@ -88,6 +88,24 @@ describe("organization role migrations", () => {
     expect(after.engine).toContainEqual([s.instanceId, s.outsiderId, "member"]);
   });
 
+  test("M1 reports an org with two owner rows, leaves it alone and migrates the others", async () => {
+    const t = newBackend();
+    const s = await seedAnomalies(t);
+    const doubled = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Doubled owner" });
+      const accountId = await ctx.db.insert("accounts", { name: "Doubled", ownerId, createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "member", createdAt: 2 });
+      return accountId;
+    });
+    await runMigration(t, internal.migrations.organizations.orgOwnerRows);
+    const after = await snapshot(t);
+    expect(after.org).toContainEqual([s.ownerId, "owner"]);
+    expect(after.org).toContainEqual([s.strayOwnerId, "admin"]);
+    const found = (await violations(t)).filter((x) => x.accountId === doubled);
+    expect(found).toEqual([{ invariant: "I1", accountId: doubled, detail: "owner_row_duplicated" }]);
+  });
+
   test("running them twice changes nothing", async () => {
     const t = newBackend();
     await seedAnomalies(t);
