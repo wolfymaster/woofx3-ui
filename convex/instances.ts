@@ -175,6 +175,9 @@ export const create = mutation({
   },
 });
 
+/** Matches the display name cap (users.ts DISPLAY_NAME_MAX_LENGTH). */
+export const ENGINE_NAME_MAX_LENGTH = 100;
+
 export const update = mutation({
   args: {
     instanceId: v.id("instances"),
@@ -195,6 +198,12 @@ export const update = mutation({
     }
 
     const { instanceId, ...updates } = args;
+    if (updates.name !== undefined) {
+      updates.name = updates.name.trim();
+      if (!updates.name || updates.name.length > ENGINE_NAME_MAX_LENGTH) {
+        throw new Error(`An engine name is 1 to ${ENGINE_NAME_MAX_LENGTH} characters`);
+      }
+    }
     await ctx.db.patch(instanceId, updates);
   },
 });
