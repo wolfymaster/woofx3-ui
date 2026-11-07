@@ -1,4 +1,10 @@
-import { getAuthUserId, modifyAccountCredentials, retrieveAccount } from "@convex-dev/auth/server";
+import {
+  getAuthSessionId,
+  getAuthUserId,
+  invalidateSessions,
+  modifyAccountCredentials,
+  retrieveAccount,
+} from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalQuery, mutation, query } from "./_generated/server";
@@ -117,7 +123,8 @@ const RETRIEVE_REFUSALS: Record<string, "wrong_password" | "too_many_attempts"> 
 };
 
 /**
- * Changes the signed-in user's password after checking the current one.
+ * Changes the signed-in user's password after checking the current one, then
+ * ends every other session of theirs.
  * Expected refusals come back as a reason because a production Convex redacts
  * thrown messages to a bare "Server Error".
  */
@@ -144,10 +151,16 @@ export const changePassword = action({
       }
       return { ok: false, reason };
     }
+    const sessionId = await getAuthSessionId(ctx);
+    if (sessionId === null) {
+      throw new Error("changePassword: a signed-in caller has no session");
+    }
     await modifyAccountCredentials(ctx, {
       provider: "password",
       account: { id: email, secret: args.newPassword },
     });
+    // Whoever knew the old password is signed out everywhere else, desktop app included.
+    await invalidateSessions(ctx, { userId, except: [sessionId] });
     return { ok: true };
   },
 });

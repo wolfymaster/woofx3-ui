@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Password } from "@convex-dev/auth/providers/Password";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
@@ -124,6 +125,32 @@ describe("users profile", () => {
       await ctx.db.patch(limit._id, { attemptsLeft: 0 });
     });
     expect(await attempt()).toEqual({ ok: false, reason: "too_many_attempts" });
+  });
+
+  test("a successful change keeps this session and ends every other one", async () => {
+    const f = await fixture();
+    const sessions = await f.t.run(async (ctx) => {
+      const account = await ctx.db.query("authAccounts").first();
+      if (account === null) {
+        throw new Error("fixture has no auth account");
+      }
+      const hashSecret = Password().options.crypto?.hashSecret;
+      if (hashSecret === undefined) {
+        throw new Error("the Password provider has no hasher");
+      }
+      await ctx.db.patch(account._id, { secret: await hashSecret("oldpassword1") });
+      const session = () =>
+        ctx.db.insert("authSessions", { userId: f.passwordUserId, expirationTime: Date.now() + 60_000 });
+      return { current: await session(), desktop: await session() };
+    });
+    const pat = f.t.withIdentity({ subject: `${f.passwordUserId}|${sessions.current}` });
+    const result = await pat.action(api.users.changePassword, {
+      currentPassword: "oldpassword1",
+      newPassword: "newpassword1",
+    });
+    expect(result).toEqual({ ok: true });
+    const left = await f.t.run((ctx) => ctx.db.query("authSessions").collect());
+    expect(left.map((row) => row._id)).toEqual([sessions.current]);
   });
 
   test("a too-short new password is refused before the old one is checked", async () => {
