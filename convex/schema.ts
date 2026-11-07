@@ -149,7 +149,14 @@ export default defineSchema({
     platformLogin: v.optional(v.string()),
     platformDisplayName: v.optional(v.string()),
     platformProfileImageUrl: v.optional(v.string()),
+    // The org role the invitee gets on accept when not already in the org.
+    // New invitations always say "member"; access comes from the engine grant.
     role: v.union(v.literal("admin"), v.literal("member")),
+    // The one engine the invitation grants, at engineRole. Absent only on
+    // invitations from before engine-scoped invites, until
+    // migrations/invitations backfills them.
+    instanceId: v.optional(v.id("instances")),
+    engineRole: v.optional(v.union(v.literal("admin"), v.literal("member"))),
     token: v.string(),
     invitedByUserId: v.id("users"),
     status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("revoked"), v.literal("expired")),
@@ -159,7 +166,8 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_account", ["accountId"])
     .index("by_account_email", ["accountId", "email"])
-    .index("by_account_platform_user", ["accountId", "platform", "platformUserId"]),
+    .index("by_account_platform_user", ["accountId", "platform", "platformUserId"])
+    .index("by_instance", ["instanceId", "status"]),
 
   // instances: a single woofx3 deployment
   instances: defineTable({
