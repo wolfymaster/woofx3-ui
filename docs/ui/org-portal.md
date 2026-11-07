@@ -18,6 +18,7 @@ The portal is where an organization's owner and admins manage the organization a
 - `organizations.rename` (owner and admin). Engines are renamed with `instances.update`.
 - Billing actions are the owner's (`manageBilling`): `billing.startCheckout`, `billing.previewPromotionCode`, `billing.openPortal`, and `billing.invoices`, which reads the customer's invoices live through `PaymentProvider.listInvoices` and answers null to anyone else. woofx3 stores no invoices.
 - Money moves through the payments module (`convex/lib/payments/`), behind `PaymentProvider`. The provider's webhooks arrive at `POST /payments/stripe/webhook` (`convex/paymentsHttp.ts`) and are kept as received in `paymentEvents`. Its configuration is `PAYMENTS_PROVIDER` (`stripe`), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `ORG_PORTAL_URL`, validated by `paymentsConfig()`.
+- Every checkout we open is a `paymentSessions` row (`open`, `complete` or `expired`), unique on the provider's session id, holding its purpose (the plan it charges) and amount. A session event is applied by that row, never by the provider's metadata: an unknown session is acknowledged and ignored, and a closed one changes nothing. Only a paid checkout binds a provider subscription to an organization. Opening a checkout expires the organization's older open session at the provider. A second live subscription for an organization is logged as an error and recorded in `paymentEvents` with outcome `stray`, for an operator to settle.
 
 ## Who sees what
 

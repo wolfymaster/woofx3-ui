@@ -159,6 +159,7 @@ import type * as lib_payments_fake from "../lib/payments/fake.js";
 import type * as lib_payments_provider from "../lib/payments/provider.js";
 import type * as lib_payments_providerEvents from "../lib/payments/providerEvents.js";
 import type * as lib_payments_registry from "../lib/payments/registry.js";
+import type * as lib_payments_sessions from "../lib/payments/sessions.js";
 import type * as lib_payments_stripe from "../lib/payments/stripe.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
@@ -487,6 +488,7 @@ declare const fullApi: ApiFromModules<{
   "lib/payments/provider": typeof lib_payments_provider;
   "lib/payments/providerEvents": typeof lib_payments_providerEvents;
   "lib/payments/registry": typeof lib_payments_registry;
+  "lib/payments/sessions": typeof lib_payments_sessions;
   "lib/payments/stripe": typeof lib_payments_stripe;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
