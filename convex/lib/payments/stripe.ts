@@ -30,7 +30,7 @@ import {
  * purpose, with STRIPE_SCHEMA_VERSION, after checking the fields read here.
  */
 export const STRIPE_API_VERSION = "2026-10-28.endive";
-/** `billingEvents.schemaVersion` for payloads of STRIPE_API_VERSION. */
+/** `paymentEvents.schemaVersion` for payloads of STRIPE_API_VERSION. */
 export const STRIPE_SCHEMA_VERSION = 1;
 
 export const STRIPE_CLIENT = {
