@@ -367,6 +367,8 @@ export class StripePaymentProvider implements PaymentProvider {
         discounts = [{ promotion_code: promotion.id }];
       }
       const metadata = { ...purposeMetadata(purpose) };
+      // A trialing org that subscribes starts paying now: the unused trial
+      // days are deliberately not carried over as a Stripe trial.
       const session = await this.stripe.checkout.sessions.create(
         {
           mode: "subscription",
