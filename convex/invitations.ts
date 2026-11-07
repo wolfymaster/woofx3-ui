@@ -493,9 +493,22 @@ export const revoke = mutation({
   },
 });
 
+/**
+ * How an `accept` call ended. The expected ways an invite link fails are
+ * values, not throws: production Convex hides a thrown message from the
+ * client, so a throw would reach the user as "Server Error".
+ */
+export type AcceptOutcome =
+  | { status: "accepted"; accountId: Id<"accounts">; instanceId: Id<"instances">; alreadyMember: boolean }
+  | { status: "already_member"; instanceId: Id<"instances"> }
+  | { status: "already_accepted" }
+  | { status: "expired" }
+  | { status: "revoked" }
+  | { status: "not_found" };
+
 export const accept = mutation({
   args: { token: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<AcceptOutcome> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
 
@@ -504,13 +517,22 @@ export const accept = mutation({
       .withIndex("by_token", (q) => q.eq("token", args.token))
       .first();
 
-    if (!inv || inv.status !== "pending") {
-      throw new Error("Invalid or expired invitation");
+    if (!inv) {
+      return { status: "not_found" };
     }
-
-    const now = Date.now();
-    if (inv.expiresAt <= now) {
-      throw new Error("This invitation has expired");
+    if (inv.status === "revoked") {
+      return { status: "revoked" };
+    }
+    if (inv.status === "expired" || (inv.status === "pending" && inv.expiresAt <= Date.now())) {
+      return { status: "expired" };
+    }
+    if (inv.status === "accepted") {
+      // Opening a used link again is harmless for someone who already has the engine.
+      const engine = await invitationEngine(ctx, inv);
+      if (engine !== null && (await getInstanceMembership(ctx, engine.instanceId, userId)) !== null) {
+        return { status: "already_member", instanceId: engine.instanceId };
+      }
+      return { status: "already_accepted" };
     }
 
     const user = await ctx.db.get(userId);
@@ -531,7 +553,7 @@ export const accept = mutation({
 
     const account = await ctx.db.get(inv.accountId);
     if (account === null) {
-      throw new Error("Invalid or expired invitation");
+      throw new Error(`accept: invitation ${inv._id} names a missing account`);
     }
     const engine = await invitationEngine(ctx, inv);
     if (engine === null) {
@@ -561,6 +583,11 @@ export const accept = mutation({
     }
 
     await ctx.db.patch(inv._id, { status: "accepted" });
-    return { accountId: inv.accountId, instanceId: engine.instanceId, alreadyMember: existingMember };
+    return {
+      status: "accepted",
+      accountId: inv.accountId,
+      instanceId: engine.instanceId,
+      alreadyMember: existingMember,
+    };
   },
 });
