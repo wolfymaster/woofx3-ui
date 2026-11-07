@@ -268,6 +268,7 @@ import type * as ops_http from "../ops/http.js";
 import type * as ops_notifications from "../ops/notifications.js";
 import type * as ops_reads from "../ops/reads.js";
 import type * as ops_storageLimits from "../ops/storageLimits.js";
+import type * as organizations from "../organizations.js";
 import type * as pageIntros from "../pageIntros.js";
 import type * as pins from "../pins.js";
 import type * as plans from "../plans.js";
@@ -593,6 +594,7 @@ declare const fullApi: ApiFromModules<{
   "ops/notifications": typeof ops_notifications;
   "ops/reads": typeof ops_reads;
   "ops/storageLimits": typeof ops_storageLimits;
+  organizations: typeof organizations;
   pageIntros: typeof pageIntros;
   pins: typeof pins;
   plans: typeof plans;

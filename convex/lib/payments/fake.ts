@@ -2,6 +2,7 @@ import type {
   AppliedDiscount,
   CheckoutRequest,
   DiscountSpec,
+  Invoice,
   PaymentEvent,
   PaymentProvider,
   ProviderSubscription,
@@ -20,6 +21,8 @@ export class FakePaymentProvider implements PaymentProvider {
   /** A subscription set to null reads as nothing to apply (still incomplete, or another purpose's). */
   readonly subscriptions = new Map<string, ProviderSubscription | null>();
   readonly promotionCodes = new Map<string, AppliedDiscount>();
+  /** Each customer's invoices, newest first. */
+  readonly invoices = new Map<string, Invoice[]>();
   readonly calls: Array<{ method: string; args: unknown }> = [];
   /** Checkout sessions opened, by idempotency key. */
   readonly checkouts = new Map<string, { request: CheckoutRequest; url: string }>();
@@ -89,5 +92,10 @@ export class FakePaymentProvider implements PaymentProvider {
   async lookupPromotionCode(code: string): Promise<Result<AppliedDiscount | null>> {
     this.calls.push({ method: "lookupPromotionCode", args: code });
     return this.outage ?? ok(this.promotionCodes.get(code) ?? null);
+  }
+
+  async listInvoices(customerRef: string, limit: number): Promise<Result<Invoice[]>> {
+    this.calls.push({ method: "listInvoices", args: { customerRef, limit } });
+    return this.outage ?? ok((this.invoices.get(customerRef) ?? []).slice(0, limit));
   }
 }
