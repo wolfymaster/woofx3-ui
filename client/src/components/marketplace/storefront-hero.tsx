@@ -33,7 +33,9 @@ export function StorefrontHero({ featured, state, onOpen }: StorefrontHeroProps)
   const side = rest.slice(0, 2);
 
   return (
-    <div className={cn("grid gap-4", side.length === 1 && "lg:grid-cols-2", side.length > 1 && "lg:grid-cols-[2fr_1fr]")}>
+    <div
+      className={cn("grid gap-4", side.length === 1 && "lg:grid-cols-2", side.length > 1 && "lg:grid-cols-[2fr_1fr]")}
+    >
       <HeroMain listing={main} state={state(main)} onOpen={onOpen} />
       {side.length > 0 && (
         <div className="flex flex-col gap-4">

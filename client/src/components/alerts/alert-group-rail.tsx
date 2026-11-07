@@ -130,11 +130,7 @@ function PlatformSection({ platform, ...nodeProps }: NodeProps & { platform: Ale
       >
         {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
         <span className="truncate">{platform.label}</span>
-        {count > 0 && (
-          <span className="ml-auto normal-case tracking-normal font-normal text-[11px]">
-            {count}
-          </span>
-        )}
+        {count > 0 && <span className="ml-auto normal-case tracking-normal font-normal text-[11px]">{count}</span>}
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-0.5 pt-1">
         {platform.children.map((node) => (
