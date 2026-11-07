@@ -81,7 +81,7 @@ export default function AdminAppearance() {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Mode</CardTitle>
+            <CardTitle className="text-lg">Mode</CardTitle>
             <CardDescription>
               Every palette has a light and a dark version. System follows your device
               {modePreference === "system" ? ` (currently ${mode})` : ""}.
@@ -108,7 +108,7 @@ export default function AdminAppearance() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Palette</CardTitle>
+            <CardTitle className="text-lg">Palette</CardTitle>
             <CardDescription>Previews show each palette's {mode} version.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -136,7 +136,7 @@ export default function AdminAppearance() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Custom colors</CardTitle>
+            <CardTitle className="text-lg">Custom colors</CardTitle>
             <CardDescription>
               Start from a palette and change any color. The dashboard updates as you pick.
             </CardDescription>

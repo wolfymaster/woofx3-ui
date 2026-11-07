@@ -303,9 +303,12 @@ function CommandsTab({
       ) : sortedCommands.length === 0 ? (
         <EmptyState
           icon={MessageSquare}
-          title="No commands found"
-          description={searchQuery ? "Try adjusting your search." : "Create your first chat command to get started."}
-          action={!searchQuery ? { label: "Add Command", onClick: () => navigate(COMMAND_NEW_ROUTE) } : undefined}
+          title={searchQuery ? "No commands found" : "No commands yet"}
+          description={
+            searchQuery
+              ? "Try adjusting your search."
+              : "Commands are words viewers type in chat, like !socials, that make woofx3 reply or act. Add one with the button above."
+          }
         />
       ) : (
         <Card>
@@ -415,7 +418,7 @@ function CommandsTab({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={() => setDeleteTarget(cmd)}
                         aria-label={`Delete !${cmd.command}`}
                       >
@@ -696,7 +699,7 @@ function GroupTable({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
                           onClick={() => onDelete(group)}
                           aria-label={`Delete ${group.name}`}
                         >

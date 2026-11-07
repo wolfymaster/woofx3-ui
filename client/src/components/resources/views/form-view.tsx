@@ -38,7 +38,7 @@ function questionCount(settings: Record<string, unknown>): number {
 /** A woofx3 form: its questions, the answers it has received, and a quick way to save them to a database. */
 export const formView: KindView = {
   description:
-    "Questions viewers answer on your public page. Decide below what happens with each answer: save it to a database, post it to chat, or anything else.",
+    "Questions viewers answer on your public page. Each answer can be saved to a database, posted to chat, or start anything else.",
   icon: STREAM_OBJECT_ICONS.forms,
   railValue: ({ settings }) => questionCount(settings).toLocaleString(),
   detail: (props) => <FormPanel key={props.instance.canonicalId} {...props} />,
