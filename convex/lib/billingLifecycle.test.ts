@@ -75,7 +75,7 @@ const EXPECTED: Record<SubscriptionState | "none", Partial<Record<LifecycleEvent
   },
   active: {
     PaymentSucceeded: "active",
-    EvaluationDue: "past_due",
+    EvaluationDue: "active",
     PaymentFailed: "past_due",
     ProviderEnded: "suspended",
     ExemptionGranted: "exempt",
@@ -275,11 +275,12 @@ describe("active", () => {
     expect(next).toMatchObject({ plan: "pro", nextBillingAt: T0 + 90 * DAY });
   });
 
-  test("a stale period end with good standing is looked at again later, not every tick", () => {
+  test("a period end passed without a renewal asks the provider once, and stays active meanwhile", () => {
     const at = T0 + 100 * DAY;
     const stale: ProviderView = { standing: "good", endedReason: null, currentPeriodEnd: at - DAY };
-    const { next } = apply(inState("active"), EVENTS.EvaluationDue, at, stale);
-    expect(next).toMatchObject({ state: "active", nextBillingAt: at + 24 * HOUR });
+    const { next, effects } = apply(inState("active"), EVENTS.EvaluationDue, at, stale);
+    expect(next).toMatchObject({ state: "active", nextBillingAt: undefined, nextCheckAt: undefined });
+    expect(effects).toEqual([{ kind: "confirmRenewal" }]);
   });
 });
 

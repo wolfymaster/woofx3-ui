@@ -12,6 +12,7 @@ import {
   type DiscountSpec,
   err,
   ok,
+  type PaymentError,
   type PaymentEvent,
   type PaymentProvider,
   type PaymentPurposeKind,
@@ -308,10 +309,16 @@ export function stripeClient(config: PaymentsConfig): Stripe {
   });
 }
 
+/** Stripe error types that mean something other than the provider being unavailable. */
+const STRIPE_ERROR_CODES: Partial<Record<string, PaymentError["code"]>> = {
+  StripeInvalidRequestError: "invalid_request",
+  // The idempotency key was used for a request with other parameters: another checkout is open.
+  StripeIdempotencyError: "checkout_in_progress",
+};
+
 function failure<T>(error: unknown): Result<T> {
   if (error instanceof Stripe.errors.StripeError) {
-    const code = error.type === "StripeInvalidRequestError" ? "invalid_request" : "provider_unavailable";
-    return err(code, `Stripe: ${error.message}`);
+    return err(STRIPE_ERROR_CODES[error.type] ?? "provider_unavailable", `Stripe: ${error.message}`);
   }
   throw error;
 }
@@ -367,6 +374,8 @@ export class StripePaymentProvider implements PaymentProvider {
         discounts = [{ promotion_code: promotion.id }];
       }
       const metadata = { ...purposeMetadata(purpose) };
+      // A trialing org that subscribes starts paying now: the unused trial
+      // days are deliberately not carried over as a Stripe trial.
       const session = await this.stripe.checkout.sessions.create(
         {
           mode: "subscription",
@@ -380,6 +389,7 @@ export class StripePaymentProvider implements PaymentProvider {
           allow_promotion_codes: discounts === undefined ? req.allowPromotionCodes : undefined,
           success_url: req.successUrl,
           cancel_url: req.cancelUrl,
+          expires_at: Math.floor(req.expiresAt / 1000),
         },
         { idempotencyKey: req.idempotencyKey }
       );

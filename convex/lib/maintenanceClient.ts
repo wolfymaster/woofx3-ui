@@ -365,13 +365,21 @@ export function startEngine(
 }
 
 /** The maintenance API's reasons for declining a stop or a start without touching the engine. */
-export type EngineSwitchRefusal = "run_in_progress" | "engine_not_stopped";
+export const ENGINE_SWITCH_REFUSALS = [
+  // Another run is under way; the same request succeeds once it ends.
+  "run_in_progress",
+  // A start for an engine that isn't stopped.
+  "engine_not_stopped",
+  // A stop for an engine in a state it can't be stopped from; asking again won't change that.
+  "engine_not_ready",
+  // A preview or other non-customer engine, which billing never stops or starts.
+  "not_customer_engine",
+] as const;
+export type EngineSwitchRefusal = (typeof ENGINE_SWITCH_REFUSALS)[number];
 
 export function engineSwitchRefusal(error: unknown): EngineSwitchRefusal | null {
   if (error instanceof MaintenanceApiError && error.status === 409) {
-    if (error.code === "run_in_progress" || error.code === "engine_not_stopped") {
-      return error.code;
-    }
+    return ENGINE_SWITCH_REFUSALS.find((code) => code === error.code) ?? null;
   }
   return null;
 }

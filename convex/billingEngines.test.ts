@@ -134,6 +134,26 @@ describe("stopping engines", () => {
     expect(await status(t, s)).toBe("upgrading");
   });
 
+  for (const code of ["engine_not_ready", "not_customer_engine"]) {
+    test(`a stop refused with ${code} is failed with the reason, not retried`, async () => {
+      const t = newBackend();
+      const s = await seed(t, "suspended", "registered");
+      const refused = () => Response.json({ error: { code, message: "no" } }, { status: 409 });
+      const { result } = await withMaintenance(refused, () => run(t, s, "stopEngines"));
+      expect(result).toEqual({ acted: 0, pending: 0 });
+      expect(await t.run((ctx) => ctx.db.get(s.provisioningId))).toMatchObject({
+        status: "failed",
+        error: expect.stringContaining(code),
+      });
+      const retries = await t.run(async (ctx) =>
+        (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+          (job) => job.name === "billing:runEngineEffect"
+        )
+      );
+      expect(retries).toEqual([]);
+    });
+  }
+
   test("a stop that no longer fits the subscription does nothing", async () => {
     const t = newBackend();
     const s = await seed(t, "active", "registered");

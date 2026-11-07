@@ -12,7 +12,8 @@ export type EngineSwitchMove =
   | "startRequested"
   | "started"
   | "foundRunning"
-  | "foundFailed";
+  | "foundFailed"
+  | "refused";
 
 /** Built engines a stop applies to. */
 const RUNNING: readonly ProvisioningStatus[] = [
@@ -38,6 +39,8 @@ export const ENGINE_SWITCH_TRANSITIONS: Record<
   // and reports it running, or failed (which provisioning.retry resumes).
   foundRunning: { from: ["stopped"], to: "registered" },
   foundFailed: { from: ["stopped"], to: "failed" },
+  // The maintenance API refused a stop or start that asking again can't fix.
+  refused: { from: [...RUNNING, "stopped"], to: "failed" },
 };
 
 /** The status `move` leads to from `current`, or null when the move doesn't apply from there. */
