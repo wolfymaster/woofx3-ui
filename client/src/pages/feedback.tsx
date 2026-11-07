@@ -4,7 +4,7 @@ import type { FeedbackStatus } from "@convex/lib/feedback";
 import { usePaginatedQuery } from "convex/react";
 import { Loader2, MessageSquarePlus, Plus } from "lucide-react";
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
 import { FeedbackPostMeta } from "@/components/feedback/feedback-post-meta";
 import { VoteButton } from "@/components/feedback/vote-button";
@@ -38,7 +38,6 @@ function PostRow({ post }: { post: FeedbackPostView }) {
 }
 
 export default function Feedback() {
-  const [, navigate] = useLocation();
   const [sort, setSort] = useState<Sort>("top");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -62,7 +61,6 @@ export default function Feedback() {
           icon={MessageSquarePlus}
           title="No feedback yet"
           description="Be the first to suggest an idea or report a bug."
-          action={{ label: "New post", onClick: () => navigate(FEEDBACK_NEW_PATH) }}
         />
       ) : (
         <p className="py-16 text-center text-sm text-muted-foreground" data-testid="feedback-empty-filtered">
