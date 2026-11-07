@@ -27,6 +27,8 @@ export const ENGINE_SYNC_CONFIG = {
   maxBackoffMs: 24 * 60 * 60 * 1000,
   /** syncRuns rows older than this are eligible for cleanup. */
   runHistoryRetentionMs: 14 * 24 * 60 * 60 * 1000,
+  /** syncRuns rows one cleanup pass deletes; a full batch schedules the next pass at once. */
+  runHistoryCleanupBatch: 200,
 } as const;
 
 /**

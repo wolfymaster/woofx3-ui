@@ -1,6 +1,7 @@
 import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
 import { bareModuleKey } from "@shared/module-key";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { reconcileEndpoints } from "./inboundWebhooks";
@@ -1036,9 +1037,9 @@ export const getSyncStateForUser = internalQuery({
 
 /**
  * Delete syncRuns rows older than `runHistoryRetentionMs`. Runs on a daily
- * cron. Bounded by `.take(200)` per invocation so a single run can't blow
- * past Convex per-mutation limits — the next day's run picks up any
- * remainder.
+ * cron. Each pass deletes at most `runHistoryCleanupBatch` rows so it stays
+ * inside Convex per-mutation limits, and a full batch schedules the next pass
+ * at once until the backlog is gone.
  */
 export const cleanupOldRuns = internalMutation({
   args: {},
@@ -1047,9 +1048,12 @@ export const cleanupOldRuns = internalMutation({
     const old = await ctx.db
       .query("syncRuns")
       .withIndex("by_started_at", (q) => q.lt("startedAt", cutoff))
-      .take(200);
+      .take(ENGINE_SYNC_CONFIG.runHistoryCleanupBatch);
     for (const r of old) {
       await ctx.db.delete(r._id);
+    }
+    if (old.length === ENGINE_SYNC_CONFIG.runHistoryCleanupBatch) {
+      await ctx.scheduler.runAfter(0, internal.engineSyncInternal.cleanupOldRuns, {});
     }
     return old.length;
   },
