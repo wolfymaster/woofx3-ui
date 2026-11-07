@@ -314,7 +314,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Instance</AlertDialogTitle>
+            <AlertDialogTitle>Delete instance</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete this instance? This action is irreversible and will permanently remove all
               data associated with this instance, including workflows, scenes, and assets.

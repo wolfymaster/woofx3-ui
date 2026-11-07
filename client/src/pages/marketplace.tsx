@@ -251,10 +251,7 @@ export default function Marketplace({
       />
 
       <div className="w-full space-y-12 p-6 lg:p-8">
-        <PageIntro
-          introId="modules"
-          onTry={() => navigate(marketplaceFilterPath({ type: "emote", category: ALL_CATEGORIES, browseAll: false }))}
-        />
+        <PageIntro introId="modules" />
 
         {fatalError && <StorefrontError message={fatalError} onRetry={refreshAll} />}
 

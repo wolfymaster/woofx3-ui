@@ -1641,7 +1641,7 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Resource</DialogTitle>
+            <DialogTitle>Delete resource</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Are you sure you want to delete{" "}

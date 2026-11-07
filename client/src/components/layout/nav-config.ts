@@ -51,7 +51,7 @@ export interface NavItem {
   selfHostedOnly?: boolean;
   /**
    * Entries nested under this one. A section's make up its sidebar; a sidebar entry's
-   * open beneath it while it or one of them is the page on show.
+   * always show beneath it, so the menu keeps one shape on every page.
    */
   children?: NavItem[];
 }
@@ -179,14 +179,6 @@ export function withAlertsChildren(items: NavItem[], extra: NavItem[]): NavItem[
     const at = workflows === -1 ? children.length : workflows;
     return { ...item, children: [...children.slice(0, at), ...extra, ...children.slice(at)] };
   });
-}
-
-/** Whether an entry's nested entries show: while it, or one of them, is the page on show. */
-export function isNavGroupOpen(item: NavItem, location: string): boolean {
-  if (!item.children) {
-    return false;
-  }
-  return isNavItemActive(item, location) || item.children.some((child) => isNavItemActive(child, location));
 }
 
 export function findActiveSection(location: string): NavSection | null {

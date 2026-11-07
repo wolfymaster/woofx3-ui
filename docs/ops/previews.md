@@ -46,7 +46,7 @@ CONVEX_DEPLOY_KEY=<preview deploy key> bunx convex run --preview-name pr-<n> see
 A preview can be onboarded with a password account, so automated tests can get through setup without signing in to Twitch. The workflow sets `PREVIEW_DEPLOYMENT=true` on the preview deployment (`convex/lib/previewDeployment.ts`), and with it setup changes in these ways:
 
 - The paired engine connects by itself after sign-up, with no form unless that fails.
-- **Connect Your Streaming Platform** shows **Skip for now** (`setup.skipTwitch`, refused elsewhere). Skipping finishes setup, and the onboarding guard does not send the user back for a link (`SetupStatus.twitchRequired`).
+- **Connect your streaming platform** shows **Skip for now** (`setup.skipTwitch`, refused elsewhere). Skipping finishes setup, and the onboarding guard does not send the user back for a link (`SetupStatus.twitchRequired`).
 - Connecting Twitch instead works as in production.
 - Applying setup installs the Twitch module even if skipping recorded no consent for it, approving what its build asks for (`platformsToApply`). The default alerts need its triggers, and test events work without a linked account.
 

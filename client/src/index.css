@@ -361,3 +361,21 @@
     display: none;
   }
 }
+
+/* Motion that moves things (slides, zooms, pulses, confetti) settles at once for
+   someone who asked their system for less of it; the colour and opacity it ends on
+   still show. Spinners keep turning: a frozen one reads as a hang, not as calm. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.animate-spin),
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: it has to beat every animation utility and inline style */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: it has to beat every animation utility and inline style */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: it has to beat every animation utility and inline style */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: it has to beat every animation utility and inline style */
+    scroll-behavior: auto !important;
+  }
+}

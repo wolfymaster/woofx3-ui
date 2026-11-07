@@ -1,7 +1,7 @@
 import { Loader2, Store, Upload } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation } from "wouter";
-import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
+import { LIST_RAIL } from "@/components/layout/sidebar-rail";
 import { getCategoryColor } from "@/components/modules/module-category";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,7 +31,7 @@ export function ModuleSidebar({ selectedId }: ModuleSidebarProps) {
   const installedModules = useMemo(() => (modules ?? []).filter((m) => m.status === "installed"), [modules]);
 
   return (
-    <div className={SIDEBAR_RAIL}>
+    <div className={LIST_RAIL}>
       <div className="p-2 border-b flex flex-col gap-1.5">
         <Button
           variant="outline"

@@ -169,7 +169,7 @@ To test against an unmerged engine PR: label it (in `wolfymaster/woofx3`) `previ
 Preview deployments set `PREVIEW_DEPLOYMENT=true` (`convex/lib/previewDeployment.ts`), so setup needs no platform and a password account gets through it:
 
 1. Register at `/auth/register` (email and password; there is no name field) with a throwaway address like `pr<n>-tester@example.com`.
-2. Nothing to fill in next: the paired preview engine connects by itself, and the user lands on "Connect Your Streaming Platform" (`/setup/connect`).
+2. Nothing to fill in next: the paired preview engine connects by itself, and the user lands on "Connect your streaming platform" (`/setup/connect`).
 3. Click "Skip for now" (`button-twitch-skip`). The Twitch module still installs, and setup continues at `/setup/overlay`.
 
 ### Kernel

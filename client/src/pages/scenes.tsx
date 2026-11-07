@@ -175,7 +175,7 @@ function SceneListScreen() {
           </div>
         }
       />
-      <PageIntro introId="scenes" onTry={() => setCreateOpen(true)} />
+      <PageIntro introId="scenes" />
 
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -320,7 +320,7 @@ function SceneListScreen() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Scene</AlertDialogTitle>
+            <AlertDialogTitle>Delete scene</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deleteTarget?.name}"? Its widgets and browser source URL go with it, and
               this cannot be undone.
