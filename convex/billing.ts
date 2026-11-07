@@ -24,7 +24,9 @@ import { engineAvailability } from "./lib/entitlementAccess";
 import { ADD_ONS } from "./lib/entitlements";
 import {
   engineSwitchRefusal,
+  getEngine,
   MaintenanceApiError,
+  type MaintenanceEngineStatus,
   sendTransactionalEmail,
   startEngine,
   stopEngine,
@@ -312,19 +314,20 @@ const engineSwitchMoveValidator = v.union(
   v.literal("stopped"),
   v.literal("startRequested"),
   v.literal("started"),
-  v.literal("foundRunning")
+  v.literal("foundRunning"),
+  v.literal("foundFailed")
 );
 
 /** Applies a declared engine switch move; a row that has moved on since is left alone. */
 export const switchEngineStatus = internalMutation({
-  args: { provisioningId: v.id("engineProvisioning"), move: engineSwitchMoveValidator },
-  handler: async (ctx, { provisioningId, move }): Promise<boolean> => {
+  args: { provisioningId: v.id("engineProvisioning"), move: engineSwitchMoveValidator, error: v.optional(v.string()) },
+  handler: async (ctx, { provisioningId, move, error }): Promise<boolean> => {
     const row = await ctx.db.get(provisioningId);
     const to = row === null ? null : switchedStatus(row.status, move);
     if (to === null) {
       return false;
     }
-    await ctx.db.patch(provisioningId, { status: to, error: undefined, updatedAt: Date.now() });
+    await ctx.db.patch(provisioningId, { status: to, error, updatedAt: Date.now() });
     return true;
   },
 });
@@ -396,12 +399,7 @@ async function switchEngine(
   } catch (error) {
     const refusal = engineSwitchRefusal(error);
     if (refusal === "engine_not_stopped") {
-      // The engine is running already, so the row catches up with it.
-      await ctx.runMutation(internal.billing.switchEngineStatus, {
-        provisioningId: engine.provisioningId,
-        move: "foundRunning",
-      });
-      return "skipped";
+      return catchUpWithEngine(ctx, engine);
     }
     logger.warn("billing engine effect: will retry", {
       effect,
@@ -415,6 +413,41 @@ async function switchEngine(
     move: stopping ? "stopRequested" : "startRequested",
   });
   return "acted";
+}
+
+/**
+ * A start refused because the engine isn't stopped: the row catches up with
+ * what the maintenance API reports. A running engine is registered again; a
+ * failed one is failed, for provisioning.retry; anything else (a run still
+ * going) is asked again later.
+ */
+async function catchUpWithEngine(ctx: ActionCtx, engine: ManagedEngine): Promise<"skipped" | "retry"> {
+  let status: MaintenanceEngineStatus;
+  try {
+    status = (await getEngine(engine.maintenanceEngineId)).engine.status;
+  } catch (error) {
+    logger.warn("billing engine effect: couldn't read a refused engine, will retry", {
+      engineId: engine.maintenanceEngineId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "retry";
+  }
+  if (status === "ready") {
+    await ctx.runMutation(internal.billing.switchEngineStatus, {
+      provisioningId: engine.provisioningId,
+      move: "foundRunning",
+    });
+    return "skipped";
+  }
+  if (status === "failed") {
+    await ctx.runMutation(internal.billing.switchEngineStatus, {
+      provisioningId: engine.provisioningId,
+      move: "foundFailed",
+      error: "start: the engine is failed, so it couldn't be started",
+    });
+    return "skipped";
+  }
+  return "retry";
 }
 
 // ---------------------------------------------------------------------------
