@@ -5,7 +5,6 @@ import type { LifecycleReason } from "./billingLifecycle";
 import {
   addOnFeatures,
   ENTITLEMENT_CATALOG,
-  ENTITLEMENT_FEATURES,
   type EntitlementFeatureKey,
   type Entitlements,
   isAssignmentActive,
@@ -118,38 +117,7 @@ export function hasFeature(availability: EngineAvailability, feature: Entitlemen
   return availability.availability === "hosted" && availability.entitlements.features.includes(feature);
 }
 
-export type EntitlementRefusal =
-  | { code: "not_available_self_hosted"; feature: EntitlementFeatureKey; message: string }
-  | { code: "not_entitled"; feature: EntitlementFeatureKey; message: string }
-  | { code: "subscription_suspended"; reason: LifecycleReason | null; message: string };
-
-/**
- * Throws unless the engine offers the feature. A Convex function that serves
- * a paid feature calls this, so a hidden button is not the only thing between
- * an org and the feature.
- */
-export async function requireFeature(
-  ctx: QueryCtx,
-  instanceId: Id<"instances">,
-  feature: EntitlementFeatureKey
-): Promise<void> {
-  const availability = await engineAvailability(ctx, instanceId, Date.now());
-  const { description } = ENTITLEMENT_FEATURES[feature];
-  if (availability.availability === "self_hosted") {
-    throw new ConvexError<EntitlementRefusal>({
-      code: "not_available_self_hosted",
-      feature,
-      message: `Available on hosted engines: ${description}`,
-    });
-  }
-  if (!hasFeature(availability, feature)) {
-    throw new ConvexError<EntitlementRefusal>({
-      code: "not_entitled",
-      feature,
-      message: `Not included in your plan: ${description}`,
-    });
-  }
-}
+export type EntitlementRefusal = { code: "subscription_suspended"; reason: LifecycleReason | null; message: string };
 
 /**
  * The org's subscription when it is usable; throws while it is suspended or

@@ -3,7 +3,7 @@ import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
-import { accountEntitlements, engineAvailability, hasFeature, orgSeatsFull, requireFeature } from "./entitlementAccess";
+import { accountEntitlements, engineAvailability, hasFeature, orgSeatsFull } from "./entitlementAccess";
 import {
   addOnFeatures,
   ENTITLEMENT_FEATURES,
@@ -53,9 +53,6 @@ describe("engineAvailability", () => {
     expect(availability).toEqual({ availability: "self_hosted" });
     for (const feature of ALL_FEATURES) {
       expect(hasFeature(availability, feature)).toBe(false);
-      await expect(t.run((ctx) => requireFeature(ctx, externalId, feature))).rejects.toThrow(
-        "Available on hosted engines"
-      );
     }
   });
 
@@ -64,15 +61,13 @@ describe("engineAvailability", () => {
     const { managedId } = await seedOrg(t, "pro", "active");
     const availability = await t.run((ctx) => engineAvailability(ctx, managedId, NOW));
     expect(hasFeature(availability, "business")).toBe(true);
-    await t.run((ctx) => requireFeature(ctx, managedId, "business"));
   });
 
-  test("a hosted Starter engine is refused a Pro feature as not entitled", async () => {
+  test("a hosted Starter engine lacks a Pro feature", async () => {
     const t = newBackend();
     const { managedId } = await seedOrg(t, "starter", "trialing");
-    await expect(t.run((ctx) => requireFeature(ctx, managedId, "business"))).rejects.toThrow(
-      "Not included in your plan"
-    );
+    const availability = await t.run((ctx) => engineAvailability(ctx, managedId, NOW));
+    expect(hasFeature(availability, "business")).toBe(false);
   });
 });
 

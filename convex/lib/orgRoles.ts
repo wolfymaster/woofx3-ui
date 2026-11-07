@@ -11,10 +11,9 @@ export type OrgAction =
   | "manageEngines"
   | "createEngine"
   | "viewBilling"
-  | "manageBilling"
-  | "deleteOrganization";
+  | "manageBilling";
 
-/** Which org roles may take each action. Admin is Owner minus billing and deletion. */
+/** Which org roles may take each action. Admin is Owner minus billing. */
 const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   viewOrganization: ["owner", "admin", "member"],
   renameOrganization: ["owner", "admin"],
@@ -27,7 +26,6 @@ const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   // The plan and its state, read-only; acting on them is manageBilling.
   viewBilling: ["owner", "admin"],
   manageBilling: ["owner"],
-  deleteOrganization: ["owner"],
 };
 
 export const ORG_ACTIONS = Object.keys(ALLOWED) as OrgAction[];
