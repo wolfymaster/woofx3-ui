@@ -1,6 +1,8 @@
 import { TestEventPicker } from "@/components/test-events/test-event-picker";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AlertMenuSection } from "@/lib/alert-groups";
+import { SHEET_MOTION } from "@/lib/sheet-motion";
+import { cn } from "@/lib/utils";
 
 interface TestEventSheetProps {
   open: boolean;
@@ -23,7 +25,7 @@ export function TestEventSheet({ open, onOpenChange, sections, selectedId, onSel
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
-        className="w-full sm:max-w-md flex flex-col"
+        className={cn("w-full sm:max-w-md flex flex-col", SHEET_MOTION)}
         onInteractOutside={(e) => e.preventDefault()}
         data-testid="test-event-sheet"
       >
