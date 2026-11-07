@@ -1,16 +1,16 @@
 import type { HttpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { type ActionCtx, httpAction } from "./_generated/server";
-import { billingConfig } from "./lib/billing/config";
-import type { BillingProvider } from "./lib/billing/provider";
-import { billingProvider } from "./lib/billing/registry";
-import { STRIPE_SCHEMA_VERSION } from "./lib/billing/stripe";
+import { paymentsConfig } from "./lib/payments/config";
+import type { PaymentProvider } from "./lib/payments/provider";
+import { paymentProvider } from "./lib/payments/registry";
+import { STRIPE_SCHEMA_VERSION } from "./lib/payments/stripe";
 import { logger } from "./logger";
 
 export const STRIPE_WEBHOOK_PATH = "/api/webhooks/billing/stripe";
 
 export interface BillingWebhookDeps {
-  provider: BillingProvider;
+  provider: PaymentProvider;
   runMutation: ActionCtx["runMutation"];
   now: () => number;
 }
@@ -46,7 +46,7 @@ export async function handleBillingWebhook(
   if (duplicate) {
     return json(200, { received: true, duplicate: true });
   }
-  if (event.kind === "ignored") {
+  if (event.purpose !== "subscription" || event.subscriptionRef === null) {
     await deps.runMutation(internal.billing.finishEvent, { eventId: event.eventId, outcome: "ignored" });
     return json(200, { received: true });
   }
@@ -54,6 +54,10 @@ export async function handleBillingWebhook(
     const fetched = await deps.provider.fetchSubscription(event.subscriptionRef);
     if (!fetched.ok) {
       throw new Error(`${fetched.error.code}: ${fetched.error.message}`);
+    }
+    if (fetched.value === null) {
+      await deps.runMutation(internal.billing.finishEvent, { eventId: event.eventId, outcome: "ignored" });
+      return json(200, { received: true });
     }
     const applied = await deps.runMutation(internal.billing.applyProviderSubscription, {
       subscription: fetched.value,
@@ -78,9 +82,9 @@ export function registerBillingRoutes(http: HttpRouter): void {
     path: STRIPE_WEBHOOK_PATH,
     method: "POST",
     handler: httpAction(async (ctx, request) => {
-      let provider: BillingProvider;
+      let provider: PaymentProvider;
       try {
-        provider = billingProvider(billingConfig());
+        provider = paymentProvider(paymentsConfig());
       } catch (error) {
         logger.error("billing webhook: billing is not configured", { error: String(error) });
         return json(503, { error: { code: "not_configured", message: "Billing is not configured" } });

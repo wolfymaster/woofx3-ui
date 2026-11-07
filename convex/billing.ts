@@ -3,20 +3,20 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { billingConfig } from "./lib/billing/config";
-import {
-  type AppliedDiscount,
-  type BillingError,
-  type BillingProvider,
-  providerSubscriptionValidator,
-} from "./lib/billing/provider";
-import { lifecycleEventFor, providerViewFor } from "./lib/billing/providerEvents";
-import { billingProvider } from "./lib/billing/registry";
 import { dueEvent, isWarningCurrent, WARNING_TEMPLATES } from "./lib/billingLifecycle";
 import { warningNotification, warningVariables } from "./lib/billingWarnings";
 import { ADD_ONS } from "./lib/entitlements";
 import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./lib/organization";
 import { requireOrgActionFor } from "./lib/orgRoles";
+import { paymentsConfig } from "./lib/payments/config";
+import {
+  type AppliedDiscount,
+  type PaymentError,
+  type PaymentProvider,
+  providerSubscriptionValidator,
+} from "./lib/payments/provider";
+import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
+import { paymentProvider } from "./lib/payments/registry";
 import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
 import { logger } from "./logger";
 import { sendNotificationOnce } from "./notifications";
@@ -164,14 +164,14 @@ async function requireBillingManager(ctx: ActionCtx, accountId: Id<"accounts">) 
   return context;
 }
 
-function providerFailure(error: BillingError): ConvexError<BillingError> {
-  return new ConvexError<BillingError>(error);
+function providerFailure(error: PaymentError): ConvexError<PaymentError> {
+  return new ConvexError<PaymentError>(error);
 }
 
 // stylegate:ignore ANY-LAY-004 reason="A Convex action handler is the composition root: no process outlives one call to inject a shared client from"
-function configuredProvider(): { provider: BillingProvider; portalUrl: string } {
-  const config = billingConfig();
-  return { provider: billingProvider(config), portalUrl: config.ORG_PORTAL_URL };
+function configuredProvider(): { provider: PaymentProvider; portalUrl: string } {
+  const config = paymentsConfig();
+  return { provider: paymentProvider(config), portalUrl: config.ORG_PORTAL_URL };
 }
 
 /** A provider checkout for a plan, for an org with no subscription in good standing. Returns its URL. */
@@ -192,11 +192,8 @@ export const startCheckout = action({
     }
     const { provider, portalUrl } = configuredProvider();
     const result = await provider.createCheckout({
-      accountId,
+      purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
       customerRef: context.customerRef,
-      plan,
-      interval,
-      promotionCode: promotionCode?.trim() || null,
       allowPromotionCodes: true,
       successUrl: `${portalUrl}/billing?checkout=done`,
       cancelUrl: `${portalUrl}/billing`,

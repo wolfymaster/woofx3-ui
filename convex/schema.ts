@@ -2,7 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { appliedDiscountValidator } from "./lib/billing/provider";
+import { appliedDiscountValidator } from "./lib/payments/provider";
 import {
   lifecycleEventKindValidator,
   lifecycleReasonValidator,

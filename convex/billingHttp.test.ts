@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { handleBillingWebhook } from "./billingHttp";
-import { FakeBillingProvider } from "./lib/billing/fake";
-import { err, type ProviderSubscription } from "./lib/billing/provider";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
+import { FakePaymentProvider } from "./lib/payments/fake";
+import { err, type ProviderSubscription } from "./lib/payments/provider";
 import { applyTransition, subscriptionFor } from "./lib/subscriptions";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -46,11 +46,11 @@ function providerSubscription(
   };
 }
 
-function deliver(t: Backend, provider: FakeBillingProvider, eventId: string) {
+function deliver(t: Backend, provider: FakePaymentProvider, eventId: string) {
   const body = JSON.stringify({
-    kind: "subscription.changed",
     eventId,
     type: "invoice.paid",
+    purpose: "subscription",
     subscriptionRef: "sub_1",
   });
   return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
@@ -75,7 +75,7 @@ describe("billing webhook", () => {
   test("a checkout with no subscription row activates the org and mirrors the provider", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     expect((await deliver(t, provider, "evt_1")).status).toBe(200);
     expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toMatchObject({
@@ -94,7 +94,7 @@ describe("billing webhook", () => {
   test("a duplicate delivery applies once", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     await deliver(t, provider, "evt_1");
     const again = await deliver(t, provider, "evt_1");
@@ -106,7 +106,7 @@ describe("billing webhook", () => {
   test("an older provider read arriving later is ignored as stale", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId, { observedAt: T0 + 2 * DAY }));
     await deliver(t, provider, "evt_new");
     provider.subscriptions.set(
@@ -136,7 +136,7 @@ describe("billing webhook", () => {
       await apply({ kind: "GraceExpired" }, T0 - 16 * DAY);
       await apply({ kind: "SpinDownDue" }, T0 - 9 * DAY);
     });
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     await deliver(t, provider, "evt_pay");
     expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.state).toBe("active");
@@ -152,7 +152,7 @@ describe("billing webhook", () => {
   test("an unknown price is recorded as failed and answers 500 so the provider retries", async () => {
     const t = newBackend();
     await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.outage = err("unknown_price", "price_x is not a woofx3 price");
     const response = await deliver(t, provider, "evt_bad");
     expect(response.status).toBe(500);
@@ -161,7 +161,7 @@ describe("billing webhook", () => {
 
   test("a bad signature is refused before anything is recorded", async () => {
     const t = newBackend();
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     const response = await handleBillingWebhook(
       { provider, runMutation: t.mutation, now: () => T0 },
       "{}",
@@ -188,7 +188,7 @@ describe("billing actions", () => {
   test("an org already paying is sent to the portal instead of a second checkout", async () => {
     const t = newBackend();
     const { accountId, ownerId } = await seedOrg(t);
-    const provider = new FakeBillingProvider();
+    const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
     await deliver(t, provider, "evt_1");
     await expect(
