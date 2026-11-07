@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { openPlatformLinkTokens, platformTokenCipher, sealPlatformLinkTokens } from "./lib/platformLinkTokens";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { isRevokedRefreshResponse, refreshOutcomeApplies } from "./lib/twitchRefresh";
@@ -117,6 +118,7 @@ export async function freshTwitchToken(ctx: ActionCtx, link: Doc<"platformLinks"
   }
 
   const response = await fetch(TWITCH_TOKEN_URL, {
+    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({

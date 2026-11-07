@@ -51,6 +51,7 @@ import { registerUserPageFormRoutes } from "./userPageFormsHttp";
 import { registerViewerAuthRoutes } from "./viewerAuthHttp";
 import "./browserSource";
 import "./moduleWebhook";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 
 const http = httpRouter();
 
@@ -261,6 +262,7 @@ http.route({
     logger.info("state valid, exchanging code", { isIntegration: !!instanceId });
 
     const tokenRes = await fetch("https://id.twitch.tv/oauth2/token", {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -283,6 +285,7 @@ http.route({
     logger.info("token exchange ok");
 
     const userRes = await fetch("https://api.twitch.tv/helix/users", {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         "Client-Id": process.env.AUTH_TWITCH_ID,
