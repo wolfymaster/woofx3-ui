@@ -295,6 +295,14 @@ export const deleteInstanceData = internalMutation({
 
     await deleteUserPage(ctx, instanceId);
 
+    const liveState = await ctx.db
+      .query("instanceLiveState")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (liveState) {
+      await ctx.db.delete(liveState._id);
+    }
+
     await ctx.scheduler.runAfter(0, internal.workflowRuns.deleteForInstance, { instanceId });
 
     const instance = await ctx.db.get(instanceId);
