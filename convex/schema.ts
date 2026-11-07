@@ -2,7 +2,6 @@ import { authTables } from "@convex-dev/auth/server";
 import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { appliedDiscountValidator } from "./lib/payments/provider";
 import {
   lifecycleEventKindValidator,
   lifecycleReasonValidator,
@@ -22,6 +21,7 @@ import {
   planTierValidator,
   subscriptionStateValidator,
 } from "./lib/organization";
+import { appliedDiscountValidator } from "./lib/payments/provider";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
