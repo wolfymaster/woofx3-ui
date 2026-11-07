@@ -13,6 +13,12 @@ export const ENGINE_SYNC_CONFIG = {
   defaultSyncIntervalMs: 8 * 60 * 60 * 1000,
   /** Skip sync if the account has had no activity in this window. */
   inactivityThresholdMs: 24 * 60 * 60 * 1000,
+  /**
+   * How long a started run holds its instance. Longer than the Convex action
+   * time limit (10 minutes), so a run still holding it can still be alive; past
+   * it the run has died without finalizing and the instance is idle again.
+   */
+  runLeaseMs: 15 * 60 * 1000,
   /** Max instances handled per sweep tick. */
   sweepBatchSize: 10,
   /** ± jitter applied to nextEligibleAt so instances don't re-align. */
@@ -43,6 +49,18 @@ export function computeNextEligibleAt(
 ): number {
   const jitter = Math.floor((rand() * 2 - 1) * jitterMs);
   return now + syncIntervalMs + jitter;
+}
+
+/**
+ * Pure: whether a run that started at `startedAt` still holds its instance's
+ * lease at `now`. A "running" run past its lease died without finalizing.
+ */
+export function holdsRunLease(
+  startedAt: number,
+  now: number,
+  config: typeof ENGINE_SYNC_CONFIG = ENGINE_SYNC_CONFIG
+): boolean {
+  return now < startedAt + config.runLeaseMs;
 }
 
 /**

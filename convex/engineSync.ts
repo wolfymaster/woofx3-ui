@@ -7,6 +7,7 @@ import { isEngineActive } from "./lib/engineSync/activity";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
 import { reconcileDatabase } from "./lib/engineSync/steps/databases";
+import { readSyncState } from "./lib/engineSync/syncRow";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
@@ -26,6 +27,7 @@ export const runSync = internalAction({
   handler: async (ctx, { instanceId, trigger }) => {
     const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, { instanceId });
     if (!bundle) {
+      await ctx.runMutation(internal.engineSyncInternal.deferUnsyncable, { instanceId });
       return { skipped: true, reason: "no-bundle" } as const;
     }
 
@@ -117,6 +119,11 @@ export const reconcileDatabaseNow = internalAction({
  * An instance whose engine has not called the woofx3 webhook within the
  * inactivity window is pushed out by that window instead of synced: nothing
  * on it has changed for a sync to pick up.
+ *
+ * A run in flight keeps its row out of the due set: the sweep and startRun
+ * move nextEligibleAt to the end of the run's lease. A "running" row that is
+ * due again is a run that died without finalizing, and is synced like any
+ * other.
  */
 export const sweep = internalMutation({
   args: {},
@@ -125,7 +132,7 @@ export const sweep = internalMutation({
     const due = await ctx.db
       .query("instanceSync")
       .withIndex("by_next_eligible", (q) => q.lte("nextEligibleAt", now))
-      // Over-read: rows mid-run are skipped and do not count toward the batch.
+      // Over-read: rows whose instance is gone are deleted and do not count toward the batch.
       .take(ENGINE_SYNC_CONFIG.sweepBatchSize * 4);
 
     let scheduled = 0;
@@ -133,9 +140,6 @@ export const sweep = internalMutation({
     for (const row of due) {
       if (scheduled + deferred >= ENGINE_SYNC_CONFIG.sweepBatchSize) {
         break;
-      }
-      if (row.status === "running") {
-        continue;
       }
       const instance = await ctx.db.get(row.instanceId);
       if (!instance) {
@@ -149,6 +153,9 @@ export const sweep = internalMutation({
         deferred++;
         continue;
       }
+      // Claim the row for the run's lease, so a sweep before the run starts
+      // does not schedule it again.
+      await ctx.db.patch(row._id, { nextEligibleAt: now + ENGINE_SYNC_CONFIG.runLeaseMs });
       await ctx.scheduler.runAfter(0, internal.engineSync.runSync, {
         instanceId: row.instanceId,
         trigger: "scheduled",
@@ -164,9 +171,6 @@ export const sweep = internalMutation({
  * Reactive query the UI subscribes to. Returns the per-instance sync state,
  * the in-flight run (if any), and the last 5 runs. Returns null unless the
  * caller is a member of the instance.
- *
- * Implemented with inline `ctx.db` reads because Convex queries cannot call
- * other queries via `ctx.runQuery`.
  */
 export const getSyncState = query({
   args: { instanceId: v.id("instances") },
@@ -174,23 +178,14 @@ export const getSyncState = query({
     if (!(await isInstanceMember(ctx, instanceId))) {
       return null;
     }
-    const syncState = await ctx.db
-      .query("instanceSync")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .first();
-    const recentRuns = await ctx.db
-      .query("syncRuns")
-      .withIndex("by_instance_recent", (q) => q.eq("instanceId", instanceId))
-      .order("desc")
-      .take(5);
-    const currentRun = recentRuns.find((r) => r.status === "running") ?? null;
-    return { syncState, currentRun, recentRuns };
+    return readSyncState(ctx, instanceId, Date.now());
   },
 });
 
 /**
  * Manual-trigger action. Bypasses the activity gate (the gate only applies to
- * scheduled sweeps). Rejects if a run is already in flight for this instance.
+ * scheduled sweeps). Rejects if a run is already in flight for this instance;
+ * a run past its lease is not in flight (see readSyncState).
  *
  * The "already running" check is a best-effort read just before scheduling —
  * two simultaneous clicks could race past it and schedule two runs. That's
