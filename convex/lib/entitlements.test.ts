@@ -39,6 +39,7 @@ describe("resolveEntitlements", () => {
   it("is nothing but code defaults when no plan applies", () => {
     expect(resolveEntitlements(null, null, now, catalog)).toEqual({
       plan: null,
+      subscription: null,
       features: [],
       limits: { "storage.assetBytes": 0, "api.requestsPerDay": null },
     });

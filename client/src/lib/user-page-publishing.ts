@@ -6,7 +6,7 @@
  */
 
 export const NO_SLUG_MESSAGE = "Only engines with a woofx3 address can have a page.";
-export const NOT_ENTITLED_MESSAGE = "Your plan doesn't include a public page for this engine. Upgrade to publish it.";
+export const NOT_ENTITLED_MESSAGE = "Public pages are available on hosted engines.";
 export const ADMINS_ONLY_MESSAGE = "Only the account's owner and admins can publish or unpublish the page.";
 
 export type PageStatus =

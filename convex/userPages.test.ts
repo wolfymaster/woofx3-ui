@@ -197,18 +197,15 @@ describe("publish", () => {
     expect(await publishedContent(f)).toBeNull();
   });
 
-  test.each([
-    ["a managed engine without the feature", { hosting: "managed", entitled: false }],
-    ["an external engine with the feature", { hosting: "external", entitled: true }],
-  ] as const)("publishes for %s", async (_name, options) => {
-    const f = await fixture(options);
+  test("publishes for a managed engine without the feature", async () => {
+    const f = await fixture({ hosting: "managed", entitled: false });
     const revision = await saved(f, "a");
     await f.owner.mutation(api.userPages.publish, { instanceId: f.instanceId, revision });
     expect(await publishedContent(f)).toEqual(withText("a"));
   });
 
-  test("refuses an external engine whose plan does not include pages, and keeps the draft", async () => {
-    const f = await fixture({ hosting: "external", entitled: false });
+  test("refuses an external engine even with the feature, and keeps the draft", async () => {
+    const f = await fixture({ hosting: "external", entitled: true });
     const revision = await saved(f, "a");
     const refused = await refusal(f.owner.mutation(api.userPages.publish, { instanceId: f.instanceId, revision }));
     expect(refused.code).toBe("not_entitled");
