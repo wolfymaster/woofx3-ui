@@ -140,6 +140,105 @@ export const runEngineEffect = internalAction({
 });
 
 // ---------------------------------------------------------------------------
+// Renewal check: one request to the provider before an active org whose
+// period end passed is deactivated
+// ---------------------------------------------------------------------------
+
+/** Retries of a renewal check the provider couldn't answer yet, with capped exponential backoff. */
+export const RENEWAL_CHECK_RETRY = {
+  baseDelayMs: 5 * 60_000,
+  maxDelayMs: 6 * 60 * 60_000,
+} as const;
+
+/** Capped exponential backoff with jitter (`jitter` in [0, 1)); it stays at the cap until the provider answers. */
+export function renewalRetryDelay(attempt: number, jitter: number): number {
+  const capped = Math.min(RENEWAL_CHECK_RETRY.baseDelayMs * 2 ** attempt, RENEWAL_CHECK_RETRY.maxDelayMs);
+  return Math.round(capped * (0.5 + jitter / 2));
+}
+
+/**
+ * The provider subscription an active org is waiting on a renewal check for,
+ * or null when there is nothing to check: the org left active, or a renewal
+ * set its next billing date again.
+ */
+export const renewalCheckTarget = internalQuery({
+  args: { accountId: v.id("accounts") },
+  handler: async (ctx, { accountId }): Promise<string | null> => {
+    const row = await subscriptionFor(ctx, accountId);
+    if (row?.state !== "active" || row.nextBillingAt !== undefined) {
+      return null;
+    }
+    if (row.providerSubscriptionId === undefined) {
+      throw new Error(`renewalCheckTarget: active subscription ${row._id} has no provider subscription`);
+    }
+    return row.providerSubscriptionId;
+  },
+});
+
+export interface RenewalCheckDeps {
+  provider: PaymentProvider;
+  runQuery: ActionCtx["runQuery"];
+  runMutation: ActionCtx["runMutation"];
+  now: () => number;
+}
+
+/**
+ * Asks the provider about the org's subscription and applies the answer
+ * through the usual path: renewed stays active, ended or failed takes the
+ * lifecycle's path for that. "retry" when the provider couldn't say yet
+ * (unreachable, or the renewal not yet charged), leaving the org as it is.
+ */
+export async function checkRenewal(deps: RenewalCheckDeps, accountId: Id<"accounts">): Promise<"settled" | "retry"> {
+  const subscriptionRef = await deps.runQuery(internal.billing.renewalCheckTarget, { accountId });
+  if (subscriptionRef === null) {
+    return "settled";
+  }
+  const fetched = await deps.provider.fetchSubscription(subscriptionRef);
+  if (!fetched.ok) {
+    logger.warn("billing renewal check: provider unavailable, will retry", { accountId, code: fetched.error.code });
+    return "retry";
+  }
+  const subscription = fetched.value;
+  if (subscription === null || (subscription.standing === "good" && subscription.currentPeriodEnd <= deps.now())) {
+    logger.info("billing renewal check: not renewed yet, will retry", { accountId, subscriptionRef });
+    return "retry";
+  }
+  await deps.runMutation(internal.billing.applyProviderSubscription, { subscription });
+  return (await deps.runQuery(internal.billing.renewalCheckTarget, { accountId })) === null ? "settled" : "retry";
+}
+
+export const confirmRenewal = internalAction({
+  args: { accountId: v.id("accounts"), attempt: v.number() },
+  handler: async (ctx, { accountId, attempt }): Promise<void> => {
+    let outcome: "settled" | "retry";
+    try {
+      outcome = await checkRenewal(
+        {
+          provider: paymentProvider(paymentsConfig()),
+          runQuery: ctx.runQuery,
+          runMutation: ctx.runMutation,
+          now: Date.now,
+        },
+        accountId
+      );
+    } catch (error) {
+      // Never deactivate on our own failure: the org stays active and the check runs again.
+      logger.error("billing renewal check: failed, will retry", {
+        accountId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      outcome = "retry";
+    }
+    if (outcome === "retry") {
+      await ctx.scheduler.runAfter(renewalRetryDelay(attempt, Math.random()), internal.billing.confirmRenewal, {
+        accountId,
+        attempt: attempt + 1,
+      });
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Checkout, promotion codes and the customer portal (owner only)
 // ---------------------------------------------------------------------------
 

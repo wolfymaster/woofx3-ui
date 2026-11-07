@@ -28,9 +28,6 @@ export const BILLING_LIFECYCLE = {
   },
   // suspended: managed engines stop this long after suspension.
   spinDownGraceDays: 7,
-  // An active subscription whose provider period end has passed without a
-  // renewal webhook is looked at again after this long.
-  staleRenewalRecheckHours: 24,
   evaluatorIntervalMinutes: 15,
 } as const;
 
@@ -112,6 +109,8 @@ export interface Stint {
 
 export type LifecycleEffect =
   | { kind: "notifyOwner"; template: WarningTemplate; at: number; stint: Stint }
+  // Ask the provider once whether an active subscription past its period end renewed.
+  | { kind: "confirmRenewal" }
   | { kind: "stopEngines" }
   | { kind: "resumeEngines" };
 
@@ -257,12 +256,8 @@ function warningsAfter(template: WarningTemplate, start: number, daysAfter: read
   return daysAfter.map((days) => ({ template, at: start + days * DAY_MS }));
 }
 
-function enterActive(currentPeriodEnd: number, ctx: TransitionContext): Entry {
-  const recheck = ctx.now + BILLING_LIFECYCLE.staleRenewalRecheckHours * HOUR_MS;
-  return {
-    state: "active",
-    timers: { ...NO_TIMERS, nextBillingAt: currentPeriodEnd > ctx.now ? currentPeriodEnd : recheck },
-  };
+function enterActive(currentPeriodEnd: number): Entry {
+  return { state: "active", timers: { ...NO_TIMERS, nextBillingAt: currentPeriodEnd } };
 }
 
 function enterPastDue(reason: LifecycleReason, ctx: TransitionContext): Entry {
@@ -292,7 +287,7 @@ function enterSuspended(reason: LifecycleReason, ctx: TransitionContext): Entry 
 /** Out of the trial, an exemption or a retry: active when paid up, otherwise past_due with the reason. */
 function evaluate(ctx: TransitionContext): Entry {
   const evaluation = evaluateBilling(ctx.provider);
-  return evaluation.ok ? enterActive(evaluation.currentPeriodEnd, ctx) : enterPastDue(evaluation.reason, ctx);
+  return evaluation.ok ? enterActive(evaluation.currentPeriodEnd) : enterPastDue(evaluation.reason, ctx);
 }
 
 /**
@@ -310,11 +305,11 @@ function reactivate(current: Lifecycle | null, entry: Entry, ctx: TransitionCont
 }
 
 /** Active on the plan the provider bills, until its period end. */
-function providerActive(event: LifecycleEvent, ctx: TransitionContext): Entry {
+function providerActive(event: LifecycleEvent): Entry {
   if (event.kind !== "ProviderActivated" && event.kind !== "PaymentSucceeded") {
     throw new Error(`providerActive: ${event.kind} carries no provider subscription`);
   }
-  return { ...enterActive(event.currentPeriodEnd, ctx), plan: event.plan };
+  return { ...enterActive(event.currentPeriodEnd), plan: event.plan };
 }
 
 const startTrial: Handler = (_current, event, ctx) => {
@@ -336,8 +331,8 @@ const startTrial: Handler = (_current, event, ctx) => {
   };
 };
 
-const activate: Handler = (_current, event, ctx) => providerActive(event, ctx);
-const reactivateActive: Handler = (current, event, ctx) => reactivate(current, providerActive(event, ctx), ctx);
+const activate: Handler = (_current, event) => providerActive(event);
+const reactivateActive: Handler = (current, event, ctx) => reactivate(current, providerActive(event), ctx);
 const paymentFailed: Handler = (_current, _event, ctx) => enterPastDue("payment_failed", ctx);
 const evaluateNow: Handler = (_current, _event, ctx) => evaluate(ctx);
 
@@ -360,7 +355,7 @@ const operatorSuspended: Handler = (_current, _event, ctx) => enterSuspended("op
 const retry: Handler = (current, _event, ctx) => {
   const evaluation = evaluateBilling(ctx.provider);
   if (evaluation.ok) {
-    return reactivate(current, enterActive(evaluation.currentPeriodEnd, ctx), ctx);
+    return reactivate(current, enterActive(evaluation.currentPeriodEnd), ctx);
   }
   if (current === null || current.graceEndsAt === undefined) {
     throw new Error("retry: a past_due subscription has no grace end");
@@ -376,6 +371,18 @@ const retry: Handler = (current, _event, ctx) => {
     },
   };
 };
+
+/**
+ * An active period end passed with no renewal webhook. Renewals arrive by
+ * webhook, so this asks the provider once before anything is deactivated:
+ * the org stays active with no billing timer while the check is out, and the
+ * check applies whatever the provider says (billing.confirmRenewal).
+ */
+const confirmRenewal: Handler = () => ({
+  state: "active",
+  timers: NO_TIMERS,
+  effects: [{ kind: "confirmRenewal" }],
+});
 
 const spinDown: Handler = (current, _event, ctx) => ({
   state: "suspended",
@@ -417,8 +424,7 @@ export const TRANSITIONS: Record<SubscriptionState | "none", Partial<Record<Life
   },
   active: {
     PaymentSucceeded: activate,
-    // A period end passed before its renewal webhook: re-checked against the stored provider view.
-    EvaluationDue: evaluateNow,
+    EvaluationDue: confirmRenewal,
     PaymentFailed: paymentFailed,
     ProviderEnded: providerEnded,
     ExemptionGranted: grantExemption,

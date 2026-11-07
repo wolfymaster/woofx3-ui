@@ -130,6 +130,9 @@ async function scheduleEffects(
           stint: effect.stint,
         });
         break;
+      case "confirmRenewal":
+        await ctx.scheduler.runAfter(0, internal.billing.confirmRenewal, { accountId, attempt: 0 });
+        break;
       case "stopEngines":
       case "resumeEngines":
         await ctx.scheduler.runAfter(0, internal.billing.runEngineEffect, {
