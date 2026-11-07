@@ -194,7 +194,8 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     <div className="flex flex-col h-full">
       <div className="px-6 pt-6 pb-3 shrink-0 space-y-3">
         <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0 mt-0.5">
+          {/* A phone gets the list's back link above the page instead (ListDetail). */}
+          <Button variant="ghost" size="icon" onClick={onBack} className="hidden shrink-0 mt-0.5 md:inline-flex">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1 min-w-0">

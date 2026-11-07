@@ -62,6 +62,15 @@ export function marketplaceFilterPath({ type, category, browseAll }: Marketplace
   return encoded === "" ? MARKETPLACE_PATH : `${MARKETPLACE_PATH}?${encoded}`;
 }
 
+/** Whether `location` and `search` open the storefront's front window: the marketplace page with nothing narrowing it. */
+export function isMarketplaceFront(location: string, search: string): boolean {
+  if (location !== MARKETPLACE_PATH) {
+    return false;
+  }
+  const filter = parseMarketplaceFilter(search);
+  return filter.type === null && filter.category === ALL_CATEGORIES && !filter.browseAll;
+}
+
 export function marketplaceListingPath(listingId: string): string {
   return `/marketplace/listing/${encodeURIComponent(listingId)}`;
 }
