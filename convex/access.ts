@@ -146,7 +146,10 @@ export const planPrompt = query({
       return null;
     }
     const account = await ctx.db.get(instance.accountId);
-    if (account === null || !orgCan(await orgRoleOf(ctx, account, userId), "manageBilling")) {
+    if (account === null) {
+      throw new Error(`instance ${instanceId} belongs to missing account ${instance.accountId}`);
+    }
+    if (!orgCan(await orgRoleOf(ctx, account, userId), "manageBilling")) {
       return null;
     }
     const subscription = subscriptionSummary(await subscriptionFor(ctx, account._id));
