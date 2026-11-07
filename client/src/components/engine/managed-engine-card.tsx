@@ -229,7 +229,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle>Managed Engine</CardTitle>
+              <CardTitle className="text-lg">Managed Engine</CardTitle>
               <CardDescription>woofx3 runs this engine for you, at your address.</CardDescription>
             </div>
             <Badge variant={statusVariant(status)} data-testid="badge-engine-status">

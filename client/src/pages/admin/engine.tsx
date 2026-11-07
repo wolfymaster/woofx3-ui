@@ -175,7 +175,7 @@ function EngineSettings() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Engine Configuration</CardTitle>
+          <CardTitle className="text-lg">Engine configuration</CardTitle>
           <CardDescription>
             Endpoint for the selected instance ({instance.name}). Each instance has its own engine URL.
           </CardDescription>
@@ -235,7 +235,7 @@ function EngineSettings() {
           </div>
           <Separator />
           <div className="grid gap-2">
-            <Label>Registration Status</Label>
+            <Label>Registration status</Label>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
               <div className={`h-2 w-2 rounded-full ${instance.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
               <p className="text-sm text-muted-foreground">
@@ -301,7 +301,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
     <>
       <Card className="border-destructive/50">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-lg text-destructive">Danger zone</CardTitle>
           <CardDescription>Irreversible actions for this instance.</CardDescription>
         </CardHeader>
         <CardContent>

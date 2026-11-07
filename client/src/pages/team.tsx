@@ -98,7 +98,7 @@ export default function Team() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <CardTitle>Team Members</CardTitle>
+                  <CardTitle className="text-lg">Team members</CardTitle>
                   <CardDescription>
                     {teamData?.account.name ?? "Workspace"} — people with access to this account.
                   </CardDescription>
