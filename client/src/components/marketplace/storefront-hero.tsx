@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authorInitials, hasStats, listingStats } from "@/lib/listing-signals";
 import { listingTypeColor, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
+import { BANNER_ASPECT, type BannerRendition } from "@/lib/marketplace-banner";
 import { cn } from "@/lib/utils";
 
 // The storefront's front window: one large featured listing and up to two
@@ -16,8 +17,9 @@ import { cn } from "@/lib/utils";
 // listing full width, because two thirds of a hero and an empty column reads
 // as a page that failed to load.
 //
-// Every panel is a 16:9 art area over a copy strip. Banners are designed at
-// 16:9 and often carry their own title near the edges, so the art is never
+// Every panel is a banner-shaped art area over a copy strip: the main panel
+// shows the wide hero rendition, the narrow side panels the card rendition.
+// Banners often carry their own title near the edges, so the art is never
 // cropped and no copy is laid over it.
 
 interface StorefrontHeroProps {
@@ -58,7 +60,7 @@ function HeroMain({
   onOpen: (id: string) => void;
 }) {
   return (
-    <HeroPanel listing={listing} onOpen={onOpen} copyClassName="space-y-2 p-5 sm:p-6">
+    <HeroPanel listing={listing} onOpen={onOpen} rendition="hero" scale={1.6} copyClassName="space-y-2 p-5 sm:p-6">
       <HeroKicker label={`Featured · ${listingTypeMeta(listing.type).label}`} />
       <h2 className="text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl">{listing.name}</h2>
       {listing.description && (
@@ -91,7 +93,7 @@ function HeroSide({
 }) {
   const stats = listingStats(listing);
   return (
-    <HeroPanel listing={listing} onOpen={onOpen} copyClassName="space-y-1.5 p-4">
+    <HeroPanel listing={listing} onOpen={onOpen} rendition="card" scale={0.8} copyClassName="space-y-1.5 p-4">
       <HeroKicker label="Featured" />
       <h3 className="line-clamp-2 text-lg font-bold leading-tight tracking-tight">{listing.name}</h3>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
@@ -114,15 +116,20 @@ function HeroSide({
   );
 }
 
-/** The 16:9 art, the copy strip under it and the click target every hero panel shares. */
+/** The banner-shaped art, the copy strip under it and the click target every hero panel shares. */
 function HeroPanel({
   listing,
   onOpen,
+  rendition,
+  scale,
   copyClassName,
   children,
 }: {
   listing: CatalogListing;
   onOpen: (id: string) => void;
+  rendition: BannerRendition;
+  /** Scales the placeholder motif to the panel. */
+  scale: number;
   copyClassName: string;
   children: React.ReactNode;
 }) {
@@ -143,10 +150,11 @@ function HeroPanel({
         }
       }}
     >
-      <div className="relative aspect-video w-full shrink-0 overflow-hidden">
+      <div className={cn("relative w-full shrink-0 overflow-hidden", BANNER_ASPECT[rendition])}>
         <ListingArt
           listing={listing}
-          sizes="(min-width: 1280px) 900px, 100vw"
+          rendition={rendition}
+          scale={scale}
           className="transition-transform duration-500 group-hover:scale-[1.03]"
         />
       </div>

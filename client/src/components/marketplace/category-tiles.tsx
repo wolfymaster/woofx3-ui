@@ -3,6 +3,8 @@ import { LISTING_TYPES } from "@shared/marketplace-catalog";
 import { ListingArt } from "@/components/marketplace/listing-art";
 import { Card } from "@/components/ui/card";
 import { listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";
+import { BANNER_ASPECT } from "@/lib/marketplace-banner";
+import { cn } from "@/lib/utils";
 
 // The five listing types, as a shelf.
 //
@@ -11,8 +13,8 @@ import { listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";
 // disappears when its last listing is retired makes the store look smaller
 // than it is. A type with no listings says "0 listed" and still opens.
 //
-// Each tile is a 16:9 art area over a label strip, so the banner is shown
-// whole and the label never covers its own text.
+// Each tile is a card-rendition art area over a label strip, so the banner is
+// shown whole and the label never covers its own text.
 
 interface CategoryTilesProps {
   counts: CatalogCounts;
@@ -43,10 +45,10 @@ export function CategoryTiles({ counts, sample, onSelect }: CategoryTilesProps) 
               }
             }}
           >
-            <div className="relative aspect-video w-full overflow-hidden">
+            <div className={cn("relative w-full overflow-hidden", BANNER_ASPECT.card)}>
               <ListingArt
                 listing={sample[type] ?? { type, images: {}, name: meta.plural }}
-                sizes="(min-width: 1024px) 260px, 50vw"
+                rendition="card"
                 scale={0.7}
                 className="transition-transform duration-500 group-hover:scale-[1.06]"
               />

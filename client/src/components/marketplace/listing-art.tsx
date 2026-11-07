@@ -1,12 +1,14 @@
 import type { CatalogListing, ListingType } from "@shared/marketplace-catalog";
 import { ModuleBannerImage } from "@/components/modules/module-image";
 import { listingTypeHue, listingTypeIcon } from "@/lib/listing-type";
+import type { BannerRendition } from "@/lib/marketplace-banner";
 import { cn } from "@/lib/utils";
 
 // A listing's product shot.
 //
 // On a creator marketplace the thumbnail *is* the product: a theme or an emote
-// pack lives or dies on its art, so the card gives it 16:10 and this fills it.
+// pack lives or dies on its art, so every surface gives it a banner-shaped area
+// (`BANNER_ASPECT`) and this fills it.
 // An uploaded banner always wins. What is left is the listings with no banner,
 // and for those a placeholder has to look like product art rather than like a
 // loading skeleton -- hence a deep type-hued gradient with a motif of what the
@@ -14,14 +16,14 @@ import { cn } from "@/lib/utils";
 
 interface ListingArtProps {
   listing: Pick<CatalogListing, "type" | "images" | "name">;
-  /** The `sizes` attribute for a real banner image. */
-  sizes: string;
+  /** The banner rendition this surface is shaped for. */
+  rendition: BannerRendition;
   /** Scales the motif's type, for the listing page's much larger surface. */
   scale?: number;
   className?: string;
 }
 
-export function ListingArt({ listing, sizes, scale = 1, className }: ListingArtProps) {
+export function ListingArt({ listing, rendition, scale = 1, className }: ListingArtProps) {
   const hue = listingTypeHue(listing.type);
   return (
     <div className={cn("absolute inset-0 overflow-hidden", className)} style={placeholderStyle(hue)}>
@@ -29,7 +31,7 @@ export function ListingArt({ listing, sizes, scale = 1, className }: ListingArtP
           corner of a card. */}
       <span className="absolute -bottom-6 -right-5 text-white/10">{listingTypeIcon(listing.type, "h-32 w-32")}</span>
       <Motif type={listing.type} hue={hue} scale={scale} />
-      {listing.images.banner && <ModuleBannerImage banner={listing.images.banner} sizes={sizes} />}
+      {listing.images.banner && <ModuleBannerImage banner={listing.images.banner} rendition={rendition} />}
     </div>
   );
 }
@@ -110,7 +112,7 @@ function Motif({ type, hue, scale }: { type: ListingType; hue: number; scale: nu
     // A scene thumbnail: webcam frame, title bar, chat box.
     return (
       <div
-        className={cn(centred, "aspect-video w-[72%] overflow-hidden rounded-lg border")}
+        className={cn(centred, "aspect-video h-[72%] overflow-hidden rounded-lg border")}
         style={{
           backgroundColor: "hsl(260 60% 3% / 0.8)",
           borderColor: `hsl(${hue} 70% 55% / 0.55)`,
