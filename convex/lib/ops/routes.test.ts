@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { matchOpsRoute } from "./routes";
+import { matchOpsRoute, PAGE_LIMIT, parsePageLimit } from "./routes";
 
 describe("matchOpsRoute", () => {
   it("names each read route", () => {
@@ -34,6 +34,9 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/audit")).toEqual({ method: "GET", name: "audit.list" });
     expect(matchOpsRoute("GET", "/api/ops/plans")).toEqual({ method: "GET", name: "plans.list" });
     expect(matchOpsRoute("GET", "/api/ops/notifications")).toEqual({ method: "GET", name: "notifications.list" });
+    expect(matchOpsRoute("GET", "/api/ops/payments/strays")).toEqual({ method: "GET", name: "payments.strays" });
+    expect(matchOpsRoute("GET", "/api/ops/payments")).toBeNull();
+    expect(matchOpsRoute("POST", "/api/ops/payments/strays")).toBeNull();
   });
 
   it("names each account billing write, and nothing else under an account", () => {
@@ -88,5 +91,21 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/users/a/b")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/users/..%2f")).toBeNull();
     expect(matchOpsRoute("GET", "/api/opsx/users")).toBeNull();
+  });
+});
+
+describe("parsePageLimit", () => {
+  it.each([
+    [null, PAGE_LIMIT.default],
+    ["1", 1],
+    ["100", 100],
+    ["0", null],
+    ["101", null],
+    ["-5", null],
+    ["2.5", null],
+    ["ten", null],
+    ["", null],
+  ])("reads %p as %p", (value, limit) => {
+    expect(parsePageLimit(value)).toBe(limit);
   });
 });

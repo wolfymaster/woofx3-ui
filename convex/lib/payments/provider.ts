@@ -2,7 +2,7 @@ import { type Infer, v } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { ProviderEndedReason, ProviderStanding } from "../billingLifecycle";
 import type { AddOnKey } from "../entitlements";
-import type { BillingInterval, PlanTier } from "../organization";
+import { type BillingInterval, billingIntervalValidator, type PlanTier, planTierValidator } from "../organization";
 
 // The payments module: every flow that moves money (subscriptions today)
 // goes through it, and domain code imports only this file. Each provider
@@ -65,16 +65,21 @@ export type AppliedDiscount = Infer<typeof appliedDiscountValidator>;
  * fields it needs; the webhook routes the provider's events on `kind`. A new
  * way to take money (a marketplace purchase priced inline, a payment to a
  * connected account) is a new member here and a new case in each provider,
- * and callers of createCheckout don't change.
+ * and callers of createCheckout don't change. It is kept on the checkout's
+ * `paymentSessions` row as the quote the session charges, so the row, not
+ * the provider's metadata, says what a completed payment grants.
  */
-export type CheckoutPurpose = {
-  kind: "subscription";
-  accountId: Id<"accounts">;
-  plan: PlanTier;
-  interval: BillingInterval;
-  /** A code the owner typed in our UI, if any. */
-  promotionCode: string | null;
-};
+export const checkoutPurposeValidator = v.union(
+  v.object({
+    kind: v.literal("subscription"),
+    accountId: v.id("accounts"),
+    plan: planTierValidator,
+    interval: billingIntervalValidator,
+    /** A code the owner typed in our UI, if any. */
+    promotionCode: v.union(v.string(), v.null()),
+  })
+);
+export type CheckoutPurpose = Infer<typeof checkoutPurposeValidator>;
 
 export type PaymentPurposeKind = CheckoutPurpose["kind"];
 
@@ -117,6 +122,25 @@ export interface CheckoutRequest {
   idempotencyKey: string;
   /** When the session closes unpaid. */
   expiresAt: number;
+}
+
+/**
+ * What an operator needs to settle a stray payment: a live provider
+ * subscription the org's row doesn't follow. The amount is known when the
+ * stray came through one of our checkouts.
+ */
+export const strayPaymentValidator = v.object({
+  subscriptionRef: v.string(),
+  customerRef: v.string(),
+  amountCents: v.union(v.number(), v.null()),
+});
+export type StrayPayment = Infer<typeof strayPaymentValidator>;
+
+/** A checkout session the provider opened, with what it will charge. */
+export interface CheckoutSession {
+  url: string;
+  sessionRef: string;
+  amountCents: number;
 }
 
 /** The provider's truth about one subscription, mapped into our terms. */
@@ -168,6 +192,17 @@ export interface PaymentEvent {
   purpose: PaymentPurposeKind | null;
   /** The provider subscription the event is about, when it is about one. */
   subscriptionRef: string | null;
+  /** What happened to a checkout session, when the event is about one. */
+  session: SessionChange | null;
+}
+
+/**
+ * A checkout session's change: paid (completed with its payment confirmed),
+ * completed but awaiting a delayed payment, or closed unpaid.
+ */
+export interface SessionChange {
+  sessionRef: string;
+  change: "paid" | "awaiting_payment" | "expired";
 }
 
 export type InvoiceStatus = "draft" | "open" | "paid" | "uncollectible" | "void";
@@ -184,7 +219,9 @@ export interface Invoice {
 
 export interface PaymentProvider {
   readonly id: PaymentProviderId;
-  createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>>;
+  createCheckout(req: CheckoutRequest): Promise<Result<CheckoutSession>>;
+  /** Closes an open checkout session unpaid. A session no longer open is `invalid_request`. */
+  expireCheckout(sessionRef: string): Promise<Result<null>>;
   createPortalSession(req: { customerRef: string; returnUrl: string }): Promise<Result<{ url: string }>>;
   verifyWebhook(rawBody: string, headers: Headers): Promise<Result<PaymentEvent>>;
   /**

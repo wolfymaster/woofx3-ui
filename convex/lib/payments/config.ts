@@ -10,7 +10,7 @@ const portalUrlSchema = z
   .refine((url) => url.startsWith("https://") || url.startsWith("http://localhost"), "must be https");
 
 const paymentsConfigSchema = z.object({
-  BILLING_PROVIDER: z.literal("stripe"),
+  PAYMENTS_PROVIDER: z.literal("stripe"),
   STRIPE_SECRET_KEY: z.string().regex(/^(sk|rk)_(test|live)_/, "must be a Stripe secret or restricted key"),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_", "must be a Stripe webhook signing secret"),
   ORG_PORTAL_URL: portalUrlSchema,
@@ -20,7 +20,7 @@ export type PaymentsConfig = z.infer<typeof paymentsConfigSchema>;
 
 export function parsePaymentsConfig(env: Record<string, string | undefined>): PaymentsConfig {
   const parsed = paymentsConfigSchema.safeParse({
-    BILLING_PROVIDER: env.BILLING_PROVIDER,
+    PAYMENTS_PROVIDER: env.PAYMENTS_PROVIDER,
     STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET,
     ORG_PORTAL_URL: env.ORG_PORTAL_URL,
