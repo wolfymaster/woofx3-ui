@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import type { GenericSchema, SchemaDefinition } from "convex/server";
+import type { FunctionReference, GenericSchema, SchemaDefinition } from "convex/server";
 import { convexTest } from "convex-test";
 import schema from "../schema";
 
@@ -56,4 +56,18 @@ export function newBackend() {
   t.registerComponent("rateLimiter", rateLimiterSchema, componentModules(RATE_LIMITER_DIR));
   t.registerComponent("migrations", migrationsSchema, componentModules(MIGRATIONS_DIR));
   return t;
+}
+
+type MigrationRef = FunctionReference<
+  "mutation",
+  "internal",
+  { cursor?: string | null; dryRun?: boolean; oneBatchOnly?: boolean; batchSize?: number }
+>;
+
+/**
+ * Runs a `migrations.define` migration over its whole table in one batch,
+ * the way the component runs each batch, without the component's scheduler.
+ */
+export async function runMigration(t: ReturnType<typeof newBackend>, migration: MigrationRef): Promise<void> {
+  await t.mutation(migration, { cursor: null, dryRun: false, oneBatchOnly: true, batchSize: 10_000 });
 }
