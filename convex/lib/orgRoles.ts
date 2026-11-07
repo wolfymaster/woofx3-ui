@@ -30,7 +30,8 @@ export type OrgRefusal =
  *
  * Ownership is `accounts.ownerId` alone. An `owner` membership row for anyone
  * else breaks I1 and counts as `admin` until `migrations/organizations`
- * demotes it, so a stray row never grants billing.
+ * demotes it, so a stray row never grants billing. A duplicate row reads as
+ * the first one, as every membership lookup does; checkOrgInvariants reports it.
  */
 export async function orgRoleOf(ctx: QueryCtx, account: Doc<"accounts">, userId: Id<"users">): Promise<OrgRole | null> {
   if (account.ownerId === userId) {
@@ -39,7 +40,7 @@ export async function orgRoleOf(ctx: QueryCtx, account: Doc<"accounts">, userId:
   const row = await ctx.db
     .query("accountMembers")
     .withIndex("by_account_user", (q) => q.eq("accountId", account._id).eq("userId", userId))
-    .unique();
+    .first();
   if (row === null) {
     return null;
   }
