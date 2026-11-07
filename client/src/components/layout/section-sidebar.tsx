@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { isNavGroupOpen, isNavItemActive, type NavItem } from "./nav-config";
+import { isNavItemActive, type NavItem } from "./nav-config";
 import { SIDEBAR_RAIL } from "./sidebar-rail";
 
 interface SectionSidebarProps {
@@ -29,7 +29,7 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
           {items.map((item) => (
             <div key={item.id} className="space-y-0.5">
               <NavRow item={item} location={location} collapsed={collapsed} nested={false} />
-              {item.children && isNavGroupOpen(item, location) && (
+              {item.children && (
                 <div className="space-y-0.5" data-testid={`subnav-group-${item.id}`}>
                   {item.children.map((child) => (
                     <NavRow key={child.id} item={child} location={location} collapsed={collapsed} nested />
