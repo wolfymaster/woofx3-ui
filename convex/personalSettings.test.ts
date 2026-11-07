@@ -104,6 +104,28 @@ describe("users profile", () => {
     expect(result).toEqual({ ok: false, reason: "no_password" });
   });
 
+  test("a wrong current password is refused, and repeated failures are rate limited", async () => {
+    const f = await fixture();
+    const attempt = () =>
+      f.pat.action(api.users.changePassword, { currentPassword: "wrong", newPassword: "longenough1" });
+    expect(await attempt()).toEqual({ ok: false, reason: "wrong_password" });
+    await f.t.run(async (ctx) => {
+      const account = await ctx.db.query("authAccounts").first();
+      if (account === null) {
+        throw new Error("fixture has no auth account");
+      }
+      const limit = await ctx.db
+        .query("authRateLimits")
+        .withIndex("identifier", (q) => q.eq("identifier", account._id))
+        .unique();
+      if (limit === null) {
+        throw new Error("a failed attempt records a rate limit row");
+      }
+      await ctx.db.patch(limit._id, { attemptsLeft: 0 });
+    });
+    expect(await attempt()).toEqual({ ok: false, reason: "too_many_attempts" });
+  });
+
   test("a too-short new password is refused before the old one is checked", async () => {
     const f = await fixture();
     const result = await f.pat.action(api.users.changePassword, { currentPassword: "a", newPassword: "short" });

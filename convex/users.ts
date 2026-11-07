@@ -108,7 +108,13 @@ export const passwordAccountId = internalQuery({
 
 export type ChangePasswordResult =
   | { ok: true }
-  | { ok: false; reason: "no_password" | "wrong_password" | "weak_password" };
+  | { ok: false; reason: "no_password" | "wrong_password" | "weak_password" | "too_many_attempts" };
+
+/** retrieveAccount's error messages for the refusals a user can cause. */
+const RETRIEVE_REFUSALS: Record<string, "wrong_password" | "too_many_attempts"> = {
+  InvalidSecret: "wrong_password",
+  TooManyFailedAttempts: "too_many_attempts",
+};
 
 /**
  * Changes the signed-in user's password after checking the current one.
@@ -131,9 +137,12 @@ export const changePassword = action({
     }
     try {
       await retrieveAccount(ctx, { provider: "password", account: { id: email, secret: args.currentPassword } });
-    } catch {
-      // retrieveAccount throws when the secret does not match; that is the only expected failure here.
-      return { ok: false, reason: "wrong_password" };
+    } catch (err) {
+      const reason = err instanceof Error ? RETRIEVE_REFUSALS[err.message] : undefined;
+      if (reason === undefined) {
+        throw err;
+      }
+      return { ok: false, reason };
     }
     await modifyAccountCredentials(ctx, {
       provider: "password",

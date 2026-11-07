@@ -21,6 +21,7 @@ const PASSWORD_REFUSALS = {
   no_password: "Your account has no password to change.",
   wrong_password: "That isn't your current password.",
   weak_password: `Use a password with at least ${PASSWORD_MIN_LENGTH} characters.`,
+  too_many_attempts: "Too many wrong passwords. Try again in an hour.",
 } as const;
 
 function useSave() {
