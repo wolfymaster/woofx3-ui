@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { ENGINE_NAME_MAX_LENGTH } from "@convex/instances";
 import { useStore } from "@nanostores/react";
 import { useAction, useMutation as useConvexMutation } from "convex/react";
 import { AlertTriangle, CheckCircle2, Loader2, Server, XCircle } from "lucide-react";
@@ -74,6 +75,7 @@ function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; nam
         >
           <Input
             aria-label="Engine name"
+            maxLength={ENGINE_NAME_MAX_LENGTH}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             className="flex-1 min-w-[200px]"
