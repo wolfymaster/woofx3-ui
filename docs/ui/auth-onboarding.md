@@ -116,9 +116,10 @@ Setup records that it opened for the signed-in user (`setup.markSeen`, per user 
 
 ## After onboarding
 
-`OnboardingGuard` requires at least one registered instance the user can reach and a Twitch link on the current instance before showing a page inside `BroadcastShell`. The instance may be one they were invited to: a user who only uses another account's instance, such as a moderator who does not stream, owns no account or instance and never goes through onboarding.
+`OnboardingGuard` requires at least one registered instance the user can reach and a Twitch link on the current instance before showing a page inside `BroadcastShell`. Which engine that is comes from the server (`access.entry`): the selected one, else the user's default engine, else the latest, each only while the user is still a member and the engine is registered. The instance may be one they were invited to: a user who only uses another account's instance, such as a moderator who does not stream, owns no account or instance and never goes through onboarding.
 
-- **No registered instance:** the user goes to onboarding, which passes them on to setup, even mid-build. The dashboard never loads without a registered engine.
+- **No registered instance:** the user goes to onboarding, which passes them on to setup, even mid-build. The dashboard never loads without a registered engine. That includes someone removed from their only engine.
+- **Suspended organization:** a hosted engine whose organization's subscription is suspended shows a full-page notice instead of its content. The owner gets **Reactivate**, linking to the portal's Billing page (not in the desktop app); everyone else is asked to contact the owner. Self-hosted engines are never locked.
 - **No Twitch link:** an owner or admin is sent to the connect screen. Anyone else sees "Ask an owner or admin to connect Twitch" in the content area, not a redirect.
 - **Link health:** the guard checks only that a link exists. A revoked or under-scoped link is left to the reconnect banner, so an established user is never sent back into setup.
 - **Unfinished setup:** while the instance's setup is unfinished, the guard also opens setup once for an owner or admin who has not seen it.
