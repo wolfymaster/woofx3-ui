@@ -544,7 +544,11 @@ export const accept = mutation({
       throw new Error(SEATS_FULL);
     }
     if (account.ownerId !== userId) {
-      await grantEngineRole(ctx, engine.instanceId, userId, engine.engineRole);
+      // An invitation only adds access: someone made an engine admin after it
+      // was sent keeps admin when they accept a member invite.
+      const held = await getInstanceMembership(ctx, engine.instanceId, userId);
+      const engineRole = roleSatisfies(held?.role, "admin") ? "admin" : engine.engineRole;
+      await grantEngineRole(ctx, engine.instanceId, userId, engineRole);
     }
     // Only an org-wide invitation from before engine invites can say "admin".
     if (!existingMember && inv.role === "admin") {
