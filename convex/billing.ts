@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   type ActionCtx,
   action,
@@ -19,9 +19,18 @@ import {
   warningNotification,
   warningVariables,
 } from "./lib/billingWarnings";
+import { switchedStatus } from "./lib/engineSwitch";
 import { engineAvailability } from "./lib/entitlementAccess";
 import { ADD_ONS } from "./lib/entitlements";
-import { MaintenanceApiError, sendTransactionalEmail } from "./lib/maintenanceClient";
+import {
+  engineSwitchRefusal,
+  getEngine,
+  MaintenanceApiError,
+  type MaintenanceEngineStatus,
+  sendTransactionalEmail,
+  startEngine,
+  stopEngine,
+} from "./lib/maintenanceClient";
 import {
   type BillingInterval,
   billingIntervalValidator,
@@ -249,19 +258,223 @@ export const bannerForViewer = query({
   },
 });
 
-/** Stops or starts the org's managed engines with its subscription. */
+/** Retries of an engine stop or start the maintenance API couldn't take yet (an upgrade running, an outage). */
+export const ENGINE_EFFECT_RETRY = {
+  baseDelayMs: 5 * 60_000,
+  maxDelayMs: 6 * 60 * 60_000,
+} as const;
+
+/**
+ * Capped exponential backoff with jitter (`jitter` in [0, 1)). It stays at
+ * the cap while the effect still fits the subscription: a suspended org's
+ * engines must stop, and a paying org's must start, however long it takes.
+ */
+export function engineRetryDelay(attempt: number, jitter: number): number {
+  const capped = Math.min(ENGINE_EFFECT_RETRY.baseDelayMs * 2 ** attempt, ENGINE_EFFECT_RETRY.maxDelayMs);
+  return Math.round(capped * (0.5 + jitter / 2));
+}
+
+type EngineEffect = "stopEngines" | "resumeEngines";
+const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
+
+/** Provisioning rows read per org. An org holds a handful of engines, so this is a backstop, not a page size. */
+const ENGINES_PER_ORG_SCAN = 50;
+
+interface ManagedEngine {
+  provisioningId: Id<"engineProvisioning">;
+  maintenanceEngineId: string;
+  status: Doc<"engineProvisioning">["status"];
+}
+
+/**
+ * The org's managed engines an effect would act on, or null when the effect
+ * no longer fits the subscription (a payment arrived before the stop ran, or
+ * the org was suspended again before the start). Self-hosted engines have no
+ * provisioning row and are never billed, locked or stopped.
+ */
+export const engineEffectTargets = internalQuery({
+  args: { accountId: v.id("accounts"), effect: engineEffectValidator },
+  handler: async (ctx, { accountId, effect }): Promise<ManagedEngine[] | null> => {
+    const subscription = await subscriptionFor(ctx, accountId);
+    const wanted =
+      effect === "stopEngines"
+        ? subscription?.state === "suspended" && subscription.spinDownAt === undefined
+        : subscription !== null && subscription.state !== "suspended";
+    if (!wanted) {
+      return null;
+    }
+    const rows = await ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .take(ENGINES_PER_ORG_SCAN);
+    return rows.flatMap((row) =>
+      row.maintenanceEngineId === undefined
+        ? []
+        : [{ provisioningId: row._id, maintenanceEngineId: row.maintenanceEngineId, status: row.status }]
+    );
+  },
+});
+
+const engineSwitchMoveValidator = v.union(
+  v.literal("stopRequested"),
+  v.literal("stopped"),
+  v.literal("startRequested"),
+  v.literal("started"),
+  v.literal("foundRunning"),
+  v.literal("foundFailed"),
+  v.literal("refused")
+);
+
+/** Applies a declared engine switch move; a row that has moved on since is left alone. */
+export const switchEngineStatus = internalMutation({
+  args: { provisioningId: v.id("engineProvisioning"), move: engineSwitchMoveValidator, error: v.optional(v.string()) },
+  handler: async (ctx, { provisioningId, move, error }): Promise<boolean> => {
+    const row = await ctx.db.get(provisioningId);
+    const to = row === null ? null : switchedStatus(row.status, move);
+    if (to === null) {
+      return false;
+    }
+    await ctx.db.patch(provisioningId, { status: to, error, updatedAt: Date.now() });
+    return true;
+  },
+});
+
+/**
+ * Stops or starts the org's managed engines with its subscription. Each call
+ * is keyed `${transitionId}:${engineId}`, so a retry asks the maintenance API
+ * for the same run. An engine already stopped is not stopped again; only
+ * stopped engines are started. Engines the API couldn't take yet are retried
+ * with backoff while the effect still fits the subscription.
+ */
 export const runEngineEffect = internalAction({
   args: {
     accountId: v.id("accounts"),
     transitionId: v.id("subscriptionTransitions"),
-    effect: v.union(v.literal("stopEngines"), v.literal("resumeEngines")),
+    effect: engineEffectValidator,
+    attempt: v.optional(v.number()),
   },
-  handler: async (_ctx, args) => {
-    // TODO: call the maintenance stop and start endpoints for each managed
-    // engine; they are added with the engine stop/start contract, later in this stack.
-    logger.info("billing engine effect", args);
+  handler: async (ctx, args): Promise<{ acted: number; pending: number }> => {
+    const targets = await ctx.runQuery(internal.billing.engineEffectTargets, {
+      accountId: args.accountId,
+      effect: args.effect,
+    });
+    if (targets === null) {
+      return { acted: 0, pending: 0 };
+    }
+    let acted = 0;
+    let pending = 0;
+    for (const engine of targets) {
+      const outcome = await switchEngine(
+        ctx,
+        args.effect,
+        engine,
+        `${args.transitionId}:${engine.maintenanceEngineId}`
+      );
+      if (outcome === "acted") {
+        acted += 1;
+      } else if (outcome === "retry") {
+        pending += 1;
+      }
+    }
+    if (pending > 0) {
+      const attempt = args.attempt ?? 0;
+      await ctx.scheduler.runAfter(engineRetryDelay(attempt, Math.random()), internal.billing.runEngineEffect, {
+        ...args,
+        attempt: attempt + 1,
+      });
+    }
+    return { acted, pending };
   },
 });
+
+/** Why a refusal that retrying can't fix left the engine failed, for the row's error. */
+const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine", string> = {
+  engine_not_ready: "the maintenance API can't stop the engine from its current state (engine_not_ready)",
+  not_customer_engine:
+    "the maintenance API says this isn't a customer engine, so billing can't switch it (not_customer_engine)",
+};
+
+async function switchEngine(
+  ctx: ActionCtx,
+  effect: EngineEffect,
+  engine: ManagedEngine,
+  idempotencyKey: string
+): Promise<"acted" | "skipped" | "retry"> {
+  const stopping = effect === "stopEngines";
+  if (!stopping && engine.status === "stopping") {
+    // A stop still running settles first (engine.stopped); the start goes out on a retry after it.
+    return "retry";
+  }
+  if (switchedStatus(engine.status, stopping ? "stopRequested" : "startRequested") === null) {
+    return "skipped";
+  }
+  try {
+    if (stopping) {
+      await stopEngine(engine.maintenanceEngineId, idempotencyKey);
+    } else {
+      await startEngine(engine.maintenanceEngineId, idempotencyKey);
+    }
+  } catch (error) {
+    const refusal = engineSwitchRefusal(error);
+    if (refusal === "engine_not_stopped") {
+      return catchUpWithEngine(ctx, engine);
+    }
+    if (refusal === "engine_not_ready" || refusal === "not_customer_engine") {
+      await ctx.runMutation(internal.billing.switchEngineStatus, {
+        provisioningId: engine.provisioningId,
+        move: "refused",
+        error: `${stopping ? "stop" : "start"}: ${REFUSAL_REASONS[refusal]}`,
+      });
+      return "skipped";
+    }
+    logger.warn("billing engine effect: will retry", {
+      effect,
+      engineId: engine.maintenanceEngineId,
+      reason: refusal ?? (error instanceof Error ? error.message : String(error)),
+    });
+    return "retry";
+  }
+  await ctx.runMutation(internal.billing.switchEngineStatus, {
+    provisioningId: engine.provisioningId,
+    move: stopping ? "stopRequested" : "startRequested",
+  });
+  return "acted";
+}
+
+/**
+ * A start refused because the engine isn't stopped: the row catches up with
+ * what the maintenance API reports. A running engine is registered again; a
+ * failed one is failed, for provisioning.retry; anything else (a run still
+ * going) is asked again later.
+ */
+async function catchUpWithEngine(ctx: ActionCtx, engine: ManagedEngine): Promise<"skipped" | "retry"> {
+  let status: MaintenanceEngineStatus;
+  try {
+    status = (await getEngine(engine.maintenanceEngineId)).engine.status;
+  } catch (error) {
+    logger.warn("billing engine effect: couldn't read a refused engine, will retry", {
+      engineId: engine.maintenanceEngineId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "retry";
+  }
+  if (status === "ready") {
+    await ctx.runMutation(internal.billing.switchEngineStatus, {
+      provisioningId: engine.provisioningId,
+      move: "foundRunning",
+    });
+    return "skipped";
+  }
+  if (status === "failed") {
+    await ctx.runMutation(internal.billing.switchEngineStatus, {
+      provisioningId: engine.provisioningId,
+      move: "foundFailed",
+      error: "start: the engine is failed, so it couldn't be started",
+    });
+    return "skipped";
+  }
+  return "retry";
+}
 
 // ---------------------------------------------------------------------------
 // Renewal check: one request to the provider before an active org whose

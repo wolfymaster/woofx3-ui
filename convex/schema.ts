@@ -317,7 +317,12 @@ export default defineSchema({
       v.literal("upgrading"),
       v.literal("failed"),
       v.literal("deprovisioning"),
-      v.literal("deleted")
+      v.literal("deleted"),
+      // A suspended org's managed engine being stopped, stopped (its data
+      // kept), and being started again after reactivation.
+      v.literal("stopping"),
+      v.literal("stopped"),
+      v.literal("starting")
     ),
     // Mirrors the maintenance API's run steps, in run order. Bounded by the
     // number of steps in a run (nine today), so it stays a field rather than

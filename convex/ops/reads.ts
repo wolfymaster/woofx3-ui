@@ -250,7 +250,10 @@ const provisioningStatus = v.union(
   v.literal("upgrading"),
   v.literal("failed"),
   v.literal("deprovisioning"),
-  v.literal("deleted")
+  v.literal("deleted"),
+  v.literal("stopping"),
+  v.literal("stopped"),
+  v.literal("starting")
 );
 
 /** Every engineProvisioning row, or those in one status, for drift checks against the maintenance API. */
