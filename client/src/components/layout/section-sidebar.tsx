@@ -2,9 +2,10 @@ import { useStore } from "@nanostores/react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { isNavGroupOpen, isNavItemActive, type NavItem } from "./nav-config";
+import { isNavItemActive, type NavItem } from "./nav-config";
 import { SIDEBAR_RAIL } from "./sidebar-rail";
 
 interface SectionSidebarProps {
@@ -14,7 +15,9 @@ interface SectionSidebarProps {
 }
 
 export function SectionSidebar({ title, items, location }: SectionSidebarProps) {
-  const collapsed = useStore($sidebarShownCollapsed);
+  // A phone has no room for a labelled rail beside the page, so it always gets the icon rail.
+  const isMobile = useIsMobile();
+  const collapsed = useStore($sidebarShownCollapsed) || isMobile;
 
   return (
     <nav className={cn(SIDEBAR_RAIL, collapsed && "w-14")} aria-label={`${title} navigation`}>
@@ -29,7 +32,7 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
           {items.map((item) => (
             <div key={item.id} className="space-y-0.5">
               <NavRow item={item} location={location} collapsed={collapsed} nested={false} />
-              {item.children && isNavGroupOpen(item, location) && (
+              {item.children && (
                 <div className="space-y-0.5" data-testid={`subnav-group-${item.id}`}>
                   {item.children.map((child) => (
                     <NavRow key={child.id} item={child} location={location} collapsed={collapsed} nested />
@@ -41,7 +44,7 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
         </div>
       </div>
 
-      <div className="border-t border-border p-2">
+      <div className={cn("border-t border-border p-2", isMobile && "hidden")}>
         <button
           type="button"
           onClick={toggleSidebar}

@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import { useMutation } from "convex/react";
-import { Activity, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
+import { Activity, Check, ChevronDown, MonitorPlay, Pencil, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { CommandPalette } from "@/components/command-palette/command-palette";
@@ -32,6 +32,7 @@ import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
+import { shortcutModifierLabel } from "@/lib/shortcut-modifier";
 import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { ConnectionStatusBar } from "./connection-status";
@@ -117,7 +118,7 @@ function InstanceBar() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Instance</DialogTitle>
+            <DialogTitle>Rename instance</DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <Label htmlFor="instance-name">Name</Label>
@@ -250,7 +251,8 @@ function AppHeader() {
           <Search className="h-4 w-4" />
           <span className="flex-1 text-left text-xs">Quick actions...</span>
           <kbd className="pointer-events-none flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-system-mono text-[10px] font-medium text-muted-foreground">
-            <Command className="h-3 w-3" />K
+            {shortcutModifierLabel(navigator.userAgent)}
+            <span>K</span>
           </kbd>
         </Button>
 

@@ -3,6 +3,7 @@ import { Loader2, Store, Upload, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { PageIntro } from "@/components/common/page-intro";
+import { LIST_RAIL_FRAME } from "@/components/layout/sidebar-rail";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
@@ -280,7 +281,7 @@ export default function Modules() {
   const removableModule = shownModule && shownModule.provenance !== "builtIn" ? shownModule : null;
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className={LIST_RAIL_FRAME}>
       <ModuleSidebar selectedId={selectedModule?.source === "installed" ? selectedModule.module.id : null} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -349,7 +350,7 @@ export default function Modules() {
           </>
         ) : (
           <div className="flex-1 overflow-auto p-6 space-y-4">
-            <PageIntro introId="modules" onTry={() => navigate(MARKETPLACE_PATH)} />
+            <PageIntro introId="modules" />
             <Card className="max-w-xl">
               <CardContent className="pt-6 space-y-3">
                 <p className="font-medium">Your modules</p>
@@ -378,7 +379,7 @@ export default function Modules() {
       <Dialog open={showErrorDetails} onOpenChange={setShowErrorDetails}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Install Failed</DialogTitle>
+            <DialogTitle>Install failed</DialogTitle>
           </DialogHeader>
           <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{install.error}</pre>
         </DialogContent>

@@ -1,4 +1,5 @@
 import { Bell, Film, Image, Sparkles, Square, Type, Volume2 } from "lucide-react";
+import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 
 export type WidgetIcon = typeof Square;
 
@@ -16,6 +17,11 @@ const FAMILY_ICON: Record<string, WidgetIcon> = {
   "media.video": Film,
   "media.audio": Volume2,
   "media.animation": Sparkles,
+  // A data widget shows one of the streamer's own things, so it wears that thing's icon.
+  "data.counter": STREAM_OBJECT_ICONS.counters,
+  "data.timer": STREAM_OBJECT_ICONS.timers,
+  "data.queue": STREAM_OBJECT_ICONS.queues,
+  "data.database": STREAM_OBJECT_ICONS.databases,
 };
 
 export function widgetIconFor(taxonomy: readonly string[] | undefined): WidgetIcon {
