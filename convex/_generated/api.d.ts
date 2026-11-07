@@ -310,6 +310,7 @@ import type * as userPageForms from "../userPageForms.js";
 import type * as userPageFormsHttp from "../userPageFormsHttp.js";
 import type * as userPages from "../userPages.js";
 import type * as userPagesPublic from "../userPagesPublic.js";
+import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 import type * as viewerAuthHttp from "../viewerAuthHttp.js";
 import type * as viewerFacts from "../viewerFacts.js";
@@ -636,6 +637,7 @@ declare const fullApi: ApiFromModules<{
   userPageFormsHttp: typeof userPageFormsHttp;
   userPages: typeof userPages;
   userPagesPublic: typeof userPagesPublic;
+  userSettings: typeof userSettings;
   users: typeof users;
   viewerAuthHttp: typeof viewerAuthHttp;
   viewerFacts: typeof viewerFacts;

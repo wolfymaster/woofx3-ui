@@ -83,6 +83,7 @@ const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
+const ProfileSettings = lazy(() => import("@/pages/settings/profile"));
 const UserPage = lazy(() => import("@/pages/user-page"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
@@ -347,6 +348,7 @@ function AppRoutes() {
 
                     <Route path="/team" component={Team} />
                     <Route path="/team/invite" component={TeamInvite} />
+                    <Route path="/settings/profile" component={ProfileSettings} />
 
                     {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
                     <Route path="/alerts">

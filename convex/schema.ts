@@ -126,6 +126,13 @@ export default defineSchema({
   // Ops search by name; the email index comes with authTables.
   users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
+  // Personal preferences. A table rather than extra `users` fields so authTables stays stock.
+  userSettings: defineTable({
+    userId: v.id("users"),
+    defaultInstanceId: v.optional(v.id("instances")),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   // accounts: the organization. It owns the engines and, later, the
   // subscription. Its id never changes: it is the marketplace buyer identity.
   accounts: defineTable({

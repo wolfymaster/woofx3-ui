@@ -20,6 +20,7 @@ import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
+import { useDefaultEngineOnSignIn } from "@/hooks/use-default-engine";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
@@ -191,6 +192,11 @@ function AppHeader() {
             <ThemeMenuSub />
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
+              <Link href="/settings/profile" data-testid="menu-your-settings">
+                Your settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
               <Link href="/team">Team Settings</Link>
             </DropdownMenuItem>
             {canManageOrganization && (
@@ -227,6 +233,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const activeSection = findActiveSection(location);
   const { instance } = useInstance();
   const resourceKindItems = useResourceKindNavItems();
+  useDefaultEngineOnSignIn();
   useLiveConnection();
   useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
