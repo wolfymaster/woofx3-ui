@@ -350,7 +350,7 @@ export default function Modules() {
           </>
         ) : (
           <div className="flex-1 overflow-auto p-6 space-y-4">
-            <PageIntro introId="modules" onTry={() => navigate(MARKETPLACE_PATH)} />
+            <PageIntro introId="modules" />
             <Card className="max-w-xl">
               <CardContent className="pt-6 space-y-3">
                 <p className="font-medium">Your modules</p>

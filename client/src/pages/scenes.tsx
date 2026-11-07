@@ -175,7 +175,7 @@ function SceneListScreen() {
           </div>
         }
       />
-      <PageIntro introId="scenes" onTry={() => setCreateOpen(true)} />
+      <PageIntro introId="scenes" />
 
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
