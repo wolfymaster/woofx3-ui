@@ -9,6 +9,7 @@ pub mod backoff;
 pub mod bridge;
 mod budget;
 pub mod clock;
+pub mod external_url;
 pub mod frame;
 pub mod host;
 pub mod identity;
