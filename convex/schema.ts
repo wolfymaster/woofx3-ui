@@ -1613,6 +1613,8 @@ export default defineSchema({
     reason: v.optional(lifecycleReasonValidator),
     actor: v.string(),
     at: v.number(),
+    // Set when its warnings went out in-app only, because the owner has no email address.
+    ownerEmailMissing: v.optional(v.boolean()),
   }).index("by_account_at", ["accountId", "at"]),
 
   // billingEvents: every provider webhook as received, deduplicated on its

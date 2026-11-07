@@ -320,3 +320,19 @@ export function putEngineEventSource(
 export async function deleteEngineEventSource(instanceId: string): Promise<void> {
   await request<unknown>(`/v1/engine-event-sources/${encodeURIComponent(instanceId)}`, { method: "DELETE" });
 }
+
+export interface TransactionalEmail {
+  /** A template key the backoffice maps to an ESP template. */
+  template: string;
+  to: string;
+  variables: Record<string, string>;
+}
+
+/**
+ * Queue a transactional email. The maintenance API answers at once and sends
+ * it through its ESPs; `idempotencyKey` makes a retried call queue one
+ * message. Needs the `email:send` scope on this deployment's API key.
+ */
+export function sendTransactionalEmail(email: TransactionalEmail, idempotencyKey: string): Promise<{ id: string }> {
+  return request<{ id: string }>("/v1/email/messages", { method: "POST", idempotencyKey, body: email });
+}

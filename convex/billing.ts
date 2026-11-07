@@ -2,10 +2,26 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { dueEvent, isWarningCurrent, WARNING_TEMPLATES } from "./lib/billingLifecycle";
-import { warningNotification, warningVariables } from "./lib/billingWarnings";
+import {
+  type ActionCtx,
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+  query,
+} from "./_generated/server";
+import { dueEvent, isWarningCurrent, WARNING_TEMPLATES, type WarningTemplate } from "./lib/billingLifecycle";
+import {
+  type BillingBanner,
+  billingBanner,
+  type WarningVariables,
+  warningNotification,
+  warningVariables,
+} from "./lib/billingWarnings";
+import { engineAvailability } from "./lib/entitlementAccess";
 import { ADD_ONS } from "./lib/entitlements";
+import { MaintenanceApiError, sendTransactionalEmail } from "./lib/maintenanceClient";
 import {
   type BillingInterval,
   billingIntervalValidator,
@@ -13,8 +29,8 @@ import {
   planTierValidator,
   subscriptionStateValidator,
 } from "./lib/organization";
-import { requireOrgActionFor } from "./lib/orgRoles";
-import { paymentsConfig } from "./lib/payments/config";
+import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
+import { orgPortalUrl, paymentsConfig } from "./lib/payments/config";
 import {
   type AppliedDiscount,
   type PaymentError,
@@ -24,6 +40,7 @@ import {
 import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
 import { paymentProvider } from "./lib/payments/registry";
 import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
+import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { sendNotificationOnce } from "./notifications";
 
@@ -121,7 +138,114 @@ export const deliverWarning = internalMutation({
         });
       }
     }
+    if (sent) {
+      await scheduleWarningEmail(ctx, transitionId, template, account.ownerId, vars);
+    }
     return { sent };
+  },
+});
+
+/**
+ * The email copy of a warning, to the owner, sent by an action so a failing
+ * mail service never rolls back the transition or the in-app notice. An
+ * owner without an email address (a Twitch-only account) gets in-app only,
+ * which is noted on the transition.
+ */
+async function scheduleWarningEmail(
+  ctx: MutationCtx,
+  transitionId: Id<"subscriptionTransitions">,
+  template: WarningTemplate,
+  ownerId: Id<"users">,
+  vars: WarningVariables
+): Promise<void> {
+  const owner = await ctx.db.get(ownerId);
+  const to = owner?.email?.trim();
+  if (to === undefined || to === "") {
+    await ctx.db.patch(transitionId, { ownerEmailMissing: true });
+    return;
+  }
+  await ctx.scheduler.runAfter(0, internal.billing.sendWarningEmail, {
+    template,
+    to,
+    variables: { ...vars },
+    idempotencyKey: `${transitionId}:${template}`,
+    attempt: 0,
+  });
+}
+
+/** Retries of a warning email that failed for a reason worth retrying, with capped exponential backoff. */
+export const WARNING_EMAIL_RETRY = {
+  maxAttempts: 6,
+  baseDelayMs: 60_000,
+  maxDelayMs: 60 * 60_000,
+} as const;
+
+function emailRetryDelay(attempt: number, jitter: number): number {
+  const capped = Math.min(WARNING_EMAIL_RETRY.baseDelayMs * 2 ** attempt, WARNING_EMAIL_RETRY.maxDelayMs);
+  return Math.round(capped * (0.5 + jitter / 2));
+}
+
+/** A refusal the same request would get again: a bad template, address or variables. */
+function isPermanent(error: unknown): boolean {
+  return error instanceof MaintenanceApiError && error.status >= 400 && error.status < 500 && error.status !== 429;
+}
+
+export const sendWarningEmail = internalAction({
+  args: {
+    template: warningTemplateValidator,
+    to: v.string(),
+    variables: v.object({ orgName: v.string(), planName: v.string(), dateIso: v.string() }),
+    idempotencyKey: v.string(),
+    attempt: v.number(),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    try {
+      await sendTransactionalEmail(
+        {
+          template: args.template,
+          to: args.to,
+          variables: { ...args.variables, billingUrl: `${orgPortalUrl()}/billing` },
+        },
+        args.idempotencyKey
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const next = args.attempt + 1;
+      if (isPermanent(error) || next >= WARNING_EMAIL_RETRY.maxAttempts) {
+        logger.error("billing warning email: giving up", { ...args, variables: undefined, error: message });
+        return;
+      }
+      logger.warn("billing warning email: retrying", { template: args.template, attempt: next, error: message });
+      await ctx.scheduler.runAfter(emailRetryDelay(args.attempt, Math.random()), internal.billing.sendWarningEmail, {
+        ...args,
+        attempt: next,
+      });
+    }
+  },
+});
+
+/**
+ * The billing banner for the engine the viewer is on, with whether they may
+ * act on it (the owner). Null off hosted engines and when nothing is due.
+ */
+export const bannerForViewer = query({
+  args: { instanceId: v.id("instances"), now: v.number() },
+  handler: async (ctx, { instanceId, now }): Promise<(BillingBanner & { canManageBilling: boolean }) | null> => {
+    const userId = await getAuthUserId(ctx);
+    const instance = await ctx.db.get(instanceId);
+    if (userId === null || instance === null || (await getInstanceMembership(ctx, instanceId, userId)) === null) {
+      return null;
+    }
+    const availability = await engineAvailability(ctx, instanceId, now);
+    if (availability.availability !== "hosted") {
+      return null;
+    }
+    const banner = billingBanner(availability.entitlements.subscription, now);
+    const account = await ctx.db.get(instance.accountId);
+    if (banner === null || account === null) {
+      return null;
+    }
+    return { ...banner, canManageBilling: orgCan(await orgRoleOf(ctx, account, userId), "manageBilling") };
   },
 });
 
