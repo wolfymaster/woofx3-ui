@@ -109,10 +109,11 @@ export const orgMembershipFromEngines = migrations.define({
 });
 
 export type InvariantViolation =
+  | { invariant: "duplicate_membership"; accountId: Id<"accounts">; userId: Id<"users">; rows: number }
   | {
       invariant: "I1";
       accountId: Id<"accounts">;
-      detail: "owner_row_missing" | "owner_row_not_owner" | "owner_row_duplicated";
+      detail: "owner_row_missing" | "owner_row_not_owner";
     }
   | { invariant: "I1"; accountId: Id<"accounts">; detail: "extra_owner_row"; userId: Id<"users"> }
   | { invariant: "I2"; accountId: Id<"accounts">; instanceId: Id<"instances">; userId: Id<"users"> }
@@ -133,11 +134,16 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
     .query("accountMembers")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
-  const ownerRows = orgRows.filter((row) => row.userId === account.ownerId);
-  const ownerRow = ownerRows[0];
-  if (ownerRows.length > 1) {
-    violations.push({ invariant: "I1", accountId, detail: "owner_row_duplicated" });
+  const rowsPerUser = new Map<Id<"users">, number>();
+  for (const row of orgRows) {
+    rowsPerUser.set(row.userId, (rowsPerUser.get(row.userId) ?? 0) + 1);
   }
+  for (const [userId, rows] of rowsPerUser) {
+    if (rows > 1) {
+      violations.push({ invariant: "duplicate_membership", accountId, userId, rows });
+    }
+  }
+  const ownerRow = orgRows.find((row) => row.userId === account.ownerId);
   if (ownerRow === undefined) {
     violations.push({ invariant: "I1", accountId, detail: "owner_row_missing" });
   } else if (ownerRow.role !== "owner") {
