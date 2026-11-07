@@ -756,7 +756,7 @@ function DeleteWorkflowDialog({ name, open, isDeleting, onOpenChange, onConfirm 
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Workflow</AlertDialogTitle>
+          <AlertDialogTitle>Delete workflow</AlertDialogTitle>
           <AlertDialogDescription>
             Are you sure you want to delete "{name}"? This action cannot be undone.
           </AlertDialogDescription>

@@ -451,7 +451,7 @@ export function DashboardView() {
         <Dialog open={addPanelOpen} onOpenChange={setAddPanelOpen}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
-              <DialogTitle>Add Dashboard Panel</DialogTitle>
+              <DialogTitle>Add a dashboard panel</DialogTitle>
             </DialogHeader>
             <DashboardLayoutPicker onSelect={handleAddPanel} />
           </DialogContent>

@@ -118,7 +118,7 @@ function InstanceBar() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Instance</DialogTitle>
+            <DialogTitle>Rename instance</DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <Label htmlFor="instance-name">Name</Label>

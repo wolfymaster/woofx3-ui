@@ -441,7 +441,7 @@ function CommandsTab({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Command</AlertDialogTitle>
+            <AlertDialogTitle>Delete command</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete {deleteTarget ? `!${deleteTarget.command}` : "this command"}? This action
               cannot be undone.
@@ -607,7 +607,7 @@ function GroupsTab({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Group</AlertDialogTitle>
+            <AlertDialogTitle>Delete group</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deleteTarget?.name}"?{" "}
               {usageCount > 0

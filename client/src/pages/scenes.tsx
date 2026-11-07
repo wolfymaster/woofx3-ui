@@ -320,7 +320,7 @@ function SceneListScreen() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Scene</AlertDialogTitle>
+            <AlertDialogTitle>Delete scene</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deleteTarget?.name}"? Its widgets and browser source URL go with it, and
               this cannot be undone.

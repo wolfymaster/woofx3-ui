@@ -751,7 +751,7 @@ function ModuleUpload() {
       <Dialog open={showErrorDetails} onOpenChange={setShowErrorDetails}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Install Failed</DialogTitle>
+            <DialogTitle>Install failed</DialogTitle>
           </DialogHeader>
           <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
         </DialogContent>
