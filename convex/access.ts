@@ -3,8 +3,11 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
 import type { LifecycleReason } from "./lib/billingLifecycle";
+import { subscriptionSummary } from "./lib/entitlementAccess";
+import { isUsable } from "./lib/entitlements";
 import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import { subscriptionFor } from "./lib/subscriptions";
+import { getInstanceMembership } from "./lib/teamAccess";
 
 // Bounds the read of a user's engine memberships; a user is on a handful.
 const MAX_MEMBERSHIPS = 100;
@@ -115,5 +118,50 @@ export const entry = query({
       return { kind: "createEngine", accountId: owned?._id ?? null };
     }
     return (await suspendedEntry(ctx, engine, userId)) ?? { kind: "engine", instanceId: engine._id };
+  },
+});
+
+/**
+ * What onboarding tells the owner about paying for a hosted engine:
+ * - trial: the org is on its free trial, so the engine just gets built
+ * - choosePlan: the trial is used up and the subscription isn't usable, so no
+ *   engine is built until the owner picks a plan in the portal
+ */
+export type PlanPrompt = { kind: "trial"; endsAt: number } | { kind: "choosePlan" };
+
+/**
+ * Null for anyone but the org's owner, for a self-hosted engine, and when
+ * nothing needs saying: an invitee or a self-hosted owner never sees a trial
+ * or a plan prompt.
+ */
+export const planPrompt = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<PlanPrompt | null> => {
+    const userId = await getAuthUserId(ctx);
+    const instance = await ctx.db.get(instanceId);
+    if (userId === null || instance === null || instance.hosting !== "managed") {
+      return null;
+    }
+    if ((await getInstanceMembership(ctx, instanceId, userId)) === null) {
+      return null;
+    }
+    const account = await ctx.db.get(instance.accountId);
+    if (account === null) {
+      throw new Error(`instance ${instanceId} belongs to missing account ${instance.accountId}`);
+    }
+    if (!orgCan(await orgRoleOf(ctx, account, userId), "manageBilling")) {
+      return null;
+    }
+    const subscription = subscriptionSummary(await subscriptionFor(ctx, account._id));
+    if (subscription === null) {
+      return null;
+    }
+    if (subscription.state === "trialing") {
+      if (subscription.nextBillingAt === null) {
+        throw new Error(`account ${account._id} is trialing with no trial end`);
+      }
+      return { kind: "trial", endsAt: subscription.nextBillingAt };
+    }
+    return isUsable(subscription) ? null : { kind: "choosePlan" };
   },
 });

@@ -2,15 +2,17 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { type ResolvedSetupPlatforms, TWITCH_SETUP_MODULE_ID } from "@convex/lib/setupPlatforms";
 import type { SetupStatus } from "@convex/setup";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { CheckCircle2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ManagedEngineStep } from "@/components/onboarding/managed-engine-step";
+import { ChoosePlan, TrialNote } from "@/components/onboarding/plan-prompt";
 import { TwitchConnectCard, type TwitchPermissionsLoad } from "@/components/setup/twitch-connect-card";
 import { AskAdminToConnectTwitch, AskOwnerToChooseUsername } from "@/components/setup/twitch-step";
 import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
+import { IS_DESKTOP } from "@/lib/desktop";
 import { useLogger } from "@/lib/logger-context";
 import { setupStepPath } from "@/lib/setup-steps";
 
@@ -48,6 +50,10 @@ function permissionsLoad(load: Load): TwitchPermissionsLoad {
  * Coming back from Twitch finishes setup on the server (`setup.finishFirstRun`)
  * and setup's routing moves on from here by itself. A preview deployment can
  * also skip, so a password account gets through.
+ *
+ * On a hosted engine the org's owner is told the engine is built on the free
+ * trial, or, once the trial is used up and the subscription isn't usable, asked
+ * to choose a plan before anything is built (`access.planPrompt`).
  */
 export function ConnectStep({ instanceId, status }: ConnectStepProps) {
   const logger = useLogger();
@@ -59,6 +65,8 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // The desktop app never shows billing, a trial or the portal.
+  const planPrompt = useQuery(api.access.planPrompt, IS_DESKTOP ? "skip" : { instanceId });
 
   const fetchPlatforms = useCallback(async () => {
     setLoad({ state: "loading" });
@@ -76,6 +84,10 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
 
   if (!status.canManageSetup) {
     return <AskAdminToConnectTwitch />;
+  }
+
+  if (planPrompt?.kind === "choosePlan") {
+    return <ChoosePlan />;
   }
 
   if (status.usernameNeeded) {
@@ -133,6 +145,7 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
 
   return (
     <div className="space-y-4">
+      {planPrompt?.kind === "trial" && !status.engineRegistered && <TrialNote endsAt={planPrompt.endsAt} />}
       <TwitchConnectCard
         load={permissionsLoad(load)}
         onRetry={() => void fetchPlatforms()}
