@@ -3,7 +3,13 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { paymentsConfig } from "./lib/payments/config";
-import type { PaymentEvent, PaymentProvider, PaymentPurposeKind, SessionChange } from "./lib/payments/provider";
+import type {
+  PaymentEvent,
+  PaymentProvider,
+  PaymentPurposeKind,
+  SessionChange,
+  StrayPayment,
+} from "./lib/payments/provider";
 import { paymentProvider } from "./lib/payments/registry";
 import type { PaymentSession } from "./lib/payments/sessions";
 import { STRIPE_SCHEMA_VERSION } from "./lib/payments/stripe";
@@ -87,6 +93,8 @@ interface EventOutcome {
   outcome: "applied" | "ignored" | "stray";
   error?: string;
   accountId?: Id<"accounts">;
+  /** Set exactly when the outcome is "stray". */
+  stray?: StrayPayment;
 }
 
 interface PurposeHandler {

@@ -21,7 +21,7 @@ import {
   planTierValidator,
   subscriptionStateValidator,
 } from "./lib/organization";
-import { appliedDiscountValidator, checkoutPurposeValidator } from "./lib/payments/provider";
+import { appliedDiscountValidator, checkoutPurposeValidator, strayPaymentValidator } from "./lib/payments/provider";
 import { paymentSessionStateValidator } from "./lib/payments/sessions";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
@@ -1650,10 +1650,13 @@ export default defineSchema({
       v.literal("failed")
     ),
     error: v.optional(v.string()),
+    // Set exactly when the outcome is "stray".
+    stray: v.optional(strayPaymentValidator),
     receivedAt: v.number(),
   })
     .index("by_provider_event", ["provider", "eventId"])
-    .index("by_received_at", ["receivedAt"]),
+    .index("by_received_at", ["receivedAt"])
+    .index("by_outcome", ["outcome", "receivedAt"]),
 
   // paymentSessions: every checkout we opened, unique on the provider's
   // session id. `purpose` is the quote the session charges, and decides what

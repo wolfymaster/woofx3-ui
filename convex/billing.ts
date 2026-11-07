@@ -47,6 +47,7 @@ import {
   type PaymentError,
   type PaymentProvider,
   providerSubscriptionValidator,
+  type StrayPayment,
 } from "./lib/payments/provider";
 import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
 import { paymentProvider } from "./lib/payments/registry";
@@ -834,7 +835,13 @@ export const invoices = action({
 type SubscriptionRead = Infer<typeof providerSubscriptionValidator> & { accountId: Id<"accounts"> };
 
 /** What applying the provider's truth about a subscription did. */
-type SubscriptionOutcome = { outcome: "applied" | "ignored" | "stray"; error?: string; accountId?: Id<"accounts"> };
+type SubscriptionOutcome = {
+  outcome: "applied" | "ignored" | "stray";
+  error?: string;
+  accountId?: Id<"accounts">;
+  /** Set exactly when the outcome is "stray". */
+  stray?: StrayPayment;
+};
 
 /**
  * Applies the provider's truth about a subscription the org's row already
@@ -881,11 +888,19 @@ export const completeSubscriptionCheckout = internalMutation({
         outcome: "stray",
         error: `subscription ${read.subscriptionRef} names org ${read.accountId}, its checkout was for ${accountId}`,
         accountId,
+        stray: {
+          subscriptionRef: read.subscriptionRef,
+          customerRef: read.customerRef,
+          amountCents: session.amountCents,
+        },
       };
     }
     const result = await applySubscriptionRead(ctx, { ...read, accountId }, { mayBind: true });
     await closeSession(ctx, session, "complete", now);
-    return result;
+    // The checkout knows what the stray subscription charged.
+    return result.stray === undefined
+      ? result
+      : { ...result, stray: { ...result.stray, amountCents: session.amountCents } };
   },
 });
 
@@ -922,6 +937,11 @@ async function applySubscriptionRead(
         outcome: "stray",
         error: `subscription ${subscription.subscriptionRef} is live beside the org's current ${before?.providerSubscriptionId}`,
         accountId,
+        stray: {
+          subscriptionRef: subscription.subscriptionRef,
+          customerRef: subscription.customerRef,
+          amountCents: null,
+        },
       };
     }
     if (followsAnother || !mayBind) {

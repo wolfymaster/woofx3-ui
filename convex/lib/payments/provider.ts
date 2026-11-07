@@ -124,6 +124,18 @@ export interface CheckoutRequest {
   expiresAt: number;
 }
 
+/**
+ * What an operator needs to settle a stray payment: a live provider
+ * subscription the org's row doesn't follow. The amount is known when the
+ * stray came through one of our checkouts.
+ */
+export const strayPaymentValidator = v.object({
+  subscriptionRef: v.string(),
+  customerRef: v.string(),
+  amountCents: v.union(v.number(), v.null()),
+});
+export type StrayPayment = Infer<typeof strayPaymentValidator>;
+
 /** A checkout session the provider opened, with what it will charge. */
 export interface CheckoutSession {
   url: string;

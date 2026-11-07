@@ -312,6 +312,22 @@ describe("payments webhook", () => {
       ["cs_fake_2", "complete"],
     ]);
     expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.providerSubscriptionId).toBe("sub_1");
+    const strays = await t.run(async (ctx) =>
+      (
+        await ctx.db
+          .query("paymentEvents")
+          .withIndex("by_outcome", (q) => q.eq("outcome", "stray"))
+          .collect()
+      ).map((event) => [event.eventId, event.accountId, event.stray])
+    );
+    expect(strays).toEqual([
+      [
+        "evt_s2",
+        accountId,
+        { subscriptionRef: "sub_2", customerRef: "cus_1", amountCents: FAKE_CHECKOUT_AMOUNT_CENTS },
+      ],
+      ["evt_s2_invoice", accountId, { subscriptionRef: "sub_2", customerRef: "cus_1", amountCents: null }],
+    ]);
   });
 
   test("a late event about an ended subscription doesn't suspend an org that subscribed again", async () => {
