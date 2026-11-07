@@ -294,11 +294,18 @@ describe("billing config", () => {
 describe("purpose metadata", () => {
   /** A Stripe client whose requests are recorded and answered from `answers`, keyed by path. */
   function recordingStripe(answers: Record<string, unknown>) {
-    const requests: Array<{ path: string; body: URLSearchParams }> = [];
+    const requests: Array<{ path: string; body: URLSearchParams; idempotencyKey: string | null }> = [];
     const fetchFn = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
-      requests.push({ path: url.pathname, body: new URLSearchParams(String(init?.body ?? "")) });
+      requests.push({
+        path: url.pathname,
+        body: new URLSearchParams(String(init?.body ?? "")),
+        idempotencyKey: new Headers(init?.headers).get("idempotency-key"),
+      });
       const answer = answers[url.pathname];
+      if (answer instanceof Response) {
+        return answer;
+      }
       return answer === undefined
         ? new Response(JSON.stringify({ error: { type: "invalid_request_error", code: "resource_missing" } }), {
             status: 404,
@@ -330,6 +337,7 @@ describe("purpose metadata", () => {
       successUrl: "https://woofx3.tv/org/billing?checkout=done",
       cancelUrl: "https://woofx3.tv/org/billing",
       idempotencyKey: "checkout:acct_1:1",
+      expiresAt: 1_800_003_600_000,
     });
     expect(result).toEqual({ ok: true, value: { url: "https://checkout.stripe.test/cs_1" } });
     const session = requests.find((request) => request.path === "/v1/checkout/sessions")?.body;
@@ -338,6 +346,41 @@ describe("purpose metadata", () => {
     expect(session?.get("subscription_data[metadata][purpose]")).toBe("subscription");
     expect(session?.get("subscription_data[metadata][ref]")).toBe("acct_1");
     expect(session?.get("client_reference_id")).toBe("acct_1");
+    expect(session?.get("expires_at")).toBe("1800003600");
+    expect(requests.find((request) => request.path === "/v1/checkout/sessions")?.idempotencyKey).toBe(
+      "checkout:acct_1:1"
+    );
+  });
+
+  test("a key already used for another open checkout is checkout_in_progress", async () => {
+    const { provider } = recordingStripe({
+      "/v1/prices": { object: "list", data: [{ id: "price_pro_month", object: "price" }] },
+      "/v1/checkout/sessions": new Response(
+        JSON.stringify({
+          error: {
+            type: "idempotency_error",
+            message: "Keys for idempotent requests can only be used with the same parameters",
+          },
+        }),
+        { status: 400 }
+      ),
+    });
+    const result = await provider.createCheckout({
+      purpose: {
+        kind: "subscription",
+        accountId: "acct_1" as Id<"accounts">,
+        plan: "starter",
+        interval: "year",
+        promotionCode: null,
+      },
+      customerRef: null,
+      allowPromotionCodes: true,
+      successUrl: "https://woofx3.tv/org/billing?checkout=done",
+      cancelUrl: "https://woofx3.tv/org/billing",
+      idempotencyKey: "checkout:acct_1:1",
+      expiresAt: 1_800_003_600_000,
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "checkout_in_progress" } });
   });
 
   test("a coupon created for a discount carries the purpose and our discount key", async () => {

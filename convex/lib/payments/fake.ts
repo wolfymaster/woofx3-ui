@@ -20,15 +20,27 @@ export class FakePaymentProvider implements PaymentProvider {
   readonly subscriptions = new Map<string, ProviderSubscription>();
   readonly promotionCodes = new Map<string, AppliedDiscount>();
   readonly calls: Array<{ method: string; args: unknown }> = [];
+  /** Checkout sessions opened, by idempotency key. */
+  readonly checkouts = new Map<string, { request: CheckoutRequest; url: string }>();
   /** When set, every call fails with this. */
   outage: Result<never> | null = null;
 
   async createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>> {
     this.calls.push({ method: "createCheckout", args: req });
+    if (this.outage) {
+      return this.outage;
+    }
+    // Like Stripe: a repeated idempotency key replays the first session, or is refused when the parameters differ.
+    const opened = this.checkouts.get(req.idempotencyKey);
+    if (opened !== undefined) {
+      return JSON.stringify(opened.request) === JSON.stringify(req)
+        ? ok({ url: opened.url })
+        : err("checkout_in_progress", `Key ${req.idempotencyKey} is open with other parameters`);
+    }
     const { purpose } = req;
-    return (
-      this.outage ?? ok({ url: `https://checkout.example/${purpose.accountId}/${purpose.plan}_${purpose.interval}` })
-    );
+    const url = `https://checkout.example/${purpose.accountId}/${purpose.plan}_${purpose.interval}/${this.checkouts.size + 1}`;
+    this.checkouts.set(req.idempotencyKey, { request: req, url });
+    return ok({ url });
   }
 
   async createPortalSession(req: { customerRef: string; returnUrl: string }): Promise<Result<{ url: string }>> {
