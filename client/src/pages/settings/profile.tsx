@@ -146,7 +146,10 @@ function PasswordCard({ hasPassword }: { hasPassword: boolean }) {
               type="password"
               autoComplete="current-password"
               value={current}
-              onChange={(e) => setCurrent(e.target.value)}
+              onChange={(e) => {
+                setCurrent(e.target.value);
+                setError(null);
+              }}
               data-testid="input-current-password"
             />
           </div>
@@ -158,7 +161,10 @@ function PasswordCard({ hasPassword }: { hasPassword: boolean }) {
               autoComplete="new-password"
               minLength={PASSWORD_MIN_LENGTH}
               value={next}
-              onChange={(e) => setNext(e.target.value)}
+              onChange={(e) => {
+                setNext(e.target.value);
+                setError(null);
+              }}
               data-testid="input-new-password"
             />
           </div>
