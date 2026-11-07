@@ -15,6 +15,7 @@ export type OpsRoute =
   | { method: "GET"; name: "audit.list" }
   | { method: "GET"; name: "plans.list" }
   | { method: "GET"; name: "notifications.list" }
+  | { method: "GET"; name: "payments.strays" }
   | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
   | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
   | { method: "POST"; name: "notifications.create" }
@@ -35,6 +36,18 @@ const ACCOUNT_BILLING_WRITES: ReadonlySet<string> = new Set<AccountBillingWrite>
 export type EngineAction = "upgrade" | "retry" | "delete";
 
 const ENGINE_ACTIONS: ReadonlySet<string> = new Set<EngineAction>(["upgrade", "retry", "delete"]);
+
+/** The `limit` a list route takes: how many items a page holds at most. */
+export const PAGE_LIMIT = { default: 25, max: 100 } as const;
+
+/** A `limit` query value, the default when absent; null when it is not a whole number in range. */
+export function parsePageLimit(value: string | null): number | null {
+  if (value === null) {
+    return PAGE_LIMIT.default;
+  }
+  const limit = /^\d{1,3}$/.test(value) ? Number(value) : Number.NaN;
+  return limit >= 1 && limit <= PAGE_LIMIT.max ? limit : null;
+}
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -96,6 +109,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
       }
       if (first === "engines" && second === "event-path") {
         return { method, name: "engines.eventPath" };
+      }
+      if (first === "payments" && second === "strays") {
+        return { method, name: "payments.strays" };
       }
       if (first === "users" && second) {
         return { method, name: "users.get", userId: second };

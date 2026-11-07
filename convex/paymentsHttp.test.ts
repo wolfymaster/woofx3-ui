@@ -9,12 +9,12 @@ import {
   RENEWAL_CHECK_RETRY,
   renewalRetryDelay,
 } from "./billing";
-import { handleBillingWebhook } from "./billingHttp";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
-import { FakePaymentProvider } from "./lib/payments/fake";
-import { err, type ProviderSubscription } from "./lib/payments/provider";
+import { FAKE_CHECKOUT_AMOUNT_CENTS, FakePaymentProvider } from "./lib/payments/fake";
+import { err, type ProviderSubscription, type SessionChange } from "./lib/payments/provider";
 import { applyTransition, subscriptionFor } from "./lib/subscriptions";
+import { handlePaymentWebhook } from "./paymentsHttp";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -61,7 +61,7 @@ function deliver(t: Backend, provider: FakePaymentProvider, eventId: string) {
     purpose: "subscription",
     subscriptionRef: "sub_1",
   });
-  return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+  return handlePaymentWebhook({ provider, runQuery: t.query, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
 }
 
 function deliverAbout(t: Backend, provider: FakePaymentProvider, eventId: string, subscriptionRef: string) {
@@ -71,11 +71,67 @@ function deliverAbout(t: Backend, provider: FakePaymentProvider, eventId: string
     purpose: "subscription",
     subscriptionRef,
   });
-  return handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+  return handlePaymentWebhook({ provider, runQuery: t.query, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+}
+
+const PORTAL = "https://woofx3.tv/org";
+
+function openCheckout(t: Backend, provider: FakePaymentProvider, accountId: Id<"accounts">, nowMs = T0) {
+  return openSubscriptionCheckout(
+    { provider, runMutation: t.mutation, portalUrl: PORTAL },
+    null,
+    { accountId, plan: "pro", interval: "month" },
+    nowMs
+  );
+}
+
+function deliverSession(
+  t: Backend,
+  provider: FakePaymentProvider,
+  eventId: string,
+  session: SessionChange,
+  subscriptionRef: string | null = "sub_1"
+) {
+  const body = JSON.stringify({
+    eventId,
+    type: session.change === "expired" ? "checkout.session.expired" : "checkout.session.completed",
+    purpose: "subscription",
+    subscriptionRef: session.change === "expired" ? null : subscriptionRef,
+    session,
+  });
+  return handlePaymentWebhook({ provider, runQuery: t.query, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+}
+
+/** The newest checkout the fake opened, which a test then pays. */
+function lastSessionRef(provider: FakePaymentProvider): string {
+  const sessionRef = [...provider.sessionStates.keys()].at(-1);
+  if (sessionRef === undefined) {
+    throw new Error("no checkout opened");
+  }
+  return sessionRef;
+}
+
+/** Opens a checkout for the org and pays it: the provider's subscription must be set first. */
+async function subscribe(
+  t: Backend,
+  provider: FakePaymentProvider,
+  accountId: Id<"accounts">,
+  { eventId = "evt_paid", subscriptionRef = "sub_1", nowMs = T0 } = {}
+) {
+  await openCheckout(t, provider, accountId, nowMs);
+  const sessionRef = lastSessionRef(provider);
+  provider.sessionStates.set(sessionRef, "complete");
+  return deliverSession(t, provider, eventId, { sessionRef, change: "paid" }, subscriptionRef);
+}
+
+async function sessions(t: Backend) {
+  return t.run(async (ctx) =>
+    (await ctx.db.query("paymentSessions").collect()).map((row) => [row.providerSessionId, row.state])
+  );
 }
 
 async function events(t: Backend) {
-  return t.run(async (ctx) => (await ctx.db.query("billingEvents").collect()).map((e) => [e.eventId, e.outcome]));
+  return t.run(async (ctx) => (await ctx.db.query("paymentEvents").collect()).map((e) => [e.eventId, e.outcome]));
 }
 
 async function transitions(t: Backend, accountId: Id<"accounts">) {
@@ -89,7 +145,7 @@ async function transitions(t: Backend, accountId: Id<"accounts">) {
   );
 }
 
-describe("billing webhook", () => {
+describe("payments webhook", () => {
   test("a marketplace-style purchase (a payment-mode checkout) is acknowledged and touches no subscription", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
@@ -111,7 +167,11 @@ describe("billing webhook", () => {
       purpose: null,
       subscriptionRef: null,
     });
-    const response = await handleBillingWebhook({ provider, runMutation: t.mutation, now: () => T0 }, body, SIGNED);
+    const response = await handlePaymentWebhook(
+      { provider, runQuery: t.query, runMutation: t.mutation, now: () => T0 },
+      body,
+      SIGNED
+    );
     expect(response.status).toBe(200);
     expect(await events(t)).toEqual([["evt_market", "ignored"]]);
     expect(provider.calls).toEqual([]);
@@ -129,12 +189,12 @@ describe("billing webhook", () => {
     expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
   });
 
-  test("a checkout with no subscription row activates the org and mirrors the provider", async () => {
+  test("a paid checkout activates the org, mirrors the provider and completes its session", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
-    expect((await deliver(t, provider, "evt_1")).status).toBe(200);
+    expect((await subscribe(t, provider, accountId, { eventId: "evt_1" })).status).toBe(200);
     expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toMatchObject({
       state: "active",
       plan: "pro",
@@ -146,18 +206,128 @@ describe("billing webhook", () => {
       nextBillingAt: T0 + 60 * DAY,
     });
     expect(await events(t)).toEqual([["evt_1", "applied"]]);
+    const [session] = await t.run((ctx) => ctx.db.query("paymentSessions").collect());
+    expect(session).toMatchObject({
+      providerSessionId: "cs_fake_1",
+      state: "complete",
+      ref: accountId,
+      amountCents: FAKE_CHECKOUT_AMOUNT_CENTS,
+      purpose: { kind: "subscription", accountId, plan: "pro", interval: "month", promotionCode: null },
+    });
   });
 
-  test("a duplicate delivery applies once", async () => {
+  test("a subscription no checkout of ours bound is acknowledged and grants nothing", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
-    await deliver(t, provider, "evt_1");
-    const again = await deliver(t, provider, "evt_1");
+    expect((await deliver(t, provider, "evt_1")).status).toBe(200);
+    expect(await events(t)).toEqual([["evt_1", "ignored"]]);
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
+  });
+
+  test("a duplicate delivery changes nothing, nor does a second paid event for the same session", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", providerSubscription(accountId));
+    await subscribe(t, provider, accountId, { eventId: "evt_1" });
+    const again = await deliverSession(t, provider, "evt_1", { sessionRef: "cs_fake_1", change: "paid" });
     expect(await again.json()).toEqual({ received: true, duplicate: true });
+    await deliverSession(t, provider, "evt_async", { sessionRef: "cs_fake_1", change: "paid" });
     expect(await transitions(t, accountId)).toEqual(["ProviderActivated"]);
     expect(provider.calls.filter((c) => c.method === "fetchSubscription").length).toBe(1);
+    expect(await events(t)).toEqual([
+      ["evt_1", "applied"],
+      ["evt_async", "ignored"],
+    ]);
+  });
+
+  test("an event about a session we have no row for is acknowledged and ignored", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", providerSubscription(accountId));
+    const response = await deliverSession(t, provider, "evt_foreign", { sessionRef: "cs_foreign", change: "paid" });
+    expect(response.status).toBe(200);
+    expect(await events(t)).toEqual([["evt_foreign", "ignored"]]);
+    expect(provider.calls.filter((c) => c.method === "fetchSubscription")).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
+  });
+
+  test("an expired session is marked expired and a later paid event for it grants nothing", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", providerSubscription(accountId));
+    await openCheckout(t, provider, accountId);
+    await deliverSession(t, provider, "evt_expired", { sessionRef: "cs_fake_1", change: "expired" });
+    expect(await sessions(t)).toEqual([["cs_fake_1", "expired"]]);
+    await deliverSession(t, provider, "evt_late", { sessionRef: "cs_fake_1", change: "paid" });
+    expect(await events(t)).toEqual([
+      ["evt_expired", "applied"],
+      ["evt_late", "ignored"],
+    ]);
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
+  });
+
+  test("a checkout awaiting a delayed payment grants once the payment succeeds", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", providerSubscription(accountId));
+    await openCheckout(t, provider, accountId);
+    await deliverSession(t, provider, "evt_completed", { sessionRef: "cs_fake_1", change: "awaiting_payment" });
+    expect(await sessions(t)).toEqual([["cs_fake_1", "open"]]);
+    expect(await t.run((ctx) => ctx.db.query("subscriptions").collect())).toEqual([]);
+    await deliverSession(t, provider, "evt_async_paid", { sessionRef: "cs_fake_1", change: "paid" });
+    expect(await sessions(t)).toEqual([["cs_fake_1", "complete"]]);
+    expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.state).toBe("active");
+  });
+
+  test("a second paid checkout's live subscription is recorded as stray, not silently ignored", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", providerSubscription(accountId));
+    provider.subscriptions.set("sub_2", providerSubscription(accountId, { subscriptionRef: "sub_2" }));
+    await openCheckout(t, provider, accountId);
+    // The first session is paid at the provider before the owner opens a second checkout in a new window.
+    provider.sessionStates.set("cs_fake_1", "complete");
+    await openCheckout(t, provider, accountId, T0 + CHECKOUT_ATTEMPT.windowMs);
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "open"],
+      ["cs_fake_2", "open"],
+    ]);
+    await deliverSession(t, provider, "evt_s1", { sessionRef: "cs_fake_1", change: "paid" }, "sub_1");
+    await deliverSession(t, provider, "evt_s2", { sessionRef: "cs_fake_2", change: "paid" }, "sub_2");
+    await deliverAbout(t, provider, "evt_s2_invoice", "sub_2");
+    expect(await events(t)).toEqual([
+      ["evt_s1", "applied"],
+      ["evt_s2", "stray"],
+      ["evt_s2_invoice", "stray"],
+    ]);
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "complete"],
+      ["cs_fake_2", "complete"],
+    ]);
+    expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.providerSubscriptionId).toBe("sub_1");
+    const strays = await t.run(async (ctx) =>
+      (
+        await ctx.db
+          .query("paymentEvents")
+          .withIndex("by_outcome", (q) => q.eq("outcome", "stray"))
+          .collect()
+      ).map((event) => [event.eventId, event.accountId, event.stray])
+    );
+    expect(strays).toEqual([
+      [
+        "evt_s2",
+        accountId,
+        { subscriptionRef: "sub_2", customerRef: "cus_1", amountCents: FAKE_CHECKOUT_AMOUNT_CENTS },
+      ],
+      ["evt_s2_invoice", accountId, { subscriptionRef: "sub_2", customerRef: "cus_1", amountCents: null }],
+    ]);
   });
 
   test("a late event about an ended subscription doesn't suspend an org that subscribed again", async () => {
@@ -166,7 +336,7 @@ describe("billing webhook", () => {
     const provider = new FakePaymentProvider();
     const old = providerSubscription(accountId, { subscriptionRef: "sub_old" });
     provider.subscriptions.set("sub_old", old);
-    await deliverAbout(t, provider, "evt_1", "sub_old");
+    await subscribe(t, provider, accountId, { eventId: "evt_1", subscriptionRef: "sub_old" });
     provider.subscriptions.set("sub_old", {
       ...old,
       standing: "ended",
@@ -179,7 +349,11 @@ describe("billing webhook", () => {
       "sub_new",
       providerSubscription(accountId, { subscriptionRef: "sub_new", observedAt: T0 + 3 * DAY })
     );
-    await deliverAbout(t, provider, "evt_3", "sub_new");
+    await subscribe(t, provider, accountId, {
+      eventId: "evt_3",
+      subscriptionRef: "sub_new",
+      nowMs: T0 + CHECKOUT_ATTEMPT.windowMs,
+    });
     // Stripe redelivers an event about the old subscription; the read is fresh, and still ended.
     provider.subscriptions.set("sub_old", {
       ...old,
@@ -206,7 +380,7 @@ describe("billing webhook", () => {
     const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId, { observedAt: T0 + 2 * DAY }));
-    await deliver(t, provider, "evt_new");
+    await subscribe(t, provider, accountId, { eventId: "evt_new" });
     provider.subscriptions.set(
       "sub_1",
       providerSubscription(accountId, { standing: "payment_failed", providerStatus: "past_due", observedAt: T0 + DAY })
@@ -236,7 +410,7 @@ describe("billing webhook", () => {
     });
     const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
-    await deliver(t, provider, "evt_pay");
+    await subscribe(t, provider, accountId, { eventId: "evt_pay" });
     expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.state).toBe("active");
     const resumes = await t.run(async (ctx) =>
       (await ctx.db.system.query("_scheduled_functions").collect()).filter(
@@ -260,8 +434,8 @@ describe("billing webhook", () => {
   test("a bad signature is refused before anything is recorded", async () => {
     const t = newBackend();
     const provider = new FakePaymentProvider();
-    const response = await handleBillingWebhook(
-      { provider, runMutation: t.mutation, now: () => T0 },
+    const response = await handlePaymentWebhook(
+      { provider, runQuery: t.query, runMutation: t.mutation, now: () => T0 },
       "{}",
       new Headers()
     );
@@ -288,7 +462,7 @@ describe("billing actions", () => {
     const { accountId, ownerId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId));
-    await deliver(t, provider, "evt_1");
+    await subscribe(t, provider, accountId);
     await expect(
       t.withIdentity({ subject: `${ownerId}|s` }).action(api.billing.startCheckout, {
         accountId,
@@ -329,25 +503,62 @@ describe("one checkout per org at a time", () => {
     expect(checkoutAttempt("acct_2" as Id<"accounts">, start).idempotencyKey).not.toBe(first.idempotencyKey);
   });
 
-  test("two concurrent requests get one session, so at most one subscription", async () => {
+  test("two concurrent requests get one session, recorded once, so at most one subscription", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
-    const args = { accountId: "acct_1" as Id<"accounts">, plan: "pro" as const, interval: "month" as const };
     const [a, b] = await Promise.all([
-      openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, args, T0),
-      openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, args, T0 + 1000),
+      openCheckout(t, provider, accountId, T0),
+      openCheckout(t, provider, accountId, T0 + 1000),
     ]);
     expect(a).toEqual(b);
     expect(provider.checkouts.size).toBe(1);
+    expect(await sessions(t)).toEqual([["cs_fake_1", "open"]]);
   });
 
   test("another plan while a checkout is open is refused, not a second session", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
-    const args = { accountId: "acct_1" as Id<"accounts">, plan: "pro" as const, interval: "month" as const };
-    await openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, args, T0);
+    await openCheckout(t, provider, accountId, T0);
     await expect(
-      openSubscriptionCheckout(provider, "https://woofx3.tv/org", null, { ...args, plan: "starter" }, T0 + 1000)
+      openSubscriptionCheckout(
+        { provider, runMutation: t.mutation, portalUrl: PORTAL },
+        null,
+        { accountId, plan: "starter", interval: "month" },
+        T0 + 1000
+      )
     ).rejects.toThrow("already open");
     expect(provider.checkouts.size).toBe(1);
+  });
+
+  test("a checkout in a new window expires the org's older open session at the provider", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    await openCheckout(t, provider, accountId, T0);
+    await openCheckout(t, provider, accountId, T0 + WINDOW);
+    expect(provider.sessionStates.get("cs_fake_1")).toBe("expired");
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "expired"],
+      ["cs_fake_2", "open"],
+    ]);
+  });
+
+  test("an older session the provider can't expire right now refuses the new checkout's URL", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    await openCheckout(t, provider, accountId, T0);
+    const expireCheckout = provider.expireCheckout.bind(provider);
+    provider.expireCheckout = async () => err("provider_unavailable", "Stripe is down");
+    await expect(openCheckout(t, provider, accountId, T0 + WINDOW)).rejects.toThrow("Stripe is down");
+    provider.expireCheckout = expireCheckout;
+    await openCheckout(t, provider, accountId, T0 + WINDOW);
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "expired"],
+      ["cs_fake_2", "open"],
+    ]);
   });
 });
 
@@ -361,7 +572,7 @@ describe("renewal check", () => {
     const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
     provider.subscriptions.set("sub_1", providerSubscription(accountId, { currentPeriodEnd: PERIOD_END }));
-    await deliver(t, provider, "evt_1");
+    await subscribe(t, provider, accountId);
     await t.mutation(internal.billing.evaluateOrg, { accountId, now: LATER });
     const deps = { provider, runQuery: t.query, runMutation: t.mutation, now: () => LATER };
     return { t, accountId, provider, deps };

@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError, v } from "convex/values";
+import { ConvexError, type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -42,13 +42,16 @@ import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
 import { orgPortalUrl, paymentsConfig } from "./lib/payments/config";
 import {
   type AppliedDiscount,
+  type CheckoutPurpose,
   type Invoice,
   type PaymentError,
   type PaymentProvider,
   providerSubscriptionValidator,
+  type StrayPayment,
 } from "./lib/payments/provider";
 import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
 import { paymentProvider } from "./lib/payments/registry";
+import { closeSession, sessionByProviderId } from "./lib/payments/sessions";
 import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
@@ -648,20 +651,38 @@ export interface CheckoutArgs {
   promotionCode?: string;
 }
 
-/** Opens (or replays) the org's subscription checkout with the provider. */
+export interface CheckoutDeps {
+  provider: PaymentProvider;
+  runMutation: ActionCtx["runMutation"];
+  portalUrl: string;
+}
+
+/**
+ * Opens (or replays) the org's subscription checkout with the provider,
+ * records it in `paymentSessions`, and expires every older session still open
+ * for the org, so only the newest can be paid. A superseded session the
+ * provider no longer holds open (paid or expired meanwhile) is left to its
+ * own webhook.
+ */
 export async function openSubscriptionCheckout(
-  provider: PaymentProvider,
-  portalUrl: string,
+  deps: CheckoutDeps,
   customerRef: string | null,
   { accountId, plan, interval, promotionCode }: CheckoutArgs,
   nowMs: number
 ): Promise<{ url: string }> {
-  const result = await provider.createCheckout({
-    purpose: { kind: "subscription", accountId, plan, interval, promotionCode: promotionCode?.trim() || null },
+  const purpose: CheckoutPurpose = {
+    kind: "subscription",
+    accountId,
+    plan,
+    interval,
+    promotionCode: promotionCode?.trim() || null,
+  };
+  const result = await deps.provider.createCheckout({
+    purpose,
     customerRef,
     allowPromotionCodes: true,
-    successUrl: `${portalUrl}/billing?checkout=done`,
-    cancelUrl: `${portalUrl}/billing`,
+    successUrl: `${deps.portalUrl}/billing?checkout=done`,
+    cancelUrl: `${deps.portalUrl}/billing`,
     ...checkoutAttempt(accountId, nowMs),
   });
   if (!result.ok && result.error.code === "checkout_in_progress") {
@@ -673,7 +694,28 @@ export async function openSubscriptionCheckout(
   if (!result.ok) {
     throw providerFailure(result.error);
   }
-  return result.value;
+  const { supersededSessionRefs } = await deps.runMutation(internal.payments.recordCheckout, {
+    purpose,
+    session: result.value,
+    now: nowMs,
+  });
+  for (const sessionRef of supersededSessionRefs) {
+    const expired = await deps.provider.expireCheckout(sessionRef);
+    if (!expired.ok && expired.error.code !== "invalid_request") {
+      // The older session is still payable: refuse to hand out a second one. A retry replays this checkout.
+      throw providerFailure(expired.error);
+    }
+    if (expired.ok) {
+      await deps.runMutation(internal.payments.expireSession, { providerSessionId: sessionRef, now: nowMs });
+    } else {
+      logger.warn("billing checkout: superseded session no longer open at the provider", {
+        accountId,
+        sessionRef,
+        error: expired.error.message,
+      });
+    }
+  }
+  return { url: result.value.url };
 }
 
 /** A provider checkout for a plan, for an org with no subscription in good standing. Returns its URL. */
@@ -693,7 +735,12 @@ export const startCheckout = action({
       });
     }
     const { provider, portalUrl } = configuredProvider();
-    return openSubscriptionCheckout(provider, portalUrl, context.customerRef, args, Date.now());
+    return openSubscriptionCheckout(
+      { provider, runMutation: ctx.runMutation, portalUrl },
+      context.customerRef,
+      args,
+      Date.now()
+    );
   },
 });
 
@@ -784,119 +831,157 @@ export const invoices = action({
 // Provider webhooks
 // ---------------------------------------------------------------------------
 
-const outcomeValidator = v.union(v.literal("applied"), v.literal("ignored"), v.literal("failed"));
+/** A provider subscription read as a function argument, with the org it is applied to. */
+type SubscriptionRead = Infer<typeof providerSubscriptionValidator> & { accountId: Id<"accounts"> };
+
+/** What applying the provider's truth about a subscription did. */
+type SubscriptionOutcome = {
+  outcome: "applied" | "ignored" | "stray";
+  error?: string;
+  accountId?: Id<"accounts">;
+  /** Set exactly when the outcome is "stray". */
+  stray?: StrayPayment;
+};
 
 /**
- * Keeps a webhook as received, before anything is done with it. A delivery
- * already applied or ignored is a duplicate; one that failed is processed again.
- */
-export const recordEvent = internalMutation({
-  args: {
-    eventId: v.string(),
-    type: v.string(),
-    rawPayload: v.string(),
-    schemaVersion: v.number(),
-    receivedAt: v.number(),
-  },
-  handler: async (ctx, args): Promise<{ duplicate: boolean }> => {
-    const existing = await ctx.db
-      .query("billingEvents")
-      .withIndex("by_provider_event", (q) => q.eq("provider", "stripe").eq("eventId", args.eventId))
-      .unique();
-    if (existing !== null) {
-      return { duplicate: existing.outcome === "applied" || existing.outcome === "ignored" };
-    }
-    await ctx.db.insert("billingEvents", { provider: "stripe", ...args, outcome: "received" });
-    return { duplicate: false };
-  },
-});
-
-export const finishEvent = internalMutation({
-  args: {
-    eventId: v.string(),
-    outcome: outcomeValidator,
-    error: v.optional(v.string()),
-    accountId: v.optional(v.id("accounts")),
-  },
-  handler: async (ctx, { eventId, outcome, error, accountId }) => {
-    const row = await ctx.db
-      .query("billingEvents")
-      .withIndex("by_provider_event", (q) => q.eq("provider", "stripe").eq("eventId", eventId))
-      .unique();
-    if (row === null) {
-      throw new Error(`finishEvent: billing event ${eventId} was never recorded`);
-    }
-    await ctx.db.patch(row._id, { outcome, error, accountId });
-  },
-});
-
-/**
- * Applies the provider's truth about a subscription: the lifecycle event its
- * standing means, then the provider mirror on the row. A read no newer than
- * the last one applied is stale and changes nothing. An event the lifecycle
- * has no transition for still updates the mirror, so operators see it.
+ * Applies the provider's truth about a subscription the org's row already
+ * follows: from a webhook about it, or the renewal check. Only a paid
+ * checkout of ours binds a new subscription to an org
+ * (completeSubscriptionCheckout), so the provider's metadata alone never
+ * grants anything.
  */
 export const applyProviderSubscription = internalMutation({
   args: { subscription: providerSubscriptionValidator },
-  handler: async (
-    ctx,
-    { subscription: read }
-  ): Promise<{ outcome: "applied" | "ignored"; error?: string; accountId?: Id<"accounts"> }> => {
+  handler: async (ctx, { subscription: read }): Promise<SubscriptionOutcome> => {
     const accountId = ctx.db.normalizeId("accounts", read.accountId);
     if (accountId === null || (await ctx.db.get(accountId)) === null) {
       return { outcome: "ignored", error: `no org ${read.accountId} for subscription ${read.subscriptionRef}` };
     }
-    const subscription = { ...read, accountId };
-    const unknownAddOn = subscription.addOns.find((key) => !Object.keys(ADD_ONS).includes(key));
-    if (unknownAddOn !== undefined) {
-      throw new Error(`Provider subscription ${subscription.subscriptionRef} has unknown add-on ${unknownAddOn}`);
+    return applySubscriptionRead(ctx, { ...read, accountId }, { mayBind: false });
+  },
+});
+
+/**
+ * Applies a paid subscription checkout: the session row names the org, the
+ * subscription it bought is bound to that org, and the session is complete,
+ * in one transaction, so a failure leaves the session open for redelivery.
+ */
+export const completeSubscriptionCheckout = internalMutation({
+  args: { providerSessionId: v.string(), subscription: providerSubscriptionValidator, now: v.number() },
+  handler: async (ctx, { providerSessionId, subscription: read, now }): Promise<SubscriptionOutcome> => {
+    const session = await sessionByProviderId(ctx, providerSessionId);
+    if (session === null || session.state !== "open") {
+      return { outcome: "ignored", error: `session ${providerSessionId} is ${session?.state ?? "not ours"}` };
     }
-    const before = await subscriptionFor(ctx, subscription.accountId);
-    if (before?.providerSyncedAt !== undefined && subscription.observedAt <= before.providerSyncedAt) {
-      return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already", accountId };
+    if (session.purpose.kind !== "subscription") {
+      throw new Error(`completeSubscriptionCheckout: session ${providerSessionId} is for ${session.purpose.kind}`);
     }
+    const accountId = session.purpose.accountId;
+    if (read.accountId !== accountId) {
+      logger.error("billing checkout: subscription names another org than its checkout", {
+        providerSessionId,
+        subscriptionRef: read.subscriptionRef,
+        checkoutAccountId: accountId,
+        subscriptionAccountId: read.accountId,
+      });
+      return {
+        outcome: "stray",
+        error: `subscription ${read.subscriptionRef} names org ${read.accountId}, its checkout was for ${accountId}`,
+        accountId,
+        stray: {
+          subscriptionRef: read.subscriptionRef,
+          customerRef: read.customerRef,
+          amountCents: session.amountCents,
+        },
+      };
+    }
+    const result = await applySubscriptionRead(ctx, { ...read, accountId }, { mayBind: true });
+    await closeSession(ctx, session, "complete", now);
+    // The checkout knows what the stray subscription charged.
+    return result.stray === undefined
+      ? result
+      : { ...result, stray: { ...result.stray, amountCents: session.amountCents } };
+  },
+});
+
+/**
+ * The lifecycle event the provider's standing means, then the provider mirror
+ * on the row. A read no newer than the last one applied is stale and changes
+ * nothing. An event the lifecycle has no transition for still updates the
+ * mirror, so operators see it.
+ */
+async function applySubscriptionRead(
+  ctx: MutationCtx,
+  subscription: SubscriptionRead,
+  { mayBind }: { mayBind: boolean }
+): Promise<SubscriptionOutcome> {
+  const { accountId } = subscription;
+  const unknownAddOn = subscription.addOns.find((key) => !Object.keys(ADD_ONS).includes(key));
+  if (unknownAddOn !== undefined) {
+    throw new Error(`Provider subscription ${subscription.subscriptionRef} has unknown add-on ${unknownAddOn}`);
+  }
+  const before = await subscriptionFor(ctx, accountId);
+  if (before?.providerSubscriptionId !== subscription.subscriptionRef) {
     // The row follows one provider subscription. Another one replaces it only
     // once it has ended, so a late event about an old, ended subscription
-    // can't suspend an org that has subscribed again.
-    if (
-      before?.providerSubscriptionId !== undefined &&
-      before.providerSubscriptionId !== subscription.subscriptionRef &&
-      before.providerStanding !== "ended"
-    ) {
+    // can't suspend an org that has subscribed again. A second live one is a
+    // double charge for an operator to settle, never silently dropped.
+    const followsAnother = before?.providerSubscriptionId !== undefined && before.providerStanding !== "ended";
+    if (followsAnother && subscription.standing !== "ended") {
+      logger.error("billing: a second live subscription for an org", {
+        accountId,
+        subscriptionRef: subscription.subscriptionRef,
+        currentSubscriptionRef: before?.providerSubscriptionId,
+      });
+      return {
+        outcome: "stray",
+        error: `subscription ${subscription.subscriptionRef} is live beside the org's current ${before?.providerSubscriptionId}`,
+        accountId,
+        stray: {
+          subscriptionRef: subscription.subscriptionRef,
+          customerRef: subscription.customerRef,
+          amountCents: null,
+        },
+      };
+    }
+    if (followsAnother || !mayBind) {
       return {
         outcome: "ignored",
-        error: `subscription ${subscription.subscriptionRef} is not the org's current ${before.providerSubscriptionId}`,
+        error: `subscription ${subscription.subscriptionRef} is not the one the org's row follows`,
         accountId,
       };
     }
-    const result = await applyTransition(ctx, {
-      accountId: subscription.accountId,
-      event: lifecycleEventFor(before?.state ?? null, subscription),
-      now: subscription.observedAt,
-      actor: PROVIDER_ACTOR,
-      origin: "signup",
-      provider: providerViewFor(subscription),
+  }
+  if (before?.providerSyncedAt !== undefined && subscription.observedAt <= before.providerSyncedAt) {
+    return { outcome: "ignored", error: "stale: an equal or newer provider read was applied already", accountId };
+  }
+  const result = await applyTransition(ctx, {
+    accountId: subscription.accountId,
+    event: lifecycleEventFor(before?.state ?? null, subscription),
+    now: subscription.observedAt,
+    actor: PROVIDER_ACTOR,
+    origin: "signup",
+    provider: providerViewFor(subscription),
+  });
+  // An illegal event from an org with no row leaves nothing to mirror onto.
+  const row = result.ok ? result.subscription : before;
+  if (row !== null) {
+    await ctx.db.patch(row._id, {
+      interval: subscription.interval,
+      addOns: subscription.addOns,
+      discount: subscription.discount ?? undefined,
+      provider: "stripe",
+      providerCustomerId: subscription.customerRef,
+      providerSubscriptionId: subscription.subscriptionRef,
+      providerStatus: subscription.providerStatus,
+      providerStanding: subscription.standing,
+      providerEndedReason: subscription.endedReason ?? undefined,
+      providerPeriodEnd: subscription.currentPeriodEnd,
+      providerSyncedAt: subscription.observedAt,
     });
-    // An illegal event from an org with no row leaves nothing to mirror onto.
-    const row = result.ok ? result.subscription : before;
-    if (row !== null) {
-      await ctx.db.patch(row._id, {
-        interval: subscription.interval,
-        addOns: subscription.addOns,
-        discount: subscription.discount ?? undefined,
-        provider: "stripe",
-        providerCustomerId: subscription.customerRef,
-        providerSubscriptionId: subscription.subscriptionRef,
-        providerStatus: subscription.providerStatus,
-        providerStanding: subscription.standing,
-        providerEndedReason: subscription.endedReason ?? undefined,
-        providerPeriodEnd: subscription.currentPeriodEnd,
-        providerSyncedAt: subscription.observedAt,
-      });
-    }
-    if (!result.ok) {
-      return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}`, accountId };
-    }
-    return { outcome: "applied", accountId };
-  },
-});
+  }
+  if (!result.ok) {
+    return { outcome: "ignored", error: `${result.error.event} is illegal from ${result.error.from}`, accountId };
+  }
+  return { outcome: "applied", accountId };
+}

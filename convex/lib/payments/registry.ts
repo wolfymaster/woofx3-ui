@@ -10,9 +10,9 @@ const PROVIDERS: Record<PaymentProviderId, ProviderFactory> = {
 
 /** The configured provider. An id with no implementation throws. */
 export function paymentProvider(config: PaymentsConfig, now: () => number = Date.now): PaymentProvider {
-  const factory = PROVIDERS[config.BILLING_PROVIDER];
+  const factory = PROVIDERS[config.PAYMENTS_PROVIDER];
   if (factory === undefined) {
-    throw new Error(`No payment provider "${config.BILLING_PROVIDER}"`);
+    throw new Error(`No payment provider "${config.PAYMENTS_PROVIDER}"`);
   }
   return factory(config, now);
 }

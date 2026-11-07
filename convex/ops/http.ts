@@ -10,7 +10,7 @@ import {
 } from "../lib/ops/billingRequests";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { type AssignmentRow, tallyPlanAccounts } from "../lib/ops/planCounts";
-import { type AccountBillingWrite, matchOpsRoute } from "../lib/ops/routes";
+import { type AccountBillingWrite, matchOpsRoute, PAGE_LIMIT, parsePageLimit } from "../lib/ops/routes";
 import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
 import type { BillingWriteResult } from "./billing";
@@ -149,6 +149,13 @@ export const opsHandler = httpAction(async (ctx, request) => {
     }
     case "notifications.list":
       return ok(await ctx.runQuery(internal.ops.notifications.list, { cursor }));
+    case "payments.strays": {
+      const limit = parsePageLimit(url.searchParams.get("limit"));
+      if (limit === null) {
+        return error(400, "invalid_limit", `limit must be a whole number from 1 to ${PAGE_LIMIT.max}`);
+      }
+      return ok(await ctx.runQuery(internal.ops.reads.listStrayPayments, { cursor, limit }));
+    }
     case "notifications.create": {
       const body = await request.json().catch(() => null);
       const parsed = parseNotificationRequest(body);

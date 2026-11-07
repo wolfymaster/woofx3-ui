@@ -227,6 +227,36 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
   };
 }
 
+/** A live provider subscription an org's row doesn't follow, for an operator to settle at the provider. */
+export interface StrayPaymentDto {
+  eventId: string;
+  type: string;
+  /** Null when the org no longer exists. */
+  account: { id: string; name: string } | null;
+  subscriptionRef: string;
+  customerRef: string;
+  /** What the checkout charged, in cents; null when the stray did not come through one of our checkouts. */
+  amountCents: number | null;
+  detail: string | null;
+  at: number;
+}
+
+export function strayPaymentDto(event: Doc<"paymentEvents">, account: Doc<"accounts"> | null): StrayPaymentDto {
+  if (event.stray === undefined) {
+    throw new Error(`strayPaymentDto: payment event ${event.eventId} has no stray details`);
+  }
+  return {
+    eventId: event.eventId,
+    type: event.type,
+    account: account === null ? null : { id: account._id, name: account.name },
+    subscriptionRef: event.stray.subscriptionRef,
+    customerRef: event.stray.customerRef,
+    amountCents: event.stray.amountCents,
+    detail: event.error ?? null,
+    at: event.receivedAt,
+  };
+}
+
 export interface NotificationDto {
   id: string;
   heading: string;
