@@ -1,5 +1,4 @@
 import type { DashboardEntry } from "@convex/access";
-import type { LifecycleReason } from "@convex/lib/billingLifecycle";
 import { PauseCircle } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -7,7 +6,9 @@ import { IS_DESKTOP } from "@/lib/desktop";
 
 const BILLING_PATH = "/org/billing";
 
-const REASON_TEXT: Record<LifecycleReason, string> = {
+type SuspendedEntry = Extract<DashboardEntry, { kind: "suspended" }>;
+
+const REASON_TEXT: Record<SuspendedEntry["reason"], string> = {
   no_payment_method: "The trial ended without a payment method.",
   payment_failed: "A payment didn't go through.",
   subscription_canceled: "The subscription was cancelled.",
@@ -20,7 +21,7 @@ const REASON_TEXT: Record<LifecycleReason, string> = {
  * The owner can reactivate from Billing; everyone else is told who can. The
  * desktop app never shows billing, so there it only explains.
  */
-export function SuspendedEngine({ entry }: { entry: Extract<DashboardEntry, { kind: "suspended" }> }) {
+export function SuspendedEngine({ entry }: { entry: SuspendedEntry }) {
   const owner = entry.ownerName ?? "the organization's owner";
   return (
     <div className="max-w-lg mx-auto p-6">
