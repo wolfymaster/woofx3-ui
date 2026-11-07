@@ -5,7 +5,7 @@ import { type MutationCtx, mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
-import { orgRoleOf } from "./lib/orgRoles";
+import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import { getInstanceMembership, grantEngineRole, type TeamMemberDto, toTeamMemberDto } from "./lib/teamAccess";
 
 // An engine's team: who can open this engine and with which engine role. The
@@ -15,7 +15,10 @@ import { getInstanceMembership, grantEngineRole, type TeamMemberDto, toTeamMembe
 /** This engine's members with their engine and org roles, or null for a caller who isn't one. */
 export const listForEngine = query({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<{ members: TeamMemberDto[]; canManage: boolean } | null> => {
+  handler: async (
+    ctx,
+    { instanceId }
+  ): Promise<{ members: TeamMemberDto[]; canManage: boolean; canManageOrganization: boolean } | null> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       return null;
@@ -40,7 +43,11 @@ export const listForEngine = query({
         members.push(toTeamMemberDto(user, row, await orgRoleOf(ctx, account, row.userId)));
       }
     }
-    return { members, canManage: roleSatisfies(own.role, "admin") };
+    return {
+      members,
+      canManage: roleSatisfies(own.role, "admin"),
+      canManageOrganization: orgCan(await orgRoleOf(ctx, account, userId), "manageMembers"),
+    };
   },
 });
 

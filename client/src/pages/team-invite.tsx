@@ -37,7 +37,7 @@ function inviteUrl(token: string): string {
 }
 
 /**
- * Invites one person to the account's team, by Twitch username or by email.
+ * Invites one person to the current engine's team, by Twitch username or by email.
  * A Twitch invite is only created after the inviter has seen who the name
  * belongs to, so a typo cannot hand access to a stranger.
  */
@@ -118,7 +118,7 @@ export default function TeamInvite() {
     return (
       <div className="p-6 lg:p-8 max-w-2xl mx-auto">
         <PageHeader title="Invite a team member" actions={backLink} />
-        <p className="text-sm text-muted-foreground">No instance available yet.</p>
+        <p className="text-sm text-muted-foreground">No engine available yet.</p>
       </div>
     );
   }
@@ -307,8 +307,8 @@ function RoleField({ role, onChange }: { role: InviteRole; onChange: (role: Invi
       </Select>
       <p className="text-xs text-muted-foreground">
         {role === "admin"
-          ? "Can manage team settings and members."
-          : "Can use workflows, assets, and engine features for this account."}
+          ? "Can manage this engine, its settings and its team."
+          : "Can use this engine's alerts, scenes, media and other features."}
       </p>
     </div>
   );
