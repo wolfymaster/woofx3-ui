@@ -1,0 +1,25 @@
+id: WUI-CPY-001
+language: tsx
+severity: warning
+message: Visible copy says "instance" where it means an engine.
+rule:
+  regex: \b[Ii]nstances?\b
+  not:
+    regex: ([Rr]esource|[Rr]untime|[Ff]orm|[Ww]idget|[Mm]odule) instances?\b|[Nn]o instances yet|instances? of
+  any:
+    - kind: jsx_text
+    - kind: string_fragment
+      inside:
+        kind: string
+        stopBy: neighbor
+        inside:
+          stopBy: neighbor
+          any:
+            - kind: jsx_attribute
+              has:
+                kind: property_identifier
+                regex: ^(title|description|placeholder|label|alt|aria-label|tooltip)$
+            - kind: pair
+              has:
+                field: key
+                regex: ^(title|description|message|subtitle|label)$
