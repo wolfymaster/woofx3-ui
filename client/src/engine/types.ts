@@ -341,19 +341,10 @@ export interface EngineAlert {
   payload?: string;
   workflowId?: string;
   sourceEventId?: string;
-  engineStatus?: string;
-  envelopeId?: string;
-  dispatchedAt?: string;
-  playedAt?: string;
-  completedAt?: string;
   error?: string;
   engineCreatedAt?: string;
-  engineUpdatedAt?: string;
-  engineVersion?: number;
   /** Epoch ms the dashboard first heard of the alert. */
   createdAt: number;
-  /** Epoch ms of the last callback that moved the alert on. */
-  progressedAt?: number;
   /** Epoch ms the alert was marked unconfirmed for going quiet mid-flight. */
   unconfirmedAt?: number;
 }

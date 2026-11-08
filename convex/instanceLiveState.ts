@@ -141,6 +141,40 @@ export const recordPoll = internalMutation({
     }
   },
 });
+/**
+ * Settles the live state of an instance whose engine cannot be polled. A row
+ * whose instance is gone is deleted, and one whose instance has no engine
+ * credentials is recorded as not live. Left alone, the sweep re-polls every
+ * live row, so either would be polled forever. No offline snapshot is
+ * scheduled: there is no engine to read one from.
+ */
+export const settleUnpollable = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const existing = await ctx.db
+      .query("instanceLiveState")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (!existing) {
+      return;
+    }
+    if (!(await ctx.db.get(instanceId))) {
+      await ctx.db.delete(existing._id);
+      return;
+    }
+    if (existing.isLive) {
+      await ctx.db.patch(existing._id, {
+        isLive: false,
+        startedAt: undefined,
+        streamTitle: undefined,
+        gameName: undefined,
+        viewerCount: undefined,
+        lastUpdateSource: "poll",
+        lastUpdatedAt: Date.now(),
+      });
+    }
+  },
+});
 
 const applySessionStartedArgs = {
   instanceId: v.id("instances"),
