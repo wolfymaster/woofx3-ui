@@ -17,6 +17,7 @@ export const syncInstanceLiveState = internalAction({
   handler: async (ctx, args): Promise<boolean> => {
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
     if (!instance?.clientId || !instance?.clientSecret) {
+      await ctx.runMutation(internal.instanceLiveState.settleUnpollable, { instanceId: args.instanceId });
       return false;
     }
 
@@ -33,7 +34,11 @@ export const syncInstanceLiveState = internalAction({
         viewerCount: status.viewerCount,
       });
       return true;
-    } catch {
+    } catch (err) {
+      // An unreachable engine stays live and is polled again: an outage is
+      // usually brief, and one failed poll recording a live stream as offline
+      // would show it offline and schedule its offline snapshot.
+      console.warn("[syncInstanceLiveState] engine poll failed", err);
       return false;
     }
   },

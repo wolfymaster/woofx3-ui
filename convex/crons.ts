@@ -18,7 +18,12 @@ crons.interval(
   internal.workflowInternal.sweepExpiredPending
 );
 
-crons.interval("engine sync sweep", { minutes: ENGINE_SYNC_CONFIG.sweepIntervalMinutes }, internal.engineSync.sweep);
+crons.interval(
+  "engine sync sweep",
+  { minutes: ENGINE_SYNC_CONFIG.sweepIntervalMinutes },
+  internal.engineSync.sweep,
+  {}
+);
 
 crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engineSyncInternal.cleanupOldRuns);
 
@@ -29,6 +34,10 @@ crons.interval("transient event sweep", { minutes: 1 }, internal.transientEvents
 crons.interval("engine event receipt cleanup", { hours: 24 }, internal.engineEvents.cleanupOldReceipts, {});
 
 crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLog.cleanupOld);
+
+crons.interval("workflow run history cleanup", { hours: 24 }, internal.workflowRuns.cleanupOld, {});
+
+crons.interval("workflow run orphan step cleanup", { hours: 24 }, internal.workflowRuns.cleanupOrphanSteps, {});
 
 // Alerts carry viewer names and messages; past the engine's detail retention
 // nothing reads them.
