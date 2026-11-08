@@ -5,7 +5,7 @@
 
 ## Purpose
 
-One keyboard-first way to reach every page, find any item on the instance by name, and
+One keyboard-first way to reach every page, find any item on the engine by name, and
 run the things a streamer does mid-stream without leaving the page they are on. Anything
 a power user repeats should be a few keystrokes from ⌘K.
 
@@ -15,7 +15,7 @@ a power user repeats should be a few keystrokes from ⌘K.
 |--------|------|---------|
 | Navigation | `navigation-commands.ts` | Every destination in `nav-config.ts` (read from it, not listed again), plus Command groups and the *Create* entries: new workflow, command, command group, module upload, asset upload, teammate invite |
 | Items | `use-item-commands.ts` | Workflows, chat commands, command groups, counters, timers, queues, scenes, installed modules, recent stream recaps, alert sections, macros and stream-info presets |
-| Actions | `use-action-commands.ts` | Clip, marker, stream title, snooze ad, skip / clear alerts; chat message, announcement, pin, shoutout; timeout, ban, unban, chat modes; theme, sidebar, command bar, rename / switch instance, copy instance id, sign out |
+| Actions | `use-action-commands.ts` | Clip, marker, stream title, snooze ad, skip / clear alerts; chat message, announcement, pin, shoutout; timeout, ban, unban, chat modes; theme, sidebar, command bar, rename / switch engine, copy engine id, sign out |
 
 Items carry their own actions as `children`: enable / disable a workflow or command,
 step / set / reset a counter, start / pause / add time to a timer, next / add / remove /
@@ -28,7 +28,7 @@ Macros that ask for variables, or that call a URL from the browser, stay on the 
 pad: the palette has no form for their inputs.
 
 The palette's content mounts only while it is open, so its queries (about fifteen,
-instance-scoped) run only while it is in use.
+engine-scoped) run only while it is in use.
 
 ## Using it
 

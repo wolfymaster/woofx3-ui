@@ -30,7 +30,7 @@ everything comes from the shared registry in `shared/user-pages/`.
   type has a settings form in `components/user-page/widget-config-form.tsx`; the
   switch there is exhaustive, so a new registry type does not type-check until
   it has one. Counter, timer and form widgets bind a resource through a picker of the
-  instance's resources of the kind the registry entry binds.
+  engine's resources of the kind the registry entry binds.
 
 ## Forms
 
