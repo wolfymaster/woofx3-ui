@@ -1,6 +1,7 @@
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
+import { TWITCH_SIGN_IN_STATE_SWEEP } from "./lib/twitchSignIn";
 
 const crons = cronJobs();
 
@@ -25,6 +26,15 @@ crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engine
 // Transient events live about a minute; one sweep a minute deletes them all,
 // however many were written, instead of one scheduled delete per row.
 crons.interval("transient event sweep", { minutes: 1 }, internal.transientEvents.sweepExpired, {});
+
+// Streamer sign-in starts are anonymous, so abandoned states are swept in
+// batches instead of one scheduled delete per start.
+crons.interval(
+  "twitch sign-in state sweep",
+  { minutes: TWITCH_SIGN_IN_STATE_SWEEP.intervalMinutes },
+  internal.twitchAuth.sweepExpiredStates,
+  {}
+);
 
 crons.interval("engine event receipt cleanup", { hours: 24 }, internal.engineEvents.cleanupOldReceipts, {});
 

@@ -10,6 +10,7 @@ import {
   oauthErrorCodeValidator,
   signInClientValidator,
   TWITCH_PENDING_SIGN_IN_TTL_MS,
+  TWITCH_SIGN_IN_STATE_SWEEP,
   TWITCH_SIGN_IN_STATE_TTL_MS,
 } from "./lib/twitchSignIn";
 
@@ -42,7 +43,7 @@ export const storeState = internalMutation({
     if (signInClient === "desktop" && nonceHash !== undefined && (await desktopNonceHashInUse(ctx, nonceHash))) {
       return "nonce_in_use";
     }
-    const id = await ctx.db.insert("twitchOAuthState", {
+    await ctx.db.insert("twitchOAuthState", {
       state,
       // The callback page navigates here after Twitch answers.
       redirectTo: safeRelativePath(redirectTo),
@@ -52,8 +53,6 @@ export const storeState = internalMutation({
       signInClient,
       createdAt: Date.now(),
     });
-    // A flow abandoned on Twitch's page never reaches the callback that deletes it.
-    await ctx.scheduler.runAfter(TWITCH_SIGN_IN_STATE_TTL_MS, internal.twitchAuth.expireState, { id });
     return "stored";
   },
 });
@@ -73,12 +72,28 @@ async function desktopNonceHashInUse(ctx: MutationCtx, nonceHash: string): Promi
   return outcome !== null;
 }
 
-export const expireState = internalMutation({
-  args: { id: v.id("twitchOAuthState") },
-  handler: async (ctx, { id }) => {
-    if (await ctx.db.get(id)) {
-      await ctx.db.delete(id);
+/**
+ * Deletes states older than their lifetime, oldest first. A flow abandoned on
+ * Twitch's page never reaches the callback that deletes its row. Runs on a
+ * short cron (see crons.ts) and continues in further passes while a batch
+ * comes back full. The callback refuses an expired row by its own clock, so
+ * the sweep only bounds storage.
+ */
+export const sweepExpiredStates = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - TWITCH_SIGN_IN_STATE_TTL_MS;
+    const expired = await ctx.db
+      .query("twitchOAuthState")
+      .withIndex("by_created_at", (q) => q.lt("createdAt", cutoff))
+      .take(TWITCH_SIGN_IN_STATE_SWEEP.batchSize);
+    for (const row of expired) {
+      await ctx.db.delete(row._id);
     }
+    if (expired.length === TWITCH_SIGN_IN_STATE_SWEEP.batchSize) {
+      await ctx.scheduler.runAfter(0, internal.twitchAuth.sweepExpiredStates, {});
+    }
+    return expired.length;
   },
 });
 
