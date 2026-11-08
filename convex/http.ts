@@ -12,6 +12,7 @@ import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from ".
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { engineActivityPatch } from "./lib/engineSync/activity";
+import { inboundWebhookRateLimiter } from "./lib/inboundWebhookLimits";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
   buildForwardedRequest,
@@ -50,6 +51,7 @@ import { registerUserPageFormRoutes } from "./userPageFormsHttp";
 import { registerViewerAuthRoutes } from "./viewerAuthHttp";
 import "./browserSource";
 import "./moduleWebhook";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 
 const http = httpRouter();
 
@@ -260,6 +262,7 @@ http.route({
     logger.info("state valid, exchanging code", { isIntegration: !!instanceId });
 
     const tokenRes = await fetch("https://id.twitch.tv/oauth2/token", {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -282,6 +285,7 @@ http.route({
     logger.info("token exchange ok");
 
     const userRes = await fetch("https://api.twitch.tv/helix/users", {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         "Client-Id": process.env.AUTH_TWITCH_ID,
@@ -440,8 +444,24 @@ http.route({
   path: "/api/webhooks/woofx3",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    // Checked before the body is read: an anonymous caller gets a 401, not a parse or a log line.
+    const authHeader = request.headers.get("Authorization");
+    const providedSecret = authHeader?.replace("Bearer ", "");
+    if (!providedSecret) {
+      logger.warn("webhook: missing Authorization header");
+      return corsJson({ error: "Missing Authorization header" }, 401);
+    }
+
     const body = await request.text();
-    const payload = JSON.parse(body);
+    let payload: { type?: string; data?: { type?: string } };
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      return corsJson({ error: "Body must be JSON" }, 400);
+    }
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      return corsJson({ error: "Body must be a JSON object" }, 400);
+    }
 
     logger.info("webhook: incoming request", {
       type: payload.type,
@@ -449,16 +469,9 @@ http.route({
     });
 
     if (!payload.type) {
-      logger.warn("webhook: missing type field", { payload: body });
+      // Field names only: the body may carry anything the sender chose.
+      logger.warn("webhook: missing type field", { fields: Object.keys(payload) });
       return corsJson({ error: "Missing required field: type" }, 400);
-    }
-
-    // Validate webhook secret (callbackToken) via Bearer token
-    const authHeader = request.headers.get("Authorization");
-    const providedSecret = authHeader?.replace("Bearer ", "");
-    if (!providedSecret) {
-      logger.warn("webhook: missing Authorization header");
-      return corsJson({ error: "Missing Authorization header" }, 401);
     }
 
     // An engine on the maintenance event queue sends its events there; one
@@ -800,6 +813,13 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
   const endpoint = await ctx.runQuery(internal.inboundWebhooks.getByEndpointId, { endpointId: path.endpointId });
   if (!endpoint || !endpoint.isEnabled) {
     return new Response(null, { status: 404 });
+  }
+  const limit = await inboundWebhookRateLimiter.limit(ctx, "inboundWebhookDelivery", { key: endpoint._id });
+  if (!limit.ok) {
+    return new Response(null, {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil(limit.retryAfter / 1000)) },
+    });
   }
 
   if (Number(request.headers.get("content-length") ?? "0") > MAX_INBOUND_BODY_BYTES) {
