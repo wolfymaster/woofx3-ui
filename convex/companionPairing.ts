@@ -570,7 +570,7 @@ export const linkSignedInApp = mutation({
     }
     const instance = await ctx.db.get(args.instanceId);
     if (!instance) {
-      throw new ConvexError("This instance no longer exists.");
+      throw new ConvexError("This engine no longer exists.");
     }
     const { ok } = await rateLimiter.limit(ctx, "companionAppLink", { key: userId });
     if (!ok) {

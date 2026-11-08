@@ -115,7 +115,7 @@ export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: Tw
               <AlertDialogTitle>Disconnect Twitch</AlertDialogTitle>
               <AlertDialogDescription>
                 Are you sure you want to disconnect your Twitch account? This will stop all Twitch-related actions and
-                triggers for this instance.
+                triggers for this engine.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

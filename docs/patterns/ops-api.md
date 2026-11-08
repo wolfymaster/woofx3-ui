@@ -2,7 +2,7 @@
 
 ## Context
 
-The internal backoffice (woofx3-maintenance `backoffice/`) shows operators managed engines from the maintenance API. It also needs the users, accounts and instances behind them, and later has to change plans and act on customer engines. None of that is reachable from outside Convex:
+The internal backoffice (woofx3-maintenance `backoffice/`) shows operators managed engines from the maintenance API. It also needs the users, accounts and engines behind them, and later has to change plans and act on customer engines. None of that is reachable from outside Convex:
 
 - Public functions are gated by Convex Auth and per-tenant roles. Adding a staff role to `users` would let a bug or a role change in this app turn a customer into an operator.
 - A deploy key can push code and read or write every table. That is far too much for a web app to hold.

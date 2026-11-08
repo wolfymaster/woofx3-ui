@@ -219,7 +219,7 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
     <Card>
       <CardHeader>
         <CardTitle>Pair the woofx3 desktop app</CardTitle>
-        <CardDescription>A woofx3 desktop app is asking to connect to one of your instances.</CardDescription>
+        <CardDescription>A woofx3 desktop app is asking to connect to one of your engines.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-lg border bg-muted/40 py-4 text-center">
@@ -253,15 +253,15 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
           <ShieldAlert className="h-4 w-4" />
           <AlertDescription>
             Only approve this if you started pairing on your own computer just now. An approved app can act on this
-            instance.
+            engine.
           </AlertDescription>
         </Alert>
 
         {instances.length === 0 ? (
           <div className="space-y-2 text-sm" data-testid="text-no-instances">
-            <p>You need to be an admin of an instance to pair a companion.</p>
+            <p>You need to be an admin of an engine to pair a companion.</p>
             <p className="text-muted-foreground">
-              No instance yet?{" "}
+              No engine yet?{" "}
               <Link href="/auth/onboarding" className="text-primary hover:underline">
                 Set one up
               </Link>
@@ -271,10 +271,10 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
         ) : (
           <>
             <div className="space-y-1">
-              <Label htmlFor="pair-instance">Instance</Label>
+              <Label htmlFor="pair-instance">Engine</Label>
               <Select value={instanceId ?? undefined} onValueChange={(value) => setChosen(value as Id<"instances">)}>
                 <SelectTrigger id="pair-instance" data-testid="select-instance">
-                  <SelectValue placeholder="Choose an instance" />
+                  <SelectValue placeholder="Choose an engine" />
                 </SelectTrigger>
                 <SelectContent>
                   {instances.map((instance) => (
@@ -304,7 +304,7 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
                     {replacement.lastSeenAt === null
                       ? "never"
                       : formatDistanceToNow(new Date(replacement.lastSeenAt), { addSuffix: true })}
-                    . An instance has one desktop app; that computer is unpaired at once.
+                    . An engine has one desktop app; that computer is unpaired at once.
                   </p>
                   <div className="flex items-start gap-2">
                     <Checkbox

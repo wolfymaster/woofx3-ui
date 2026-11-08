@@ -104,7 +104,7 @@ export function NotesWidget() {
   if (!instanceId) {
     return (
       <div className="h-full flex items-center justify-center p-4 text-sm text-muted-foreground">
-        Select an instance to take notes.
+        Select an engine to take notes.
       </div>
     );
   }
@@ -115,7 +115,7 @@ export function NotesWidget() {
         ref={textareaRef}
         value={draft ?? ""}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder="Anything worth remembering this stream… Everyone on this account sees these notes."
+        placeholder="Anything worth remembering this stream… Everyone on this engine sees these notes."
         className="flex-1 min-h-0 resize-none border-0 rounded-none focus-visible:ring-0 text-sm"
         data-testid="input-dashboard-notes"
       />

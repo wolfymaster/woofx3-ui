@@ -477,7 +477,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
         <EmptyState
           icon={WorkflowIcon}
           title="Workflow not found"
-          description="It may have been deleted, or it belongs to another instance."
+          description="It may have been deleted, or it belongs to another engine."
           action={{ label: "Back to workflows", onClick: () => navigate(LIST_PATH) }}
         />
       </div>

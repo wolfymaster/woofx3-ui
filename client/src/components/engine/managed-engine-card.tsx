@@ -171,7 +171,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-muted-foreground">
-          This instance is managed, but no provisioning record exists for it.
+          This engine is managed, but no provisioning record exists for it.
         </CardContent>
       </Card>
     );

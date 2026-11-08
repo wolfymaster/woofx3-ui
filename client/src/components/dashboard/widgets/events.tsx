@@ -102,7 +102,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-2 space-y-0.5">
           {!instanceId ? (
-            <EmptyFeed>No instance connected</EmptyFeed>
+            <EmptyFeed>No engine connected</EmptyFeed>
           ) : rows.length === 0 && loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

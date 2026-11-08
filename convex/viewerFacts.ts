@@ -22,7 +22,7 @@ export const list = action({
     await requireInstanceRoleInAction(ctx, instanceId);
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance?.clientId || !instance.clientSecret) {
-      throw new ConvexError("This instance is not registered with an engine");
+      throw new ConvexError("This engine is not registered yet");
     }
     try {
       const raw = await createEngineRpcSession<ViewerFactsApi>(

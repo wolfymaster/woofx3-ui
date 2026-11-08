@@ -13,7 +13,7 @@ const EngineScopeContext = createContext<EngineScope | null>(null);
  */
 export class NoInstanceSelectedError extends Error {
   constructor() {
-    super("No instance is selected, so there is no engine to ask");
+    super("No engine is selected, so there is nothing to ask");
     this.name = "NoInstanceSelectedError";
   }
 }

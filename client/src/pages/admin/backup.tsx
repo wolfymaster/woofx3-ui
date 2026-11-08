@@ -497,7 +497,7 @@ function ImportCard({ canImport }: { canImport: boolean }) {
       <CardContent className="space-y-6">
         {!canImport && (
           <Alert>
-            <AlertDescription>Only owners and admins of this instance can import a backup.</AlertDescription>
+            <AlertDescription>Only owners and admins of this engine can import a backup.</AlertDescription>
           </Alert>
         )}
 
@@ -639,7 +639,7 @@ export default function AdminBackup() {
       {isLoading || (instance && access === undefined) ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       ) : !instance || !engineInstanceId || !access?.canExport ? (
-        <p className="text-sm text-muted-foreground">Select an instance you are a member of to back it up.</p>
+        <p className="text-sm text-muted-foreground">Select an engine you are a member of to back it up.</p>
       ) : (
         <>
           <ExportCard instanceName={instance.name} canExportMembers={access.canExportMembers} />

@@ -220,7 +220,7 @@ describe("first run", () => {
           .first(),
       };
     });
-    expect(facts.instance).toBe("Wolfy_Master's Instance");
+    expect(facts.instance).toBe("Wolfy_Master's Engine");
     expect(facts.account).toBe("Wolfy_Master");
     expect(facts.user).toBe("Wolfy_Master");
     expect(facts.setup?.completedAt).toBeDefined();
@@ -268,7 +268,7 @@ describe("first run", () => {
       const accountId = await ctx.db.insert("accounts", { name: "Streamer", ownerId: userId, createdAt: 1 });
       const instanceId = await ctx.db.insert("instances", {
         accountId,
-        name: "Streamer's Instance",
+        name: "Streamer's Engine",
         url: "https://engine.example",
         hosting: "managed",
         clientId: "client",

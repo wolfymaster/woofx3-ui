@@ -561,10 +561,10 @@ export function useActionCommands(
       result.push(
         {
           id: "app:rename-instance",
-          title: "Rename instance…",
+          title: "Rename engine…",
           kind: "action",
           group: APP_GROUP,
-          keywords: ["instance name"],
+          keywords: ["engine name"],
           icon: Pencil,
           action: {
             type: "prompt",
@@ -573,14 +573,14 @@ export function useActionCommands(
               submitLabel: (text) => `Rename to “${text}”`,
               run: async (text) => {
                 await renameInstance({ instanceId: current._id, name: text.trim() });
-                return "Instance renamed";
+                return "Engine renamed";
               },
             },
           },
         },
         {
           id: "app:copy-instance-id",
-          title: "Copy instance ID",
+          title: "Copy engine ID",
           kind: "action",
           group: APP_GROUP,
           keywords: ["clipboard", "debug", "support"],
@@ -589,7 +589,7 @@ export function useActionCommands(
             type: "run",
             run: async () => {
               await navigator.clipboard.writeText(current._id);
-              return "Instance ID copied";
+              return "Engine ID copied";
             },
           },
         }
@@ -602,7 +602,7 @@ export function useActionCommands(
         title: candidate.name,
         kind: "action",
         group: APP_GROUP,
-        subtitle: "Switch instance",
+        subtitle: "Switch engine",
         keywords: ["instance", "switch", "workspace"],
         meta: candidate._id === instanceId ? "Current" : undefined,
         icon: Server,
@@ -618,7 +618,7 @@ export function useActionCommands(
       result.push(
         {
           id: "app:switch-instance",
-          title: "Switch instance…",
+          title: "Switch engine…",
           kind: "action",
           group: APP_GROUP,
           keywords: ["workspace", "engine", "account"],
