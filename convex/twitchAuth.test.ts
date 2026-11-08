@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import { newBackend } from "./lib/convexTest.testing";
 import { generateOpaqueToken, hashOpaqueToken } from "./lib/oauthHandoff";
-import { type SignInClient, TWITCH_PENDING_SIGN_IN_TTL_MS } from "./lib/twitchSignIn";
+import {
+  type SignInClient,
+  TWITCH_PENDING_SIGN_IN_TTL_MS,
+  TWITCH_SIGN_IN_STATE_SWEEP,
+  TWITCH_SIGN_IN_STATE_TTL_MS,
+} from "./lib/twitchSignIn";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -167,5 +172,56 @@ describe("web sign-in", () => {
     await expect(
       t.mutation(internal.twitchAuth.storeState, { state: generateOpaqueToken(), redirectTo: "/", nonceHash })
     ).rejects.toThrow("names the client");
+  });
+});
+
+describe("sign-in state expiry", () => {
+  const nonceHash = "a".repeat(64);
+  const insertState = (t: Backend, state: string, age: number) =>
+    t.run((ctx) =>
+      ctx.db.insert("twitchOAuthState", { state, redirectTo: "/", nonceHash, createdAt: Date.now() - age })
+    );
+  const states = (t: Backend) => t.run((ctx) => ctx.db.query("twitchOAuthState").collect());
+  const sweepJobs = (t: Backend) =>
+    t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter((job) =>
+        job.name.includes("sweepExpiredStates")
+      )
+    );
+
+  test("the callback refuses an expired state the sweep has not deleted yet", async () => {
+    const t = newBackend();
+    await insertState(t, "old", TWITCH_SIGN_IN_STATE_TTL_MS + 1);
+
+    expect(await t.mutation(internal.twitchAuth.validateAndConsumeState, { state: "old" })).toBeNull();
+    expect(await states(t)).toEqual([]);
+  });
+
+  test("starting a sign-in schedules no per-row job", async () => {
+    const t = newBackend();
+    await startSignIn(t, "web");
+
+    expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toEqual([]);
+  });
+
+  test("the sweep deletes expired states and keeps live ones", async () => {
+    const t = newBackend();
+    await insertState(t, "old", TWITCH_SIGN_IN_STATE_TTL_MS + 1);
+    await insertState(t, "fresh", 1000);
+
+    expect(await t.mutation(internal.twitchAuth.sweepExpiredStates, {})).toBe(1);
+    expect((await states(t)).map((row) => row.state)).toEqual(["fresh"]);
+    expect(await sweepJobs(t)).toEqual([]);
+  });
+
+  test("the sweep schedules another pass when a batch comes back full", async () => {
+    const t = newBackend();
+    for (let i = 0; i < TWITCH_SIGN_IN_STATE_SWEEP.batchSize + 1; i++) {
+      await insertState(t, `old-${i}`, TWITCH_SIGN_IN_STATE_TTL_MS + 1);
+    }
+
+    expect(await t.mutation(internal.twitchAuth.sweepExpiredStates, {})).toBe(TWITCH_SIGN_IN_STATE_SWEEP.batchSize);
+    expect(await states(t)).toHaveLength(1);
+    expect(await sweepJobs(t)).toHaveLength(1);
   });
 });

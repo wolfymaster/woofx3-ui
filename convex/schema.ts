@@ -1339,7 +1339,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_state", ["state"])
-    .index("by_nonce_hash", ["nonceHash"]),
+    .index("by_nonce_hash", ["nonceHash"])
+    .index("by_created_at", ["createdAt"]),
 
   // twitchPendingAuth: one-time token bridging Convex HTTP callback → frontend signIn
   twitchPendingAuth: defineTable({
