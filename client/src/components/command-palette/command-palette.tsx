@@ -344,7 +344,7 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
         )}
         <CommandInput value={query} onValueChange={changeQuery} placeholder={placeholder} data-testid="palette-input" />
         <CommandList className="max-h-[min(60vh,440px)]">
-          <CommandEmpty>{instance ? "Nothing matches." : "Nothing matches — pick an instance for more."}</CommandEmpty>
+          <CommandEmpty>{instance ? "Nothing matches." : "Nothing matches — pick an engine for more."}</CommandEmpty>
           {sections.map((section, sectionIndex) => (
             <div key={section.heading}>
               {sectionIndex > 0 && <CommandSeparator />}

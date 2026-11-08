@@ -18,7 +18,7 @@ export function StorefrontError({ message, onRetry }: { message: string; onRetry
       <div className="space-y-1">
         <p className="text-base font-semibold">The marketplace isn't answering</p>
         <p className="max-w-md text-sm text-muted-foreground">
-          Nothing is wrong with your instance — the store is a separate service. Try again in a moment.
+          Nothing is wrong with your engine — the store is a separate service. Try again in a moment.
         </p>
       </div>
       <Button size="sm" variant="outline" onClick={onRetry}>
@@ -66,7 +66,7 @@ export function StorefrontEmptyCatalog() {
       <div className="space-y-1">
         <p className="text-base font-semibold">The store is being stocked</p>
         <p className="max-w-md text-sm text-muted-foreground">
-          No listings are published to your instance yet. Modules, themes, emotes, overlays and alerts all land here.
+          No listings are published to your engine yet. Modules, themes, emotes, overlays and alerts all land here.
         </p>
       </div>
     </div>

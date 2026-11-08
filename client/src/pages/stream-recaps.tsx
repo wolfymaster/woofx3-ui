@@ -68,7 +68,7 @@ export default function StreamRecaps() {
 
   let content: React.ReactNode;
   if (!isInstanceLoading && !instanceId) {
-    content = <p className="py-16 text-center text-sm text-muted-foreground">No instance connected.</p>;
+    content = <p className="py-16 text-center text-sm text-muted-foreground">No engine connected.</p>;
   } else if (rows === undefined) {
     content = (
       <div className="flex justify-center py-16">

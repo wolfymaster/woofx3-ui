@@ -104,7 +104,7 @@ describe("backupFileName", () => {
   });
 
   it("falls back when nothing of the name survives", () => {
-    expect(backupFileName("***", new Date(2026, 0, 1))).toBe("woofx3-backup-instance-2026-01-01.json");
+    expect(backupFileName("***", new Date(2026, 0, 1))).toBe("woofx3-backup-engine-2026-01-01.json");
   });
 });
 

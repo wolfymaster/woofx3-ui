@@ -57,8 +57,8 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
     return (
       <EmptyState
         icon={BellRing}
-        title="No instance connected"
-        description="Pick an instance from the workspace switcher to see what its alerts have been doing."
+        title="No engine connected"
+        description="Pick an engine from the workspace switcher to see what its alerts have been doing."
       />
     );
   }
@@ -72,7 +72,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
       <EmptyState
         icon={BellRing}
         title="Alerts are not readable here"
-        description="This account does not have access to the selected instance. Pick another from the workspace switcher."
+        description="This account does not have access to the selected engine. Pick another from the workspace switcher."
       />
     );
   }

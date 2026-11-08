@@ -217,7 +217,7 @@ export class BrowserTransport implements WoofxTransport {
 
   private getApi(): BrowserEngineApi {
     if (!this.session) {
-      throw new Error("Not connected to woofx3 instance");
+      throw new Error("Not connected to woofx3 engine");
     }
     return this.session.api;
   }

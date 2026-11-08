@@ -99,7 +99,7 @@ function SignedInAppLink() {
       </button>
       {view.kind === "failed" ? (
         <>
-          <p className="pr-6 text-sm font-medium">This computer could not connect to your instance</p>
+          <p className="pr-6 text-sm font-medium">This computer could not connect to your engine</p>
           <p className="mt-1 text-sm text-muted-foreground">{view.message}</p>
           <div className="mt-3 flex justify-end">
             <Button

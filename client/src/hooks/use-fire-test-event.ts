@@ -46,8 +46,8 @@ export function useFireTestEvent() {
     if (!instanceId) {
       toast({
         variant: "destructive",
-        title: "No instance selected",
-        description: "Pick an instance from the workspace switcher before firing test events.",
+        title: "No engine selected",
+        description: "Pick an engine from the workspace switcher before firing test events.",
       });
       return null;
     }
