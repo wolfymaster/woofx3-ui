@@ -186,9 +186,9 @@ function toWorkflowRunAlert(snapshot: AlertSnapshot, now: number): WorkflowRunAl
     status: alert.status,
     payload: alert.payload,
     error: alert.error,
-    dispatchedAt: alert.dispatchedAt,
-    playedAt: alert.playedAt,
-    completedAt: alert.completedAt,
+    dispatchedAt: snapshot.dispatchedAt,
+    playedAt: snapshot.playedAt,
+    completedAt: snapshot.completedAt,
     engineCreatedAt: alert.engineCreatedAt,
     unconfirmedAt: alert.unconfirmedAt,
   };

@@ -13,8 +13,20 @@ export const ENGINE_SYNC_CONFIG = {
   defaultSyncIntervalMs: 8 * 60 * 60 * 1000,
   /** Skip sync if the account has had no activity in this window. */
   inactivityThresholdMs: 24 * 60 * 60 * 1000,
-  /** Max instances handled per sweep tick. */
+  /**
+   * How long a started run holds its instance. Longer than the Convex action
+   * time limit (10 minutes), so a run still holding it can still be alive; past
+   * it the run has died without finalizing and the instance is idle again.
+   */
+  runLeaseMs: 15 * 60 * 1000,
+  /** Max instances handled per sweep pass. */
   sweepBatchSize: 10,
+  /**
+   * Further passes a tick may chain while each pass fills its batch. With
+   * the batch size and tick interval, this bounds syncs started per day to
+   * 10 * 21 * 96 = 20,160: about 6,700 active engines at the default interval.
+   */
+  sweepMaxChainedRuns: 20,
   /** ± jitter applied to nextEligibleAt so instances don't re-align. */
   jitterMs: 5 * 60 * 1000,
   /** Page size for paginated engine reads. */
@@ -27,6 +39,8 @@ export const ENGINE_SYNC_CONFIG = {
   maxBackoffMs: 24 * 60 * 60 * 1000,
   /** syncRuns rows older than this are eligible for cleanup. */
   runHistoryRetentionMs: 14 * 24 * 60 * 60 * 1000,
+  /** syncRuns rows one cleanup pass deletes; a full batch schedules the next pass at once. */
+  runHistoryCleanupBatch: 200,
 } as const;
 
 /**
@@ -41,6 +55,18 @@ export function computeNextEligibleAt(
 ): number {
   const jitter = Math.floor((rand() * 2 - 1) * jitterMs);
   return now + syncIntervalMs + jitter;
+}
+
+/**
+ * Pure: whether a run that started at `startedAt` still holds its instance's
+ * lease at `now`. A "running" run past its lease died without finalizing.
+ */
+export function holdsRunLease(
+  startedAt: number,
+  now: number,
+  config: typeof ENGINE_SYNC_CONFIG = ENGINE_SYNC_CONFIG
+): boolean {
+  return now < startedAt + config.runLeaseMs;
 }
 
 /**

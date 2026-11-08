@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { type Infer, type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
   ALERT_IN_FLIGHT_STALE_MS,
@@ -62,6 +62,27 @@ async function canRead(ctx: QueryCtx, instanceId: Id<"instances">): Promise<bool
   return (await getInstanceMembership(ctx, instanceId, userId)) !== null;
 }
 
+/**
+ * The fields of an alert the alert list's readers use: the events widget, the
+ * alerts dashboard feed and the overlay page's test check. Every status
+ * change re-sends the whole list to each subscriber, so it carries nothing
+ * else.
+ */
+function toAlertListRow(row: Doc<"engineAlerts">) {
+  return {
+    _id: row._id,
+    engineAlertId: row.engineAlertId,
+    status: row.status,
+    payload: row.payload,
+    workflowId: row.workflowId,
+    sourceEventId: row.sourceEventId,
+    error: row.error,
+    engineCreatedAt: row.engineCreatedAt,
+    createdAt: row.createdAt,
+    unconfirmedAt: row.unconfirmedAt,
+  };
+}
+
 export const listForInstance = query({
   args: {
     instanceId: v.id("instances"),
@@ -73,18 +94,18 @@ export const listForInstance = query({
       return [];
     }
     const take = Math.min(Math.max(limit ?? 50, 1), 500);
-    if (status) {
-      return ctx.db
-        .query("engineAlerts")
-        .withIndex("by_instance_status", (q) => q.eq("instanceId", instanceId).eq("status", status))
-        .order("desc")
-        .take(take);
-    }
-    return ctx.db
-      .query("engineAlerts")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .order("desc")
-      .take(take);
+    const rows = status
+      ? await ctx.db
+          .query("engineAlerts")
+          .withIndex("by_instance_status", (q) => q.eq("instanceId", instanceId).eq("status", status))
+          .order("desc")
+          .take(take)
+      : await ctx.db
+          .query("engineAlerts")
+          .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+          .order("desc")
+          .take(take);
+    return rows.map(toAlertListRow);
   },
 });
 

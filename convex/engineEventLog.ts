@@ -12,6 +12,9 @@ import { action, internalMutation, internalQuery, type MutationCtx, type QueryCt
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+/** Rows one cleanup pass deletes; a full batch schedules the next pass at once. */
+export const EVENT_LOG_CLEANUP_BATCH = 200;
+
 async function membershipFor(
   ctx: QueryCtx,
   instanceId: Id<"instances">,
@@ -227,8 +230,9 @@ export const retrigger = action({
 });
 
 /**
- * Deletes rows older than RETENTION_MS. Runs on a daily cron (see crons.ts) —
- * mirrors engineSyncInternal.cleanupOldRuns.
+ * Deletes rows older than RETENTION_MS. Runs on a daily cron (see crons.ts) and
+ * continues in further passes while a batch comes back full, so a backlog
+ * clears without any one mutation reading an unbounded set.
  */
 export const cleanupOld = internalMutation({
   args: {},
@@ -237,9 +241,12 @@ export const cleanupOld = internalMutation({
     const old = await ctx.db
       .query("engineEventLog")
       .withIndex("by_received_at", (q) => q.lt("receivedAt", cutoff))
-      .take(200);
+      .take(EVENT_LOG_CLEANUP_BATCH);
     for (const row of old) {
       await ctx.db.delete(row._id);
+    }
+    if (old.length === EVENT_LOG_CLEANUP_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.engineEventLog.cleanupOld, {});
     }
     return old.length;
   },
