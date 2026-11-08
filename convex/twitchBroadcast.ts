@@ -13,6 +13,7 @@ import {
 import { normalizeTwitchLogin } from "@shared/twitch-users";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { fetchTwitchUser } from "./lib/twitchUsers";
@@ -70,6 +71,7 @@ export async function postChatMessage(
     viaEngine: (engine) => engine.twitchSendChatMessage({ message }),
     direct: () =>
       fetch(TWITCH_MESSAGES_URL, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -114,6 +116,7 @@ export async function postAnnouncement(
     viaEngine: (engine) => engine.twitchSendChatAnnouncement({ message, color }),
     direct: () =>
       fetch(url, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -162,7 +165,7 @@ export async function postShoutout(
     operation: "sendShoutout",
     kind: "write",
     viaEngine: (engine) => engine.twitchSendShoutout({ to_broadcaster_id: target.twitchUserId }),
-    direct: () => fetch(url, { method: "POST", headers }),
+    direct: () => fetch(url, { signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS), method: "POST", headers }),
   });
   await readShoutoutAnswer(response);
 }

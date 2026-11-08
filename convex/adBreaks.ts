@@ -18,6 +18,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import type { EngineApi } from "./lib/engineInstanceUrl";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 
@@ -69,6 +70,7 @@ export async function callHelix(
       viaEngine,
       direct: () =>
         fetch(`${url}?broadcaster_id=${encodeURIComponent(call.broadcasterUserId)}`, {
+          signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
           method,
           headers: { Authorization: `Bearer ${call.accessToken}`, "Client-Id": call.clientId },
         }),
