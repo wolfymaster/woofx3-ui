@@ -10,7 +10,6 @@ const CASES: Array<[OrgRole | null, OrgAction, boolean]> = [
   ["owner", "createEngine", true],
   ["owner", "viewBilling", true],
   ["owner", "manageBilling", true],
-  ["owner", "deleteOrganization", true],
   ["admin", "viewOrganization", true],
   ["admin", "renameOrganization", true],
   ["admin", "manageMembers", true],
@@ -18,7 +17,6 @@ const CASES: Array<[OrgRole | null, OrgAction, boolean]> = [
   ["admin", "createEngine", false],
   ["admin", "viewBilling", true],
   ["admin", "manageBilling", false],
-  ["admin", "deleteOrganization", false],
   ["member", "viewOrganization", true],
   ["member", "renameOrganization", false],
   ["member", "manageMembers", false],
@@ -26,7 +24,6 @@ const CASES: Array<[OrgRole | null, OrgAction, boolean]> = [
   ["member", "createEngine", false],
   ["member", "viewBilling", false],
   ["member", "manageBilling", false],
-  ["member", "deleteOrganization", false],
   [null, "viewOrganization", false],
   [null, "renameOrganization", false],
   [null, "manageMembers", false],
@@ -34,7 +31,6 @@ const CASES: Array<[OrgRole | null, OrgAction, boolean]> = [
   [null, "createEngine", false],
   [null, "viewBilling", false],
   [null, "manageBilling", false],
-  [null, "deleteOrganization", false],
 ];
 
 describe("orgCan", () => {

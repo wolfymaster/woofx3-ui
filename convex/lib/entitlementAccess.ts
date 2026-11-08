@@ -5,7 +5,6 @@ import type { LifecycleReason } from "./billingLifecycle";
 import {
   addOnFeatures,
   ENTITLEMENT_CATALOG,
-  ENTITLEMENT_FEATURES,
   type EntitlementFeatureKey,
   type Entitlements,
   isAssignmentActive,
@@ -118,38 +117,7 @@ export function hasFeature(availability: EngineAvailability, feature: Entitlemen
   return availability.availability === "hosted" && availability.entitlements.features.includes(feature);
 }
 
-export type EntitlementRefusal =
-  | { code: "not_available_self_hosted"; feature: EntitlementFeatureKey; message: string }
-  | { code: "not_entitled"; feature: EntitlementFeatureKey; message: string }
-  | { code: "subscription_suspended"; reason: LifecycleReason | null; message: string };
-
-/**
- * Throws unless the engine offers the feature. A Convex function that serves
- * a paid feature calls this, so a hidden button is not the only thing between
- * an org and the feature.
- */
-export async function requireFeature(
-  ctx: QueryCtx,
-  instanceId: Id<"instances">,
-  feature: EntitlementFeatureKey
-): Promise<void> {
-  const availability = await engineAvailability(ctx, instanceId, Date.now());
-  const { description } = ENTITLEMENT_FEATURES[feature];
-  if (availability.availability === "self_hosted") {
-    throw new ConvexError<EntitlementRefusal>({
-      code: "not_available_self_hosted",
-      feature,
-      message: `Available on hosted engines: ${description}`,
-    });
-  }
-  if (!hasFeature(availability, feature)) {
-    throw new ConvexError<EntitlementRefusal>({
-      code: "not_entitled",
-      feature,
-      message: `Not included in your plan: ${description}`,
-    });
-  }
-}
+export type EntitlementRefusal = { code: "subscription_suspended"; reason: LifecycleReason | null; message: string };
 
 /**
  * The org's subscription when it is usable; throws while it is suspended or
@@ -170,30 +138,35 @@ export async function requireUsableSubscription(
   return subscription;
 }
 
+export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove someone to invite more people";
+
 /**
- * Whether the engine's org has no seat left for one more person (the
- * `org.members` limit, which counts every org member, owner included). Only
- * a hosted engine's plan limits seats.
+ * Whether the org has no seat left for one more person (the `org.members`
+ * limit, which counts every org member, owner included). Seats belong to the
+ * org, not to an engine: the limit applies once the org has a subscription or
+ * any managed engine, whichever engine the person joins through. An org with
+ * only self-hosted engines has no seat limit.
  */
-export async function orgSeatsFull(ctx: QueryCtx, instanceId: Id<"instances">, nowMs: number): Promise<boolean> {
-  const availability = await engineAvailability(ctx, instanceId, nowMs);
-  if (availability.availability === "self_hosted") {
+export async function orgSeatsFull(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<boolean> {
+  const instances = await ctx.db
+    .query("instances")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .collect();
+  const seated =
+    (await subscriptionFor(ctx, accountId)) !== null || instances.some((instance) => instance.hosting === "managed");
+  if (!seated) {
     return false;
   }
-  const limit = availability.entitlements.limits["org.members"];
+  const limit = (await accountEntitlements(ctx, accountId, nowMs)).limits["org.members"];
   if (limit === undefined) {
     throw new Error('Limit "org.members" was not resolved');
   }
   if (limit === null) {
     return false;
   }
-  const instance = await ctx.db.get(instanceId);
-  if (instance === null) {
-    throw new Error(`orgSeatsFull: instance ${instanceId} does not exist`);
-  }
   const members = await ctx.db
     .query("accountMembers")
-    .withIndex("by_account", (q) => q.eq("accountId", instance.accountId))
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .take(limit + 1);
   return members.length >= limit;
 }

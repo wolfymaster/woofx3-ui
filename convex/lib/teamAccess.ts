@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { orgSeatsFull, SEATS_FULL } from "./entitlementAccess";
 import { roleSatisfies } from "./instanceRoles";
 import type { EngineRole, OrgRole } from "./organization";
 import { orgRoleOf } from "./orgRoles";
@@ -43,7 +44,8 @@ export async function getAccountMembership(ctx: QueryCtx, accountId: Id<"account
  * Gives the user `role` on the engine, the one way engine access is granted.
  * Holds the membership invariants:
  *
- * - I2: the user joins the engine's org as a `member` when not already in it.
+ * - I2: the user joins the engine's org as a `member` when not already in it,
+ *   which takes a seat: refused when the org's seats are full.
  * - I3: only the org owner holds engine `owner`, and the org owner holds
  *   nothing less, so both are refused.
  * - I4: an org admin gets at least engine `admin`; a lower role is raised.
@@ -75,6 +77,9 @@ export async function grantEngineRole(
   const now = Date.now();
   let orgRole = await orgRoleOf(ctx, account, userId);
   if (orgRole === null) {
+    if (await orgSeatsFull(ctx, account._id, now)) {
+      throw new Error(SEATS_FULL);
+    }
     await ctx.db.insert("accountMembers", { accountId: account._id, userId, role: "member", createdAt: now });
     orgRole = "member";
   }

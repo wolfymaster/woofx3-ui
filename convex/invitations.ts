@@ -12,7 +12,7 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
-import { orgSeatsFull } from "./lib/entitlementAccess";
+import { orgSeatsFull, SEATS_FULL } from "./lib/entitlementAccess";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
@@ -330,8 +330,6 @@ export const lookupTwitchUser = action({
 // Create
 // ---------------------------------------------------------------------------
 
-const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove someone to invite more people";
-
 /** Whether the person an invitation names already has a seat in the engine's org. */
 async function inviteeInOrg(
   ctx: QueryCtx,
@@ -389,7 +387,7 @@ export const insertInvitation = internalMutation({
     }
 
     const now = Date.now();
-    if (!(await inviteeInOrg(ctx, instance, args.target)) && (await orgSeatsFull(ctx, instance._id, now))) {
+    if (!(await inviteeInOrg(ctx, instance, args.target)) && (await orgSeatsFull(ctx, instance.accountId, now))) {
       throw new Error(SEATS_FULL);
     }
     const token = randomToken();
@@ -595,9 +593,6 @@ export const accept = mutation({
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
-    if (!existingMember && (await orgSeatsFull(ctx, engine.instanceId, now))) {
-      throw new Error(SEATS_FULL);
-    }
     if (account.ownerId !== userId) {
       // An invitation only adds access: someone made an engine admin after it
       // was sent keeps admin when they accept a member invite.
