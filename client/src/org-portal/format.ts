@@ -1,5 +1,6 @@
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { AppliedDiscount, DiscountDuration } from "@convex/lib/payments/provider";
+import type { MyOrganization } from "@convex/organizations";
 
 export const PLAN_NAMES: Record<PlanTier, string> = { starter: "Starter", pro: "Pro" };
 
@@ -44,4 +45,12 @@ export function describeDiscount(discount: AppliedDiscount): string {
   const { spec } = discount;
   const amount = spec.kind === "percent_off" ? `${spec.percent}%` : formatCents(spec.amountCents);
   return `${amount} off ${durationText(spec.duration)}`;
+}
+
+/** "3 of 5 seats used", or "20 members" when no seat limit applies. */
+export function formatSeats(seats: NonNullable<MyOrganization["seats"]>): string {
+  if (seats.limit === null) {
+    return seats.used === 1 ? "1 member" : `${seats.used} members`;
+  }
+  return `${seats.used} of ${seats.limit} seats used`;
 }

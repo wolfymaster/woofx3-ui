@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useConvexUser } from "@/hooks/use-convex-auth";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
+import { formatSeats } from "../format";
 import { useOrganization } from "../organization-context";
 
 type ChangeableRole = "admin" | "member";
@@ -133,11 +134,7 @@ export default function MembersPage() {
         )}
         <div className="flex flex-wrap justify-between gap-2 text-sm text-muted-foreground">
           <span>Invite people from an engine&apos;s Team page.</span>
-          {seats ? (
-            <span data-testid="text-seats">
-              {seats.limit === null ? `${seats.used} seats used` : `${seats.used} of ${seats.limit} seats used`}
-            </span>
-          ) : null}
+          {seats ? <span data-testid="text-seats">{formatSeats(seats)}</span> : null}
         </div>
       </CardContent>
     </Card>

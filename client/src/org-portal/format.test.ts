@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AppliedDiscount } from "@convex/lib/payments/provider";
-import { describeDiscount, formatPrice } from "./format";
+import { describeDiscount, formatPrice, formatSeats } from "./format";
 
 describe("describeDiscount", () => {
   const cases: Array<[AppliedDiscount["spec"], string]> = [
@@ -21,4 +21,17 @@ describe("formatPrice", () => {
     expect(formatPrice("starter", "month")).toContain("/mo");
     expect(formatPrice("pro", "year")).toContain("/yr");
   });
+});
+
+describe("formatSeats", () => {
+  const cases: Array<[{ used: number; limit: number | null }, string]> = [
+    [{ used: 3, limit: 5 }, "3 of 5 seats used"],
+    [{ used: 20, limit: null }, "20 members"],
+    [{ used: 1, limit: null }, "1 member"],
+  ];
+  for (const [seats, expected] of cases) {
+    test(expected, () => {
+      expect(formatSeats(seats)).toBe(expected);
+    });
+  }
 });
