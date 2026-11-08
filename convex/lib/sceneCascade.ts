@@ -6,7 +6,6 @@ type SceneChildId =
   | Id<"sceneSlots">
   | Id<"browserSourceKeys">
   | Id<"alertDescriptors">
-  | Id<"alertHistory">
   | Id<"obsSceneConfigs">
   | Id<"alerts">
   | Id<"obsCommands">;
@@ -35,11 +34,6 @@ const SCENE_CHILD_QUERIES: SceneChildQuery[] = [
       .take(limit),
   (ctx, sceneId, limit) =>
     ctx.db
-      .query("alertHistory")
-      .withIndex("by_scene", (q) => q.eq("sceneId", sceneId))
-      .take(limit),
-  (ctx, sceneId, limit) =>
-    ctx.db
       .query("obsSceneConfigs")
       .withIndex("by_scene", (q) => q.eq("sceneId", sceneId))
       .take(limit),
@@ -55,7 +49,7 @@ const SCENE_CHILD_QUERIES: SceneChildQuery[] = [
       .take(limit),
 ];
 
-// Bounds the work per transaction. alerts/alertHistory are unbounded in
+// Bounds the work per transaction. alerts are unbounded in
 // principle, so the cascade drains in batches rather than risking one oversized
 // transaction that would fail the whole webhook.
 const SCENE_CASCADE_BATCH = 256;

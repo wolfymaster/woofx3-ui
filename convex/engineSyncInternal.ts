@@ -22,21 +22,6 @@ import { getInstanceMembership } from "./lib/teamAccess";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 import { upsertWorkflowGroupFromWebhook, workflowGroupFields } from "./workflowGroups";
 
-// One-shot cleanup for the orphan instanceSync rows that exist in the
-// pre-spec deployment. Safe to delete after the first prod deploy.
-export const dropAllInstanceSync = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    // One-shot cleanup. Orphan count is small (3 in dev as of writing) — take
-    // a generous ceiling that's still well under Convex read limits.
-    const rows = await ctx.db.query("instanceSync").take(100);
-    for (const r of rows) {
-      await ctx.db.delete(r._id);
-    }
-    return rows.length;
-  },
-});
-
 /**
  * Reconcile the local `chatCommands` mirror against a full snapshot
  * returned by the engine's `listCommands()`. The engine is the source of

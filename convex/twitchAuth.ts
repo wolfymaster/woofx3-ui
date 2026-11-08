@@ -258,17 +258,3 @@ export const deleteOrphanedAuthAccount = internalMutation({
     await ctx.db.delete(account._id);
   },
 });
-
-export const deletePendingAuth = internalMutation({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const record = await ctx.db
-      .query("twitchPendingAuth")
-      .withIndex("by_token", (q) => q.eq("token", token))
-      .first();
-
-    if (record) {
-      await ctx.db.delete(record._id);
-    }
-  },
-});

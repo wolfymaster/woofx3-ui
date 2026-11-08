@@ -61,13 +61,6 @@ already filed and open in this repo. Nothing below duplicates them.
 - **Size:** large
 - **Description:** No history/undo stack exists at all for step edits, so an accidental delete/drag has no recovery path.
 
-### Alert Log filters only search the most recent 200 alerts, with no pagination
-
-- **Files:** `convex/alertLog.ts:6-44`
-- **Category:** bug
-- **Size:** medium
-- **Description:** `take(200)` runs before the `alertType`/`user` filters are applied in-memory, so filtering/searching for anything outside the newest 200 rows silently returns nothing even though matches exist.
-
 ### Alert replay has no error feedback
 
 - **Files:** `client/src/pages/alert-log.tsx:167-170`
