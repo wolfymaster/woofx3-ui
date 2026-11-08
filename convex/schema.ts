@@ -1938,7 +1938,7 @@ export default defineSchema({
     // same step twice.
     .index("by_attempt", ["runId", "taskId", "attempt"]),
 
-  // alertHistory: bounded history of fired alerts
+  // alertHistory: nothing reads or writes it any more; kept because production may still hold rows.
   alertHistory: defineTable({
     instanceId: v.id("instances"),
     sceneId: v.id("scenes"),
