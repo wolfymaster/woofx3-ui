@@ -76,7 +76,11 @@ describe("organization role migrations", () => {
     const t = newBackend();
     const s = await seedAnomalies(t);
     await migrateRoles(t);
-    expect(await violations(t)).toEqual([]);
+    expect(await t.action(internal.migrations.organizations.checkOrgInvariantsAll, {})).toEqual({
+      total: 0,
+      violations: [],
+      overSeatLimit: [],
+    });
     const after = await snapshot(t);
     expect(after.org).toContainEqual([s.ownerId, "owner"]);
     expect(after.org).toContainEqual([s.strayOwnerId, "admin"]);
@@ -149,7 +153,9 @@ describe("organization role migrations", () => {
         .collect()
     );
     expect(orgRows.map((row) => row.userId)).toEqual(expect.arrayContaining(outsiders));
-    expect(await violations(t)).toEqual([]);
+    const check = await t.action(internal.migrations.organizations.checkOrgInvariantsAll, {});
+    expect(check.violations).toEqual([]);
+    expect(check.overSeatLimit).toEqual([{ accountId, members: 7, limit: 5 }]);
   });
 
   test("running them twice changes nothing", async () => {
