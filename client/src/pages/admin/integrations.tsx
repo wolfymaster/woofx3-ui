@@ -18,7 +18,7 @@ export default function AdminIntegrations() {
 
   return (
     <div className="container mx-auto p-6">
-      <PageHeader title="Integrations" description="Connect the platforms and services this instance talks to." />
+      <PageHeader title="Integrations" description="Connect the platforms and services this engine talks to." />
       <Card>
         <CardHeader>
           <CardTitle>Connected Services</CardTitle>

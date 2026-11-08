@@ -308,7 +308,7 @@ export function ThisComputerConnections() {
 
 function ThisComputerBody({ view }: { view: IntegrationsView | null }) {
   if (!view) {
-    return <p className="text-sm text-muted-foreground">This computer isn't linked to this instance.</p>;
+    return <p className="text-sm text-muted-foreground">This computer isn't linked to this engine.</p>;
   }
   switch (view.availability.kind) {
     case "off":

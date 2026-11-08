@@ -130,6 +130,41 @@ describe("invitations.create", () => {
   });
 });
 
+describe("invitations.listForEngine", () => {
+  async function listedEmails(t: Backend, userId: Id<"users">, instanceId: Id<"instances">) {
+    const result = await as(t, userId).query(api.invitations.listForEngine, { instanceId, now: Date.now() });
+    return result === null ? null : result.invitations.map((i) => i.email).sort();
+  }
+
+  test("an engine admin sees only that engine's invitations", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const secondId = await addEngine(t, org, "second");
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    await invite(t, org.ownerId, secondId, "there@example.com");
+    await legacyInvite(t, org, "orgwide@example.com", "member");
+    expect(await listedEmails(t, adminId, org.instanceId)).toEqual(["here@example.com"]);
+  });
+
+  test("an engine member sees no invitations", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const memberId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    expect(await listedEmails(t, memberId, org.instanceId)).toBeNull();
+  });
+
+  test("manageMembers also sees the org-wide invitations, but not expired ones", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    await legacyInvite(t, org, "orgwide@example.com", "member");
+    await legacyInvite(t, org, "stale@example.com", "member", 1);
+    expect(await listedEmails(t, org.ownerId, org.instanceId)).toEqual(["here@example.com", "orgwide@example.com"]);
+  });
+});
+
 describe("invitations.accept", () => {
   test("a new user joins the org as a member and gets only the invited engine", async () => {
     const t = newBackend();
@@ -164,15 +199,61 @@ describe("invitations.accept", () => {
     expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: "member", engine: "admin" });
   });
 
-  test("an expired invitation is refused", async () => {
+  test("an expired invitation is reported, and grants nothing", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
     await legacyInvite(t, org, "late@example.com", "member", Date.now() - 1);
     const userId = await addUser(t, "late@example.com");
-    await expect(as(t, userId).mutation(api.invitations.accept, { token: "legacy-late@example.com" })).rejects.toThrow(
-      "expired"
-    );
+    const result = await as(t, userId).mutation(api.invitations.accept, { token: "legacy-late@example.com" });
+    expect(result).toEqual({ status: "expired" });
     expect((await roles(t, org, userId, org.instanceId)).org).toBeNull();
+  });
+
+  test("an unknown token is not_found", async () => {
+    const t = newBackend();
+    const userId = await addUser(t, "someone@example.com");
+    expect(await as(t, userId).mutation(api.invitations.accept, { token: "nope" })).toEqual({ status: "not_found" });
+  });
+
+  test("a revoked invitation is reported, and grants nothing", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    const [row] = await t.run((ctx) => ctx.db.query("invitations").collect());
+    await as(t, org.ownerId).mutation(api.invitations.revoke, { invitationId: row._id });
+    const userId = await addUser(t, "new@example.com");
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({ status: "revoked" });
+    expect((await roles(t, org, userId, org.instanceId)).engine).toBeNull();
+  });
+
+  test("opening a used link again is already_member for someone on the engine", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    const userId = await addUser(t, "new@example.com");
+    await as(t, userId).mutation(api.invitations.accept, { token });
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({
+      status: "already_member",
+      instanceId: org.instanceId,
+    });
+  });
+
+  test("a used link is already_accepted for someone who is not on the engine", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    const userId = await addUser(t, "new@example.com");
+    await as(t, userId).mutation(api.invitations.accept, { token });
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("instanceMembers")
+        .withIndex("by_instance_user", (q) => q.eq("instanceId", org.instanceId).eq("userId", userId))
+        .unique();
+      if (row) {
+        await ctx.db.delete(row._id);
+      }
+    });
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({ status: "already_accepted" });
   });
 
   test("an org-wide admin invitation makes an org admin with engine admin", async () => {

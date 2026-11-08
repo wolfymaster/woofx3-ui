@@ -147,7 +147,7 @@ export const setEndpoint = mutation({
     }
     const endpoint = await installedLocalEndpoint(ctx, companion.instanceId, args.moduleId, args.endpointId);
     if (!endpoint) {
-      throw new ConvexError("No module installed on this instance declares that endpoint.");
+      throw new ConvexError("No module installed on this engine declares that endpoint.");
     }
     if (args.address && (!isEndpointHost(args.address.host) || !isEndpointPort(args.address.port))) {
       throw new ConvexError("The address must be a host name or IP address and a port from 1 to 65535.");

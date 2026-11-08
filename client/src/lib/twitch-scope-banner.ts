@@ -3,7 +3,7 @@ import type { TwitchScopeHealth } from "@shared/twitch-scope-health";
 /** What the reconnect prompt says for a link that needs one, or null when it does not. */
 export function twitchReconnectMessage(health: TwitchScopeHealth): string | null {
   if (health.state === "revoked") {
-    return "Twitch no longer accepts this instance's connection. Reconnect to bring back everything that talks to Twitch.";
+    return "Twitch no longer accepts this engine's connection. Reconnect to bring back everything that talks to Twitch.";
   }
   if (health.state === "missing") {
     const labels = health.missing.map((capability) => capability.label);

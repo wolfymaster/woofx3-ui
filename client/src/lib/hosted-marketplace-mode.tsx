@@ -54,7 +54,7 @@ function useHostedSettingSources(moduleId: string): ModuleSettingSources {
   const returnToCompanion = useCallback(
     async (key: string) => {
       if (!instanceId) {
-        throw new Error("No instance selected");
+        throw new Error("No engine selected");
       }
       await handBack({ instanceId, moduleId, key });
     },

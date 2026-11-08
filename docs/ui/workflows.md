@@ -9,24 +9,24 @@
 
 Modelled on the Chat Commands page: `PageHeader`, an All / Enabled / Disabled tab filter with counts, a search box, a **Create Workflow** button, and a single full-width table.
 
-- Rows come from the Convex `workflows` table for the current instance (`api.workflows.list`).
+- Rows come from the Convex `workflows` table for the current engine (`api.workflows.list`).
 - Columns: workflow (name + description), trigger, steps, enabled, actions.
 - The **trigger** label is resolved against the catalog by `workflowTriggerLabel` (`lib/workflow-display.ts`), which shares `triggerNodeLabel` with the step cards, so a workflow reads the same in the list as in the editor.
 - The **enabled** toggle calls `workflowActions.setEnabled` inline; clicking a row (or the pencil) opens the editor; the trash opens the shared delete dialog.
 - There is no list rail on this page — the section subnav is the only sidebar, and the table is the list.
 
-An instance with no workflows gets an empty state pointing at the starter packs first and the create flow second.
+An engine with no workflows gets an empty state pointing at the starter packs first and the create flow second.
 
 ## Starter packs (`/stream/starter-packs`)
 
 **Primary files:** `client/src/pages/starter-packs.tsx`, `convex/lib/starterPacks.ts`, `convex/starterPacks.ts`
 
-Curated sets of workflows and chat commands (raid welcome, follower thanks, sub and gift hype, cheer thanks, handy commands, BRB scene, ad break heads-up, ad break scene) that a new streamer installs in one click. The dashboard shows a banner linking here while the instance has no workflows (`api.workflows.hasAny`).
+Curated sets of workflows and chat commands (raid welcome, follower thanks, sub and gift hype, cheer thanks, handy commands, BRB scene, ad break heads-up, ad break scene) that a new streamer installs in one click. The dashboard shows a banner linking here while the engine has no workflows (`api.workflows.hasAny`).
 
-- The packs are pure data in `convex/lib/starterPacks.ts`. Each names its actions by canonical ref and its triggers by event subject, and is resolved against the instance's catalog when installed, so the definitions carry the same handler type, function id and `$ref` the flow editor writes.
+- The packs are pure data in `convex/lib/starterPacks.ts`. Each names its actions by canonical ref and its triggers by event subject, and is resolved against the engine's catalog when installed, so the definitions carry the same handler type, function id and `$ref` the flow editor writes.
 - A pack's editable fields (message text, scene names, thresholds) accept `{name}` placeholders, such as `{raider}`, which become engine expressions such as `${trigger.data.fromBroadcasterUserName}`. A placeholder a field's items do not offer is refused, and so is any raw `${...}`: the engine resolves every expression in a parameter, `${env.NAME}` included, with no way to escape one. Lengths are checked against Twitch's limits (500 for chat, 140 for markers), counting each placeholder as 25 characters. Scene names are used exactly as typed and only flagged when they start or end with a space.
 - The raid pause is off (0) and its field disabled: a delay wait is a task type, not a catalog action, and no engine reports supporting it, while an engine without it fails the run at the wait. `STARTER_FEATURES` in `convex/lib/starterPacks.ts` is where that switches on once an engine can say so.
-- Twitch actions (`woofx3_twitch:action:twitch.shoutout`, `twitch.clip`, `twitch.marker`) come from the Twitch platform module, like every trigger the packs bind to. OBS scene switches (`woofx3_obs:action:obs.switch_scene`) come from the OBS platform module. Chat replies (`woofx3:action:chat.reply`) are the engine's own. Availability is read from the instance's action catalog, per item:
+- Twitch actions (`woofx3_twitch:action:twitch.shoutout`, `twitch.clip`, `twitch.marker`) come from the Twitch platform module, like every trigger the packs bind to. OBS scene switches (`woofx3_obs:action:obs.switch_scene`) come from the OBS platform module. Chat replies (`woofx3:action:chat.reply`) are the engine's own. Availability is read from the engine's action catalog, per item:
   - **Requires the Twitch module**: the catalog has nothing from `woofx3_twitch`, and the item needs a Twitch trigger or action.
   - **Requires the OBS module**: the catalog has nothing from `woofx3_obs`, and the item switches scenes.
   - **Requires engine update**: an engine action is missing, or an ad-break trigger is (`sinceEngineUpdate`), since those arrived in a later engine release.
@@ -154,7 +154,7 @@ The engine refuses a workflow it cannot set up (bad parameters, a step naming a 
 
 - **Storage:** Convex `workflowHealth`, one row per `(instanceId, engineWorkflowId)`, separate from `workflows` so a report can land before the workflow row does. Rules and payload shapes live in `shared/workflow-health.ts`.
 - **Inputs:** the `workflow.health.snapshot` webhook (sent on engine start and api reconnect; authoritative, anything unlisted is ok), the `workflow.health.changed` webhook (one transition), and the `workflowHealth.resync` action, which calls the engine's `getWorkflowHealth()` with the snapshot's replace-all meaning. A report older than the stored one (by the engine's `since`) is ignored.
-- **Resync:** on list-page mount (at most every 5 minutes per instance) and whenever the live engine session connects (at most every minute), throttled server-side in `workflowHealthSyncs`. An engine without the RPC is recorded as `unsupported` and shows nothing.
+- **Resync:** on list-page mount (at most every 5 minutes per engine) and whenever the live engine session connects (at most every minute), throttled server-side in `workflowHealthSyncs`. An engine without the RPC is recorded as `unsupported` and shows nothing.
 - **Where it shows:** a red badge with the engine's reason in a popover (`components/workflows/not-running-badge.tsx`) on list rows, the editor header, and the event trigger cards (Alerts, Counters, Timers, Queues), plus a one-line dashboard notice linking to the list. `workflowHealth.listNotRunning` returns only enabled, mirrored workflows.
 
 ## Summary

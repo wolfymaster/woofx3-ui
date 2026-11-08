@@ -7,6 +7,7 @@ import {
   type CouponFields,
   couponId,
   couponParams,
+  type InvoiceFields,
   parsePriceLookupKey,
   priceLookupKey,
   StripePaymentProvider,
@@ -14,12 +15,14 @@ import {
   sameDiscount,
   specOfCoupon,
   standingOf,
+  toCheckoutSession,
+  toInvoice,
   toProviderSubscription,
 } from "./stripe";
 
 const SECRET = "whsec_test_secret";
 const VALID_ENV = {
-  BILLING_PROVIDER: "stripe",
+  PAYMENTS_PROVIDER: "stripe",
   STRIPE_SECRET_KEY: "sk_test_123",
   STRIPE_WEBHOOK_SECRET: SECRET,
   ORG_PORTAL_URL: "https://woofx3.tv/org",
@@ -206,6 +209,7 @@ describe("verifyWebhook", () => {
         type: "customer.subscription.updated",
         purpose: "subscription",
         subscriptionRef: "sub_1",
+        session: null,
       },
     });
   });
@@ -231,7 +235,7 @@ describe("verifyWebhook", () => {
     const body = JSON.stringify({ id: "evt_2", object: "event", type: "customer.created", data: { object: {} } });
     expect(await provider.verifyWebhook(body, await signed(body))).toEqual({
       ok: true,
-      value: { eventId: "evt_2", type: "customer.created", purpose: null, subscriptionRef: null },
+      value: { eventId: "evt_2", type: "customer.created", purpose: null, subscriptionRef: null, session: null },
     });
   });
 
@@ -260,8 +264,10 @@ describe("verifyWebhook", () => {
       type: "checkout.session.completed",
       data: {
         object: {
+          id: "cs_market",
           object: "checkout.session",
           mode: "payment",
+          payment_status: "paid",
           subscription: null,
           metadata: { purpose: "marketplace", ref: "listing_1" },
         },
@@ -269,25 +275,58 @@ describe("verifyWebhook", () => {
     });
     expect(await provider.verifyWebhook(body, await signed(body))).toEqual({
       ok: true,
-      value: { eventId: "evt_4", type: "checkout.session.completed", purpose: null, subscriptionRef: null },
+      value: {
+        eventId: "evt_4",
+        type: "checkout.session.completed",
+        purpose: null,
+        subscriptionRef: null,
+        session: { sessionRef: "cs_market", change: "paid" },
+      },
+    });
+  });
+
+  test.each([
+    ["checkout.session.completed", "unpaid", "awaiting_payment"],
+    ["checkout.session.completed", "no_payment_required", "paid"],
+    ["checkout.session.async_payment_succeeded", "paid", "paid"],
+    ["checkout.session.expired", "unpaid", "expired"],
+  ])("%s with payment status %s is a %s session", async (type, paymentStatus, change) => {
+    const body = JSON.stringify({
+      id: "evt_5",
+      object: "event",
+      type,
+      data: {
+        object: {
+          id: "cs_1",
+          object: "checkout.session",
+          mode: "subscription",
+          payment_status: paymentStatus,
+          subscription: "sub_1",
+          metadata: { purpose: "subscription", ref: "acct_1" },
+        },
+      },
+    });
+    expect(await provider.verifyWebhook(body, await signed(body))).toMatchObject({
+      ok: true,
+      value: { purpose: "subscription", session: { sessionRef: "cs_1", change } },
     });
   });
 });
 
 describe("billing config", () => {
   test("accepts a complete config", () => {
-    expect(parsePaymentsConfig(VALID_ENV).BILLING_PROVIDER).toBe("stripe");
+    expect(parsePaymentsConfig(VALID_ENV).PAYMENTS_PROVIDER).toBe("stripe");
   });
 
   test("names every missing or malformed variable", () => {
     expect(() => parsePaymentsConfig({})).toThrow(
-      /BILLING_PROVIDER.*STRIPE_SECRET_KEY.*STRIPE_WEBHOOK_SECRET.*ORG_PORTAL_URL/
+      /PAYMENTS_PROVIDER.*STRIPE_SECRET_KEY.*STRIPE_WEBHOOK_SECRET.*ORG_PORTAL_URL/
     );
     expect(() => parsePaymentsConfig({ ...VALID_ENV, STRIPE_WEBHOOK_SECRET: "nope" })).toThrow("STRIPE_WEBHOOK_SECRET");
     expect(() => parsePaymentsConfig({ ...VALID_ENV, ORG_PORTAL_URL: "http://woofx3.tv/org" })).toThrow(
       "ORG_PORTAL_URL"
     );
-    expect(() => parsePaymentsConfig({ ...VALID_ENV, BILLING_PROVIDER: "paypal" })).toThrow("BILLING_PROVIDER");
+    expect(() => parsePaymentsConfig({ ...VALID_ENV, PAYMENTS_PROVIDER: "paypal" })).toThrow("PAYMENTS_PROVIDER");
   });
 });
 
@@ -322,7 +361,13 @@ describe("purpose metadata", () => {
   test("a subscription checkout stamps its purpose and org on the session and the subscription", async () => {
     const { provider, requests } = recordingStripe({
       "/v1/prices": { object: "list", data: [{ id: "price_pro_month", object: "price" }] },
-      "/v1/checkout/sessions": { id: "cs_1", object: "checkout.session", url: "https://checkout.stripe.test/cs_1" },
+      "/v1/checkout/sessions": {
+        id: "cs_1",
+        object: "checkout.session",
+        url: "https://checkout.stripe.test/cs_1",
+        amount_total: 1500,
+        currency: "usd",
+      },
     });
     const result = await provider.createCheckout({
       purpose: {
@@ -339,7 +384,10 @@ describe("purpose metadata", () => {
       idempotencyKey: "checkout:acct_1:1",
       expiresAt: 1_800_003_600_000,
     });
-    expect(result).toEqual({ ok: true, value: { url: "https://checkout.stripe.test/cs_1" } });
+    expect(result).toEqual({
+      ok: true,
+      value: { url: "https://checkout.stripe.test/cs_1", sessionRef: "cs_1", amountCents: 1500 },
+    });
     const session = requests.find((request) => request.path === "/v1/checkout/sessions")?.body;
     expect(session?.get("metadata[purpose]")).toBe("subscription");
     expect(session?.get("metadata[ref]")).toBe("acct_1");
@@ -381,6 +429,24 @@ describe("purpose metadata", () => {
       expiresAt: 1_800_003_600_000,
     });
     expect(result).toMatchObject({ ok: false, error: { code: "checkout_in_progress" } });
+  });
+
+  test("expiring a checkout closes it, and one no longer open is invalid_request", async () => {
+    const { provider, requests } = recordingStripe({
+      "/v1/checkout/sessions/cs_1/expire": { id: "cs_1", object: "checkout.session", status: "expired" },
+      "/v1/checkout/sessions/cs_done/expire": new Response(
+        JSON.stringify({
+          error: {
+            type: "invalid_request_error",
+            message: "Only Checkout Sessions with a status of open can be expired",
+          },
+        }),
+        { status: 400 }
+      ),
+    });
+    expect(await provider.expireCheckout("cs_1")).toEqual({ ok: true, value: null });
+    expect(requests.map((request) => request.path)).toEqual(["/v1/checkout/sessions/cs_1/expire"]);
+    expect(await provider.expireCheckout("cs_done")).toMatchObject({ ok: false, error: { code: "invalid_request" } });
   });
 
   test("a coupon created for a discount carries the purpose and our discount key", async () => {
@@ -425,6 +491,16 @@ describe("purpose metadata", () => {
   });
 });
 
+describe("toCheckoutSession", () => {
+  test.each([
+    [{ url: null, amount_total: 1500, currency: "usd" }, "provider_unavailable"],
+    [{ url: "https://checkout.stripe.test/cs_1", amount_total: null, currency: "usd" }, "invalid_request"],
+    [{ url: "https://checkout.stripe.test/cs_1", amount_total: 1500, currency: "eur" }, "invalid_request"],
+  ])("refuses a session it can't record: %o", (fields, code) => {
+    expect(toCheckoutSession({ id: "cs_1", ...fields })).toMatchObject({ ok: false, error: { code } });
+  });
+});
+
 describe("sameDiscount", () => {
   const twentyOnce: DiscountSpec = { kind: "percent_off", percent: 20, duration: { kind: "once" } };
   const cases: Array<[string, DiscountSpec | null, boolean]> = [
@@ -448,5 +524,45 @@ describe("sameDiscount", () => {
     };
     expect(sameDiscount(three, three)).toBe(true);
     expect(sameDiscount({ ...three, duration: { kind: "months", months: 6 } }, three)).toBe(false);
+  });
+});
+
+describe("toInvoice", () => {
+  const invoice = (overrides: Partial<InvoiceFields> = {}): InvoiceFields => ({
+    id: "in_1",
+    status: "paid",
+    period_start: 1_800_000_000,
+    total: 3000,
+    hosted_invoice_url: "https://invoice.stripe.com/i/1",
+    ...overrides,
+  });
+
+  const cases: Array<[string, Partial<InvoiceFields>, unknown]> = [
+    [
+      "a paid invoice",
+      {},
+      {
+        ok: true,
+        value: {
+          id: "in_1",
+          periodStart: 1_800_000_000_000,
+          amountCents: 3000,
+          status: "paid",
+          hostedUrl: "https://invoice.stripe.com/i/1",
+        },
+      },
+    ],
+    ["an unsaved draft", { status: null, hosted_invoice_url: null }, expect.objectContaining({ ok: true })],
+    ["an unknown status", { status: "mystery" }, expect.objectContaining({ ok: false })],
+  ];
+  for (const [name, overrides, expected] of cases) {
+    test(name, () => {
+      expect(toInvoice(invoice(overrides))).toEqual(expected);
+    });
+  }
+
+  test("an unsaved draft reads as a draft with no page", () => {
+    const mapped = toInvoice(invoice({ status: null, hosted_invoice_url: undefined }));
+    expect(mapped.ok && mapped.value).toEqual(expect.objectContaining({ status: "draft", hostedUrl: null }));
   });
 });

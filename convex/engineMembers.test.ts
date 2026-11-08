@@ -78,10 +78,19 @@ describe("engineMembers.listForEngine", () => {
     await addMember(t, org, "member", null);
     const result = await as(t, memberId).query(api.engineMembers.listForEngine, { instanceId: org.instanceId });
     expect(result?.canManage).toBe(false);
+    expect(result?.canManageOrganization).toBe(false);
     expect(result?.members.map((m) => [m.orgRole, m.engineRole]).sort()).toEqual([
       ["member", "member"],
       ["owner", "owner"],
     ]);
+  });
+
+  test("an org admin may manage the organization", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addMember(t, org, "admin", "admin");
+    const result = await as(t, adminId).query(api.engineMembers.listForEngine, { instanceId: org.instanceId });
+    expect(result?.canManageOrganization).toBe(true);
   });
 
   test("answers null to someone who isn't on the engine", async () => {

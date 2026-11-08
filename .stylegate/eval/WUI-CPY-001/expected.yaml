@@ -1,0 +1,10 @@
+reviewed: false
+findings:
+  - file: bad/client/src/pages/engine-empty.tsx
+    line_start: 4
+    line_end: 4
+    note: An empty state's title and description call the engine an instance.
+  - file: bad/client/src/pages/engine-empty.tsx
+    line_start: 8
+    line_end: 8
+    note: Paragraph text calls the engine an instance.

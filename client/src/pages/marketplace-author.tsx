@@ -156,7 +156,7 @@ export default function MarketplaceAuthor() {
 
             {grouped.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Nothing published yet — or nothing visible to this instance.
+                Nothing published yet — or nothing visible to this engine.
               </p>
             )}
           </>

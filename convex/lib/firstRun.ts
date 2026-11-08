@@ -23,7 +23,7 @@ export function linkedNames(current: FirstRunNames, displayName: string): Partia
   }
   return {
     ...(current.account === PLACEHOLDER_NAME ? { account: display } : {}),
-    ...(current.instance === PLACEHOLDER_NAME ? { instance: `${display}'s Instance` } : {}),
+    ...(current.instance === PLACEHOLDER_NAME ? { instance: `${display}'s Engine` } : {}),
     ...(current.user?.trim() ? {} : { user: display }),
   };
 }

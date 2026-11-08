@@ -12,15 +12,14 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
-import { orgSeatsFull } from "./lib/entitlementAccess";
+import { orgSeatsFull, SEATS_FULL } from "./lib/entitlementAccess";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import { requireOrgAction } from "./lib/orgRoles";
+import { orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
 import {
   applyOrgRoleToEngines,
-  canAccessAccount,
   getAccountMembership,
   getInstanceMembership,
   grantEngineRole,
@@ -41,37 +40,70 @@ function randomToken(): string {
   return `${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-export const listForAccount = query({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, args) => {
+type PendingInvitation = Pick<
+  Doc<"invitations">,
+  | "_id"
+  | "email"
+  | "platform"
+  | "platformLogin"
+  | "platformDisplayName"
+  | "platformProfileImageUrl"
+  | "role"
+  | "createdAt"
+  | "expiresAt"
+> & { instanceId: Id<"instances"> | null; engineRole: "admin" | "member" | null };
+
+function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
+  return {
+    _id: r._id,
+    email: r.email,
+    platform: r.platform,
+    platformLogin: r.platformLogin,
+    platformDisplayName: r.platformDisplayName,
+    platformProfileImageUrl: r.platformProfileImageUrl,
+    role: r.role,
+    instanceId: r.instanceId ?? null,
+    engineRole: r.engineRole ?? null,
+    createdAt: r.createdAt,
+    expiresAt: r.expiresAt,
+  };
+}
+
+/**
+ * Pending invitations the caller may manage on this engine's team page, or
+ * null when they may manage none. Invitee emails are personal data, so the
+ * list follows `revoke`: an engine's admins see its invitations, and only an
+ * org role with `manageMembers` also sees the org-wide ones that predate
+ * engine-scoped invites. `now` (ms) decides which have expired; a query
+ * can't read the clock without losing its cache.
+ */
+export const listForEngine = query({
+  args: { instanceId: v.id("instances"), now: v.number() },
+  handler: async (ctx, { instanceId, now }): Promise<{ invitations: PendingInvitation[] } | null> => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
-
-    const allowed = await canAccessAccount(ctx, args.accountId, userId);
-    if (!allowed) return null;
-
-    const rows = await ctx.db
+    if (userId === null) {
+      return null;
+    }
+    const instance = await ctx.db.get(instanceId);
+    const membership = await getInstanceMembership(ctx, instanceId, userId);
+    if (instance === null || !roleSatisfies(membership?.role, "admin")) {
+      return null;
+    }
+    const engineRows = await ctx.db
       .query("invitations")
-      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId).eq("status", "pending"))
       .collect();
-
-    const now = Date.now();
-    const invitations = rows
-      .filter((r) => r.status === "pending" && r.expiresAt > now)
-      .map((r) => ({
-        _id: r._id,
-        email: r.email,
-        platform: r.platform,
-        platformLogin: r.platformLogin,
-        platformDisplayName: r.platformDisplayName,
-        platformProfileImageUrl: r.platformProfileImageUrl,
-        role: r.role,
-        instanceId: r.instanceId ?? null,
-        engineRole: r.engineRole ?? null,
-        createdAt: r.createdAt,
-        expiresAt: r.expiresAt,
-      }));
-
+    const account = await ctx.db.get(instance.accountId);
+    const orgWideRows =
+      account !== null && orgCan(await orgRoleOf(ctx, account, userId), "manageMembers")
+        ? (
+            await ctx.db
+              .query("invitations")
+              .withIndex("by_account", (q) => q.eq("accountId", instance.accountId))
+              .collect()
+          ).filter((r) => r.instanceId === undefined && r.status === "pending")
+        : [];
+    const invitations = [...engineRows, ...orgWideRows].filter((r) => r.expiresAt > now).map(toPendingInvitation);
     return { invitations };
   },
 });
@@ -298,8 +330,6 @@ export const lookupTwitchUser = action({
 // Create
 // ---------------------------------------------------------------------------
 
-const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove someone to invite more people";
-
 /** Whether the person an invitation names already has a seat in the engine's org. */
 async function inviteeInOrg(
   ctx: QueryCtx,
@@ -357,7 +387,7 @@ export const insertInvitation = internalMutation({
     }
 
     const now = Date.now();
-    if (!(await inviteeInOrg(ctx, instance, args.target)) && (await orgSeatsFull(ctx, instance._id, now))) {
+    if (!(await inviteeInOrg(ctx, instance, args.target)) && (await orgSeatsFull(ctx, instance.accountId, now))) {
       throw new Error(SEATS_FULL);
     }
     const token = randomToken();
@@ -493,9 +523,22 @@ export const revoke = mutation({
   },
 });
 
+/**
+ * How an `accept` call ended. The expected ways an invite link fails are
+ * values, not throws: production Convex hides a thrown message from the
+ * client, so a throw would reach the user as "Server Error".
+ */
+export type AcceptOutcome =
+  | { status: "accepted"; accountId: Id<"accounts">; instanceId: Id<"instances">; alreadyMember: boolean }
+  | { status: "already_member"; instanceId: Id<"instances"> }
+  | { status: "already_accepted" }
+  | { status: "expired" }
+  | { status: "revoked" }
+  | { status: "not_found" };
+
 export const accept = mutation({
   args: { token: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<AcceptOutcome> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
 
@@ -503,14 +546,24 @@ export const accept = mutation({
       .query("invitations")
       .withIndex("by_token", (q) => q.eq("token", args.token))
       .first();
-
-    if (!inv || inv.status !== "pending") {
-      throw new Error("Invalid or expired invitation");
-    }
-
     const now = Date.now();
-    if (inv.expiresAt <= now) {
-      throw new Error("This invitation has expired");
+
+    if (!inv) {
+      return { status: "not_found" };
+    }
+    if (inv.status === "revoked") {
+      return { status: "revoked" };
+    }
+    if (inv.status === "expired" || (inv.status === "pending" && inv.expiresAt <= now)) {
+      return { status: "expired" };
+    }
+    if (inv.status === "accepted") {
+      // Opening a used link again is harmless for someone who already has the engine.
+      const engine = await invitationEngine(ctx, inv);
+      if (engine !== null && (await getInstanceMembership(ctx, engine.instanceId, userId)) !== null) {
+        return { status: "already_member", instanceId: engine.instanceId };
+      }
+      return { status: "already_accepted" };
     }
 
     const user = await ctx.db.get(userId);
@@ -531,7 +584,7 @@ export const accept = mutation({
 
     const account = await ctx.db.get(inv.accountId);
     if (account === null) {
-      throw new Error("Invalid or expired invitation");
+      throw new Error(`accept: invitation ${inv._id} names a missing account`);
     }
     const engine = await invitationEngine(ctx, inv);
     if (engine === null) {
@@ -540,9 +593,6 @@ export const accept = mutation({
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
-    if (!existingMember && (await orgSeatsFull(ctx, engine.instanceId, now))) {
-      throw new Error(SEATS_FULL);
-    }
     if (account.ownerId !== userId) {
       // An invitation only adds access: someone made an engine admin after it
       // was sent keeps admin when they accept a member invite.
@@ -561,6 +611,11 @@ export const accept = mutation({
     }
 
     await ctx.db.patch(inv._id, { status: "accepted" });
-    return { accountId: inv.accountId, instanceId: engine.instanceId, alreadyMember: existingMember };
+    return {
+      status: "accepted",
+      accountId: inv.accountId,
+      instanceId: engine.instanceId,
+      alreadyMember: existingMember,
+    };
   },
 });

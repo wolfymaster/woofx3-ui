@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as access from "../access.js";
 import type * as accountMembers from "../accountMembers.js";
 import type * as accounts from "../accounts.js";
 import type * as actionDefinitions from "../actionDefinitions.js";
@@ -19,7 +20,6 @@ import type * as alertCompositions from "../alertCompositions.js";
 import type * as alertLog from "../alertLog.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
-import type * as billingHttp from "../billingHttp.js";
 import type * as browserSource from "../browserSource.js";
 import type * as chatCommandActions from "../chatCommandActions.js";
 import type * as chatCommandGroups from "../chatCommandGroups.js";
@@ -160,6 +160,7 @@ import type * as lib_payments_fake from "../lib/payments/fake.js";
 import type * as lib_payments_provider from "../lib/payments/provider.js";
 import type * as lib_payments_providerEvents from "../lib/payments/providerEvents.js";
 import type * as lib_payments_registry from "../lib/payments/registry.js";
+import type * as lib_payments_sessions from "../lib/payments/sessions.js";
 import type * as lib_payments_stripe from "../lib/payments/stripe.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
@@ -268,7 +269,10 @@ import type * as ops_http from "../ops/http.js";
 import type * as ops_notifications from "../ops/notifications.js";
 import type * as ops_reads from "../ops/reads.js";
 import type * as ops_storageLimits from "../ops/storageLimits.js";
+import type * as organizations from "../organizations.js";
 import type * as pageIntros from "../pageIntros.js";
+import type * as payments from "../payments.js";
+import type * as paymentsHttp from "../paymentsHttp.js";
 import type * as pins from "../pins.js";
 import type * as plans from "../plans.js";
 import type * as platformRealtime from "../platformRealtime.js";
@@ -334,6 +338,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  access: typeof access;
   accountMembers: typeof accountMembers;
   accounts: typeof accounts;
   actionDefinitions: typeof actionDefinitions;
@@ -345,7 +350,6 @@ declare const fullApi: ApiFromModules<{
   alertLog: typeof alertLog;
   auth: typeof auth;
   billing: typeof billing;
-  billingHttp: typeof billingHttp;
   browserSource: typeof browserSource;
   chatCommandActions: typeof chatCommandActions;
   chatCommandGroups: typeof chatCommandGroups;
@@ -486,6 +490,7 @@ declare const fullApi: ApiFromModules<{
   "lib/payments/provider": typeof lib_payments_provider;
   "lib/payments/providerEvents": typeof lib_payments_providerEvents;
   "lib/payments/registry": typeof lib_payments_registry;
+  "lib/payments/sessions": typeof lib_payments_sessions;
   "lib/payments/stripe": typeof lib_payments_stripe;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
@@ -594,7 +599,10 @@ declare const fullApi: ApiFromModules<{
   "ops/notifications": typeof ops_notifications;
   "ops/reads": typeof ops_reads;
   "ops/storageLimits": typeof ops_storageLimits;
+  organizations: typeof organizations;
   pageIntros: typeof pageIntros;
+  payments: typeof payments;
+  paymentsHttp: typeof paymentsHttp;
   pins: typeof pins;
   plans: typeof plans;
   platformRealtime: typeof platformRealtime;

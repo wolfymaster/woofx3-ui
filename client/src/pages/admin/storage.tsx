@@ -23,7 +23,7 @@ export default function AdminStorage() {
 
   return (
     <div className="container mx-auto p-6">
-      <PageHeader title="Storage" description="Where this instance keeps uploaded assets and module resources." />
+      <PageHeader title="Storage" description="Where this engine keeps uploaded assets and module resources." />
 
       <StorageSettings />
     </div>

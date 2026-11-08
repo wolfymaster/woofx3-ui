@@ -20,7 +20,7 @@ account's quotes, entitlements and checkout. In the hosted app those are the
 actions in `convex/marketplaceCatalog.ts`. They are requests, not subscriptions:
 the catalog is an HTTP service, so none of it is reactive. `use-marketplace.ts` does the one
 thing that follows from that: every fetched result is tied to the inputs it was
-fetched for, and a result belonging to a different instance, query or listing is
+fetched for, and a result belonging to a different engine, query or listing is
 never rendered. A stale render here is a streamer installing something they were
 not looking at.
 
@@ -214,8 +214,8 @@ permissions, so backing out acquires nothing.
   catalog prices `free` installs.
 
 Content — a module archive or a bundle — is fetched by `fetchListingContent`:
-anonymously at the instance's own catalog access first, which is how free
-content is served and keeps dev-tier listings hidden from instances not
+anonymously at the engine's own catalog access first, which is how free
+content is served and keeps dev-tier listings hidden from engines not
 flagged for them; then, only on a 401 (visible but not free), with the write
 token as the buyer. The marketplace serves it only to an account that holds
 the listing. Previews — the module detail's permission read, the file browser
@@ -229,7 +229,7 @@ instead (`convex/lib/marketplaceEngineInstall.ts`).
 `marketplaceEngineFor` picks the path per call, and takes the engine only when
 all of these hold, checked cheapest first:
 
-- the instance does not have dev marketplace access (the engine reads
+- the engine does not have dev marketplace access (the engine reads
   `/catalog/{id}` anonymously, where dev-tier listings do not exist);
 - `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are set, so a buyer token can
   be minted;
@@ -288,7 +288,7 @@ parts only work as a set, and a second copy would have drifted from the first.
 | Variable | Needed for |
 |---|---|
 | `MARKETPLACE_API_URL` | Everything. The marketplace API's origin. |
-| `MARKETPLACE_DEV_TOKEN` | Revealing dev-tier listings to flagged instances. |
+| `MARKETPLACE_DEV_TOKEN` | Revealing dev-tier listings to flagged engines. |
 | `MARKETPLACE_API_TOKEN` | Acquire, quotes, checkout and ownership reads. The marketplace gates those on its write token. Never reaches the browser. |
 | `APP_BASE_URL` | Checkout. The origin a return path is joined onto. |
 | `MARKETPLACE_BUYER_SIGNING_KEY` | Minting buyer tokens (`buyerTokenFor`). The Ed25519 private key as JWK JSON. A secret. |

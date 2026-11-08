@@ -60,7 +60,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
       <CardHeader>
         <CardTitle>Desktop app</CardTitle>
         <CardDescription>
-          The computer paired with this instance through the woofx3 desktop app. Pairing another computer replaces it.
+          The computer paired with this engine through the woofx3 desktop app. Pairing another computer replaces it.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -80,7 +80,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
               </p>
             </div>
             {!companion.approvalStands ? (
-              <Badge variant="outline" title="Whoever approved it is no longer an admin of this instance">
+              <Badge variant="outline" title="Whoever approved it is no longer an admin of this engine">
                 Needs pairing again
               </Badge>
             ) : !companion.confirmed ? (

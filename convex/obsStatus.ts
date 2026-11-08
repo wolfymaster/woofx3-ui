@@ -18,11 +18,11 @@ export const get = action({
     }
     const isMember: boolean = await ctx.runQuery(internal.platformRealtime.checkMembership, { instanceId, userId });
     if (!isMember) {
-      throw new ConvexError("You are not a member of this instance");
+      throw new ConvexError("You are not a member of this engine");
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance?.clientId || !instance.clientSecret) {
-      throw new ConvexError("This instance is not registered with an engine");
+      throw new ConvexError("This engine is not registered yet");
     }
     const raw = await createEngineRpcSession<ObsStatusApi>(
       instance.url,

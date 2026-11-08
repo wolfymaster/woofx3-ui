@@ -45,7 +45,7 @@ export async function deleteCompanion(ctx: MutationCtx, companionId: Id<"compani
 
 /** How the companion names the person who approved it, so the person at the PC can recognise them. */
 export function approverDisplayName(user: Doc<"users"> | null): string {
-  return user?.name ?? user?.email ?? "an instance admin";
+  return user?.name ?? user?.email ?? "an engine admin";
 }
 
 /** The instance's companion rows; at most one is expected, see MAX_COMPANION_ROWS_PER_INSTANCE. */

@@ -130,7 +130,7 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
           {runs.length === 0 ? (
             <div className="py-8 text-center">
               <Play className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
-              <p className="text-sm text-muted-foreground">{instanceId ? "No recent runs" : "No instance connected"}</p>
+              <p className="text-sm text-muted-foreground">{instanceId ? "No recent runs" : "No engine connected"}</p>
             </div>
           ) : (
             runs.map((run) => <WorkflowRunItem key={run.id} run={run} />)

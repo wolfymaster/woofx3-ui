@@ -95,6 +95,12 @@ const DesktopRelayWatch = IS_DESKTOP ? lazy(() => import("@/desktop/RelayWatch")
 const DesktopUpdateBanner = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateBanner")) : null;
 const DesktopLocalConnectionsGuide = IS_DESKTOP ? lazy(() => import("@/desktop/LocalConnectionsGuide")) : null;
 
+// The organization and billing portal is web only: the desktop app never shows
+// billing, so its build carries no /org route (org-portal/boundary.test.ts).
+const OrgPortal = IS_DESKTOP ? null : lazy(() => import("@/org-portal/OrgPortal"));
+/** `/org` and every path under it. */
+const ORG_PORTAL_ROUTE = /^\/org(?:\/.*)?$/;
+
 function SplashScreen() {
   return (
     <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -223,6 +229,17 @@ function AppRoutes() {
       </Route>
 
       <Route path={`${USER_PAGE_PREFIX}*`} component={UserPageHandoff} />
+
+      {/* Outside BroadcastShell: the portal has its own slim layout and needs no engine. */}
+      {OrgPortal && (
+        <Route path={ORG_PORTAL_ROUTE}>
+          <AuthGuard>
+            <PageBoundary resetKey={location}>
+              <OrgPortal />
+            </PageBoundary>
+          </AuthGuard>
+        </Route>
+      )}
 
       {/* Protected app routes */}
       <Route>

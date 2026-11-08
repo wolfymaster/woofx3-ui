@@ -76,7 +76,11 @@ describe("organization role migrations", () => {
     const t = newBackend();
     const s = await seedAnomalies(t);
     await migrateRoles(t);
-    expect(await violations(t)).toEqual([]);
+    expect(await t.action(internal.migrations.organizations.checkOrgInvariantsAll, {})).toEqual({
+      total: 0,
+      violations: [],
+      overSeatLimit: [],
+    });
     const after = await snapshot(t);
     expect(after.org).toContainEqual([s.ownerId, "owner"]);
     expect(after.org).toContainEqual([s.strayOwnerId, "admin"]);
@@ -118,6 +122,40 @@ describe("organization role migrations", () => {
     expect(await violations(t)).toEqual([
       { invariant: "duplicate_membership", accountId: s.accountId, userId: s.outsiderId, rows: 2 },
     ]);
+  });
+
+  test("M2 keeps everyone already on an engine, even past the seat limit", async () => {
+    const t = newBackend();
+    const { accountId, outsiders } = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Owner" });
+      const accountId = await ctx.db.insert("accounts", { name: "Big team", ownerId, createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", {
+        accountId,
+        name: "Hosted",
+        url: "https://h",
+        hosting: "managed",
+        createdAt: 1,
+      });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
+      const outsiders: Array<Id<"users">> = [];
+      for (let i = 0; i < 6; i++) {
+        const userId = await ctx.db.insert("users", { name: `Engine member ${i}` });
+        await ctx.db.insert("instanceMembers", { instanceId, userId, role: "member" });
+        outsiders.push(userId);
+      }
+      return { accountId, outsiders };
+    });
+    await migrateRoles(t);
+    const orgRows = await t.run((ctx) =>
+      ctx.db
+        .query("accountMembers")
+        .withIndex("by_account", (q) => q.eq("accountId", accountId))
+        .collect()
+    );
+    expect(orgRows.map((row) => row.userId)).toEqual(expect.arrayContaining(outsiders));
+    const check = await t.action(internal.migrations.organizations.checkOrgInvariantsAll, {});
+    expect(check.violations).toEqual([]);
+    expect(check.overSeatLimit).toEqual([{ accountId, members: 7, limit: 5 }]);
   });
 
   test("running them twice changes nothing", async () => {

@@ -86,10 +86,10 @@ const ENTRIES = {
       "The woofx3 server that runs your workflows, commands and overlays. It keeps running when this site is closed, so automations work while you stream.",
   },
   instance: {
-    term: "Instance",
+    term: "Engine connection",
     category: "setup",
     definition:
-      "Your engine as this site knows it: its address, connected platforms and settings. Everyone on your team works on the same instance.",
+      "Your engine as this site knows it: its address, connected platforms and settings. Everyone on your team works on the same engine.",
   },
   panel: {
     term: "Panel",

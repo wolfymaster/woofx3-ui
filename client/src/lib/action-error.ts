@@ -3,7 +3,8 @@ import { ConvexError } from "convex/values";
 /**
  * The sentence to show for a failed Convex action.
  *
- * A ConvexError carries it as `data`. A plain Error thrown inside an action
+ * A ConvexError carries it as `data`, or as `data.message` when its data is
+ * a coded refusal (`{ code, message }`). A plain Error thrown inside an action
  * reaches the client in one of two wrappers: in development
  * `[CONVEX A(...)] [Request ID: ...] Server Error Uncaught Error: <message>`
  * plus a stack, from which the message is cut out; in production only
@@ -14,6 +15,9 @@ import { ConvexError } from "convex/values";
 export function actionErrorMessage(error: unknown): string {
   if (error instanceof ConvexError && typeof error.data === "string") {
     return error.data;
+  }
+  if (error instanceof ConvexError && typeof error.data?.message === "string") {
+    return error.data.message;
   }
   const raw = error instanceof Error ? error.message : String(error);
   const uncaught = raw.match(/Uncaught (?:Convex)?Error: ([^\n]*)/);

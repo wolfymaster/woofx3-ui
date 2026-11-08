@@ -2,7 +2,7 @@
 
 ## Context
 
-The internal backoffice (woofx3-maintenance `backoffice/`) shows operators managed engines from the maintenance API. It also needs the users, accounts and instances behind them, and later has to change plans and act on customer engines. None of that is reachable from outside Convex:
+The internal backoffice (woofx3-maintenance `backoffice/`) shows operators managed engines from the maintenance API. It also needs the users, accounts and engines behind them, and later has to change plans and act on customer engines. None of that is reachable from outside Convex:
 
 - Public functions are gated by Convex Auth and per-tenant roles. Adding a staff role to `users` would let a bug or a role change in this app turn a customer into an operator.
 - A deploy key can push code and read or write every table. That is far too much for a web app to hold.
@@ -39,6 +39,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
 | `GET /api/ops/instances/:id/health` | Live state, sync state, recent alerts and failing workflows. |
 | `GET /api/ops/audit?actor=&target=&cursor=` | The audit log, newest first, for one operator or one target. |
 | `GET /api/ops/plans` | Every plan with how many accounts are on it, resolved as entitlements are: an active assignment's plan, else the default. Walks every account and assignment a page per query, so it is not a single snapshot; the backoffice prices it for expected revenue. |
+| `GET /api/ops/payments/strays?cursor=&limit=` | Stray payments, newest first: live provider subscriptions an organization's row doesn't follow, such as a second checkout that was also paid. Each gives the event, the organization (id and name; `null` once it is deleted), the provider subscription and customer refs, the amount in cents when it came through one of our checkouts (else `null`), and when it arrived. `limit` is 1 to 100 (default 25); any other value answers `400 invalid_limit`. Nothing cancels or refunds a stray: an operator settles it at the provider. |
 
 List routes are cursor-paginated: pass back `cursor` until it is `null`.
 

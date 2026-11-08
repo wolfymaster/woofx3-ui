@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { switchedStatus } from "./lib/engineSwitch";
+import { requireUsableSubscription } from "./lib/entitlementAccess";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
 import {
   decideRedeployEvent,
@@ -105,6 +106,9 @@ export const reserveManagedInstance = internalMutation({
 
     const { instanceId } = await findOrCreateManagedInstance(ctx, account);
     await startTrialIfNew(ctx, accountId, Date.now());
+    // Every managed request (onboarding, the username form, retry) comes
+    // through here, so a suspended org can't build an engine nothing would stop.
+    await requireUsableSubscription(ctx, accountId);
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -187,10 +191,26 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
 }
 
 /**
+ * Throws `subscription_suspended` unless the org's subscription is usable, for
+ * actions that resume a managed engine's run outside `reserveManagedInstance`.
+ * An org with no subscription row yet predates subscriptions and is not
+ * suspended, so it passes until the subscription migration gives it one.
+ */
+export const assertCanResumeEngine = internalQuery({
+  args: { accountId: v.id("accounts") },
+  handler: async (ctx, { accountId }): Promise<null> => {
+    if ((await subscriptionFor(ctx, accountId)) !== null) {
+      await requireUsableSubscription(ctx, accountId);
+    }
+    return null;
+  },
+});
+
+/**
  * An org's first managed engine starts its Starter trial. An org that already
  * has a subscription row, in any state, gets no second one.
  */
-async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">, now: number): Promise<void> {
+export async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">, now: number): Promise<void> {
   if ((await subscriptionFor(ctx, accountId)) !== null) {
     return;
   }

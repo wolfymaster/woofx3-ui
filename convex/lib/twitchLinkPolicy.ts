@@ -26,5 +26,5 @@ export function relinkRefusal(
   if (!existing || existing.platformUserId === incomingPlatformUserId) {
     return null;
   }
-  return `This instance is linked to Twitch account @${existing.platformUsername}. Sign in to Twitch as that account to reconnect, or disconnect it first to link a different one.`;
+  return `This engine is linked to Twitch account @${existing.platformUsername}. Sign in to Twitch as that account to reconnect, or disconnect it first to link a different one.`;
 }

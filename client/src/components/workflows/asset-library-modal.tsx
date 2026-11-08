@@ -178,7 +178,7 @@ export function AssetLibraryModal({
         </DialogHeader>
 
         {!instanceId ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">Select an instance to browse assets.</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">Select an engine to browse assets.</p>
         ) : (
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="grid grid-cols-3 w-full">

@@ -1,75 +1,8 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
-import { orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
-import { applyOrgRoleToEngines, canAccessAccount } from "./lib/teamAccess";
-
-export const listForAccount = query({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
-
-    const allowed = await canAccessAccount(ctx, args.accountId, userId);
-    if (!allowed) return null;
-
-    const account = await ctx.db.get(args.accountId);
-    if (!account) return null;
-
-    const rows = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
-      .collect();
-
-    const members: Array<{
-      userId: (typeof rows)[0]["userId"];
-      role: (typeof rows)[0]["role"];
-      createdAt: number;
-      name: string;
-      email: string | null;
-      image: string | null;
-    }> = [];
-
-    const seen = new Set<string>();
-
-    for (const row of rows) {
-      const user = await ctx.db.get(row.userId);
-      if (!user) continue;
-      const u = user as Record<string, unknown>;
-      members.push({
-        userId: row.userId,
-        role: row.role,
-        createdAt: row.createdAt,
-        name: (typeof u.name === "string" ? u.name : null) ?? "User",
-        email: typeof u.email === "string" ? u.email : null,
-        image: typeof u.image === "string" ? u.image : null,
-      });
-      seen.add(row.userId);
-    }
-
-    if (!seen.has(account.ownerId)) {
-      const ownerUser = await ctx.db.get(account.ownerId);
-      if (ownerUser) {
-        const u = ownerUser as Record<string, unknown>;
-        members.push({
-          userId: account.ownerId,
-          role: "owner",
-          createdAt: account.createdAt,
-          name: (typeof u.name === "string" ? u.name : null) ?? "User",
-          email: typeof u.email === "string" ? u.email : null,
-          image: typeof u.image === "string" ? u.image : null,
-        });
-      }
-    }
-
-    return {
-      account: { _id: account._id, name: account.name, ownerId: account.ownerId },
-      members,
-      canManage: orgCan(await orgRoleOf(ctx, account, userId), "manageMembers"),
-    };
-  },
-});
+import { requireOrgAction } from "./lib/orgRoles";
+import { applyOrgRoleToEngines } from "./lib/teamAccess";
 
 export const removeMember = mutation({
   args: {

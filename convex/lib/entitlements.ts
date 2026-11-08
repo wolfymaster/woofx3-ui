@@ -72,8 +72,8 @@ export const ENTITLEMENT_LIMITS = {
     unit: "bytes",
     default: 500 * 1024 * 1024,
   },
-  // Counts accountMembers, owner included; checked when inviting to a hosted
-  // engine and when an invitee who isn't in the org yet accepts.
+  // Counts accountMembers, owner included; checked by orgSeatsFull whenever
+  // someone new would join the org (lib/entitlementAccess.ts).
   "org.members": {
     description: "People in the organization",
     unit: "seats",

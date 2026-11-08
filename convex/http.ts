@@ -6,7 +6,6 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
-import { registerBillingRoutes } from "./billingHttp";
 import type { WebhookEventResult } from "./engineEvents";
 import { registerEngineEventRoutes } from "./engineEventsHttp";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
@@ -47,6 +46,7 @@ import { DESKTOP_SIGN_IN_PAGE_PATH, isNonceHash, parseSignInClient } from "./lib
 import { TWITCH_TOKEN_REQUESTED_EVENT_TYPE } from "./lib/twitchTokenGrant";
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
+import { registerPaymentRoutes } from "./paymentsHttp";
 import { registerUserPageFormRoutes } from "./userPageFormsHttp";
 import { registerViewerAuthRoutes } from "./viewerAuthHttp";
 import "./browserSource";
@@ -961,7 +961,7 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macr
 
 registerViewerAuthRoutes(http);
 registerUserPageFormRoutes(http);
-registerBillingRoutes(http);
+registerPaymentRoutes(http);
 registerEngineEventRoutes(http);
 
 export default http;

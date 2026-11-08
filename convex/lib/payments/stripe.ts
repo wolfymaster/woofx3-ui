@@ -8,9 +8,12 @@ import {
   type AppliedDiscount,
   type CheckoutPurpose,
   type CheckoutRequest,
+  type CheckoutSession,
   type DiscountDuration,
   type DiscountSpec,
   err,
+  type Invoice,
+  type InvoiceStatus,
   ok,
   type PaymentError,
   type PaymentEvent,
@@ -21,6 +24,7 @@ import {
   parsePaymentPurposeKind,
   purposeMetadata,
   type Result,
+  type SessionChange,
 } from "./provider";
 
 /**
@@ -28,7 +32,7 @@ import {
  * purpose, with STRIPE_SCHEMA_VERSION, after checking the fields read here.
  */
 export const STRIPE_API_VERSION = "2026-10-28.endive";
-/** `billingEvents.schemaVersion` for payloads of STRIPE_API_VERSION. */
+/** `paymentEvents.schemaVersion` for payloads of STRIPE_API_VERSION. */
 export const STRIPE_SCHEMA_VERSION = 1;
 
 export const STRIPE_CLIENT = {
@@ -270,6 +274,8 @@ export function purposeOf(event: Stripe.Event): PaymentPurposeKind | null {
         (object as Stripe.Invoice).parent?.subscription_details?.metadata?.purpose ?? null
       );
     case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded":
+    case "checkout.session.expired":
       return parsePaymentPurposeKind((object as Stripe.Checkout.Session).metadata?.purpose ?? null);
     default:
       return null;
@@ -290,10 +296,70 @@ export function subscriptionRefOf(event: Stripe.Event): string | null {
     case "invoice.payment_failed":
       return idOf((object as Stripe.Invoice).parent?.subscription_details?.subscription ?? null);
     case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded":
       return idOf((object as Stripe.Checkout.Session).subscription ?? null);
     default:
       return null;
   }
+}
+
+/**
+ * What an event says happened to a checkout session. A session that completes
+ * before a delayed payment method has paid is only awaiting payment: Stripe
+ * sends `async_payment_succeeded` once it has.
+ */
+export function sessionChangeOf(event: Stripe.Event): SessionChange | null {
+  switch (event.type) {
+    case "checkout.session.completed":
+      return {
+        sessionRef: event.data.object.id,
+        change: event.data.object.payment_status === "unpaid" ? "awaiting_payment" : "paid",
+      };
+    case "checkout.session.async_payment_succeeded":
+      return { sessionRef: event.data.object.id, change: "paid" };
+    case "checkout.session.expired":
+      return { sessionRef: event.data.object.id, change: "expired" };
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Invoices
+// ---------------------------------------------------------------------------
+
+const INVOICE_STATUSES: Record<InvoiceStatus, true> = {
+  draft: true,
+  open: true,
+  paid: true,
+  uncollectible: true,
+  void: true,
+};
+
+function invoiceStatus(status: InvoiceFields["status"]): InvoiceStatus | null {
+  // Stripe leaves the status unset only before an invoice is first saved, which is still a draft.
+  if (status === null) {
+    return "draft";
+  }
+  return (Object.keys(INVOICE_STATUSES) as InvoiceStatus[]).find((known) => known === status) ?? null;
+}
+
+/** The invoice fields toInvoice reads. */
+export type InvoiceFields = Pick<Stripe.Invoice, "id" | "status" | "period_start" | "total" | "hosted_invoice_url">;
+
+/** A Stripe invoice in our terms; an error for a status this API version doesn't define. */
+export function toInvoice(invoice: InvoiceFields): Result<Invoice> {
+  const status = invoiceStatus(invoice.status);
+  if (status === null) {
+    return err("invalid_request", `Stripe invoice ${invoice.id} has unknown status ${invoice.status}`);
+  }
+  return ok({
+    id: invoice.id,
+    periodStart: invoice.period_start * 1000,
+    amountCents: invoice.total,
+    status,
+    hostedUrl: invoice.hosted_invoice_url ?? null,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +389,22 @@ function failure<T>(error: unknown): Result<T> {
   throw error;
 }
 
+/** A created Stripe checkout session in our terms. Every woofx3 price is in USD. */
+export function toCheckoutSession(
+  session: Pick<Stripe.Checkout.Session, "id" | "url" | "amount_total" | "currency">
+): Result<CheckoutSession> {
+  if (session.url === null) {
+    return err("provider_unavailable", `Stripe returned checkout ${session.id} without a URL`);
+  }
+  if (session.amount_total === null || session.currency !== "usd") {
+    return err(
+      "invalid_request",
+      `Stripe checkout ${session.id} charges ${session.amount_total} ${session.currency}, not an amount in usd`
+    );
+  }
+  return ok({ url: session.url, sessionRef: session.id, amountCents: session.amount_total });
+}
+
 export class StripePaymentProvider implements PaymentProvider {
   readonly id = "stripe" as const;
   private readonly crypto = Stripe.createSubtleCryptoProvider();
@@ -349,7 +431,7 @@ export class StripePaymentProvider implements PaymentProvider {
     return codes.data[0] ?? null;
   }
 
-  async createCheckout(req: CheckoutRequest): Promise<Result<{ url: string }>> {
+  async createCheckout(req: CheckoutRequest): Promise<Result<CheckoutSession>> {
     switch (req.purpose.kind) {
       case "subscription":
         return this.createSubscriptionCheckout(req, req.purpose);
@@ -359,7 +441,7 @@ export class StripePaymentProvider implements PaymentProvider {
   private async createSubscriptionCheckout(
     req: CheckoutRequest,
     purpose: Extract<CheckoutPurpose, { kind: "subscription" }>
-  ): Promise<Result<{ url: string }>> {
+  ): Promise<Result<CheckoutSession>> {
     try {
       const price = await this.priceId(priceLookupKey(purpose.plan, purpose.interval));
       if (!price.ok) {
@@ -393,9 +475,16 @@ export class StripePaymentProvider implements PaymentProvider {
         },
         { idempotencyKey: req.idempotencyKey }
       );
-      return session.url === null
-        ? err("provider_unavailable", "Stripe returned a checkout without a URL")
-        : ok({ url: session.url });
+      return toCheckoutSession(session);
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async expireCheckout(sessionRef: string): Promise<Result<null>> {
+    try {
+      await this.stripe.checkout.sessions.expire(sessionRef);
+      return ok(null);
     } catch (error) {
       return failure(error);
     }
@@ -438,6 +527,7 @@ export class StripePaymentProvider implements PaymentProvider {
       type: event.type,
       purpose: purposeOf(event),
       subscriptionRef: subscriptionRefOf(event),
+      session: sessionChangeOf(event),
     });
   }
 
@@ -502,6 +592,23 @@ export class StripePaymentProvider implements PaymentProvider {
       }
       const spec = specOfCoupon(coupon);
       return ok(spec === null ? null : { spec, code: promotion.code, endsAt: null });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async listInvoices(customerRef: string, limit: number): Promise<Result<Invoice[]>> {
+    try {
+      const page = await this.stripe.invoices.list({ customer: customerRef, limit });
+      const invoices: Invoice[] = [];
+      for (const invoice of page.data) {
+        const mapped = toInvoice(invoice);
+        if (!mapped.ok) {
+          return mapped;
+        }
+        invoices.push(mapped.value);
+      }
+      return ok(invoices);
     } catch (error) {
       return failure(error);
     }

@@ -204,7 +204,7 @@ function EngineSettings() {
       <Card>
         <CardContent className="flex items-center gap-2 py-8 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading instance…
+          Loading engine…
         </CardContent>
       </Card>
     );
@@ -214,7 +214,7 @@ function EngineSettings() {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-muted-foreground">
-          No instance selected. Complete onboarding or pick an instance from the header menu.
+          No engine selected. Complete onboarding or pick an engine from the header menu.
         </CardContent>
       </Card>
     );
@@ -242,7 +242,7 @@ function EngineSettings() {
         <CardHeader>
           <CardTitle>Engine Configuration</CardTitle>
           <CardDescription>
-            Endpoint for the selected instance ({instance.name}). Each instance has its own engine URL.
+            Endpoint for the selected engine ({instance.name}). Each engine has its own URL.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -294,7 +294,7 @@ function EngineSettings() {
             {status === "error" && errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
             {status === "success" && <p className="text-xs text-green-500">Engine is reachable.</p>}
             <p className="text-xs text-muted-foreground">
-              The hostname and port (or full URL) where this instance&apos;s backend API is running. If no protocol is
+              The hostname and port (or full URL) where this engine&apos;s backend API is running. If no protocol is
               specified, the current page&apos;s protocol will be used.
             </p>
           </div>
@@ -329,7 +329,7 @@ function EngineSettings() {
           <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
             <div className="h-2 w-2 rounded-full bg-green-500" />
             <p className="text-sm text-muted-foreground">
-              Saving the engine URL updates this instance and reconnects the live engine connection.
+              Saving the URL updates this engine and reconnects the live connection.
             </p>
           </div>
         </CardContent>
@@ -353,7 +353,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       window.location.href = "/";
     } catch (e) {
       toast({
-        title: "Couldn't delete instance",
+        title: "Couldn't delete engine",
         description: e instanceof Error ? e.message : String(e),
         variant: "destructive",
       });
@@ -367,11 +367,11 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="text-destructive">Danger Zone</CardTitle>
-          <CardDescription>Irreversible actions for this instance.</CardDescription>
+          <CardDescription>Irreversible actions for this engine.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="destructive" data-testid="button-delete-instance" onClick={() => setDialogOpen(true)}>
-            Delete Instance
+            Delete Engine
           </Button>
         </CardContent>
       </Card>
@@ -379,10 +379,10 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Instance</AlertDialogTitle>
+            <AlertDialogTitle>Delete Engine</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this instance? This action is irreversible and will permanently remove all
-              data associated with this instance, including workflows, scenes, and assets.
+              Are you sure you want to delete this engine? This action is irreversible and will permanently remove all
+              data associated with this engine, including workflows, scenes, and assets.
               {managed
                 ? " Your managed engine is shut down and its address is released, so it can be claimed again."
                 : null}
@@ -400,7 +400,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
               ) : (
                 <AlertTriangle className="h-4 w-4 mr-2" />
               )}
-              Delete Instance
+              Delete Engine
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -412,7 +412,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
 export default function AdminEngine() {
   return (
     <div className="container mx-auto p-6">
-      <PageHeader title="Engine" description="Where this instance's woofx3 engine lives, and how it stays in sync." />
+      <PageHeader title="Engine" description="Where this engine lives, and how it stays in sync." />
 
       <EngineSettings />
     </div>
