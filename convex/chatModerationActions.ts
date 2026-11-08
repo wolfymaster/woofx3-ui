@@ -25,10 +25,10 @@ export type ChatModerationRead = { kind: "unsupported" } | { kind: "ready"; conf
 async function engineFor(ctx: ActionCtx, instanceId: Id<"instances">, userId: Id<"users">) {
   const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, { instanceId, userId });
   if (!bundle) {
-    throw new ConvexError("This instance could not be found.");
+    throw new ConvexError("This engine could not be found.");
   }
   if (!bundle.clientId || !bundle.clientSecret) {
-    throw new ConvexError("This instance is not connected to its engine yet.");
+    throw new ConvexError("This engine is not connected yet.");
   }
   const { url, clientId, clientSecret } = bundle;
   // A capnweb HTTP batch session is single-use, so each call gets its own.

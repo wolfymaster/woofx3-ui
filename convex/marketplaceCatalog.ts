@@ -471,10 +471,10 @@ export const createAlertFromBundle = internalAction({
 async function engineFor(ctx: ActionCtx, instanceId: Id<"instances">) {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance) {
-    throw new ConvexError(`Instance ${instanceId} not found`);
+    throw new ConvexError(`Engine ${instanceId} not found`);
   }
   if (!instance.clientId || !instance.clientSecret) {
-    throw new ConvexError("Instance is not registered with the engine");
+    throw new ConvexError("Engine is not registered with the engine");
   }
   return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
 }

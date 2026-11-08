@@ -80,7 +80,7 @@ async function requireAccess(ctx: ActionCtx, instanceId: Id<"instances">): Promi
   // inferred type is circular and TypeScript gives up.
   const access: InstanceAccess = await ctx.runQuery(internal.supporters.instanceAccessFor, { instanceId, userId });
   if (access.status === "not-member") {
-    throw new ConvexError("You are not a member of this instance.");
+    throw new ConvexError("You are not a member of this engine.");
   }
   return access;
 }
@@ -88,7 +88,7 @@ async function requireAccess(ctx: ActionCtx, instanceId: Id<"instances">): Promi
 async function requireEngine(ctx: ActionCtx, instanceId: Id<"instances">): Promise<EngineCredentials> {
   const access = await requireAccess(ctx, instanceId);
   if (access.status !== "ready") {
-    throw new ConvexError("This instance is not connected to its engine yet.");
+    throw new ConvexError("This engine is not connected yet.");
   }
   return access.engine;
 }

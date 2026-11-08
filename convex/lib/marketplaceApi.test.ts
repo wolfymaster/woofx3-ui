@@ -24,7 +24,7 @@ describe("toClientError", () => {
   });
 
   test("a ConvexError passes through, and anything else is left to be logged", () => {
-    const already = new ConvexError("Cozy Alerts hasn't been bought on this account.");
+    const already = new ConvexError("Cozy Alerts hasn't been bought in this organization.");
     expect(toClientError(already)).toBe(already);
     const bug = new TypeError("x is undefined");
     expect(toClientError(bug)).toBe(bug);
