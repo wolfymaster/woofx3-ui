@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { useCallback, useEffect, useState } from "react";
 import type { AlertQueueGateway } from "@/engine/gateway";
 import type { EngineAlert, OverlayPresence, ReadOptions } from "@/engine/types";
@@ -8,7 +8,9 @@ import { OVERLAY_PRESENCE_POLL_MS, overlayPresenceOf } from "@/lib/overlay-prese
 import { useMappedList } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
-function toEngineAlert(row: Doc<"engineAlerts">): EngineAlert {
+type AlertListRow = FunctionReturnType<typeof api.engineAlerts.listForInstance>[number];
+
+function toEngineAlert(row: AlertListRow): EngineAlert {
   return {
     id: row._id,
     engineAlertId: row.engineAlertId,
@@ -16,17 +18,9 @@ function toEngineAlert(row: Doc<"engineAlerts">): EngineAlert {
     payload: row.payload,
     workflowId: row.workflowId,
     sourceEventId: row.sourceEventId,
-    engineStatus: row.engineStatus,
-    envelopeId: row.envelopeId,
-    dispatchedAt: row.dispatchedAt,
-    playedAt: row.playedAt,
-    completedAt: row.completedAt,
     error: row.error,
     engineCreatedAt: row.engineCreatedAt,
-    engineUpdatedAt: row.engineUpdatedAt,
-    engineVersion: row.engineVersion,
     createdAt: row.createdAt,
-    progressedAt: row.progressedAt,
     unconfirmedAt: row.unconfirmedAt,
   };
 }

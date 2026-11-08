@@ -20,24 +20,16 @@ function snapshot(overrides: Partial<AlertSnapshot> = {}): AlertSnapshot {
 
 describe("toEngineAlert", () => {
   test("maps the engine's snapshot, with its id as the record's", () => {
-    expect(toEngineAlert(snapshot({ version: 3, envelopeId: "env-1" }), UPDATED_MS)).toEqual({
+    expect(toEngineAlert(snapshot(), UPDATED_MS)).toEqual({
       id: "alert-1",
       engineAlertId: "alert-1",
       status: "completed",
       payload: '{"text":"hi"}',
       workflowId: "run-1",
       sourceEventId: "event-1",
-      engineStatus: undefined,
-      envelopeId: "env-1",
-      dispatchedAt: undefined,
-      playedAt: undefined,
-      completedAt: undefined,
       error: undefined,
       engineCreatedAt: "2026-10-28T11:59:59.000Z",
-      engineUpdatedAt: UPDATED_AT,
-      engineVersion: 3,
       createdAt: Date.parse("2026-10-28T11:59:59.000Z"),
-      progressedAt: UPDATED_MS,
       unconfirmedAt: undefined,
     });
   });
@@ -52,9 +44,8 @@ describe("toEngineAlert", () => {
     ]);
   });
 
-  test("keeps a status this build does not know as unknown, with the engine's value beside it", () => {
-    const alert = toEngineAlert(snapshot({ status: "cancelled" }), UPDATED_MS);
-    expect([alert.status, alert.engineStatus]).toEqual(["unknown", "cancelled"]);
+  test("keeps a status this build does not know as unknown", () => {
+    expect(toEngineAlert(snapshot({ status: "cancelled" }), UPDATED_MS).status).toBe("unknown");
   });
 
   test.each([
