@@ -11,6 +11,7 @@
 
 import { twitchUserFromHelix } from "@shared/twitch-users";
 import { logger } from "../logger";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./outboundTimeouts";
 import { isRevokedRefreshResponse } from "./twitchRefresh";
 import type { SubscriberTier, ViewerPlatform } from "./viewerAuth";
 
@@ -123,6 +124,7 @@ export function twitchViewerClient(credentials: TwitchAppCredentials): ViewerPla
 
   const tokenRequest = (params: Record<string, string>) =>
     fetch(TWITCH_TOKEN_URL, {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -154,7 +156,10 @@ export function twitchViewerClient(credentials: TwitchAppCredentials): ViewerPla
     },
 
     async fetchProfile(accessToken) {
-      const response = await fetch(TWITCH_USERS_URL, { headers: helixHeaders(accessToken) });
+      const response = await fetch(TWITCH_USERS_URL, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
+        headers: helixHeaders(accessToken),
+      });
       if (!response.ok) {
         return { ok: false, error: "failed" };
       }
@@ -186,8 +191,14 @@ export function twitchViewerClient(credentials: TwitchAppCredentials): ViewerPla
     async checkRoles(accessToken, viewerPlatformUserId, broadcasterPlatformUserId) {
       const query = `user_id=${encodeURIComponent(viewerPlatformUserId)}&broadcaster_id=${encodeURIComponent(broadcasterPlatformUserId)}`;
       const [followResponse, subscriptionResponse] = await Promise.all([
-        fetch(`${TWITCH_FOLLOWED_URL}?${query}`, { headers: helixHeaders(accessToken) }),
-        fetch(`${TWITCH_USER_SUBSCRIPTION_URL}?${query}`, { headers: helixHeaders(accessToken) }),
+        fetch(`${TWITCH_FOLLOWED_URL}?${query}`, {
+          signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
+          headers: helixHeaders(accessToken),
+        }),
+        fetch(`${TWITCH_USER_SUBSCRIPTION_URL}?${query}`, {
+          signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
+          headers: helixHeaders(accessToken),
+        }),
       ]);
       if (followResponse.status === 401 || subscriptionResponse.status === 401) {
         return { ok: false, error: "unauthorized" };

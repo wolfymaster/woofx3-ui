@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi, engineApiUrl } from "./lib/engineInstanceUrl";
+import { OUTBOUND_ARCHIVE_TIMEOUT_MS } from "./lib/outboundTimeouts";
 
 /**
  * Map an engine RPC error to a user-friendly message. The capnweb layer throws
@@ -279,7 +280,7 @@ export const deliverZipToInstance = internalAction({
         instanceId: args.instanceId,
         archiveKey: args.archiveKey,
       });
-      const archiveRes = await fetch(delivery.archiveUrl);
+      const archiveRes = await fetch(delivery.archiveUrl, { signal: AbortSignal.timeout(OUTBOUND_ARCHIVE_TIMEOUT_MS) });
       if (!archiveRes.ok) {
         throw new Error(`Failed to fetch module archive: ${archiveRes.status} ${archiveRes.statusText}`);
       }

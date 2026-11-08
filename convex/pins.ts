@@ -13,6 +13,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { planRepin, type RepinPlan } from "./lib/pinStrategy";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
@@ -186,6 +187,7 @@ export async function fetchCurrentPin(
     viaEngine: (engine) => engine.twitchGetChatPins(),
     direct: () =>
       fetch(url, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),
   });
@@ -289,6 +291,7 @@ async function pinExisting(
     viaEngine: (engine) => engine.twitchPinChatMessage({ message_id: messageId }),
     direct: () =>
       fetch(url, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "PUT",
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),
@@ -446,6 +449,7 @@ export async function unpinOnTwitch(
     viaEngine: (engine) => engine.twitchUnpinChatMessage({ message_id: messageId }),
     direct: () =>
       fetch(url, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),

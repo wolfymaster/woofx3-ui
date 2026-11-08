@@ -15,6 +15,7 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { queuedPosition, type ShoutoutEnqueueRequestedResponse } from "./lib/shoutoutEngineRequest";
 import {
   earliestEligibleAt,
@@ -120,6 +121,7 @@ export async function fetchChatters(
     viaEngine: (engine) => engine.twitchGetChatters({ first: CHATTERS_PAGE_SIZE }),
     direct: () =>
       fetch(url, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),
   });
@@ -492,6 +494,7 @@ export async function sendQueuedShoutout(
     viaEngine: (engine) => engine.twitchSendShoutout({ to_broadcaster_id: toBroadcasterId }),
     direct: () =>
       fetch(url, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
       }),
