@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { ListDetail } from "@/components/layout/list-detail";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   ApproveModulePermissionsDialog,
@@ -288,12 +289,16 @@ export default function ModuleInstall() {
   // An upload installs onto the engine rather than into the catalog, so this
   // page sits beside what is installed, not beside the storefront's rail.
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      <ModuleSidebar selectedId={null} />
-      <div className="h-full min-w-0 flex-1 overflow-auto">
-        <ModuleUpload />
-      </div>
-    </div>
+    <ListDetail
+      hasSelection
+      back={{ href: MARKETPLACE_INSTALLED_PATH, label: "installed modules" }}
+      list={<ModuleSidebar selectedId={null} />}
+      detail={
+        <div className="h-full min-w-0 flex-1 overflow-auto">
+          <ModuleUpload />
+        </div>
+      }
+    />
   );
 }
 
@@ -750,7 +755,7 @@ function ModuleUpload() {
       <Dialog open={showErrorDetails} onOpenChange={setShowErrorDetails}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Install Failed</DialogTitle>
+            <DialogTitle>Install failed</DialogTitle>
           </DialogHeader>
           <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
         </DialogContent>

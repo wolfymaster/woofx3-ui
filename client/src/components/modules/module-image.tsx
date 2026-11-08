@@ -1,4 +1,5 @@
 import type { MarketplaceBannerUrls, MarketplaceIconUrls } from "@shared/marketplace-images";
+import type { BannerRendition } from "@/lib/marketplace-banner";
 import { cn } from "@/lib/utils";
 
 // Width descriptors are the renditions' pixel widths, documented on the types
@@ -30,18 +31,19 @@ export function ModuleIconImage({ icon, displaySize, className }: ModuleIconImag
 
 interface ModuleBannerImageProps {
   banner: MarketplaceBannerUrls;
-  /** The `sizes` attribute: how wide the banner renders at each breakpoint. */
-  sizes: string;
+  /**
+   * The one rendition to show. Card and hero have different proportions, so the parent is
+   * sized for one of them (`BANNER_ASPECT`) and the image never swaps to the other.
+   */
+  rendition: BannerRendition;
   className?: string;
 }
 
 /** Fills its positioned parent, cropping to cover it. */
-export function ModuleBannerImage({ banner, sizes, className }: ModuleBannerImageProps) {
+export function ModuleBannerImage({ banner, rendition, className }: ModuleBannerImageProps) {
   return (
     <img
-      src={banner.card}
-      srcSet={`${banner.card} 512w, ${banner.hero} 1600w`}
-      sizes={sizes}
+      src={banner[rendition]}
       alt=""
       loading="lazy"
       decoding="async"

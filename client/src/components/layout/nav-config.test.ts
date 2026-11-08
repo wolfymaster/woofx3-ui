@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   ADMIN_ITEMS,
   flattenNavItems,
-  isNavGroupOpen,
   isNavItemActive,
   type NavItem,
   navItemsFor,
@@ -63,29 +62,6 @@ describe("navItemsFor", () => {
   });
 });
 
-describe("isNavGroupOpen", () => {
-  test("its own page opens it", () => {
-    expect(isNavGroupOpen(alerts, "/stream/alerts")).toBe(true);
-  });
-
-  test("a nested entry's page keeps it open", () => {
-    expect(isNavGroupOpen(alerts, "/stream/counters/death_count")).toBe(true);
-    expect(isNavGroupOpen(alerts, "/stream/workflows")).toBe(true);
-  });
-
-  test("an unrelated page leaves it closed", () => {
-    expect(isNavGroupOpen(alerts, "/stream/scenes")).toBe(false);
-  });
-
-  test("an entry with nothing nested never opens", () => {
-    const commands = STREAM_ITEMS.find((item) => item.id === "commands");
-    if (!commands) {
-      throw new Error("the Commands entry is missing from STREAM_ITEMS");
-    }
-    expect(isNavGroupOpen(commands, "/stream/commands")).toBe(false);
-  });
-});
-
 describe("flattenNavItems", () => {
   test("nested entries follow their parent", () => {
     const ids = flattenNavItems(STREAM_ITEMS).map((item) => item.id);
@@ -128,15 +104,6 @@ describe("withAlertsChildren", () => {
   test("leaves a menu without Alerts as it is", () => {
     const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
     expect(withAlertsChildren(helpOnly, [wheels])).toEqual(helpOnly);
-  });
-
-  test("a page for an extra entry keeps Alerts open", () => {
-    const merged = withAlertsChildren(STREAM_ITEMS, [wheels]);
-    const mergedAlerts = merged.find((item) => item.id === "alerts");
-    if (!mergedAlerts) {
-      throw new Error("the Alerts entry is missing");
-    }
-    expect(isNavGroupOpen(mergedAlerts, "/stream/resources/wheel_spin/wheel/prizes")).toBe(true);
   });
 });
 

@@ -398,7 +398,7 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
           <EmptyState
             icon={Zap}
             title="No macros yet"
-            description="Add a button to send a chat message, run a chat command, fire a workflow, run an action, or make an HTTP request in one click."
+            description="One-click buttons for chat, commands, workflows and more."
             action={{ label: "Add Macro", onClick: handleAddMacro }}
             className="h-full py-6"
           />

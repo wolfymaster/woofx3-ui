@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Layers } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
+import { LIST_RAIL } from "@/components/layout/sidebar-rail";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -55,7 +55,7 @@ export function AlertGroupRail({
   groupsActive,
 }: AlertGroupRailProps) {
   return (
-    <nav className={SIDEBAR_RAIL} aria-label="Alert groups">
+    <nav className={LIST_RAIL} aria-label="Alert groups">
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <Label htmlFor="alert-rail-hide-unused" className="text-[13px] font-normal text-muted-foreground">
           Hide unused alerts
@@ -121,20 +121,16 @@ function PlatformSection({ platform, ...nodeProps }: NodeProps & { platform: Ale
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      {/* A filled bar rather than a link: a platform divides the rail, it is not somewhere
-          to go, so it reads apart from the entries below instead of competing with the
-          selected one's highlight. */}
+      {/* A small-caps label rather than a link: a platform divides the rail, it is not
+          somewhere to go. It matches the other rails' group labels and stays quieter than
+          the entries, so the selected entry is what draws the eye. */}
       <CollapsibleTrigger
-        className="flex w-full items-center gap-1.5 rounded-md bg-primary px-2.5 py-2 text-primary-foreground text-sm font-bold uppercase tracking-wide hover:bg-primary/90"
+        className="flex w-full items-center gap-1.5 rounded-md px-2.5 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
         data-testid={`alert-platform-${id}`}
       >
-        {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+        {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
         <span className="truncate">{platform.label}</span>
-        {count > 0 && (
-          <span className="ml-auto normal-case tracking-normal font-normal text-[11px] text-primary-foreground/70">
-            {count}
-          </span>
-        )}
+        {count > 0 && <span className="ml-auto normal-case tracking-normal font-normal text-[11px]">{count}</span>}
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-0.5 pt-1">
         {platform.children.map((node) => (

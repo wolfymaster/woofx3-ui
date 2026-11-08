@@ -50,7 +50,13 @@ export default function MarketplaceAuthor() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="w-full space-y-8 p-6 lg:p-8">
-        <Button variant="ghost" size="sm" className="-ml-2 gap-2" onClick={() => navigate(MARKETPLACE_PATH)}>
+        {/* A phone gets the list's back link above the page instead (ListDetail). */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="hidden -ml-2 gap-2 md:inline-flex"
+          onClick={() => navigate(MARKETPLACE_PATH)}
+        >
           <ArrowLeft className="h-4 w-4" />
           Marketplace
         </Button>

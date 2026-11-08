@@ -1,6 +1,9 @@
 import { ImageOff } from "lucide-react";
 import type { ReactNode } from "react";
 
+/** The placeholder label's size in canvas pixels: a share of the widget's box, never below the floor. */
+const PLACEHOLDER_LABEL = { minPx: 16, heightShare: 0.12, widthShare: 0.08 } as const;
+
 interface WidgetFallbackBackgroundProps {
   /** The widget's box on the canvas, rotated about its centre. */
   box: { x: number; y: number; width: number; height: number; rotation: number };
@@ -35,6 +38,13 @@ export function WidgetFallbackBackground({ box: placed, opacity, label, children
       </div>
     );
   }
+  // The canvas is drawn at its real size and scaled down to fit, so a fixed type size
+  // shrinks with it. Sizing the label from the widget's own box keeps it in proportion
+  // to the widget at every zoom.
+  const labelSize = Math.max(
+    PLACEHOLDER_LABEL.minPx,
+    Math.min(placed.height * PLACEHOLDER_LABEL.heightShare, placed.width * PLACEHOLDER_LABEL.widthShare)
+  );
   return (
     <div
       className="absolute flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground overflow-hidden"
@@ -44,8 +54,10 @@ export function WidgetFallbackBackground({ box: placed, opacity, label, children
           "repeating-linear-gradient(45deg, hsl(var(--border)) 0, hsl(var(--border)) 1px, transparent 1px, transparent 12px)",
       }}
     >
-      <ImageOff className="h-5 w-5 opacity-60" />
-      <span className="text-[10px] opacity-70 px-2 truncate max-w-full">{label}</span>
+      <ImageOff className="opacity-60" style={{ width: labelSize * 1.5, height: labelSize * 1.5 }} />
+      <span className="opacity-70 px-2 truncate max-w-full" style={{ fontSize: labelSize }}>
+        {label}
+      </span>
     </div>
   );
 }

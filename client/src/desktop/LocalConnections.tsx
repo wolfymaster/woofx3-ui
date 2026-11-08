@@ -294,7 +294,7 @@ export function ThisComputerConnections() {
   return (
     <Card className="mt-6" id="local-connections" data-testid="this-computer-connections">
       <CardHeader>
-        <CardTitle>On this computer</CardTitle>
+        <CardTitle className="text-lg">On this computer</CardTitle>
         <CardDescription>
           Apps on this computer or your network that your engine reaches through woofx3.
         </CardDescription>

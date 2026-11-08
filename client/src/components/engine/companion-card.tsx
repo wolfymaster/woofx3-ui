@@ -58,7 +58,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Desktop app</CardTitle>
+        <CardTitle className="text-lg">Desktop app</CardTitle>
         <CardDescription>
           The computer paired with this engine through the woofx3 desktop app. Pairing another computer replaces it.
         </CardDescription>
