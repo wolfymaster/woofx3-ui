@@ -92,6 +92,35 @@ describe("organizations.mine", () => {
     ]);
   });
 
+  test("seats have the plan's limit once the org has a hosted engine", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    expect((await mine(t, org.ownerId)).seats).toEqual({ used: 1, limit: 5 });
+  });
+
+  test("seats have no limit for an org with only self-hosted engines", async () => {
+    const t = newBackend();
+    const ownerId = await t.run(async (ctx) => {
+      await seedMissingTierPlans(ctx, "test");
+      const ownerId = await ctx.db.insert("users", { name: "Owner" });
+      const accountId = await ctx.db.insert("accounts", { name: "LAN", ownerId, createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
+      await ctx.db.insert("instances", {
+        accountId,
+        name: "LAN Box",
+        url: "https://lan",
+        hosting: "external",
+        createdAt: 1,
+      });
+      for (let i = 0; i < 6; i++) {
+        const userId = await ctx.db.insert("users", { name: `m${i}` });
+        await ctx.db.insert("accountMembers", { accountId, userId, role: "member", createdAt: 1 });
+      }
+      return ownerId;
+    });
+    expect((await mine(t, ownerId)).seats).toEqual({ used: 7, limit: null });
+  });
+
   test("an admin sees the plan but may not manage billing", async () => {
     const t = newBackend();
     const org = await seedOrg(t);

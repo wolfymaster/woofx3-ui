@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatSeats } from "../format";
 import { useOrganization } from "../organization-context";
 import { portalPage } from "../portal-pages";
 import { RenameDialog } from "../rename-dialog";
@@ -48,9 +49,7 @@ export default function OverviewPage() {
           <Fact label="Engines" value={engineSummary || "None yet"} />
           {subscription ? <Fact label="Plan" value={planLabel(subscription)} /> : null}
           {subscription ? <Fact label="State" value={stateLabel(subscription)} /> : null}
-          {seats ? (
-            <Fact label="Members" value={seats.limit === null ? `${seats.used}` : `${seats.used} of ${seats.limit}`} />
-          ) : null}
+          {seats ? <Fact label="Members" value={formatSeats(seats)} /> : null}
         </div>
         {notice ? (
           <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm">

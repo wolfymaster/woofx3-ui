@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type QueryCtx, query } from "./_generated/server";
-import { accountEntitlements } from "./lib/entitlementAccess";
+import { accountEntitlements, orgSeatLimit } from "./lib/entitlementAccess";
 import type { Entitlements, SubscriptionSummary } from "./lib/entitlements";
 import type { EngineRole, OrgRole } from "./lib/organization";
 import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
@@ -47,7 +47,10 @@ export interface MyOrganization {
   engines: OrgEngine[];
   /** Null for a role that can't see billing. */
   subscription: OrgSubscription | null;
-  /** Null for a role that can't manage members. `limit` null is unlimited. */
+  /**
+   * Null for a role that can't manage members. `limit` is null when no seat
+   * limit applies: an org with only self-hosted engines, or a plan without one.
+   */
   seats: { used: number; limit: number | null } | null;
 }
 
@@ -106,16 +109,12 @@ async function orgSubscription(
   };
 }
 
-async function orgSeats(ctx: QueryCtx, accountId: Id<"accounts">, entitlements: Entitlements) {
-  const limit = entitlements.limits["org.members"];
-  if (limit === undefined) {
-    throw new Error('Limit "org.members" was not resolved');
-  }
+async function orgSeats(ctx: QueryCtx, accountId: Id<"accounts">, now: number) {
   const members = await ctx.db
     .query("accountMembers")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
-  return { used: members.length, limit };
+  return { used: members.length, limit: await orgSeatLimit(ctx, accountId, now) };
 }
 
 async function myOrganization(
@@ -137,7 +136,7 @@ async function myOrganization(
     can,
     engines: await orgEngines(ctx, account, userId, can.manageEngines),
     subscription: can.viewBilling ? await orgSubscription(ctx, account._id, role, entitlements) : null,
-    seats: can.manageMembers ? await orgSeats(ctx, account._id, entitlements) : null,
+    seats: can.manageMembers ? await orgSeats(ctx, account._id, now) : null,
   };
 }
 

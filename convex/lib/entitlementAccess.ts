@@ -141,13 +141,13 @@ export async function requireUsableSubscription(
 export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove someone to invite more people";
 
 /**
- * Whether the org has no seat left for one more person (the `org.members`
- * limit, which counts every org member, owner included). Seats belong to the
- * org, not to an engine: the limit applies once the org has a subscription or
- * any managed engine, whichever engine the person joins through. An org with
- * only self-hosted engines has no seat limit.
+ * The org's `org.members` limit (every org member, owner included), or null
+ * when no seat limit applies. Seats belong to the org, not to an engine: the
+ * limit applies once the org has a subscription or any managed engine,
+ * whichever engine a person joins through. An org with only self-hosted
+ * engines has none, nor does a plan without one.
  */
-export async function orgSeatsFull(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<boolean> {
+export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<number | null> {
   const instances = await ctx.db
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
@@ -155,12 +155,18 @@ export async function orgSeatsFull(ctx: QueryCtx, accountId: Id<"accounts">, now
   const seated =
     (await subscriptionFor(ctx, accountId)) !== null || instances.some((instance) => instance.hosting === "managed");
   if (!seated) {
-    return false;
+    return null;
   }
   const limit = (await accountEntitlements(ctx, accountId, nowMs)).limits["org.members"];
   if (limit === undefined) {
     throw new Error('Limit "org.members" was not resolved');
   }
+  return limit;
+}
+
+/** Whether the org has no seat left for one more person (see orgSeatLimit). */
+export async function orgSeatsFull(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<boolean> {
+  const limit = await orgSeatLimit(ctx, accountId, nowMs);
   if (limit === null) {
     return false;
   }

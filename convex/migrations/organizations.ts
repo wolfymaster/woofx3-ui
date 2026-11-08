@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type QueryCtx } from "../_generated/server";
+import { orgSeatLimit } from "../lib/entitlementAccess";
 import { orgRoleOf } from "../lib/orgRoles";
 import { subscriptionFor } from "../lib/subscriptions";
 import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
@@ -10,7 +11,8 @@ import { migrations } from "./index";
 
 // Brings existing data to the organization model's invariants (I1-I4 in
 // lib/teamAccess.ts and lib/orgRoles.ts). Run orgOwnerRows, then
-// orgMembershipFromEngines, then checkOrgInvariantsAll, which must report none.
+// orgMembershipFromEngines, then checkOrgInvariantsAll, which must report no
+// violations. It also lists orgs over their seat limit, which M2 allows.
 
 /**
  * M1: every org's owner has an `owner` membership row and nobody else does
@@ -96,6 +98,7 @@ export const orgMembershipFromEngines = migrations.define({
     }
     // Someone already on an engine keeps their access past the seat limit, so
     // they join the org here rather than through grantEngineRole's seat check.
+    // checkOrgInvariantsAll lists the orgs this leaves over their limit.
     if ((await getAccountMembership(ctx, account._id, membership.userId)) === null) {
       await ctx.db.insert("accountMembers", {
         accountId: account._id,
@@ -218,11 +221,33 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
   return violations;
 }
 
+/** An org with more members than its seat limit; M2 keeps existing members rather than drop them. */
+export interface OverSeatLimit {
+  accountId: Id<"accounts">;
+  members: number;
+  limit: number;
+}
+
+async function overSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<OverSeatLimit | null> {
+  const limit = await orgSeatLimit(ctx, accountId, nowMs);
+  if (limit === null) {
+    return null;
+  }
+  const members = (
+    await ctx.db
+      .query("accountMembers")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .collect()
+  ).length;
+  return members > limit ? { accountId, members, limit } : null;
+}
+
 const CHECK_PAGE_SIZE = 50;
 
 /**
- * M5, one page of orgs: the invariant violations it finds, and orgs with a
- * managed engine but no subscription. Read-only. I5
+ * M5, one page of orgs: the invariant violations it finds, including orgs
+ * with a managed engine but no subscription, and the orgs over their seat
+ * limit, which are reported but are not violations. Read-only. I5
  * (members hold only engines they were granted) has no stored trace to check.
  */
 export const checkOrgInvariants = internalQuery({
@@ -230,33 +255,46 @@ export const checkOrgInvariants = internalQuery({
   handler: async (ctx, { cursor }) => {
     const page = await ctx.db.query("accounts").paginate({ cursor, numItems: CHECK_PAGE_SIZE });
     const violations: InvariantViolation[] = [];
+    const overLimit: OverSeatLimit[] = [];
+    const now = Date.now();
     for (const account of page.page) {
       violations.push(...(await orgViolations(ctx, account)));
+      const over = await overSeatLimit(ctx, account._id, now);
+      if (over !== null) {
+        overLimit.push(over);
+      }
     }
-    return { violations, continueCursor: page.continueCursor, isDone: page.isDone };
+    return { violations, overSeatLimit: overLimit, continueCursor: page.continueCursor, isDone: page.isDone };
   },
 });
 
 /**
  * M5 over every org: `bunx convex run migrations/organizations:checkOrgInvariantsAll`.
- * Zero violations is the precondition for dropping the old shapes.
+ * Zero violations is the precondition for dropping the old shapes; orgs over
+ * their seat limit keep their members and only stop taking new ones.
  */
 export const checkOrgInvariantsAll = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ total: number; violations: InvariantViolation[] }> => {
+  handler: async (
+    ctx
+  ): Promise<{ total: number; violations: InvariantViolation[]; overSeatLimit: OverSeatLimit[] }> => {
     const violations: InvariantViolation[] = [];
+    const overLimit: OverSeatLimit[] = [];
     let cursor: string | null = null;
     for (;;) {
-      const page: { violations: InvariantViolation[]; continueCursor: string; isDone: boolean } = await ctx.runQuery(
-        internal.migrations.organizations.checkOrgInvariants,
-        { cursor }
-      );
+      const page: {
+        violations: InvariantViolation[];
+        overSeatLimit: OverSeatLimit[];
+        continueCursor: string;
+        isDone: boolean;
+      } = await ctx.runQuery(internal.migrations.organizations.checkOrgInvariants, { cursor });
       violations.push(...page.violations);
+      overLimit.push(...page.overSeatLimit);
       if (page.isDone) {
         break;
       }
       cursor = page.continueCursor;
     }
-    return { total: violations.length, violations };
+    return { total: violations.length, violations, overSeatLimit: overLimit };
   },
 });
