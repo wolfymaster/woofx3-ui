@@ -372,6 +372,43 @@ export const cleanupOld = internalMutation({
   },
 });
 
+/** Steps one orphan-step cleanup pass reads; a pass that is not the last schedules the next at once. */
+export const WORKFLOW_RUN_STEP_CLEANUP_BATCH = 200;
+
+/**
+ * Deletes steps past `WORKFLOW_RUN_RETENTION_MS` whose run never arrived.
+ * Steps can land before their run, and `cleanupOld` reaches steps only
+ * through a run, so a step whose run was never recorded would be kept
+ * forever. An old step whose run does exist is left to that run's cleanup;
+ * because such steps stay in the index, passes walk it with a cursor rather
+ * than re-reading from the front. Runs on a daily cron (see crons.ts).
+ */
+export const cleanupOrphanSteps = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { cursor = null }) => {
+    const cutoff = Date.now() - WORKFLOW_RUN_RETENTION_MS;
+    const page = await ctx.db
+      .query("workflowRunSteps")
+      .withIndex("by_creation_time", (q) => q.lt("_creationTime", cutoff))
+      .paginate({ cursor, numItems: WORKFLOW_RUN_STEP_CLEANUP_BATCH });
+    let deleted = 0;
+    for (const step of page.page) {
+      const runs = await ctx.db
+        .query("workflowRuns")
+        .withIndex("by_engine_id", (q) => q.eq("engineRunId", step.runId))
+        .collect();
+      if (!runs.some((run) => run.instanceId === step.instanceId)) {
+        await ctx.db.delete(step._id);
+        deleted++;
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOrphanSteps, { cursor: page.continueCursor });
+    }
+    return deleted;
+  },
+});
+
 /**
  * Deletes every run of a deleted instance, with its steps, in passes that
  * continue while a batch comes back full. Scheduled by

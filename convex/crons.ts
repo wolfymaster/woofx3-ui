@@ -37,6 +37,8 @@ crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLo
 
 crons.interval("workflow run history cleanup", { hours: 24 }, internal.workflowRuns.cleanupOld, {});
 
+crons.interval("workflow run orphan step cleanup", { hours: 24 }, internal.workflowRuns.cleanupOrphanSteps, {});
+
 // Alerts carry viewer names and messages; past the engine's detail retention
 // nothing reads them.
 crons.interval("engine alert cleanup", { hours: 24 }, internal.engineAlerts.cleanupOld, {});
