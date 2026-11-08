@@ -16,7 +16,7 @@ export const ENGINE_NAMESPACE_MODULES = {
   status: ["engineInfo", "engineHealth", "obsStatus", "instanceLiveState", "streamStatus", "engineSync"],
   resources: ["resources"],
   eventLog: ["engineEventLog"],
-  alertQueue: ["engineAlerts", "alertActions", "alertLog"],
+  alertQueue: ["engineAlerts", "alertActions"],
   alertLibrary: ["alertCompositions", "alertCompositionActions", "compositionPreview"],
   commands: ["chatCommands", "chatCommandGroups", "chatCommandActions"],
   moduleResources: ["moduleResourceActions", "moduleResourceInstances", "resourceValues", "resourceKinds"],

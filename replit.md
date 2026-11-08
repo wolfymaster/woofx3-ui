@@ -111,6 +111,5 @@ shared/           # Shared code between client/server
 - **capnweb**: Object-capability RPC system for type-safe client-server communication
 
 ### Replit-Specific
-- `@replit/vite-plugin-runtime-error-modal`: Error overlay in development
 - `@replit/vite-plugin-cartographer`: Development tooling
 - `@replit/vite-plugin-dev-banner`: Development environment indicator

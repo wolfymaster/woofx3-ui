@@ -303,6 +303,18 @@ describe("parseCatalogPage", () => {
   });
 });
 
+describe("credit links", () => {
+  test.each([
+    ["https", "https://twitch.tv/x", "https://twitch.tv/x"],
+    ["javascript", "javascript:alert(1)", undefined],
+    ["data", "data:text/html,x", undefined],
+    ["relative", "/admin", undefined],
+  ])("credit url with %s scheme", (_name, url, expected) => {
+    const listing = parseCatalogListing(listingPayload({ credits: [{ name: "n", url }] }));
+    expect(listing?.credits[0].url).toBe(expected);
+  });
+});
+
 describe("parseAuthorPage", () => {
   test("reads a claimed profile and its links", () => {
     const page = parseAuthorPage({
@@ -336,6 +348,18 @@ describe("parseAuthorPage", () => {
     expect(page?.author.claimed).toBe(false);
     expect(page?.author.bio).toBeUndefined();
     expect(page?.author.links).toEqual([]);
+  });
+
+  test.each([
+    ["https", "https://twitch.tv/x", true],
+    ["http", "http://example.com", true],
+    ["javascript", "javascript:alert(1)", false],
+    ["data", "data:text/html,<script>alert(1)</script>", false],
+    ["relative", "/admin", false],
+    ["empty", "", false],
+  ])("author link with %s scheme is kept only when http(s)", (_name, url, kept) => {
+    const page = parseAuthorPage({ author: { slug: "a", links: [{ label: "l", url }] }, listings: [] });
+    expect(page?.author.links.map((link) => link.url)).toEqual(kept ? [url] : []);
   });
 
   test("is null without a slug, because there is no page to address", () => {
