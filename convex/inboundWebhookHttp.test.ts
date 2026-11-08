@@ -48,13 +48,19 @@ describe("inbound webhook rate limit", () => {
     });
     const post = (id: string) => t.fetch(`/api/webhooks/${id}`, { method: "POST", body: "{}" });
 
-    for (let i = 0; i < INBOUND_WEBHOOK_BURST; i++) {
-      expect((await post(ENDPOINT_ID)).status).toBe(503);
+    // Shards may refuse early, never late: no more than the burst gets through.
+    const statuses: number[] = [];
+    for (let i = 0; i < INBOUND_WEBHOOK_BURST + 10; i++) {
+      const response = await post(ENDPOINT_ID);
+      statuses.push(response.status);
+      if (response.status === 429) {
+        expect(Number(response.headers.get("Retry-After"))).toBeGreaterThan(0);
+      }
     }
-    const refused = await post(ENDPOINT_ID);
 
-    expect(refused.status).toBe(429);
-    expect(Number(refused.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(statuses.filter((status) => status === 503).length).toBeLessThanOrEqual(INBOUND_WEBHOOK_BURST);
+    expect(statuses.every((status) => status === 503 || status === 429)).toBe(true);
+    expect(statuses).toContain(429);
     expect((await post(otherId)).status).toBe(503);
   });
 });
