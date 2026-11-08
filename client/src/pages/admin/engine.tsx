@@ -240,7 +240,7 @@ function EngineSettings() {
       <EngineNameCard instanceId={instance._id} name={instance.name} />
       <Card>
         <CardHeader>
-          <CardTitle>Engine Configuration</CardTitle>
+          <CardTitle className="text-lg">Engine configuration</CardTitle>
           <CardDescription>
             Endpoint for the selected engine ({instance.name}). Each engine has its own URL.
           </CardDescription>
@@ -300,7 +300,7 @@ function EngineSettings() {
           </div>
           <Separator />
           <div className="grid gap-2">
-            <Label>Registration Status</Label>
+            <Label>Registration status</Label>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
               <div className={`h-2 w-2 rounded-full ${instance.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
               <p className="text-sm text-muted-foreground">
@@ -366,7 +366,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
     <>
       <Card className="border-destructive/50">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-lg text-destructive">Danger zone</CardTitle>
           <CardDescription>Irreversible actions for this engine.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -379,7 +379,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Engine</AlertDialogTitle>
+            <AlertDialogTitle>Delete engine</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete this engine? This action is irreversible and will permanently remove all
               data associated with this engine, including workflows, scenes, and assets.

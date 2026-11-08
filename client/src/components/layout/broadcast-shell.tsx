@@ -1,5 +1,5 @@
 import { useStore } from "@nanostores/react";
-import { Activity, ArrowUpRight, Command, Search } from "lucide-react";
+import { Activity, ArrowUpRight, Search } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { CommandPalette } from "@/components/command-palette/command-palette";
@@ -29,6 +29,7 @@ import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
+import { shortcutModifierLabel } from "@/lib/shortcut-modifier";
 import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { BillingBanner } from "./billing-banner";
@@ -39,12 +40,14 @@ import {
   findActiveSection,
   isSectionActive,
   MAIN_NAV_SECTIONS,
+  type NavItem,
   navItemsFor,
   sectionsFor,
   UTILITY_SECTIONS,
   withAlertsChildren,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
+import { SectionMenu } from "./section-menu";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
@@ -106,7 +109,12 @@ function StatusBar() {
   );
 }
 
-function AppHeader() {
+interface SectionNav {
+  title: string;
+  items: NavItem[];
+}
+
+function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
   const { user } = useConvexUser();
   const { signOut } = useAuthActions();
   const [location] = useLocation();
@@ -128,6 +136,7 @@ function AppHeader() {
 
   return (
     <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
+      {sectionNav && <SectionMenu title={sectionNav.title} items={sectionNav.items} location={location} />}
       <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
         {MAIN_NAV_SECTIONS.map((item) => {
           const isActive = isSectionActive(item, location);
@@ -162,7 +171,8 @@ function AppHeader() {
           <Search className="h-4 w-4" />
           <span className="flex-1 text-left text-xs">Quick actions...</span>
           <kbd className="pointer-events-none flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-system-mono text-[10px] font-medium text-muted-foreground">
-            <Command className="h-3 w-3" />K
+            {shortcutModifierLabel(navigator.userAgent)}
+            <span>K</span>
           </kbd>
         </Button>
 
@@ -237,6 +247,12 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   useLiveConnection();
   useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
+  const sectionNav: SectionNav | null = activeSection?.children
+    ? {
+        title: activeSection.label,
+        items: navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting),
+      }
+    : null;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -253,20 +269,14 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   return (
     <StatusBarSlotProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-        <AppHeader />
+        <AppHeader sectionNav={sectionNav} />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />
         <BillingBanner />
         <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
-          {activeSection?.children && (
-            <SectionSidebar
-              title={activeSection.label}
-              items={navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting)}
-              location={location}
-            />
-          )}
+          {sectionNav && <SectionSidebar title={sectionNav.title} items={sectionNav.items} location={location} />}
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
 

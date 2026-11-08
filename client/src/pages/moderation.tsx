@@ -220,7 +220,7 @@ function GeneralCard({ config, onChange }: { config: ModerationConfig; onChange:
   return (
     <Card>
       <CardHeader>
-        <CardTitle>General</CardTitle>
+        <CardTitle className="text-lg">General</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <SwitchRow
@@ -322,7 +322,7 @@ function FilterCard({
     <Card data-testid={`filter-${filter}`}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1">
-          <CardTitle>{copy.title}</CardTitle>
+          <CardTitle className="text-lg">{copy.title}</CardTitle>
           <CardDescription>{copy.description}</CardDescription>
         </div>
         <Switch
@@ -636,7 +636,7 @@ function RecentActionsCard() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div className="space-y-1">
-          <CardTitle>Recent actions</CardTitle>
+          <CardTitle className="text-lg">Recent actions</CardTitle>
           <CardDescription>The latest messages chat moderation caught, newest first.</CardDescription>
         </div>
         <Button variant="ghost" size="icon" aria-label="Refresh" onClick={recent.refetch}>

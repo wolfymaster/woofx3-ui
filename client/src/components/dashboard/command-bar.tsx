@@ -33,13 +33,13 @@ function StreamPreviewThumbnail({ isLive, login, title }: { isLive: boolean; log
 
   return (
     <>
-      {/* Fixed 16:9 at every viewport width — the one element in the bar that never
-          reflows to its container's shape. */}
+      {/* Fixed 16:9 wherever it shows — the one element in the bar that never reflows to
+          its container's shape. A phone leaves the bar no room for it, so it hides there. */}
       <button
         type="button"
         disabled={!isLive || !login}
         onClick={() => setEnlarged(true)}
-        className="relative shrink-0 w-[118px] aspect-video rounded-md overflow-hidden bg-black group disabled:cursor-default"
+        className="relative hidden shrink-0 w-[118px] aspect-video rounded-md overflow-hidden bg-black group disabled:cursor-default sm:block"
         data-testid="button-command-bar-preview"
       >
         {isLive && login ? (

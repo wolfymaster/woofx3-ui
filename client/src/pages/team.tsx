@@ -124,7 +124,7 @@ export default function Team() {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
                 Members
                 <Badge variant="secondary">{members.length + pendingInvites.length}</Badge>
               </CardTitle>

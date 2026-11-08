@@ -131,10 +131,11 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
           </Card>
         </div>
 
-        {/* Fixed height rather than grown to fit: the form scrolls its own
-            fields so the Trigger button stays on screen beside the feed,
-            however many fields the chosen event declares. */}
-        <Card className="flex h-[32rem] flex-col gap-4 p-4 lg:sticky lg:top-6">
+        {/* Grows to fit its fields, but beside the feed it never grows past the window
+            (less the app's header and status bars), so the Trigger button stays on
+            screen however many fields the chosen event declares. Only a window too short
+            for them makes the form scroll its own fields. */}
+        <Card className="flex flex-col gap-4 p-4 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-10rem)]">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Fire a test alert</h2>
