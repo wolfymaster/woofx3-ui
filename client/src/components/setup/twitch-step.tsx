@@ -12,8 +12,8 @@ export function AskAdminToConnectTwitch() {
       <div className="space-y-1 text-sm">
         <p className="font-medium">Ask an owner or admin to connect Twitch</p>
         <p className="text-muted-foreground">
-          woofx3 needs this organization&apos;s Twitch channel connected before it can be used, and only an owner or admin
-          can connect it. This page updates once they have.
+          woofx3 needs this organization&apos;s Twitch channel connected before it can be used, and only an owner or
+          admin can connect it. This page updates once they have.
         </p>
       </div>
     </div>
@@ -28,8 +28,8 @@ export function AskOwnerToChooseUsername() {
       <div className="space-y-1 text-sm">
         <p className="font-medium">Ask the organization owner to choose a username</p>
         <p className="text-muted-foreground">
-          We couldn&apos;t pick one from the Twitch name, and only the organization&apos;s owner can choose it. This page
-          updates once they have.
+          We couldn&apos;t pick one from the Twitch name, and only the organization&apos;s owner can choose it. This
+          page updates once they have.
         </p>
       </div>
     </div>
