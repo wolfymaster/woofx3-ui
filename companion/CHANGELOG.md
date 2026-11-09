@@ -1,5 +1,15 @@
 # woofx3 desktop changelog
 
+## [0.4.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.3.0...woofx3-v0.4.0) (2026-11-09)
+
+### ⚠ BREAKING CHANGES
+
+* **convex:** remove pairing a companion with a code
+
+### Code Refactoring
+
+* **convex:** remove pairing a companion with a code ([fa555f4](https://github.com/wolfymaster/woofx3-ui/commit/fa555f48dd83a215efc1d0e9838cf9069e0355b9))
+
 ## [0.3.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.2.2...woofx3-v0.3.0) (2026-11-07)
 
 ### Features
