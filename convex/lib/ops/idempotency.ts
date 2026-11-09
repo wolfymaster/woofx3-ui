@@ -68,7 +68,7 @@ export function parseIdempotencyKey(headers: Headers): ParseResult<string> {
 export function requestFingerprint(request: unknown): string {
   return JSON.stringify(request, (_key, value: unknown) =>
     typeof value === "object" && value !== null && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1)))
       : value
   );
 }
