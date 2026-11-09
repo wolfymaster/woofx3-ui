@@ -45,6 +45,7 @@ A managed engine runs the release it was built with until its owner or an admin 
 
 - Members of the selected engine with their engine role (`engineMembers.listForEngine`), and its pending invitations (`invitations.listForEngine`). Sharing is Convex-only; the engine is never involved.
   - Engine admins change a plain org member's engine role and remove them from the engine (`engineMembers.setRole` / `remove`). The org owner's and org admins' engine roles follow their org role, so they change only in the organization.
+  - Members' email addresses go to the org owner only (`viewMemberEmails` in `convex/lib/orgRoles.ts`); everyone else gets member rows without the field. The owner sees them masked until they press "Show emails", which lasts until the page is left (`client/src/components/team/member-emails.tsx`). A member is named by their name, else the platform name they linked on the engine, else "Member".
   - Invitee emails are personal data: an engine's admins see its invitations, and an org owner or admin also sees org-wide invitations from before engine-scoped invites. Engine members see none.
   - The header names the engine from `useInstance`, the same source as the profile menu.
   - "Manage organization" opens `/org` for org owners and admins, on a hosted engine, in the web build only.

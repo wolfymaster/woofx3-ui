@@ -8,6 +8,7 @@ import type { EngineRole, OrgRole } from "./lib/organization";
 import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
 import type { AppliedDiscount } from "./lib/payments/provider";
 import { subscriptionFor } from "./lib/subscriptions";
+import { linkedPlatformNames, memberDisplayName, memberEmailField } from "./lib/teamAccess";
 
 // The org portal's reads. Storage calls an organization an account; these
 // answer in the portal's terms. What each role sees follows orgCan: a page a
@@ -172,7 +173,8 @@ export const mine = query({
 export interface OrgMember {
   userId: Id<"users">;
   name: string;
-  email: string | null;
+  /** Present only for a viewer allowed `viewMemberEmails`; null when the member has no address. */
+  email?: string | null;
   image: string | null;
   role: OrgRole;
   engines: Array<{ instanceId: Id<"instances">; name: string; role: EngineRole }>;
@@ -184,13 +186,22 @@ export const members = query({
   handler: async (ctx, { accountId }): Promise<OrgMember[] | null> => {
     const userId = await getAuthUserId(ctx);
     const account = await ctx.db.get(accountId);
-    if (userId === null || account === null || !orgCan(await orgRoleOf(ctx, account, userId), "manageMembers")) {
+    if (userId === null || account === null) {
       return null;
     }
+    const callerRole = await orgRoleOf(ctx, account, userId);
+    if (!orgCan(callerRole, "manageMembers")) {
+      return null;
+    }
+    const showEmails = orgCan(callerRole, "viewMemberEmails");
     const instances = await ctx.db
       .query("instances")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
       .collect();
+    const platformNames = await linkedPlatformNames(
+      ctx,
+      instances.map((instance) => instance._id)
+    );
     const rows = await ctx.db
       .query("accountMembers")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
@@ -214,8 +225,8 @@ export const members = query({
       }
       result.push({
         userId: user._id,
-        name: user.name ?? "User",
-        email: user.email ?? null,
+        name: memberDisplayName(user, platformNames),
+        ...memberEmailField(user, showEmails),
         image: user.image ?? null,
         role,
         engines,
