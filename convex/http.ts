@@ -484,10 +484,7 @@ http.route({
     // that has not moved yet (too old to support an events target) posts them here.
     const eventType: string = payload.data?.type ?? payload.type;
     if (!ENGINE_REQUEST_TYPES.has(eventType)) {
-      const result = await ctx.runMutation(internal.engineEvents.applyFromWebhook, {
-        webhookSecret: providedSecret,
-        body,
-      });
+      const result = await ctx.runMutation(internal.engineEvents.applyFromWebhook, { instanceId: instance._id, body });
       return legacyEventResponse(result, eventType);
     }
     return answerEngineRequest(ctx, instance, payload as CallbackEnvelope, eventType);
