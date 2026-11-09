@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { newBackend } from "./lib/convexTest.testing";
-import {
-  WORKFLOW_RUN_CLEANUP_BATCH,
-  WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS,
-  WORKFLOW_RUN_RETENTION_MS,
-  WORKFLOW_RUN_STEP_CLEANUP_BATCH,
-} from "./workflowRuns";
+import { finishScheduledChain, newBackend } from "./lib/convexTest.testing";
+import { WORKFLOW_RUN_CLEANUP_BATCH, WORKFLOW_RUN_RETENTION_MS, WORKFLOW_RUN_STEP_CLEANUP_BATCH } from "./workflowRuns";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -100,22 +95,23 @@ describe("cleanupOld", () => {
     await t.mutation(internal.workflowRuns.cleanupOld, {});
     expect(await counts(t)).toEqual({ runs: 2, steps: 2 });
     expect(await scheduledNames(t)).toEqual(["workflowRuns:cleanupOld"]);
-    await t.mutation(internal.workflowRuns.cleanupOld, { chainedRun: 1 });
+    await t.mutation(internal.workflowRuns.cleanupOld, {});
     expect(await counts(t)).toEqual({ runs: 0, steps: 0 });
   });
 
-  test("stops chaining at the per-run cap", async () => {
+  test("a chain of over 500 passes drains the whole backlog", async () => {
     const t = newBackend();
     setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
     const instanceId = await seedInstance(t);
-    for (let i = 0; i < WORKFLOW_RUN_CLEANUP_BATCH + 1; i++) {
+    for (let i = 0; i < 510; i++) {
       await seedRun(t, instanceId, `run-${i}`);
     }
     setSystemTime();
 
-    await t.mutation(internal.workflowRuns.cleanupOld, { chainedRun: WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS });
-    expect(await scheduledNames(t)).toEqual([]);
-  });
+    await t.mutation(internal.workflowRuns.cleanupOld, { batchSize: 1 });
+    await finishScheduledChain(t);
+    expect(await counts(t)).toEqual({ runs: 0, steps: 0 });
+  }, 30_000);
 });
 
 /** A step whose run was never recorded, stored now (by the test clock). */
@@ -137,7 +133,7 @@ async function seedOrphanStep(t: Backend, instanceId: Id<"instances">, engineRun
   });
 }
 
-type OrphanStepPass = { next?: { cursor: string; cutoff: number }; chainedRun?: number };
+type OrphanStepPass = { next?: { cursor: string; cutoff: number }; batchSize?: number };
 
 /** The arguments of every scheduled orphan-step pass, in scheduling order. */
 async function scheduledOrphanStepPasses(t: Backend): Promise<OrphanStepPass[]> {
@@ -218,19 +214,19 @@ describe("cleanupOrphanSteps", () => {
     expect(passes.map((pass) => pass.next?.cutoff)).toEqual([second.next?.cutoff, second.next?.cutoff]);
   });
 
-  test("stops chaining at the per-run cap", async () => {
+  test("a chain of over 500 passes reads the whole index", async () => {
     const t = newBackend();
     setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
     const instanceId = await seedInstance(t);
-    for (let i = 0; i < WORKFLOW_RUN_STEP_CLEANUP_BATCH + 1; i++) {
-      await seedOrphanStep(t, instanceId, "late-run");
+    for (let i = 0; i < 510; i++) {
+      await seedOrphanStep(t, instanceId, `orphan-${i}`);
     }
     setSystemTime();
-    await seedRun(t, instanceId, "late-run");
 
-    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { chainedRun: WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS });
-    expect(await scheduledOrphanStepPasses(t)).toEqual([]);
-  });
+    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { batchSize: 1 });
+    await finishScheduledChain(t);
+    expect(await counts(t)).toEqual({ runs: 0, steps: 0 });
+  }, 30_000);
 });
 
 describe("deleteInstanceData", () => {

@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { reconcileEndpoints } from "./inboundWebhooks";
+import { cleanupBatchSize, cleanupBatchSizeArg } from "./lib/cleanupBatch";
 import {
   computeNextEligibleAt,
   computeNextEligibleAtAfterError,
@@ -20,7 +21,6 @@ import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
-import { logger } from "./logger";
 import { upsertWorkflowGroupFromWebhook, workflowGroupFields } from "./workflowGroups";
 
 /**
@@ -1066,27 +1066,22 @@ export const getSyncStateForUser = internalQuery({
  * Delete syncRuns rows older than `runHistoryRetentionMs`. Runs on a daily
  * cron. Each pass deletes at most `runHistoryCleanupBatch` rows so it stays
  * inside Convex per-mutation limits, and a full batch schedules the next pass
- * at once, up to `runHistoryCleanupMaxChainedRuns` passes.
+ * at once, so the chain ends only when a batch comes back short.
  */
 export const cleanupOldRuns = internalMutation({
-  args: { chainedRun: v.optional(v.number()) },
-  handler: async (ctx, { chainedRun = 0 }) => {
+  args: { batchSize: cleanupBatchSizeArg },
+  handler: async (ctx, args) => {
+    const batchSize = cleanupBatchSize(args.batchSize, ENGINE_SYNC_CONFIG.runHistoryCleanupBatch);
     const cutoff = Date.now() - ENGINE_SYNC_CONFIG.runHistoryRetentionMs;
     const old = await ctx.db
       .query("syncRuns")
       .withIndex("by_started_at", (q) => q.lt("startedAt", cutoff))
-      .take(ENGINE_SYNC_CONFIG.runHistoryCleanupBatch);
+      .take(batchSize);
     for (const r of old) {
       await ctx.db.delete(r._id);
     }
-    if (old.length === ENGINE_SYNC_CONFIG.runHistoryCleanupBatch) {
-      if (chainedRun < ENGINE_SYNC_CONFIG.runHistoryCleanupMaxChainedRuns) {
-        await ctx.scheduler.runAfter(0, internal.engineSyncInternal.cleanupOldRuns, { chainedRun: chainedRun + 1 });
-      } else {
-        logger.warn("engineSyncInternal.cleanupOldRuns: chained-run cap reached; the next daily run continues", {
-          chainedRun,
-        });
-      }
+    if (old.length === batchSize) {
+      await ctx.scheduler.runAfter(0, internal.engineSyncInternal.cleanupOldRuns, { batchSize: args.batchSize });
     }
     return old.length;
   },

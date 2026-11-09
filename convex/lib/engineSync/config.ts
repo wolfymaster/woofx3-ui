@@ -41,11 +41,6 @@ export const ENGINE_SYNC_CONFIG = {
   runHistoryRetentionMs: 14 * 24 * 60 * 60 * 1000,
   /** syncRuns rows one cleanup pass deletes; a full batch schedules the next pass at once. */
   runHistoryCleanupBatch: 200,
-  /**
-   * Further cleanup passes one daily run may chain, bounding it to 20,200
-   * rows. A larger backlog waits for the next day's run.
-   */
-  runHistoryCleanupMaxChainedRuns: 100,
 } as const;
 
 /**

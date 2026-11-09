@@ -26,8 +26,6 @@ export const TWITCH_SIGN_IN_STATE_TTL_MS = 10 * 60 * 1000;
 export const TWITCH_SIGN_IN_STATE_SWEEP = {
   intervalMinutes: 5,
   batchSize: 200,
-  /** Further passes one tick may chain, bounding it to 4,200 rows; a larger backlog waits for the next tick. */
-  maxChainedRuns: 20,
 } as const;
 
 /** How long a finished sign-in, or a desktop sign-in's outcome, waits to be claimed. */
