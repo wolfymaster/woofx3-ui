@@ -348,7 +348,9 @@ export const switchEngineStatus = internalMutation({
  * is keyed `${transitionId}:${engineId}`, so a retry asks the maintenance API
  * for the same run. An engine already stopped is not stopped again; only
  * stopped engines are started. Engines the API couldn't take yet are retried
- * with backoff while the effect still fits the subscription.
+ * with backoff while the effect still fits the subscription, and so is the
+ * whole effect when this run fails part-way: a lost effect would leave a
+ * suspended org's engines running or a paying org's stopped.
  */
 export const runEngineEffect = internalAction({
   args: {
@@ -357,39 +359,51 @@ export const runEngineEffect = internalAction({
     effect: engineEffectValidator,
     attempt: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<{ acted: number; pending: number }> => {
-    const targets = await ctx.runQuery(internal.billing.engineEffectTargets, {
-      accountId: args.accountId,
-      effect: args.effect,
-    });
-    if (targets === null) {
-      return { acted: 0, pending: 0 };
+  handler: async (ctx, args): Promise<{ acted: number; pending: number } | null> => {
+    let outcome: { acted: number; pending: number } | null = null;
+    try {
+      outcome = await switchOrgEngines(ctx, args);
+    } catch (error) {
+      logger.error("billing engine effect: failed, will retry", {
+        accountId: args.accountId,
+        effect: args.effect,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
-    let acted = 0;
-    let pending = 0;
-    for (const engine of targets) {
-      const outcome = await switchEngine(
-        ctx,
-        args.effect,
-        engine,
-        `${args.transitionId}:${engine.maintenanceEngineId}`
-      );
-      if (outcome === "acted") {
-        acted += 1;
-      } else if (outcome === "retry") {
-        pending += 1;
-      }
-    }
-    if (pending > 0) {
+    if (outcome === null || outcome.pending > 0) {
       const attempt = args.attempt ?? 0;
       await ctx.scheduler.runAfter(engineRetryDelay(attempt, Math.random()), internal.billing.runEngineEffect, {
         ...args,
         attempt: attempt + 1,
       });
     }
-    return { acted, pending };
+    return outcome;
   },
 });
+
+async function switchOrgEngines(
+  ctx: ActionCtx,
+  args: { accountId: Id<"accounts">; transitionId: Id<"subscriptionTransitions">; effect: EngineEffect }
+): Promise<{ acted: number; pending: number }> {
+  const targets = await ctx.runQuery(internal.billing.engineEffectTargets, {
+    accountId: args.accountId,
+    effect: args.effect,
+  });
+  if (targets === null) {
+    return { acted: 0, pending: 0 };
+  }
+  let acted = 0;
+  let pending = 0;
+  for (const engine of targets) {
+    const outcome = await switchEngine(ctx, args.effect, engine, `${args.transitionId}:${engine.maintenanceEngineId}`);
+    if (outcome === "acted") {
+      acted += 1;
+    } else if (outcome === "retry") {
+      pending += 1;
+    }
+  }
+  return { acted, pending };
+}
 
 /** Why a refusal that retrying can't fix left the engine failed, for the row's error. */
 const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine", string> = {

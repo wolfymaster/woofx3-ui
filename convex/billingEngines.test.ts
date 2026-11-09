@@ -97,6 +97,14 @@ function run(t: Backend, s: Seeded, effect: "stopEngines" | "resumeEngines") {
   return t.action(internal.billing.runEngineEffect, { accountId: s.accountId, transitionId: s.transitionId, effect });
 }
 
+function effectRetries(t: Backend) {
+  return t.run(async (ctx) =>
+    (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+      (job) => job.name === "billing:runEngineEffect"
+    )
+  );
+}
+
 async function status(t: Backend, s: Seeded) {
   return (await t.run((ctx) => ctx.db.get(s.provisioningId)))?.status;
 }
@@ -153,6 +161,31 @@ describe("stopping engines", () => {
       expect(retries).toEqual([]);
     });
   }
+
+  test("a run that throws part-way is retried, not lost", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    // A second row for the org makes its subscription lookup throw.
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("subscriptions")
+        .withIndex("by_account", (q) => q.eq("accountId", s.accountId))
+        .first();
+      if (row === null) {
+        throw new Error("seeded subscription missing");
+      }
+      const { _id, _creationTime, ...copy } = row;
+      await ctx.db.insert("subscriptions", copy);
+    });
+    const muted = spyOn(logger, "error").mockImplementation(() => {});
+    try {
+      const { result } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+      expect(result).toBeNull();
+    } finally {
+      muted.mockRestore();
+    }
+    expect((await effectRetries(t)).map((job) => (job.args[0] as { attempt: number }).attempt)).toEqual([1]);
+  });
 
   test("a stop that no longer fits the subscription does nothing", async () => {
     const t = newBackend();
