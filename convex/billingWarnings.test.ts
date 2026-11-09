@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { billingBanner } from "./lib/billingWarnings";
 import { newBackend } from "./lib/convexTest.testing";
+import { dateText } from "./lib/dateText";
 import { applyTransition } from "./lib/subscriptions";
 import { stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
@@ -94,7 +95,11 @@ describe("warning email", () => {
         template: "billing-trial-ending",
         to: "owner@example.com",
         idempotencyKey: `${org.transitionId}:billing-trial-ending`,
-        variables: expect.objectContaining({ orgName: "Wolfy Streams", planName: "Starter" }),
+        variables: expect.objectContaining({
+          orgName: "Wolfy Streams",
+          planName: "Starter",
+          dateText: expect.stringMatching(/^[A-Z][a-z]+ \d{1,2}, \d{4}$/),
+        }),
       }),
     ]);
   });
@@ -133,7 +138,7 @@ describe("warning email", () => {
         t.action(internal.billing.sendWarningEmail, {
           template: "billing-trial-ending",
           to: "owner@example.com",
-          variables: { orgName: "Wolfy Streams", planName: "Starter", dateIso: new Date(T0).toISOString() },
+          variables: { orgName: "Wolfy Streams", planName: "Starter", dateText: dateText(T0) },
           idempotencyKey: `${org.transitionId}:billing-trial-ending`,
           attempt: 0,
         })
@@ -164,7 +169,7 @@ describe("warning email", () => {
         t.action(internal.billing.sendWarningEmail, {
           template: "billing-trial-ending",
           to: "owner@example.com",
-          variables: { orgName: "Org", planName: "Starter", dateIso: new Date(T0).toISOString() },
+          variables: { orgName: "Org", planName: "Starter", dateText: dateText(T0) },
           idempotencyKey: `${org.transitionId}:billing-trial-ending`,
           attempt: 0,
         })
@@ -188,7 +193,7 @@ describe("warning email", () => {
           t.action(internal.billing.sendWarningEmail, {
             template: "billing-trial-ending",
             to: "owner@example.com",
-            variables: { orgName: "Org", planName: "Starter", dateIso: new Date(T0).toISOString() },
+            variables: { orgName: "Org", planName: "Starter", dateText: dateText(T0) },
             idempotencyKey: `${org.transitionId}:billing-trial-ending`,
             attempt: 0,
           })

@@ -223,7 +223,7 @@ export const sendWarningEmail = internalAction({
   args: {
     template: warningTemplateValidator,
     to: v.string(),
-    variables: v.object({ orgName: v.string(), planName: v.string(), dateIso: v.string() }),
+    variables: v.object({ orgName: v.string(), planName: v.string(), dateText: v.string() }),
     idempotencyKey: v.string(),
     attempt: v.number(),
   },
