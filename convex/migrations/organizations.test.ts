@@ -122,6 +122,55 @@ describe("organization role migrations", () => {
     ]);
   });
 
+  test("M1 and M2 skip members whose user is gone, and M5 reports them", async () => {
+    const t = newBackend();
+    const gone = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Owner" });
+      const goneAdminId = await ctx.db.insert("users", { name: "Deleted admin" });
+      const goneEngineMemberId = await ctx.db.insert("users", { name: "Deleted engine member" });
+      const accountId = await ctx.db.insert("accounts", { name: "Org", ownerId, createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: goneAdminId, role: "owner", createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", { accountId, name: "E", url: "https://e", createdAt: 1 });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: goneEngineMemberId, role: "member" });
+      await ctx.db.delete(goneAdminId);
+      await ctx.db.delete(goneEngineMemberId);
+      return { accountId, instanceId, goneAdminId, goneEngineMemberId };
+    });
+    const before = await snapshot(t);
+    await migrateRoles(t);
+    expect(await snapshot(t)).toEqual(before);
+    expect(await violations(t)).toEqual([
+      { invariant: "member_user_missing", accountId: gone.accountId, userId: gone.goneAdminId },
+      {
+        invariant: "member_user_missing",
+        accountId: gone.accountId,
+        userId: gone.goneEngineMemberId,
+        instanceId: gone.instanceId,
+      },
+    ]);
+  });
+
+  test("M1 still migrates the members of an org whose owner is gone, and M5 reports the owner", async () => {
+    const t = newBackend();
+    const org = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Deleted owner" });
+      const adminId = await ctx.db.insert("users", { name: "Admin" });
+      const accountId = await ctx.db.insert("accounts", { name: "Ownerless", ownerId, createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: adminId, role: "admin", createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", { accountId, name: "O", url: "https://o", createdAt: 1 });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: adminId, role: "member" });
+      await ctx.db.delete(ownerId);
+      return { accountId, ownerId, adminId, instanceId };
+    });
+    await migrateRoles(t);
+    expect((await snapshot(t)).engine).toEqual([[org.instanceId, org.adminId, "admin"]]);
+    expect(await violations(t)).toEqual([
+      { invariant: "owner_user_missing", accountId: org.accountId, userId: org.ownerId },
+    ]);
+  });
+
   test("M5 reports a member with two org rows", async () => {
     const t = newBackend();
     const s = await seedAnomalies(t);

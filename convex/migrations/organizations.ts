@@ -20,29 +20,42 @@ import { isPlanTier } from "./subscriptions";
  * M1: every org's owner has an `owner` membership row and nobody else does
  * (I1); other `owner` rows become `admin`. Then the org's floors hold on each
  * of its engines: the owner owns it (I3) and every org admin is at least
- * engine admin (I4). An owner whose user is gone is reported and the org left
- * for an operator. An owner with several membership rows is reported and
- * those rows are left for an operator (which row to keep is their call, since
- * migrations only insert and patch); the org's other members still migrate.
+ * engine admin (I4). Two cases are logged and left for an operator, and the
+ * org's other members still migrate: an owner whose user is gone, and an
+ * owner with several membership rows (which row to keep is an operator's
+ * call, since migrations only insert and patch). A member whose user is gone
+ * is skipped. checkOrgInvariantsAll lists all three.
  */
 export const orgOwnerRows = migrations.define({
   table: "accounts",
   migrateOne: async (ctx, account) => {
-    if ((await ctx.db.get(account.ownerId)) === null) {
+    const ownerExists = (await ctx.db.get(account.ownerId)) !== null;
+    if (!ownerExists) {
       logger.warn("orgOwnerRows: org owner's user is gone", { accountId: account._id, ownerId: account.ownerId });
-      return;
     }
     const rows = await ctx.db
       .query("accountMembers")
       .withIndex("by_account", (q) => q.eq("accountId", account._id))
       .collect();
-    const members = rows.filter((row) => row.userId !== account.ownerId);
+    const members: Array<Doc<"accountMembers">> = [];
+    for (const row of rows) {
+      if (row.userId === account.ownerId) {
+        continue;
+      }
+      if ((await ctx.db.get(row.userId)) === null) {
+        logger.warn("orgOwnerRows: member's user is gone; skipped", { accountId: account._id, userId: row.userId });
+        continue;
+      }
+      members.push(row);
+    }
     for (const row of members) {
       if (row.role === "owner") {
         await ctx.db.patch(row._id, { role: "admin" });
       }
     }
-    await ownerRowAndEngines(ctx, account, rows);
+    if (ownerExists) {
+      await ownerRowAndEngines(ctx, account, rows);
+    }
     for (const row of members) {
       if ((await orgRoleOf(ctx, account, row.userId)) === "admin") {
         await applyOrgRoleToEngines(ctx, account._id, row.userId, "admin");
@@ -86,7 +99,8 @@ async function ownerRowAndEngines(
  * M2: every engine member is in the engine's org (I2), and only the org owner
  * owns an engine (I3): an engine `owner` who doesn't own the org becomes an
  * org admin, with engine `admin` on every engine of the org (I4). An engine
- * whose org is gone is reported.
+ * whose org is gone is logged, and a member whose user is gone is skipped;
+ * checkOrgInvariantsAll lists both.
  */
 export const orgMembershipFromEngines = migrations.define({
   table: "instanceMembers",
@@ -101,6 +115,13 @@ export const orgMembershipFromEngines = migrations.define({
       return;
     }
     if (membership.userId === account.ownerId) {
+      return;
+    }
+    if ((await ctx.db.get(membership.userId)) === null) {
+      logger.warn("orgMembershipFromEngines: engine member's user is gone; skipped", {
+        instanceMemberId: membership._id,
+        userId: membership.userId,
+      });
       return;
     }
     // Someone already on an engine keeps their access past the seat limit, so
@@ -149,6 +170,13 @@ export type InvariantViolation =
       invariant: "subscription";
       accountId: Id<"accounts">;
       detail: "managed_engine_without_subscription" | "comped_not_exempt";
+    }
+  | { invariant: "owner_user_missing"; accountId: Id<"accounts">; userId: Id<"users"> }
+  | {
+      invariant: "member_user_missing";
+      accountId: Id<"accounts">;
+      userId: Id<"users">;
+      instanceId?: Id<"instances">;
     };
 
 /** Whether the org holds an active operator assignment of a tier plan, which M6 turns into an exemption. */
@@ -167,10 +195,32 @@ async function isComped(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number)
 async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">, nowMs: number): Promise<InvariantViolation[]> {
   const violations: InvariantViolation[] = [];
   const accountId = account._id;
-  const orgRows = await ctx.db
+  const userGone = new Map<Id<"users">, boolean>();
+  const isGone = async (userId: Id<"users">): Promise<boolean> => {
+    let gone = userGone.get(userId);
+    if (gone === undefined) {
+      gone = (await ctx.db.get(userId)) === null;
+      userGone.set(userId, gone);
+    }
+    return gone;
+  };
+  const ownerGone = await isGone(account.ownerId);
+  if (ownerGone) {
+    violations.push({ invariant: "owner_user_missing", accountId, userId: account.ownerId });
+  }
+  const allOrgRows = await ctx.db
     .query("accountMembers")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
+  // A row whose user is gone is reported once, as itself, rather than as every invariant it breaks.
+  const orgRows: Array<Doc<"accountMembers">> = [];
+  for (const row of allOrgRows) {
+    if (row.userId !== account.ownerId && (await isGone(row.userId))) {
+      violations.push({ invariant: "member_user_missing", accountId, userId: row.userId });
+    } else {
+      orgRows.push(row);
+    }
+  }
   const rowsPerUser = new Map<Id<"users">, number>();
   for (const row of orgRows) {
     rowsPerUser.set(row.userId, (rowsPerUser.get(row.userId) ?? 0) + 1);
@@ -181,9 +231,10 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">, nowMs: num
     }
   }
   const ownerRow = orgRows.find((row) => row.userId === account.ownerId);
-  if (ownerRow === undefined) {
+  // A gone owner is reported once, above: their row and engines wait for an operator to name a new owner.
+  if (!ownerGone && ownerRow === undefined) {
     violations.push({ invariant: "I1", accountId, detail: "owner_row_missing" });
-  } else if (ownerRow.role !== "owner") {
+  } else if (!ownerGone && ownerRow !== undefined && ownerRow.role !== "owner") {
     violations.push({ invariant: "I1", accountId, detail: "owner_row_not_owner" });
   }
   for (const row of orgRows) {
@@ -215,7 +266,7 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">, nowMs: num
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     const engineRole = new Map(engineRows.map((row) => [row.userId, row.role]));
-    if (engineRole.get(account.ownerId) !== "owner") {
+    if (!ownerGone && engineRole.get(account.ownerId) !== "owner") {
       violations.push({
         invariant: "I3",
         accountId,
@@ -225,6 +276,10 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">, nowMs: num
       });
     }
     for (const row of engineRows) {
+      if (row.userId !== account.ownerId && (await isGone(row.userId))) {
+        violations.push({ invariant: "member_user_missing", accountId, userId: row.userId, instanceId });
+        continue;
+      }
       if ((await orgRoleOf(ctx, account, row.userId)) === null) {
         violations.push({ invariant: "I2", accountId, instanceId, userId: row.userId });
       }
