@@ -8,8 +8,8 @@ import { logger } from "../logger";
 import { migrations } from "./index";
 
 // Gives existing orgs their subscription. The end state does not depend on
-// the order: a comped org that seedSubscriptions reached first is moved from
-// its migration trial to its exemption. Running exemptionsFromPlanAssignments
+// the order: a comped org that seedSubscriptions (or a signup) reached first is moved from
+// its trial to its exemption. Running exemptionsFromPlanAssignments
 // first still saves those orgs a trial they would not keep.
 
 const MIGRATION = "migration";
@@ -27,9 +27,13 @@ async function hasManagedEngine(ctx: QueryCtx, accountId: Id<"accounts">): Promi
   return rows.some((row) => row.status !== "deleted");
 }
 
-/** A trial seedSubscriptions started that nobody has paid for or changed since. */
-function isMigrationTrial(row: Doc<"subscriptions">): boolean {
-  return row.origin === MIGRATION && row.state === "trialing" && row.providerSubscriptionId === undefined;
+/**
+ * A trial nobody has paid for. Whatever its origin: between the deploy and
+ * the migrations finishing, a comped org that starts an engine build gets a
+ * signup trial, and it must not shadow the comp.
+ */
+function isConvertibleTrial(row: Doc<"subscriptions">): boolean {
+  return row.state === "trialing" && row.providerSubscriptionId === undefined;
 }
 
 /**
@@ -37,7 +41,7 @@ function isMigrationTrial(row: Doc<"subscriptions">): boolean {
  * until the assignment's expiry. A plan key that is not a tier is reported and
  * skipped. The assignment's planId stays until the default-plan cleanup.
  * An org that already has a subscription is left as it is, unless that
- * subscription is the trial seedSubscriptions gave it.
+ * subscription is a trial with no provider subscription.
  */
 export const exemptionsFromPlanAssignments = migrations.define({
   table: "accountPlans",
@@ -47,7 +51,7 @@ export const exemptionsFromPlanAssignments = migrations.define({
       return;
     }
     const existing = await subscriptionFor(ctx, assignment.accountId);
-    if (existing !== null && !isMigrationTrial(existing)) {
+    if (existing !== null && !isConvertibleTrial(existing)) {
       return;
     }
     const plan = await ctx.db.get(assignment.planId);

@@ -64,5 +64,5 @@ The `instances` row points at an org that no longer exists. Nobody can reach the
 
 The org has an active operator plan assignment on a tier plan (`starter` or `pro`) but its subscription is not `exempt`.
 
-- If M6 (`migrations/subscriptions:exemptionsFromPlanAssignments`) has not run yet, run it: it also converts a trial that M3 started.
-- If it has run, the subscription was changed since (the org paid, or an operator moved it). M6 leaves those alone. Decide whether the comp still applies: grant the exemption through the ops API (`POST /api/ops/accounts/:id/exemption`, see [Ops API](../patterns/ops-api.md)), or remove the plan assignment.
+- If M6 (`migrations/subscriptions:exemptionsFromPlanAssignments`) has not run yet, run it: it also converts any trial with no provider subscription (one M3 started, or a signup trial started after the deploy).
+- If it has run, the subscription was changed since (the org paid, or an operator moved it). M6 leaves those alone (a provider subscription, or an active, past due, suspended or exempt state). Decide whether the comp still applies: grant the exemption through the ops API (`POST /api/ops/accounts/:id/exemption`, see [Ops API](../patterns/ops-api.md)), or remove the plan assignment.

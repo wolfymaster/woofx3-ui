@@ -98,7 +98,7 @@ The component records progress per migration:
 
 ### Organization migrations
 
-These bring existing data to the organization and billing model. Run them in this order, each one to `success` before the next:
+These bring existing data to the organization and billing model. Each one runs to `success` before the next (the chain below does that for you). The table lists them in the order they were designed; the command to run is in [Starting the chain](#starting-the-chain):
 
 | Step | Command `fn` | Why it goes here |
 |---|---|---|
@@ -109,14 +109,18 @@ These bring existing data to the organization and billing model. Run them in thi
 | M3 | `migrations/subscriptions:seedSubscriptions` | Starts a Starter trial, billed 30 days later, for every org with a managed engine and no subscription. |
 | M5 | `migrations/organizations:checkOrgInvariantsAll` | Read-only report, run directly: `bunx convex run migrations/organizations:checkOrgInvariantsAll`. |
 
-The end state does not depend on the order of M6 and M3: if M3 ran first, M6 still moves a comped org's migration trial to its exemption. M1 and M2 also converge in either order. The order above is still the one to use.
+The end state does not depend on the order of M6 and M3: if M3 ran first, or a signup trial started in the window, M6 still moves a comped org's unpaid trial to its exemption. M1 and M2 also converge in either order. The chain below is still the one to use.
 
-To chain migrations without waiting by hand, pass the rest in `next`; each starts when the previous one finishes:
+### Starting the chain
+
+Start it as soon as the "Deploy Convex" job goes green, while the UI image is still building, and start with M6. Until a comped org has its exemption, an owner who starts a managed-engine build gets an ordinary signup trial instead of the comp. M6 now converts that trial too (any `trialing` row with no provider subscription, whatever its origin), so such an org still ends up exempt; a quick start only keeps the window short. M6 needs only the plan assignments. The other migrations do not depend on each other, so they follow it in the same chain (each starts when the previous one finishes):
 
 ```bash
-bunx convex run migrations/index:run '{"fn": "migrations/organizations:orgOwnerRows", "next": ["migrations/organizations:orgMembershipFromEngines", "migrations/invitations:invitationEngineTarget", "migrations/subscriptions:exemptionsFromPlanAssignments", "migrations/subscriptions:seedSubscriptions"]}'
+bunx convex run migrations/index:run '{"fn":"migrations/subscriptions:exemptionsFromPlanAssignments","next":["migrations/organizations:orgOwnerRows","migrations/organizations:orgMembershipFromEngines","migrations/invitations:invitationEngineTarget","migrations/subscriptions:seedSubscriptions"]}'
 ```
 
-Then watch the last one with `lib:getStatus` until it reports `success`, and run M5. If one in the chain fails, the chain stops there: fix the cause and run the same command again; finished migrations are skipped.
+M3 stays last in the chain so M6 spares comped orgs a trial they would not keep. M6 never touches an org with a provider subscription, or one that is active, past due, suspended or already exempt.
+
+Then watch the last one (`migrations/subscriptions:seedSubscriptions`) with `lib:getStatus` until it reports `success`, and run M5 (`bunx convex run migrations/organizations:checkOrgInvariantsAll`). If one in the chain fails, the chain stops there: fix the cause and run the same command again; finished migrations are skipped.
 
 M5 returns `total` and a list of `violations`, each with an `invariant`, the `accountId` and, where it applies, the `userId` or `instanceId`. `total` must be `0` before the old plan-assignment shapes are removed. `overSeatLimit` lists orgs with more members than their plan's seats; that is on purpose (M2 keeps everyone who already had access) and is not a violation: those orgs keep their members and only stop taking new ones. What each violation means and how to resolve it is in [Organization migration runbook](./org-migrations.md).
