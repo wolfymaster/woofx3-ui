@@ -61,6 +61,13 @@ Operators also set what only an operator may:
 | `POST /api/ops/accounts/:id/suspend` | `{ reason }`: suspends the organization now. Its managed engines stop after the usual spin-down grace. |
 | `POST /api/ops/accounts/:id/discount` | `{ key, spec }`: attaches a discount to the organization's provider subscription, creating the provider's coupon for `key` if it is missing. `spec` is `{ kind: "percent_off", percent, duration }` or `{ kind: "amount_off", amountCents, currency: "usd", duration }`, with `duration` `{ kind: "once" }`, `{ kind: "forever" }` or `{ kind: "months", months }`. Without a provider subscription it answers `409 no_subscription`; a provider failure answers `502`. |
 
+- **Idempotency keys:** the four `/api/ops/accounts/:id/...` writes run once per key, so the backoffice can retry after a timeout or a `5xx`.
+    - Each takes an `Idempotency-Key` header: 8 to 100 letters, digits, `.`, `:`, `-` or `_`. Missing or malformed, it answers `400 invalid_idempotency_key`.
+    - A key belongs to one route and one organization, and to the validated body it first came with. The `X-Woofx3-Reason` header is not part of it.
+    - A repeat of a success answers the first `200` and its body again and changes nothing; it writes no audit row either. The same key with another body answers `409 idempotency_mismatch`.
+    - A refusal (`400`, `404`, `409`) or a provider failure (`502`) does not use the key up: the same request can be sent again with it, and is decided afresh.
+    - The key is claimed and settled in `opsRequests`, in the same mutation as the write and its audit row. A discount calls the provider between its mutations, so its key is claimed first: until the call settles, a repeat answers `409 in_progress`. A claim left by a call that died is taken over after 15 minutes (Convex ends an action after 10), and the provider is asked again with the same provider idempotency key, so the discount is not applied twice.
+    - Keys are kept 30 days, then deleted by a daily cleanup.
 - **Subscription writes** go through the billing lifecycle (`convex/lib/subscriptions.ts` `applyTransition`), the same path the evaluator and provider webhooks use, so an operator can't put a subscription into a state the lifecycle can't reach. A write the lifecycle has no transition for answers `409 illegal_transition`. Each one is audited with its outcome, refusals included.
 - **One implementation:** both paths run `convex/lib/managedEngineActions.ts`. The provisioning row, the runs, the callbacks and a rollback are identical; only `upgrade.requestedBy` names the operator, as `{ operator: email }`.
 - **Not shown to the customer:** `provisioning.forInstance` strips `requestedBy`, and the customer sees the run like any other.

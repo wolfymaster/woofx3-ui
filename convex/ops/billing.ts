@@ -5,6 +5,14 @@ import { internalAction, internalMutation, internalQuery, type MutationCtx } fro
 import type { LifecycleEvent } from "../lib/billingLifecycle";
 import { recordOpsAudit } from "../lib/ops/audit";
 import { type SubscriptionDto, subscriptionDto } from "../lib/ops/dto";
+import {
+  claimOpsRequest,
+  type OpsRequestClaim,
+  type OpsRequestId,
+  requestFingerprint,
+  settleOpsRequest,
+} from "../lib/ops/idempotency";
+import type { AccountBillingWrite } from "../lib/ops/routes";
 import { planTierValidator } from "../lib/organization";
 import { paymentsConfig } from "../lib/payments/config";
 import { appliedDiscountValidator, type DiscountSpec, discountSpecValidator } from "../lib/payments/provider";
@@ -24,9 +32,18 @@ interface OperatorWrite {
   accountId: string;
   actor: string;
   reason: string;
+  /** The caller's Idempotency-Key; see lib/ops/idempotency.ts. */
+  idempotencyKey: string;
 }
 
-const operatorArgs = { accountId: v.string(), actor: v.string(), reason: v.string() };
+const operatorArgs = { accountId: v.string(), actor: v.string(), reason: v.string(), idempotencyKey: v.string() };
+
+function requestId(
+  write: Pick<OperatorWrite, "accountId" | "idempotencyKey">,
+  kind: AccountBillingWrite
+): OpsRequestId {
+  return { write: kind, accountId: write.accountId, key: write.idempotencyKey };
+}
 
 type Refusal = Extract<BillingWriteResult, { ok: false }>;
 
@@ -52,6 +69,29 @@ async function audited(
     request,
     result: outcome.ok ? "ok" : outcome.code,
   });
+  return outcome;
+}
+
+/**
+ * An audited write run once per idempotency key, claimed and settled in the
+ * same mutation as the change: a repeat replays the first success and writes
+ * nothing, not even an audit row.
+ */
+async function auditedOnce(
+  ctx: MutationCtx,
+  write: OperatorWrite,
+  kind: AccountBillingWrite,
+  action: string,
+  request: Record<string, unknown>,
+  apply: (accountId: Id<"accounts">, row: Doc<"subscriptions"> | null) => Promise<BillingWriteResult>
+): Promise<BillingWriteResult> {
+  const id = requestId(write, kind);
+  const claim = await claimOpsRequest(ctx, id, requestFingerprint(request), Date.now());
+  if (claim.kind === "answered") {
+    return claim.outcome;
+  }
+  const outcome = await audited(ctx, write, action, request, apply);
+  await settleOpsRequest(ctx, id, outcome, Date.now());
   return outcome;
 }
 
@@ -84,7 +124,7 @@ async function transitionOrRefuse(
 export const setPlan = internalMutation({
   args: { ...operatorArgs, plan: planTierValidator },
   handler: async (ctx, args): Promise<BillingWriteResult> =>
-    audited(ctx, args, "accounts.setPlan", { plan: args.plan }, async (_accountId, row) => {
+    auditedOnce(ctx, args, "plan", "accounts.setPlan", { plan: args.plan }, async (_accountId, row) => {
       if (row === null) {
         return NO_SUBSCRIPTION;
       }
@@ -121,7 +161,7 @@ export const setExemption = internalMutation({
     ),
   },
   handler: async (ctx, args): Promise<BillingWriteResult> =>
-    audited(ctx, args, "accounts.setExemption", { ...args.exemption }, async (accountId) => {
+    auditedOnce(ctx, args, "exemption", "accounts.setExemption", { ...args.exemption }, async (accountId) => {
       const { exemption } = args;
       if (exemption.kind === "grant" && exemption.until !== null && exemption.until <= Date.now()) {
         return { ok: false, status: 400, code: "invalid_exemption", message: "until must be in the future" };
@@ -138,7 +178,7 @@ export const setExemption = internalMutation({
 export const suspend = internalMutation({
   args: { ...operatorArgs, suspendReason: v.string() },
   handler: async (ctx, args): Promise<BillingWriteResult> =>
-    audited(ctx, args, "accounts.suspend", { reason: args.suspendReason }, async (accountId, row) =>
+    auditedOnce(ctx, args, "suspend", "accounts.suspend", { reason: args.suspendReason }, async (accountId, row) =>
       row === null ? NO_SUBSCRIPTION : transitionOrRefuse(ctx, accountId, { kind: "OperatorSuspended" }, args.actor)
     ),
 });
@@ -158,7 +198,24 @@ export const discountTarget = internalQuery({
   },
 });
 
-/** Mirrors an applied discount onto the subscription, and audits the write either way. */
+/**
+ * Claims a discount's idempotency key before the provider is called. A crash
+ * after the call leaves the claim pending: repeats answer 409 in_progress
+ * until it goes stale, then take it over and ask the provider again, which
+ * its own idempotency key makes safe.
+ */
+export const claimDiscount = internalMutation({
+  args: { accountId: v.string(), idempotencyKey: v.string(), key: v.string(), spec: discountSpecValidator },
+  handler: async (ctx, args): Promise<OpsRequestClaim> =>
+    claimOpsRequest(
+      ctx,
+      requestId(args, "discount"),
+      requestFingerprint({ key: args.key, spec: args.spec }),
+      Date.now()
+    ),
+});
+
+/** Mirrors an applied discount onto the subscription, audits the write either way, and settles its claim. */
 export const recordDiscount = internalMutation({
   args: {
     ...operatorArgs,
@@ -174,22 +231,31 @@ export const recordDiscount = internalMutation({
       })
     ),
   },
-  handler: async (ctx, args): Promise<BillingWriteResult> =>
-    audited(ctx, args, "accounts.applyDiscount", { key: args.key, spec: args.spec }, async (_accountId, row) => {
-      const { outcome } = args;
-      if (outcome.kind === "refused") {
-        return { ok: false, status: outcome.status, code: outcome.code, message: outcome.message };
+  handler: async (ctx, args): Promise<BillingWriteResult> => {
+    const result = await audited(
+      ctx,
+      args,
+      "accounts.applyDiscount",
+      { key: args.key, spec: args.spec },
+      async (_accountId, row) => {
+        const { outcome } = args;
+        if (outcome.kind === "refused") {
+          return { ok: false, status: outcome.status, code: outcome.code, message: outcome.message };
+        }
+        if (row === null) {
+          throw new Error(`recordDiscount: ${args.accountId} applied a discount but has no subscription row`);
+        }
+        await ctx.db.patch(row._id, { discount: outcome.discount, updatedAt: Date.now(), updatedBy: args.actor });
+        const updated = await ctx.db.get(row._id);
+        if (updated === null) {
+          throw new Error(`recordDiscount: ${row._id} vanished inside its own mutation`);
+        }
+        return { ok: true, result: subscriptionDto(updated) };
       }
-      if (row === null) {
-        throw new Error(`recordDiscount: ${args.accountId} applied a discount but has no subscription row`);
-      }
-      await ctx.db.patch(row._id, { discount: outcome.discount, updatedAt: Date.now(), updatedBy: args.actor });
-      const updated = await ctx.db.get(row._id);
-      if (updated === null) {
-        throw new Error(`recordDiscount: ${row._id} vanished inside its own mutation`);
-      }
-      return { ok: true, result: subscriptionDto(updated) };
-    }),
+    );
+    await settleOpsRequest(ctx, requestId(args, "discount"), result, Date.now());
+    return result;
+  },
 });
 
 /**
@@ -215,6 +281,11 @@ export function discountAttemptKey(
 export const applyDiscount = internalAction({
   args: { ...operatorArgs, key: v.string(), spec: discountSpecValidator },
   handler: async (ctx, args): Promise<BillingWriteResult> => {
+    const { accountId, idempotencyKey, key, spec } = args;
+    const claim = await ctx.runMutation(internal.ops.billing.claimDiscount, { accountId, idempotencyKey, key, spec });
+    if (claim.kind === "answered") {
+      return claim.outcome;
+    }
     const target = await ctx.runQuery(internal.ops.billing.discountTarget, { accountId: args.accountId });
     if (!target.ok) {
       const { status, code, message } = target;
