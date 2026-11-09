@@ -171,6 +171,25 @@ describe("organization role migrations", () => {
     ]);
   });
 
+  test("M5 reports an engine whose org is gone", async () => {
+    const t = newBackend();
+    const orphan = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Owner" });
+      const accountId = await ctx.db.insert("accounts", { name: "Gone", ownerId, createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", {
+        accountId,
+        name: "Orphan",
+        url: "https://x",
+        createdAt: 1,
+      });
+      await ctx.db.delete(accountId);
+      return { accountId, instanceId };
+    });
+    expect(await violations(t)).toEqual([
+      { invariant: "orphan_engine", accountId: orphan.accountId, instanceId: orphan.instanceId },
+    ]);
+  });
+
   test("M5 reports a member with two org rows", async () => {
     const t = newBackend();
     const s = await seedAnomalies(t);

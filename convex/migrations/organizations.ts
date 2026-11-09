@@ -177,7 +177,8 @@ export type InvariantViolation =
       accountId: Id<"accounts">;
       userId: Id<"users">;
       instanceId?: Id<"instances">;
-    };
+    }
+  | { invariant: "orphan_engine"; accountId: Id<"accounts">; instanceId: Id<"instances"> };
 
 /** Whether the org holds an active operator assignment of a tier plan, which M6 turns into an exemption. */
 async function isComped(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<boolean> {
@@ -350,8 +351,23 @@ export const checkOrgInvariants = internalQuery({
   },
 });
 
+/** M5, one page of engines: those whose org is gone, which the walk over orgs cannot see. Read-only. */
+export const checkOrphanEngines = internalQuery({
+  args: { cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { cursor }) => {
+    const page = await ctx.db.query("instances").paginate({ cursor, numItems: CHECK_PAGE_SIZE });
+    const violations: InvariantViolation[] = [];
+    for (const instance of page.page) {
+      if ((await ctx.db.get(instance.accountId)) === null) {
+        violations.push({ invariant: "orphan_engine", accountId: instance.accountId, instanceId: instance._id });
+      }
+    }
+    return { violations, continueCursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
 /**
- * M5 over every org: `bunx convex run migrations/organizations:checkOrgInvariantsAll`.
+ * M5 over every org and engine: `bunx convex run migrations/organizations:checkOrgInvariantsAll`.
  * Zero violations is the precondition for dropping the old shapes; orgs over
  * their seat limit keep their members and only stop taking new ones.
  */
@@ -372,6 +388,18 @@ export const checkOrgInvariantsAll = internalAction({
       } = await ctx.runQuery(internal.migrations.organizations.checkOrgInvariants, { cursor });
       violations.push(...page.violations);
       overLimit.push(...page.overSeatLimit);
+      if (page.isDone) {
+        break;
+      }
+      cursor = page.continueCursor;
+    }
+    cursor = null;
+    for (;;) {
+      const page: { violations: InvariantViolation[]; continueCursor: string; isDone: boolean } = await ctx.runQuery(
+        internal.migrations.organizations.checkOrphanEngines,
+        { cursor }
+      );
+      violations.push(...page.violations);
       if (page.isDone) {
         break;
       }
