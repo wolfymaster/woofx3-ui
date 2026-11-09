@@ -190,6 +190,18 @@ describe("organization role migrations", () => {
     ]);
   });
 
+  test("M2 before M1 ends where M1 before M2 does", async () => {
+    const inOrder = newBackend();
+    await seedAnomalies(inOrder);
+    await migrateRoles(inOrder);
+    const reversed = newBackend();
+    await seedAnomalies(reversed);
+    await runMigration(reversed, internal.migrations.organizations.orgMembershipFromEngines);
+    await runMigration(reversed, internal.migrations.organizations.orgOwnerRows);
+    expect(await snapshot(reversed)).toEqual(await snapshot(inOrder));
+    expect(await violations(reversed)).toEqual([]);
+  });
+
   test("M5 reports a member with two org rows", async () => {
     const t = newBackend();
     const s = await seedAnomalies(t);
