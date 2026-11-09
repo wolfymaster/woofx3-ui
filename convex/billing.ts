@@ -214,20 +214,23 @@ export const sendWarningEmail = internalAction({
     attempt: v.number(),
   },
   handler: async (ctx, args): Promise<void> => {
+    // A configuration error, not an outage: it fails here, loudly, rather than being retried.
+    const billingUrl = `${orgPortalUrl()}/billing`;
     try {
       await sendTransactionalEmail(
-        {
-          template: args.template,
-          to: args.to,
-          variables: { ...args.variables, billingUrl: `${orgPortalUrl()}/billing` },
-        },
+        { template: args.template, to: args.to, variables: { ...args.variables, billingUrl } },
         args.idempotencyKey
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const next = args.attempt + 1;
       if (isPermanent(error) || next >= WARNING_EMAIL_RETRY.maxAttempts) {
-        logger.error("billing warning email: giving up", { ...args, variables: undefined, error: message });
+        logger.error("billing warning email: giving up", {
+          template: args.template,
+          idempotencyKey: args.idempotencyKey,
+          attempt: args.attempt,
+          error: message,
+        });
         return;
       }
       logger.warn("billing warning email: retrying", { template: args.template, attempt: next, error: message });
