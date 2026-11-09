@@ -62,7 +62,6 @@ const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
 const Moderation = lazy(() => import("@/pages/moderation"));
-const CompanionPair = lazy(() => import("@/pages/companion-pair"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Feedback = lazy(() => import("@/pages/feedback"));
@@ -221,13 +220,6 @@ function AppRoutes() {
           </InstanceEngineScope>
         </AuthGuard>
       </Route>
-      {/* Outside OnboardingGuard: pairing the companion comes before a local engine has an instance. */}
-      <Route path="/companion/pair">
-        <AuthGuard>
-          <CompanionPair />
-        </AuthGuard>
-      </Route>
-
       <Route path={`${USER_PAGE_PREFIX}*`} component={UserPageHandoff} />
 
       {/* Outside BroadcastShell: the portal has its own slim layout and needs no engine. */}

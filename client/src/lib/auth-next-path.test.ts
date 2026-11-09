@@ -4,8 +4,8 @@ import { safeNextPath, withNext } from "./auth-next-path";
 describe("safeNextPath", () => {
   test("keeps a path on this site", () => {
     expect(safeNextPath("/auth/accept-invite?token=abc", "/")).toBe("/auth/accept-invite?token=abc");
-    expect(safeNextPath("/companion/pair?code=BCDF-GHJK", "/")).toBe("/companion/pair?code=BCDF-GHJK");
     expect(safeNextPath("/org/billing?checkout=done", "/")).toBe("/org/billing?checkout=done");
+    expect(safeNextPath("/admin/engine?tab=sync", "/")).toBe("/admin/engine?tab=sync");
     expect(safeNextPath("/", "/auth/onboarding")).toBe("/");
   });
 

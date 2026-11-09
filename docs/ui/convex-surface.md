@@ -15,7 +15,7 @@ Convex is the **multi-tenant control plane**: auth, accounts, engines, assets, w
 | Alert log | `engineAlerts.ts` (mirror of the engine's dispatch log, plus the Alerts dashboard's `overview` counters; rows older than seven days are deleted by a daily cron, `cleanupOld`), `alertActions.ts` (`replayAlert`, `skipCurrentAlert` and `clearAlertQueue` proxies) |
 | Platform | `twitchAuth.ts`, `chatCommands.ts`, `dashboardLayouts.ts` |
 | Engine connectivity | `engineHealth.ts`, `lib/engineInstanceUrl.ts`, `registration.ts` |
-| Companion app | `companionPairing.ts` (device-authorization pairing, approval page), `companions.ts` (token-authenticated companion functions, the engine's one companion for the admin card, revoke), `lib/companionCodes.ts`, `lib/companionRecords.ts` — see [Companion app](/ui/companion) |
+| Companion app | `companionPairing.ts` (linking the signed-in desktop app), `companions.ts` (token-authenticated companion functions, the engine's one companion for the admin card, revoke), `lib/companionCodes.ts`, `lib/companionRecords.ts` — see [Companion app](/ui/companion) |
 
 ## Engine access
 
