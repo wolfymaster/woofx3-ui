@@ -13,6 +13,7 @@ import {
   TWITCH_SIGN_IN_STATE_SWEEP,
   TWITCH_SIGN_IN_STATE_TTL_MS,
 } from "./lib/twitchSignIn";
+import { logger } from "./logger";
 
 /**
  * "nonce_in_use" refuses a desktop sign-in whose nonce hash another sign-in
@@ -76,12 +77,12 @@ async function desktopNonceHashInUse(ctx: MutationCtx, nonceHash: string): Promi
  * Deletes states older than their lifetime, oldest first. A flow abandoned on
  * Twitch's page never reaches the callback that deletes its row. Runs on a
  * short cron (see crons.ts) and continues in further passes while a batch
- * comes back full. The callback refuses an expired row by its own clock, so
- * the sweep only bounds storage.
+ * comes back full, up to `maxChainedRuns`. The callback refuses an expired
+ * row by its own clock, so the sweep only bounds storage.
  */
 export const sweepExpiredStates = internalMutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { chainedRun: v.optional(v.number()) },
+  handler: async (ctx, { chainedRun = 0 }) => {
     const cutoff = Date.now() - TWITCH_SIGN_IN_STATE_TTL_MS;
     const expired = await ctx.db
       .query("twitchOAuthState")
@@ -91,7 +92,11 @@ export const sweepExpiredStates = internalMutation({
       await ctx.db.delete(row._id);
     }
     if (expired.length === TWITCH_SIGN_IN_STATE_SWEEP.batchSize) {
-      await ctx.scheduler.runAfter(0, internal.twitchAuth.sweepExpiredStates, {});
+      if (chainedRun < TWITCH_SIGN_IN_STATE_SWEEP.maxChainedRuns) {
+        await ctx.scheduler.runAfter(0, internal.twitchAuth.sweepExpiredStates, { chainedRun: chainedRun + 1 });
+      } else {
+        logger.warn("twitchAuth.sweepExpiredStates: chained-run cap reached; the next tick continues", { chainedRun });
+      }
     }
     return expired.length;
   },

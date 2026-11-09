@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { admitInboundWebhook, INBOUND_WEBHOOK_CONFLICT_RETRY_SECONDS } from "./inboundWebhookLimits";
 
+/** Convex's write-conflict message, as the backend words it. */
 const CONFLICT = new Error(
   'Documents read from or written to the "rateLimits" table changed while this mutation was being run and on every subsequent retry.'
 );

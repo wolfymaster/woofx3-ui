@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import { hasRecordedTriggerEvent } from "./lib/runTriggerEvent";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { logger } from "./logger";
 
 /**
  * Milliseconds for an engine timestamp. Go marshals nanosecond precision, which
@@ -333,6 +334,13 @@ export const WORKFLOW_RUN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export const WORKFLOW_RUN_CLEANUP_BATCH = 50;
 
 /**
+ * Further passes one daily run of `cleanupOld` or `cleanupOrphanSteps` may
+ * chain, bounding it to 25,050 runs or 100,200 steps read. A larger backlog
+ * waits for the next day's run.
+ */
+export const WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS = 500;
+
+/**
  * Deletes a run and its steps. Steps are keyed by the engine's run id, which
  * is only unique within one engine, so they are matched on the instance too.
  */
@@ -352,11 +360,11 @@ async function deleteRunWithSteps(ctx: MutationCtx, run: Doc<"workflowRuns">): P
 /**
  * Deletes runs past `WORKFLOW_RUN_RETENTION_MS`, oldest first, with their
  * steps. Runs on a daily cron (see crons.ts) and continues in further passes
- * while a batch comes back full.
+ * while a batch comes back full, up to `WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS`.
  */
 export const cleanupOld = internalMutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { chainedRun: v.optional(v.number()) },
+  handler: async (ctx, { chainedRun = 0 }) => {
     const cutoff = Date.now() - WORKFLOW_RUN_RETENTION_MS;
     const old = await ctx.db
       .query("workflowRuns")
@@ -366,7 +374,11 @@ export const cleanupOld = internalMutation({
       await deleteRunWithSteps(ctx, run);
     }
     if (old.length === WORKFLOW_RUN_CLEANUP_BATCH) {
-      await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOld, {});
+      if (chainedRun < WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS) {
+        await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOld, { chainedRun: chainedRun + 1 });
+      } else {
+        logger.warn("workflowRuns.cleanupOld: chained-run cap reached; the next daily run continues", { chainedRun });
+      }
     }
     return old.length;
   },
@@ -381,12 +393,21 @@ export const WORKFLOW_RUN_STEP_CLEANUP_BATCH = 200;
  * through a run, so a step whose run was never recorded would be kept
  * forever. An old step whose run does exist is left to that run's cleanup;
  * because such steps stay in the index, passes walk it with a cursor rather
- * than re-reading from the front. Runs on a daily cron (see crons.ts).
+ * than re-reading from the front. Runs on a daily cron (see crons.ts) and
+ * chains up to `WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS` passes.
+ *
+ * A cursor is valid only for the exact query that produced it, range bound
+ * included, so a chained pass reuses the first pass's cutoff instead of
+ * reading the clock again.
  */
 export const cleanupOrphanSteps = internalMutation({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
-  handler: async (ctx, { cursor = null }) => {
-    const cutoff = Date.now() - WORKFLOW_RUN_RETENTION_MS;
+  args: {
+    next: v.optional(v.object({ cursor: v.string(), cutoff: v.number() })),
+    chainedRun: v.optional(v.number()),
+  },
+  handler: async (ctx, { next, chainedRun = 0 }) => {
+    const cutoff = next?.cutoff ?? Date.now() - WORKFLOW_RUN_RETENTION_MS;
+    const cursor = next?.cursor ?? null;
     const page = await ctx.db
       .query("workflowRunSteps")
       .withIndex("by_creation_time", (q) => q.lt("_creationTime", cutoff))
@@ -403,7 +424,16 @@ export const cleanupOrphanSteps = internalMutation({
       }
     }
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOrphanSteps, { cursor: page.continueCursor });
+      if (chainedRun < WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS) {
+        await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOrphanSteps, {
+          next: { cursor: page.continueCursor, cutoff },
+          chainedRun: chainedRun + 1,
+        });
+      } else {
+        logger.warn("workflowRuns.cleanupOrphanSteps: chained-run cap reached; the next daily run continues", {
+          chainedRun,
+        });
+      }
     }
     return deleted;
   },

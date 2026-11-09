@@ -4,6 +4,7 @@ import type { InboundWebhookResponse } from "@woofx3/api";
 import type { CallbackEnvelope } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import type { WebhookEventResult } from "./engineEvents";
@@ -444,12 +445,17 @@ http.route({
   path: "/api/webhooks/woofx3",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    // Checked before the body is read: an anonymous caller gets a 401, not a parse or a log line.
+    // Checked before the body is read: a caller without the instance's secret gets a 401, not a parse or a log line.
     const authHeader = request.headers.get("Authorization");
     const providedSecret = authHeader?.replace("Bearer ", "");
     if (!providedSecret) {
       logger.warn("webhook: missing Authorization header");
       return corsJson({ error: "Missing Authorization header" }, 401);
+    }
+    const instance = await ctx.runQuery(internal.instances.getByWebhookSecret, { webhookSecret: providedSecret });
+    if (!instance) {
+      logger.warn("webhook: unauthorized - no instance found for provided secret");
+      return corsJson({ error: "Unauthorized" }, 401);
     }
 
     const body = await request.text();
@@ -484,7 +490,7 @@ http.route({
       });
       return legacyEventResponse(result, eventType);
     }
-    return answerEngineRequest(ctx, providedSecret, payload as CallbackEnvelope, eventType);
+    return answerEngineRequest(ctx, instance, payload as CallbackEnvelope, eventType);
   }),
 });
 
@@ -519,16 +525,10 @@ function legacyEventResponse(result: WebhookEventResult, eventType: string): Res
 
 async function answerEngineRequest(
   ctx: ActionCtx,
-  webhookSecret: string,
+  instance: Doc<"instances">,
   envelope: CallbackEnvelope,
   eventType: string
 ): Promise<Response> {
-  const instance = await ctx.runQuery(internal.instances.getByWebhookSecret, { webhookSecret });
-  if (!instance) {
-    logger.warn("webhook: unauthorized - no instance found for provided secret");
-    return corsJson({ error: "Unauthorized" }, 401);
-  }
-
   // A request shows the engine is running and may hold changes a scheduled
   // sync would mirror. Checked here first so most requests do not run a
   // mutation for it.

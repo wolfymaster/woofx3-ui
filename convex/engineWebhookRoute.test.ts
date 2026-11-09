@@ -59,6 +59,17 @@ describe("POST /api/webhooks/woofx3 before it trusts the caller", () => {
   });
 
   test.each([
+    ["a body with no type", JSON.stringify({ chatLine: MARKER })],
+    ["a body that is not JSON", `not json ${MARKER}`],
+  ])("%s, with a wrong secret, is a 401 that logs nothing of the body", async (_name, body) => {
+    const t = await backendWithInstance();
+    const response = await post(t, body, "not-the-secret");
+    expect(response.status).toBe(401);
+    expect(logged.join("\n")).not.toContain(MARKER);
+    expect(logged.join("\n")).not.toContain("chatLine");
+  });
+
+  test.each([
     ["not JSON", "{oops"],
     ["a JSON array", "[1]"],
     ["JSON null", "null"],

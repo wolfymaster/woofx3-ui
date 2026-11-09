@@ -20,6 +20,7 @@ import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
+import { logger } from "./logger";
 import { upsertWorkflowGroupFromWebhook, workflowGroupFields } from "./workflowGroups";
 
 /**
@@ -1065,11 +1066,11 @@ export const getSyncStateForUser = internalQuery({
  * Delete syncRuns rows older than `runHistoryRetentionMs`. Runs on a daily
  * cron. Each pass deletes at most `runHistoryCleanupBatch` rows so it stays
  * inside Convex per-mutation limits, and a full batch schedules the next pass
- * at once until the backlog is gone.
+ * at once, up to `runHistoryCleanupMaxChainedRuns` passes.
  */
 export const cleanupOldRuns = internalMutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { chainedRun: v.optional(v.number()) },
+  handler: async (ctx, { chainedRun = 0 }) => {
     const cutoff = Date.now() - ENGINE_SYNC_CONFIG.runHistoryRetentionMs;
     const old = await ctx.db
       .query("syncRuns")
@@ -1079,7 +1080,13 @@ export const cleanupOldRuns = internalMutation({
       await ctx.db.delete(r._id);
     }
     if (old.length === ENGINE_SYNC_CONFIG.runHistoryCleanupBatch) {
-      await ctx.scheduler.runAfter(0, internal.engineSyncInternal.cleanupOldRuns, {});
+      if (chainedRun < ENGINE_SYNC_CONFIG.runHistoryCleanupMaxChainedRuns) {
+        await ctx.scheduler.runAfter(0, internal.engineSyncInternal.cleanupOldRuns, { chainedRun: chainedRun + 1 });
+      } else {
+        logger.warn("engineSyncInternal.cleanupOldRuns: chained-run cap reached; the next daily run continues", {
+          chainedRun,
+        });
+      }
     }
     return old.length;
   },
