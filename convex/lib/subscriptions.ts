@@ -93,7 +93,7 @@ export async function applyTransition(ctx: MutationCtx, request: TransitionReque
   if (!result.ok) {
     return result;
   }
-  const { next, effects } = result;
+  const { next, effects, note } = result;
   const written = { ...next, updatedAt: request.now, updatedBy: request.actor };
   let subscriptionId: Id<"subscriptions">;
   if (row === null) {
@@ -118,6 +118,7 @@ export async function applyTransition(ctx: MutationCtx, request: TransitionReque
     reason: next.stateReason,
     actor: request.actor,
     at: request.now,
+    note,
   });
   if (effects.some((effect) => RECHECKED_EFFECTS.has(effect.kind))) {
     await ctx.db.patch(subscriptionId, { effectIssuedBy: transitionId });

@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { ENGINE_EFFECT_RETRY, ENGINE_STOP_RETRY, engineRetryDelay } from "./billing";
+import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
 import { applyTransition, subscriptionFor } from "./lib/subscriptions";
 import { stubFetch } from "./lib/twitchEngineHelix.fakes";
@@ -246,6 +247,32 @@ describe("stopping engines", () => {
     const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
     expect(result).toEqual({ acted: 1, pending: 0 });
     expect(calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/stop"]);
+  });
+
+  test("once every managed engine is stopped the recheck stops producing transitions", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "stopped");
+    const recheckAt = T0 + BILLING_LIFECYCLE.effectRecheckHours * 60 * 60 * 1000;
+    await t.run(async (ctx) => {
+      const row = await subscriptionFor(ctx, s.accountId);
+      await ctx.db.patch(row?._id as Id<"subscriptions">, { nextRetryAt: recheckAt, nextCheckAt: recheckAt });
+    });
+    const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(result).toEqual({ acted: 0, pending: 0 });
+    expect(calls).toEqual([]);
+    const settled = await t.run((ctx) => subscriptionFor(ctx, s.accountId));
+    expect(settled?.state).toBe("suspended");
+    expect(settled?.nextCheckAt).toBeUndefined();
+    expect(await t.mutation(internal.billing.evaluateOrg, { accountId: s.accountId, now: T0 + 30 * DAY })).toEqual({
+      applied: 0,
+    });
+    const transitions = await t.run((ctx) =>
+      ctx.db
+        .query("subscriptionTransitions")
+        .withIndex("by_account_at", (q) => q.eq("accountId", s.accountId))
+        .collect()
+    );
+    expect(transitions.map((row) => row.event)).toEqual(["SpinDownDue", "EnginesStopped"]);
   });
 
   test("a stop that no longer fits the subscription does nothing", async () => {

@@ -43,6 +43,7 @@ const EVENTS: Record<LifecycleEventKind, LifecycleEvent> = {
   ExemptionGranted: { kind: "ExemptionGranted", plan: "pro", until: null },
   ExemptionRevoked: { kind: "ExemptionRevoked" },
   OperatorSuspended: { kind: "OperatorSuspended" },
+  EnginesStopped: { kind: "EnginesStopped" },
 };
 
 /** One reachable lifecycle per state, built through the machine itself. */
@@ -97,6 +98,7 @@ const EXPECTED: Record<SubscriptionState | "none", Partial<Record<LifecycleEvent
     PaymentSucceeded: "active",
     SpinDownDue: "suspended",
     RetryDue: "suspended",
+    EnginesStopped: "suspended",
     ExemptionGranted: "exempt",
   },
   exempt: { ExemptionExpired: "past_due", ExemptionRevoked: "past_due", ExemptionGranted: "exempt" },
@@ -255,6 +257,15 @@ describe("spin-down and reactivation", () => {
     });
   });
 
+  test("once every engine is stopped the recheck ends: same stint and reason, no timer, nothing issued", () => {
+    const suspended = inState("suspended");
+    const stopping = apply(suspended, EVENTS.SpinDownDue, suspended?.spinDownAt ?? 0).next;
+    const { next, effects } = apply(stopping, EVENTS.EnginesStopped, (stopping.nextRetryAt ?? 0) + HOUR);
+    expect(effects).toEqual([]);
+    expect(next).toEqual({ ...stopping, nextRetryAt: undefined, nextCheckAt: undefined });
+    expect(dueEvent(next, Number.MAX_SAFE_INTEGER)).toBeNull();
+  });
+
   test("reactivating before spin-down resumes nothing", () => {
     const suspended = inState("suspended");
     const { next, effects } = apply(suspended, EVENTS.PaymentSucceeded, (suspended?.stateSince ?? 0) + DAY);
@@ -368,6 +379,35 @@ describe("active", () => {
     const again = apply(next, EVENTS.RetryDue, recheckAt, stale);
     expect(again.effects).toEqual([{ kind: "confirmRenewal" }]);
     expect(again.next).toMatchObject({ state: "active", nextBillingAt: undefined });
+  });
+});
+
+describe("unresolved renewals", () => {
+  const periodEnd = T0 + 100 * DAY;
+  const stale: ProviderView = { standing: "good", endedReason: null, currentPeriodEnd: periodEnd };
+
+  test("are rechecked renewalMaxRechecks times, then left active for an operator with no timer", () => {
+    let current = apply(inState("active"), EVENTS.EvaluationDue, periodEnd, stale).next;
+    let rechecks = 0;
+    for (;;) {
+      const at = current.nextCheckAt;
+      if (at === undefined) {
+        break;
+      }
+      const result = apply(current, EVENTS.RetryDue, at, stale);
+      rechecks += 1;
+      current = result.next;
+      if (current.nextCheckAt === undefined) {
+        expect(result.effects).toEqual([]);
+        expect(result.note).toContain("renewal unresolved");
+      } else {
+        expect(result.effects).toEqual([{ kind: "confirmRenewal" }]);
+        expect(result.note).toBeUndefined();
+      }
+      expect(rechecks).toBeLessThanOrEqual(BILLING_LIFECYCLE.renewalMaxRechecks);
+    }
+    expect(rechecks).toBe(BILLING_LIFECYCLE.renewalMaxRechecks);
+    expect(current).toMatchObject({ state: "active", nextBillingAt: undefined, nextRetryAt: undefined });
   });
 });
 

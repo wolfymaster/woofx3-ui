@@ -31,6 +31,9 @@ export const BILLING_LIFECYCLE = {
   // An org waiting on an effect (a renewal check, its engines stopping) is
   // re-evaluated this often, so an effect whose action was lost is issued again.
   effectRecheckHours: 6,
+  // Rechecks of a renewal the provider never resolves (a week at
+  // effectRecheckHours) before it is left for an operator.
+  renewalMaxRechecks: 28,
   evaluatorIntervalMinutes: 15,
 } as const;
 
@@ -57,6 +60,7 @@ export const EVENT_KINDS = [
   "ExemptionGranted",
   "ExemptionRevoked",
   "OperatorSuspended",
+  "EnginesStopped",
 ] as const;
 
 export const lifecycleEventKindValidator = v.union(
@@ -72,7 +76,8 @@ export const lifecycleEventKindValidator = v.union(
   v.literal("ProviderEnded"),
   v.literal("ExemptionGranted"),
   v.literal("ExemptionRevoked"),
-  v.literal("OperatorSuspended")
+  v.literal("OperatorSuspended"),
+  v.literal("EnginesStopped")
 );
 export type LifecycleEventKind = Infer<typeof lifecycleEventKindValidator>;
 
@@ -91,7 +96,8 @@ export type LifecycleEvent =
   | { kind: "ProviderEnded"; reason: ProviderEndedReason }
   | { kind: "ExemptionGranted"; plan: PlanTier; until: number | null }
   | { kind: "ExemptionRevoked" }
-  | { kind: "OperatorSuspended" };
+  | { kind: "OperatorSuspended" }
+  | { kind: "EnginesStopped" };
 
 export const WARNING_TEMPLATES = [
   "billing-trial-ending",
@@ -147,8 +153,15 @@ export interface TransitionContext {
   provider: ProviderView;
 }
 
+/** `note` says, for an operator reading the history, what the transition left for them. */
 export type TransitionResult =
-  | { ok: true; next: Lifecycle; reason: LifecycleReason | undefined; effects: LifecycleEffect[] }
+  | {
+      ok: true;
+      next: Lifecycle;
+      reason: LifecycleReason | undefined;
+      effects: LifecycleEffect[];
+      note: string | undefined;
+    }
   | { ok: false; error: { code: "illegal_transition"; from: SubscriptionState | "none"; event: LifecycleEventKind } };
 
 // ---------------------------------------------------------------------------
@@ -256,6 +269,7 @@ interface Entry {
   trialStartedAt?: number;
   warnings?: Array<{ template: WarningTemplate; at: number }>;
   effects?: LifecycleEffect[];
+  note?: string;
 }
 
 type Handler = (current: Lifecycle | null, event: LifecycleEvent, ctx: TransitionContext) => Entry;
@@ -416,20 +430,41 @@ function effectRecheck(ctx: TransitionContext): Timers {
  * webhook, so this asks the provider before anything is deactivated: the org
  * stays active with no billing timer while the check is out, and the check
  * applies whatever the provider says (billing.confirmRenewal). The recheck
- * asks again until an answer moves the org on.
+ * asks again until an answer moves the org on, or `renewalMaxRechecks` have
+ * passed since the period end: then the org is left active with no timer and
+ * the transition's note asks an operator to settle it at the provider.
  */
-const confirmRenewal: Handler = (_current, _event, ctx) => ({
-  state: "active",
-  timers: effectRecheck(ctx),
-  effects: [{ kind: "confirmRenewal" }],
-});
+const confirmRenewal: Handler = (_current, _event, ctx) => {
+  const recheckMs = BILLING_LIFECYCLE.effectRecheckHours * HOUR_MS;
+  const periodEnd = ctx.provider?.currentPeriodEnd;
+  if (periodEnd !== undefined && ctx.now - periodEnd >= BILLING_LIFECYCLE.renewalMaxRechecks * recheckMs) {
+    return {
+      state: "active",
+      timers: NO_TIMERS,
+      note:
+        `renewal unresolved: the provider has not renewed the period that ended ${new Date(periodEnd).toISOString()} ` +
+        `after ${BILLING_LIFECYCLE.renewalMaxRechecks} rechecks; settle it at the provider`,
+    };
+  }
+  return { state: "active", timers: effectRecheck(ctx), effects: [{ kind: "confirmRenewal" }] };
+};
 
-/** Stops the managed engines, and keeps asking for that while the org stays suspended. */
+/**
+ * Stops the managed engines, and keeps asking for that while the org stays
+ * suspended, until every one is confirmed stopped (EnginesStopped).
+ */
 const stopEngines: Handler = (current, _event, ctx) => ({
   state: "suspended",
   reason: current?.stateReason,
   timers: effectRecheck(ctx),
   effects: [{ kind: "stopEngines" }],
+});
+
+/** Every managed engine of the suspended org is stopped, so the recheck that re-issues the stop ends. */
+const enginesStopped: Handler = (current) => ({
+  state: "suspended",
+  reason: current?.stateReason,
+  timers: NO_TIMERS,
 });
 
 const spinDown: Handler = (current, event, ctx) => ({
@@ -490,6 +525,7 @@ export const TRANSITIONS: Record<SubscriptionState | "none", Partial<Record<Life
     PaymentSucceeded: reactivateUnlessOperator,
     SpinDownDue: spinDown,
     RetryDue: stopEngines,
+    EnginesStopped: enginesStopped,
     ExemptionGranted: grantExemption,
   },
   exempt: {
@@ -559,5 +595,11 @@ export function transition(current: Lifecycle | null, event: LifecycleEvent, ctx
     at: warning.at,
     stint,
   }));
-  return { ok: true, next, reason: next.stateReason, effects: [...warnings, ...(entry.effects ?? [])] };
+  return {
+    ok: true,
+    next,
+    reason: next.stateReason,
+    effects: [...warnings, ...(entry.effects ?? [])],
+    note: entry.note,
+  };
 }

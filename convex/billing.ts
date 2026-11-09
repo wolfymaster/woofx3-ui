@@ -475,6 +475,37 @@ export const runEngineEffect = internalAction({
   },
 });
 
+/** Statuses a stop has nothing left to do for; a failed stop's own retries are not among the targets. */
+const SETTLED_STOPS: readonly Doc<"engineProvisioning">["status"][] = ["stopped", "deleted"];
+
+const ENGINE_EFFECT_ACTOR = "billing:engines";
+
+/**
+ * Every managed engine the org's current stop acts on is stopped: the
+ * lifecycle ends the recheck that issues the stop again. A stop issued since,
+ * or an org that left the suspension, is left alone.
+ */
+export const recordEnginesStopped = internalMutation({
+  args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions") },
+  handler: async (ctx, { accountId, transitionId }): Promise<boolean> => {
+    const row = await subscriptionFor(ctx, accountId);
+    if (row?.state !== "suspended" || row.nextRetryAt === undefined || !isCurrentIssue(row, transitionId)) {
+      return false;
+    }
+    const result = await applyTransition(ctx, {
+      accountId,
+      event: { kind: "EnginesStopped" },
+      now: Date.now(),
+      actor: ENGINE_EFFECT_ACTOR,
+      origin: "signup",
+    });
+    if (!result.ok) {
+      throw new Error(`recordEnginesStopped: EnginesStopped is illegal from ${result.error.from}`);
+    }
+    return true;
+  },
+});
+
 async function switchOrgEngines(
   ctx: ActionCtx,
   args: { accountId: Id<"accounts">; transitionId: Id<"subscriptionTransitions">; effect: EngineEffect }
@@ -485,6 +516,13 @@ async function switchOrgEngines(
     effect: args.effect,
   });
   if (targets === null) {
+    return { acted: 0, pending: 0 };
+  }
+  if (args.effect === "stopEngines" && targets.every((engine) => SETTLED_STOPS.includes(engine.status))) {
+    await ctx.runMutation(internal.billing.recordEnginesStopped, {
+      accountId: args.accountId,
+      transitionId: args.transitionId,
+    });
     return { acted: 0, pending: 0 };
   }
   let acted = 0;

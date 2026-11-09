@@ -1635,6 +1635,8 @@ export default defineSchema({
     at: v.number(),
     // Set when its warnings went out in-app only, because the owner has no email address.
     ownerEmailMissing: v.optional(v.boolean()),
+    // What the transition left for an operator, such as a renewal the provider never resolved.
+    note: v.optional(v.string()),
   }).index("by_account_at", ["accountId", "at"]),
 
   // paymentEvents: every provider webhook as received, deduplicated on its
