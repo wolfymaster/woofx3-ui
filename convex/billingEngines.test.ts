@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { ENGINE_EFFECT_RETRY, ENGINE_STOP_RETRY, engineRetryDelay } from "./billing";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
@@ -71,6 +72,14 @@ async function seed(
     await ctx.db.patch(subscriptionId, { effectIssuedBy: transitionId });
     return { accountId, transitionId, provisioningId };
   });
+}
+
+async function patchSubscription(ctx: MutationCtx, accountId: Id<"accounts">, patch: Partial<Doc<"subscriptions">>) {
+  const row = await subscriptionFor(ctx, accountId);
+  if (row === null) {
+    throw new Error(`fixture: org ${accountId} has no subscription`);
+  }
+  await ctx.db.patch(row._id, patch);
 }
 
 /** Runs `fn` against a stubbed maintenance API, restoring the environment and fetch after. */
@@ -220,8 +229,7 @@ describe("stopping engines", () => {
         actor: "evaluator",
         at: T0 + 1,
       });
-      const row = await subscriptionFor(ctx, s.accountId);
-      await ctx.db.patch(row?._id as Id<"subscriptions">, { effectIssuedBy: reissued });
+      await patchSubscription(ctx, s.accountId, { effectIssuedBy: reissued });
     });
     const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
     expect(result).toEqual({ acted: 0, pending: 0 });
@@ -232,8 +240,7 @@ describe("stopping engines", () => {
     const t = newBackend();
     const s = await seed(t, "suspended", "registered");
     await t.run(async (ctx) => {
-      const row = await subscriptionFor(ctx, s.accountId);
-      await ctx.db.patch(row?._id as Id<"subscriptions">, { stateReason: "operator" });
+      await patchSubscription(ctx, s.accountId, { stateReason: "operator" });
       const noOp = await applyTransition(ctx, {
         accountId: s.accountId,
         event: { kind: "PaymentSucceeded", plan: "starter", currentPeriodEnd: T0 + 30 * DAY },
@@ -253,10 +260,7 @@ describe("stopping engines", () => {
     const t = newBackend();
     const s = await seed(t, "suspended", "stopped");
     const recheckAt = T0 + BILLING_LIFECYCLE.effectRecheckHours * 60 * 60 * 1000;
-    await t.run(async (ctx) => {
-      const row = await subscriptionFor(ctx, s.accountId);
-      await ctx.db.patch(row?._id as Id<"subscriptions">, { nextRetryAt: recheckAt, nextCheckAt: recheckAt });
-    });
+    await t.run((ctx) => patchSubscription(ctx, s.accountId, { nextRetryAt: recheckAt, nextCheckAt: recheckAt }));
     const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
     expect(result).toEqual({ acted: 0, pending: 0 });
     expect(calls).toEqual([]);
