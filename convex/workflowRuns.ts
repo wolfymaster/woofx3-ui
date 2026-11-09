@@ -382,11 +382,16 @@ export const WORKFLOW_RUN_STEP_CLEANUP_BATCH = 200;
  * forever. An old step whose run does exist is left to that run's cleanup;
  * because such steps stay in the index, passes walk it with a cursor rather
  * than re-reading from the front. Runs on a daily cron (see crons.ts).
+ *
+ * A cursor is valid only for the exact query that produced it, range bound
+ * included, so a chained pass reuses the first pass's cutoff instead of
+ * reading the clock again.
  */
 export const cleanupOrphanSteps = internalMutation({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
-  handler: async (ctx, { cursor = null }) => {
-    const cutoff = Date.now() - WORKFLOW_RUN_RETENTION_MS;
+  args: { next: v.optional(v.object({ cursor: v.string(), cutoff: v.number() })) },
+  handler: async (ctx, { next }) => {
+    const cutoff = next?.cutoff ?? Date.now() - WORKFLOW_RUN_RETENTION_MS;
+    const cursor = next?.cursor ?? null;
     const page = await ctx.db
       .query("workflowRunSteps")
       .withIndex("by_creation_time", (q) => q.lt("_creationTime", cutoff))
@@ -403,7 +408,9 @@ export const cleanupOrphanSteps = internalMutation({
       }
     }
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOrphanSteps, { cursor: page.continueCursor });
+      await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOrphanSteps, {
+        next: { cursor: page.continueCursor, cutoff },
+      });
     }
     return deleted;
   },

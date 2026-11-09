@@ -119,6 +119,16 @@ async function seedOrphanStep(t: Backend, instanceId: Id<"instances">, engineRun
   });
 }
 
+type OrphanStepPass = { next?: { cursor: string; cutoff: number } };
+
+/** The arguments of every scheduled orphan-step pass, in scheduling order. */
+async function scheduledOrphanStepPasses(t: Backend): Promise<OrphanStepPass[]> {
+  const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+  return jobs
+    .filter((job) => job.name === "workflowRuns:cleanupOrphanSteps")
+    .map((job) => job.args[0] as OrphanStepPass);
+}
+
 describe("cleanupOrphanSteps", () => {
   test("deletes old steps whose run never arrived and keeps the rest", async () => {
     const t = newBackend();
@@ -164,10 +174,30 @@ describe("cleanupOrphanSteps", () => {
     await seedRun(t, instanceId, "late-run");
 
     expect(await t.mutation(internal.workflowRuns.cleanupOrphanSteps, {})).toBe(0);
-    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-    expect(jobs.map((job) => job.name)).toEqual(["workflowRuns:cleanupOrphanSteps"]);
-    const { cursor } = jobs[0].args[0] as { cursor: string };
-    expect(await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { cursor })).toBe(1);
+    const [job] = await scheduledOrphanStepPasses(t);
+    expect(await t.mutation(internal.workflowRuns.cleanupOrphanSteps, job)).toBe(1);
+  });
+
+  test("chained passes keep the first pass's cutoff, which their cursor depends on", async () => {
+    const t = newBackend();
+    setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
+    const instanceId = await seedInstance(t);
+    for (let i = 0; i < 2 * WORKFLOW_RUN_STEP_CLEANUP_BATCH + 1; i++) {
+      await seedOrphanStep(t, instanceId, "late-run");
+    }
+    setSystemTime();
+    await seedRun(t, instanceId, "late-run");
+
+    const firstPassAt = Date.now();
+    setSystemTime(new Date(firstPassAt));
+    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, {});
+    const [second] = await scheduledOrphanStepPasses(t);
+    expect(second.next?.cutoff).toBe(firstPassAt - WORKFLOW_RUN_RETENTION_MS);
+
+    setSystemTime(new Date(firstPassAt + 60_000));
+    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, second);
+    const passes = await scheduledOrphanStepPasses(t);
+    expect(passes.map((pass) => pass.next?.cutoff)).toEqual([second.next?.cutoff, second.next?.cutoff]);
   });
 });
 
