@@ -98,7 +98,7 @@ describe("warning email", () => {
         variables: expect.objectContaining({
           orgName: "Wolfy Streams",
           planName: "Starter",
-          dateText: expect.stringMatching(/^[A-Z][a-z]+ \d{1,2}, \d{4}$/),
+          dateText: expect.stringMatching(/^[A-Z][a-z]+ \d{1,2}, \d{4} at \d{1,2}:\d{2} [AP]M P[SD]T$/),
         }),
       }),
     ]);
