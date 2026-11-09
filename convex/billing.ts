@@ -61,7 +61,13 @@ import {
 import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
 import { paymentProvider } from "./lib/payments/registry";
 import { closeSession, sessionByProviderId } from "./lib/payments/sessions";
-import { applyTransition, ENGINES_PER_ORG_SCAN, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
+import {
+  applyTransition,
+  ENGINES_PER_ORG_SCAN,
+  isCurrentIssue,
+  lifecycleOf,
+  subscriptionFor,
+} from "./lib/subscriptions";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { sendNotificationOnce } from "./notifications";
@@ -352,24 +358,6 @@ interface ManagedEngine {
 }
 
 /**
- * Whether `transitionId` is the org's newest transition. An effect the
- * lifecycle issues again on a recheck is superseded by the newer issue, so
- * one org never runs two copies of it.
- */
-async function isLatestTransition(
-  ctx: QueryCtx,
-  accountId: Id<"accounts">,
-  transitionId: Id<"subscriptionTransitions">
-): Promise<boolean> {
-  const latest = await ctx.db
-    .query("subscriptionTransitions")
-    .withIndex("by_account_at", (q) => q.eq("accountId", accountId))
-    .order("desc")
-    .first();
-  return latest?._id === transitionId;
-}
-
-/**
  * The org's managed engines an effect would act on, or null when the effect
  * no longer fits the subscription (a payment arrived before the stop ran, or
  * the org was suspended again before the start), or a recheck has issued the
@@ -384,7 +372,7 @@ export const engineEffectTargets = internalQuery({
       effect === "stopEngines"
         ? subscription?.state === "suspended" &&
           subscription.spinDownAt === undefined &&
-          (await isLatestTransition(ctx, accountId, transitionId))
+          isCurrentIssue(subscription, transitionId)
         : subscription !== null && subscription.state !== "suspended";
     if (!wanted) {
       return null;
@@ -706,11 +694,7 @@ export const renewalCheckTarget = internalQuery({
   args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions") },
   handler: async (ctx, { accountId, transitionId }): Promise<string | null> => {
     const row = await subscriptionFor(ctx, accountId);
-    if (
-      row?.state !== "active" ||
-      row.nextBillingAt !== undefined ||
-      !(await isLatestTransition(ctx, accountId, transitionId))
-    ) {
+    if (row?.state !== "active" || row.nextBillingAt !== undefined || !isCurrentIssue(row, transitionId)) {
       return null;
     }
     if (row.providerSubscriptionId === undefined) {

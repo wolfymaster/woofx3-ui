@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { ENGINE_EFFECT_RETRY, ENGINE_STOP_RETRY, engineRetryDelay } from "./billing";
 import { newBackend } from "./lib/convexTest.testing";
-import { applyTransition } from "./lib/subscriptions";
+import { applyTransition, subscriptionFor } from "./lib/subscriptions";
 import { stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
 
@@ -46,7 +46,7 @@ async function seed(
       createdAt: 1,
       updatedAt: 1,
     });
-    await ctx.db.insert("subscriptions", {
+    const subscriptionId = await ctx.db.insert("subscriptions", {
       accountId,
       plan: "starter",
       state,
@@ -67,6 +67,7 @@ async function seed(
       actor: "test",
       at: T0,
     });
+    await ctx.db.patch(subscriptionId, { effectIssuedBy: transitionId });
     return { accountId, transitionId, provisioningId };
   });
 }
@@ -209,19 +210,42 @@ describe("stopping engines", () => {
   test("a stop that a recheck issued again stands down for the newer one", async () => {
     const t = newBackend();
     const s = await seed(t, "suspended", "registered");
-    await t.run((ctx) =>
-      ctx.db.insert("subscriptionTransitions", {
+    await t.run(async (ctx) => {
+      const reissued = await ctx.db.insert("subscriptionTransitions", {
         accountId: s.accountId,
         from: "suspended",
         to: "suspended",
         event: "RetryDue",
         actor: "evaluator",
         at: T0 + 1,
-      })
-    );
+      });
+      const row = await subscriptionFor(ctx, s.accountId);
+      await ctx.db.patch(row?._id as Id<"subscriptions">, { effectIssuedBy: reissued });
+    });
     const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
     expect(result).toEqual({ acted: 0, pending: 0 });
     expect(calls).toEqual([]);
+  });
+
+  test("a provider event mirrored onto an operator's suspension mid-retry leaves the pending stop running", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    await t.run(async (ctx) => {
+      const row = await subscriptionFor(ctx, s.accountId);
+      await ctx.db.patch(row?._id as Id<"subscriptions">, { stateReason: "operator" });
+      const noOp = await applyTransition(ctx, {
+        accountId: s.accountId,
+        event: { kind: "PaymentSucceeded", plan: "starter", currentPeriodEnd: T0 + 30 * DAY },
+        now: T0 + 1,
+        actor: "provider:stripe",
+        origin: "signup",
+        provider: { standing: "good", endedReason: null, currentPeriodEnd: T0 + 30 * DAY },
+      });
+      expect(noOp.ok && noOp.subscription.state).toBe("suspended");
+    });
+    const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(result).toEqual({ acted: 1, pending: 0 });
+    expect(calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/stop"]);
   });
 
   test("a stop that no longer fits the subscription does nothing", async () => {

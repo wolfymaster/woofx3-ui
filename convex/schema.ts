@@ -1593,6 +1593,10 @@ export default defineSchema({
     spinDownAt: v.optional(v.number()),
     // The earliest timer above: the only field the evaluator reads.
     nextCheckAt: v.optional(v.number()),
+    // The transition that last issued a rechecked effect (stopping the managed
+    // engines, or a renewal check). An action of an earlier issue stands down
+    // for it; a transition that issues neither leaves it.
+    effectIssuedBy: v.optional(v.id("subscriptionTransitions")),
     // AddOnKey values, validated against ADD_ONS on write.
     addOns: v.array(v.string()),
     // The provider's active discount, mirrored for display.
