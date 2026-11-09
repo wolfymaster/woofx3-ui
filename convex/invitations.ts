@@ -534,7 +534,10 @@ export type AcceptOutcome =
   | { status: "already_accepted" }
   | { status: "expired" }
   | { status: "revoked" }
-  | { status: "not_found" };
+  | { status: "not_found" }
+  | { status: "wrong_account"; message: string }
+  | { status: "engine_gone" }
+  | { status: "seats_full" };
 
 export const accept = mutation({
   args: { token: v.string() },
@@ -579,7 +582,7 @@ export const accept = mutation({
       twitchUserId: twitchAccount?.providerAccountId ?? null,
     });
     if (refusal) {
-      throw new Error(refusal);
+      return { status: "wrong_account", message: refusal };
     }
 
     const account = await ctx.db.get(inv.accountId);
@@ -588,11 +591,14 @@ export const accept = mutation({
     }
     const engine = await invitationEngine(ctx, inv);
     if (engine === null) {
-      throw new Error("The engine this invitation was for no longer exists");
+      return { status: "engine_gone" };
     }
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
+    if (!existingMember && (await orgSeatsFull(ctx, inv.accountId, now))) {
+      return { status: "seats_full" };
+    }
     if (account.ownerId !== userId) {
       // An invitation only adds access: someone made an engine admin after it
       // was sent keeps admin when they accept a member invite.
