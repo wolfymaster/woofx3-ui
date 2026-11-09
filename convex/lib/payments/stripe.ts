@@ -187,6 +187,11 @@ function appliedDiscount(discount: Stripe.Discount | string): AppliedDiscount | 
   return { spec, code, endsAt: discount.end === null ? null : discount.end * 1000 };
 }
 
+/** The coupon id behind a discount; null when the discount isn't expanded. */
+function couponOf(discount: Stripe.Discount | string): string | null {
+  return typeof discount === "string" ? null : idOf(discount.source.coupon);
+}
+
 function idOf(value: string | { id: string } | null): string | null {
   if (value === null) {
     return null;
@@ -571,13 +576,28 @@ export class StripePaymentProvider implements PaymentProvider {
           { idempotencyKey: `${req.idempotencyKey}:coupon` }
         );
       }
-      const subscription = await this.stripe.subscriptions.update(
-        req.subscriptionRef,
-        { discounts: [{ coupon: id }], expand: ["discounts.source.coupon"] },
-        { idempotencyKey: req.idempotencyKey }
-      );
-      const applied = subscription.discounts.map(appliedDiscount).find((discount) => discount !== null);
-      return applied === undefined ? err("unknown_discount", `Coupon ${id} did not attach`) : ok(applied);
+      // Setting `discounts` replaces them all, so the ones already on the subscription (a promotion code) are kept.
+      const current = await this.stripe.subscriptions.retrieve(req.subscriptionRef, {
+        expand: ["discounts.source.coupon"],
+      });
+      const subscription = current.discounts.some((discount) => couponOf(discount) === id)
+        ? current
+        : await this.stripe.subscriptions.update(
+            req.subscriptionRef,
+            {
+              discounts: [
+                ...current.discounts.map((discount) => ({
+                  discount: typeof discount === "string" ? discount : discount.id,
+                })),
+                { coupon: id },
+              ],
+              expand: ["discounts.source.coupon"],
+            },
+            { idempotencyKey: req.idempotencyKey }
+          );
+      const ours = subscription.discounts.find((discount) => couponOf(discount) === id);
+      const applied = ours === undefined ? null : appliedDiscount(ours);
+      return applied === null ? err("unknown_discount", `Coupon ${id} did not attach`) : ok(applied);
     } catch (error) {
       return failure(error);
     }
