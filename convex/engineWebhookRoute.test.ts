@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { EngineEventType } from "@woofx3/api/webhooks";
+import { internal } from "./_generated/api";
 import { newBackend } from "./lib/convexTest.testing";
 
 const SECRET = "webhook-secret";
@@ -111,5 +112,50 @@ describe("POST /api/webhooks/woofx3 before it trusts the caller", () => {
     });
     expect((await post(t, body, SECRET)).status).toBe(200);
     expect(logged.join("\n")).not.toContain(MARKER);
+  });
+});
+
+describe("applyFromWebhook", () => {
+  test("applies the event for the instance the route resolved, even after its secret rotated", async () => {
+    const t = await backendWithInstance();
+    const instanceId = await t.run(async (ctx) => {
+      const instance = await ctx.db
+        .query("instances")
+        .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", SECRET))
+        .first();
+      if (!instance) {
+        throw new Error("instance missing");
+      }
+      await ctx.db.patch(instance._id, { webhookSecret: "rotated-secret" });
+      return instance._id;
+    });
+    const body = JSON.stringify({
+      specversion: "1.0",
+      id: "env-rotated",
+      source: "engine",
+      type: EngineEventType.SCENE_DELETED,
+      time: "2026-11-04T10:00:00.000Z",
+      data: { type: EngineEventType.SCENE_DELETED, id: "s1" },
+    });
+
+    const result = await t.mutation(internal.engineEvents.applyFromWebhook, { instanceId, body });
+    expect(result.kind).not.toBe("unauthorized");
+  });
+
+  test("refuses an event for an instance deleted after the route resolved it", async () => {
+    const t = await backendWithInstance();
+    const instanceId = await t.run(async (ctx) => {
+      const instance = await ctx.db.query("instances").first();
+      if (!instance) {
+        throw new Error("instance missing");
+      }
+      await ctx.db.delete(instance._id);
+      return instance._id;
+    });
+
+    const body = JSON.stringify({ type: EngineEventType.SCENE_DELETED, data: { type: EngineEventType.SCENE_DELETED } });
+    expect(await t.mutation(internal.engineEvents.applyFromWebhook, { instanceId, body })).toEqual({
+      kind: "unauthorized",
+    });
   });
 });

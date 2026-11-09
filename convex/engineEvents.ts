@@ -64,19 +64,17 @@ export async function receiveEngineEvent(
 
 /**
  * One engine event from the webhook route, for engines not yet moved onto the
- * event queue. Authenticated here rather than in the route so that the whole
- * event costs one function call. `body` is the raw JSON: an engine payload can
- * hold `$`-prefixed keys, which a Convex argument cannot.
+ * event queue. The route has already resolved the instance from the caller's
+ * secret, so a secret rotated since then does not refuse an authenticated
+ * event. `body` is the raw JSON: an engine payload can hold `$`-prefixed
+ * keys, which a Convex argument cannot.
  */
 export const applyFromWebhook = internalMutation({
-  args: { webhookSecret: v.string(), body: v.string() },
-  handler: async (ctx, { webhookSecret, body }): Promise<WebhookEventResult> => {
-    const instance = await ctx.db
-      .query("instances")
-      .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", webhookSecret))
-      .first();
+  args: { instanceId: v.id("instances"), body: v.string() },
+  handler: async (ctx, { instanceId, body }): Promise<WebhookEventResult> => {
+    const instance = await ctx.db.get(instanceId);
     if (!instance) {
-      logger.warn("webhook: unauthorized - no instance found for provided secret");
+      logger.warn("webhook: instance deleted before its event was applied", { instanceId });
       return { kind: "unauthorized" };
     }
     const envelope = JSON.parse(body) as CallbackEnvelope;

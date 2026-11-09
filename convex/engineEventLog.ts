@@ -4,7 +4,7 @@ import { type ObjectType, v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type MutationCtx, type QueryCtx, query } from "./_generated/server";
-import { logger } from "./logger";
+import { cleanupBatchSize, cleanupBatchSizeArg } from "./lib/cleanupBatch";
 
 // Audit trail of every engine webhook event received (source: "webhook",
 // written by convex/http.ts's POST /api/webhooks/woofx3 handler) plus every
@@ -15,11 +15,6 @@ const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /** Rows one cleanup pass deletes; a full batch schedules the next pass at once. */
 export const EVENT_LOG_CLEANUP_BATCH = 200;
-/**
- * Further passes one daily run may chain, bounding it to 100,200 rows. A
- * larger backlog waits for the next day's run.
- */
-export const EVENT_LOG_CLEANUP_MAX_CHAINED_RUNS = 500;
 
 async function membershipFor(
   ctx: QueryCtx,
@@ -237,27 +232,23 @@ export const retrigger = action({
 
 /**
  * Deletes rows older than RETENTION_MS. Runs on a daily cron (see crons.ts) and
- * continues in further passes while a batch comes back full, up to
- * `EVENT_LOG_CLEANUP_MAX_CHAINED_RUNS`, so a backlog clears without any one
- * mutation reading an unbounded set.
+ * continues in further passes until a batch comes back short, so any backlog
+ * clears without one mutation reading an unbounded set.
  */
 export const cleanupOld = internalMutation({
-  args: { chainedRun: v.optional(v.number()) },
-  handler: async (ctx, { chainedRun = 0 }) => {
+  args: { batchSize: cleanupBatchSizeArg },
+  handler: async (ctx, args) => {
+    const batchSize = cleanupBatchSize(args.batchSize, EVENT_LOG_CLEANUP_BATCH);
     const cutoff = Date.now() - RETENTION_MS;
     const old = await ctx.db
       .query("engineEventLog")
       .withIndex("by_received_at", (q) => q.lt("receivedAt", cutoff))
-      .take(EVENT_LOG_CLEANUP_BATCH);
+      .take(batchSize);
     for (const row of old) {
       await ctx.db.delete(row._id);
     }
-    if (old.length === EVENT_LOG_CLEANUP_BATCH) {
-      if (chainedRun < EVENT_LOG_CLEANUP_MAX_CHAINED_RUNS) {
-        await ctx.scheduler.runAfter(0, internal.engineEventLog.cleanupOld, { chainedRun: chainedRun + 1 });
-      } else {
-        logger.warn("engineEventLog.cleanupOld: chained-run cap reached; the next daily run continues", { chainedRun });
-      }
+    if (old.length === batchSize) {
+      await ctx.scheduler.runAfter(0, internal.engineEventLog.cleanupOld, { batchSize: args.batchSize });
     }
     return old.length;
   },

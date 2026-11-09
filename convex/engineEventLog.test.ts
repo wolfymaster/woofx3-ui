@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { internal } from "./_generated/api";
-import { EVENT_LOG_CLEANUP_BATCH, EVENT_LOG_CLEANUP_MAX_CHAINED_RUNS } from "./engineEventLog";
-import { newBackend } from "./lib/convexTest.testing";
+import { EVENT_LOG_CLEANUP_BATCH } from "./engineEventLog";
+import { finishScheduledChain, newBackend } from "./lib/convexTest.testing";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -40,16 +40,18 @@ describe("cleanupOld", () => {
     await t.mutation(internal.engineEventLog.cleanupOld, {});
     expect(await remaining()).toBe(3);
     const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-    expect(scheduled.map((job) => [job.name, job.args])).toEqual([["engineEventLog:cleanupOld", [{ chainedRun: 1 }]]]);
+    expect(scheduled.map((job) => [job.name, job.args])).toEqual([["engineEventLog:cleanupOld", [{}]]]);
 
     await t.mutation(internal.engineEventLog.cleanupOld, {});
     expect(await remaining()).toBe(0);
   });
 
-  test("stops chaining at the per-run cap", async () => {
+  test("a chain of over 500 passes drains the whole backlog", async () => {
     const t = newBackend();
-    await seedOldRows(t, EVENT_LOG_CLEANUP_BATCH + 1);
-    await t.mutation(internal.engineEventLog.cleanupOld, { chainedRun: EVENT_LOG_CLEANUP_MAX_CHAINED_RUNS });
-    expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toEqual([]);
-  });
+    await seedOldRows(t, 510);
+
+    await t.mutation(internal.engineEventLog.cleanupOld, { batchSize: 1 });
+    await finishScheduledChain(t);
+    expect(await t.run(async (ctx) => (await ctx.db.query("engineEventLog").collect()).length)).toBe(0);
+  }, 30_000);
 });

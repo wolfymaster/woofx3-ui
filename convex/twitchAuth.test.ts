@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
-import { newBackend } from "./lib/convexTest.testing";
+import { finishScheduledChain, newBackend } from "./lib/convexTest.testing";
 import { generateOpaqueToken, hashOpaqueToken } from "./lib/oauthHandoff";
 import {
   type SignInClient,
@@ -222,16 +222,17 @@ describe("sign-in state expiry", () => {
 
     expect(await t.mutation(internal.twitchAuth.sweepExpiredStates, {})).toBe(TWITCH_SIGN_IN_STATE_SWEEP.batchSize);
     expect(await states(t)).toHaveLength(1);
-    expect((await sweepJobs(t)).map((job) => job.args)).toEqual([[{ chainedRun: 1 }]]);
+    expect((await sweepJobs(t)).map((job) => job.args)).toEqual([[{}]]);
   });
 
-  test("the sweep stops chaining at the per-tick cap", async () => {
+  test("a chain of over 20 passes drains the whole backlog", async () => {
     const t = newBackend();
-    for (let i = 0; i < TWITCH_SIGN_IN_STATE_SWEEP.batchSize + 1; i++) {
+    for (let i = 0; i < 30; i++) {
       await insertState(t, `old-${i}`, TWITCH_SIGN_IN_STATE_TTL_MS + 1);
     }
 
-    await t.mutation(internal.twitchAuth.sweepExpiredStates, { chainedRun: TWITCH_SIGN_IN_STATE_SWEEP.maxChainedRuns });
-    expect(await sweepJobs(t)).toEqual([]);
+    await t.mutation(internal.twitchAuth.sweepExpiredStates, { batchSize: 1 });
+    await finishScheduledChain(t);
+    expect(await states(t)).toEqual([]);
   });
 });

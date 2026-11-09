@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { ABANDONED_RUN_ERROR } from "./engineSyncInternal";
-import { newBackend } from "./lib/convexTest.testing";
+import { finishScheduledChain, newBackend } from "./lib/convexTest.testing";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -77,22 +77,20 @@ describe("cleanupOldRuns", () => {
     await t.mutation(internal.engineSyncInternal.cleanupOldRuns, {});
     expect(await remaining()).toBe(3);
     const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-    expect(scheduled.map((job) => [job.name, job.args])).toEqual([
-      ["engineSyncInternal:cleanupOldRuns", [{ chainedRun: 1 }]],
-    ]);
+    expect(scheduled.map((job) => [job.name, job.args])).toEqual([["engineSyncInternal:cleanupOldRuns", [{}]]]);
 
     await t.mutation(internal.engineSyncInternal.cleanupOldRuns, {});
     expect(await remaining()).toBe(0);
   });
 
-  test("stops chaining at the per-run cap", async () => {
+  test("a chain of over 100 passes drains the whole backlog", async () => {
     const t = newBackend();
-    await seedOldRuns(t, ENGINE_SYNC_CONFIG.runHistoryCleanupBatch + 1);
-    await t.mutation(internal.engineSyncInternal.cleanupOldRuns, {
-      chainedRun: ENGINE_SYNC_CONFIG.runHistoryCleanupMaxChainedRuns,
-    });
-    expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toEqual([]);
-  });
+    await seedOldRuns(t, 110);
+
+    await t.mutation(internal.engineSyncInternal.cleanupOldRuns, { batchSize: 1 });
+    await finishScheduledChain(t);
+    expect(await t.run(async (ctx) => (await ctx.db.query("syncRuns").collect()).length)).toBe(0);
+  }, 30_000);
 });
 
 describe("startRun", () => {

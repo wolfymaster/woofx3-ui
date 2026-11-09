@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { newBackend } from "./lib/convexTest.testing";
-import {
-  WORKFLOW_RUN_CLEANUP_BATCH,
-  WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS,
-  WORKFLOW_RUN_RETENTION_MS,
-  WORKFLOW_RUN_STEP_CLEANUP_BATCH,
-} from "./workflowRuns";
+import { finishScheduledChain, newBackend } from "./lib/convexTest.testing";
+import { WORKFLOW_RUN_CLEANUP_BATCH, WORKFLOW_RUN_RETENTION_MS, WORKFLOW_RUN_STEP_CLEANUP_BATCH } from "./workflowRuns";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -100,22 +95,23 @@ describe("cleanupOld", () => {
     await t.mutation(internal.workflowRuns.cleanupOld, {});
     expect(await counts(t)).toEqual({ runs: 2, steps: 2 });
     expect(await scheduledNames(t)).toEqual(["workflowRuns:cleanupOld"]);
-    await t.mutation(internal.workflowRuns.cleanupOld, { chainedRun: 1 });
+    await t.mutation(internal.workflowRuns.cleanupOld, {});
     expect(await counts(t)).toEqual({ runs: 0, steps: 0 });
   });
 
-  test("stops chaining at the per-run cap", async () => {
+  test("a chain of over 500 passes drains the whole backlog", async () => {
     const t = newBackend();
     setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
     const instanceId = await seedInstance(t);
-    for (let i = 0; i < WORKFLOW_RUN_CLEANUP_BATCH + 1; i++) {
+    for (let i = 0; i < 510; i++) {
       await seedRun(t, instanceId, `run-${i}`);
     }
     setSystemTime();
 
-    await t.mutation(internal.workflowRuns.cleanupOld, { chainedRun: WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS });
-    expect(await scheduledNames(t)).toEqual([]);
-  });
+    await t.mutation(internal.workflowRuns.cleanupOld, { batchSize: 1 });
+    await finishScheduledChain(t);
+    expect(await counts(t)).toEqual({ runs: 0, steps: 0 });
+  }, 30_000);
 });
 
 /** A step whose run was never recorded, stored now (by the test clock). */
@@ -137,7 +133,7 @@ async function seedOrphanStep(t: Backend, instanceId: Id<"instances">, engineRun
   });
 }
 
-type OrphanStepPass = { next?: { cursor: string; cutoff: number }; chainedRun?: number };
+type OrphanStepPass = { next?: { cursor: string; cutoff: number }; batchSize?: number };
 
 /** The arguments of every scheduled orphan-step pass, in scheduling order. */
 async function scheduledOrphanStepPasses(t: Backend): Promise<OrphanStepPass[]> {
@@ -198,39 +194,61 @@ describe("cleanupOrphanSteps", () => {
 
   test("chained passes keep the first pass's cutoff, which their cursor depends on", async () => {
     const t = newBackend();
-    setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
-    const instanceId = await seedInstance(t);
-    for (let i = 0; i < 2 * WORKFLOW_RUN_STEP_CLEANUP_BATCH + 1; i++) {
-      await seedOrphanStep(t, instanceId, "late-run");
-    }
-    setSystemTime();
-    await seedRun(t, instanceId, "late-run");
-
     const firstPassAt = Date.now();
+    const firstCutoff = firstPassAt - WORKFLOW_RUN_RETENTION_MS;
+    setSystemTime(new Date(firstCutoff - 60_000));
+    const instanceId = await seedInstance(t);
+    for (let i = 0; i < 3; i++) {
+      await seedOrphanStep(t, instanceId, `old-${i}`);
+    }
+    // Younger than the first pass's cutoff, older than the cutoff a minute later.
+    setSystemTime(new Date(firstCutoff + 30_000));
+    await seedOrphanStep(t, instanceId, "young-0");
+    await seedOrphanStep(t, instanceId, "young-1");
+
     setSystemTime(new Date(firstPassAt));
-    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, {});
+    expect(await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { batchSize: 1 })).toBe(1);
     const [second] = await scheduledOrphanStepPasses(t);
-    expect(second.next?.cutoff).toBe(firstPassAt - WORKFLOW_RUN_RETENTION_MS);
+    expect(second.next?.cutoff).toBe(firstCutoff);
 
     setSystemTime(new Date(firstPassAt + 60_000));
-    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, second);
-    const passes = await scheduledOrphanStepPasses(t);
-    expect(passes.map((pass) => pass.next?.cutoff)).toEqual([second.next?.cutoff, second.next?.cutoff]);
+    await finishScheduledChain(t);
+    expect((await scheduledOrphanStepPasses(t)).map((pass) => pass.next?.cutoff)).toEqual([firstCutoff, firstCutoff]);
+    const steps = await t.run(async (ctx) => (await ctx.db.query("workflowRunSteps").collect()).map((s) => s.runId));
+    expect(steps).toEqual(["young-0", "young-1"]);
   });
 
-  test("stops chaining at the per-run cap", async () => {
+  test("reaches an orphan behind over 500 pages of steps whose run exists", async () => {
     const t = newBackend();
     setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
     const instanceId = await seedInstance(t);
-    for (let i = 0; i < WORKFLOW_RUN_STEP_CLEANUP_BATCH + 1; i++) {
+    for (let i = 0; i < 510; i++) {
       await seedOrphanStep(t, instanceId, "late-run");
     }
+    await seedOrphanStep(t, instanceId, "orphan");
     setSystemTime();
     await seedRun(t, instanceId, "late-run");
 
-    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { chainedRun: WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS });
-    expect(await scheduledOrphanStepPasses(t)).toEqual([]);
-  });
+    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { batchSize: 1 });
+    await finishScheduledChain(t);
+    const steps = await t.run(async (ctx) => (await ctx.db.query("workflowRunSteps").collect()).map((s) => s.runId));
+    expect(steps).toHaveLength(511);
+    expect(steps).not.toContain("orphan");
+  }, 30_000);
+
+  test("a chain of over 500 passes reads the whole index", async () => {
+    const t = newBackend();
+    setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
+    const instanceId = await seedInstance(t);
+    for (let i = 0; i < 510; i++) {
+      await seedOrphanStep(t, instanceId, `orphan-${i}`);
+    }
+    setSystemTime();
+
+    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { batchSize: 1 });
+    await finishScheduledChain(t);
+    expect(await counts(t)).toEqual({ runs: 0, steps: 0 });
+  }, 30_000);
 });
 
 describe("deleteInstanceData", () => {
