@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
-import { billingView } from "../billing-view";
+import { billingView, checkoutNeedsPortal } from "../billing-view";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "../format";
 import { useOrganization } from "../organization-context";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
@@ -94,6 +94,7 @@ function ManageBillingButton() {
 function PlanChooser() {
   const { organization } = useOrganization();
   const startCheckout = useAction(api.billing.startCheckout);
+  const openPortal = useAction(api.billing.openPortal);
   const previewPromotionCode = useAction(api.billing.previewPromotionCode);
   const [choice, setChoice] = useState(choiceKey("starter", "month"));
   const [code, setCode] = useState("");
@@ -156,14 +157,22 @@ function PlanChooser() {
       <Button
         disabled={busy}
         onClick={() =>
-          go(() =>
-            startCheckout({
-              accountId: organization.accountId,
-              plan: selected.plan,
-              interval: selected.interval,
-              promotionCode,
-            })
-          )
+          go(async () => {
+            try {
+              return await startCheckout({
+                accountId: organization.accountId,
+                plan: selected.plan,
+                interval: selected.interval,
+                promotionCode,
+              });
+            } catch (error) {
+              if (!checkoutNeedsPortal(error)) {
+                throw error;
+              }
+              toast({ title: "Update your payment method", description: actionErrorMessage(error) });
+              return openPortal({ accountId: organization.accountId });
+            }
+          })
         }
         data-testid="button-continue-to-checkout"
       >

@@ -1,4 +1,6 @@
+import type { CheckoutRefusal } from "@convex/billing";
 import type { MyOrganization, OrgSubscription } from "@convex/organizations";
+import { ConvexError } from "convex/values";
 
 /**
  * What Plan & billing shows for an organization:
@@ -30,4 +32,15 @@ export function billingView(organization: Pick<MyOrganization, "engines" | "subs
     return { kind: "provider_managed", subscription };
   }
   return { kind: "choose_plan", subscription };
+}
+
+const PORTAL_REFUSAL: CheckoutRefusal["code"] = "subscription_exists";
+
+/** Whether a refused checkout means the org's live but failing subscription is to be fixed in the customer portal. */
+export function checkoutNeedsPortal(error: unknown): boolean {
+  if (!(error instanceof ConvexError)) {
+    return false;
+  }
+  const data: unknown = error.data;
+  return typeof data === "object" && data !== null && "code" in data && data.code === PORTAL_REFUSAL;
 }

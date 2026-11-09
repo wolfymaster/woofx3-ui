@@ -35,7 +35,7 @@ The portal is where an organization's owner and admins manage the organization a
 
 The Engines page lists the organization's engines and has no way to add one. An organization's first engine comes from onboarding.
 
-Plan & billing picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. List prices in `format.ts` must match the provider's prices and the marketing pricing page.
+Plan & billing picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. A checkout is refused while the provider subscription has not ended: one in good standing answers `already_subscribed`, and one whose payments are failing (past due, or suspended with the subscription still alive) answers `subscription_exists`, which sends the owner to the provider's portal to fix the payment method instead of paying for a second subscription. List prices in `format.ts` must match the provider's prices and the marketing pricing page.
 
 ## Entry points
 
