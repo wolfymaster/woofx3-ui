@@ -25,22 +25,24 @@ const RUNNING: readonly ProvisioningStatus[] = [
   "starting",
 ];
 
+// A request is written before the maintenance API is called, so a call that
+// fails leaves the row stopping or starting, and asking again applies from there.
 export const ENGINE_SWITCH_TRANSITIONS: Record<
   EngineSwitchMove,
   { from: readonly ProvisioningStatus[]; to: ProvisioningStatus }
 > = {
-  stopRequested: { from: RUNNING, to: "stopping" },
+  stopRequested: { from: [...RUNNING, "stopping"], to: "stopping" },
   // The callback can overtake the row's own "stopping" write.
   stopped: { from: ["stopping", ...RUNNING], to: "stopped" },
-  startRequested: { from: ["stopped"], to: "starting" },
+  startRequested: { from: ["stopped", "starting"], to: "starting" },
   // A started engine keeps its database and registration, so it is registered again as it was.
   started: { from: ["starting", "stopped"], to: "registered" },
   // The maintenance API refused a start because the engine was not stopped,
   // and reports it running, or failed (which provisioning.retry resumes).
-  foundRunning: { from: ["stopped"], to: "registered" },
-  foundFailed: { from: ["stopped"], to: "failed" },
+  foundRunning: { from: ["starting"], to: "registered" },
+  foundFailed: { from: ["starting"], to: "failed" },
   // The maintenance API refused a stop or start that asking again can't fix.
-  refused: { from: [...RUNNING, "stopped"], to: "failed" },
+  refused: { from: ["stopping", "starting"], to: "failed" },
 };
 
 /** The status `move` leads to from `current`, or null when the move doesn't apply from there. */

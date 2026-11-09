@@ -57,6 +57,7 @@ import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptio
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { sendNotificationOnce } from "./notifications";
+import schema from "./schema";
 
 /** Orgs whose timers are due, scheduled per evaluator tick; the next tick takes the rest. */
 const EVALUATOR_BATCH = 200;
@@ -341,6 +342,8 @@ export const engineEffectTargets = internalQuery({
   },
 });
 
+const provisioningStatusValidator = schema.tables.engineProvisioning.validator.fields.status;
+
 const engineSwitchMoveValidator = v.union(
   v.literal("stopRequested"),
   v.literal("stopped"),
@@ -362,6 +365,25 @@ export const switchEngineStatus = internalMutation({
     }
     await ctx.db.patch(provisioningId, { status: to, error, updatedAt: Date.now() });
     return true;
+  },
+});
+
+/**
+ * Takes back a stop or start request the maintenance API refused without
+ * touching the engine (another run under way): the row goes back to the
+ * status it had, so that run's callbacks find the engine as they left it.
+ */
+export const withdrawEngineSwitch = internalMutation({
+  args: {
+    provisioningId: v.id("engineProvisioning"),
+    requested: v.union(v.literal("stopping"), v.literal("starting")),
+    previous: provisioningStatusValidator,
+  },
+  handler: async (ctx, { provisioningId, requested, previous }): Promise<void> => {
+    const row = await ctx.db.get(provisioningId);
+    if (row?.status === requested) {
+      await ctx.db.patch(provisioningId, { status: previous, updatedAt: Date.now() });
+    }
   },
 });
 
@@ -446,7 +468,12 @@ async function switchEngine(
     // A stop still running settles first (engine.stopped); the start goes out on a retry after it.
     return "retry";
   }
-  if (switchedStatus(engine.status, stopping ? "stopRequested" : "startRequested") === null) {
+  // Recorded before the call, so the row never claims less than was asked of the maintenance API.
+  const requested = await ctx.runMutation(internal.billing.switchEngineStatus, {
+    provisioningId: engine.provisioningId,
+    move: stopping ? "stopRequested" : "startRequested",
+  });
+  if (!requested) {
     return "skipped";
   }
   try {
@@ -468,6 +495,13 @@ async function switchEngine(
       });
       return "skipped";
     }
+    if (refusal === "run_in_progress") {
+      await ctx.runMutation(internal.billing.withdrawEngineSwitch, {
+        provisioningId: engine.provisioningId,
+        requested: stopping ? "stopping" : "starting",
+        previous: engine.status,
+      });
+    }
     logger.warn("billing engine effect: will retry", {
       effect,
       engineId: engine.maintenanceEngineId,
@@ -475,10 +509,6 @@ async function switchEngine(
     });
     return "retry";
   }
-  await ctx.runMutation(internal.billing.switchEngineStatus, {
-    provisioningId: engine.provisioningId,
-    move: stopping ? "stopRequested" : "startRequested",
-  });
   return "acted";
 }
 

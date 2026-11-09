@@ -70,7 +70,7 @@ async function seed(
 }
 
 /** Runs `fn` against a stubbed maintenance API, restoring the environment and fetch after. */
-async function withMaintenance<T>(respond: (url: string) => Response, fn: () => Promise<T>) {
+async function withMaintenance<T>(respond: (url: string) => Response | Promise<Response>, fn: () => Promise<T>) {
   const saved = Object.fromEntries(Object.keys(MAINTENANCE).map((key) => [key, process.env[key]]));
   Object.assign(process.env, MAINTENANCE);
   const fetchStub = stubFetch((call) => respond(call.url));
@@ -125,6 +125,23 @@ describe("stopping engines", () => {
     const s = await seed(t, "suspended", "stopped");
     const { calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
     expect(calls).toEqual([]);
+  });
+
+  test("the row says stopping before the maintenance API is called, so a failed call is retried from there", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    const seenAtCall: Array<ProvisioningStatus | undefined> = [];
+    const outage = async () => {
+      seenAtCall.push(await status(t, s));
+      return new Response("bad gateway", { status: 502 });
+    };
+    const first = await withMaintenance(outage, () => run(t, s, "stopEngines"));
+    expect(first.result).toEqual({ acted: 0, pending: 1 });
+    expect(seenAtCall).toEqual(["stopping"]);
+    expect(await status(t, s)).toBe("stopping");
+    const second = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(second.result).toEqual({ acted: 1, pending: 0 });
+    expect(second.calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/stop"]);
   });
 
   test("an upgrade in progress is retried later", async () => {
