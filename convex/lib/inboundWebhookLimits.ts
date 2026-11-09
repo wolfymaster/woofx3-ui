@@ -32,7 +32,12 @@ export type InboundWebhookAdmission = { ok: true } | { ok: false; retryAfterSeco
 
 type BucketLimit = () => Promise<{ ok: boolean; retryAfter?: number }>;
 
-/** Convex's optimistic concurrency failure, which survives the component call as a plain Error message. */
+/**
+ * Convex's optimistic concurrency failure. It reaches the caller of the
+ * component as a plain Error: Convex gives it no error name, code or
+ * ConvexError data to match, so the backend's message text is matched. The
+ * test pins that text, and must change with it if Convex rewords it.
+ */
 function isWriteConflict(err: unknown): boolean {
   return err instanceof Error && err.message.includes("changed while this mutation was being run");
 }
