@@ -323,4 +323,16 @@ describe("assertLifecycle", () => {
     expect(() => assertLifecycle({ ...pastDue, nextCheckAt: 0 })).toThrow("nextCheckAt");
     expect(() => assertLifecycle({ ...pastDue, state: "trialing", plan: "pro" })).toThrow("trialing needs");
   });
+
+  test("refuses a timer its state has no transition for, which the evaluator could never act on", () => {
+    const exempt = inState("exempt");
+    if (exempt === null) {
+      throw new Error("fixture");
+    }
+    const at = T0 + 10 * DAY;
+    expect(() => assertLifecycle({ ...exempt, nextBillingAt: at, nextCheckAt: at })).toThrow(
+      "nextBillingAt is set, but EvaluationDue has no transition"
+    );
+    expect(() => assertLifecycle({ ...exempt, graceEndsAt: at, nextCheckAt: at })).toThrow("graceEndsAt");
+  });
 });

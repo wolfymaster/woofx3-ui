@@ -178,6 +178,15 @@ export function evaluateBilling(provider: ProviderView): Evaluation {
 
 const TIMER_FIELDS = ["nextBillingAt", "graceEndsAt", "nextRetryAt", "exemptUntil", "spinDownAt"] as const;
 
+/** The event the evaluator raises when each timer is due. */
+const TIMER_EVENTS: Record<(typeof TIMER_FIELDS)[number], LifecycleEventKind> = {
+  nextBillingAt: "EvaluationDue",
+  graceEndsAt: "GraceExpired",
+  nextRetryAt: "RetryDue",
+  exemptUntil: "ExemptionExpired",
+  spinDownAt: "SpinDownDue",
+};
+
 /** The earliest set timer: the only field the evaluator reads. */
 export function nextCheckAt(lifecycle: Omit<Lifecycle, "nextCheckAt">): number | undefined {
   const set = TIMER_FIELDS.map((field) => lifecycle[field]).filter((at): at is number => at !== undefined);
@@ -485,6 +494,12 @@ export function assertLifecycle(lifecycle: Lifecycle): void {
   }
   if (lifecycle.nextCheckAt !== nextCheckAt(lifecycle)) {
     fail("nextCheckAt is not the earliest timer");
+  }
+  // A timer its state has no transition for would fail the evaluator on every tick.
+  for (const field of TIMER_FIELDS) {
+    if (lifecycle[field] !== undefined && TRANSITIONS[lifecycle.state][TIMER_EVENTS[field]] === undefined) {
+      fail(`${field} is set, but ${TIMER_EVENTS[field]} has no transition`);
+    }
   }
 }
 
