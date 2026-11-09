@@ -159,7 +159,7 @@ describe("stopping engines", () => {
     expect(await status(t, s)).toBe("upgrading");
   });
 
-  for (const code of ["engine_not_ready", "not_customer_engine"]) {
+  for (const code of ["engine_not_ready", "not_customer_engine", "engine_deleted"]) {
     test(`a stop refused with ${code} is failed with the reason, not retried`, async () => {
       const t = newBackend();
       const s = await seed(t, "suspended", "registered");

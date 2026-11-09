@@ -380,6 +380,8 @@ export const ENGINE_SWITCH_REFUSALS = [
   "engine_not_ready",
   // A preview or other non-customer engine, which billing never stops or starts.
   "not_customer_engine",
+  // The engine was deleted; there is nothing left to stop or start.
+  "engine_deleted",
 ] as const;
 export type EngineSwitchRefusal = (typeof ENGINE_SWITCH_REFUSALS)[number];
 

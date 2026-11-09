@@ -559,10 +559,11 @@ export const retryEngineStop = internalAction({
 });
 
 /** Why a refusal that retrying can't fix left the engine failed, for the row's error. */
-const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine", string> = {
+const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine" | "engine_deleted", string> = {
   engine_not_ready: "the maintenance API can't stop the engine from its current state (engine_not_ready)",
   not_customer_engine:
     "the maintenance API says this isn't a customer engine, so billing can't switch it (not_customer_engine)",
+  engine_deleted: "the maintenance API says the engine was deleted (engine_deleted)",
 };
 
 async function switchEngine(
@@ -595,7 +596,7 @@ async function switchEngine(
     if (refusal === "engine_not_stopped") {
       return catchUpWithEngine(ctx, engine);
     }
-    if (refusal === "engine_not_ready" || refusal === "not_customer_engine") {
+    if (refusal === "engine_not_ready" || refusal === "not_customer_engine" || refusal === "engine_deleted") {
       await ctx.runMutation(internal.billing.switchEngineStatus, {
         provisioningId: engine.provisioningId,
         move: "refused",
