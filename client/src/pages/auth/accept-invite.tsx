@@ -7,7 +7,9 @@ import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { acceptRefusalMessage } from "@/lib/accept-invite-outcome";
+import { convexRequestId } from "@/lib/action-error";
 import { withNext } from "@/lib/auth-next-path";
+import { useLogger } from "@/lib/logger-context";
 import { $currentInstanceId } from "@/lib/stores";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
@@ -33,6 +35,7 @@ export default function AcceptInvite() {
   const [, navigate] = useLocation();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const accept = useMutation(api.invitations.accept);
+  const logger = useLogger();
   const token = getTokenFromLocation();
   const preview = useQuery(api.invitations.previewByToken, token ? { token } : "skip");
   const twitchTarget = preview?.target.kind === "twitch" ? preview.target : null;
@@ -70,13 +73,14 @@ export default function AcceptInvite() {
       setStatus("done");
       setMessage("You have joined the team. Redirecting…");
       setTimeout(() => navigate("/"), 1500);
-    } catch {
+    } catch (error) {
+      logger.error("Accepting an invitation failed", { error, requestId: convexRequestId(error) });
       setStatus("error");
       // The server answers expected outcomes as values; a throw here is unexpected
       // and its message is hidden in production, so say something usable.
       setMessage("Something went wrong accepting this invitation. Try the link again, or ask for a new one.");
     }
-  }, [accept, navigate, token]);
+  }, [accept, logger, navigate, token]);
 
   useEffect(() => {
     if (authLoading) {
@@ -111,7 +115,7 @@ export default function AcceptInvite() {
             </div>
             <div>
               <CardTitle>Accept invitation</CardTitle>
-              <CardDescription>Join a shared woofx3 workspace.</CardDescription>
+              <CardDescription>Join an engine's team on woofx3.</CardDescription>
             </div>
           </div>
         </CardHeader>

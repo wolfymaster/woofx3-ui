@@ -118,7 +118,7 @@ Setup records that it opened for the signed-in user (`setup.markSeen`, per user 
 
 ## After onboarding
 
-`OnboardingGuard` requires at least one registered engine the user can reach and a Twitch link on the current engine before showing a page inside `BroadcastShell`. Which engine that is comes from the server (`access.entry`): the selected one, else the user's default engine, else the latest, each only while the user is still a member and the engine is registered. The engine may be one they were invited to: a user who only uses another account's engine, such as a moderator who does not stream, owns no account or engine and never goes through onboarding.
+`OnboardingGuard` requires at least one registered engine the user can reach and a Twitch link on the current engine before showing a page inside `BroadcastShell`. Which engine that is comes from the server (`access.entry`): the selected one, else the user's default engine, else the newest created, each only while the user is still a member and the engine is registered. The engine may be one they were invited to: a user who only uses another account's engine, such as a moderator who does not stream, owns no account or engine and never goes through onboarding.
 
 - **No registered engine:** the user goes to onboarding, which passes them on to setup, even mid-build. The dashboard never loads without a registered engine. That includes someone removed from their only engine.
 - **Suspended organization:** a hosted engine whose organization's subscription is suspended shows a full-page notice instead of its content. The owner gets **Reactivate**, linking to the portal's Billing page (not in the desktop app); everyone else is asked to contact the owner. Self-hosted engines are never locked.

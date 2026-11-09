@@ -29,6 +29,7 @@ import { useEngineScope } from "@/engine/context";
 import { useEngineConnectionTest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import { $engineUrl } from "@/lib/stores";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
@@ -51,7 +52,7 @@ function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; nam
     } catch (e) {
       toast({
         title: "Couldn't rename engine",
-        description: e instanceof Error ? e.message : String(e),
+        description: actionErrorMessage(e),
         variant: "destructive",
       });
     } finally {

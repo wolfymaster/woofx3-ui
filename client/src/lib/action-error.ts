@@ -25,8 +25,14 @@ export function actionErrorMessage(error: unknown): string {
     return uncaught[1].trim();
   }
   if (raw.includes("Server Error")) {
-    const requestId = raw.match(/\[Request ID: ([^\]]+)\]/)?.[1];
+    const requestId = convexRequestId(error);
     return requestId ? `Something went wrong (request ${requestId})` : "Something went wrong";
   }
   return raw;
+}
+
+/** The request id Convex puts in a failed call's message, for matching a client report to the server log. */
+export function convexRequestId(error: unknown): string | null {
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw.match(/\[Request ID: ([^\]]+)\]/)?.[1] ?? null;
 }

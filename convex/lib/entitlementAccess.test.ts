@@ -202,7 +202,7 @@ describe("seat limit", () => {
     await acceptAsNewUser(t, org, org.externalId, "fifth@example.com");
     await expect(invite(t, org.ownerId, org.externalId, "sixth@example.com")).rejects.toThrow("seats are all taken");
     await expect(invite(t, org.ownerId, org.managedId, "sixth@example.com")).rejects.toThrow("seats are all taken");
-    await expect(acceptAsNewUser(t, org, org.externalId, "sixth@example.com")).rejects.toThrow("seats are all taken");
+    expect(await acceptAsNewUser(t, org, org.externalId, "sixth@example.com")).toEqual({ status: "seats_full" });
   });
 
   test("a full org refuses every engine grant that would add someone", async () => {
@@ -262,8 +262,8 @@ describe("seat limit", () => {
       });
       return ctx.db.insert("users", { name: "Sixth", email: "sixth@example.com" });
     });
-    await expect(
-      t.withIdentity({ subject: `${inviteeId}|s` }).mutation(api.invitations.accept, { token: "full" })
-    ).rejects.toThrow("seats are all taken");
+    expect(
+      await t.withIdentity({ subject: `${inviteeId}|s` }).mutation(api.invitations.accept, { token: "full" })
+    ).toEqual({ status: "seats_full" });
   });
 });

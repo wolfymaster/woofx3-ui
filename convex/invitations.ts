@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { canReadChannelRole, normalizeTwitchLogin, type TwitchUser } from "@shared/twitch-users";
-import { type Infer, v } from "convex/values";
+import { ConvexError, type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -388,7 +388,7 @@ export const insertInvitation = internalMutation({
 
     const now = Date.now();
     if (!(await inviteeInOrg(ctx, instance, args.target)) && (await orgSeatsFull(ctx, instance.accountId, now))) {
-      throw new Error(SEATS_FULL);
+      throw new ConvexError({ code: "seats_full", message: SEATS_FULL });
     }
     const token = randomToken();
     const expiresAt = now + INVITATION_LIFETIME_MS;
@@ -408,7 +408,7 @@ export const insertInvitation = internalMutation({
     if (args.target.kind === "email") {
       const normalized = normalizeEmail(args.target.email);
       if (!normalized.includes("@")) {
-        throw new Error("Invalid email");
+        throw new ConvexError({ code: "invalid_email", message: "That isn't an email address" });
       }
 
       const engineMembers = await ctx.db
@@ -418,7 +418,7 @@ export const insertInvitation = internalMutation({
       for (const row of engineMembers) {
         const user = await ctx.db.get(row.userId);
         if (user?.email !== undefined && normalizeEmail(user.email) === normalized) {
-          throw new Error("That user is already on this engine");
+          throw new ConvexError({ code: "already_on_engine", message: "That user is already on this engine" });
         }
       }
 
@@ -427,7 +427,10 @@ export const insertInvitation = internalMutation({
         .withIndex("by_account_email", (q) => q.eq("accountId", instance.accountId).eq("email", normalized))
         .collect();
       if (existing.some((r) => isPendingFor(r, instance._id, now))) {
-        throw new Error("An invitation to this engine is already pending for this email");
+        throw new ConvexError({
+          code: "already_invited",
+          message: "An invitation to this engine is already pending for this email",
+        });
       }
 
       await ctx.db.insert("invitations", { ...common, email: normalized });
@@ -436,7 +439,7 @@ export const insertInvitation = internalMutation({
 
     const refusal = await twitchInviteRefusal(ctx, instance, args.inviterUserId, args.target.twitchUserId);
     if (refusal) {
-      throw new Error(refusal);
+      throw new ConvexError({ code: "not_invitable", message: refusal });
     }
 
     await ctx.db.insert("invitations", {
@@ -481,7 +484,7 @@ export const create = action({
     const { credentials } = await lookupCredentials(ctx, twitchLink);
     const user = await fetchTwitchUser(credentials, { id: args.target.twitchUserId });
     if (!user) {
-      throw new Error("No Twitch user by that name");
+      throw new ConvexError({ code: "no_twitch_user", message: "No Twitch user by that name" });
     }
     return ctx.runMutation(internal.invitations.insertInvitation, {
       instanceId: args.instanceId,
@@ -534,7 +537,10 @@ export type AcceptOutcome =
   | { status: "already_accepted" }
   | { status: "expired" }
   | { status: "revoked" }
-  | { status: "not_found" };
+  | { status: "not_found" }
+  | { status: "wrong_account"; message: string }
+  | { status: "engine_gone" }
+  | { status: "seats_full" };
 
 export const accept = mutation({
   args: { token: v.string() },
@@ -579,7 +585,7 @@ export const accept = mutation({
       twitchUserId: twitchAccount?.providerAccountId ?? null,
     });
     if (refusal) {
-      throw new Error(refusal);
+      return { status: "wrong_account", message: refusal };
     }
 
     const account = await ctx.db.get(inv.accountId);
@@ -588,11 +594,14 @@ export const accept = mutation({
     }
     const engine = await invitationEngine(ctx, inv);
     if (engine === null) {
-      throw new Error("The engine this invitation was for no longer exists");
+      return { status: "engine_gone" };
     }
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
+    if (!existingMember && (await orgSeatsFull(ctx, inv.accountId, now))) {
+      return { status: "seats_full" };
+    }
     if (account.ownerId !== userId) {
       // An invitation only adds access: someone made an engine admin after it
       // was sent keeps admin when they accept a member invite.

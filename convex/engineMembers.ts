@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
@@ -90,7 +90,10 @@ export const setRole = mutation({
     await requireInstanceRole(ctx, instanceId, "admin");
     const { account } = await changeableTarget(ctx, instanceId, targetUserId);
     if (role === "member" && (await orgRoleOf(ctx, account, targetUserId)) === "admin") {
-      throw new Error("Organization admins are admins on every engine. Change their organization role first");
+      throw new ConvexError({
+        code: "org_admin_has_every_engine",
+        message: "Organization admins are admins on every engine. Change their organization role first",
+      });
     }
     await grantEngineRole(ctx, instanceId, targetUserId, role);
     // A companion this member approved bridges only while they are an admin.
@@ -105,7 +108,10 @@ export const remove = mutation({
     await requireInstanceRole(ctx, instanceId, "admin");
     const { account, membership } = await changeableTarget(ctx, instanceId, targetUserId);
     if ((await orgRoleOf(ctx, account, targetUserId)) === "admin") {
-      throw new Error("Organization admins have every engine. Change their organization role first");
+      throw new ConvexError({
+        code: "org_admin_has_every_engine",
+        message: "Organization admins have every engine. Change their organization role first",
+      });
     }
     await ctx.db.delete(membership._id);
     // A companion this member approved stops bridging with their access.

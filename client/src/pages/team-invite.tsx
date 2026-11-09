@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 
 type InviteMethod = "twitch" | "email";
 type InviteRole = "admin" | "member";
@@ -26,10 +27,6 @@ type TwitchLookup =
   | { state: "found"; candidate: TwitchInviteCandidate };
 
 const TEAM_PATH = "/team";
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 function inviteUrl(token: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -73,7 +70,7 @@ export default function TeamInvite() {
       const candidate = await lookupTwitchUser({ instanceId, login });
       setLookup(candidate ? { state: "found", candidate } : { state: "not-found" });
     } catch (err) {
-      setLookup({ state: "failed", message: errorMessage(err) });
+      setLookup({ state: "failed", message: actionErrorMessage(err) });
     }
   }
 
@@ -87,7 +84,7 @@ export default function TeamInvite() {
       setLink(inviteUrl(token));
       toast({ title: "Invitation created", description: "Share the link with your teammate." });
     } catch (err) {
-      toast({ title: "Could not invite", description: errorMessage(err), variant: "destructive" });
+      toast({ title: "Could not invite", description: actionErrorMessage(err), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }

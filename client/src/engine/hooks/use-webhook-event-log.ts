@@ -17,7 +17,7 @@ export function useRetriggerEvent() {
       toast({
         variant: "destructive",
         title: "No engine selected",
-        description: "Pick an engine from the workspace switcher before retriggering events.",
+        description: "Pick an engine with Switch engine in your profile menu before retriggering events.",
       });
       return;
     }

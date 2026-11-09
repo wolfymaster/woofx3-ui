@@ -19,6 +19,16 @@ describe("safeNextPath", () => {
   });
 });
 
+describe("safeNextPath keeps the org portal links from the marketing site", () => {
+  test.each([
+    ["/org/", "/org/"],
+    ["/org/?start=trial", "/org/?start=trial"],
+    ["/org?start=trial", "/org?start=trial"],
+  ])("%s", (next, expected) => {
+    expect(safeNextPath(next, "/auth/onboarding")).toBe(expected);
+  });
+});
+
 describe("withNext", () => {
   test("carries the next path, encoded", () => {
     expect(withNext("/auth/register", "/auth/accept-invite?token=a&b")).toBe(

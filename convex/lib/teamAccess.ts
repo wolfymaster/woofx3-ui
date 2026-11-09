@@ -97,7 +97,6 @@ export async function grantEngineRole(
 /**
  * Gives a new engine its standing members: the org owner as `owner` (I3) and
  * every org admin as `admin` (I4). Org members get it only when granted (I5).
- * Only an owner or admin can create an engine, so this covers its creator.
  */
 export async function grantNewEngineMembers(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
   const instance = await ctx.db.get(instanceId);

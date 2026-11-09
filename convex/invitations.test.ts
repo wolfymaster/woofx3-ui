@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend, runMigration } from "./lib/convexTest.testing";
+import { accountEntitlements, SEATS_FULL } from "./lib/entitlementAccess";
 import type { EngineRole, OrgRole } from "./lib/organization";
+import { applyTransition } from "./lib/subscriptions";
+import { seedMissingTierPlans } from "./seeds/plans";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -103,6 +107,32 @@ async function roles(t: Backend, org: Org, userId: Id<"users">, instanceId: Id<"
   });
 }
 
+/** Puts the org on a Starter trial with a hosted engine, then takes every seat the plan has. */
+async function fillSeats(t: Backend, org: Org): Promise<void> {
+  await t.run(async (ctx) => {
+    await seedMissingTierPlans(ctx, "test");
+    await ctx.db.patch(org.instanceId, { hosting: "managed" });
+    const trial = await applyTransition(ctx, {
+      accountId: org.accountId,
+      event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
+      now: Date.now(),
+      actor: "test",
+      origin: "signup",
+    });
+    if (!trial.ok) {
+      throw new Error("trial start was illegal");
+    }
+  });
+  const { limits } = await t.run((ctx) => accountEntitlements(ctx, org.accountId, Date.now()));
+  const limit = limits["org.members"];
+  if (typeof limit !== "number") {
+    throw new Error("the Starter plan has no seat limit");
+  }
+  for (let seat = 1; seat < limit; seat += 1) {
+    await addUser(t, `seat${seat}@example.com`, { org, orgRole: "member", engineRole: null });
+  }
+}
+
 describe("invitations.create", () => {
   test("an engine admin invites to that engine with org role member", async () => {
     const t = newBackend();
@@ -125,8 +155,21 @@ describe("invitations.create", () => {
     const org = await seedOrg(t);
     await addUser(t, "on@example.com", { org, orgRole: "member", engineRole: "member" });
     await addUser(t, "off@example.com", { org, orgRole: "member", engineRole: null });
-    await expect(invite(t, org.ownerId, org.instanceId, "on@example.com")).rejects.toThrow("already on this engine");
+    await expect(invite(t, org.ownerId, org.instanceId, "on@example.com")).rejects.toMatchObject({
+      data: { code: "already_on_engine", message: "That user is already on this engine" },
+    });
     await invite(t, org.ownerId, org.instanceId, "off@example.com");
+  });
+});
+
+describe("invitations.create refusals", () => {
+  test("a full org refuses a new invitee with a message the client can show", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    await fillSeats(t, org);
+    await expect(invite(t, org.ownerId, org.instanceId, "new@example.com")).rejects.toMatchObject({
+      data: { code: "seats_full", message: SEATS_FULL },
+    });
   });
 });
 
@@ -263,6 +306,46 @@ describe("invitations.accept", () => {
     const userId = await addUser(t, "boss@example.com");
     await as(t, userId).mutation(api.invitations.accept, { token: "legacy-boss@example.com" });
     expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: "admin", engine: "admin" });
+  });
+
+  test("a full org is seats_full, and grants nothing", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    await fillSeats(t, org);
+    const userId = await addUser(t, "new@example.com");
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({ status: "seats_full" });
+    expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: null, engine: null });
+  });
+
+  test("a full org still lets an existing org member accept", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const userId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: null });
+    const { token } = await invite(t, org.ownerId, org.instanceId, "member@example.com");
+    await fillSeats(t, org);
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toMatchObject({ status: "accepted" });
+  });
+
+  test("the wrong account is wrong_account with whom to sign in as, and grants nothing", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    const userId = await addUser(t, "other@example.com");
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({
+      status: "wrong_account",
+      message: "Sign in with the email address this invitation was sent to",
+    });
+    expect((await roles(t, org, userId, org.instanceId)).org).toBeNull();
+  });
+
+  test("an invitation to a deleted engine is engine_gone", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    await t.run((ctx) => ctx.db.delete(org.instanceId));
+    const userId = await addUser(t, "new@example.com");
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({ status: "engine_gone" });
   });
 
   test("the preview names the engine", async () => {

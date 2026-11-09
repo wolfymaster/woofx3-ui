@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ConvexError } from "convex/values";
-import { actionErrorMessage } from "./action-error";
+import { actionErrorMessage, convexRequestId } from "./action-error";
 
 describe("actionErrorMessage", () => {
   test("uses a ConvexError's string data", () => {
@@ -29,5 +29,15 @@ describe("actionErrorMessage", () => {
   test("passes other messages through", () => {
     expect(actionErrorMessage(new Error("Network down"))).toBe("Network down");
     expect(actionErrorMessage("plain")).toBe("plain");
+  });
+});
+
+describe("convexRequestId", () => {
+  test.each([
+    ["[CONVEX M(invitations:accept)] [Request ID: 7f3a9c] Server Error", "7f3a9c"],
+    ["[CONVEX M(invitations:accept)] [Request ID: abc] Server Error\nUncaught Error: boom", "abc"],
+    ["Network down", null],
+  ])("%s", (message, requestId) => {
+    expect(convexRequestId(new Error(message))).toBe(requestId);
   });
 });
