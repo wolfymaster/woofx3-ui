@@ -1,4 +1,3 @@
-import type { OrgAction } from "@convex/lib/orgRoles";
 import type { OrgCapabilities } from "@convex/organizations";
 
 export const ORG_PORTAL_PATH = "/org";
@@ -10,7 +9,7 @@ export interface PortalPage {
   label: string;
   path: string;
   /** The org action a role needs to see the page; its query answers null to everyone else. */
-  visibleWith: OrgAction;
+  visibleWith: keyof OrgCapabilities;
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [

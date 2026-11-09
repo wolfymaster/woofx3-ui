@@ -64,7 +64,6 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
       manageMembers: true,
       viewMemberEmails: owner,
       manageEngines: true,
-      createEngine: owner,
       viewBilling: true,
       manageBilling: owner,
     },

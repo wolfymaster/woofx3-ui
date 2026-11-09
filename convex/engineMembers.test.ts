@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
 import type { EngineRole, OrgRole } from "./lib/organization";
@@ -245,5 +245,34 @@ describe("instances.create", () => {
     expect(await engineRole(t, instanceId, org.ownerId)).toBe("owner");
     expect(await engineRole(t, instanceId, adminId)).toBe("admin");
     expect(await engineRole(t, instanceId, memberId)).toBeNull();
+  });
+
+  test.each<[string, OrgRole]>([
+    ["an org admin", "admin"],
+    ["an org member", "member"],
+  ])("refuses %s with the org's createEngine refusal", async (_case, role) => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const userId = await addMember(t, org, role, "admin");
+    await expect(
+      as(t, userId).mutation(api.instances.create, { accountId: org.accountId, name: "Second", url: "two.example" })
+    ).rejects.toMatchObject({ data: { code: "not_authorized", action: "createEngine" } });
+  });
+});
+
+describe("provisioningInternal.reserveManagedInstance", () => {
+  test("refuses an org admin with the org's createEngine refusal", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addMember(t, org, "admin", "admin");
+    await expect(
+      t.mutation(internal.provisioningInternal.reserveManagedInstance, {
+        accountId: org.accountId,
+        userId: adminId,
+        slug: "org",
+        newRegistrationToken: "token",
+        newCreateRequestId: "request",
+      })
+    ).rejects.toMatchObject({ data: { code: "not_authorized", action: "createEngine" } });
   });
 });
