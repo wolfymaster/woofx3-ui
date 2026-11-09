@@ -125,6 +125,43 @@ describe("subscription migrations in any order", () => {
     expect((await endState(t, orgs)).comped?.state).toBe("trialing");
   });
 
+  const STATES = ["trialing", "active", "past_due", "suspended", "exempt"] as const;
+  const ORIGINS = ["migration", "signup", "operator"] as const;
+
+  for (const origin of ORIGINS) {
+    for (const state of STATES) {
+      for (const provider of [undefined, "sub_paid"]) {
+        const converts = state === "trialing" && provider === undefined;
+        test(`M6 ${converts ? "converts" : "leaves"} a ${origin} ${state} row ${provider ? "with" : "without"} a provider subscription`, async () => {
+          const t = newBackend();
+          const orgs = await seedOrgs(t);
+          await t.run(async (ctx) => {
+            await ctx.db.insert("subscriptions", {
+              accountId: orgs.comped,
+              plan: "starter",
+              state,
+              origin,
+              providerSubscriptionId: provider,
+              stateSince: 1,
+              addOns: [],
+              updatedAt: 1,
+              updatedBy: "test",
+            });
+          });
+          await runMigration(t, M6);
+          const after = (await endState(t, orgs)).comped;
+          expect(after?.state).toBe(converts ? "exempt" : state);
+          if (!converts) {
+            expect(after?.origin).toBe(origin);
+          }
+          const again = JSON.stringify(await endState(t, orgs));
+          await runMigration(t, M6);
+          expect(JSON.stringify(await endState(t, orgs))).toBe(again);
+        });
+      }
+    }
+  }
+
   test("M5 reports a comped org that is not exempt", async () => {
     const t = newBackend();
     const orgs = await seedOrgs(t);
