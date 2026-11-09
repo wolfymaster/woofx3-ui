@@ -6,7 +6,14 @@ import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { orgCan, orgRoleOf } from "./lib/orgRoles";
-import { getInstanceMembership, grantEngineRole, type TeamMemberDto, toTeamMemberDto } from "./lib/teamAccess";
+import {
+  getInstanceMembership,
+  grantEngineRole,
+  linkedPlatformNames,
+  memberDisplayName,
+  type TeamMemberDto,
+  toTeamMemberDto,
+} from "./lib/teamAccess";
 
 // An engine's team: who can open this engine and with which engine role. The
 // org role only sets floors (lib/teamAccess.ts grantEngineRole), so the owner
@@ -32,6 +39,9 @@ export const listForEngine = query({
     if (account === null) {
       return null;
     }
+    const callerOrgRole = await orgRoleOf(ctx, account, userId);
+    const showEmails = orgCan(callerOrgRole, "viewMemberEmails");
+    const platformNames = await linkedPlatformNames(ctx, [instanceId]);
     const rows = await ctx.db
       .query("instanceMembers")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -40,13 +50,14 @@ export const listForEngine = query({
     for (const row of rows) {
       const user = await ctx.db.get(row.userId);
       if (user !== null) {
-        members.push(toTeamMemberDto(user, row, await orgRoleOf(ctx, account, row.userId)));
+        const orgRole = await orgRoleOf(ctx, account, row.userId);
+        members.push(toTeamMemberDto(user, row, orgRole, memberDisplayName(user, platformNames), showEmails));
       }
     }
     return {
       members,
       canManage: roleSatisfies(own.role, "admin"),
-      canManageOrganization: orgCan(await orgRoleOf(ctx, account, userId), "manageMembers"),
+      canManageOrganization: orgCan(callerOrgRole, "manageMembers"),
     };
   },
 });

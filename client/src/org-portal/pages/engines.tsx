@@ -2,8 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { OrgEngine } from "@convex/organizations";
 import { useMutation } from "convex/react";
-import { Plus } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,23 +45,13 @@ export default function EnginesPage() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
-        <div className="space-y-1.5">
-          <CardTitle>Engines</CardTitle>
-          <CardDescription>
-            {organization.can.manageEngines
-              ? "Every engine in this organization."
-              : "The engines in this organization you can open."}
-          </CardDescription>
-        </div>
-        {organization.can.createEngine ? (
-          <Button asChild data-testid="button-create-engine">
-            <Link href="/auth/onboarding">
-              <Plus className="h-4 w-4 mr-2" />
-              Create another engine
-            </Link>
-          </Button>
-        ) : null}
+      <CardHeader>
+        <CardTitle>Engines</CardTitle>
+        <CardDescription>
+          {organization.can.manageEngines
+            ? "Every engine in this organization."
+            : "The engines in this organization you can open."}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {organization.engines.length === 0 ? (

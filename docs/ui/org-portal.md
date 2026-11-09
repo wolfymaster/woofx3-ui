@@ -15,7 +15,7 @@ The portal is where an organization's owner and admins manage the organization a
 ## Data
 
 - `organizations.mine({ now })` lists the caller's organizations, each with their role, a `can` map from `orgCan`, its engines, the subscription and seats. What a role may not see comes back empty: members get no subscription and no seats, and only the engines they're on. Only the owner gets the active discount.
-- `organizations.members` (owner and admin) lists members with their engines. Roles change and members are removed through `accountMembers.updateMemberRole` / `removeMember`. Invitations are sent from an engine's Team page, never here.
+- `organizations.members` (owner and admin) lists members with their engines. Email addresses are the owner's only, masked until shown, as on the Team page. Roles change and members are removed through `accountMembers.updateMemberRole` / `removeMember`. Invitations are sent from an engine's Team page, never here.
 - `organizations.rename` (owner and admin). Engines are renamed with `instances.update`.
 - Billing actions are the owner's (`manageBilling`): `billing.startCheckout`, `billing.previewPromotionCode`, `billing.openPortal`, and `billing.invoices`, which reads the customer's invoices live through `PaymentProvider.listInvoices` and answers null to anyone else. woofx3 stores no invoices.
 - Money moves through the payments module (`convex/lib/payments/`), behind `PaymentProvider`. The provider's webhooks arrive at `POST /payments/stripe/webhook` (`convex/paymentsHttp.ts`) and are kept as received in `paymentEvents`. Its configuration is `PAYMENTS_PROVIDER` (`stripe`), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `ORG_PORTAL_URL`, validated by `paymentsConfig()`.
@@ -30,8 +30,10 @@ The portal is where an organization's owner and admins manage the organization a
 | Overview | everything | everything, no billing buttons | name, own role, own engines |
 | Plan & billing | full | read-only | hidden |
 | Members | change roles, remove | change roles (not the owner), remove | hidden |
-| Engines | rename, create, open | rename, open | open the ones they're on |
+| Engines | rename, open | rename, open | open the ones they're on |
 | Discounts & invoices | full | hidden | hidden |
+
+The Engines page lists the organization's engines and has no way to add one. An organization's first engine comes from onboarding.
 
 Plan & billing picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. List prices in `format.ts` must match the provider's prices and the marketing pricing page.
 

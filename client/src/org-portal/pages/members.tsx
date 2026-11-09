@@ -2,6 +2,8 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { OrgMember } from "@convex/organizations";
 import { useMutation, useQuery } from "convex/react";
+import { useState } from "react";
+import { EmailVisibilityToggle, hasMemberEmails, MemberEmail } from "@/components/team/member-emails";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +25,7 @@ export default function MembersPage() {
   const updateRole = useMutation(api.accountMembers.updateMemberRole);
   const removeMember = useMutation(api.accountMembers.removeMember);
   const { seats } = organization;
+  const [emailsShown, setEmailsShown] = useState(false);
 
   async function run(action: () => Promise<unknown>, success: string) {
     try {
@@ -38,11 +41,16 @@ export default function MembersPage() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Members</CardTitle>
-        <CardDescription>
-          Admins manage members and engines. Members use the engines they&apos;re invited to.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>Members</CardTitle>
+          <CardDescription>
+            Admins manage members and engines. Members use the engines they&apos;re invited to.
+          </CardDescription>
+        </div>
+        {members && hasMemberEmails(members) ? (
+          <EmailVisibilityToggle shown={emailsShown} onShownChange={setEmailsShown} />
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         {members === undefined ? (
@@ -70,7 +78,7 @@ export default function MembersPage() {
                       </Avatar>
                       <div>
                         <p className="font-medium">{member.name}</p>
-                        <p className="text-sm text-muted-foreground">{member.email ?? "—"}</p>
+                        <MemberEmail email={member.email} shown={emailsShown} />
                       </div>
                     </div>
                   </TableCell>

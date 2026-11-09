@@ -8,6 +8,7 @@ export type OrgAction =
   | "viewOrganization"
   | "renameOrganization"
   | "manageMembers"
+  | "viewMemberEmails"
   | "manageEngines"
   | "createEngine"
   | "viewBilling"
@@ -18,6 +19,9 @@ const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   viewOrganization: ["owner", "admin", "member"],
   renameOrganization: ["owner", "admin"],
   manageMembers: ["owner", "admin"],
+  // Members are mostly invited by their platform name, so their addresses are
+  // private: only the owner, who holds the account, sees them.
+  viewMemberEmails: ["owner"],
   // See every engine of the org and rename them.
   manageEngines: ["owner", "admin"],
   // A new engine starts or extends what the org is billed for, so it is the
