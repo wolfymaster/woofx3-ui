@@ -66,7 +66,8 @@ export const finishEvent = internalMutation({
 /**
  * Records a checkout the provider opened, and returns the other sessions
  * still open for the same purpose and row, which the caller expires so that
- * only the newest can be paid.
+ * only the newest can be paid. `open` is false when the provider replayed a
+ * session that has closed since, whose URL must not be handed out.
  */
 export const recordCheckout = internalMutation({
   args: {
@@ -74,10 +75,14 @@ export const recordCheckout = internalMutation({
     session: v.object({ url: v.string(), sessionRef: v.string(), amountCents: v.number() }),
     now: v.number(),
   },
-  handler: async (ctx, { purpose, session, now }): Promise<{ supersededSessionRefs: string[] }> => {
+  handler: async (ctx, { purpose, session, now }): Promise<{ open: boolean; supersededSessionRefs: string[] }> => {
     const recorded = await recordSession(ctx, { purpose, session, now });
+    if (recorded.state !== "open") {
+      return { open: false, supersededSessionRefs: [] };
+    }
     const open = await openSessionsFor(ctx, purpose.kind, recorded.ref);
     return {
+      open: true,
       supersededSessionRefs: open
         .filter((other) => other.providerSessionId !== recorded.providerSessionId)
         .map((other) => other.providerSessionId),

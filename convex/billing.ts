@@ -9,6 +9,7 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  type QueryCtx,
   query,
 } from "./_generated/server";
 import { dueEvent, isWarningCurrent, WARNING_TEMPLATES, type WarningTemplate } from "./lib/billingLifecycle";
@@ -56,6 +57,7 @@ import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptio
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { sendNotificationOnce } from "./notifications";
+import schema from "./schema";
 
 /** Orgs whose timers are due, scheduled per evaluator tick; the next tick takes the rest. */
 const EVALUATOR_BATCH = 200;
@@ -212,20 +214,23 @@ export const sendWarningEmail = internalAction({
     attempt: v.number(),
   },
   handler: async (ctx, args): Promise<void> => {
+    // A configuration error, not an outage: it fails here, loudly, rather than being retried.
+    const billingUrl = `${orgPortalUrl()}/billing`;
     try {
       await sendTransactionalEmail(
-        {
-          template: args.template,
-          to: args.to,
-          variables: { ...args.variables, billingUrl: `${orgPortalUrl()}/billing` },
-        },
+        { template: args.template, to: args.to, variables: { ...args.variables, billingUrl } },
         args.idempotencyKey
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const next = args.attempt + 1;
       if (isPermanent(error) || next >= WARNING_EMAIL_RETRY.maxAttempts) {
-        logger.error("billing warning email: giving up", { ...args, variables: undefined, error: message });
+        logger.error("billing warning email: giving up", {
+          template: args.template,
+          idempotencyKey: args.idempotencyKey,
+          attempt: args.attempt,
+          error: message,
+        });
         return;
       }
       logger.warn("billing warning email: retrying", { template: args.template, attempt: next, error: message });
@@ -278,6 +283,53 @@ export function engineRetryDelay(attempt: number, jitter: number): number {
   return Math.round(capped * (0.5 + jitter / 2));
 }
 
+/**
+ * Retries of a stop the maintenance API took but whose run failed, for a
+ * suspended org whose engines should be stopped. Each one is a new run, so
+ * they are capped; the last failure is left for an operator.
+ */
+export const ENGINE_STOP_RETRY = {
+  maxAttempts: 5,
+} as const;
+
+/** Whether a failed stop of this engine should be tried again: its org is suspended and past spin-down. */
+async function stopStillWanted(ctx: QueryCtx, accountId: Id<"accounts">): Promise<boolean> {
+  const subscription = await subscriptionFor(ctx, accountId);
+  return subscription?.state === "suspended" && subscription.spinDownAt === undefined;
+}
+
+/**
+ * After a failed stop of `row`: schedules the next retry while the org still
+ * wants its engines stopped, or marks the engine as waiting for an operator
+ * once the retries are used up. `jitter` is in [0, 1).
+ */
+export async function scheduleEngineStopRetry(
+  ctx: MutationCtx,
+  row: Doc<"engineProvisioning">,
+  jitter: number
+): Promise<void> {
+  if (!(await stopStillWanted(ctx, row.accountId))) {
+    return;
+  }
+  const attempt = row.stopRetries ?? 0;
+  if (attempt >= ENGINE_STOP_RETRY.maxAttempts) {
+    logger.error("billing engine stop: retries used up, needs an operator", {
+      accountId: row.accountId,
+      engineId: row.maintenanceEngineId,
+      attempts: attempt,
+    });
+    await ctx.db.patch(row._id, {
+      error: `${row.error ?? "stop failed"} (gave up after ${attempt} retries; stop it by hand)`,
+    });
+    return;
+  }
+  await ctx.db.patch(row._id, { stopRetries: attempt + 1 });
+  await ctx.scheduler.runAfter(engineRetryDelay(attempt, jitter), internal.billing.retryEngineStop, {
+    provisioningId: row._id,
+    attempt,
+  });
+}
+
 type EngineEffect = "stopEngines" | "resumeEngines";
 const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
 
@@ -291,18 +343,39 @@ interface ManagedEngine {
 }
 
 /**
+ * Whether `transitionId` is the org's newest transition. An effect the
+ * lifecycle issues again on a recheck is superseded by the newer issue, so
+ * one org never runs two copies of it.
+ */
+async function isLatestTransition(
+  ctx: QueryCtx,
+  accountId: Id<"accounts">,
+  transitionId: Id<"subscriptionTransitions">
+): Promise<boolean> {
+  const latest = await ctx.db
+    .query("subscriptionTransitions")
+    .withIndex("by_account_at", (q) => q.eq("accountId", accountId))
+    .order("desc")
+    .first();
+  return latest?._id === transitionId;
+}
+
+/**
  * The org's managed engines an effect would act on, or null when the effect
  * no longer fits the subscription (a payment arrived before the stop ran, or
- * the org was suspended again before the start). Self-hosted engines have no
- * provisioning row and are never billed, locked or stopped.
+ * the org was suspended again before the start), or a recheck has issued the
+ * stop again. Self-hosted engines have no provisioning row and are never
+ * billed, locked or stopped.
  */
 export const engineEffectTargets = internalQuery({
-  args: { accountId: v.id("accounts"), effect: engineEffectValidator },
-  handler: async (ctx, { accountId, effect }): Promise<ManagedEngine[] | null> => {
+  args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions"), effect: engineEffectValidator },
+  handler: async (ctx, { accountId, transitionId, effect }): Promise<ManagedEngine[] | null> => {
     const subscription = await subscriptionFor(ctx, accountId);
     const wanted =
       effect === "stopEngines"
-        ? subscription?.state === "suspended" && subscription.spinDownAt === undefined
+        ? subscription?.state === "suspended" &&
+          subscription.spinDownAt === undefined &&
+          (await isLatestTransition(ctx, accountId, transitionId))
         : subscription !== null && subscription.state !== "suspended";
     if (!wanted) {
       return null;
@@ -311,13 +384,18 @@ export const engineEffectTargets = internalQuery({
       .query("engineProvisioning")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
       .take(ENGINES_PER_ORG_SCAN);
+    // A failed stop is left to its own retries, and once they are used up, to an operator.
+    const ownedByStopRetries = (row: Doc<"engineProvisioning">) =>
+      effect === "stopEngines" && row.status === "failed" && row.stopRetries !== undefined;
     return rows.flatMap((row) =>
-      row.maintenanceEngineId === undefined
+      row.maintenanceEngineId === undefined || ownedByStopRetries(row)
         ? []
         : [{ provisioningId: row._id, maintenanceEngineId: row.maintenanceEngineId, status: row.status }]
     );
   },
 });
+
+const provisioningStatusValidator = schema.tables.engineProvisioning.validator.fields.status;
 
 const engineSwitchMoveValidator = v.union(
   v.literal("stopRequested"),
@@ -344,11 +422,32 @@ export const switchEngineStatus = internalMutation({
 });
 
 /**
+ * Takes back a stop or start request the maintenance API refused without
+ * touching the engine (another run under way): the row goes back to the
+ * status it had, so that run's callbacks find the engine as they left it.
+ */
+export const withdrawEngineSwitch = internalMutation({
+  args: {
+    provisioningId: v.id("engineProvisioning"),
+    requested: v.union(v.literal("stopping"), v.literal("starting")),
+    previous: provisioningStatusValidator,
+  },
+  handler: async (ctx, { provisioningId, requested, previous }): Promise<void> => {
+    const row = await ctx.db.get(provisioningId);
+    if (row?.status === requested) {
+      await ctx.db.patch(provisioningId, { status: previous, updatedAt: Date.now() });
+    }
+  },
+});
+
+/**
  * Stops or starts the org's managed engines with its subscription. Each call
  * is keyed `${transitionId}:${engineId}`, so a retry asks the maintenance API
  * for the same run. An engine already stopped is not stopped again; only
  * stopped engines are started. Engines the API couldn't take yet are retried
- * with backoff while the effect still fits the subscription.
+ * with backoff while the effect still fits the subscription, and so is the
+ * whole effect when this run fails part-way: a lost effect would leave a
+ * suspended org's engines running or a paying org's stopped.
  */
 export const runEngineEffect = internalAction({
   args: {
@@ -357,45 +456,114 @@ export const runEngineEffect = internalAction({
     effect: engineEffectValidator,
     attempt: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<{ acted: number; pending: number }> => {
-    const targets = await ctx.runQuery(internal.billing.engineEffectTargets, {
-      accountId: args.accountId,
-      effect: args.effect,
-    });
-    if (targets === null) {
-      return { acted: 0, pending: 0 };
+  handler: async (ctx, args): Promise<{ acted: number; pending: number } | null> => {
+    let outcome: { acted: number; pending: number } | null = null;
+    try {
+      outcome = await switchOrgEngines(ctx, args);
+    } catch (error) {
+      logger.error("billing engine effect: failed, will retry", {
+        accountId: args.accountId,
+        effect: args.effect,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
-    let acted = 0;
-    let pending = 0;
-    for (const engine of targets) {
-      const outcome = await switchEngine(
-        ctx,
-        args.effect,
-        engine,
-        `${args.transitionId}:${engine.maintenanceEngineId}`
-      );
-      if (outcome === "acted") {
-        acted += 1;
-      } else if (outcome === "retry") {
-        pending += 1;
-      }
-    }
-    if (pending > 0) {
+    if (outcome === null || outcome.pending > 0) {
       const attempt = args.attempt ?? 0;
       await ctx.scheduler.runAfter(engineRetryDelay(attempt, Math.random()), internal.billing.runEngineEffect, {
         ...args,
         attempt: attempt + 1,
       });
     }
-    return { acted, pending };
+    return outcome;
+  },
+});
+
+async function switchOrgEngines(
+  ctx: ActionCtx,
+  args: { accountId: Id<"accounts">; transitionId: Id<"subscriptionTransitions">; effect: EngineEffect }
+): Promise<{ acted: number; pending: number }> {
+  const targets = await ctx.runQuery(internal.billing.engineEffectTargets, {
+    accountId: args.accountId,
+    transitionId: args.transitionId,
+    effect: args.effect,
+  });
+  if (targets === null) {
+    return { acted: 0, pending: 0 };
+  }
+  let acted = 0;
+  let pending = 0;
+  for (const engine of targets) {
+    const outcome = await switchEngine(ctx, args.effect, engine, `${args.transitionId}:${engine.maintenanceEngineId}`);
+    if (outcome === "acted") {
+      acted += 1;
+    } else if (outcome === "retry") {
+      pending += 1;
+    }
+  }
+  return { acted, pending };
+}
+
+/** The engine a stop retry acts on, or null when it no longer needs stopping or the org no longer wants it. */
+export const engineStopRetryTarget = internalQuery({
+  args: { provisioningId: v.id("engineProvisioning") },
+  handler: async (ctx, { provisioningId }): Promise<ManagedEngine | null> => {
+    const row = await ctx.db.get(provisioningId);
+    if (row?.status !== "failed" || row.maintenanceEngineId === undefined) {
+      return null;
+    }
+    if (!(await stopStillWanted(ctx, row.accountId))) {
+      return null;
+    }
+    return { provisioningId: row._id, maintenanceEngineId: row.maintenanceEngineId, status: row.status };
+  },
+});
+
+/** A stop retry the maintenance API didn't take: the engine is failed again and the next retry is scheduled. */
+export const recordEngineStopFailure = internalMutation({
+  args: { provisioningId: v.id("engineProvisioning"), error: v.string() },
+  handler: async (ctx, { provisioningId, error }): Promise<void> => {
+    const row = await ctx.db.get(provisioningId);
+    if (row === null || (row.status !== "stopping" && row.status !== "failed")) {
+      return;
+    }
+    await ctx.db.patch(provisioningId, { status: "failed", error, updatedAt: Date.now() });
+    await scheduleEngineStopRetry(ctx, { ...row, status: "failed", error }, Math.random());
+  },
+});
+
+/** Asks the maintenance API again to stop an engine whose stop run failed. Each attempt is its own run. */
+export const retryEngineStop = internalAction({
+  args: { provisioningId: v.id("engineProvisioning"), attempt: v.number() },
+  handler: async (ctx, { provisioningId, attempt }): Promise<void> => {
+    const engine = await ctx.runQuery(internal.billing.engineStopRetryTarget, { provisioningId });
+    if (engine === null) {
+      return;
+    }
+    let outcome: "acted" | "skipped" | "retry";
+    try {
+      outcome = await switchEngine(ctx, "stopEngines", engine, `stop-retry:${provisioningId}:${attempt}`);
+    } catch (error) {
+      logger.error("billing engine stop retry: failed", {
+        provisioningId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      outcome = "retry";
+    }
+    if (outcome === "retry") {
+      await ctx.runMutation(internal.billing.recordEngineStopFailure, {
+        provisioningId,
+        error: "stop: the maintenance API didn't take the retry",
+      });
+    }
   },
 });
 
 /** Why a refusal that retrying can't fix left the engine failed, for the row's error. */
-const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine", string> = {
+const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine" | "engine_deleted", string> = {
   engine_not_ready: "the maintenance API can't stop the engine from its current state (engine_not_ready)",
   not_customer_engine:
     "the maintenance API says this isn't a customer engine, so billing can't switch it (not_customer_engine)",
+  engine_deleted: "the maintenance API says the engine was deleted (engine_deleted)",
 };
 
 async function switchEngine(
@@ -409,7 +577,12 @@ async function switchEngine(
     // A stop still running settles first (engine.stopped); the start goes out on a retry after it.
     return "retry";
   }
-  if (switchedStatus(engine.status, stopping ? "stopRequested" : "startRequested") === null) {
+  // Recorded before the call, so the row never claims less than was asked of the maintenance API.
+  const requested = await ctx.runMutation(internal.billing.switchEngineStatus, {
+    provisioningId: engine.provisioningId,
+    move: stopping ? "stopRequested" : "startRequested",
+  });
+  if (!requested) {
     return "skipped";
   }
   try {
@@ -423,13 +596,20 @@ async function switchEngine(
     if (refusal === "engine_not_stopped") {
       return catchUpWithEngine(ctx, engine);
     }
-    if (refusal === "engine_not_ready" || refusal === "not_customer_engine") {
+    if (refusal === "engine_not_ready" || refusal === "not_customer_engine" || refusal === "engine_deleted") {
       await ctx.runMutation(internal.billing.switchEngineStatus, {
         provisioningId: engine.provisioningId,
         move: "refused",
         error: `${stopping ? "stop" : "start"}: ${REFUSAL_REASONS[refusal]}`,
       });
       return "skipped";
+    }
+    if (refusal === "run_in_progress") {
+      await ctx.runMutation(internal.billing.withdrawEngineSwitch, {
+        provisioningId: engine.provisioningId,
+        requested: stopping ? "stopping" : "starting",
+        previous: engine.status,
+      });
     }
     logger.warn("billing engine effect: will retry", {
       effect,
@@ -438,10 +618,6 @@ async function switchEngine(
     });
     return "retry";
   }
-  await ctx.runMutation(internal.billing.switchEngineStatus, {
-    provisioningId: engine.provisioningId,
-    move: stopping ? "stopRequested" : "startRequested",
-  });
   return "acted";
 }
 
@@ -499,14 +675,18 @@ export function renewalRetryDelay(attempt: number, jitter: number): number {
 
 /**
  * The provider subscription an active org is waiting on a renewal check for,
- * or null when there is nothing to check: the org left active, or a renewal
- * set its next billing date again.
+ * or null when there is nothing to check: the org left active, a renewal set
+ * its next billing date again, or a recheck issued the check again.
  */
 export const renewalCheckTarget = internalQuery({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, { accountId }): Promise<string | null> => {
+  args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions") },
+  handler: async (ctx, { accountId, transitionId }): Promise<string | null> => {
     const row = await subscriptionFor(ctx, accountId);
-    if (row?.state !== "active" || row.nextBillingAt !== undefined) {
+    if (
+      row?.state !== "active" ||
+      row.nextBillingAt !== undefined ||
+      !(await isLatestTransition(ctx, accountId, transitionId))
+    ) {
       return null;
     }
     if (row.providerSubscriptionId === undefined) {
@@ -529,8 +709,12 @@ export interface RenewalCheckDeps {
  * lifecycle's path for that. "retry" when the provider couldn't say yet
  * (unreachable, or the renewal not yet charged), leaving the org as it is.
  */
-export async function checkRenewal(deps: RenewalCheckDeps, accountId: Id<"accounts">): Promise<"settled" | "retry"> {
-  const subscriptionRef = await deps.runQuery(internal.billing.renewalCheckTarget, { accountId });
+export async function checkRenewal(
+  deps: RenewalCheckDeps,
+  accountId: Id<"accounts">,
+  transitionId: Id<"subscriptionTransitions">
+): Promise<"settled" | "retry"> {
+  const subscriptionRef = await deps.runQuery(internal.billing.renewalCheckTarget, { accountId, transitionId });
   if (subscriptionRef === null) {
     return "settled";
   }
@@ -545,12 +729,14 @@ export async function checkRenewal(deps: RenewalCheckDeps, accountId: Id<"accoun
     return "retry";
   }
   await deps.runMutation(internal.billing.applyProviderSubscription, { subscription });
-  return (await deps.runQuery(internal.billing.renewalCheckTarget, { accountId })) === null ? "settled" : "retry";
+  return (await deps.runQuery(internal.billing.renewalCheckTarget, { accountId, transitionId })) === null
+    ? "settled"
+    : "retry";
 }
 
 export const confirmRenewal = internalAction({
-  args: { accountId: v.id("accounts"), attempt: v.number() },
-  handler: async (ctx, { accountId, attempt }): Promise<void> => {
+  args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions"), attempt: v.number() },
+  handler: async (ctx, { accountId, transitionId, attempt }): Promise<void> => {
     let outcome: "settled" | "retry";
     try {
       outcome = await checkRenewal(
@@ -560,7 +746,8 @@ export const confirmRenewal = internalAction({
           runMutation: ctx.runMutation,
           now: Date.now,
         },
-        accountId
+        accountId,
+        transitionId
       );
     } catch (error) {
       // Never deactivate on our own failure: the org stays active and the check runs again.
@@ -573,6 +760,7 @@ export const confirmRenewal = internalAction({
     if (outcome === "retry") {
       await ctx.scheduler.runAfter(renewalRetryDelay(attempt, Math.random()), internal.billing.confirmRenewal, {
         accountId,
+        transitionId,
         attempt: attempt + 1,
       });
     }
@@ -621,10 +809,13 @@ function configuredProvider(): { provider: PaymentProvider; portalUrl: string } 
 }
 
 /**
- * One checkout attempt per org at a time: every request in the same window
- * shares an idempotency key, so the provider hands concurrent and repeated
- * requests the one session the first opened. The session's expiry is derived
- * from the window too, because a replay must repeat every parameter.
+ * One checkout attempt per org and terms at a time: every request for the
+ * same plan, interval and promotion code in the same window shares an
+ * idempotency key, so the provider hands concurrent and repeated requests the
+ * one session the first opened. Other terms get their own session, and
+ * opening it expires the older one, so only the newest can be paid. The
+ * session's expiry is derived from the window too, because a replay must
+ * repeat every parameter.
  */
 export const CHECKOUT_ATTEMPT = {
   windowMs: 30 * 60_000,
@@ -632,14 +823,15 @@ export const CHECKOUT_ATTEMPT = {
   expiryMarginMs: 5 * 60_000,
 } as const;
 
-/** The key and expiry of the org's checkout attempt at `nowMs`; the expiry lands 35-65 minutes out. */
+/** The key and expiry of the org's checkout attempt for `purpose` at `nowMs`; the expiry lands 35-65 minutes out. */
 export function checkoutAttempt(
-  accountId: Id<"accounts">,
+  purpose: Extract<CheckoutPurpose, { kind: "subscription" }>,
   nowMs: number
 ): { idempotencyKey: string; expiresAt: number } {
   const windowStart = Math.floor(nowMs / CHECKOUT_ATTEMPT.windowMs) * CHECKOUT_ATTEMPT.windowMs;
+  const terms = [purpose.plan, purpose.interval, encodeURIComponent(purpose.promotionCode ?? "")].join(":");
   return {
-    idempotencyKey: `checkout:${accountId}:${windowStart}`,
+    idempotencyKey: `checkout:${purpose.accountId}:${terms}:${windowStart}`,
     expiresAt: windowStart + 2 * CHECKOUT_ATTEMPT.windowMs + CHECKOUT_ATTEMPT.expiryMarginMs,
   };
 }
@@ -670,7 +862,7 @@ export async function openSubscriptionCheckout(
   { accountId, plan, interval, promotionCode }: CheckoutArgs,
   nowMs: number
 ): Promise<{ url: string }> {
-  const purpose: CheckoutPurpose = {
+  const purpose: Extract<CheckoutPurpose, { kind: "subscription" }> = {
     kind: "subscription",
     accountId,
     plan,
@@ -683,7 +875,7 @@ export async function openSubscriptionCheckout(
     allowPromotionCodes: true,
     successUrl: `${deps.portalUrl}/billing?checkout=done`,
     cancelUrl: `${deps.portalUrl}/billing`,
-    ...checkoutAttempt(accountId, nowMs),
+    ...checkoutAttempt(purpose, nowMs),
   });
   if (!result.ok && result.error.code === "checkout_in_progress") {
     throw new ConvexError<PaymentError>({
@@ -694,11 +886,18 @@ export async function openSubscriptionCheckout(
   if (!result.ok) {
     throw providerFailure(result.error);
   }
-  const { supersededSessionRefs } = await deps.runMutation(internal.payments.recordCheckout, {
+  const { open, supersededSessionRefs } = await deps.runMutation(internal.payments.recordCheckout, {
     purpose,
     session: result.value,
     now: nowMs,
   });
+  if (!open) {
+    // The provider replayed a session a checkout for other terms has since replaced; its URL leads nowhere.
+    throw new ConvexError<PaymentError>({
+      code: "checkout_in_progress",
+      message: "That checkout was replaced by a newer one. Finish the newer one, or start again in half an hour.",
+    });
+  }
   for (const sessionRef of supersededSessionRefs) {
     const expired = await deps.provider.expireCheckout(sessionRef);
     if (!expired.ok && expired.error.code !== "invalid_request") {

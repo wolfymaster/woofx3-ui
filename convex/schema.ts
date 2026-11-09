@@ -367,6 +367,10 @@ export default defineSchema({
     // Registration is retried on a backoff after the engine reports ready;
     // this counts the attempts made so far so the schedule can advance.
     registrationAttempts: v.optional(v.number()),
+    // Retries issued for a failed stop of a suspended org's engine. At
+    // ENGINE_STOP_RETRY.maxAttempts they stop and the engine waits for an
+    // operator. Cleared when the engine stops or starts.
+    stopRetries: v.optional(v.number()),
     // The latest upgrade of this engine, kept after it ends so the engine page
     // can say how it went.
     upgrade: v.optional(
@@ -1583,7 +1587,8 @@ export default defineSchema({
     nextBillingAt: v.optional(v.number()),
     // past_due: when it is suspended.
     graceEndsAt: v.optional(v.number()),
-    // past_due: the next re-evaluation.
+    // past_due: the next re-evaluation. active with a renewal check out, or
+    // suspended once engines stop: when that effect is issued again.
     nextRetryAt: v.optional(v.number()),
     // exempt: absent means indefinitely.
     exemptUntil: v.optional(v.number()),

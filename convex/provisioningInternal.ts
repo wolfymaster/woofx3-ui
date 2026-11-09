@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { scheduleEngineStopRetry } from "./billing";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { switchedStatus } from "./lib/engineSwitch";
 import { requireUsableSubscription } from "./lib/entitlementAccess";
@@ -682,11 +683,12 @@ export const applyCallbackEvent = internalMutation({
         // failed to be built would offer the user the opposite repair. A
         // failed stop or start is `failed`, which provisioning.retry resumes.
         const status = args.runKind === "deprovision" ? "deprovisioning" : "failed";
-        await ctx.db.patch(row._id, {
-          status,
-          error: `${step}: ${args.error ?? "the maintenance API reported a failure"}`,
-          updatedAt: Date.now(),
-        });
+        const error = `${step}: ${args.error ?? "the maintenance API reported a failure"}`;
+        await ctx.db.patch(row._id, { status, error, updatedAt: Date.now() });
+        if (args.runKind === "stop") {
+          // A suspended org's engine must stop; provisioning.retry is refused while suspended.
+          await scheduleEngineStopRetry(ctx, { ...row, status, error }, Math.random());
+        }
         return { handled: true, duplicate: false };
       }
 
@@ -702,6 +704,7 @@ export const applyCallbackEvent = internalMutation({
         await ctx.db.patch(row._id, {
           status,
           error: undefined,
+          stopRetries: undefined,
           ...(move === "started" && args.version ? { reportedVersion: args.version } : {}),
           updatedAt: Date.now(),
         });

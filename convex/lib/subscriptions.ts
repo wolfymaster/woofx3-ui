@@ -133,7 +133,7 @@ async function scheduleEffects(
         });
         break;
       case "confirmRenewal":
-        await ctx.scheduler.runAfter(0, internal.billing.confirmRenewal, { accountId, attempt: 0 });
+        await ctx.scheduler.runAfter(0, internal.billing.confirmRenewal, { accountId, transitionId, attempt: 0 });
         break;
       case "stopEngines":
       case "resumeEngines":

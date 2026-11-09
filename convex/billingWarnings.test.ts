@@ -19,7 +19,8 @@ const ENV = {
 };
 
 /** Runs `fn` with the mail service configured and billing's warning logs muted, restoring both after. */
-async function withMailService<T>(fn: () => Promise<T>): Promise<T> {
+/** Runs `fn` with the mail service configured, and returns what it logged as errors. */
+async function withMailService(fn: () => Promise<unknown>): Promise<{ errors: unknown[][] }> {
   const saved = Object.fromEntries(Object.keys(ENV).map((key) => [key, process.env[key]]));
   Object.assign(process.env, ENV);
   const muted = [
@@ -27,7 +28,8 @@ async function withMailService<T>(fn: () => Promise<T>): Promise<T> {
     spyOn(logger, "error").mockImplementation(() => {}),
   ];
   try {
-    return await fn();
+    await fn();
+    return { errors: muted[1]?.mock.calls ?? [] };
   } finally {
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) {
@@ -150,14 +152,15 @@ describe("warning email", () => {
     expect((await t.run((ctx) => ctx.db.get(org.transitionId)))?.event).toBe("TrialStarted");
   });
 
-  test("a refused send is not retried", async () => {
+  test("a refused send is not retried, and giving up never logs the owner's address", async () => {
     const t = newBackend();
     const org = await trialOrg(t, "owner@example.com");
     const fetchStub = stubFetch(() =>
       Response.json({ error: { code: "unknown_template", message: "no such template" } }, { status: 422 })
     );
+    let logged: unknown[][] = [];
     try {
-      await withMailService(() =>
+      ({ errors: logged } = await withMailService(() =>
         t.action(internal.billing.sendWarningEmail, {
           template: "billing-trial-ending",
           to: "owner@example.com",
@@ -165,10 +168,36 @@ describe("warning email", () => {
           idempotencyKey: `${org.transitionId}:billing-trial-ending`,
           attempt: 0,
         })
-      );
+      ));
     } finally {
       fetchStub.restore();
     }
+    expect(await scheduled(t, "billing:sendWarningEmail")).toEqual([]);
+    expect(logged).toHaveLength(1);
+    expect(JSON.stringify(logged)).not.toContain("owner@example.com");
+  });
+
+  test("a misconfigured portal URL fails at once instead of being retried as an outage", async () => {
+    const t = newBackend();
+    const org = await trialOrg(t, "owner@example.com");
+    const fetchStub = stubFetch(() => Response.json({ id: "msg_1" }));
+    try {
+      await withMailService(async () => {
+        delete process.env.ORG_PORTAL_URL;
+        await expect(
+          t.action(internal.billing.sendWarningEmail, {
+            template: "billing-trial-ending",
+            to: "owner@example.com",
+            variables: { orgName: "Org", planName: "Starter", dateIso: new Date(T0).toISOString() },
+            idempotencyKey: `${org.transitionId}:billing-trial-ending`,
+            attempt: 0,
+          })
+        ).rejects.toThrow("ORG_PORTAL_URL");
+      });
+    } finally {
+      fetchStub.restore();
+    }
+    expect(fetchStub.calls).toEqual([]);
     expect(await scheduled(t, "billing:sendWarningEmail")).toEqual([]);
   });
 });

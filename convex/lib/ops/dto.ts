@@ -152,6 +152,8 @@ export interface ProvisioningDto {
   reportedVersion: string | null;
   error: string | null;
   registrationAttempts: number;
+  /** Retries issued for a failed billing stop; at the cap the engine waits for an operator. */
+  stopRetries: number;
   upgrade: {
     fromVersion: string;
     toVersion: string;
@@ -185,6 +187,7 @@ export function provisioningDto(row: Doc<"engineProvisioning">): ProvisioningDto
     reportedVersion: row.reportedVersion ?? null,
     error: row.error ?? null,
     registrationAttempts: row.registrationAttempts ?? 0,
+    stopRetries: row.stopRetries ?? 0,
     upgrade: row.upgrade
       ? {
           fromVersion: row.upgrade.fromVersion,

@@ -3,6 +3,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   CHECKOUT_ATTEMPT,
+  type CheckoutArgs,
   checkoutAttempt,
   checkRenewal,
   openSubscriptionCheckout,
@@ -18,7 +19,8 @@ import { handlePaymentWebhook } from "./paymentsHttp";
 
 type Backend = ReturnType<typeof newBackend>;
 
-const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 const T0 = Date.UTC(2026, 10, 1);
 const SIGNED = new Headers({ "x-fake-signature": "valid" });
 
@@ -492,15 +494,29 @@ describe("one checkout per org at a time", () => {
   const WINDOW = CHECKOUT_ATTEMPT.windowMs;
 
   test("requests in one window share a key and an expiry 35-65 minutes out; the next window gets a new key", () => {
-    const accountId = "acct_1" as Id<"accounts">;
+    const purpose = {
+      kind: "subscription" as const,
+      accountId: "acct_1" as Id<"accounts">,
+      plan: "pro" as const,
+      interval: "month" as const,
+      promotionCode: null,
+    };
     const start = Math.ceil(T0 / WINDOW) * WINDOW;
-    const first = checkoutAttempt(accountId, start);
-    const late = checkoutAttempt(accountId, start + WINDOW - 1);
+    const first = checkoutAttempt(purpose, start);
+    const late = checkoutAttempt(purpose, start + WINDOW - 1);
     expect(late).toEqual(first);
     expect(first.expiresAt - start).toBe(65 * 60_000);
     expect(first.expiresAt - (start + WINDOW - 1)).toBeGreaterThan(35 * 60_000 - 1);
-    expect(checkoutAttempt(accountId, start + WINDOW).idempotencyKey).not.toBe(first.idempotencyKey);
-    expect(checkoutAttempt("acct_2" as Id<"accounts">, start).idempotencyKey).not.toBe(first.idempotencyKey);
+    expect(checkoutAttempt(purpose, start + WINDOW).idempotencyKey).not.toBe(first.idempotencyKey);
+    const others = [
+      { ...purpose, accountId: "acct_2" as Id<"accounts"> },
+      { ...purpose, plan: "starter" as const },
+      { ...purpose, interval: "year" as const },
+      { ...purpose, promotionCode: "SPRING" },
+    ];
+    for (const other of others) {
+      expect(checkoutAttempt(other, start).idempotencyKey).not.toBe(first.idempotencyKey);
+    }
   });
 
   test("two concurrent requests get one session, recorded once, so at most one subscription", async () => {
@@ -516,20 +532,43 @@ describe("one checkout per org at a time", () => {
     expect(await sessions(t)).toEqual([["cs_fake_1", "open"]]);
   });
 
-  test("another plan while a checkout is open is refused, not a second session", async () => {
+  test("other terms while a checkout is open replace it: a new session, and the older one expired", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
     await openCheckout(t, provider, accountId, T0);
-    await expect(
+    const checkout = (terms: Partial<CheckoutArgs>, at: number) =>
       openSubscriptionCheckout(
         { provider, runMutation: t.mutation, portalUrl: PORTAL },
         null,
-        { accountId, plan: "starter", interval: "month" },
-        T0 + 1000
-      )
-    ).rejects.toThrow("already open");
-    expect(provider.checkouts.size).toBe(1);
+        { accountId, plan: "pro", interval: "month", ...terms },
+        at
+      );
+    await checkout({ plan: "starter" }, T0 + 1000);
+    await checkout({ promotionCode: "SPRING" }, T0 + 2000);
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "expired"],
+      ["cs_fake_2", "expired"],
+      ["cs_fake_3", "open"],
+    ]);
+  });
+
+  test("going back to terms a newer checkout replaced is refused, and the newer one stays payable", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    await openCheckout(t, provider, accountId, T0);
+    await openSubscriptionCheckout(
+      { provider, runMutation: t.mutation, portalUrl: PORTAL },
+      null,
+      { accountId, plan: "starter", interval: "month" },
+      T0 + 1000
+    );
+    await expect(openCheckout(t, provider, accountId, T0 + 2000)).rejects.toThrow("replaced by a newer one");
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "expired"],
+      ["cs_fake_2", "open"],
+    ]);
   });
 
   test("a checkout in a new window expires the org's older open session at the provider", async () => {
@@ -566,6 +605,14 @@ describe("renewal check", () => {
   const PERIOD_END = T0 + 60 * DAY;
   const LATER = PERIOD_END + DAY;
 
+  function renewalChecks(t: ReturnType<typeof newBackend>) {
+    return t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+        (job) => job.name === "billing:confirmRenewal"
+      )
+    );
+  }
+
   /** An active org whose period end passed with no renewal webhook, after the evaluator has run. */
   async function overdueOrg() {
     const t = newBackend();
@@ -575,30 +622,43 @@ describe("renewal check", () => {
     await subscribe(t, provider, accountId);
     await t.mutation(internal.billing.evaluateOrg, { accountId, now: LATER });
     const deps = { provider, runQuery: t.query, runMutation: t.mutation, now: () => LATER };
-    return { t, accountId, provider, deps };
+    const [check] = await renewalChecks(t);
+    const transitionId = (check?.args[0] as { transitionId: Id<"subscriptionTransitions"> }).transitionId;
+    return { t, accountId, transitionId, provider, deps };
   }
 
-  test("the evaluator asks the provider once and leaves the org active meanwhile", async () => {
-    const { t, accountId } = await overdueOrg();
+  test("the evaluator asks the provider and leaves the org active meanwhile, with a recheck set", async () => {
+    const { t, accountId, transitionId } = await overdueOrg();
     const row = await t.run((ctx) => subscriptionFor(ctx, accountId));
     expect(row?.state).toBe("active");
     expect(row?.nextBillingAt).toBeUndefined();
-    expect(row?.nextCheckAt).toBeUndefined();
-    const checks = await t.run(async (ctx) =>
-      (await ctx.db.system.query("_scheduled_functions").collect()).filter(
-        (job) => job.name === "billing:confirmRenewal"
-      )
+    expect(row?.nextCheckAt).toBe(LATER + BILLING_LIFECYCLE.effectRecheckHours * HOUR);
+    expect((await renewalChecks(t)).map((job) => job.args[0])).toEqual([{ accountId, transitionId, attempt: 0 }]);
+  });
+
+  test("a check whose action was lost is issued again at the recheck, and the old one stands down", async () => {
+    const { t, accountId, transitionId, provider, deps } = await overdueOrg();
+    const recheckAt = LATER + BILLING_LIFECYCLE.effectRecheckHours * HOUR;
+    await t.mutation(internal.billing.evaluateOrg, { accountId, now: recheckAt });
+    const issued = (await renewalChecks(t)).map((job) => job.args[0] as { transitionId: string });
+    expect(issued).toHaveLength(2);
+    const reissued = issued[1]?.transitionId as Id<"subscriptionTransitions">;
+    expect(reissued).not.toBe(transitionId);
+    provider.subscriptions.set(
+      "sub_1",
+      providerSubscription(accountId, { currentPeriodEnd: PERIOD_END, observedAt: recheckAt })
     );
-    expect(checks.map((job) => job.args[0])).toEqual([{ accountId, attempt: 0 }]);
+    expect(await checkRenewal(deps, accountId, transitionId)).toBe("settled");
+    expect(await checkRenewal(deps, accountId, reissued)).toBe("retry");
   });
 
   test("renewed at the provider: applied, and the org stays active until the new period end", async () => {
-    const { t, accountId, provider, deps } = await overdueOrg();
+    const { t, accountId, transitionId, provider, deps } = await overdueOrg();
     provider.subscriptions.set(
       "sub_1",
       providerSubscription(accountId, { currentPeriodEnd: PERIOD_END + 30 * DAY, observedAt: LATER })
     );
-    expect(await checkRenewal(deps, accountId)).toBe("settled");
+    expect(await checkRenewal(deps, accountId, transitionId)).toBe("settled");
     expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toMatchObject({
       state: "active",
       nextBillingAt: PERIOD_END + 30 * DAY,
@@ -606,7 +666,7 @@ describe("renewal check", () => {
   });
 
   test("ended at the provider: the org takes the ended path", async () => {
-    const { t, accountId, provider, deps } = await overdueOrg();
+    const { t, accountId, transitionId, provider, deps } = await overdueOrg();
     provider.subscriptions.set(
       "sub_1",
       providerSubscription(accountId, {
@@ -617,7 +677,7 @@ describe("renewal check", () => {
         observedAt: LATER,
       })
     );
-    expect(await checkRenewal(deps, accountId)).toBe("settled");
+    expect(await checkRenewal(deps, accountId, transitionId)).toBe("settled");
     expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toMatchObject({
       state: "suspended",
       stateReason: "provider_ended",
@@ -625,20 +685,20 @@ describe("renewal check", () => {
   });
 
   test("provider unreachable: nothing changes and the check is retried", async () => {
-    const { t, accountId, provider, deps } = await overdueOrg();
+    const { t, accountId, transitionId, provider, deps } = await overdueOrg();
     const before = await t.run((ctx) => subscriptionFor(ctx, accountId));
     provider.outage = err("provider_unavailable", "Stripe is down");
-    expect(await checkRenewal(deps, accountId)).toBe("retry");
+    expect(await checkRenewal(deps, accountId, transitionId)).toBe("retry");
     expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toEqual(before);
   });
 
   test("still active at the provider but not yet renewed: retried, not applied", async () => {
-    const { t, accountId, provider, deps } = await overdueOrg();
+    const { t, accountId, transitionId, provider, deps } = await overdueOrg();
     provider.subscriptions.set(
       "sub_1",
       providerSubscription(accountId, { currentPeriodEnd: PERIOD_END, observedAt: LATER })
     );
-    expect(await checkRenewal(deps, accountId)).toBe("retry");
+    expect(await checkRenewal(deps, accountId, transitionId)).toBe("retry");
     expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.nextBillingAt).toBeUndefined();
   });
 

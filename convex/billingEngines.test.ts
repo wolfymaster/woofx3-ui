@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { ENGINE_EFFECT_RETRY, engineRetryDelay } from "./billing";
+import { ENGINE_EFFECT_RETRY, ENGINE_STOP_RETRY, engineRetryDelay } from "./billing";
 import { newBackend } from "./lib/convexTest.testing";
 import { stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
@@ -70,7 +70,7 @@ async function seed(
 }
 
 /** Runs `fn` against a stubbed maintenance API, restoring the environment and fetch after. */
-async function withMaintenance<T>(respond: (url: string) => Response, fn: () => Promise<T>) {
+async function withMaintenance<T>(respond: (url: string) => Response | Promise<Response>, fn: () => Promise<T>) {
   const saved = Object.fromEntries(Object.keys(MAINTENANCE).map((key) => [key, process.env[key]]));
   Object.assign(process.env, MAINTENANCE);
   const fetchStub = stubFetch((call) => respond(call.url));
@@ -97,6 +97,14 @@ function run(t: Backend, s: Seeded, effect: "stopEngines" | "resumeEngines") {
   return t.action(internal.billing.runEngineEffect, { accountId: s.accountId, transitionId: s.transitionId, effect });
 }
 
+function effectRetries(t: Backend) {
+  return t.run(async (ctx) =>
+    (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+      (job) => job.name === "billing:runEngineEffect"
+    )
+  );
+}
+
 async function status(t: Backend, s: Seeded) {
   return (await t.run((ctx) => ctx.db.get(s.provisioningId)))?.status;
 }
@@ -119,6 +127,23 @@ describe("stopping engines", () => {
     expect(calls).toEqual([]);
   });
 
+  test("the row says stopping before the maintenance API is called, so a failed call is retried from there", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    const seenAtCall: Array<ProvisioningStatus | undefined> = [];
+    const outage = async () => {
+      seenAtCall.push(await status(t, s));
+      return new Response("bad gateway", { status: 502 });
+    };
+    const first = await withMaintenance(outage, () => run(t, s, "stopEngines"));
+    expect(first.result).toEqual({ acted: 0, pending: 1 });
+    expect(seenAtCall).toEqual(["stopping"]);
+    expect(await status(t, s)).toBe("stopping");
+    const second = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(second.result).toEqual({ acted: 1, pending: 0 });
+    expect(second.calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/stop"]);
+  });
+
   test("an upgrade in progress is retried later", async () => {
     const t = newBackend();
     const s = await seed(t, "suspended", "upgrading");
@@ -134,7 +159,7 @@ describe("stopping engines", () => {
     expect(await status(t, s)).toBe("upgrading");
   });
 
-  for (const code of ["engine_not_ready", "not_customer_engine"]) {
+  for (const code of ["engine_not_ready", "not_customer_engine", "engine_deleted"]) {
     test(`a stop refused with ${code} is failed with the reason, not retried`, async () => {
       const t = newBackend();
       const s = await seed(t, "suspended", "registered");
@@ -153,6 +178,49 @@ describe("stopping engines", () => {
       expect(retries).toEqual([]);
     });
   }
+
+  test("a run that throws part-way is retried, not lost", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    // A second row for the org makes its subscription lookup throw.
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("subscriptions")
+        .withIndex("by_account", (q) => q.eq("accountId", s.accountId))
+        .first();
+      if (row === null) {
+        throw new Error("seeded subscription missing");
+      }
+      const { _id, _creationTime, ...copy } = row;
+      await ctx.db.insert("subscriptions", copy);
+    });
+    const muted = spyOn(logger, "error").mockImplementation(() => {});
+    try {
+      const { result } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+      expect(result).toBeNull();
+    } finally {
+      muted.mockRestore();
+    }
+    expect((await effectRetries(t)).map((job) => (job.args[0] as { attempt: number }).attempt)).toEqual([1]);
+  });
+
+  test("a stop that a recheck issued again stands down for the newer one", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    await t.run((ctx) =>
+      ctx.db.insert("subscriptionTransitions", {
+        accountId: s.accountId,
+        from: "suspended",
+        to: "suspended",
+        event: "RetryDue",
+        actor: "evaluator",
+        at: T0 + 1,
+      })
+    );
+    const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(result).toEqual({ acted: 0, pending: 0 });
+    expect(calls).toEqual([]);
+  });
 
   test("a stop that no longer fits the subscription does nothing", async () => {
     const t = newBackend();
@@ -269,6 +337,81 @@ describe("maintenance callbacks", () => {
     await callback(t, "e1", "engine.failed", "start");
     const row = await t.run((ctx) => ctx.db.get(s.provisioningId));
     expect(row).toMatchObject({ status: "failed", error: "deploy: health check timed out" });
+  });
+});
+
+describe("failed stops of a suspended org", () => {
+  function stopFailed(t: Backend, eventId: string) {
+    return t.mutation(internal.provisioningInternal.applyCallbackEvent, {
+      eventId,
+      eventType: "engine.failed",
+      maintenanceEngineId: "eng_1",
+      runKind: "stop",
+      step: "host-stop",
+      error: "host timed out",
+    });
+  }
+
+  function stopRetries(t: Backend) {
+    return t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+        (job) => job.name === "billing:retryEngineStop"
+      )
+    );
+  }
+
+  test("are retried with a new run each time, until the engine stops", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "stopping");
+    await stopFailed(t, "e1");
+    expect(await t.run((ctx) => ctx.db.get(s.provisioningId))).toMatchObject({ status: "failed", stopRetries: 1 });
+    const [retry] = await stopRetries(t);
+    expect(retry?.args[0]).toEqual({ provisioningId: s.provisioningId, attempt: 0 });
+    const delay = (retry?.scheduledTime ?? 0) - (retry?._creationTime ?? 0);
+    expect(delay).toBeGreaterThanOrEqual(ENGINE_EFFECT_RETRY.baseDelayMs / 2 - 1000);
+    expect(delay).toBeLessThanOrEqual(ENGINE_EFFECT_RETRY.baseDelayMs + 1000);
+
+    const { calls } = await withMaintenance(ACCEPTED, () =>
+      t.action(internal.billing.retryEngineStop, { provisioningId: s.provisioningId, attempt: 0 })
+    );
+    expect(calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/stop"]);
+    expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(`stop-retry:${s.provisioningId}:0`);
+    expect(await status(t, s)).toBe("stopping");
+
+    await t.mutation(internal.provisioningInternal.applyCallbackEvent, {
+      eventId: "e2",
+      eventType: "engine.stopped",
+      maintenanceEngineId: "eng_1",
+    });
+    const stopped = await t.run((ctx) => ctx.db.get(s.provisioningId));
+    expect(stopped?.status).toBe("stopped");
+    expect(stopped?.stopRetries).toBeUndefined();
+  });
+
+  test("give up at the cap and say the engine needs an operator; the recheck leaves it alone too", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "stopping");
+    await t.run((ctx) => ctx.db.patch(s.provisioningId, { stopRetries: ENGINE_STOP_RETRY.maxAttempts }));
+    const muted = spyOn(logger, "error").mockImplementation(() => {});
+    try {
+      await stopFailed(t, "e1");
+    } finally {
+      muted.mockRestore();
+    }
+    expect(await stopRetries(t)).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.get(s.provisioningId))).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("gave up after 5 retries"),
+    });
+    const { calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(calls).toEqual([]);
+  });
+
+  test("are not retried once the org no longer wants its engines stopped", async () => {
+    const t = newBackend();
+    await seed(t, "active", "stopping");
+    await stopFailed(t, "e1");
+    expect(await stopRetries(t)).toEqual([]);
   });
 });
 

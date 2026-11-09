@@ -333,15 +333,16 @@ describe("billing config", () => {
 describe("purpose metadata", () => {
   /** A Stripe client whose requests are recorded and answered from `answers`, keyed by path. */
   function recordingStripe(answers: Record<string, unknown>) {
-    const requests: Array<{ path: string; body: URLSearchParams; idempotencyKey: string | null }> = [];
+    const requests: Array<{ method: string; path: string; body: URLSearchParams; idempotencyKey: string | null }> = [];
     const fetchFn = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
       requests.push({
+        method: init?.method ?? "GET",
         path: url.pathname,
         body: new URLSearchParams(String(init?.body ?? "")),
         idempotencyKey: new Headers(init?.headers).get("idempotency-key"),
       });
-      const answer = answers[url.pathname];
+      const answer = answers[`${init?.method ?? "GET"} ${url.pathname}`] ?? answers[url.pathname];
       if (answer instanceof Response) {
         return answer;
       }
@@ -460,7 +461,9 @@ describe("purpose metadata", () => {
             object: "discount",
             end: null,
             promotion_code: null,
-            source: { coupon: { percent_off: 20, amount_off: null, currency: null, duration: "once" } },
+            source: {
+              coupon: { id: "woofx3_spring", percent_off: 20, amount_off: null, currency: null, duration: "once" },
+            },
           },
         ],
       },
@@ -471,6 +474,55 @@ describe("purpose metadata", () => {
     const coupon = requests.find((request) => request.path === "/v1/coupons")?.body;
     expect(coupon?.get("metadata[purpose]")).toBe("subscription");
     expect(coupon?.get("metadata[ref]")).toBe("spring");
+  });
+
+  test("a discount joins the subscription's existing discounts instead of replacing them", async () => {
+    const promoCoupon = { id: "promo_coupon", percent_off: 10, amount_off: null, currency: null, duration: "forever" };
+    const ourCoupon = { id: "woofx3_spring", percent_off: 20, amount_off: null, currency: null, duration: "once" };
+    const discount = (id: string, coupon: object) => ({
+      id,
+      object: "discount",
+      end: null,
+      promotion_code: null,
+      source: { coupon },
+    });
+    const { provider, requests } = recordingStripe({
+      "/v1/coupons": { id: "woofx3_spring", object: "coupon" },
+      "GET /v1/subscriptions/sub_1": {
+        id: "sub_1",
+        object: "subscription",
+        discounts: [discount("di_promo", promoCoupon)],
+      },
+      "POST /v1/subscriptions/sub_1": {
+        id: "sub_1",
+        object: "subscription",
+        discounts: [discount("di_promo", promoCoupon), discount("di_ours", ourCoupon)],
+      },
+    });
+    const spec: DiscountSpec = { kind: "percent_off", percent: 20, duration: { kind: "once" } };
+    const result = await provider.applyDiscount({ subscriptionRef: "sub_1", key: "spring", spec, idempotencyKey: "k" });
+    expect(result).toMatchObject({ ok: true, value: { spec } });
+    const update = requests.find((request) => request.method === "POST" && request.path === "/v1/subscriptions/sub_1");
+    expect(update?.body.get("discounts[0][discount]")).toBe("di_promo");
+    expect(update?.body.get("discounts[1][coupon]")).toBe("woofx3_spring");
+  });
+
+  test("a discount already on the subscription is not attached twice", async () => {
+    const ourCoupon = { id: "woofx3_spring", percent_off: 20, amount_off: null, currency: null, duration: "once" };
+    const { provider, requests } = recordingStripe({
+      "/v1/coupons/woofx3_spring": { object: "coupon", ...ourCoupon },
+      "GET /v1/subscriptions/sub_1": {
+        id: "sub_1",
+        object: "subscription",
+        discounts: [
+          { id: "di_ours", object: "discount", end: null, promotion_code: null, source: { coupon: ourCoupon } },
+        ],
+      },
+    });
+    const spec: DiscountSpec = { kind: "percent_off", percent: 20, duration: { kind: "once" } };
+    const result = await provider.applyDiscount({ subscriptionRef: "sub_1", key: "spring", spec, idempotencyKey: "k" });
+    expect(result).toMatchObject({ ok: true, value: { spec } });
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
   test("an existing coupon with other terms under the same key is refused, not silently reused", async () => {
