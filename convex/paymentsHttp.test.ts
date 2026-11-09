@@ -3,6 +3,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   CHECKOUT_ATTEMPT,
+  type CheckoutArgs,
   checkoutAttempt,
   checkRenewal,
   openSubscriptionCheckout,
@@ -493,15 +494,29 @@ describe("one checkout per org at a time", () => {
   const WINDOW = CHECKOUT_ATTEMPT.windowMs;
 
   test("requests in one window share a key and an expiry 35-65 minutes out; the next window gets a new key", () => {
-    const accountId = "acct_1" as Id<"accounts">;
+    const purpose = {
+      kind: "subscription" as const,
+      accountId: "acct_1" as Id<"accounts">,
+      plan: "pro" as const,
+      interval: "month" as const,
+      promotionCode: null,
+    };
     const start = Math.ceil(T0 / WINDOW) * WINDOW;
-    const first = checkoutAttempt(accountId, start);
-    const late = checkoutAttempt(accountId, start + WINDOW - 1);
+    const first = checkoutAttempt(purpose, start);
+    const late = checkoutAttempt(purpose, start + WINDOW - 1);
     expect(late).toEqual(first);
     expect(first.expiresAt - start).toBe(65 * 60_000);
     expect(first.expiresAt - (start + WINDOW - 1)).toBeGreaterThan(35 * 60_000 - 1);
-    expect(checkoutAttempt(accountId, start + WINDOW).idempotencyKey).not.toBe(first.idempotencyKey);
-    expect(checkoutAttempt("acct_2" as Id<"accounts">, start).idempotencyKey).not.toBe(first.idempotencyKey);
+    expect(checkoutAttempt(purpose, start + WINDOW).idempotencyKey).not.toBe(first.idempotencyKey);
+    const others = [
+      { ...purpose, accountId: "acct_2" as Id<"accounts"> },
+      { ...purpose, plan: "starter" as const },
+      { ...purpose, interval: "year" as const },
+      { ...purpose, promotionCode: "SPRING" },
+    ];
+    for (const other of others) {
+      expect(checkoutAttempt(other, start).idempotencyKey).not.toBe(first.idempotencyKey);
+    }
   });
 
   test("two concurrent requests get one session, recorded once, so at most one subscription", async () => {
@@ -517,20 +532,43 @@ describe("one checkout per org at a time", () => {
     expect(await sessions(t)).toEqual([["cs_fake_1", "open"]]);
   });
 
-  test("another plan while a checkout is open is refused, not a second session", async () => {
+  test("other terms while a checkout is open replace it: a new session, and the older one expired", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
     const provider = new FakePaymentProvider();
     await openCheckout(t, provider, accountId, T0);
-    await expect(
+    const checkout = (terms: Partial<CheckoutArgs>, at: number) =>
       openSubscriptionCheckout(
         { provider, runMutation: t.mutation, portalUrl: PORTAL },
         null,
-        { accountId, plan: "starter", interval: "month" },
-        T0 + 1000
-      )
-    ).rejects.toThrow("already open");
-    expect(provider.checkouts.size).toBe(1);
+        { accountId, plan: "pro", interval: "month", ...terms },
+        at
+      );
+    await checkout({ plan: "starter" }, T0 + 1000);
+    await checkout({ promotionCode: "SPRING" }, T0 + 2000);
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "expired"],
+      ["cs_fake_2", "expired"],
+      ["cs_fake_3", "open"],
+    ]);
+  });
+
+  test("going back to terms a newer checkout replaced is refused, and the newer one stays payable", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    await openCheckout(t, provider, accountId, T0);
+    await openSubscriptionCheckout(
+      { provider, runMutation: t.mutation, portalUrl: PORTAL },
+      null,
+      { accountId, plan: "starter", interval: "month" },
+      T0 + 1000
+    );
+    await expect(openCheckout(t, provider, accountId, T0 + 2000)).rejects.toThrow("replaced by a newer one");
+    expect(await sessions(t)).toEqual([
+      ["cs_fake_1", "expired"],
+      ["cs_fake_2", "open"],
+    ]);
   });
 
   test("a checkout in a new window expires the org's older open session at the provider", async () => {

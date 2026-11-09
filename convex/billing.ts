@@ -805,10 +805,13 @@ function configuredProvider(): { provider: PaymentProvider; portalUrl: string } 
 }
 
 /**
- * One checkout attempt per org at a time: every request in the same window
- * shares an idempotency key, so the provider hands concurrent and repeated
- * requests the one session the first opened. The session's expiry is derived
- * from the window too, because a replay must repeat every parameter.
+ * One checkout attempt per org and terms at a time: every request for the
+ * same plan, interval and promotion code in the same window shares an
+ * idempotency key, so the provider hands concurrent and repeated requests the
+ * one session the first opened. Other terms get their own session, and
+ * opening it expires the older one, so only the newest can be paid. The
+ * session's expiry is derived from the window too, because a replay must
+ * repeat every parameter.
  */
 export const CHECKOUT_ATTEMPT = {
   windowMs: 30 * 60_000,
@@ -816,14 +819,15 @@ export const CHECKOUT_ATTEMPT = {
   expiryMarginMs: 5 * 60_000,
 } as const;
 
-/** The key and expiry of the org's checkout attempt at `nowMs`; the expiry lands 35-65 minutes out. */
+/** The key and expiry of the org's checkout attempt for `purpose` at `nowMs`; the expiry lands 35-65 minutes out. */
 export function checkoutAttempt(
-  accountId: Id<"accounts">,
+  purpose: Extract<CheckoutPurpose, { kind: "subscription" }>,
   nowMs: number
 ): { idempotencyKey: string; expiresAt: number } {
   const windowStart = Math.floor(nowMs / CHECKOUT_ATTEMPT.windowMs) * CHECKOUT_ATTEMPT.windowMs;
+  const terms = [purpose.plan, purpose.interval, encodeURIComponent(purpose.promotionCode ?? "")].join(":");
   return {
-    idempotencyKey: `checkout:${accountId}:${windowStart}`,
+    idempotencyKey: `checkout:${purpose.accountId}:${terms}:${windowStart}`,
     expiresAt: windowStart + 2 * CHECKOUT_ATTEMPT.windowMs + CHECKOUT_ATTEMPT.expiryMarginMs,
   };
 }
@@ -854,7 +858,7 @@ export async function openSubscriptionCheckout(
   { accountId, plan, interval, promotionCode }: CheckoutArgs,
   nowMs: number
 ): Promise<{ url: string }> {
-  const purpose: CheckoutPurpose = {
+  const purpose: Extract<CheckoutPurpose, { kind: "subscription" }> = {
     kind: "subscription",
     accountId,
     plan,
@@ -867,7 +871,7 @@ export async function openSubscriptionCheckout(
     allowPromotionCodes: true,
     successUrl: `${deps.portalUrl}/billing?checkout=done`,
     cancelUrl: `${deps.portalUrl}/billing`,
-    ...checkoutAttempt(accountId, nowMs),
+    ...checkoutAttempt(purpose, nowMs),
   });
   if (!result.ok && result.error.code === "checkout_in_progress") {
     throw new ConvexError<PaymentError>({
@@ -878,11 +882,18 @@ export async function openSubscriptionCheckout(
   if (!result.ok) {
     throw providerFailure(result.error);
   }
-  const { supersededSessionRefs } = await deps.runMutation(internal.payments.recordCheckout, {
+  const { open, supersededSessionRefs } = await deps.runMutation(internal.payments.recordCheckout, {
     purpose,
     session: result.value,
     now: nowMs,
   });
+  if (!open) {
+    // The provider replayed a session a checkout for other terms has since replaced; its URL leads nowhere.
+    throw new ConvexError<PaymentError>({
+      code: "checkout_in_progress",
+      message: "That checkout was replaced by a newer one. Finish the newer one, or start again in half an hour.",
+    });
+  }
   for (const sessionRef of supersededSessionRefs) {
     const expired = await deps.provider.expireCheckout(sessionRef);
     if (!expired.ok && expired.error.code !== "invalid_request") {
