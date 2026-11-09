@@ -213,3 +213,20 @@ describe("POST /api/ops/accounts/:id/suspend", () => {
     expect(await other.json()).toMatchObject({ error: { code: "idempotency_mismatch" } });
   });
 });
+
+describe("cleanupOld", () => {
+  test("deletes keys past retention and keeps recent ones", async () => {
+    const t = newBackend();
+    const row = { write: "plan" as const, accountId: "a", fingerprint: "{}", state: "done" as const, result: "{}" };
+    await t.run(async (ctx) => {
+      await ctx.db.insert("opsRequests", {
+        ...row,
+        key: "old-key-1",
+        claimedAt: Date.now() - OPS_REQUESTS.retentionMs - 1,
+      });
+      await ctx.db.insert("opsRequests", { ...row, key: "new-key-1", claimedAt: Date.now() });
+    });
+    expect(await t.mutation(internal.ops.requests.cleanupOld, {})).toBe(1);
+    expect((await requests(t)).map((r) => r.key)).toEqual(["new-key-1"]);
+  });
+});
