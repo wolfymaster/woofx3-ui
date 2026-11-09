@@ -3,11 +3,13 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type QueryCtx } from "../_generated/server";
 import { orgSeatLimit } from "../lib/entitlementAccess";
+import { isAssignmentActive } from "../lib/entitlements";
 import { orgRoleOf } from "../lib/orgRoles";
 import { subscriptionFor } from "../lib/subscriptions";
 import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
 import { logger } from "../logger";
 import { migrations } from "./index";
+import { isPlanTier } from "./subscriptions";
 
 // Brings existing data to the organization model's invariants (I1-I4 in
 // lib/teamAccess.ts and lib/orgRoles.ts). Run orgOwnerRows, then
@@ -138,9 +140,26 @@ export type InvariantViolation =
       detail: "owner_not_engine_owner" | "non_owner_engine_owner";
     }
   | { invariant: "I4"; accountId: Id<"accounts">; instanceId: Id<"instances">; userId: Id<"users"> }
-  | { invariant: "subscription"; accountId: Id<"accounts">; detail: "managed_engine_without_subscription" };
+  | {
+      invariant: "subscription";
+      accountId: Id<"accounts">;
+      detail: "managed_engine_without_subscription" | "comped_not_exempt";
+    };
 
-async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<InvariantViolation[]> {
+/** Whether the org holds an active operator assignment of a tier plan, which M6 turns into an exemption. */
+async function isComped(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<boolean> {
+  const assignment = await ctx.db
+    .query("accountPlans")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .unique();
+  if (assignment?.planId === undefined || !isAssignmentActive(assignment, nowMs)) {
+    return false;
+  }
+  const plan = await ctx.db.get(assignment.planId);
+  return plan !== null && isPlanTier(plan.key);
+}
+
+async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">, nowMs: number): Promise<InvariantViolation[]> {
   const violations: InvariantViolation[] = [];
   const accountId = account._id;
   const orgRows = await ctx.db
@@ -175,6 +194,9 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
     .take(50);
   if (provisioning.some((row) => row.status !== "deleted") && (await subscriptionFor(ctx, accountId)) === null) {
     violations.push({ invariant: "subscription", accountId, detail: "managed_engine_without_subscription" });
+  }
+  if ((await isComped(ctx, accountId, nowMs)) && (await subscriptionFor(ctx, accountId))?.state !== "exempt") {
+    violations.push({ invariant: "subscription", accountId, detail: "comped_not_exempt" });
   }
 
   const instances = await ctx.db
@@ -258,7 +280,7 @@ export const checkOrgInvariants = internalQuery({
     const overLimit: OverSeatLimit[] = [];
     const now = Date.now();
     for (const account of page.page) {
-      violations.push(...(await orgViolations(ctx, account)));
+      violations.push(...(await orgViolations(ctx, account, now)));
       const over = await overSeatLimit(ctx, account._id, now);
       if (over !== null) {
         overLimit.push(over);
