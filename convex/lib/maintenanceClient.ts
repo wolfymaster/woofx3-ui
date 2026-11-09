@@ -94,6 +94,11 @@ export interface SlugAvailability {
 /** The owner type this deployment registers engines under; the API key is scoped to it. */
 export const MAINTENANCE_OWNER_TYPE = "woofx3-ui";
 
+export const MAINTENANCE_CLIENT = {
+  // Every call answers at once (runs report back by callback), so a slow answer is an outage, not work.
+  requestTimeoutMs: 30_000,
+} as const;
+
 interface MaintenanceConfig {
   baseUrl: string;
   apiKey: string;
@@ -127,6 +132,7 @@ async function request<T>(path: string, init: { method: string; body?: unknown; 
     method: init.method,
     headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: AbortSignal.timeout(MAINTENANCE_CLIENT.requestTimeoutMs),
   });
 
   const text = await response.text();
