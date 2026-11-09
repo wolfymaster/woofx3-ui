@@ -280,6 +280,53 @@ export function engineRetryDelay(attempt: number, jitter: number): number {
   return Math.round(capped * (0.5 + jitter / 2));
 }
 
+/**
+ * Retries of a stop the maintenance API took but whose run failed, for a
+ * suspended org whose engines should be stopped. Each one is a new run, so
+ * they are capped; the last failure is left for an operator.
+ */
+export const ENGINE_STOP_RETRY = {
+  maxAttempts: 5,
+} as const;
+
+/** Whether a failed stop of this engine should be tried again: its org is suspended and past spin-down. */
+async function stopStillWanted(ctx: QueryCtx, accountId: Id<"accounts">): Promise<boolean> {
+  const subscription = await subscriptionFor(ctx, accountId);
+  return subscription?.state === "suspended" && subscription.spinDownAt === undefined;
+}
+
+/**
+ * After a failed stop of `row`: schedules the next retry while the org still
+ * wants its engines stopped, or marks the engine as waiting for an operator
+ * once the retries are used up. `jitter` is in [0, 1).
+ */
+export async function scheduleEngineStopRetry(
+  ctx: MutationCtx,
+  row: Doc<"engineProvisioning">,
+  jitter: number
+): Promise<void> {
+  if (!(await stopStillWanted(ctx, row.accountId))) {
+    return;
+  }
+  const attempt = row.stopRetries ?? 0;
+  if (attempt >= ENGINE_STOP_RETRY.maxAttempts) {
+    logger.error("billing engine stop: retries used up, needs an operator", {
+      accountId: row.accountId,
+      engineId: row.maintenanceEngineId,
+      attempts: attempt,
+    });
+    await ctx.db.patch(row._id, {
+      error: `${row.error ?? "stop failed"} (gave up after ${attempt} retries; stop it by hand)`,
+    });
+    return;
+  }
+  await ctx.db.patch(row._id, { stopRetries: attempt + 1 });
+  await ctx.scheduler.runAfter(engineRetryDelay(attempt, jitter), internal.billing.retryEngineStop, {
+    provisioningId: row._id,
+    attempt,
+  });
+}
+
 type EngineEffect = "stopEngines" | "resumeEngines";
 const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
 
@@ -334,8 +381,11 @@ export const engineEffectTargets = internalQuery({
       .query("engineProvisioning")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
       .take(ENGINES_PER_ORG_SCAN);
+    // A failed stop is left to its own retries, and once they are used up, to an operator.
+    const ownedByStopRetries = (row: Doc<"engineProvisioning">) =>
+      effect === "stopEngines" && row.status === "failed" && row.stopRetries !== undefined;
     return rows.flatMap((row) =>
-      row.maintenanceEngineId === undefined
+      row.maintenanceEngineId === undefined || ownedByStopRetries(row)
         ? []
         : [{ provisioningId: row._id, maintenanceEngineId: row.maintenanceEngineId, status: row.status }]
     );
@@ -449,6 +499,61 @@ async function switchOrgEngines(
   }
   return { acted, pending };
 }
+
+/** The engine a stop retry acts on, or null when it no longer needs stopping or the org no longer wants it. */
+export const engineStopRetryTarget = internalQuery({
+  args: { provisioningId: v.id("engineProvisioning") },
+  handler: async (ctx, { provisioningId }): Promise<ManagedEngine | null> => {
+    const row = await ctx.db.get(provisioningId);
+    if (row?.status !== "failed" || row.maintenanceEngineId === undefined) {
+      return null;
+    }
+    if (!(await stopStillWanted(ctx, row.accountId))) {
+      return null;
+    }
+    return { provisioningId: row._id, maintenanceEngineId: row.maintenanceEngineId, status: row.status };
+  },
+});
+
+/** A stop retry the maintenance API didn't take: the engine is failed again and the next retry is scheduled. */
+export const recordEngineStopFailure = internalMutation({
+  args: { provisioningId: v.id("engineProvisioning"), error: v.string() },
+  handler: async (ctx, { provisioningId, error }): Promise<void> => {
+    const row = await ctx.db.get(provisioningId);
+    if (row === null || (row.status !== "stopping" && row.status !== "failed")) {
+      return;
+    }
+    await ctx.db.patch(provisioningId, { status: "failed", error, updatedAt: Date.now() });
+    await scheduleEngineStopRetry(ctx, { ...row, status: "failed", error }, Math.random());
+  },
+});
+
+/** Asks the maintenance API again to stop an engine whose stop run failed. Each attempt is its own run. */
+export const retryEngineStop = internalAction({
+  args: { provisioningId: v.id("engineProvisioning"), attempt: v.number() },
+  handler: async (ctx, { provisioningId, attempt }): Promise<void> => {
+    const engine = await ctx.runQuery(internal.billing.engineStopRetryTarget, { provisioningId });
+    if (engine === null) {
+      return;
+    }
+    let outcome: "acted" | "skipped" | "retry";
+    try {
+      outcome = await switchEngine(ctx, "stopEngines", engine, `stop-retry:${provisioningId}:${attempt}`);
+    } catch (error) {
+      logger.error("billing engine stop retry: failed", {
+        provisioningId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      outcome = "retry";
+    }
+    if (outcome === "retry") {
+      await ctx.runMutation(internal.billing.recordEngineStopFailure, {
+        provisioningId,
+        error: "stop: the maintenance API didn't take the retry",
+      });
+    }
+  },
+});
 
 /** Why a refusal that retrying can't fix left the engine failed, for the row's error. */
 const REFUSAL_REASONS: Record<"engine_not_ready" | "not_customer_engine", string> = {
