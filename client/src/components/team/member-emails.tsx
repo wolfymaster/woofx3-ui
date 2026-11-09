@@ -18,6 +18,7 @@ interface EmailVisibilityToggleProps {
   onShownChange: (shown: boolean) => void;
 }
 
+/** A toggle button: the label stays put and `aria-pressed` carries the state, as ARIA toggle buttons require. */
 export function EmailVisibilityToggle({ shown, onShownChange }: EmailVisibilityToggleProps) {
   const Icon = shown ? EyeOff : Eye;
   return (
@@ -29,7 +30,7 @@ export function EmailVisibilityToggle({ shown, onShownChange }: EmailVisibilityT
       data-testid="button-toggle-emails"
     >
       <Icon className="h-4 w-4 mr-2" />
-      {shown ? "Hide emails" : "Show emails"}
+      Show emails
     </Button>
   );
 }
@@ -41,7 +42,13 @@ export function MemberEmail({ email, shown }: { email?: string | null; shown: bo
   }
   return (
     <p className="text-sm text-muted-foreground" data-testid="text-member-email">
-      {shown ? (email ?? "—") : MASKED_EMAIL}
+      {shown ? (
+        (email ?? "—")
+      ) : (
+        <span role="img" aria-label="Email hidden">
+          {MASKED_EMAIL}
+        </span>
+      )}
     </p>
   );
 }

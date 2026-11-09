@@ -130,14 +130,16 @@ describe("organizations.mine", () => {
     expect(organization.can.manageBilling).toBe(false);
   });
 
-  test("an admin sees and renames every engine but may not create one", async () => {
+  test("an admin sees and renames every engine, and no one is sent createEngine", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
     const adminId = await addMember(t, org, "admin", "admin");
     const organization = await mine(t, adminId);
-    expect(organization.can).toMatchObject({ manageEngines: true, createEngine: false });
+    expect(organization.can.manageEngines).toBe(true);
     expect(organization.engines.map((e) => e.name).sort()).toEqual(["Hosted", "LAN Box"]);
-    expect((await mine(t, org.ownerId)).can.createEngine).toBe(true);
+    // Creating is enforced by the server's engine paths, not offered by any screen.
+    expect(organization.can).not.toHaveProperty("createEngine");
+    expect((await mine(t, org.ownerId)).can).not.toHaveProperty("createEngine");
   });
 
   test("a member sees no billing or seats, and only the engines they're on", async () => {

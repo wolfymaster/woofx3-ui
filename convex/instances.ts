@@ -10,6 +10,7 @@ import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
+import { requireOrgAction } from "./lib/orgRoles";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
 import { markFirstRun } from "./provisioningInternal";
@@ -102,14 +103,7 @@ export const create = mutation({
     url: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    // Verify user owns this account
-    const account = await ctx.db.get(args.accountId);
-    if (!account || account.ownerId !== userId) {
-      throw new Error("Not authorized");
-    }
+    await requireOrgAction(ctx, args.accountId, "createEngine");
 
     // An account has one engine, and a registration that failed leaves an
     // instance behind with no credentials. Retrying onboarding with a
