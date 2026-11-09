@@ -1,5 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import { BILLING_LIFECYCLE, type WarningTemplate } from "./billingLifecycle";
+import { dateText } from "./dateText";
 import type { NotificationContent } from "./notifications";
 import type { PlanTier, SubscriptionState } from "./organization";
 
@@ -14,7 +15,7 @@ const PLAN_NAMES: Record<PlanTier, string> = { starter: "Starter", pro: "Pro" };
 export interface WarningVariables {
   orgName: string;
   planName: string;
-  dateIso: string;
+  dateText: string;
 }
 
 /** The date a warning is about, from the subscription it warns about. */
@@ -43,41 +44,40 @@ export function warningVariables(
   return {
     orgName: account.name,
     planName: PLAN_NAMES[subscription.plan],
-    dateIso: new Date(warningDate(template, subscription, now)).toISOString(),
+    dateText: dateText(warningDate(template, subscription, now)),
   };
 }
 
-const COPY: Record<WarningTemplate, (vars: WarningVariables, day: string) => { heading: string; description: string }> =
-  {
-    "billing-trial-ending": (vars, day) => ({
-      heading: "Your trial is ending",
-      description: `${vars.orgName}'s ${vars.planName} trial ends on ${day}. Add a payment method to keep your engine running.`,
-    }),
-    "billing-payment-needed": (vars, day) => ({
-      heading: "Payment needed",
-      description: `${vars.orgName} needs a payment method by ${day}, or its hosted engines will be paused.`,
-    }),
-    "billing-payment-failed": (vars, day) => ({
-      heading: "Payment failed",
-      description: `The last payment for ${vars.orgName} didn't go through. Update it by ${day}, or its hosted engines will be paused.`,
-    }),
-    "billing-suspended": (vars, day) => ({
-      heading: "Subscription ended",
-      description: `${vars.orgName}'s subscription has ended. Its hosted engines will be paused on ${day}.`,
-    }),
-    "billing-engines-stopping": (vars, day) => ({
-      heading: "Engines pause soon",
-      description: `${vars.orgName}'s hosted engines will be paused on ${day}. Reactivate to keep them running.`,
-    }),
-    "billing-engines-stopped": (vars) => ({
-      heading: "Engines paused",
-      description: `${vars.orgName}'s hosted engines are paused. Your data is kept; reactivate to start them again.`,
-    }),
-    "billing-reactivated": (vars) => ({
-      heading: "You're all set",
-      description: `${vars.orgName}'s ${vars.planName} subscription is active again.`,
-    }),
-  };
+const COPY: Record<WarningTemplate, (vars: WarningVariables) => { heading: string; description: string }> = {
+  "billing-trial-ending": (vars) => ({
+    heading: "Your trial is ending",
+    description: `${vars.orgName}'s ${vars.planName} trial ends on ${vars.dateText}. Add a payment method to keep your engine running.`,
+  }),
+  "billing-payment-needed": (vars) => ({
+    heading: "Payment needed",
+    description: `${vars.orgName} needs a payment method by ${vars.dateText}, or its hosted engines will be paused.`,
+  }),
+  "billing-payment-failed": (vars) => ({
+    heading: "Payment failed",
+    description: `The last payment for ${vars.orgName} didn't go through. Update it by ${vars.dateText}, or its hosted engines will be paused.`,
+  }),
+  "billing-suspended": (vars) => ({
+    heading: "Subscription ended",
+    description: `${vars.orgName}'s subscription has ended. Its hosted engines will be paused on ${vars.dateText}.`,
+  }),
+  "billing-engines-stopping": (vars) => ({
+    heading: "Engines pause soon",
+    description: `${vars.orgName}'s hosted engines will be paused on ${vars.dateText}. Reactivate to keep them running.`,
+  }),
+  "billing-engines-stopped": (vars) => ({
+    heading: "Engines paused",
+    description: `${vars.orgName}'s hosted engines are paused. Your data is kept; reactivate to start them again.`,
+  }),
+  "billing-reactivated": (vars) => ({
+    heading: "You're all set",
+    description: `${vars.orgName}'s ${vars.planName} subscription is active again.`,
+  }),
+};
 
 /** Who a warning goes to: the owner can act on billing; org admins are told. */
 export type WarningRecipient = "owner" | "admin";
@@ -88,9 +88,8 @@ export function warningNotification(
   vars: WarningVariables,
   recipient: WarningRecipient
 ): NotificationContent {
-  const day = vars.dateIso.slice(0, 10);
   const link = recipient === "owner" ? BILLING_PATH : null;
-  return { ...COPY[template](vars, day), link, actionLabel: link === null ? null : "Billing" };
+  return { ...COPY[template](vars), link, actionLabel: link === null ? null : "Billing" };
 }
 
 export type BannerKind = "trial_ending" | "payment_needed";
