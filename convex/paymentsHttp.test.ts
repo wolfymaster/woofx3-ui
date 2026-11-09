@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -506,6 +507,45 @@ describe("billing actions", () => {
       })
     ).rejects.toThrow("already has a subscription");
   });
+
+  for (const state of ["past_due", "suspended"] as const) {
+    test(`a ${state} org whose subscription is failing is sent to the portal, not a second checkout`, async () => {
+      const t = newBackend();
+      const { accountId, ownerId } = await seedOrg(t);
+      const provider = new FakePaymentProvider();
+      provider.subscriptions.set("sub_1", providerSubscription(accountId));
+      await subscribe(t, provider, accountId);
+      provider.subscriptions.set(
+        "sub_1",
+        providerSubscription(accountId, {
+          standing: "payment_failed",
+          providerStatus: "past_due",
+          observedAt: T0 + 2 * DAY,
+        })
+      );
+      await deliver(t, provider, "evt_failed");
+      if (state === "suspended") {
+        await t.run((ctx) =>
+          applyTransition(ctx, {
+            accountId,
+            event: { kind: "GraceExpired" },
+            now: T0 + 16 * DAY,
+            actor: "test",
+            origin: "signup",
+          })
+        );
+      }
+      expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.state).toBe(state);
+      const refusal = await t
+        .withIdentity({ subject: `${ownerId}|s` })
+        .action(api.billing.startCheckout, { accountId, plan: "pro", interval: "month" })
+        .then(
+          () => null,
+          (error: unknown) => (error instanceof ConvexError ? error.data : error)
+        );
+      expect(refusal).toMatchObject({ code: "subscription_exists" });
+    });
+  }
 });
 
 describe("internal mutations", () => {

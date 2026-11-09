@@ -12,7 +12,13 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
-import { dueEvent, isWarningCurrent, WARNING_TEMPLATES, type WarningTemplate } from "./lib/billingLifecycle";
+import {
+  dueEvent,
+  isWarningCurrent,
+  type ProviderStanding,
+  WARNING_TEMPLATES,
+  type WarningTemplate,
+} from "./lib/billingLifecycle";
 import {
   type BillingBanner,
   billingBanner,
@@ -773,15 +779,22 @@ export const confirmRenewal = internalAction({
 
 const PROVIDER_ACTOR = "provider:stripe";
 
+/** `providerStanding` is null when the org has no provider subscription. */
+interface BillingContext {
+  customerRef: string | null;
+  providerStanding: ProviderStanding | null;
+}
+
 /** What a billing action needs to know about the org, for a caller allowed to manage its billing. */
 export const billingContext = internalQuery({
   args: { accountId: v.id("accounts"), userId: v.id("users") },
-  handler: async (ctx, { accountId, userId }): Promise<{ customerRef: string | null; paidUp: boolean }> => {
+  handler: async (ctx, { accountId, userId }): Promise<BillingContext> => {
     await requireOrgActionFor(ctx, accountId, userId, "manageBilling");
     const subscription = await subscriptionFor(ctx, accountId);
     return {
       customerRef: subscription?.providerCustomerId ?? null,
-      paidUp: subscription?.providerSubscriptionId !== undefined && subscription.providerStanding === "good",
+      providerStanding:
+        subscription?.providerSubscriptionId === undefined ? null : (subscription.providerStanding ?? null),
     };
   },
 });
@@ -791,7 +804,7 @@ async function requireBillingManager(ctx: ActionCtx, accountId: Id<"accounts">) 
   if (userId === null) {
     throw new ConvexError({ code: "not_authenticated", message: "Not authenticated" });
   }
-  const context: { customerRef: string | null; paidUp: boolean } = await ctx.runQuery(internal.billing.billingContext, {
+  const context: BillingContext = await ctx.runQuery(internal.billing.billingContext, {
     accountId,
     userId,
   });
@@ -917,7 +930,14 @@ export async function openSubscriptionCheckout(
   return { url: result.value.url };
 }
 
-/** A provider checkout for a plan, for an org with no subscription in good standing. Returns its URL. */
+/**
+ * Why a checkout is refused while the org's provider subscription has not
+ * ended: a second one would double-charge. A failing one is fixed in the
+ * customer portal, so `subscription_exists` tells the client to open it.
+ */
+export type CheckoutRefusal = { code: "already_subscribed" | "subscription_exists"; message: string };
+
+/** A provider checkout for a plan, for an org whose provider subscription, if any, has ended. Returns its URL. */
 export const startCheckout = action({
   args: {
     accountId: v.id("accounts"),
@@ -927,10 +947,16 @@ export const startCheckout = action({
   },
   handler: async (ctx, args): Promise<{ url: string }> => {
     const context = await requireBillingManager(ctx, args.accountId);
-    if (context.paidUp) {
-      throw new ConvexError({
+    if (context.providerStanding === "good") {
+      throw new ConvexError<CheckoutRefusal>({
         code: "already_subscribed",
         message: "This organization already has a subscription. Change it in Manage billing.",
+      });
+    }
+    if (context.providerStanding === "payment_failed") {
+      throw new ConvexError<CheckoutRefusal>({
+        code: "subscription_exists",
+        message: "Your payment method needs attention. Update it in the billing portal.",
       });
     }
     const { provider, portalUrl } = configuredProvider();
