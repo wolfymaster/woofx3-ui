@@ -2,7 +2,6 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";
 import { OPS_REQUESTS } from "../lib/ops/idempotency";
-import { logger } from "../logger";
 
 /**
  * Deletes idempotency keys older than `OPS_REQUESTS.retentionMs`. Runs on a
@@ -20,12 +19,8 @@ export const cleanupOld = internalMutation({
     for (const row of old) {
       await ctx.db.delete(row._id);
     }
-    if (old.length === OPS_REQUESTS.cleanupBatch) {
-      if (passesLeft > 1) {
-        await ctx.scheduler.runAfter(0, internal.ops.requests.cleanupOld, { passesLeft: passesLeft - 1 });
-      } else {
-        logger.warn("ops requests cleanup: pass cap reached; the rest waits for the next run");
-      }
+    if (old.length === OPS_REQUESTS.cleanupBatch && passesLeft > 1) {
+      await ctx.scheduler.runAfter(0, internal.ops.requests.cleanupOld, { passesLeft: passesLeft - 1 });
     }
     return old.length;
   },
