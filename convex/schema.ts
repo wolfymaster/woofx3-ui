@@ -14,6 +14,7 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
+import { accountBillingWriteValidator } from "./lib/ops/idempotency";
 import {
   billingIntervalValidator,
   engineRoleValidator,
@@ -1530,6 +1531,24 @@ export default defineSchema({
     .index("by_at", ["at"])
     .index("by_actor", ["actor", "at"])
     .index("by_target", ["target", "at"]),
+
+  // opsRequests: the ops API's billing writes by the caller's Idempotency-Key,
+  // so a retry replays the first success instead of writing twice. Claimed and
+  // settled in the same mutation as the write; see lib/ops/idempotency.ts.
+  opsRequests: defineTable({
+    write: accountBillingWriteValidator,
+    accountId: v.string(),
+    key: v.string(),
+    // Canonical JSON of the validated body; the same key with another body is refused.
+    fingerprint: v.string(),
+    state: v.union(v.literal("pending"), v.literal("done")),
+    // done: the subscription answered, as JSON, replayed to every repeat.
+    result: v.optional(v.string()),
+    // pending: when the running call claimed it. done: when it settled.
+    claimedAt: v.number(),
+  })
+    .index("by_key", ["write", "accountId", "key"])
+    .index("by_claimed_at", ["claimedAt"]),
 
   // licenses: written by account creation before plans existed, always
   // free with no features, and read by nothing. Emptied by
