@@ -15,6 +15,7 @@ import {
 import {
   dueEvent,
   isWarningCurrent,
+  type LifecycleReason,
   type ProviderStanding,
   WARNING_TEMPLATES,
   type WarningTemplate,
@@ -43,6 +44,7 @@ import {
   billingIntervalValidator,
   type PlanTier,
   planTierValidator,
+  type SubscriptionState,
   subscriptionStateValidator,
 } from "./lib/organization";
 import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
@@ -779,10 +781,12 @@ export const confirmRenewal = internalAction({
 
 const PROVIDER_ACTOR = "provider:stripe";
 
-/** `providerStanding` is null when the org has no provider subscription. */
-interface BillingContext {
+/** `providerStanding` is null when the org has no provider subscription; `state` when it has no subscription row. */
+export interface BillingContext {
   customerRef: string | null;
   providerStanding: ProviderStanding | null;
+  state: SubscriptionState | null;
+  stateReason: LifecycleReason | null;
 }
 
 /** What a billing action needs to know about the org, for a caller allowed to manage its billing. */
@@ -795,6 +799,8 @@ export const billingContext = internalQuery({
       customerRef: subscription?.providerCustomerId ?? null,
       providerStanding:
         subscription?.providerSubscriptionId === undefined ? null : (subscription.providerStanding ?? null),
+      state: subscription?.state ?? null,
+      stateReason: subscription?.stateReason ?? null,
     };
   },
 });
@@ -931,13 +937,41 @@ export async function openSubscriptionCheckout(
 }
 
 /**
- * Why a checkout is refused while the org's provider subscription has not
- * ended: a second one would double-charge. A failing one is fixed in the
- * customer portal, so `subscription_exists` tells the client to open it.
+ * Why a checkout is refused. While the org's provider subscription has not
+ * ended a second one would double-charge; a failing one is fixed in the
+ * customer portal, so `subscription_exists` tells the client to open it. An
+ * operator's suspension outlasts any payment, so paying would charge an org
+ * that stays suspended: `suspended_by_operator` sends the owner to support.
  */
-export type CheckoutRefusal = { code: "already_subscribed" | "subscription_exists"; message: string };
+export type CheckoutRefusal = {
+  code: "already_subscribed" | "subscription_exists" | "suspended_by_operator";
+  message: string;
+};
 
-/** A provider checkout for a plan, for an org whose provider subscription, if any, has ended. Returns its URL. */
+/** The refusal of a checkout for the org in `context`, or null when it may check out. */
+export function checkoutRefusal(context: BillingContext): CheckoutRefusal | null {
+  if (context.state === "suspended" && context.stateReason === "operator") {
+    return {
+      code: "suspended_by_operator",
+      message: "Your organization's account is suspended. Contact woofx3 support.",
+    };
+  }
+  if (context.providerStanding === "good") {
+    return {
+      code: "already_subscribed",
+      message: "This organization already has a subscription. Change it in Manage billing.",
+    };
+  }
+  if (context.providerStanding === "payment_failed") {
+    return {
+      code: "subscription_exists",
+      message: "Your payment method needs attention. Update it in the billing portal.",
+    };
+  }
+  return null;
+}
+
+/** A provider checkout for a plan, for an org `checkoutRefusal` lets check out. Returns its URL. */
 export const startCheckout = action({
   args: {
     accountId: v.id("accounts"),
@@ -947,17 +981,9 @@ export const startCheckout = action({
   },
   handler: async (ctx, args): Promise<{ url: string }> => {
     const context = await requireBillingManager(ctx, args.accountId);
-    if (context.providerStanding === "good") {
-      throw new ConvexError<CheckoutRefusal>({
-        code: "already_subscribed",
-        message: "This organization already has a subscription. Change it in Manage billing.",
-      });
-    }
-    if (context.providerStanding === "payment_failed") {
-      throw new ConvexError<CheckoutRefusal>({
-        code: "subscription_exists",
-        message: "Your payment method needs attention. Update it in the billing portal.",
-      });
+    const refusal = checkoutRefusal(context);
+    if (refusal !== null) {
+      throw new ConvexError<CheckoutRefusal>(refusal);
     }
     const { provider, portalUrl } = configuredProvider();
     return openSubscriptionCheckout(

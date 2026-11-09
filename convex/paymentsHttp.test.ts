@@ -6,6 +6,7 @@ import {
   CHECKOUT_ATTEMPT,
   type CheckoutArgs,
   checkoutAttempt,
+  checkoutRefusal,
   checkRenewal,
   openSubscriptionCheckout,
   RENEWAL_CHECK_RETRY,
@@ -546,6 +547,69 @@ describe("billing actions", () => {
       expect(refusal).toMatchObject({ code: "subscription_exists" });
     });
   }
+});
+
+describe("checkoutRefusal", () => {
+  const OPEN = { customerRef: null, providerStanding: null, state: null, stateReason: null } as const;
+  const CASES: Array<[string, Parameters<typeof checkoutRefusal>[0], string | null]> = [
+    ["no subscription yet", OPEN, null],
+    ["a trial", { ...OPEN, state: "trialing" }, null],
+    [
+      "suspended for non-payment with no provider subscription",
+      { ...OPEN, state: "suspended", stateReason: "no_payment_method" },
+      null,
+    ],
+    [
+      "suspended after the provider ended it",
+      { ...OPEN, providerStanding: "ended", state: "suspended", stateReason: "provider_ended" },
+      null,
+    ],
+    [
+      "suspended by an operator during a trial",
+      { ...OPEN, state: "suspended", stateReason: "operator" },
+      "suspended_by_operator",
+    ],
+    [
+      "suspended by an operator after the subscription ended",
+      { ...OPEN, providerStanding: "ended", state: "suspended", stateReason: "operator" },
+      "suspended_by_operator",
+    ],
+    [
+      "suspended by an operator while paying",
+      { ...OPEN, providerStanding: "good", state: "suspended", stateReason: "operator" },
+      "suspended_by_operator",
+    ],
+    ["paying", { ...OPEN, providerStanding: "good", state: "active" }, "already_subscribed"],
+    [
+      "failing",
+      { ...OPEN, providerStanding: "payment_failed", state: "past_due", stateReason: "payment_failed" },
+      "subscription_exists",
+    ],
+  ];
+  for (const [name, context, expected] of CASES) {
+    test(name, () => {
+      expect(checkoutRefusal(context)?.code ?? null).toBe(expected);
+    });
+  }
+
+  test("an org an operator suspended during its trial gets no checkout to pay", async () => {
+    const t = newBackend();
+    const { accountId, ownerId } = await seedOrg(t);
+    for (const event of [{ kind: "TrialStarted", billingDelayDays: 30 }, { kind: "OperatorSuspended" }] as const) {
+      await t.run((ctx) => applyTransition(ctx, { accountId, event, now: T0, actor: "test", origin: "signup" }));
+    }
+    const refusal = await t
+      .withIdentity({ subject: `${ownerId}|s` })
+      .action(api.billing.startCheckout, { accountId, plan: "pro", interval: "month" })
+      .then(
+        () => null,
+        (error: unknown) => (error instanceof ConvexError ? error.data : error)
+      );
+    expect(refusal).toEqual({
+      code: "suspended_by_operator",
+      message: "Your organization's account is suspended. Contact woofx3 support.",
+    });
+  });
 });
 
 describe("internal mutations", () => {

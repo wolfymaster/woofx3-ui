@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
-import { billingView, checkoutNeedsPortal } from "../billing-view";
+import { billingView, checkoutRefusalAction } from "../billing-view";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "../format";
 import { useOrganization } from "../organization-context";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
@@ -58,14 +58,18 @@ function SubscriptionSummary({ subscription }: { subscription: OrgSubscription }
   );
 }
 
-/** Sends the browser to a provider page: checkout or the customer portal. */
+/** Sends the browser to a provider page: checkout or the customer portal. `open` answers null when there is none. */
 function useProviderRedirect() {
   const [busy, setBusy] = useState(false);
-  async function go(open: () => Promise<{ url: string }>) {
+  async function go(open: () => Promise<{ url: string } | null>) {
     setBusy(true);
     try {
-      const { url } = await open();
-      window.location.assign(url);
+      const target = await open();
+      if (target === null) {
+        setBusy(false);
+        return;
+      }
+      window.location.assign(target.url);
     } catch (error) {
       toast({ title: "Billing is unavailable", description: actionErrorMessage(error), variant: "destructive" });
       setBusy(false);
@@ -166,11 +170,20 @@ function PlanChooser() {
                 promotionCode,
               });
             } catch (error) {
-              if (!checkoutNeedsPortal(error)) {
-                throw error;
+              const action = checkoutRefusalAction(error);
+              if (action === "open_portal") {
+                toast({ title: "Update your payment method", description: actionErrorMessage(error) });
+                return openPortal({ accountId: organization.accountId });
               }
-              toast({ title: "Update your payment method", description: actionErrorMessage(error) });
-              return openPortal({ accountId: organization.accountId });
+              if (action === "contact_support") {
+                toast({
+                  title: "Organization suspended",
+                  description: actionErrorMessage(error),
+                  variant: "destructive",
+                });
+                return null;
+              }
+              throw error;
             }
           })
         }
