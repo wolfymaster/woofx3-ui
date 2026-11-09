@@ -81,8 +81,12 @@ describe("users profile", () => {
 
   test("blank and overlong names are refused", async () => {
     const f = await fixture();
-    await expect(f.pat.mutation(api.users.updateProfile, { name: "  " })).rejects.toThrow("display name");
-    await expect(f.pat.mutation(api.users.updateProfile, { name: "x".repeat(101) })).rejects.toThrow("display name");
+    await expect(f.pat.mutation(api.users.updateProfile, { name: "  " })).rejects.toMatchObject({
+      data: { code: "invalid_name" },
+    });
+    await expect(f.pat.mutation(api.users.updateProfile, { name: "x".repeat(101) })).rejects.toMatchObject({
+      data: { code: "invalid_name" },
+    });
   });
 
   test("a Twitch-only user keeps the Twitch name", async () => {

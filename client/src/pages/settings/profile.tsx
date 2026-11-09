@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import { PASSWORD_MIN_LENGTH } from "@/lib/register-error";
 
 /** Radix Select cannot hold an empty value, so "no default" is this. */
@@ -33,7 +34,7 @@ function useSave() {
     } catch (e) {
       toast({
         title: "Couldn't save",
-        description: e instanceof Error ? e.message : String(e),
+        description: actionErrorMessage(e),
         variant: "destructive",
       });
     }

@@ -23,6 +23,7 @@ import { useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { toast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import { useBillingUi } from "@/lib/feature-source";
 import { cn } from "@/lib/utils";
 
@@ -94,11 +95,7 @@ export default function Team() {
       await action();
       toast({ title: success });
     } catch (e: unknown) {
-      toast({
-        title: "Failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
+      toast({ title: "Failed", description: actionErrorMessage(e), variant: "destructive" });
     }
   }
 

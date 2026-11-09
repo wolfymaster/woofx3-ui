@@ -145,7 +145,7 @@ describe("engineMembers.setRole", () => {
         targetUserId: orgAdminId,
         role: "member",
       })
-    ).rejects.toThrow("Organization admins");
+    ).rejects.toMatchObject({ data: { code: "org_admin_has_every_engine" } });
     await expect(
       as(t, orgAdminId).mutation(api.engineMembers.setRole, {
         instanceId: org.instanceId,
@@ -172,7 +172,7 @@ describe("engineMembers.remove", () => {
     const orgAdminId = await addMember(t, org, "admin", "admin");
     await expect(
       as(t, org.ownerId).mutation(api.engineMembers.remove, { instanceId: org.instanceId, targetUserId: orgAdminId })
-    ).rejects.toThrow("Organization admins");
+    ).rejects.toMatchObject({ data: { code: "org_admin_has_every_engine" } });
     await expect(
       as(t, orgAdminId).mutation(api.engineMembers.remove, { instanceId: org.instanceId, targetUserId: org.ownerId })
     ).rejects.toThrow("always owns");

@@ -34,16 +34,18 @@ describe("instances.update name", () => {
 
   test("a blank name is refused", async () => {
     const f = await fixture();
-    await expect(f.owner.mutation(api.instances.update, { instanceId: f.instanceId, name: "   " })).rejects.toThrow(
-      "engine name"
-    );
+    await expect(
+      f.owner.mutation(api.instances.update, { instanceId: f.instanceId, name: "   " })
+    ).rejects.toMatchObject({
+      data: { code: "invalid_name" },
+    });
   });
 
   test("a name over the cap is refused", async () => {
     const f = await fixture();
     await expect(
       f.owner.mutation(api.instances.update, { instanceId: f.instanceId, name: "x".repeat(ENGINE_NAME_MAX_LENGTH + 1) })
-    ).rejects.toThrow("engine name");
+    ).rejects.toMatchObject({ data: { code: "invalid_name" } });
     await f.owner.mutation(api.instances.update, {
       instanceId: f.instanceId,
       name: "x".repeat(ENGINE_NAME_MAX_LENGTH),

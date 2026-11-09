@@ -3,7 +3,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend, runMigration } from "./lib/convexTest.testing";
-import { accountEntitlements } from "./lib/entitlementAccess";
+import { accountEntitlements, SEATS_FULL } from "./lib/entitlementAccess";
 import type { EngineRole, OrgRole } from "./lib/organization";
 import { applyTransition } from "./lib/subscriptions";
 import { seedMissingTierPlans } from "./seeds/plans";
@@ -155,8 +155,21 @@ describe("invitations.create", () => {
     const org = await seedOrg(t);
     await addUser(t, "on@example.com", { org, orgRole: "member", engineRole: "member" });
     await addUser(t, "off@example.com", { org, orgRole: "member", engineRole: null });
-    await expect(invite(t, org.ownerId, org.instanceId, "on@example.com")).rejects.toThrow("already on this engine");
+    await expect(invite(t, org.ownerId, org.instanceId, "on@example.com")).rejects.toMatchObject({
+      data: { code: "already_on_engine", message: "That user is already on this engine" },
+    });
     await invite(t, org.ownerId, org.instanceId, "off@example.com");
+  });
+});
+
+describe("invitations.create refusals", () => {
+  test("a full org refuses a new invitee with a message the client can show", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    await fillSeats(t, org);
+    await expect(invite(t, org.ownerId, org.instanceId, "new@example.com")).rejects.toMatchObject({
+      data: { code: "seats_full", message: SEATS_FULL },
+    });
   });
 });
 
