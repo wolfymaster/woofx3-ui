@@ -194,24 +194,28 @@ describe("cleanupOrphanSteps", () => {
 
   test("chained passes keep the first pass's cutoff, which their cursor depends on", async () => {
     const t = newBackend();
-    setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
-    const instanceId = await seedInstance(t);
-    for (let i = 0; i < 2 * WORKFLOW_RUN_STEP_CLEANUP_BATCH + 1; i++) {
-      await seedOrphanStep(t, instanceId, "late-run");
-    }
-    setSystemTime();
-    await seedRun(t, instanceId, "late-run");
-
     const firstPassAt = Date.now();
+    const firstCutoff = firstPassAt - WORKFLOW_RUN_RETENTION_MS;
+    setSystemTime(new Date(firstCutoff - 60_000));
+    const instanceId = await seedInstance(t);
+    for (let i = 0; i < 3; i++) {
+      await seedOrphanStep(t, instanceId, `old-${i}`);
+    }
+    // Younger than the first pass's cutoff, older than the cutoff a minute later.
+    setSystemTime(new Date(firstCutoff + 30_000));
+    await seedOrphanStep(t, instanceId, "young-0");
+    await seedOrphanStep(t, instanceId, "young-1");
+
     setSystemTime(new Date(firstPassAt));
-    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, {});
+    expect(await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { batchSize: 1 })).toBe(1);
     const [second] = await scheduledOrphanStepPasses(t);
-    expect(second.next?.cutoff).toBe(firstPassAt - WORKFLOW_RUN_RETENTION_MS);
+    expect(second.next?.cutoff).toBe(firstCutoff);
 
     setSystemTime(new Date(firstPassAt + 60_000));
-    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, second);
-    const passes = await scheduledOrphanStepPasses(t);
-    expect(passes.map((pass) => pass.next?.cutoff)).toEqual([second.next?.cutoff, second.next?.cutoff]);
+    await finishScheduledChain(t);
+    expect((await scheduledOrphanStepPasses(t)).map((pass) => pass.next?.cutoff)).toEqual([firstCutoff, firstCutoff]);
+    const steps = await t.run(async (ctx) => (await ctx.db.query("workflowRunSteps").collect()).map((s) => s.runId));
+    expect(steps).toEqual(["young-0", "young-1"]);
   });
 
   test("reaches an orphan behind over 500 pages of steps whose run exists", async () => {
