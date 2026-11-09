@@ -345,6 +345,28 @@ const startTrial: Handler = (_current, event, ctx) => {
 
 const activate: Handler = (_current, event) => providerActive(event);
 const reactivateActive: Handler = (current, event, ctx) => reactivate(current, providerActive(event), ctx);
+
+/**
+ * A provider payment lifts a suspension for non-payment. Only an operator
+ * lifts an operator's suspension (by granting an exemption), so that org stays
+ * suspended exactly as it was; its provider standing is still mirrored.
+ */
+const reactivateUnlessOperator: Handler = (current, event, ctx) => {
+  if (current?.stateReason !== "operator") {
+    return reactivateActive(current, event, ctx);
+  }
+  return {
+    state: "suspended",
+    reason: "operator",
+    timers: {
+      nextBillingAt: current.nextBillingAt,
+      graceEndsAt: current.graceEndsAt,
+      nextRetryAt: current.nextRetryAt,
+      exemptUntil: current.exemptUntil,
+      spinDownAt: current.spinDownAt,
+    },
+  };
+};
 const paymentFailed: Handler = (_current, _event, ctx) => enterPastDue("payment_failed", ctx);
 const evaluateNow: Handler = (_current, _event, ctx) => evaluate(ctx);
 
@@ -464,8 +486,8 @@ export const TRANSITIONS: Record<SubscriptionState | "none", Partial<Record<Life
     OperatorSuspended: operatorSuspended,
   },
   suspended: {
-    ProviderActivated: reactivateActive,
-    PaymentSucceeded: reactivateActive,
+    ProviderActivated: reactivateUnlessOperator,
+    PaymentSucceeded: reactivateUnlessOperator,
     SpinDownDue: spinDown,
     RetryDue: stopEngines,
     ExemptionGranted: grantExemption,

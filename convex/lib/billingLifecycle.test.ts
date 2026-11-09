@@ -8,6 +8,7 @@ import {
   type Lifecycle,
   type LifecycleEvent,
   type LifecycleEventKind,
+  type LifecycleReason,
   nextRetryAt,
   type ProviderView,
   transition,
@@ -274,6 +275,76 @@ describe("spin-down and reactivation", () => {
     const { next, effects } = apply(stopped, EVENTS.ExemptionGranted, (suspended?.spinDownAt ?? 0) + DAY);
     expect(next).toMatchObject({ state: "exempt", plan: "pro", nextCheckAt: undefined });
     expect(effects).toContainEqual({ kind: "resumeEngines" });
+  });
+});
+
+describe("provider events while suspended", () => {
+  const active = () => inState("active");
+  const SUSPENDED_FOR: Record<LifecycleReason, () => Lifecycle | null> = {
+    no_payment_method: () => inState("suspended"),
+    payment_failed: () =>
+      apply(apply(active(), EVENTS.PaymentFailed, T0 + 2 * DAY).next, EVENTS.GraceExpired, T0 + 16 * DAY).next,
+    subscription_canceled: () => apply(active(), EVENTS.ProviderEnded, T0 + 2 * DAY).next,
+    provider_ended: () => apply(active(), { kind: "ProviderEnded", reason: "provider_ended" }, T0 + 2 * DAY).next,
+    operator: () => apply(active(), EVENTS.OperatorSuspended, T0 + 2 * DAY).next,
+  };
+  const PROVIDER_EVENTS = ["ProviderActivated", "PaymentSucceeded", "PaymentFailed", "ProviderEnded"] as const;
+  // Only an operator lifts an operator's suspension; a payment lifts any other.
+  const EXPECTED_FROM: Record<LifecycleReason, Record<(typeof PROVIDER_EVENTS)[number], Expected>> = {
+    no_payment_method: {
+      ProviderActivated: "active",
+      PaymentSucceeded: "active",
+      PaymentFailed: null,
+      ProviderEnded: null,
+    },
+    payment_failed: {
+      ProviderActivated: "active",
+      PaymentSucceeded: "active",
+      PaymentFailed: null,
+      ProviderEnded: null,
+    },
+    subscription_canceled: {
+      ProviderActivated: "active",
+      PaymentSucceeded: "active",
+      PaymentFailed: null,
+      ProviderEnded: null,
+    },
+    provider_ended: {
+      ProviderActivated: "active",
+      PaymentSucceeded: "active",
+      PaymentFailed: null,
+      ProviderEnded: null,
+    },
+    operator: {
+      ProviderActivated: "suspended",
+      PaymentSucceeded: "suspended",
+      PaymentFailed: null,
+      ProviderEnded: null,
+    },
+  };
+
+  for (const reason of Object.keys(SUSPENDED_FOR) as LifecycleReason[]) {
+    for (const kind of PROVIDER_EVENTS) {
+      const expected = EXPECTED_FROM[reason][kind];
+      test(`suspended (${reason}) + ${kind} -> ${expected ?? "illegal"}`, () => {
+        const current = SUSPENDED_FOR[reason]();
+        expect(current).toMatchObject({ state: "suspended", stateReason: reason });
+        const result = transition(current, EVENTS[kind], { now: (current?.stateSince ?? T0) + HOUR, provider: GOOD });
+        if (expected === null) {
+          expect(result.ok).toBe(false);
+          return;
+        }
+        expect(result.ok && result.next.state).toBe(expected);
+      });
+    }
+  }
+
+  test("a payment leaves an operator's suspension as it was: same stint, timers and reason, no effects", () => {
+    const suspended = SUSPENDED_FOR.operator();
+    const stopped = apply(suspended, EVENTS.SpinDownDue, suspended?.spinDownAt ?? 0).next;
+    const { next, effects } = apply(stopped, EVENTS.PaymentSucceeded, (stopped.nextRetryAt ?? 0) - HOUR, GOOD);
+    expect(next).toEqual(stopped);
+    expect(effects).toEqual([]);
   });
 });
 

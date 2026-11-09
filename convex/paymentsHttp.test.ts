@@ -423,6 +423,39 @@ describe("payments webhook", () => {
     expect(resumes.length).toBe(1);
   });
 
+  test("a payment for an operator-suspended org is recorded and mirrored, and the org stays suspended", async () => {
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    const provider = new FakePaymentProvider();
+    provider.subscriptions.set("sub_1", providerSubscription(accountId));
+    await subscribe(t, provider, accountId);
+    await t.run(async (ctx) => {
+      const result = await applyTransition(ctx, {
+        accountId,
+        event: { kind: "OperatorSuspended" },
+        now: T0 + DAY,
+        actor: "ops:test",
+        origin: "signup",
+      });
+      expect(result.ok).toBe(true);
+    });
+    provider.subscriptions.set(
+      "sub_1",
+      providerSubscription(accountId, {
+        standing: "payment_failed",
+        providerStatus: "past_due",
+        observedAt: T0 + 2 * DAY,
+      })
+    );
+    await deliver(t, provider, "evt_failed");
+    provider.subscriptions.set("sub_1", providerSubscription(accountId, { observedAt: T0 + 3 * DAY }));
+    await deliver(t, provider, "evt_recovered");
+    const row = await t.run((ctx) => subscriptionFor(ctx, accountId));
+    expect(row).toMatchObject({ state: "suspended", stateReason: "operator", providerStanding: "good" });
+    expect((await transitions(t, accountId)).at(-1)).toBe("ProviderActivated");
+    expect((await events(t)).at(-1)).toEqual(["evt_recovered", "applied"]);
+  });
+
   test("an unknown price is recorded as failed and answers 500 so the provider retries", async () => {
     const t = newBackend();
     await seedOrg(t);
