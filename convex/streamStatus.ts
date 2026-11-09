@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalAction, internalMutation } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { logger } from "./logger";
 
 // Polls one instance's engine for its live, Helix-backed getStreamStatus and
 // reconciles instanceLiveState with the result. instanceLiveState is normally
@@ -38,7 +39,10 @@ export const syncInstanceLiveState = internalAction({
       // An unreachable engine stays live and is polled again: an outage is
       // usually brief, and one failed poll recording a live stream as offline
       // would show it offline and schedule its offline snapshot.
-      console.warn("[syncInstanceLiveState] engine poll failed", err);
+      logger.warn("syncInstanceLiveState: engine poll failed", {
+        instanceId: args.instanceId,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return false;
     }
   },
