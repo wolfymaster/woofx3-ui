@@ -7,7 +7,7 @@ import { recordOpsAudit } from "../lib/ops/audit";
 import { type SubscriptionDto, subscriptionDto } from "../lib/ops/dto";
 import { planTierValidator } from "../lib/organization";
 import { paymentsConfig } from "../lib/payments/config";
-import { appliedDiscountValidator, discountSpecValidator } from "../lib/payments/provider";
+import { appliedDiscountValidator, type DiscountSpec, discountSpecValidator } from "../lib/payments/provider";
 import { paymentProvider } from "../lib/payments/registry";
 import { applyTransition, setSubscriptionPlan, subscriptionFor } from "../lib/subscriptions";
 
@@ -193,9 +193,24 @@ export const recordDiscount = internalMutation({
 });
 
 /**
+ * The idempotency key of one discount request. A retry of the same request
+ * asks the provider for the same change; another subscription or other terms
+ * are another request, which the provider must not take for a replay.
+ */
+export function discountAttemptKey(
+  accountId: string,
+  subscriptionRef: string,
+  key: string,
+  spec: DiscountSpec
+): string {
+  const amount = spec.kind === "percent_off" ? `${spec.percent}pct` : `${spec.amountCents}${spec.currency}`;
+  const duration = spec.duration.kind === "months" ? `${spec.duration.months}mo` : spec.duration.kind;
+  return `ops-discount:${accountId}:${subscriptionRef}:${key}:${amount}:${duration}`;
+}
+
+/**
  * Attaches a discount to the org's provider subscription, creating the
- * provider's coupon for `key` first if it is missing. Retrying with the same
- * key asks the provider for the same change.
+ * provider's coupon for `key` first if it is missing.
  */
 export const applyDiscount = internalAction({
   args: { ...operatorArgs, key: v.string(), spec: discountSpecValidator },
@@ -215,7 +230,7 @@ export const applyDiscount = internalAction({
       subscriptionRef: target.subscriptionRef,
       key: args.key,
       spec: args.spec,
-      idempotencyKey: `ops-discount:${args.accountId}:${args.key}`,
+      idempotencyKey: discountAttemptKey(args.accountId, target.subscriptionRef, args.key, args.spec),
     });
     return ctx.runMutation(internal.ops.billing.recordDiscount, {
       ...args,

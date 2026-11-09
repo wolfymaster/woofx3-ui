@@ -3,7 +3,9 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { BILLING_LIFECYCLE } from "../lib/billingLifecycle";
 import { newBackend } from "../lib/convexTest.testing";
+import type { DiscountSpec } from "../lib/payments/provider";
 import { applyTransition, subscriptionFor } from "../lib/subscriptions";
+import { discountAttemptKey } from "./billing";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -144,4 +146,35 @@ describe("getAccount", () => {
     expect(detail?.transitions.map((row) => row.event)).toEqual(["OperatorSuspended", "TrialStarted"]);
     expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.updatedBy).toBe(OPERATOR.actor);
   });
+});
+
+describe("discountAttemptKey", () => {
+  const accountId = "acct_1";
+  const spec: DiscountSpec = { kind: "percent_off", percent: 20, duration: { kind: "months", months: 3 } };
+  const first = discountAttemptKey(accountId, "sub_1", "spring", spec);
+
+  test("a retry of the same request reuses its key", () => {
+    expect(discountAttemptKey(accountId, "sub_1", "spring", { ...spec })).toBe(first);
+  });
+
+  const changed: Array<[string, string]> = [
+    ["another subscription", discountAttemptKey(accountId, "sub_2", "spring", spec)],
+    ["another percent", discountAttemptKey(accountId, "sub_1", "spring", { ...spec, percent: 50 })],
+    ["another duration", discountAttemptKey(accountId, "sub_1", "spring", { ...spec, duration: { kind: "once" } })],
+    [
+      "an amount off",
+      discountAttemptKey(accountId, "sub_1", "spring", {
+        kind: "amount_off",
+        amountCents: 20,
+        currency: "usd",
+        duration: spec.duration,
+      }),
+    ],
+    ["another discount key", discountAttemptKey(accountId, "sub_1", "summer", spec)],
+  ];
+  for (const [name, key] of changed) {
+    test(`${name} gets its own key`, () => {
+      expect(key).not.toBe(first);
+    });
+  }
 });
