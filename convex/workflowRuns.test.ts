@@ -214,6 +214,24 @@ describe("cleanupOrphanSteps", () => {
     expect(passes.map((pass) => pass.next?.cutoff)).toEqual([second.next?.cutoff, second.next?.cutoff]);
   });
 
+  test("reaches an orphan behind over 500 pages of steps whose run exists", async () => {
+    const t = newBackend();
+    setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
+    const instanceId = await seedInstance(t);
+    for (let i = 0; i < 510; i++) {
+      await seedOrphanStep(t, instanceId, "late-run");
+    }
+    await seedOrphanStep(t, instanceId, "orphan");
+    setSystemTime();
+    await seedRun(t, instanceId, "late-run");
+
+    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { batchSize: 1 });
+    await finishScheduledChain(t);
+    const steps = await t.run(async (ctx) => (await ctx.db.query("workflowRunSteps").collect()).map((s) => s.runId));
+    expect(steps).toHaveLength(511);
+    expect(steps).not.toContain("orphan");
+  }, 30_000);
+
   test("a chain of over 500 passes reads the whole index", async () => {
     const t = newBackend();
     setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
