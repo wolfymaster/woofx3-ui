@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
@@ -184,7 +184,10 @@ export const update = mutation({
     if (updates.name !== undefined) {
       updates.name = updates.name.trim();
       if (!updates.name || updates.name.length > ENGINE_NAME_MAX_LENGTH) {
-        throw new Error(`An engine name is 1 to ${ENGINE_NAME_MAX_LENGTH} characters`);
+        throw new ConvexError({
+          code: "invalid_name",
+          message: `An engine name is 1 to ${ENGINE_NAME_MAX_LENGTH} characters`,
+        });
       }
     }
     await ctx.db.patch(instanceId, updates);

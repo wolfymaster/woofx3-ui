@@ -6,6 +6,7 @@ import { ArrowUpRight, Crown, Mail, MoreHorizontal, Search, Shield, Trash2, User
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import { EmailVisibilityToggle, hasMemberEmails, MemberEmail } from "@/components/team/member-emails";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import { useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { toast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import { useBillingUi } from "@/lib/feature-source";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +72,7 @@ export default function Team() {
   const setMemberRole = useMutation(api.engineMembers.setRole);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [emailsShown, setEmailsShown] = useState(false);
 
   const members = teamData?.members ?? [];
   const canManage = teamData?.canManage ?? false;
@@ -77,8 +80,10 @@ export default function Team() {
 
   const filteredMembers = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return members.filter((m) => m.name.toLowerCase().includes(q) || (m.email ?? "").toLowerCase().includes(q));
-  }, [members, searchQuery]);
+    // A hidden address doesn't match either, so a search can't point at whose it is.
+    const searchEmail = (m: TeamMemberDto) => emailsShown && (m.email ?? "").toLowerCase().includes(q);
+    return members.filter((m) => m.name.toLowerCase().includes(q) || searchEmail(m));
+  }, [members, searchQuery, emailsShown]);
 
   if (!instance || !instanceId) {
     return (
@@ -94,11 +99,7 @@ export default function Team() {
       await action();
       toast({ title: success });
     } catch (e: unknown) {
-      toast({
-        title: "Failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
+      toast({ title: "Failed", description: actionErrorMessage(e), variant: "destructive" });
     }
   }
 
@@ -141,8 +142,8 @@ export default function Team() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <div className="relative max-w-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search members..."
@@ -152,6 +153,9 @@ export default function Team() {
                 data-testid="input-search-members"
               />
             </div>
+            {hasMemberEmails(members) ? (
+              <EmailVisibilityToggle shown={emailsShown} onShownChange={setEmailsShown} />
+            ) : null}
           </div>
 
           {teamData === undefined ? (
@@ -219,7 +223,7 @@ export default function Team() {
                               {member.name}
                               {isSelf ? " (you)" : ""}
                             </p>
-                            <p className="text-sm text-muted-foreground">{member.email ?? "—"}</p>
+                            <MemberEmail email={member.email} shown={emailsShown} />
                           </div>
                         </div>
                       </TableCell>

@@ -93,6 +93,24 @@ describe("engineMembers.listForEngine", () => {
     expect(result?.canManageOrganization).toBe(true);
   });
 
+  test("sends email addresses to the org owner only", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    await t.run((ctx) => ctx.db.patch(org.ownerId, { email: "owner@example.com" }));
+    const adminId = await addMember(t, org, "admin", "admin");
+    const memberId = await addMember(t, org, "member", "member");
+    const forOwner = await as(t, org.ownerId).query(api.engineMembers.listForEngine, { instanceId: org.instanceId });
+    expect(forOwner?.members.find((m) => m.userId === org.ownerId)?.email).toBe("owner@example.com");
+    expect(forOwner?.members.find((m) => m.userId === memberId)?.email).toBeNull();
+    for (const viewer of [adminId, memberId]) {
+      const result = await as(t, viewer).query(api.engineMembers.listForEngine, { instanceId: org.instanceId });
+      expect(result?.members.length).toBe(3);
+      for (const member of result?.members ?? []) {
+        expect("email" in member).toBe(false);
+      }
+    }
+  });
+
   test("answers null to someone who isn't on the engine", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
@@ -145,7 +163,7 @@ describe("engineMembers.setRole", () => {
         targetUserId: orgAdminId,
         role: "member",
       })
-    ).rejects.toThrow("Organization admins");
+    ).rejects.toMatchObject({ data: { code: "org_admin_has_every_engine" } });
     await expect(
       as(t, orgAdminId).mutation(api.engineMembers.setRole, {
         instanceId: org.instanceId,
@@ -172,7 +190,7 @@ describe("engineMembers.remove", () => {
     const orgAdminId = await addMember(t, org, "admin", "admin");
     await expect(
       as(t, org.ownerId).mutation(api.engineMembers.remove, { instanceId: org.instanceId, targetUserId: orgAdminId })
-    ).rejects.toThrow("Organization admins");
+    ).rejects.toMatchObject({ data: { code: "org_admin_has_every_engine" } });
     await expect(
       as(t, orgAdminId).mutation(api.engineMembers.remove, { instanceId: org.instanceId, targetUserId: org.ownerId })
     ).rejects.toThrow("always owns");

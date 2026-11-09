@@ -438,8 +438,8 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
             <AlertDialogTitle>Delete this engine?</AlertDialogTitle>
             <AlertDialogDescription>
               The engine at {address ?? provisioning.slug} is destroyed, along with its database and everything stored
-              on it. Your workspace, scenes and workflows stay here, and the address becomes available to someone else.
-              This cannot be undone.
+              on it. Your organization, scenes and workflows stay here, and the address becomes available to someone
+              else. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

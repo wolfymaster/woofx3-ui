@@ -5,7 +5,7 @@ import {
   modifyAccountCredentials,
   retrieveAccount,
 } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 
@@ -88,7 +88,10 @@ export const updateProfile = mutation({
     }
     const name = args.name.trim();
     if (!name || name.length > DISPLAY_NAME_MAX_LENGTH) {
-      throw new Error(`A display name is 1 to ${DISPLAY_NAME_MAX_LENGTH} characters`);
+      throw new ConvexError({
+        code: "invalid_name",
+        message: `A display name is 1 to ${DISPLAY_NAME_MAX_LENGTH} characters`,
+      });
     }
     const twitch = await ctx.db
       .query("authAccounts")

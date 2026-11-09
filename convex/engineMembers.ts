@@ -1,12 +1,19 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { orgCan, orgRoleOf } from "./lib/orgRoles";
-import { getInstanceMembership, grantEngineRole, type TeamMemberDto, toTeamMemberDto } from "./lib/teamAccess";
+import {
+  getInstanceMembership,
+  grantEngineRole,
+  linkedPlatformNames,
+  memberDisplayName,
+  type TeamMemberDto,
+  toTeamMemberDto,
+} from "./lib/teamAccess";
 
 // An engine's team: who can open this engine and with which engine role. The
 // org role only sets floors (lib/teamAccess.ts grantEngineRole), so the owner
@@ -32,6 +39,9 @@ export const listForEngine = query({
     if (account === null) {
       return null;
     }
+    const callerOrgRole = await orgRoleOf(ctx, account, userId);
+    const showEmails = orgCan(callerOrgRole, "viewMemberEmails");
+    const platformNames = await linkedPlatformNames(ctx, [instanceId]);
     const rows = await ctx.db
       .query("instanceMembers")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -40,13 +50,14 @@ export const listForEngine = query({
     for (const row of rows) {
       const user = await ctx.db.get(row.userId);
       if (user !== null) {
-        members.push(toTeamMemberDto(user, row, await orgRoleOf(ctx, account, row.userId)));
+        const orgRole = await orgRoleOf(ctx, account, row.userId);
+        members.push(toTeamMemberDto(user, row, orgRole, memberDisplayName(user, platformNames), showEmails));
       }
     }
     return {
       members,
       canManage: roleSatisfies(own.role, "admin"),
-      canManageOrganization: orgCan(await orgRoleOf(ctx, account, userId), "manageMembers"),
+      canManageOrganization: orgCan(callerOrgRole, "manageMembers"),
     };
   },
 });
@@ -90,7 +101,10 @@ export const setRole = mutation({
     await requireInstanceRole(ctx, instanceId, "admin");
     const { account } = await changeableTarget(ctx, instanceId, targetUserId);
     if (role === "member" && (await orgRoleOf(ctx, account, targetUserId)) === "admin") {
-      throw new Error("Organization admins are admins on every engine. Change their organization role first");
+      throw new ConvexError({
+        code: "org_admin_has_every_engine",
+        message: "Organization admins are admins on every engine. Change their organization role first",
+      });
     }
     await grantEngineRole(ctx, instanceId, targetUserId, role);
     // A companion this member approved bridges only while they are an admin.
@@ -105,7 +119,10 @@ export const remove = mutation({
     await requireInstanceRole(ctx, instanceId, "admin");
     const { account, membership } = await changeableTarget(ctx, instanceId, targetUserId);
     if ((await orgRoleOf(ctx, account, targetUserId)) === "admin") {
-      throw new Error("Organization admins have every engine. Change their organization role first");
+      throw new ConvexError({
+        code: "org_admin_has_every_engine",
+        message: "Organization admins have every engine. Change their organization role first",
+      });
     }
     await ctx.db.delete(membership._id);
     // A companion this member approved stops bridging with their access.

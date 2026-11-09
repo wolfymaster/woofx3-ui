@@ -16,6 +16,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import {
   inlineArgument,
   type PaletteSection,
@@ -154,7 +155,7 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
     } catch (err) {
       toast({
         title: `${label} failed`,
-        description: err instanceof Error ? err.message : String(err),
+        description: actionErrorMessage(err),
         variant: "destructive",
       });
     } finally {

@@ -4,7 +4,7 @@ import type { MyOrganization } from "@convex/organizations";
 import { useQuery } from "convex/react";
 import { ArrowLeft, Building2, Check, ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { Link, Route, Switch, useLocation } from "wouter";
+import { Link, Redirect, Route, Switch, useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +22,7 @@ import InvoicesPage from "./pages/invoices";
 import MembersPage from "./pages/members";
 import OverviewPage from "./pages/overview";
 import { PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
+import { START_TRIAL_PATH, startsTrial } from "./start-trial";
 
 const PAGES: Record<PortalPageId, () => React.ReactElement> = {
   overview: OverviewPage,
@@ -144,6 +145,7 @@ export default function OrgPortal() {
   const now = useMinuteClock();
   const organizations = useQuery(api.organizations.mine, { now });
   const { instance } = useInstance();
+  const search = useSearch();
   const [selectedId, setSelectedId] = useState<Id<"accounts"> | null>(null);
 
   if (organizations === undefined) {
@@ -152,6 +154,9 @@ export default function OrgPortal() {
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
+  }
+  if (startsTrial(search, organizations)) {
+    return <Redirect to={START_TRIAL_PATH} replace />;
   }
   const organization =
     organizations.find((org) => org.accountId === selectedId) ??

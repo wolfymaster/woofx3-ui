@@ -167,6 +167,48 @@ describe("organizations.members", () => {
     const memberId = await addMember(t, org, "member", "member");
     expect(await as(t, memberId).query(api.organizations.members, { accountId: org.accountId })).toBeNull();
   });
+
+  test("sends email addresses to the owner only", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addMember(t, org, "admin", "admin");
+    const forOwner = await as(t, org.ownerId).query(api.organizations.members, { accountId: org.accountId });
+    expect(forOwner?.find((m) => m.userId === adminId)?.email).toBe("admin@example.com");
+    const forAdmin = await as(t, adminId).query(api.organizations.members, { accountId: org.accountId });
+    expect(forAdmin?.length).toBe(2);
+    for (const member of forAdmin ?? []) {
+      expect("email" in member).toBe(false);
+    }
+  });
+
+  test("names a member without a name by their linked platform name, else Member", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const [linkedId, plainId] = await t.run(async (ctx) => {
+      const ids: Id<"users">[] = [];
+      for (const email of ["linked@example.com", "plain@example.com"]) {
+        const userId = await ctx.db.insert("users", { email });
+        await ctx.db.insert("accountMembers", { accountId: org.accountId, userId, role: "member", createdAt: 1 });
+        ids.push(userId);
+      }
+      await ctx.db.insert("platformLinks", {
+        instanceId: org.hostedId,
+        platform: "twitch",
+        platformUserId: "123",
+        platformUsername: "WolfyTV",
+        channelId: "123",
+        sealedAccessToken: "sealed",
+        sealedRefreshToken: "sealed",
+        expiresAt: 1,
+        scopes: [],
+        connectedByUserId: ids[0],
+      });
+      return ids;
+    });
+    const members = await as(t, org.ownerId).query(api.organizations.members, { accountId: org.accountId });
+    expect(members?.find((m) => m.userId === linkedId)?.name).toBe("WolfyTV");
+    expect(members?.find((m) => m.userId === plainId)?.name).toBe("Member");
+  });
 });
 
 describe("organizations.rename", () => {

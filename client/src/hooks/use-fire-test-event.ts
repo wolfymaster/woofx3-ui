@@ -47,7 +47,7 @@ export function useFireTestEvent() {
       toast({
         variant: "destructive",
         title: "No engine selected",
-        description: "Pick an engine from the workspace switcher before firing test events.",
+        description: "Pick an engine with Switch engine in your profile menu before firing test events.",
       });
       return null;
     }
