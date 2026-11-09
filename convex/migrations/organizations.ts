@@ -12,9 +12,10 @@ import { migrations } from "./index";
 import { isPlanTier } from "./subscriptions";
 
 // Brings existing data to the organization model's invariants (I1-I4 in
-// lib/teamAccess.ts and lib/orgRoles.ts). Run orgOwnerRows, then
-// orgMembershipFromEngines, then checkOrgInvariantsAll, which must report no
-// violations. It also lists orgs over their seat limit, which M2 allows.
+// lib/teamAccess.ts and lib/orgRoles.ts). The run order with the
+// subscription and invitation migrations, and what to do with each violation
+// checkOrgInvariantsAll reports, are in docs/ops/deploy.md and
+// docs/ops/org-migrations.md.
 
 /**
  * M1: every org's owner has an `owner` membership row and nobody else does

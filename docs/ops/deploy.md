@@ -80,4 +80,43 @@ A UI rollback that predates a Convex change can call functions whose arguments h
 
 ## Data migrations
 
-Tracked migrations use the `@convex-dev/migrations` component: each one is defined in a file under `convex/migrations/` and run by name with `bunx convex run migrations/index:run '{"fn": "migrations/<file>:<name>"}'` (add `--prod` for production). The component records progress, so a run resumes where it stopped and a finished migration is skipped.
+Tracked migrations use the `@convex-dev/migrations` component: each one is defined in a file under `convex/migrations/` and run by name through the runner (add `--prod` for production):
+
+```bash
+bunx convex run migrations/index:run '{"fn": "migrations/<file>:<name>"}'
+```
+
+The component records progress per migration:
+
+- **The runner returns before the migration is done.** A table larger than one batch (100 documents by default) keeps running in the background after the command prints `Migration started.` Watch it until `state` is `success`:
+  ```bash
+  bunx convex run --component migrations --watch lib:getStatus '{"names": ["migrations/<file>:<name>"]}'
+  ```
+- **Running it again is safe.** While it is in progress the runner only reports `Migration running.`; once finished it reports `Migration already done.` and changes nothing.
+- **Stopping and resuming.** `bunx convex run --component migrations lib:cancel '{"name": "migrations/<file>:<name>"}'` stops it after the current batch. Running the same `migrations/index:run` command again, without `reset`, resumes from the stored cursor. A migration that failed resumes the same way once the cause is fixed.
+- **`"reset": true` starts over from the first document.** It skips the in-progress check, so only use it when `lib:getStatus` shows the migration is not `inProgress`, for example to run a finished migration again after an operator fixed data by hand. Every migration here is idempotent, so a rerun only touches what still needs it.
+
+### Organization migrations
+
+These bring existing data to the organization and billing model. Run them in this order, each one to `success` before the next:
+
+| Step | Command `fn` | Why it goes here |
+|---|---|---|
+| M1 | `migrations/organizations:orgOwnerRows` | Gives each org its owner row and the owner its engines. M2 relies on the owner being known so it never makes the owner an admin. |
+| M2 | `migrations/organizations:orgMembershipFromEngines` | Puts every engine member in the engine's org; engine owners who do not own the org become org admins. |
+| M4 | `migrations/invitations:invitationEngineTarget` | Points pending invitations at an engine. Only needs M1 and M2 to have settled who is in each org. |
+| M6 | `migrations/subscriptions:exemptionsFromPlanAssignments` | Turns operator plan assignments (comps) into exemptions. Running it before M3 spares comped orgs a trial they would not keep. |
+| M3 | `migrations/subscriptions:seedSubscriptions` | Starts a Starter trial, billed 30 days later, for every org with a managed engine and no subscription. |
+| M5 | `migrations/organizations:checkOrgInvariantsAll` | Read-only report, run directly: `bunx convex run migrations/organizations:checkOrgInvariantsAll`. |
+
+The end state does not depend on the order of M6 and M3: if M3 ran first, M6 still moves a comped org's migration trial to its exemption. M1 and M2 also converge in either order. The order above is still the one to use.
+
+To chain migrations without waiting by hand, pass the rest in `next`; each starts when the previous one finishes:
+
+```bash
+bunx convex run migrations/index:run '{"fn": "migrations/organizations:orgOwnerRows", "next": ["migrations/organizations:orgMembershipFromEngines", "migrations/invitations:invitationEngineTarget", "migrations/subscriptions:exemptionsFromPlanAssignments", "migrations/subscriptions:seedSubscriptions"]}'
+```
+
+Then watch the last one with `lib:getStatus` until it reports `success`, and run M5. If one in the chain fails, the chain stops there: fix the cause and run the same command again; finished migrations are skipped.
+
+M5 returns `total` and a list of `violations`, each with an `invariant`, the `accountId` and, where it applies, the `userId` or `instanceId`. `total` must be `0` before the old plan-assignment shapes are removed. `overSeatLimit` lists orgs with more members than their plan's seats; that is on purpose (M2 keeps everyone who already had access) and is not a violation: those orgs keep their members and only stop taking new ones. What each violation means and how to resolve it is in [Organization migration runbook](./org-migrations.md).
