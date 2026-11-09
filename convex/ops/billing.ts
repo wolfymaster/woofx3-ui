@@ -38,7 +38,10 @@ interface OperatorWrite {
 
 const operatorArgs = { accountId: v.string(), actor: v.string(), reason: v.string(), idempotencyKey: v.string() };
 
-function requestId(write: OperatorWrite, kind: AccountBillingWrite): OpsRequestId {
+function requestId(
+  write: Pick<OperatorWrite, "accountId" | "idempotencyKey">,
+  kind: AccountBillingWrite
+): OpsRequestId {
   return { write: kind, accountId: write.accountId, key: write.idempotencyKey };
 }
 
@@ -206,7 +209,7 @@ export const claimDiscount = internalMutation({
   handler: async (ctx, args): Promise<OpsRequestClaim> =>
     claimOpsRequest(
       ctx,
-      { write: "discount", accountId: args.accountId, key: args.idempotencyKey },
+      requestId(args, "discount"),
       requestFingerprint({ key: args.key, spec: args.spec }),
       Date.now()
     ),
