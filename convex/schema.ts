@@ -370,7 +370,8 @@ export default defineSchema({
     registrationAttempts: v.optional(v.number()),
     // Retries issued for a failed stop of a suspended org's engine. At
     // ENGINE_STOP_RETRY.maxAttempts they stop and the engine waits for an
-    // operator. Cleared when the engine stops or starts.
+    // operator. Cleared when the engine stops or starts, and when the org
+    // leaves the suspension they were issued in.
     stopRetries: v.optional(v.number()),
     // The latest upgrade of this engine, kept after it ends so the engine page
     // can say how it went.

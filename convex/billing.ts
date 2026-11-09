@@ -61,7 +61,7 @@ import {
 import { lifecycleEventFor, providerViewFor } from "./lib/payments/providerEvents";
 import { paymentProvider } from "./lib/payments/registry";
 import { closeSession, sessionByProviderId } from "./lib/payments/sessions";
-import { applyTransition, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
+import { applyTransition, ENGINES_PER_ORG_SCAN, lifecycleOf, subscriptionFor } from "./lib/subscriptions";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { sendNotificationOnce } from "./notifications";
@@ -294,7 +294,10 @@ export function engineRetryDelay(attempt: number, jitter: number): number {
 /**
  * Retries of a stop the maintenance API took but whose run failed, for a
  * suspended org whose engines should be stopped. Each one is a new run, so
- * they are capped; the last failure is left for an operator.
+ * they are capped; the last failure is left for an operator. A retry the API
+ * didn't take (unreachable, another run under way) started no run, so it is
+ * asked again on the backoff without using one up. The count belongs to one
+ * suspension and is cleared when the org leaves it.
  */
 export const ENGINE_STOP_RETRY = {
   maxAttempts: 5,
@@ -335,14 +338,12 @@ export async function scheduleEngineStopRetry(
   await ctx.scheduler.runAfter(engineRetryDelay(attempt, jitter), internal.billing.retryEngineStop, {
     provisioningId: row._id,
     attempt,
+    backoff: attempt + 1,
   });
 }
 
 type EngineEffect = "stopEngines" | "resumeEngines";
 const engineEffectValidator = v.union(v.literal("stopEngines"), v.literal("resumeEngines"));
-
-/** Provisioning rows read per org. An org holds a handful of engines, so this is a backstop, not a page size. */
-const ENGINES_PER_ORG_SCAN = 50;
 
 interface ManagedEngine {
   provisioningId: Id<"engineProvisioning">;
@@ -526,23 +527,36 @@ export const engineStopRetryTarget = internalQuery({
   },
 });
 
-/** A stop retry the maintenance API didn't take: the engine is failed again and the next retry is scheduled. */
-export const recordEngineStopFailure = internalMutation({
-  args: { provisioningId: v.id("engineProvisioning"), error: v.string() },
-  handler: async (ctx, { provisioningId, error }): Promise<void> => {
+/**
+ * A stop retry the maintenance API didn't take: no run started, so the same
+ * attempt is asked again after the next backoff step, using none of the cap.
+ */
+export const deferEngineStopRetry = internalMutation({
+  args: { provisioningId: v.id("engineProvisioning"), attempt: v.number(), backoff: v.number(), error: v.string() },
+  handler: async (ctx, { provisioningId, attempt, backoff, error }): Promise<void> => {
     const row = await ctx.db.get(provisioningId);
     if (row === null || (row.status !== "stopping" && row.status !== "failed")) {
       return;
     }
     await ctx.db.patch(provisioningId, { status: "failed", error, updatedAt: Date.now() });
-    await scheduleEngineStopRetry(ctx, { ...row, status: "failed", error }, Math.random());
+    if (!(await stopStillWanted(ctx, row.accountId))) {
+      return;
+    }
+    await ctx.scheduler.runAfter(engineRetryDelay(backoff, Math.random()), internal.billing.retryEngineStop, {
+      provisioningId,
+      attempt,
+      backoff: backoff + 1,
+    });
   },
 });
 
-/** Asks the maintenance API again to stop an engine whose stop run failed. Each attempt is its own run. */
+/**
+ * Asks the maintenance API again to stop an engine whose stop run failed.
+ * Each attempt is its own run; `backoff` is the step of the next delay.
+ */
 export const retryEngineStop = internalAction({
-  args: { provisioningId: v.id("engineProvisioning"), attempt: v.number() },
-  handler: async (ctx, { provisioningId, attempt }): Promise<void> => {
+  args: { provisioningId: v.id("engineProvisioning"), attempt: v.number(), backoff: v.number() },
+  handler: async (ctx, { provisioningId, attempt, backoff }): Promise<void> => {
     const engine = await ctx.runQuery(internal.billing.engineStopRetryTarget, { provisioningId });
     if (engine === null) {
       return;
@@ -558,8 +572,10 @@ export const retryEngineStop = internalAction({
       outcome = "retry";
     }
     if (outcome === "retry") {
-      await ctx.runMutation(internal.billing.recordEngineStopFailure, {
+      await ctx.runMutation(internal.billing.deferEngineStopRetry, {
         provisioningId,
+        attempt,
+        backoff,
         error: "stop: the maintenance API didn't take the retry",
       });
     }

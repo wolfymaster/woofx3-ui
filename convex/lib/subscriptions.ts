@@ -99,6 +99,9 @@ export async function applyTransition(ctx: MutationCtx, request: TransitionReque
     subscriptionId = row._id;
     await ctx.db.patch(row._id, written);
   }
+  if (current?.state === "suspended" && next.state !== "suspended") {
+    await forgetStopRetries(ctx, request.accountId);
+  }
   const transitionId = await ctx.db.insert("subscriptionTransitions", {
     accountId: request.accountId,
     from: current?.state,
@@ -114,6 +117,26 @@ export async function applyTransition(ctx: MutationCtx, request: TransitionReque
     throw new Error(`applyTransition: subscription ${subscriptionId} vanished inside its own mutation`);
   }
   return { ok: true, transitionId, subscription };
+}
+
+/** Provisioning rows read per org. An org holds a handful of engines, so this is a backstop, not a page size. */
+export const ENGINES_PER_ORG_SCAN = 50;
+
+/**
+ * The failed-stop retries of the org's engines count against one suspension
+ * (billing.ENGINE_STOP_RETRY), so leaving it clears them: an engine a later
+ * suspension must stop gets its full set of retries.
+ */
+async function forgetStopRetries(ctx: MutationCtx, accountId: Id<"accounts">): Promise<void> {
+  const rows = await ctx.db
+    .query("engineProvisioning")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .take(ENGINES_PER_ORG_SCAN);
+  for (const row of rows) {
+    if (row.stopRetries !== undefined) {
+      await ctx.db.patch(row._id, { stopRetries: undefined });
+    }
+  }
 }
 
 async function scheduleEffects(
