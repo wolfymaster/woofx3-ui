@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { internalAction, internalQuery, type QueryCtx } from "../_generated/server";
+import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { orgSeatLimit } from "../lib/entitlementAccess";
 import { isAssignmentActive } from "../lib/entitlements";
 import { orgRoleOf } from "../lib/orgRoles";
@@ -20,9 +20,10 @@ import { isPlanTier } from "./subscriptions";
  * M1: every org's owner has an `owner` membership row and nobody else does
  * (I1); other `owner` rows become `admin`. Then the org's floors hold on each
  * of its engines: the owner owns it (I3) and every org admin is at least
- * engine admin (I4). An owner whose user is gone, or who has several
- * membership rows, is reported and left for an operator; the other orgs still
- * migrate.
+ * engine admin (I4). An owner whose user is gone is reported and the org left
+ * for an operator. An owner with several membership rows is reported and
+ * those rows are left for an operator (which row to keep is their call, since
+ * migrations only insert and patch); the org's other members still migrate.
  */
 export const orgOwnerRows = migrations.define({
   table: "accounts",
@@ -35,47 +36,51 @@ export const orgOwnerRows = migrations.define({
       .query("accountMembers")
       .withIndex("by_account", (q) => q.eq("accountId", account._id))
       .collect();
-    const ownerRows = rows.filter((row) => row.userId === account.ownerId);
-    if (ownerRows.length > 1) {
-      // Migrations only insert and patch, so which row to keep is an operator's call.
-      logger.warn("orgOwnerRows: org has several membership rows for its owner", {
-        accountId: account._id,
-        ownerId: account.ownerId,
-        rows: ownerRows.length,
-      });
-      return;
-    }
-    const ownerRow: Doc<"accountMembers"> | undefined = ownerRows[0];
-    for (const row of rows) {
-      if (row.userId !== account.ownerId && row.role === "owner") {
+    const members = rows.filter((row) => row.userId !== account.ownerId);
+    for (const row of members) {
+      if (row.role === "owner") {
         await ctx.db.patch(row._id, { role: "admin" });
       }
     }
-    if (ownerRow === undefined) {
-      await ctx.db.insert("accountMembers", {
-        accountId: account._id,
-        userId: account.ownerId,
-        role: "owner",
-        createdAt: account.createdAt,
-      });
-    } else if (ownerRow.role !== "owner") {
-      await ctx.db.patch(ownerRow._id, { role: "owner" });
-    }
-
-    const instances = await ctx.db
-      .query("instances")
-      .withIndex("by_account", (q) => q.eq("accountId", account._id))
-      .collect();
-    for (const instance of instances) {
-      await grantEngineRole(ctx, instance._id, account.ownerId, "owner");
-    }
-    for (const row of rows) {
-      if (row.userId !== account.ownerId && (await orgRoleOf(ctx, account, row.userId)) === "admin") {
+    await ownerRowAndEngines(ctx, account, rows);
+    for (const row of members) {
+      if ((await orgRoleOf(ctx, account, row.userId)) === "admin") {
         await applyOrgRoleToEngines(ctx, account._id, row.userId, "admin");
       }
     }
   },
 });
+
+async function ownerRowAndEngines(
+  ctx: MutationCtx,
+  account: Doc<"accounts">,
+  rows: Array<Doc<"accountMembers">>
+): Promise<void> {
+  const ownerRows = rows.filter((row) => row.userId === account.ownerId);
+  if (ownerRows.length > 1) {
+    logger.warn("orgOwnerRows: org has several membership rows for its owner; left for an operator", {
+      accountId: account._id,
+      ownerId: account.ownerId,
+      rows: ownerRows.length,
+    });
+  } else if (ownerRows.length === 0) {
+    await ctx.db.insert("accountMembers", {
+      accountId: account._id,
+      userId: account.ownerId,
+      role: "owner",
+      createdAt: account.createdAt,
+    });
+  } else if (ownerRows[0].role !== "owner") {
+    await ctx.db.patch(ownerRows[0]._id, { role: "owner" });
+  }
+  const instances = await ctx.db
+    .query("instances")
+    .withIndex("by_account", (q) => q.eq("accountId", account._id))
+    .collect();
+  for (const instance of instances) {
+    await grantEngineRole(ctx, instance._id, account.ownerId, "owner");
+  }
+}
 
 /**
  * M2: every engine member is in the engine's org (I2), and only the org owner

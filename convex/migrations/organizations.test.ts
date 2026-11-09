@@ -92,20 +92,30 @@ describe("organization role migrations", () => {
     expect(after.engine).toContainEqual([s.instanceId, s.outsiderId, "member"]);
   });
 
-  test("M1 reports an org with two owner rows, leaves it alone and migrates the others", async () => {
+  test("M1 reports an org with two owner rows and still migrates its other members", async () => {
     const t = newBackend();
     const s = await seedAnomalies(t);
     const doubled = await t.run(async (ctx) => {
       const ownerId = await ctx.db.insert("users", { name: "Doubled owner" });
+      const adminId = await ctx.db.insert("users", { name: "Admin of the doubled org" });
       const accountId = await ctx.db.insert("accounts", { name: "Doubled", ownerId, createdAt: 1 });
       await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
       await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "member", createdAt: 2 });
-      return { accountId, ownerId };
+      await ctx.db.insert("accountMembers", { accountId, userId: adminId, role: "admin", createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", { accountId, name: "D", url: "https://d", createdAt: 1 });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: adminId, role: "member" });
+      return { accountId, ownerId, adminId, instanceId };
     });
     await runMigration(t, internal.migrations.organizations.orgOwnerRows);
     const after = await snapshot(t);
     expect(after.org).toContainEqual([s.ownerId, "owner"]);
     expect(after.org).toContainEqual([s.strayOwnerId, "admin"]);
+    expect(after.org.filter(([userId]) => userId === doubled.ownerId)).toEqual([
+      [doubled.ownerId, "member"],
+      [doubled.ownerId, "owner"],
+    ]);
+    expect(after.engine).toContainEqual([doubled.instanceId, doubled.adminId, "admin"]);
     const found = (await violations(t)).filter((x) => x.accountId === doubled.accountId);
     expect(found).toEqual([
       { invariant: "duplicate_membership", accountId: doubled.accountId, userId: doubled.ownerId, rows: 2 },
