@@ -34,13 +34,25 @@ export function billingView(organization: Pick<MyOrganization, "engines" | "subs
   return { kind: "choose_plan", subscription };
 }
 
-const PORTAL_REFUSAL: CheckoutRefusal["code"] = "subscription_exists";
+/**
+ * What the page does about a refused checkout: a live but failing
+ * subscription is fixed in the customer portal; an operator's suspension
+ * only support can lift, so nothing opens. Null for any other failure.
+ */
+export type CheckoutRefusalAction = "open_portal" | "contact_support";
 
-/** Whether a refused checkout means the org's live but failing subscription is to be fixed in the customer portal. */
-export function checkoutNeedsPortal(error: unknown): boolean {
+const REFUSAL_ACTIONS: Partial<Record<CheckoutRefusal["code"], CheckoutRefusalAction>> = {
+  subscription_exists: "open_portal",
+  suspended_by_operator: "contact_support",
+};
+
+export function checkoutRefusalAction(error: unknown): CheckoutRefusalAction | null {
   if (!(error instanceof ConvexError)) {
-    return false;
+    return null;
   }
   const data: unknown = error.data;
-  return typeof data === "object" && data !== null && "code" in data && data.code === PORTAL_REFUSAL;
+  if (typeof data !== "object" || data === null || !("code" in data) || typeof data.code !== "string") {
+    return null;
+  }
+  return REFUSAL_ACTIONS[data.code as CheckoutRefusal["code"]] ?? null;
 }

@@ -1,8 +1,11 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { ENGINE_EFFECT_RETRY, ENGINE_STOP_RETRY, engineRetryDelay } from "./billing";
+import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
+import { applyTransition, subscriptionFor } from "./lib/subscriptions";
 import { stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
 
@@ -10,6 +13,7 @@ type Backend = ReturnType<typeof newBackend>;
 type ProvisioningStatus = Doc<"engineProvisioning">["status"];
 
 const T0 = Date.UTC(2026, 10, 1);
+const DAY = 24 * 60 * 60 * 1000;
 const MAINTENANCE = { MAINTENANCE_API_URL: "https://maintenance.example", MAINTENANCE_API_KEY: "key" };
 
 interface Seeded {
@@ -44,7 +48,7 @@ async function seed(
       createdAt: 1,
       updatedAt: 1,
     });
-    await ctx.db.insert("subscriptions", {
+    const subscriptionId = await ctx.db.insert("subscriptions", {
       accountId,
       plan: "starter",
       state,
@@ -65,8 +69,17 @@ async function seed(
       actor: "test",
       at: T0,
     });
+    await ctx.db.patch(subscriptionId, { effectIssuedBy: transitionId });
     return { accountId, transitionId, provisioningId };
   });
+}
+
+async function patchSubscription(ctx: MutationCtx, accountId: Id<"accounts">, patch: Partial<Doc<"subscriptions">>) {
+  const row = await subscriptionFor(ctx, accountId);
+  if (row === null) {
+    throw new Error(`fixture: org ${accountId} has no subscription`);
+  }
+  await ctx.db.patch(row._id, patch);
 }
 
 /** Runs `fn` against a stubbed maintenance API, restoring the environment and fetch after. */
@@ -207,19 +220,63 @@ describe("stopping engines", () => {
   test("a stop that a recheck issued again stands down for the newer one", async () => {
     const t = newBackend();
     const s = await seed(t, "suspended", "registered");
-    await t.run((ctx) =>
-      ctx.db.insert("subscriptionTransitions", {
+    await t.run(async (ctx) => {
+      const reissued = await ctx.db.insert("subscriptionTransitions", {
         accountId: s.accountId,
         from: "suspended",
         to: "suspended",
         event: "RetryDue",
         actor: "evaluator",
         at: T0 + 1,
-      })
-    );
+      });
+      await patchSubscription(ctx, s.accountId, { effectIssuedBy: reissued });
+    });
     const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
     expect(result).toEqual({ acted: 0, pending: 0 });
     expect(calls).toEqual([]);
+  });
+
+  test("a provider event mirrored onto an operator's suspension mid-retry leaves the pending stop running", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    await t.run(async (ctx) => {
+      await patchSubscription(ctx, s.accountId, { stateReason: "operator" });
+      const noOp = await applyTransition(ctx, {
+        accountId: s.accountId,
+        event: { kind: "PaymentSucceeded", plan: "starter", currentPeriodEnd: T0 + 30 * DAY },
+        now: T0 + 1,
+        actor: "provider:stripe",
+        origin: "signup",
+        provider: { standing: "good", endedReason: null, currentPeriodEnd: T0 + 30 * DAY },
+      });
+      expect(noOp.ok && noOp.subscription.state).toBe("suspended");
+    });
+    const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(result).toEqual({ acted: 1, pending: 0 });
+    expect(calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/stop"]);
+  });
+
+  test("once every managed engine is stopped the recheck stops producing transitions", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "stopped");
+    const recheckAt = T0 + BILLING_LIFECYCLE.effectRecheckHours * 60 * 60 * 1000;
+    await t.run((ctx) => patchSubscription(ctx, s.accountId, { nextRetryAt: recheckAt, nextCheckAt: recheckAt }));
+    const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(result).toEqual({ acted: 0, pending: 0 });
+    expect(calls).toEqual([]);
+    const settled = await t.run((ctx) => subscriptionFor(ctx, s.accountId));
+    expect(settled?.state).toBe("suspended");
+    expect(settled?.nextCheckAt).toBeUndefined();
+    expect(await t.mutation(internal.billing.evaluateOrg, { accountId: s.accountId, now: T0 + 30 * DAY })).toEqual({
+      applied: 0,
+    });
+    const transitions = await t.run((ctx) =>
+      ctx.db
+        .query("subscriptionTransitions")
+        .withIndex("by_account_at", (q) => q.eq("accountId", s.accountId))
+        .collect()
+    );
+    expect(transitions.map((row) => row.event)).toEqual(["SpinDownDue", "EnginesStopped"]);
   });
 
   test("a stop that no longer fits the subscription does nothing", async () => {
@@ -366,13 +423,13 @@ describe("failed stops of a suspended org", () => {
     await stopFailed(t, "e1");
     expect(await t.run((ctx) => ctx.db.get(s.provisioningId))).toMatchObject({ status: "failed", stopRetries: 1 });
     const [retry] = await stopRetries(t);
-    expect(retry?.args[0]).toEqual({ provisioningId: s.provisioningId, attempt: 0 });
+    expect(retry?.args[0]).toEqual({ provisioningId: s.provisioningId, attempt: 0, backoff: 1 });
     const delay = (retry?.scheduledTime ?? 0) - (retry?._creationTime ?? 0);
     expect(delay).toBeGreaterThanOrEqual(ENGINE_EFFECT_RETRY.baseDelayMs / 2 - 1000);
     expect(delay).toBeLessThanOrEqual(ENGINE_EFFECT_RETRY.baseDelayMs + 1000);
 
     const { calls } = await withMaintenance(ACCEPTED, () =>
-      t.action(internal.billing.retryEngineStop, { provisioningId: s.provisioningId, attempt: 0 })
+      t.action(internal.billing.retryEngineStop, { provisioningId: s.provisioningId, attempt: 0, backoff: 1 })
     );
     expect(calls.map((call) => call.url)).toEqual(["https://maintenance.example/v1/engines/eng_1/stop"]);
     expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(`stop-retry:${s.provisioningId}:0`);
@@ -405,6 +462,42 @@ describe("failed stops of a suspended org", () => {
     });
     const { calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
     expect(calls).toEqual([]);
+  });
+
+  test("a retry the maintenance API didn't take is asked again later without using up an attempt", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "failed");
+    await t.run((ctx) => ctx.db.patch(s.provisioningId, { stopRetries: 1 }));
+    const muted = spyOn(logger, "error").mockImplementation(() => {});
+    try {
+      await withMaintenance(
+        () => Response.json({ error: { code: "unavailable" } }, { status: 503 }),
+        () => t.action(internal.billing.retryEngineStop, { provisioningId: s.provisioningId, attempt: 0, backoff: 1 })
+      );
+    } finally {
+      muted.mockRestore();
+    }
+    expect(await t.run((ctx) => ctx.db.get(s.provisioningId))).toMatchObject({ status: "failed", stopRetries: 1 });
+    const [again] = await stopRetries(t);
+    expect(again?.args[0]).toEqual({ provisioningId: s.provisioningId, attempt: 0, backoff: 2 });
+    const delay = (again?.scheduledTime ?? 0) - (again?._creationTime ?? 0);
+    expect(delay).toBeGreaterThanOrEqual(engineRetryDelay(1, 0) - 1000);
+  });
+
+  test("a later suspension gets its full set of retries once the org has left the one that used them up", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "failed");
+    await t.run((ctx) => ctx.db.patch(s.provisioningId, { stopRetries: ENGINE_STOP_RETRY.maxAttempts }));
+    await t.run((ctx) =>
+      applyTransition(ctx, {
+        accountId: s.accountId,
+        event: { kind: "ExemptionGranted", plan: "starter", until: null },
+        now: T0 + DAY,
+        actor: "test",
+        origin: "signup",
+      })
+    );
+    expect((await t.run((ctx) => ctx.db.get(s.provisioningId)))?.stopRetries).toBeUndefined();
   });
 
   test("are not retried once the org no longer wants its engines stopped", async () => {

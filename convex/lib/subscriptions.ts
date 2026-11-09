@@ -19,6 +19,14 @@ import type { PlanTier } from "./organization";
 
 export type SubscriptionOrigin = Doc<"subscriptions">["origin"];
 
+/** Effects the lifecycle issues again on a recheck; only the newest issue of one acts. */
+const RECHECKED_EFFECTS: ReadonlySet<LifecycleEffect["kind"]> = new Set(["stopEngines", "confirmRenewal"]);
+
+/** Whether `transitionId` issued the org's current rechecked effect, so its action should still act. */
+export function isCurrentIssue(row: Doc<"subscriptions">, transitionId: Id<"subscriptionTransitions">): boolean {
+  return row.effectIssuedBy === transitionId;
+}
+
 export async function subscriptionFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise<Doc<"subscriptions"> | null> {
   return ctx.db
     .query("subscriptions")
@@ -85,7 +93,7 @@ export async function applyTransition(ctx: MutationCtx, request: TransitionReque
   if (!result.ok) {
     return result;
   }
-  const { next, effects } = result;
+  const { next, effects, note } = result;
   const written = { ...next, updatedAt: request.now, updatedBy: request.actor };
   let subscriptionId: Id<"subscriptions">;
   if (row === null) {
@@ -99,6 +107,9 @@ export async function applyTransition(ctx: MutationCtx, request: TransitionReque
     subscriptionId = row._id;
     await ctx.db.patch(row._id, written);
   }
+  if (current?.state === "suspended" && next.state !== "suspended") {
+    await forgetStopRetries(ctx, request.accountId);
+  }
   const transitionId = await ctx.db.insert("subscriptionTransitions", {
     accountId: request.accountId,
     from: current?.state,
@@ -107,13 +118,37 @@ export async function applyTransition(ctx: MutationCtx, request: TransitionReque
     reason: next.stateReason,
     actor: request.actor,
     at: request.now,
+    note,
   });
+  if (effects.some((effect) => RECHECKED_EFFECTS.has(effect.kind))) {
+    await ctx.db.patch(subscriptionId, { effectIssuedBy: transitionId });
+  }
   await scheduleEffects(ctx, request.accountId, transitionId, effects);
   const subscription = await ctx.db.get(subscriptionId);
   if (subscription === null) {
     throw new Error(`applyTransition: subscription ${subscriptionId} vanished inside its own mutation`);
   }
   return { ok: true, transitionId, subscription };
+}
+
+/** Provisioning rows read per org. An org holds a handful of engines, so this is a backstop, not a page size. */
+export const ENGINES_PER_ORG_SCAN = 50;
+
+/**
+ * The failed-stop retries of the org's engines count against one suspension
+ * (billing.ENGINE_STOP_RETRY), so leaving it clears them: an engine a later
+ * suspension must stop gets its full set of retries.
+ */
+async function forgetStopRetries(ctx: MutationCtx, accountId: Id<"accounts">): Promise<void> {
+  const rows = await ctx.db
+    .query("engineProvisioning")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .take(ENGINES_PER_ORG_SCAN);
+  for (const row of rows) {
+    if (row.stopRetries !== undefined) {
+      await ctx.db.patch(row._id, { stopRetries: undefined });
+    }
+  }
 }
 
 async function scheduleEffects(

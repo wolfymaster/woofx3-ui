@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
 import type { OrgEngine, OrgSubscription } from "@convex/organizations";
 import { ConvexError } from "convex/values";
-import { type BillingView, billingView, checkoutNeedsPortal } from "./billing-view";
+import { type BillingView, billingView, type CheckoutRefusalAction, checkoutRefusalAction } from "./billing-view";
 
 function engine(hosting: OrgEngine["hosting"]): OrgEngine {
   return { instanceId: "i" as Id<"instances">, name: hosting, hosting, status: null, canOpen: true };
@@ -58,17 +58,18 @@ describe("billingView", () => {
   }
 });
 
-describe("checkoutNeedsPortal", () => {
-  const CASES: Array<[string, unknown, boolean]> = [
-    ["a live, failing subscription", new ConvexError({ code: "subscription_exists", message: "m" }), true],
-    ["a subscription in good standing", new ConvexError({ code: "already_subscribed", message: "m" }), false],
-    ["a provider failure", new ConvexError({ code: "provider_unavailable", message: "m" }), false],
-    ["a string ConvexError", new ConvexError("subscription_exists"), false],
-    ["a plain error", new Error("subscription_exists"), false],
+describe("checkoutRefusalAction", () => {
+  const CASES: Array<[string, unknown, CheckoutRefusalAction | null]> = [
+    ["a live, failing subscription", new ConvexError({ code: "subscription_exists", message: "m" }), "open_portal"],
+    ["an operator's suspension", new ConvexError({ code: "suspended_by_operator", message: "m" }), "contact_support"],
+    ["a subscription in good standing", new ConvexError({ code: "already_subscribed", message: "m" }), null],
+    ["a provider failure", new ConvexError({ code: "provider_unavailable", message: "m" }), null],
+    ["a string ConvexError", new ConvexError("subscription_exists"), null],
+    ["a plain error", new Error("subscription_exists"), null],
   ];
   for (const [name, error, expected] of CASES) {
     test(name, () => {
-      expect(checkoutNeedsPortal(error)).toBe(expected);
+      expect(checkoutRefusalAction(error)).toBe(expected);
     });
   }
 });

@@ -357,6 +357,8 @@ export interface SubscriptionTransitionDto {
   reason: string | null;
   actor: string;
   at: number;
+  /** What the transition left for an operator, such as a renewal the provider never resolved. */
+  note: string | null;
 }
 
 export function subscriptionTransitionDto(row: Doc<"subscriptionTransitions">): SubscriptionTransitionDto {
@@ -367,5 +369,6 @@ export function subscriptionTransitionDto(row: Doc<"subscriptionTransitions">): 
     reason: row.reason ?? null,
     actor: row.actor,
     at: row.at,
+    note: row.note ?? null,
   };
 }

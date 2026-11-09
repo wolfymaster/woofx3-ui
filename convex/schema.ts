@@ -370,7 +370,8 @@ export default defineSchema({
     registrationAttempts: v.optional(v.number()),
     // Retries issued for a failed stop of a suspended org's engine. At
     // ENGINE_STOP_RETRY.maxAttempts they stop and the engine waits for an
-    // operator. Cleared when the engine stops or starts.
+    // operator. Cleared when the engine stops or starts, and when the org
+    // leaves the suspension they were issued in.
     stopRetries: v.optional(v.number()),
     // The latest upgrade of this engine, kept after it ends so the engine page
     // can say how it went.
@@ -1592,6 +1593,10 @@ export default defineSchema({
     spinDownAt: v.optional(v.number()),
     // The earliest timer above: the only field the evaluator reads.
     nextCheckAt: v.optional(v.number()),
+    // The transition that last issued a rechecked effect (stopping the managed
+    // engines, or a renewal check). An action of an earlier issue stands down
+    // for it; a transition that issues neither leaves it.
+    effectIssuedBy: v.optional(v.id("subscriptionTransitions")),
     // AddOnKey values, validated against ADD_ONS on write.
     addOns: v.array(v.string()),
     // The provider's active discount, mirrored for display.
@@ -1630,6 +1635,8 @@ export default defineSchema({
     at: v.number(),
     // Set when its warnings went out in-app only, because the owner has no email address.
     ownerEmailMissing: v.optional(v.boolean()),
+    // What the transition left for an operator, such as a renewal the provider never resolved.
+    note: v.optional(v.string()),
   }).index("by_account_at", ["accountId", "at"]),
 
   // paymentEvents: every provider webhook as received, deduplicated on its
