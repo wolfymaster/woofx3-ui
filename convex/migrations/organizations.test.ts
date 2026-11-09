@@ -92,24 +92,114 @@ describe("organization role migrations", () => {
     expect(after.engine).toContainEqual([s.instanceId, s.outsiderId, "member"]);
   });
 
-  test("M1 reports an org with two owner rows, leaves it alone and migrates the others", async () => {
+  test("M1 reports an org with two owner rows and still migrates its other members", async () => {
     const t = newBackend();
     const s = await seedAnomalies(t);
     const doubled = await t.run(async (ctx) => {
       const ownerId = await ctx.db.insert("users", { name: "Doubled owner" });
+      const adminId = await ctx.db.insert("users", { name: "Admin of the doubled org" });
       const accountId = await ctx.db.insert("accounts", { name: "Doubled", ownerId, createdAt: 1 });
       await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
       await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "member", createdAt: 2 });
-      return { accountId, ownerId };
+      await ctx.db.insert("accountMembers", { accountId, userId: adminId, role: "admin", createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", { accountId, name: "D", url: "https://d", createdAt: 1 });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: adminId, role: "member" });
+      return { accountId, ownerId, adminId, instanceId };
     });
     await runMigration(t, internal.migrations.organizations.orgOwnerRows);
     const after = await snapshot(t);
     expect(after.org).toContainEqual([s.ownerId, "owner"]);
     expect(after.org).toContainEqual([s.strayOwnerId, "admin"]);
+    expect(after.org.filter(([userId]) => userId === doubled.ownerId)).toEqual([
+      [doubled.ownerId, "member"],
+      [doubled.ownerId, "owner"],
+    ]);
+    expect(after.engine).toContainEqual([doubled.instanceId, doubled.adminId, "admin"]);
     const found = (await violations(t)).filter((x) => x.accountId === doubled.accountId);
     expect(found).toEqual([
       { invariant: "duplicate_membership", accountId: doubled.accountId, userId: doubled.ownerId, rows: 2 },
     ]);
+  });
+
+  test("M1 and M2 skip members whose user is gone, and M5 reports them", async () => {
+    const t = newBackend();
+    const gone = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Owner" });
+      const goneAdminId = await ctx.db.insert("users", { name: "Deleted admin" });
+      const goneEngineMemberId = await ctx.db.insert("users", { name: "Deleted engine member" });
+      const accountId = await ctx.db.insert("accounts", { name: "Org", ownerId, createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: goneAdminId, role: "owner", createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", { accountId, name: "E", url: "https://e", createdAt: 1 });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: goneEngineMemberId, role: "member" });
+      await ctx.db.delete(goneAdminId);
+      await ctx.db.delete(goneEngineMemberId);
+      return { accountId, instanceId, goneAdminId, goneEngineMemberId };
+    });
+    const before = await snapshot(t);
+    await migrateRoles(t);
+    expect(await snapshot(t)).toEqual(before);
+    expect(await violations(t)).toEqual([
+      { invariant: "member_user_missing", accountId: gone.accountId, userId: gone.goneAdminId },
+      {
+        invariant: "member_user_missing",
+        accountId: gone.accountId,
+        userId: gone.goneEngineMemberId,
+        instanceId: gone.instanceId,
+      },
+    ]);
+  });
+
+  test("M1 still migrates the members of an org whose owner is gone, and M5 reports the owner", async () => {
+    const t = newBackend();
+    const org = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Deleted owner" });
+      const adminId = await ctx.db.insert("users", { name: "Admin" });
+      const accountId = await ctx.db.insert("accounts", { name: "Ownerless", ownerId, createdAt: 1 });
+      await ctx.db.insert("accountMembers", { accountId, userId: adminId, role: "admin", createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", { accountId, name: "O", url: "https://o", createdAt: 1 });
+      await ctx.db.insert("instanceMembers", { instanceId, userId: adminId, role: "member" });
+      await ctx.db.delete(ownerId);
+      return { accountId, ownerId, adminId, instanceId };
+    });
+    await migrateRoles(t);
+    expect((await snapshot(t)).engine).toEqual([[org.instanceId, org.adminId, "admin"]]);
+    expect(await violations(t)).toEqual([
+      { invariant: "owner_user_missing", accountId: org.accountId, userId: org.ownerId },
+    ]);
+  });
+
+  test("M5 reports an engine whose org is gone", async () => {
+    const t = newBackend();
+    const orphan = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", { name: "Owner" });
+      const accountId = await ctx.db.insert("accounts", { name: "Gone", ownerId, createdAt: 1 });
+      const instanceId = await ctx.db.insert("instances", {
+        accountId,
+        name: "Orphan",
+        url: "https://x",
+        createdAt: 1,
+      });
+      await ctx.db.delete(accountId);
+      return { accountId, instanceId };
+    });
+    expect(await violations(t)).toEqual([
+      { invariant: "orphan_engine", accountId: orphan.accountId, instanceId: orphan.instanceId },
+    ]);
+  });
+
+  test("M2 before M1 ends where M1 before M2 does", async () => {
+    const inOrder = newBackend();
+    await seedAnomalies(inOrder);
+    await migrateRoles(inOrder);
+    const reversed = newBackend();
+    await seedAnomalies(reversed);
+    await runMigration(reversed, internal.migrations.organizations.orgMembershipFromEngines);
+    await runMigration(reversed, internal.migrations.organizations.orgOwnerRows);
+    expect(await snapshot(reversed)).toEqual(await snapshot(inOrder));
+    expect(await violations(reversed)).toEqual([]);
   });
 
   test("M5 reports a member with two org rows", async () => {
