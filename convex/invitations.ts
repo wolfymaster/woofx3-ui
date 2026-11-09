@@ -366,6 +366,10 @@ const TARGET_VALIDATOR = v.union(
   })
 );
 
+/** The one refusal a caller without `viewMemberEmails` gets for a full org or an address already on the engine. */
+const INVITE_REFUSED =
+  "This invitation couldn't be sent. Your organization may have no free seats, or this person may already be on this engine";
+
 /**
  * Writes the invitation after re-checking, inside the transaction, that the
  * inviter is still an admin of the engine and the invitee is neither on it
@@ -386,9 +390,24 @@ export const insertInvitation = internalMutation({
       throw new Error("Not authorized for this instance");
     }
 
+    const account = await ctx.db.get(instance.accountId);
+    if (account === null) {
+      throw new Error(`insertInvitation: instance ${instance._id} belongs to missing org ${instance.accountId}`);
+    }
+    // Only a caller who may see member emails learns which refusal an address
+    // hit; for anyone else "full" and "already on it" must read the same, or
+    // inviting a guessed address would reveal whether it belongs to a member.
+    const hidesMembers =
+      args.target.kind === "email" && !orgCan(await orgRoleOf(ctx, account, args.inviterUserId), "viewMemberEmails");
+
     const now = Date.now();
-    if (!(await inviteeInOrg(ctx, instance, args.target)) && (await orgSeatsFull(ctx, instance.accountId, now))) {
-      throw new ConvexError({ code: "seats_full", message: SEATS_FULL });
+    if (await orgSeatsFull(ctx, instance.accountId, now)) {
+      if (hidesMembers) {
+        throw new ConvexError({ code: "invite_refused", message: INVITE_REFUSED });
+      }
+      if (!(await inviteeInOrg(ctx, instance, args.target))) {
+        throw new ConvexError({ code: "seats_full", message: SEATS_FULL });
+      }
     }
     const token = randomToken();
     const expiresAt = now + INVITATION_LIFETIME_MS;
@@ -418,7 +437,9 @@ export const insertInvitation = internalMutation({
       for (const row of engineMembers) {
         const user = await ctx.db.get(row.userId);
         if (user?.email !== undefined && normalizeEmail(user.email) === normalized) {
-          throw new ConvexError({ code: "already_on_engine", message: "That user is already on this engine" });
+          throw hidesMembers
+            ? new ConvexError({ code: "invite_refused", message: INVITE_REFUSED })
+            : new ConvexError({ code: "already_on_engine", message: "That user is already on this engine" });
         }
       }
 
