@@ -271,14 +271,6 @@ export const deleteInstanceData = internalMutation({
       await deleteCompanion(ctx, companion._id);
     }
 
-    const pairings = await ctx.db
-      .query("companionPairings")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .collect();
-    for (const pairing of pairings) {
-      await ctx.db.delete(pairing._id);
-    }
-
     // Each pass reads past the rows it deleted, so the loop ends once none remain.
     for (;;) {
       const provenance = await ctx.db

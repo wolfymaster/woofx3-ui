@@ -81,7 +81,7 @@ export async function describeReplacedCompanion(
   };
 }
 
-/** A companion's credential as a pairing records it. `confirmedAt` is absent until the person at the PC confirms. */
+/** A companion's credential as linking the desktop app records it. */
 export interface CompanionCredential {
   instanceId: Id<"instances">;
   installationId: string;
@@ -90,14 +90,14 @@ export interface CompanionCredential {
   companionVersion: string;
   pairedBy: Id<"users">;
   pairedAt: number;
-  confirmedAt: number | undefined;
+  confirmedAt: number;
 }
 
 /**
  * Makes `installationId` the instance's one companion, holding the
  * credential's token hash. An instance has at most one companion: rows from
  * other installations are deleted, and their `companions:self`
- * subscriptions turning null unpair them. The same installation pairing
+ * subscriptions turning null unpair them. The same installation linking
  * again keeps its companion id (and so its endpoint rows) and gets the new
  * token. Throws when another companion row already holds the token hash.
  */
@@ -115,7 +115,7 @@ export async function writeCompanionCredential(
     .withIndex("by_instance_installation", (q) => q.eq("instanceId", instanceId).eq("installationId", installationId))
     .first();
   if (tokenHolder && tokenHolder._id !== existing?._id) {
-    throw new ConvexError("This companion's token is already in use. Start pairing again from the companion.");
+    throw new ConvexError("This companion's token is already in use. Sign in again to link this computer.");
   }
   for (const replaced of companionsReplacedBy(await companionsOf(ctx, instanceId), installationId)) {
     await deleteCompanion(ctx, replaced._id);

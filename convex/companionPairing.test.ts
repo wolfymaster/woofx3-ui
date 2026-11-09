@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { api, internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
 
@@ -209,26 +209,5 @@ describe("linkSignedInApp", () => {
     await expect(f.owner.mutation(api.companionPairing.linkSignedInApp, linkArgs(f))).rejects.toThrow(
       "Too many pairing attempts"
     );
-  });
-});
-
-describe("approve", () => {
-  test("still writes the device-code companion unconfirmed and replaces another computer", async () => {
-    const f = await fixture();
-    const otherId = await otherComputerPaired(f, 42);
-    await f.t.mutation(internal.companionPairing.insertPairing, {
-      deviceCodeHash: "d".repeat(64),
-      tokenHash: HASH,
-      installationId: THIS_PC,
-      userCode: "BCDFGHJK",
-      deviceName: "STREAM-PC",
-      companionVersion: "0.1.0",
-    });
-    await f.owner.mutation(api.companionPairing.approve, { userCode: "BCDF-GHJK", instanceId: f.instanceId });
-    const rows = await companionRows(f);
-    expect(rows.map((row) => [row.installationId, row.tokenHash, row.confirmedAt])).toEqual([
-      [THIS_PC, HASH, undefined],
-    ]);
-    expect(await f.t.run((ctx) => ctx.db.get(otherId))).toBeNull();
   });
 });

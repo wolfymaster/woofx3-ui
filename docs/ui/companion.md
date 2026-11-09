@@ -1,7 +1,7 @@
 # Companion app
 
-**Routes:** `/companion/pair` (approval page), the Companion card on `/admin/engine`
-**Primary files:** `companion/` (the app; `companion/core/` holds the relay client, bridge and discovery), `client/src/pages/companion-pair.tsx`, `client/src/desktop/AppLink.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
+**Routes:** the Companion card on `/admin/engine`
+**Primary files:** `companion/` (the app; `companion/core/` holds the relay client, bridge and discovery), `client/src/desktop/AppLink.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
 
 ## What it is
 
@@ -246,21 +246,11 @@ The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/s
 
 ## Pairing
 
-The desktop app pairs only by [linking itself](#linking-the-desktop-app) to the instance it is signed in to. Convex also still serves pairing with a code, for companion apps installed before that, which pair from their own window's **Pair**. That flow follows the OAuth device authorization shape (RFC 8628): the companion shows a short code, and a signed-in person approves it in the browser.
+The desktop app pairs by [linking itself](#linking-the-desktop-app) to the instance it is signed in to. It generates its own token: 32 bytes from the OS RNG, base64url, prefixed `wfxc_`, kept in the OS credential store (Credential Manager on Windows). Only the token's SHA-256 hash ever leaves the app, so no secret travels back to it and a lost response cannot strand a link.
 
-1. The companion generates its own token: 32 bytes from the OS RNG, base64url, prefixed `wfxc_`. It stores it in the OS credential store (Credential Manager on Windows) marked unconfirmed.
-2. It calls the action `companionPairing.start` with its device name, version, installation id and the token's SHA-256 hash. Convex draws a device code and an 8-character user code (`XXXX-XXXX`, from an alphabet with no vowels or look-alike characters), and returns them with the verification URL `<SITE_URL>/companion/pair?code=…` and how long the code is good for (10 minutes).
-3. The companion opens that URL and shows the code. It subscribes to `companions.self` with its token, and to `companionPairing.status` with the device code to hear about a decline.
-4. On the approval page the person checks that the code matches, picks an instance where they are an admin or owner, and approves. `companionPairing.approve` writes the `companions` row with the stored token hash and marks the pairing approved, in one transaction. If the instance already has a companion from another installation, the same transaction deletes it (see [One companion per instance](#one-companion-per-instance)).
-5. `companions.self` turns non-null for the token, returning the instance name and the approver's name. The companion asks the person at the PC to **Confirm** or **Reject** "Approved for {instance} by {person}". A code shown on stream could be approved by anyone who saw it, so the token counts only once confirmed. Confirm calls `companions.confirm`, which sets `confirmedAt` on the row; Reject calls `companions.unpair`. `self` reports `confirmed`, and the server's value wins after a restart. Re-pairing the same installation clears `confirmedAt`.
+The **installation id** is a UUID the app generates once and keeps in its app data directory. Linking from an installation that already has a row on that instance replaces that row's token, keeping its id, so linking the same PC again does not leave a duplicate.
 
-Whenever the companion gives up a token before it is paired (Cancel, the code expiring, a failure, or a restart that finds an unconfirmed token Convex no longer answers for), it forgets the token locally and then, in the background, calls `companionPairing.cancel` with the device code and `companions.unpair` with the token. `cancel` moves a pending pairing to `cancelled`, and `unpair` also cancels any pending pairing started with that token, since a restart loses the device code. Both are idempotent. Without this, an approval arriving after the companion gave up would write a `companions` row nobody holds.
-
-Because the companion makes its own token and sends only its hash, no secret ever travels back to it, and a lost response cannot strand a pairing.
-
-The **installation id** is a UUID the companion generates once and keeps in its app data directory. Approving a pairing from an installation that already has a row on that instance replaces that row's token, keeping its id, so pairing the same PC again does not leave a duplicate.
-
-The stored pairing (`core/src/stored_token.rs`) holds the token, whether it is confirmed, and the instance's name and id. A pairing stored before the id was kept has none until `companions.self` next names the instance.
+The stored pairing (`core/src/stored_token.rs`) holds the token, whether it is confirmed, and the instance's name and id. A pairing stored before the id was kept has none until `companions.self` next names the instance. A stored token that was never confirmed, left by the code pairing older versions offered, is given up on start.
 
 ### Linking the desktop app
 
@@ -268,40 +258,18 @@ When an admin or owner of the selected instance is signed in to the dashboard in
 
 1. The dashboard asks the host `companion_link_status`: the instance this computer is the confirmed companion of (its id and name), plus its installation id, device name and version. If that is the selected instance, nothing happens. A stored pairing that names no instance id is left alone too, since which instance it belongs to cannot be told.
 2. `begin_app_link` generates a fresh token in the Rust process and keeps it in memory, not yet in the credential store. It returns only the token's hash, with the installation id, device name and version. Starting again replaces a token that never finished.
-3. The dashboard calls `companionPairing.linkSignedInApp` with the instance and those values. It requires the admin role on the instance, checks the hash, installation id, device name and version as `start` does, and is rate limited per user. It writes the `companions` row already confirmed, approved by the caller, through the same `writeCompanionCredential` (`convex/lib/companionRecords.ts`) an approval uses, so this installation's existing row keeps its id and gets the new token. Calling it again with the same installation and hash changes nothing.
+3. The dashboard calls `companionPairing.linkSignedInApp` with the instance and those values. It requires the admin role on the instance, checks the hash, installation id, device name and version, and is rate limited per user. It writes the `companions` row already confirmed, approved by the caller, through `writeCompanionCredential` (`convex/lib/companionRecords.ts`), so this installation's existing row keeps its id and gets the new token. Calling it again with the same installation and hash changes nothing.
 4. `finish_app_link` gives up any previous pairing, stores the token as confirmed with the instance's name and id, and starts the paired session.
 
-If another installation is the instance's companion, `linkSignedInApp` writes nothing and answers with that computer's name and last-seen time. The dashboard asks "Use this computer for local connections?" in a small prompt the person can dismiss. Choosing this computer calls the mutation again with `replaceOtherComputer`, which replaces the other companion as an approval does (see [One companion per instance](#one-companion-per-instance)); the other PC drops to Unpaired.
+If another installation is the instance's companion, `linkSignedInApp` writes nothing and answers with that computer's name and last-seen time. The dashboard asks "Use this computer for local connections?" in a small prompt the person can dismiss. Choosing this computer calls the mutation again with `replaceOtherComputer`, which replaces the other companion (see [One companion per instance](#one-companion-per-instance)); the other PC drops to Unpaired.
 
 The dashboard tries once per instance per run of the app. Anyone below admin is skipped without a word. A failure is shown with **Try again**, and never retried on its own.
 
-Why no confirmation: the device-code flow asks the person at the PC to confirm because a code shown on stream could be approved by anyone who saw it. Here the approval is the sign-in itself, made inside the app on that PC, so the person who approves is the person at the PC. The token never leaves the Rust process: the webview and Convex see only its hash, as in the device-code flow.
-
 ### One companion per instance
 
-An instance has at most one companion. Approving a pairing from a different installation **replaces** the current companion: `approve` deletes its row and presence row in the same transaction, and the old companion's `companions.self` subscription turns null, so it drops to Unpaired at once. Pairing the same installation again updates the row in place and keeps its id, with no warning.
+An instance has at most one companion. Linking a different installation **replaces** the current companion: its row and presence row are deleted in the same transaction, and the old companion's `companions.self` subscription turns null, so it drops to Unpaired at once. Linking the same installation again updates the row in place and keeps its id. The app never replaces another computer without asking (see [Linking the desktop app](#linking-the-desktop-app)).
 
-The desktop app's own link never replaces another computer without asking (see [Linking the desktop app](#linking-the-desktop-app)).
-
-Before Approve is enabled, the approval page asks `companionPairing.replacementForApproval` with the user code and the chosen instance. It answers with the device name and last-seen time of the companion that approving would replace, or null. It compares installation ids on the server, so they never reach the browser, and it answers only an admin of the instance, with no token data. When it names a companion, the page shows "This replaces the companion on {device}, last seen {time}" and requires a second checkbox. The confirmation is tied to that companion, so choosing another instance asks again.
-
-Because there is only one companion, holding a confirmed companion row is the privilege. A phished approval can only replace the streamer's own companion, and that is visible: the real companion drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows an approval or a link replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
-
-### The approval page
-
-`/companion/pair` sits under `AuthGuard` but outside `BroadcastShell` and `OnboardingGuard`, like `/setup`. A streamer whose engine will run on their own PC has no registered instance until the companion exists, so the onboarding guard must not catch them. A signed-out visitor goes to `/auth/login?next=…`; the `next` path is carried through to registration too, so a new account lands back on the page.
-
-The device name is shown as "Reported by the device", since the companion chooses it. Approve stays disabled until the person ticks "This matches the code shown in the companion on my computer", even when the code came in the link. The page calls `companionPairing.timeLeft` once when a code loads and counts down from that with `performance.now()`, so the browser's own clock never decides that a code has expired.
-
-### Who may approve
-
-The user code is a short-lived capability: whoever holds it may see the pairing's device details (`getForApproval`) and decline it (`deny`), so those need only a sign-in. Approving binds a device that will act on the instance, which is an admin concern, so `approve` requires the admin role on the chosen instance.
-
-### Expiry and rate limits
-
-Expiry is stored as `expiresAt`, never as a status. Mutations compare it with the clock; queries never read it, since a query does not re-run as time passes. The companion waits for the duration `start` returned (`expiresInMs`), and the action `companionPairing.timeLeft` answers how long a code has left by the server's clock, so neither a skewed PC clock nor a skewed browser clock shows a live code as expired. The server still enforces expiry on approve and decline. An hourly cron (`companionPairing.cleanupExpired`) deletes pairings an hour after they expire.
-
-`start` is public and unauthenticated, so it is rate limited per installation and then globally (`@convex-dev/rate-limiter`). The caller chooses its own installation id, so the global bucket (3000 an hour, bursts of 300) is the real ceiling; checking the per-installation bucket first means refused calls do not spend it. `deny` is rate limited per user, and answers a wrong or used-up code with a result rather than an error so that failed attempts count against the limit too.
+Because there is only one companion, holding a confirmed companion row is the privilege, and a replacement is visible: the replaced computer drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows a link replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
 
 ## Tokens and revocation
 
@@ -309,16 +277,15 @@ Only the token's hash is stored. The `companions` row is the credential: a token
 
 - `companions.self` — what the companion subscribes to. Null means unpaired; the companion forgets its token. A query error is not a revocation.
 - `companions.heartbeat` — every 60 seconds once confirmed. It writes `companionPresence`, a separate table, so the heartbeat does not re-run subscriptions that read the companion itself.
-- `companions.confirm` — the person at the PC confirmed a pairing made with a code (older companion apps); sets `confirmedAt`.
 - `companions.unpair` — the companion giving up its token, as when the desktop app links again. It clears its local token first, so an offline Convex never keeps it.
 - `companions.revoke` — an admin removing the companion from the Companion card. Deleting the row is the revocation.
 - `companions.forInstance` — the instance's companion for its members (null when there is none), with device, version, pairing date, last heartbeat and whether the device confirmed it.
 
-A companion acts with its approver's authority, so it stays paired only while the person who approved it is still an admin or owner of the instance. Removing them, or lowering them to member, unpairs it, the same rule as remote macro triggers. Deleting the instance deletes its companion, its presence row and the instance's pairings.
+A companion acts with its approver's authority, so it stays paired only while the person who approved it is still an admin or owner of the instance. Removing them, or lowering them to member, unpairs it, the same rule as remote macro triggers. Deleting the instance deletes its companion and its presence row.
 
 ## The Companion card
 
-On `/admin/engine`, for managed and self-hosted engines alike: a cloud engine uses a companion for local integrations too. It shows the instance's companion from `companions.forInstance` (null when there is none) with device, version and pairing date. It reads **Online** when the last heartbeat is under three minutes old, otherwise "Last seen …". A companion the device has not confirmed yet reads "Awaiting confirmation on the device". The card re-renders once a minute so the badge ages without new data. Admins and owners get **Revoke**.
+On `/admin/engine`, for managed and self-hosted engines alike: a cloud engine uses a companion for local integrations too. It shows the instance's companion from `companions.forInstance` (null when there is none) with device, version and pairing date. It reads **Online** when the last heartbeat is under three minutes old, otherwise "Last seen …". A companion left unconfirmed by the code pairing older versions offered reads "Awaiting confirmation on the device". The card re-renders once a minute so the badge ages without new data. Admins and owners get **Revoke**.
 
 ## Bridging local endpoints
 
@@ -348,7 +315,7 @@ OBS <-ws 127.0.0.1:4455- Companion ==(outbound WSS)== Relay DO <==wss /bridge/<m
 
 ### Revocation
 
-Revoking, unpairing or replacing the companion deletes its row and its `companionEndpoints` rows, and schedules `syncEngine`, which clears the engine's relay configuration within seconds. A companion can also stop bridging without its row being deleted. Re-pairing the same installation leaves it unconfirmed until the person at the PC confirms. Removing its approver from the account, or lowering them below admin, voids its approval. Both schedule `syncEngine` as well. Independently of Convex reaching anything: a deleted companion cannot mint again, the relay closes its socket when its five-minute credential expires without a refresh, and a newer companion's credential displaces it. So a revoked companion is cut off within five minutes at most.
+Revoking, unpairing or replacing the companion deletes its row and its `companionEndpoints` rows, and schedules `syncEngine`, which clears the engine's relay configuration within seconds. A companion can also stop bridging without its row being deleted. Removing its approver from the account, or lowering them below admin, voids its approval. Both schedule `syncEngine` as well. Independently of Convex reaching anything: a deleted companion cannot mint again, the relay closes its socket when its five-minute credential expires without a refresh, and a newer companion's credential displaces it. So a revoked companion is cut off within five minutes at most.
 
 ### When the bridge is offered
 
