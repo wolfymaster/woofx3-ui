@@ -222,6 +222,16 @@ describe("sign-in state expiry", () => {
 
     expect(await t.mutation(internal.twitchAuth.sweepExpiredStates, {})).toBe(TWITCH_SIGN_IN_STATE_SWEEP.batchSize);
     expect(await states(t)).toHaveLength(1);
-    expect(await sweepJobs(t)).toHaveLength(1);
+    expect((await sweepJobs(t)).map((job) => job.args)).toEqual([[{ chainedRun: 1 }]]);
+  });
+
+  test("the sweep stops chaining at the per-tick cap", async () => {
+    const t = newBackend();
+    for (let i = 0; i < TWITCH_SIGN_IN_STATE_SWEEP.batchSize + 1; i++) {
+      await insertState(t, `old-${i}`, TWITCH_SIGN_IN_STATE_TTL_MS + 1);
+    }
+
+    await t.mutation(internal.twitchAuth.sweepExpiredStates, { chainedRun: TWITCH_SIGN_IN_STATE_SWEEP.maxChainedRuns });
+    expect(await sweepJobs(t)).toEqual([]);
   });
 });

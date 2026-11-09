@@ -52,31 +52,46 @@ async function syncRow(t: Backend, instanceId: Id<"instances">) {
   return row;
 }
 
+async function seedOldRuns(t: Backend, count: number): Promise<void> {
+  const { instanceId } = await seedInstance(t);
+  const old = Date.now() - ENGINE_SYNC_CONFIG.runHistoryRetentionMs - 1;
+  await t.run(async (ctx) => {
+    for (let i = 0; i < count; i++) {
+      await ctx.db.insert("syncRuns", {
+        instanceId,
+        trigger: "scheduled",
+        status: "success",
+        startedAt: old,
+        steps: [],
+      });
+    }
+  });
+}
+
 describe("cleanupOldRuns", () => {
   test("a full batch cleans again until the backlog is gone", async () => {
     const t = newBackend();
-    const { instanceId } = await seedInstance(t);
-    const old = Date.now() - ENGINE_SYNC_CONFIG.runHistoryRetentionMs - 1;
-    await t.run(async (ctx) => {
-      for (let i = 0; i < ENGINE_SYNC_CONFIG.runHistoryCleanupBatch + 3; i++) {
-        await ctx.db.insert("syncRuns", {
-          instanceId,
-          trigger: "scheduled",
-          status: "success",
-          startedAt: old,
-          steps: [],
-        });
-      }
-    });
+    await seedOldRuns(t, ENGINE_SYNC_CONFIG.runHistoryCleanupBatch + 3);
     const remaining = () => t.run(async (ctx) => (await ctx.db.query("syncRuns").collect()).length);
 
     await t.mutation(internal.engineSyncInternal.cleanupOldRuns, {});
     expect(await remaining()).toBe(3);
     const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-    expect(scheduled.map((job) => job.name)).toEqual(["engineSyncInternal:cleanupOldRuns"]);
+    expect(scheduled.map((job) => [job.name, job.args])).toEqual([
+      ["engineSyncInternal:cleanupOldRuns", [{ chainedRun: 1 }]],
+    ]);
 
     await t.mutation(internal.engineSyncInternal.cleanupOldRuns, {});
     expect(await remaining()).toBe(0);
+  });
+
+  test("stops chaining at the per-run cap", async () => {
+    const t = newBackend();
+    await seedOldRuns(t, ENGINE_SYNC_CONFIG.runHistoryCleanupBatch + 1);
+    await t.mutation(internal.engineSyncInternal.cleanupOldRuns, {
+      chainedRun: ENGINE_SYNC_CONFIG.runHistoryCleanupMaxChainedRuns,
+    });
+    expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toEqual([]);
   });
 });
 

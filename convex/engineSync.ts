@@ -11,6 +11,7 @@ import { readSyncState } from "./lib/engineSync/syncRow";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
+import { logger } from "./logger";
 
 /**
  * Orchestrator: runs every registered sync step for an instance in order,
@@ -163,8 +164,12 @@ export const sweep = internalMutation({
 
     // Every row read is now deleted, deferred or claimed, so the next pass
     // reads the rows behind them.
-    if (due.length === ENGINE_SYNC_CONFIG.sweepBatchSize && chainedRun < ENGINE_SYNC_CONFIG.sweepMaxChainedRuns) {
-      await ctx.scheduler.runAfter(0, internal.engineSync.sweep, { chainedRun: chainedRun + 1 });
+    if (due.length === ENGINE_SYNC_CONFIG.sweepBatchSize) {
+      if (chainedRun < ENGINE_SYNC_CONFIG.sweepMaxChainedRuns) {
+        await ctx.scheduler.runAfter(0, internal.engineSync.sweep, { chainedRun: chainedRun + 1 });
+      } else {
+        logger.warn("engineSync.sweep: chained-run cap reached; the next tick continues", { chainedRun });
+      }
     }
     return { scheduled, deferred };
   },

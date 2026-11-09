@@ -2,7 +2,12 @@ import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
-import { WORKFLOW_RUN_CLEANUP_BATCH, WORKFLOW_RUN_RETENTION_MS, WORKFLOW_RUN_STEP_CLEANUP_BATCH } from "./workflowRuns";
+import {
+  WORKFLOW_RUN_CLEANUP_BATCH,
+  WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS,
+  WORKFLOW_RUN_RETENTION_MS,
+  WORKFLOW_RUN_STEP_CLEANUP_BATCH,
+} from "./workflowRuns";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -95,8 +100,21 @@ describe("cleanupOld", () => {
     await t.mutation(internal.workflowRuns.cleanupOld, {});
     expect(await counts(t)).toEqual({ runs: 2, steps: 2 });
     expect(await scheduledNames(t)).toEqual(["workflowRuns:cleanupOld"]);
-    await t.mutation(internal.workflowRuns.cleanupOld, {});
+    await t.mutation(internal.workflowRuns.cleanupOld, { chainedRun: 1 });
     expect(await counts(t)).toEqual({ runs: 0, steps: 0 });
+  });
+
+  test("stops chaining at the per-run cap", async () => {
+    const t = newBackend();
+    setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
+    const instanceId = await seedInstance(t);
+    for (let i = 0; i < WORKFLOW_RUN_CLEANUP_BATCH + 1; i++) {
+      await seedRun(t, instanceId, `run-${i}`);
+    }
+    setSystemTime();
+
+    await t.mutation(internal.workflowRuns.cleanupOld, { chainedRun: WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS });
+    expect(await scheduledNames(t)).toEqual([]);
   });
 });
 
@@ -119,7 +137,7 @@ async function seedOrphanStep(t: Backend, instanceId: Id<"instances">, engineRun
   });
 }
 
-type OrphanStepPass = { next?: { cursor: string; cutoff: number } };
+type OrphanStepPass = { next?: { cursor: string; cutoff: number }; chainedRun?: number };
 
 /** The arguments of every scheduled orphan-step pass, in scheduling order. */
 async function scheduledOrphanStepPasses(t: Backend): Promise<OrphanStepPass[]> {
@@ -198,6 +216,20 @@ describe("cleanupOrphanSteps", () => {
     await t.mutation(internal.workflowRuns.cleanupOrphanSteps, second);
     const passes = await scheduledOrphanStepPasses(t);
     expect(passes.map((pass) => pass.next?.cutoff)).toEqual([second.next?.cutoff, second.next?.cutoff]);
+  });
+
+  test("stops chaining at the per-run cap", async () => {
+    const t = newBackend();
+    setSystemTime(new Date(Date.now() - WORKFLOW_RUN_RETENTION_MS - 60_000));
+    const instanceId = await seedInstance(t);
+    for (let i = 0; i < WORKFLOW_RUN_STEP_CLEANUP_BATCH + 1; i++) {
+      await seedOrphanStep(t, instanceId, "late-run");
+    }
+    setSystemTime();
+    await seedRun(t, instanceId, "late-run");
+
+    await t.mutation(internal.workflowRuns.cleanupOrphanSteps, { chainedRun: WORKFLOW_RUN_CLEANUP_MAX_CHAINED_RUNS });
+    expect(await scheduledOrphanStepPasses(t)).toEqual([]);
   });
 });
 

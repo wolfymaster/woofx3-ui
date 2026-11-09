@@ -26,7 +26,7 @@ crons.interval(
   {}
 );
 
-crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engineSyncInternal.cleanupOldRuns);
+crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engineSyncInternal.cleanupOldRuns, {});
 
 // Transient events live about a minute; one sweep a minute deletes them all,
 // however many were written, instead of one scheduled delete per row.
@@ -43,7 +43,7 @@ crons.interval(
 
 crons.interval("engine event receipt cleanup", { hours: 24 }, internal.engineEvents.cleanupOldReceipts, {});
 
-crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLog.cleanupOld);
+crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLog.cleanupOld, {});
 
 crons.interval("workflow run history cleanup", { hours: 24 }, internal.workflowRuns.cleanupOld, {});
 
