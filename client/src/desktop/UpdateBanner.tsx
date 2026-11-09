@@ -1,81 +1,58 @@
-import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useLogger } from "@/lib/logger-context";
-import { appState, installUpdate, onAppStateChange, type ReadyUpdate } from "./host";
-
-/** Follows the update the host has downloaded and verified, if any. */
-function useReadyUpdate(): ReadyUpdate | null {
-  const logger = useLogger();
-  const [update, setUpdate] = useState<ReadyUpdate | null>(null);
-  useEffect(() => {
-    let disposed = false;
-    let eventSeen = false;
-    // Subscribe before reading, so a change between the two is not lost.
-    const unlisten = onAppStateChange((state) => {
-      eventSeen = true;
-      setUpdate(state.update);
-    });
-    appState().then(
-      (state) => {
-        if (!disposed && !eventSeen) {
-          setUpdate(state.update);
-        }
-      },
-      (err: unknown) => {
-        logger.error("Couldn't read the app's update state from the host", { error: err });
-      }
-    );
-    return () => {
-      disposed = true;
-      void unlisten.then((stop) => stop());
-    };
-  }, [logger]);
-  return update;
-}
+import { UpdateRestartButton } from "./UpdateRestartButton";
+import { useReadyUpdate } from "./use-ready-update";
 
 /**
- * Offers a ready update. The app never restarts on its own, so this and the
- * tray's item are the ways in. A failed install leaves the update ready and
- * says why here.
+ * Offers a ready update. The app never restarts on its own, so this, the
+ * header's update icon and the tray's item are the ways in. Dismissing hides
+ * only this card, for that version; the icon stays until the app restarts.
  */
 export default function UpdateBanner() {
-  const logger = useLogger();
   const update = useReadyUpdate();
-  const [installing, setInstalling] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
 
-  if (!update) {
+  if (!update || update.version === dismissedVersion) {
     return null;
   }
 
-  const install = async () => {
-    setInstalling(true);
-    setFailure(null);
-    try {
-      await installUpdate();
-    } catch (err) {
-      logger.error("Couldn't install the update", { error: err });
-      setFailure(typeof err === "string" ? err : "The update couldn't be installed. Try again.");
-    } finally {
-      setInstalling(false);
+  // Leaves the way it came in, to the right, then unmounts.
+  const dismiss = () => setLeaving(true);
+  const finishLeaving = () => {
+    if (leaving) {
+      setDismissedVersion(update.version);
+      setLeaving(false);
     }
   };
 
   return (
     <div
-      className="fixed bottom-4 left-4 z-50 w-[22rem] max-w-[calc(100vw-2rem)] rounded-lg border bg-card p-4 text-card-foreground shadow-lg"
+      className={
+        "fixed right-4 top-[4.25rem] z-50 w-[22rem] max-w-[calc(100vw-2rem)] rounded-lg border bg-card/90 p-4 pr-10 " +
+        "text-card-foreground shadow-lg backdrop-blur-xl transition duration-200 ease-out " +
+        "animate-in fade-in slide-in-from-right-4 motion-reduce:animate-none motion-reduce:slide-in-from-right-0 " +
+        (leaving ? "translate-x-4 opacity-0 motion-reduce:translate-x-0" : "")
+      }
       aria-live="polite"
       data-testid="update-banner"
+      onTransitionEnd={finishLeaving}
     >
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute right-1.5 top-1.5 h-7 w-7 text-muted-foreground"
+        onClick={dismiss}
+        aria-label="Dismiss update notice"
+        data-testid="button-dismiss-update"
+      >
+        <X className="h-4 w-4" />
+      </Button>
       <p className="text-sm font-medium">
         {update.productName} {update.version} is ready
       </p>
-      {failure && <p className="mt-1 text-sm text-destructive">{failure}</p>}
-      <div className="mt-3 flex justify-end">
-        <Button size="sm" onClick={() => void install()} disabled={installing} data-testid="button-restart-to-update">
-          {installing ? "Restarting…" : "Restart to update"}
-        </Button>
-      </div>
+      <UpdateRestartButton />
     </div>
   );
 }
