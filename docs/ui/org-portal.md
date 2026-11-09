@@ -9,6 +9,7 @@ The portal is where an organization's owner and admins manage the organization a
 
 - On the dashboard origin, so it shares the dashboard's Convex Auth session (kept in `localStorage`, per origin). `woofx3.tv/org/*` is redirected there by the edge.
 - Outside `BroadcastShell` and `OnboardingGuard`, with its own slim layout (`OrgPortal.tsx`): it needs no engine, only a signed-in user. Someone signed out goes through sign-in and back to the same `/org/…` path (`AuthGuard`'s `?next=`, clamped by `safeNextPath`).
+- The marketing site's "Start free trial" link opens `/org/?start=trial`. Someone who owns no organization with an engine is sent straight on to onboarding, which starts the trial (`start-trial.ts`); an owner who already has an engine sees the overview.
 - **Web build only.** `App.tsx` imports it behind `IS_DESKTOP`, so the desktop build carries no `/org` route; `org-portal/boundary.test.ts` holds that.
 
 ## Data
