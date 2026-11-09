@@ -173,6 +173,42 @@ describe("invitations.create refusals", () => {
   });
 });
 
+describe("invitations.create refusals hide member emails from non-owners", () => {
+  const REFUSED = { code: "invite_refused" };
+
+  test.each<[string, OrgRole]>([
+    ["an org admin", "admin"],
+    ["an engine admin who is an org member", "member"],
+  ])("%s gets the same refusal for an address already on the engine", async (_case, orgRole) => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole, engineRole: "admin" });
+    await addUser(t, "on@example.com", { org, orgRole: "member", engineRole: "member" });
+    await expect(invite(t, adminId, org.instanceId, "on@example.com")).rejects.toMatchObject({ data: REFUSED });
+  });
+
+  test.each<[string, OrgRole]>([
+    ["an org admin", "admin"],
+    ["an engine admin who is an org member", "member"],
+  ])("%s with seats full can't tell a member's address from a stranger's", async (_case, orgRole) => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole, engineRole: "admin" });
+    await fillSeats(t, org);
+    await expect(invite(t, adminId, org.instanceId, "seat1@example.com")).rejects.toMatchObject({ data: REFUSED });
+    await expect(invite(t, adminId, org.instanceId, "stranger@example.com")).rejects.toMatchObject({
+      data: REFUSED,
+    });
+  });
+
+  test("the owner with seats full still invites an org member who isn't on the engine", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    await fillSeats(t, org);
+    await invite(t, org.ownerId, org.instanceId, "seat1@example.com");
+  });
+});
+
 describe("invitations.listForEngine", () => {
   async function listedEmails(t: Backend, userId: Id<"users">, instanceId: Id<"instances">) {
     const result = await as(t, userId).query(api.invitations.listForEngine, { instanceId, now: Date.now() });

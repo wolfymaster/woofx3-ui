@@ -14,6 +14,7 @@ import {
   type RedeployEvent,
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
+import { requireOrgActionFor } from "./lib/orgRoles";
 import { applyTransition, subscriptionFor } from "./lib/subscriptions";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
@@ -98,12 +99,7 @@ export const reserveManagedInstance = internalMutation({
     newCreateRequestId: v.string(),
   },
   handler: async (ctx, { accountId, userId, slug, newRegistrationToken, newCreateRequestId }) => {
-    // The account owner only: an engine is a resource the account is billed
-    // for, which is a narrower question than who may manage its team.
-    const account = await ctx.db.get(accountId);
-    if (!account || account.ownerId !== userId) {
-      throw new Error("Not authorized");
-    }
+    const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
 
     const { instanceId } = await findOrCreateManagedInstance(ctx, account);
     await startTrialIfNew(ctx, accountId, Date.now());
