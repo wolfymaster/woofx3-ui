@@ -60,6 +60,7 @@ import type * as integrationCredentials from "../integrationCredentials.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_alertQueueResults from "../lib/alertQueueResults.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
+import type * as lib_cleanupBatch from "../lib/cleanupBatch.js";
 import type * as lib_commandWorkflow from "../lib/commandWorkflow.js";
 import type * as lib_companionAuth from "../lib/companionAuth.js";
 import type * as lib_companionCodes from "../lib/companionCodes.js";
@@ -107,6 +108,7 @@ import type * as lib_firstRun from "../lib/firstRun.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
 import type * as lib_hostedStorage from "../lib/hostedStorage.js";
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
+import type * as lib_inboundWebhookLimits from "../lib/inboundWebhookLimits.js";
 import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
 import type * as lib_instanceAccess from "../lib/instanceAccess.js";
@@ -144,6 +146,7 @@ import type * as lib_ops_notificationRequest from "../lib/ops/notificationReques
 import type * as lib_ops_planCounts from "../lib/ops/planCounts.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
+import type * as lib_outboundTimeouts from "../lib/outboundTimeouts.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_placementOpacity from "../lib/placementOpacity.js";
@@ -361,6 +364,7 @@ declare const fullApi: ApiFromModules<{
   invitations: typeof invitations;
   "lib/alertQueueResults": typeof lib_alertQueueResults;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
+  "lib/cleanupBatch": typeof lib_cleanupBatch;
   "lib/commandWorkflow": typeof lib_commandWorkflow;
   "lib/companionAuth": typeof lib_companionAuth;
   "lib/companionCodes": typeof lib_companionCodes;
@@ -408,6 +412,7 @@ declare const fullApi: ApiFromModules<{
   "lib/gettingStarted": typeof lib_gettingStarted;
   "lib/hostedStorage": typeof lib_hostedStorage;
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;
+  "lib/inboundWebhookLimits": typeof lib_inboundWebhookLimits;
   "lib/inboundWebhookPath": typeof lib_inboundWebhookPath;
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
   "lib/instanceAccess": typeof lib_instanceAccess;
@@ -445,6 +450,7 @@ declare const fullApi: ApiFromModules<{
   "lib/ops/planCounts": typeof lib_ops_planCounts;
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
+  "lib/outboundTimeouts": typeof lib_outboundTimeouts;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
   "lib/placementOpacity": typeof lib_placementOpacity;
