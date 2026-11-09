@@ -5,6 +5,8 @@ import type { EngineGateway } from "@/engine/gateway";
 import { EngineScopeProvider } from "@/engine/scope";
 import { FakeChatModerationGateway } from "@/engine/testing/FakeChatModerationGateway";
 import type { EngineScope, InstanceId } from "@/engine/types";
+import { createAppLogger } from "@/lib/logger";
+import { LoggerProvider } from "@/lib/logger-context";
 import Moderation from "./moderation";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,11 +22,13 @@ async function render(fake: FakeChatModerationGateway): Promise<ReactTestRendere
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
     renderer = create(
-      <EngineGatewayProvider gateway={gateway}>
-        <EngineScopeProvider scope={SCOPE}>
-          <Moderation />
-        </EngineScopeProvider>
-      </EngineGatewayProvider>
+      <LoggerProvider logger={createAppLogger([])}>
+        <EngineGatewayProvider gateway={gateway}>
+          <EngineScopeProvider scope={SCOPE}>
+            <Moderation />
+          </EngineScopeProvider>
+        </EngineGatewayProvider>
+      </LoggerProvider>
     );
   });
   if (renderer === undefined) {

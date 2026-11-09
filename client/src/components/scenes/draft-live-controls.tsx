@@ -81,6 +81,7 @@ export function DraftLiveControls({
   testIds,
 }: DraftLiveControlsProps) {
   const disabled = live || !commandsEnabled;
+  const upToDate = disabled && pendingCommand === null && (live || !hasDraft);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   return (
     <>
@@ -106,7 +107,8 @@ export function DraftLiveControls({
               <Button
                 onClick={() => onCommand("publish")}
                 disabled={disabled}
-                className="w-32 rounded-r-none"
+                variant={upToDate ? "outline" : "default"}
+                className="w-40 rounded-r-none"
                 data-testid={testIds.publish}
               >
                 {pendingCommand === "publish" ? (
@@ -114,17 +116,24 @@ export function DraftLiveControls({
                 ) : (
                   <Upload className="h-4 w-4 mr-2" />
                 )}
-                {pendingCommand === "publish" ? "Publishing…" : "Publish"}
+                {pendingCommand === "publish" ? "Publishing…" : upToDate ? "Up to date" : "Publish changes"}
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>{live ? copy.liveDisabled : hasDraft ? copy.publish : "Nothing to publish"}</TooltipContent>
+          <TooltipContent>
+            {live
+              ? copy.liveDisabled
+              : hasDraft
+                ? copy.publish
+                : "Nothing to publish: your draft matches what's on stream"}
+          </TooltipContent>
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               size="icon"
-              className="rounded-l-none border-l border-primary-foreground/25"
+              variant={upToDate ? "outline" : "default"}
+              className={cn("rounded-l-none border-l", !upToDate && "border-primary-foreground/25")}
               aria-label="More publish options"
               data-testid={`${testIds.publish}-menu`}
             >
@@ -177,7 +186,9 @@ function SaveStatusIndicator({ status, live, copy }: { status: DraftSaveStatus; 
     sending: [live ? "Saving…" : "Saving draft…", "Your latest edits are still being sent"],
     retrying: ["Retrying save…", "A save didn't go through and is being sent again"],
     draft: ["Draft saved, not published", copy.publish],
-    saved: ["All changes saved", undefined],
+    saved: live
+      ? ["Live, all changes on stream", copy.live]
+      : ["Draft saved", "Your edits are saved as a draft. Publish changes to put them on stream."],
   }[status];
   return (
     <StatusIndicator tone={SAVE_STATUS_TONE[status]} tooltip={tooltip} testId="status-saved">

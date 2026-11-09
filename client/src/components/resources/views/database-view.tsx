@@ -54,7 +54,7 @@ const PAGE_SIZE = 50;
 /** A woofx3 database: its columns and its rows. */
 export const databaseView: KindView = {
   description:
-    "Tables you keep: form answers, games you played, giveaway entrants. Workflows add and change rows; columns you choose can show on your public page.",
+    "Tables you keep: form answers, games you played, giveaway entrants. Triggers add and change rows, and columns you choose can show on your public page.",
   icon: STREAM_OBJECT_ICONS.databases,
   railValue: ({ settings }) => parseDatabaseColumns(settings).length.toLocaleString(),
   detail: (props) => <DatabasePanel key={props.instance.canonicalId} {...props} />,
@@ -330,8 +330,17 @@ interface Sort {
 /** What was typed into each cell of a row being added or edited, by column id. */
 type CellDrafts = Record<string, string>;
 
-function draftsOf(columns: readonly DatabaseColumn[], record: DatabaseRecord | null): CellDrafts {
-  return Object.fromEntries(columns.map((column) => [column.id, cellText(record?.values[column.id])]));
+/**
+ * The cells of a row as the editor starts them. A yes/no cell is a switch, which
+ * has no blank state, so an empty one starts as no and saves as it shows.
+ */
+export function draftsOf(columns: readonly DatabaseColumn[], record: DatabaseRecord | null): CellDrafts {
+  return Object.fromEntries(
+    columns.map((column) => {
+      const text = cellText(record?.values[column.id]);
+      return [column.id, column.type === "boolean" && text === "" ? String(false) : text];
+    })
+  );
 }
 
 /** The values to send for a row's drafts, or the message for each cell that doesn't fit. */
@@ -428,14 +437,23 @@ function RecordsCard({ databaseId, columns }: { databaseId: string; columns: Dat
     <TableRow key={key} data-testid="row-editor">
       {columns.map((column) => (
         <TableCell key={column.id} className="align-top">
-          <Input
-            className="h-8"
-            value={drafts[column.id] ?? ""}
-            placeholder={column.type === "boolean" ? "true or false" : column.type === "date" ? "YYYY-MM-DD" : ""}
-            aria-label={column.label}
-            aria-invalid={errors[column.id] !== undefined}
-            onChange={(event) => setDrafts({ ...drafts, [column.id]: event.target.value })}
-          />
+          {column.type === "boolean" ? (
+            <Switch
+              className="mt-1.5"
+              checked={drafts[column.id] === String(true)}
+              aria-label={column.label}
+              onCheckedChange={(checked) => setDrafts({ ...drafts, [column.id]: String(checked) })}
+            />
+          ) : (
+            <Input
+              className="h-8"
+              value={drafts[column.id] ?? ""}
+              placeholder={column.type === "date" ? "YYYY-MM-DD" : ""}
+              aria-label={column.label}
+              aria-invalid={errors[column.id] !== undefined}
+              onChange={(event) => setDrafts({ ...drafts, [column.id]: event.target.value })}
+            />
+          )}
           {errors[column.id] && <p className="mt-1 text-xs text-destructive">{errors[column.id]}</p>}
         </TableCell>
       ))}

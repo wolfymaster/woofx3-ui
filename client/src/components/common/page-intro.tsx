@@ -9,16 +9,15 @@ import { PAGE_INTROS, type PageIntroId } from "@/lib/page-intros";
 
 interface PageIntroProps {
   introId: PageIntroId;
-  /** Starts the page's main task, e.g. opens the create flow. */
-  onTry: () => void;
 }
 
 /**
- * A short explanation of a page, shown until the user closes it or tries the
- * page's main task. Nothing renders while dismissals load, so the card never
- * flashes for someone who already closed it.
+ * A short explanation of a page, shown until the user closes it. It has no button
+ * of its own: the page's primary action sits right below it, and a second button
+ * for the same task only asks which one to press. Nothing renders while dismissals
+ * load, so the card never flashes for someone who already closed it.
  */
-export function PageIntro({ introId, onTry }: PageIntroProps) {
+export function PageIntro({ introId }: PageIntroProps) {
   const logger = useLogger();
   const dismissed = useDismissedPageIntros();
   const dismissIntro = useDismissPageIntroRequest();
@@ -37,24 +36,12 @@ export function PageIntro({ introId, onTry }: PageIntroProps) {
     <Card className="mb-6 border-primary/30 bg-primary/5" data-testid={`page-intro-${introId}`}>
       <CardContent className="flex gap-3 p-4">
         <Lightbulb className="h-5 w-5 shrink-0 text-primary mt-0.5" />
-        <div className="flex-1 space-y-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5">
-              <p className="font-medium">{intro.title}</p>
-              <HelpTip term={intro.term} />
-            </div>
-            <p className="text-sm text-muted-foreground">{intro.body}</p>
+        <div className="flex-1 space-y-1">
+          <div className="flex items-center gap-1.5">
+            <p className="font-medium">{intro.title}</p>
+            <HelpTip term={intro.term} />
           </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              void dismiss({ introId });
-              onTry();
-            }}
-            data-testid={`button-page-intro-try-${introId}`}
-          >
-            {intro.tryLabel}
-          </Button>
+          <p className="text-sm text-muted-foreground">{intro.body}</p>
         </div>
         <Tooltip>
           <TooltipTrigger asChild>

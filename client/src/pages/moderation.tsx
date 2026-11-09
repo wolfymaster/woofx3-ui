@@ -39,6 +39,7 @@ import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 import {
   ACTION_NAMES,
   actionsMissingScope,
+  canSaveConfig,
   configActionsMissingScope,
   configProblem,
   FILTER_COPY,
@@ -53,11 +54,13 @@ import {
   toggleAction,
   withRule,
 } from "@/lib/chat-moderation-form";
+import { useLogger } from "@/lib/logger-context";
 
 /** The chat moderation page: what the engine filters in chat, and what it does about it. */
 export default function Moderation() {
   const { read, save } = useModerationConfig();
   const { toast } = useToast();
+  const logger = useLogger().scoped("moderation");
   const { twitchLink } = useTwitchIntegration();
   // Unknown until the link loads, so no prompt flashes before it does.
   const granted = twitchLink?.scopes ?? null;
@@ -103,9 +106,11 @@ export default function Moderation() {
       await save(draft);
       toast({ title: "Chat moderation saved" });
     } catch (error) {
+      // The engine's words name the config's paths, so they go to the log, not the streamer.
+      logger.error("Couldn't save chat moderation", { error });
       toast({
         title: "Could not save chat moderation",
-        description: error instanceof Error ? error.message : String(error),
+        description: "Your changes are still on this page. Try saving again in a moment.",
         variant: "destructive",
       });
     } finally {
@@ -116,7 +121,7 @@ export default function Moderation() {
   return (
     <Page
       actions={
-        <Button onClick={onSave} disabled={!changed || problem !== null || saving} data-testid="moderation-save">
+        <Button onClick={onSave} disabled={!changed || !canSaveConfig(draft) || saving} data-testid="moderation-save">
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save
         </Button>
@@ -215,7 +220,7 @@ function GeneralCard({ config, onChange }: { config: ModerationConfig; onChange:
   return (
     <Card>
       <CardHeader>
-        <CardTitle>General</CardTitle>
+        <CardTitle className="text-lg">General</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <SwitchRow
@@ -317,7 +322,7 @@ function FilterCard({
     <Card data-testid={`filter-${filter}`}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1">
-          <CardTitle>{copy.title}</CardTitle>
+          <CardTitle className="text-lg">{copy.title}</CardTitle>
           <CardDescription>{copy.description}</CardDescription>
         </div>
         <Switch
@@ -631,7 +636,7 @@ function RecentActionsCard() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div className="space-y-1">
-          <CardTitle>Recent actions</CardTitle>
+          <CardTitle className="text-lg">Recent actions</CardTitle>
           <CardDescription>The latest messages chat moderation caught, newest first.</CardDescription>
         </div>
         <Button variant="ghost" size="icon" aria-label="Refresh" onClick={recent.refetch}>

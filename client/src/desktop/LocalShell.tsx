@@ -2,22 +2,28 @@ import { Activity, Monitor } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Uptime } from "@/components/common/uptime";
-import { isSectionActive } from "@/components/layout/nav-config";
+import { isSectionActive, type NavSection } from "@/components/layout/nav-config";
+import { SectionMenu } from "@/components/layout/section-menu";
 import { SectionSidebar } from "@/components/layout/section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "@/components/layout/status-bar-slot";
+import { UtilityNav } from "@/components/layout/utility-nav";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { cn } from "@/lib/utils";
-import { LOCAL_NAV_SECTIONS } from "./local-routes";
+import { LOCAL_NAV_SECTIONS, LOCAL_UTILITY_SECTIONS } from "./local-routes";
 import UpdateBanner from "./UpdateBanner";
 
-function LocalHeader({ location }: { location: string }) {
+function LocalHeader({ location, activeSection }: { location: string; activeSection: NavSection | undefined }) {
   return (
     <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
+      {activeSection?.children && (
+        <SectionMenu title={activeSection.label} items={activeSection.children} location={location} />
+      )}
       <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
         {LOCAL_NAV_SECTIONS.map((section) => {
           const isActive = isSectionActive(section, location);
@@ -36,6 +42,8 @@ function LocalHeader({ location }: { location: string }) {
           );
         })}
       </nav>
+      <UtilityNav sections={LOCAL_UTILITY_SECTIONS} location={location} />
+      <Separator orientation="vertical" className="h-6 hidden md:block" />
       <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0" data-testid="local-mode-badge">
         <Monitor className="h-4 w-4" />
         <span>On this computer</span>
@@ -95,12 +103,14 @@ function LocalStatusBar() {
 export function LocalShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   useLiveConnection();
-  const activeSection = LOCAL_NAV_SECTIONS.find((section) => isSectionActive(section, location));
+  const activeSection = [...LOCAL_NAV_SECTIONS, ...LOCAL_UTILITY_SECTIONS].find((section) =>
+    isSectionActive(section, location)
+  );
 
   return (
     <StatusBarSlotProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-        <LocalHeader location={location} />
+        <LocalHeader location={location} activeSection={activeSection} />
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {activeSection?.children && (
             <SectionSidebar title={activeSection.label} items={activeSection.children} location={location} />

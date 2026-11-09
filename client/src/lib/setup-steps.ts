@@ -3,7 +3,7 @@
 // on the page the user was on.
 
 export const SETUP_STEPS = [
-  { id: "connect", title: "Connect Your Streaming Platform" },
+  { id: "connect", title: "Connect your streaming platform" },
   { id: "overlay", title: "Your overlay" },
   { id: "finish", title: "All set" },
 ] as const;

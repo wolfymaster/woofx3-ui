@@ -230,3 +230,20 @@ fn test_window_wire_twitch_sign_in_args() {
         "the nonce hash is required"
     );
 }
+
+/// What the dashboard sends to open a link in the system browser.
+#[test]
+fn test_window_wire_open_external_url_args() {
+    let read: OpenExternalUrlArgs =
+        serde_json::from_value(json!({ "url": "https://www.twitch.tv/activate" })).expect("reads");
+    assert_eq!(
+        read,
+        OpenExternalUrlArgs {
+            url: "https://www.twitch.tv/activate".to_string(),
+        }
+    );
+    assert!(
+        serde_json::from_value::<OpenExternalUrlArgs>(json!({})).is_err(),
+        "the url is required"
+    );
+}

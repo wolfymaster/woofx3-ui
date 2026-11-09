@@ -50,13 +50,14 @@ use engine_host::LocalEngine;
 use integrations::Integrations;
 use tray::Tray;
 use update::Downloaded;
+use woofx3_companion_core::external_url::external_url;
 use woofx3_companion_core::twitch_sign_in::{convex_site_url, twitch_sign_in_url};
 use woofx3_companion_core::window::{
     AppLinkStart, ChooseHostModeArgs, CompanionLinkStatus, CompanionState, ConfirmAddressArgs,
     EnqueueShoutoutArgs, FinishAppLinkArgs, HostModeView, IntegrationsView, LocalEngineSession,
-    OpenTwitchSignInArgs, ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs,
-    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs,
-    WindowState, STATE_EVENT,
+    OpenExternalUrlArgs, OpenTwitchSignInArgs, ReadyUpdate, RemoveShoutoutArgs,
+    ReorderShoutoutsArgs, SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs,
+    TestResult, UseDiscoveredArgs, WindowState, STATE_EVENT,
 };
 use woofx3_companion_core::AppIdentity;
 
@@ -450,6 +451,22 @@ async fn open_twitch_sign_in(
         .app
         .opener()
         .open_url(url, None::<&str>)
+        .map_err(|err| format!("Could not open the browser: {err}"))
+}
+
+/// Opens a link from the dashboard in the system browser. The webview opens
+/// no new windows, so every external link comes here; only web pages are
+/// handed to the operating system (`external_url`).
+#[tauri::command]
+async fn open_external_url(
+    companion: State<'_, Arc<Companion>>,
+    args: OpenExternalUrlArgs,
+) -> Result<(), String> {
+    let url = external_url(&args.url).map_err(|err| err.to_string())?;
+    companion
+        .app
+        .opener()
+        .open_url(url.as_str(), None::<&str>)
         .map_err(|err| format!("Could not open the browser: {err}"))
 }
 

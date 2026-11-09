@@ -1,9 +1,16 @@
+import { useMemo } from "react";
 import { useEngineGateway } from "@/engine/context";
 import type { ModuleId } from "@/engine/types";
 
 /** Every module resource instance on the instance. */
 export function useResourceInstances() {
   return useEngineGateway().moduleResources.useInstances();
+}
+
+/** Every resource instance's display name by canonical id, so a sentence names the thing instead of its id. */
+export function useResourceLabels(): Map<string, string> | undefined {
+  const rows = useResourceInstances();
+  return useMemo(() => (rows ? new Map(rows.map((row) => [row.canonicalId, row.displayName])) : undefined), [rows]);
 }
 
 /** One installed module's resource instances; a null module id skips the read. */

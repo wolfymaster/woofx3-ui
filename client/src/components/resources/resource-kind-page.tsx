@@ -4,7 +4,8 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
 import { EmptyState } from "@/components/common/empty-state";
-import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
+import { ListDetail } from "@/components/layout/list-detail";
+import { LIST_RAIL } from "@/components/layout/sidebar-rail";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { GenericResourceDetail } from "@/components/resources/generic-resource-detail";
 import { type KindView, kindViewFor } from "@/components/resources/kind-views";
@@ -147,116 +148,129 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <nav className={SIDEBAR_RAIL} aria-label={title}>
-        <div className="flex items-center justify-between gap-2 border-b p-3">
-          <span className="text-sm font-semibold">{title}</span>
-          <Button size="sm" variant="outline" onClick={() => setCreating(true)} data-testid={`button-new-${kindName}`}>
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            New
-          </Button>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-0.5">
-            {sorted.length === 0 ? (
-              <p className="px-2 py-4 text-xs text-muted-foreground">No {noun}s yet.</p>
-            ) : (
-              sorted.map((row) => {
-                const isActive = row.resourceInstanceId === selectedId;
-                return (
-                  <Link key={row.canonicalId} href={`${basePath}/${encodeURIComponent(row.resourceInstanceId)}`}>
-                    <span
-                      className={cn(
-                        "flex items-center justify-between gap-2 rounded-md px-2.5 py-2 text-[15px] cursor-pointer hover:bg-accent",
-                        isActive && "bg-accent font-medium"
-                      )}
-                      aria-current={isActive ? "page" : undefined}
-                      data-testid={`resource-${row.resourceInstanceId}`}
-                    >
-                      <span className="truncate">{resourceName(row)}</span>
-                      <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                        {view.railValue(detailProps(row))}
-                      </span>
-                    </span>
-                  </Link>
-                );
-              })
-            )}
-          </div>
-        </ScrollArea>
-      </nav>
-
-      <div className="flex-1 overflow-auto">
-        <div className="p-6 lg:p-8 max-w-[900px] space-y-6">
-          {!selected ? (
-            sorted.length === 0 ? (
-              <EmptyState
-                icon={icon}
-                title={`No ${noun}s yet`}
-                description={description}
-                action={{ label: `New ${noun}`, onClick: () => setCreating(true) }}
-              />
-            ) : (
-              <EmptyState
-                icon={icon}
-                title={selectedId ? `No ${noun} called "${selectedId}"` : `Choose a ${noun}`}
-                description={selectedId ? `It may have been deleted.` : description}
-              />
-            )
-          ) : (
-            <>
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h1 className="text-2xl font-semibold tracking-tight truncate">{resourceName(selected)}</h1>
-                  <p className="text-xs font-mono text-muted-foreground break-all">{selected.canonicalId}</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive hover:text-destructive shrink-0"
-                  onClick={() => setDeleteTarget(selected)}
-                  aria-label={`Delete ${resourceName(selected)}`}
-                  data-testid={`button-delete-${kindName}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+    <>
+      <ListDetail
+        hasSelection={selectedId !== ""}
+        back={{ href: basePath, label: title }}
+        list={
+          <nav className={LIST_RAIL} aria-label={title}>
+            <div className="flex items-center justify-between gap-2 border-b p-3">
+              <span className="text-sm font-semibold">{title}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCreating(true)}
+                data-testid={`button-new-${kindName}`}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                New
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-2 space-y-0.5">
+                {sorted.length === 0 ? (
+                  <p className="px-2 py-4 text-xs text-muted-foreground">No {noun}s yet.</p>
+                ) : (
+                  sorted.map((row) => {
+                    const isActive = row.resourceInstanceId === selectedId;
+                    return (
+                      <Link key={row.canonicalId} href={`${basePath}/${encodeURIComponent(row.resourceInstanceId)}`}>
+                        <span
+                          className={cn(
+                            "flex items-center justify-between gap-2 rounded-md px-2.5 py-2 text-[15px] cursor-pointer hover:bg-accent",
+                            isActive && "bg-accent font-medium"
+                          )}
+                          aria-current={isActive ? "page" : undefined}
+                          data-testid={`resource-${row.resourceInstanceId}`}
+                        >
+                          <span className="truncate">{resourceName(row)}</span>
+                          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                            {view.railValue(detailProps(row))}
+                          </span>
+                        </span>
+                      </Link>
+                    );
+                  })
+                )}
               </div>
+            </ScrollArea>
+          </nav>
+        }
+        detail={
+          <div className="flex-1 overflow-auto">
+            <div className="p-6 lg:p-8 max-w-[900px] space-y-6">
+              {!selected ? (
+                sorted.length === 0 ? (
+                  <EmptyState
+                    icon={icon}
+                    title={`No ${noun}s yet`}
+                    description={description}
+                    action={{ label: `New ${noun}`, onClick: () => setCreating(true) }}
+                  />
+                ) : (
+                  <EmptyState
+                    icon={icon}
+                    title={selectedId ? `No ${noun} called "${selectedId}"` : `Choose a ${noun}`}
+                    description={selectedId ? `It may have been deleted.` : description}
+                  />
+                )
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h1 className="text-2xl font-semibold tracking-tight truncate">{resourceName(selected)}</h1>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive shrink-0"
+                      onClick={() => setDeleteTarget(selected)}
+                      aria-label={`Delete ${resourceName(selected)}`}
+                      data-testid={`button-delete-${kindName}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
 
-              {view.detail(detailProps(selected))}
+                  {view.detail(detailProps(selected))}
 
-              <ResourceActionEditors key={selected.canonicalId} kind={kind} instance={selected} />
+                  <ResourceActionEditors key={selected.canonicalId} kind={kind} instance={selected} />
 
-              <ResourceTriggerEditors
-                kind={kind}
-                instance={selected}
-                triggerDetail={view.triggerDetail && ((preset) => view.triggerDetail?.(preset, detailProps(selected)))}
-              />
+                  <ResourceTriggerEditors
+                    kind={kind}
+                    instance={selected}
+                    triggerDetail={
+                      view.triggerDetail && ((preset) => view.triggerDetail?.(preset, detailProps(selected)))
+                    }
+                  />
 
-              <SettingsCard
-                instance={selected}
-                moduleId={kindDefinition.moduleName}
-                schema={kindDefinition.schema}
-                settings={resourceSettings(selected)}
-                onSave={async (displayName, settings) => {
-                  try {
-                    await updateInstance({
-                      canonicalId: selected.canonicalId,
-                      displayName,
-                      settings,
-                    });
-                  } catch (err) {
-                    toast({
-                      title: "Couldn't save those settings",
-                      description: err instanceof Error ? err.message : String(err),
-                      variant: "destructive",
-                    });
-                  }
-                }}
-              />
-            </>
-          )}
-        </div>
-      </div>
+                  <SettingsCard
+                    instance={selected}
+                    moduleId={kindDefinition.moduleName}
+                    schema={kindDefinition.schema}
+                    settings={resourceSettings(selected)}
+                    onSave={async (displayName, settings) => {
+                      try {
+                        await updateInstance({
+                          canonicalId: selected.canonicalId,
+                          displayName,
+                          settings,
+                        });
+                      } catch (err) {
+                        toast({
+                          title: "Couldn't save those settings",
+                          description: err instanceof Error ? err.message : String(err),
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        }
+      />
 
       {creating && (
         <CreateResourceDialog
@@ -311,7 +325,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
 

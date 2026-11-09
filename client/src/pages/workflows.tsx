@@ -65,6 +65,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
 import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
+import { SHEET_MOTION } from "@/lib/sheet-motion";
 import { cn } from "@/lib/utils";
 import {
   UNTRIGGERED_LABEL,
@@ -225,7 +226,7 @@ function WorkflowListScreen() {
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader title="Workflows" description="Automations that run when something happens on your stream." />
-      <PageIntro introId="workflows" onTry={() => navigate(CREATE_PATH)} />
+      <PageIntro introId="workflows" />
 
       <div className="space-y-6">
         <Tabs value={enabledFilter} onValueChange={(v) => setEnabledFilter(v as EnabledFilter)}>
@@ -372,7 +373,7 @@ function WorkflowListScreen() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setDeleteTarget(workflow);
@@ -453,6 +454,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const [currentDefinition, setCurrentDefinition] = useState<WorkflowDefinition | null>(null);
   const editedRevisionRef = useRef<number | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedSteps, setHasUnsavedSteps] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -597,8 +599,11 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* On a phone the actions wrap to a second row under the name rather than
+          overlapping it. The name group's minimum width is what forces the wrap: with
+          none it would shrink to nothing and the badge would spill over the actions. */}
+      <div className="min-h-14 border-b border-border bg-background flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2 shrink-0">
+        <div className="flex flex-1 items-center gap-3 min-w-[12rem] overflow-hidden">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={() => navigate(LIST_PATH)} aria-label="Back to workflows">
@@ -633,7 +638,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
           )}
           <Badge
             variant={workflow.isEnabled ? "secondary" : "outline"}
-            className={cn(!workflow.isEnabled && "text-muted-foreground")}
+            className={cn("shrink-0", !workflow.isEnabled && "text-muted-foreground")}
           >
             {workflow.isEnabled ? "Enabled" : "Disabled"}
           </Badge>
@@ -658,10 +663,16 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
             disabled={!instanceId}
             data-testid="button-workflow-test-run"
           >
-            <Play className="h-4 w-4 mr-2" />
-            Test run
+            <Play className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only">Test run</span>
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={!currentDefinition || isSaving}>
+          <Button
+            size="sm"
+            variant={hasUnsavedSteps ? "default" : "outline"}
+            onClick={handleSave}
+            disabled={!currentDefinition || isSaving}
+            data-testid="button-workflow-save"
+          >
             <Save className="h-4 w-4 mr-2" />
             {isSaving ? "Saving…" : "Save"}
           </Button>
@@ -692,7 +703,11 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
         {instanceId ? (
-          <WorkflowFlowEditor engineWorkflowId={engineWorkflowId} onDefinitionChange={trackEdit} />
+          <WorkflowFlowEditor
+            engineWorkflowId={engineWorkflowId}
+            onDefinitionChange={trackEdit}
+            onUnsavedChange={setHasUnsavedSteps}
+          />
         ) : (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -716,7 +731,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       />
 
       <Sheet open={showJson} onOpenChange={setShowJson}>
-        <SheetContent className="w-[500px] sm:max-w-none">
+        <SheetContent className={cn("w-[500px] sm:max-w-none", SHEET_MOTION)}>
           <SheetHeader>
             <SheetTitle>Workflow JSON</SheetTitle>
           </SheetHeader>
@@ -756,7 +771,7 @@ function DeleteWorkflowDialog({ name, open, isDeleting, onOpenChange, onConfirm 
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Workflow</AlertDialogTitle>
+          <AlertDialogTitle>Delete workflow</AlertDialogTitle>
           <AlertDialogDescription>
             Are you sure you want to delete "{name}"? This action cannot be undone.
           </AlertDialogDescription>

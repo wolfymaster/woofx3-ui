@@ -98,26 +98,26 @@ function TestEventOutcome({
     case "running":
       return (
         <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="test-event-outcome-running">
-          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />A workflow picked it up and is running…
+          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />A trigger picked it up and is running its steps…
         </p>
       );
     case "succeeded":
       return (
         <p className="flex items-center gap-2 text-xs text-green-500" data-testid="test-event-outcome-succeeded">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          The workflow ran, and any alert it sent is on its way to your overlay.
+          Its steps ran. The Alerts page shows whether each alert played.
         </p>
       );
     case "nothingMatched":
       return (
         <p className="text-xs text-muted-foreground" data-testid="test-event-outcome-nothing">
-          Published, but no workflow picked it up. Check that a workflow is enabled for this event.
+          Sent, but no trigger picked it up. Check that a trigger for this event is switched on.
         </p>
       );
     case "unsettled":
       return (
         <p className="text-xs text-muted-foreground" data-testid="test-event-outcome-unsettled">
-          No result after a minute. The workflow may still be running: its run history has the details.
+          No result after a minute. Its steps may still be running.
         </p>
       );
     case "failed":

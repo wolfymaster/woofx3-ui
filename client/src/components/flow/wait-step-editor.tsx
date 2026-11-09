@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useResourceInstances } from "@/engine/hooks/use-module-resources";
+import { useResourceLabels } from "@/engine/hooks/use-module-resources";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { type OptionLabels, type SentencePart, sentenceParts } from "@/lib/condition-sentence";
 import { isInternalSource } from "@/lib/parse-config-fields";
@@ -900,10 +900,4 @@ function OutputsNote({ step, catalogTriggers }: { step: WaitNode; catalogTrigger
       Later steps can use {labels.join(", ")}. Type <code>{"{"}</code> in one of their fields.
     </p>
   );
-}
-
-/** The streamer's counters, timers and queues by canonical id, so a sentence names them. */
-function useResourceLabels(): ReadonlyMap<string, string> | undefined {
-  const rows = useResourceInstances();
-  return useMemo(() => (rows ? new Map(rows.map((row) => [row.canonicalId, row.displayName])) : undefined), [rows]);
 }

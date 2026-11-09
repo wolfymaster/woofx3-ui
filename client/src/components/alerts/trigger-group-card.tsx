@@ -5,6 +5,7 @@ import { TriggerAdvancedSettings, TriggerGroupChips } from "@/components/alerts/
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
+import { useResourceLabels } from "@/engine/hooks/use-module-resources";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -26,6 +27,7 @@ import { definitionToTree } from "@/lib/workflow-tree";
 /** The titles of a workflow's top-level steps, as a closed card lists them. */
 function useStepTitles(trigger: EventTrigger | undefined): string[] {
   const { catalogActions } = useWorkflowCatalog();
+  const resourceLabels = useResourceLabels();
   return useMemo(() => {
     const read = trigger ? definitionToTree(trigger.definition) : undefined;
     if (!read?.editable) {
@@ -33,10 +35,12 @@ function useStepTitles(trigger: EventTrigger | undefined): string[] {
     }
     return read.tree.steps.map(
       (step) =>
-        stepSummary(step, { action: step.type === "action" ? resolveCatalogAction(step, catalogActions) : undefined })
-          .title
+        stepSummary(step, {
+          action: step.type === "action" ? resolveCatalogAction(step, catalogActions) : undefined,
+          resourceLabels,
+        }).title
     );
-  }, [trigger, catalogActions]);
+  }, [trigger, catalogActions, resourceLabels]);
 }
 
 /** Switches workflows on or off, saying which couldn't be. */

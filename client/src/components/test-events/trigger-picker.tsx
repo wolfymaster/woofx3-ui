@@ -83,14 +83,7 @@ export function TriggerPicker({
                     data-testid={`option-${testId}-${preset.id}`}
                   >
                     <Check className={cn("mt-0.5 h-4 w-4 shrink-0", preset.id === selectedId ? "" : "opacity-0")} />
-                    <span className="min-w-0">
-                      <span className="block truncate">{preset.name}</span>
-                      {preset.event && (
-                        <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                          {preset.event}
-                        </span>
-                      )}
-                    </span>
+                    <span className="block min-w-0 truncate">{preset.name}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

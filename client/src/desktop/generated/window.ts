@@ -222,6 +222,12 @@ export type FinishAppLinkArgs = { instanceId: string, instanceName: string, };
  */
 export type OpenTwitchSignInArgs = { nonceHash: string, };
 
+/**
+ * A link the dashboard asks the host to open in the system browser. The
+ * host opens only web pages (`external_url`).
+ */
+export type OpenExternalUrlArgs = { url: string, };
+
 export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
 export const SHOUTOUT_QUEUE_EVENT = "companion://shoutout-queue";
@@ -248,6 +254,7 @@ export const COMMANDS = {
   begin_app_link: "begin_app_link",
   finish_app_link: "finish_app_link",
   open_twitch_sign_in: "open_twitch_sign_in",
+  open_external_url: "open_external_url",
 } as const;
 
 export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
@@ -274,6 +281,7 @@ export type CommandArgs = {
   begin_app_link: null;
   finish_app_link: FinishAppLinkArgs;
   open_twitch_sign_in: OpenTwitchSignInArgs;
+  open_external_url: OpenExternalUrlArgs;
 };
 
 /** What each command resolves to. */
@@ -298,4 +306,5 @@ export type CommandResults = {
   begin_app_link: AppLinkStart;
   finish_app_link: void;
   open_twitch_sign_in: void;
+  open_external_url: void;
 };

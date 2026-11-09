@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { parse } from "regexparam";
 import {
   installedModulePath,
+  isMarketplaceFront,
   legacyModulesRedirect,
   MARKETPLACE_AUTHOR_ROUTE,
   MARKETPLACE_BROWSE_ROUTE,
@@ -112,5 +113,20 @@ describe("legacyModulesRedirect", () => {
     ["a module's page with an encoded id", "a%20b", "", "/marketplace/installed/a%20b"],
   ])("%s", (_case, rest, search, target) => {
     expect(legacyModulesRedirect(rest, search)).toBe(target);
+  });
+});
+
+describe("isMarketplaceFront", () => {
+  test.each([
+    ["the bare storefront", MARKETPLACE_PATH, "", true],
+    ["a filter the storefront does not know", MARKETPLACE_PATH, "?type=bogus", true],
+    ["a type filter", MARKETPLACE_PATH, "?type=emote", false],
+    ["a category filter", MARKETPLACE_PATH, "?category=Media", false],
+    ["the whole catalog", MARKETPLACE_PATH, "?browse=all", false],
+    ["a listing", marketplaceListingPath("abc"), "", false],
+    ["an author", marketplaceAuthorPath("wolfy"), "", false],
+    ["the installed modules", MARKETPLACE_INSTALLED_PATH, "", false],
+  ])("%s", (_case, location, search, front) => {
+    expect(isMarketplaceFront(location, search)).toBe(front);
   });
 });
