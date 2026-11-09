@@ -1,5 +1,52 @@
 # woofx3 desktop changelog
 
+## [0.4.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.3.0...woofx3-v0.4.0) (2026-11-09)
+
+### ⚠ BREAKING CHANGES
+
+* **convex:** remove pairing a companion with a code
+
+### Code Refactoring
+
+* **convex:** remove pairing a companion with a code ([fa555f4](https://github.com/wolfymaster/woofx3-ui/commit/fa555f48dd83a215efc1d0e9838cf9069e0355b9))
+
+## [0.3.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.2.2...woofx3-v0.3.0) (2026-11-07)
+
+### Features
+
+* **layout:** open the section from a header menu on phones ([d459ced](https://github.com/wolfymaster/woofx3-ui/commit/d459ced2da5a7b0506260255a494ca2fae4933c7))
+* **layout:** show list or detail, not both, on phones ([7271957](https://github.com/wolfymaster/woofx3-ui/commit/7271957c23f169f4222cfad87ee0688ac3221333))
+
+### Bug Fixes
+
+* **admin:** list YouTube and Discord as coming soon, not connectable ([64f75c5](https://github.com/wolfymaster/woofx3-ui/commit/64f75c59ef2cd45a3860e8c2d40b6af23b698148))
+* **admin:** sentence-case section titles and describe engine sync plainly ([52135a5](https://github.com/wolfymaster/woofx3-ui/commit/52135a5209565f850d3c42603e0a11b1e2b03061))
+* **alerts:** quiet the platform headers and stop the test form scrolling ([fb4c7ba](https://github.com/wolfymaster/woofx3-ui/commit/fb4c7baf6e5294a54a912bf7689a5e246685802b))
+* **dashboard:** line panels up with the bar above and shorten the macro hint ([b29b289](https://github.com/wolfymaster/woofx3-ui/commit/b29b289125956b80bcda2a64deecb2e0bbd19af7))
+* **feedback:** sort with the same segmented switch as other lists ([45f282f](https://github.com/wolfymaster/woofx3-ui/commit/45f282ff0a47f4bd0340e37aa070984eb492079e))
+* **layout:** fit the dashboard and list pages on a phone ([b2dc463](https://github.com/wolfymaster/woofx3-ui/commit/b2dc463071c8b86ee1a3f848d5d01ae5dadc64ad))
+* **layout:** name Ctrl, not Command, in the quick actions hint off Apple ([52cfb28](https://github.com/wolfymaster/woofx3-ui/commit/52cfb28a9d69e100c73b3edf4a8a1f65ca26e08e))
+* **layout:** time the phone section menu like the app's other sheets ([1c9de4c](https://github.com/wolfymaster/woofx3-ui/commit/1c9de4c82e805daed339b3af896d2220e925edc0))
+* **marketplace:** keep hero copy off the art and banners uncropped ([5cbd11f](https://github.com/wolfymaster/woofx3-ui/commit/5cbd11fcac52f929eef7ba9e984e99af155976b9))
+* **marketplace:** shape banner art to the rendition it shows ([d7f8fb0](https://github.com/wolfymaster/woofx3-ui/commit/d7f8fb019ac1bf5a2bfa792178ce36e2e7374717))
+* **marketplace:** show featured and category banners uncropped at 16:9 ([967eb15](https://github.com/wolfymaster/woofx3-ui/commit/967eb151e793bf566197de8f30f035842752b4fd))
+* **nav:** keep the entries nested under Alerts visible on every page ([f36fb4d](https://github.com/wolfymaster/woofx3-ui/commit/f36fb4d3bb6886044f7b61d0fd283734680562f8))
+* **scenes:** give counter, timer, queue and database widgets their icons ([3045f58](https://github.com/wolfymaster/woofx3-ui/commit/3045f581086166b0561f5b852721833a09c086a8))
+* **scenes:** keep the widget placeholder's label readable at any zoom ([8270dae](https://github.com/wolfymaster/woofx3-ui/commit/8270dae3677703ffa889fca64fbda49d950dfca4))
+* **scenes:** label autosave as a draft and Publish as going live ([20dc994](https://github.com/wolfymaster/woofx3-ui/commit/20dc9949fef22f556fc6996c2e699878e07d868a))
+* **setup:** write the connect page's heading in sentence case ([b1439fb](https://github.com/wolfymaster/woofx3-ui/commit/b1439fb143ca87f2df905451f440ec19b64cd930))
+* **starter-packs:** quiet the per-card buttons and stop repeating the block reason ([bfaf2b0](https://github.com/wolfymaster/woofx3-ui/commit/bfaf2b06803897e8ad399671d105d5f803cd7d5a))
+* **ui:** drop the page intro's button that repeats the page's own action ([aacbc76](https://github.com/wolfymaster/woofx3-ui/commit/aacbc768fb35dbdc305685aeaa2a088fe2de028d))
+* **ui:** empty states say what is missing and stop repeating the page button ([cd48cde](https://github.com/wolfymaster/woofx3-ui/commit/cd48cde9b8692a604625cc4f5a1233a4f90a9c62))
+* **ui:** grey out row delete icons until hovered ([0521d21](https://github.com/wolfymaster/woofx3-ui/commit/0521d21542caa44d80d8a6824df90003ea3e726a))
+* **ui:** honour reduced motion across the app ([d498b56](https://github.com/wolfymaster/woofx3-ui/commit/d498b56795c39f1a4cfb1811e34d9c1bf08f9126))
+* **ui:** make section card titles smaller than the page title ([8898dcd](https://github.com/wolfymaster/woofx3-ui/commit/8898dcdcfb1fa1a2fd7c9f1511f2adf8168455fd))
+* **ui:** open side sheets in 300ms instead of 500ms ([fc063d5](https://github.com/wolfymaster/woofx3-ui/commit/fc063d5d29e6d090df38df1696e522d8f7e18fe8))
+* **ui:** write the remaining Title Case dialog titles in sentence case ([ed4b079](https://github.com/wolfymaster/woofx3-ui/commit/ed4b0799cecadf432d5eda6aef64e2bb48d5be8b))
+* **workflows:** keep the editor header readable on a phone ([f068eff](https://github.com/wolfymaster/woofx3-ui/commit/f068eff0356febc38da6f9428f568214cc1f5966))
+* **workflows:** quiet the header Save when nothing is unsaved ([c146c96](https://github.com/wolfymaster/woofx3-ui/commit/c146c96945b1b3a4806aef42071fe04b4276913e))
+* **workflows:** wrap the editor header's actions on a phone ([c036d50](https://github.com/wolfymaster/woofx3-ui/commit/c036d50fa233217bcf3675057cba4f0954a15927))
+
 ## [0.2.2](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.2.1...woofx3-v0.2.2) (2026-11-07)
 
 ### Bug Fixes

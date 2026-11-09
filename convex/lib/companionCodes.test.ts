@@ -1,59 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   companionsReplacedBy,
-  formatUserCode,
-  generateUserCode,
   hashCompanionToken,
   isCompanionToken,
   isInstallationId,
   isSha256Hex,
   isValidCompanionVersion,
   MAX_COMPANION_VERSION_LENGTH,
-  normalizeUserCode,
-  USER_CODE_ALPHABET,
-  USER_CODE_LENGTH,
 } from "./companionCodes";
-
-function sequenceFiller(values: number[]) {
-  let index = 0;
-  return (bytes: Uint8Array) => {
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = values[index % values.length];
-      index += 1;
-    }
-  };
-}
-
-describe("generateUserCode", () => {
-  test("draws every character from the alphabet", () => {
-    const code = generateUserCode((bytes) => crypto.getRandomValues(bytes));
-    expect(code).toHaveLength(USER_CODE_LENGTH);
-    for (const ch of code) {
-      expect(USER_CODE_ALPHABET).toContain(ch);
-    }
-  });
-
-  test("rejects bytes that would bias the distribution", () => {
-    // Bytes at or above 243 (9 × 27) are redrawn, so 243 and 255 are skipped.
-    const code = generateUserCode(sequenceFiller([243, 255, 0, 1, 2, 3, 4, 5, 6, 7]));
-    expect(code).toBe("BCDFGHJK");
-  });
-});
-
-describe("normalizeUserCode", () => {
-  test("accepts the displayed form, lower case and stray spaces", () => {
-    expect(normalizeUserCode(" bcdf-ghjk ")).toBe("BCDFGHJK");
-  });
-
-  test("refuses wrong lengths and characters outside the alphabet", () => {
-    expect(normalizeUserCode("BCDF-GHJ")).toBeNull();
-    expect(normalizeUserCode("BCDF-GHJO")).toBeNull();
-  });
-});
-
-test("formatUserCode splits into two groups of four", () => {
-  expect(formatUserCode("BCDFGHJK")).toBe("BCDF-GHJK");
-});
 
 describe("companion tokens", () => {
   const token = `wfxc_${"A".repeat(43)}`;
