@@ -76,6 +76,7 @@ const EXPECTED: Record<SubscriptionState | "none", Partial<Record<LifecycleEvent
   active: {
     PaymentSucceeded: "active",
     EvaluationDue: "active",
+    RetryDue: "active",
     PaymentFailed: "past_due",
     ProviderEnded: "suspended",
     ExemptionGranted: "exempt",
@@ -94,6 +95,7 @@ const EXPECTED: Record<SubscriptionState | "none", Partial<Record<LifecycleEvent
     ProviderActivated: "active",
     PaymentSucceeded: "active",
     SpinDownDue: "suspended",
+    RetryDue: "suspended",
     ExemptionGranted: "exempt",
   },
   exempt: { ExemptionExpired: "past_due", ExemptionRevoked: "past_due", ExemptionGranted: "exempt" },
@@ -234,12 +236,22 @@ describe("warnings", () => {
 });
 
 describe("spin-down and reactivation", () => {
-  test("SpinDownDue stops managed engines once", () => {
+  test("SpinDownDue stops managed engines, with a recheck that issues the stop again", () => {
     const suspended = inState("suspended");
-    const { next, effects } = apply(suspended, EVENTS.SpinDownDue, suspended?.spinDownAt ?? 0);
+    const at = suspended?.spinDownAt ?? 0;
+    const recheckAt = at + BILLING_LIFECYCLE.effectRecheckHours * HOUR;
+    const { next, effects } = apply(suspended, EVENTS.SpinDownDue, at);
     expect(effects).toContainEqual({ kind: "stopEngines" });
-    expect(next).toMatchObject({ state: "suspended", spinDownAt: undefined, nextCheckAt: undefined });
-    expect(dueEvent(next, Number.MAX_SAFE_INTEGER)).toBeNull();
+    expect(next).toMatchObject({ state: "suspended", spinDownAt: undefined, nextCheckAt: recheckAt });
+    expect(dueEvent(next, recheckAt)).toEqual({ kind: "RetryDue" });
+    const again = apply(next, EVENTS.RetryDue, recheckAt);
+    expect(again.effects).toEqual([{ kind: "stopEngines" }]);
+    expect(again.next).toMatchObject({
+      state: "suspended",
+      stateSince: next.stateSince,
+      stateReason: next.stateReason,
+      nextCheckAt: recheckAt + BILLING_LIFECYCLE.effectRecheckHours * HOUR,
+    });
   });
 
   test("reactivating before spin-down resumes nothing", () => {
@@ -275,12 +287,16 @@ describe("active", () => {
     expect(next).toMatchObject({ plan: "pro", nextBillingAt: T0 + 90 * DAY });
   });
 
-  test("a period end passed without a renewal asks the provider once, and stays active meanwhile", () => {
+  test("a period end passed without a renewal asks the provider, and stays active with a recheck", () => {
     const at = T0 + 100 * DAY;
+    const recheckAt = at + BILLING_LIFECYCLE.effectRecheckHours * HOUR;
     const stale: ProviderView = { standing: "good", endedReason: null, currentPeriodEnd: at - DAY };
     const { next, effects } = apply(inState("active"), EVENTS.EvaluationDue, at, stale);
-    expect(next).toMatchObject({ state: "active", nextBillingAt: undefined, nextCheckAt: undefined });
+    expect(next).toMatchObject({ state: "active", nextBillingAt: undefined, nextCheckAt: recheckAt });
     expect(effects).toEqual([{ kind: "confirmRenewal" }]);
+    const again = apply(next, EVENTS.RetryDue, recheckAt, stale);
+    expect(again.effects).toEqual([{ kind: "confirmRenewal" }]);
+    expect(again.next).toMatchObject({ state: "active", nextBillingAt: undefined });
   });
 });
 

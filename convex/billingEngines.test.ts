@@ -187,6 +187,24 @@ describe("stopping engines", () => {
     expect((await effectRetries(t)).map((job) => (job.args[0] as { attempt: number }).attempt)).toEqual([1]);
   });
 
+  test("a stop that a recheck issued again stands down for the newer one", async () => {
+    const t = newBackend();
+    const s = await seed(t, "suspended", "registered");
+    await t.run((ctx) =>
+      ctx.db.insert("subscriptionTransitions", {
+        accountId: s.accountId,
+        from: "suspended",
+        to: "suspended",
+        event: "RetryDue",
+        actor: "evaluator",
+        at: T0 + 1,
+      })
+    );
+    const { result, calls } = await withMaintenance(ACCEPTED, () => run(t, s, "stopEngines"));
+    expect(result).toEqual({ acted: 0, pending: 0 });
+    expect(calls).toEqual([]);
+  });
+
   test("a stop that no longer fits the subscription does nothing", async () => {
     const t = newBackend();
     const s = await seed(t, "active", "registered");

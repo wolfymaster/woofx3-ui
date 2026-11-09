@@ -9,6 +9,7 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  type QueryCtx,
   query,
 } from "./_generated/server";
 import { dueEvent, isWarningCurrent, WARNING_TEMPLATES, type WarningTemplate } from "./lib/billingLifecycle";
@@ -291,18 +292,39 @@ interface ManagedEngine {
 }
 
 /**
+ * Whether `transitionId` is the org's newest transition. An effect the
+ * lifecycle issues again on a recheck is superseded by the newer issue, so
+ * one org never runs two copies of it.
+ */
+async function isLatestTransition(
+  ctx: QueryCtx,
+  accountId: Id<"accounts">,
+  transitionId: Id<"subscriptionTransitions">
+): Promise<boolean> {
+  const latest = await ctx.db
+    .query("subscriptionTransitions")
+    .withIndex("by_account_at", (q) => q.eq("accountId", accountId))
+    .order("desc")
+    .first();
+  return latest?._id === transitionId;
+}
+
+/**
  * The org's managed engines an effect would act on, or null when the effect
  * no longer fits the subscription (a payment arrived before the stop ran, or
- * the org was suspended again before the start). Self-hosted engines have no
- * provisioning row and are never billed, locked or stopped.
+ * the org was suspended again before the start), or a recheck has issued the
+ * stop again. Self-hosted engines have no provisioning row and are never
+ * billed, locked or stopped.
  */
 export const engineEffectTargets = internalQuery({
-  args: { accountId: v.id("accounts"), effect: engineEffectValidator },
-  handler: async (ctx, { accountId, effect }): Promise<ManagedEngine[] | null> => {
+  args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions"), effect: engineEffectValidator },
+  handler: async (ctx, { accountId, transitionId, effect }): Promise<ManagedEngine[] | null> => {
     const subscription = await subscriptionFor(ctx, accountId);
     const wanted =
       effect === "stopEngines"
-        ? subscription?.state === "suspended" && subscription.spinDownAt === undefined
+        ? subscription?.state === "suspended" &&
+          subscription.spinDownAt === undefined &&
+          (await isLatestTransition(ctx, accountId, transitionId))
         : subscription !== null && subscription.state !== "suspended";
     if (!wanted) {
       return null;
@@ -387,6 +409,7 @@ async function switchOrgEngines(
 ): Promise<{ acted: number; pending: number }> {
   const targets = await ctx.runQuery(internal.billing.engineEffectTargets, {
     accountId: args.accountId,
+    transitionId: args.transitionId,
     effect: args.effect,
   });
   if (targets === null) {
@@ -513,14 +536,18 @@ export function renewalRetryDelay(attempt: number, jitter: number): number {
 
 /**
  * The provider subscription an active org is waiting on a renewal check for,
- * or null when there is nothing to check: the org left active, or a renewal
- * set its next billing date again.
+ * or null when there is nothing to check: the org left active, a renewal set
+ * its next billing date again, or a recheck issued the check again.
  */
 export const renewalCheckTarget = internalQuery({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, { accountId }): Promise<string | null> => {
+  args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions") },
+  handler: async (ctx, { accountId, transitionId }): Promise<string | null> => {
     const row = await subscriptionFor(ctx, accountId);
-    if (row?.state !== "active" || row.nextBillingAt !== undefined) {
+    if (
+      row?.state !== "active" ||
+      row.nextBillingAt !== undefined ||
+      !(await isLatestTransition(ctx, accountId, transitionId))
+    ) {
       return null;
     }
     if (row.providerSubscriptionId === undefined) {
@@ -543,8 +570,12 @@ export interface RenewalCheckDeps {
  * lifecycle's path for that. "retry" when the provider couldn't say yet
  * (unreachable, or the renewal not yet charged), leaving the org as it is.
  */
-export async function checkRenewal(deps: RenewalCheckDeps, accountId: Id<"accounts">): Promise<"settled" | "retry"> {
-  const subscriptionRef = await deps.runQuery(internal.billing.renewalCheckTarget, { accountId });
+export async function checkRenewal(
+  deps: RenewalCheckDeps,
+  accountId: Id<"accounts">,
+  transitionId: Id<"subscriptionTransitions">
+): Promise<"settled" | "retry"> {
+  const subscriptionRef = await deps.runQuery(internal.billing.renewalCheckTarget, { accountId, transitionId });
   if (subscriptionRef === null) {
     return "settled";
   }
@@ -559,12 +590,14 @@ export async function checkRenewal(deps: RenewalCheckDeps, accountId: Id<"accoun
     return "retry";
   }
   await deps.runMutation(internal.billing.applyProviderSubscription, { subscription });
-  return (await deps.runQuery(internal.billing.renewalCheckTarget, { accountId })) === null ? "settled" : "retry";
+  return (await deps.runQuery(internal.billing.renewalCheckTarget, { accountId, transitionId })) === null
+    ? "settled"
+    : "retry";
 }
 
 export const confirmRenewal = internalAction({
-  args: { accountId: v.id("accounts"), attempt: v.number() },
-  handler: async (ctx, { accountId, attempt }): Promise<void> => {
+  args: { accountId: v.id("accounts"), transitionId: v.id("subscriptionTransitions"), attempt: v.number() },
+  handler: async (ctx, { accountId, transitionId, attempt }): Promise<void> => {
     let outcome: "settled" | "retry";
     try {
       outcome = await checkRenewal(
@@ -574,7 +607,8 @@ export const confirmRenewal = internalAction({
           runMutation: ctx.runMutation,
           now: Date.now,
         },
-        accountId
+        accountId,
+        transitionId
       );
     } catch (error) {
       // Never deactivate on our own failure: the org stays active and the check runs again.
@@ -587,6 +621,7 @@ export const confirmRenewal = internalAction({
     if (outcome === "retry") {
       await ctx.scheduler.runAfter(renewalRetryDelay(attempt, Math.random()), internal.billing.confirmRenewal, {
         accountId,
+        transitionId,
         attempt: attempt + 1,
       });
     }

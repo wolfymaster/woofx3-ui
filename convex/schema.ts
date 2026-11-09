@@ -1583,7 +1583,8 @@ export default defineSchema({
     nextBillingAt: v.optional(v.number()),
     // past_due: when it is suspended.
     graceEndsAt: v.optional(v.number()),
-    // past_due: the next re-evaluation.
+    // past_due: the next re-evaluation. active with a renewal check out, or
+    // suspended once engines stop: when that effect is issued again.
     nextRetryAt: v.optional(v.number()),
     // exempt: absent means indefinitely.
     exemptUntil: v.optional(v.number()),

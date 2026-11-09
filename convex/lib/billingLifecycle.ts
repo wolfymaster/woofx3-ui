@@ -28,6 +28,9 @@ export const BILLING_LIFECYCLE = {
   },
   // suspended: managed engines stop this long after suspension.
   spinDownGraceDays: 7,
+  // An org waiting on an effect (a renewal check, its engines stopping) is
+  // re-evaluated this often, so an effect whose action was lost is issued again.
+  effectRecheckHours: 6,
   evaluatorIntervalMinutes: 15,
 } as const;
 
@@ -372,24 +375,35 @@ const retry: Handler = (current, _event, ctx) => {
   };
 };
 
+/** The timer that re-issues an effect if its action is lost; RetryDue in the effect's state issues it again. */
+function effectRecheck(ctx: TransitionContext): Timers {
+  return { ...NO_TIMERS, nextRetryAt: ctx.now + BILLING_LIFECYCLE.effectRecheckHours * HOUR_MS };
+}
+
 /**
  * An active period end passed with no renewal webhook. Renewals arrive by
- * webhook, so this asks the provider once before anything is deactivated:
- * the org stays active with no billing timer while the check is out, and the
- * check applies whatever the provider says (billing.confirmRenewal).
+ * webhook, so this asks the provider before anything is deactivated: the org
+ * stays active with no billing timer while the check is out, and the check
+ * applies whatever the provider says (billing.confirmRenewal). The recheck
+ * asks again until an answer moves the org on.
  */
-const confirmRenewal: Handler = () => ({
+const confirmRenewal: Handler = (_current, _event, ctx) => ({
   state: "active",
-  timers: NO_TIMERS,
+  timers: effectRecheck(ctx),
   effects: [{ kind: "confirmRenewal" }],
 });
 
-const spinDown: Handler = (current, _event, ctx) => ({
+/** Stops the managed engines, and keeps asking for that while the org stays suspended. */
+const stopEngines: Handler = (current, _event, ctx) => ({
   state: "suspended",
   reason: current?.stateReason,
-  timers: NO_TIMERS,
-  warnings: [{ template: "billing-engines-stopped", at: ctx.now }],
+  timers: effectRecheck(ctx),
   effects: [{ kind: "stopEngines" }],
+});
+
+const spinDown: Handler = (current, event, ctx) => ({
+  ...stopEngines(current, event, ctx),
+  warnings: [{ template: "billing-engines-stopped", at: ctx.now }],
 });
 
 const grantExemption: Handler = (current, event, ctx) => {
@@ -425,6 +439,7 @@ export const TRANSITIONS: Record<SubscriptionState | "none", Partial<Record<Life
   active: {
     PaymentSucceeded: activate,
     EvaluationDue: confirmRenewal,
+    RetryDue: confirmRenewal,
     PaymentFailed: paymentFailed,
     ProviderEnded: providerEnded,
     ExemptionGranted: grantExemption,
@@ -443,6 +458,7 @@ export const TRANSITIONS: Record<SubscriptionState | "none", Partial<Record<Life
     ProviderActivated: reactivateActive,
     PaymentSucceeded: reactivateActive,
     SpinDownDue: spinDown,
+    RetryDue: stopEngines,
     ExemptionGranted: grantExemption,
   },
   exempt: {
