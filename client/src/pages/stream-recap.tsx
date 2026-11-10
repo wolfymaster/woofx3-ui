@@ -178,7 +178,7 @@ function engineProblem(state: StreamRecapEngineState): EngineProblem | null {
       return null;
     case "unregistered":
       return {
-        message: "This instance isn't registered with an engine, so viewer history and supporters aren't available.",
+        message: "This engine isn't registered yet, so viewer history and supporters aren't available.",
         retryable: false,
       };
     case "unknown_session":
@@ -488,7 +488,7 @@ export default function StreamRecapPage() {
   if (!isInstanceLoading && !instanceId) {
     return (
       <div className="container mx-auto p-6">
-        <p className="py-16 text-center text-sm text-muted-foreground">No instance connected.</p>
+        <p className="py-16 text-center text-sm text-muted-foreground">No engine connected.</p>
       </div>
     );
   }

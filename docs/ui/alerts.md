@@ -1,6 +1,6 @@
 # Alert triggers
 
-Choosing a kind of event on the Alerts rail (`/stream/alerts/<platform>/<kind>…`) replaces the dashboard with that event's **triggers**: what happens when it fires, and when. The same list appears on resource pages (Counters, Timers, Queues), filtered to one instance. See [Shell & routing](./overview.md) for the rail, the dashboard and the test sheet.
+Choosing a kind of event on the Alerts rail (`/stream/alerts/<platform>/<kind>…`) replaces the dashboard with that event's **triggers**: what happens when it fires, and when. The same list appears on resource pages (Counters, Timers, Queues), filtered to one engine. See [Shell & routing](./overview.md) for the rail, the dashboard and the test sheet.
 
 ## Triggers and workflows
 
@@ -20,7 +20,7 @@ Under the steps, **Also runs** lists the module workflows on the trigger, each w
 
 ## Resource pages
 
-`components/resources/resource-trigger-editors.tsx` shows a kind's events (Timer ended, Counter changed…) with a `pin`: only the triggers whose condition holds the instance's field to this instance, a new trigger starts pinned, and the pinned value reads as text in the sentence rather than a picker. `components/resources/resource-action-editors.tsx` lists, across every event, the triggers with a step (inside conditions too) that runs one of the kind's actions on this instance (`stepsAimAt`, `lib/resource-actions.ts` `eventsChangingResource`). Its **Add trigger** asks for the event and the action together, and opens a new trigger on that event's list starting with the step, aimed at the instance and with no other settings, so Increment counter keeps honouring the counter's own "Counts by".
+`components/resources/resource-trigger-editors.tsx` shows a kind's events (Timer ended, Counter changed…) with a `pin`: only the triggers whose condition holds the engine's field to this engine, a new trigger starts pinned, and the pinned value reads as text in the sentence rather than a picker. `components/resources/resource-action-editors.tsx` lists, across every event, the triggers with a step (inside conditions too) that runs one of the kind's actions on this engine (`stepsAimAt`, `lib/resource-actions.ts` `eventsChangingResource`). Its **Add trigger** asks for the event and the action together, and opens a new trigger on that event's list starting with the step, aimed at the engine and with no other settings, so Increment counter keeps honouring the counter's own "Counts by".
 
 ## Workflows sharing a trigger
 

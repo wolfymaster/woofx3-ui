@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
@@ -10,7 +10,8 @@ import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
-import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { requireOrgAction } from "./lib/orgRoles";
+import { grantNewEngineMembers } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
 import { markFirstRun } from "./provisioningInternal";
 
@@ -102,14 +103,7 @@ export const create = mutation({
     url: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    // Verify user owns this account
-    const account = await ctx.db.get(args.accountId);
-    if (!account || account.ownerId !== userId) {
-      throw new Error("Not authorized");
-    }
+    await requireOrgAction(ctx, args.accountId, "createEngine");
 
     // An account has one engine, and a registration that failed leaves an
     // instance behind with no credentials. Retrying onboarding with a
@@ -136,7 +130,7 @@ export const create = mutation({
     const firstEngine = !existing.some((instance) => instance.clientId);
     if (unregistered) {
       await ctx.db.patch(unregistered._id, { name: args.name, url: args.url, hosting: "external" });
-      await ensureInstanceMember(ctx, unregistered._id, userId, "owner");
+      await grantNewEngineMembers(ctx, unregistered._id);
       if (firstEngine) {
         await markFirstRun(ctx, unregistered._id);
       }
@@ -149,24 +143,7 @@ export const create = mutation({
       createdAt: Date.now(),
     });
 
-    // Add creator as owner member
-    await ctx.db.insert("instanceMembers", {
-      instanceId,
-      userId,
-      role: "owner",
-    });
-
-    const teammates = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
-      .collect();
-
-    for (const m of teammates) {
-      if (m.userId === userId) {
-        continue;
-      }
-      await ensureInstanceMember(ctx, instanceId, m.userId, mapAccountRoleToInstanceRole(m.role));
-    }
+    await grantNewEngineMembers(ctx, instanceId);
     if (firstEngine) {
       await markFirstRun(ctx, instanceId);
     }
@@ -174,6 +151,9 @@ export const create = mutation({
     return instanceId;
   },
 });
+
+/** Matches the display name cap (users.ts DISPLAY_NAME_MAX_LENGTH). */
+export const ENGINE_NAME_MAX_LENGTH = 100;
 
 export const update = mutation({
   args: {
@@ -195,6 +175,15 @@ export const update = mutation({
     }
 
     const { instanceId, ...updates } = args;
+    if (updates.name !== undefined) {
+      updates.name = updates.name.trim();
+      if (!updates.name || updates.name.length > ENGINE_NAME_MAX_LENGTH) {
+        throw new ConvexError({
+          code: "invalid_name",
+          message: `An engine name is 1 to ${ENGINE_NAME_MAX_LENGTH} characters`,
+        });
+      }
+    }
     await ctx.db.patch(instanceId, updates);
   },
 });

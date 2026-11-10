@@ -6,6 +6,10 @@ import { useLocation } from "wouter";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { acceptRefusalMessage } from "@/lib/accept-invite-outcome";
+import { convexRequestId } from "@/lib/action-error";
+import { withNext } from "@/lib/auth-next-path";
+import { useLogger } from "@/lib/logger-context";
 import { $currentInstanceId } from "@/lib/stores";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
@@ -31,6 +35,7 @@ export default function AcceptInvite() {
   const [, navigate] = useLocation();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const accept = useMutation(api.invitations.accept);
+  const logger = useLogger();
   const token = getTokenFromLocation();
   const preview = useQuery(api.invitations.previewByToken, token ? { token } : "skip");
   const twitchTarget = preview?.target.kind === "twitch" ? preview.target : null;
@@ -48,20 +53,34 @@ export default function AcceptInvite() {
     setStatus("working");
     setMessage(null);
     try {
-      const { instanceId } = await accept({ token });
+      const outcome = await accept({ token });
+      const refusal = acceptRefusalMessage(outcome);
+      if (refusal !== null) {
+        setStatus("error");
+        setMessage(refusal);
+        return;
+      }
       // Open the account they were invited to, not whichever instance they had
       // selected before (their own, if they have one).
-      if (instanceId) {
-        $currentInstanceId.set(instanceId);
+      if (outcome.status === "already_member") {
+        $currentInstanceId.set(outcome.instanceId);
+        navigate("/");
+        return;
+      }
+      if (outcome.status === "accepted") {
+        $currentInstanceId.set(outcome.instanceId);
       }
       setStatus("done");
       setMessage("You have joined the team. Redirecting…");
       setTimeout(() => navigate("/"), 1500);
-    } catch (e: unknown) {
+    } catch (error) {
+      logger.error("Accepting an invitation failed", { error, requestId: convexRequestId(error) });
       setStatus("error");
-      setMessage(e instanceof Error ? e.message : "Could not accept invitation.");
+      // The server answers expected outcomes as values; a throw here is unexpected
+      // and its message is hidden in production, so say something usable.
+      setMessage("Something went wrong accepting this invitation. Try the link again, or ask for a new one.");
     }
-  }, [accept, navigate, token]);
+  }, [accept, logger, navigate, token]);
 
   useEffect(() => {
     if (authLoading) {
@@ -76,10 +95,7 @@ export default function AcceptInvite() {
       if (preview?.target.kind === "twitch") {
         return;
       }
-      const next = token
-        ? `/auth/login?next=${encodeURIComponent(`/auth/accept-invite?token=${token}`)}`
-        : "/auth/login";
-      navigate(next);
+      navigate(withNext("/auth/login", token ? `/auth/accept-invite?token=${encodeURIComponent(token)}` : null));
       return;
     }
     if (ranAccept.current) {
@@ -99,7 +115,7 @@ export default function AcceptInvite() {
             </div>
             <div>
               <CardTitle>Accept invitation</CardTitle>
-              <CardDescription>Join a shared woofx3 workspace.</CardDescription>
+              <CardDescription>Join an engine's team on woofx3.</CardDescription>
             </div>
           </div>
         </CardHeader>

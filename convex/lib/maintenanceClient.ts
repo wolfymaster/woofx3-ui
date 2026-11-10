@@ -8,7 +8,6 @@
  * the fields the UI actually reads are declared, since a response gaining a
  * field must not break this client.
  */
-import { OUTBOUND_FETCH_TIMEOUT_MS } from "./outboundTimeouts";
 
 /** A non-2xx answer, carrying the API's stable error code so callers can branch on it. */
 export class MaintenanceApiError extends Error {
@@ -22,7 +21,14 @@ export class MaintenanceApiError extends Error {
   }
 }
 
-export type MaintenanceEngineStatus = "provisioning" | "ready" | "upgrading" | "failed" | "deprovisioning" | "deleted";
+export type MaintenanceEngineStatus =
+  | "provisioning"
+  | "ready"
+  | "upgrading"
+  | "failed"
+  | "deprovisioning"
+  | "deleted"
+  | "stopped";
 export type MaintenanceStepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 export type MaintenanceRunStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -50,7 +56,7 @@ export interface MaintenanceRunStep {
 
 export interface MaintenanceRun {
   id: string;
-  kind: "provision" | "deprovision" | "redeploy";
+  kind: "provision" | "deprovision" | "redeploy" | "stop" | "start";
   status: MaintenanceRunStatus;
   currentStep: string;
   error: { code: string; message: string; step: string } | null;
@@ -88,6 +94,11 @@ export interface SlugAvailability {
 /** The owner type this deployment registers engines under; the API key is scoped to it. */
 export const MAINTENANCE_OWNER_TYPE = "woofx3-ui";
 
+export const MAINTENANCE_CLIENT = {
+  // Every call answers at once (runs report back by callback), so a slow answer is an outage, not work.
+  requestTimeoutMs: 30_000,
+} as const;
+
 interface MaintenanceConfig {
   baseUrl: string;
   apiKey: string;
@@ -118,10 +129,10 @@ async function request<T>(path: string, init: { method: string; body?: unknown; 
   }
 
   const response = await fetch(`${config.baseUrl}${path}`, {
-    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     method: init.method,
     headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: AbortSignal.timeout(MAINTENANCE_CLIENT.requestTimeoutMs),
   });
 
   const text = await response.text();

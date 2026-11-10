@@ -9,6 +9,9 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
+import { opsRequestKindValidator } from "./lib/ops/idempotency";
+import { engineRoleValidator, orgRoleValidator } from "./lib/organization";
+import { orgBillingFields } from "./lib/orgBilling";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -113,7 +116,15 @@ export default defineSchema({
   // Ops search by name; the email index comes with authTables.
   users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
-  // accounts: tenant/organization level
+  // Personal preferences. A table rather than extra `users` fields so authTables stays stock.
+  userSettings: defineTable({
+    userId: v.id("users"),
+    defaultInstanceId: v.optional(v.id("instances")),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // accounts: the organization. It owns the engines and, later, the
+  // subscription. Its id never changes: it is the marketplace buyer identity.
   accounts: defineTable({
     name: v.string(),
     ownerId: v.id("users"),
@@ -122,11 +133,12 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .searchIndex("search_name", { searchField: "name" }),
 
-  // accountMembers: users with access to an account (team). Owner also has accounts.ownerId.
+  // accountMembers: the organization's members and their org role. The owner
+  // (accounts.ownerId) has exactly one row, with role "owner" (invariant I1).
   accountMembers: defineTable({
     accountId: v.id("accounts"),
     userId: v.id("users"),
-    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    role: orgRoleValidator,
     createdAt: v.number(),
   })
     .index("by_account", ["accountId"])
@@ -146,7 +158,14 @@ export default defineSchema({
     platformLogin: v.optional(v.string()),
     platformDisplayName: v.optional(v.string()),
     platformProfileImageUrl: v.optional(v.string()),
+    // The org role the invitee gets on accept when not already in the org.
+    // New invitations always say "member"; access comes from the engine grant.
     role: v.union(v.literal("admin"), v.literal("member")),
+    // The one engine the invitation grants, at engineRole. Absent only on
+    // invitations from before engine-scoped invites, until
+    // migrations/invitations backfills them.
+    instanceId: v.optional(v.id("instances")),
+    engineRole: v.optional(v.union(v.literal("admin"), v.literal("member"))),
     token: v.string(),
     invitedByUserId: v.id("users"),
     status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("revoked"), v.literal("expired")),
@@ -156,7 +175,8 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_account", ["accountId"])
     .index("by_account_email", ["accountId", "email"])
-    .index("by_account_platform_user", ["accountId", "platform", "platformUserId"]),
+    .index("by_account_platform_user", ["accountId", "platform", "platformUserId"])
+    .index("by_instance", ["instanceId", "status"]),
 
   // instances: a single woofx3 deployment
   instances: defineTable({
@@ -178,6 +198,7 @@ export default defineSchema({
     // only ones engineProvisioning rows and deprovisioning apply to.
     hosting: v.optional(v.union(v.literal("managed"), v.literal("external"))),
     createdAt: v.number(),
+    // Never read: production rows written by old code still carry it, and the schema must accept them.
     lastViewedAt: v.optional(v.number()),
     lastEngineActivityAt: v.optional(v.number()),
     storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
@@ -294,7 +315,12 @@ export default defineSchema({
       v.literal("upgrading"),
       v.literal("failed"),
       v.literal("deprovisioning"),
-      v.literal("deleted")
+      v.literal("deleted"),
+      // A suspended org's managed engine being stopped, stopped (its data
+      // kept), and being started again after reactivation.
+      v.literal("stopping"),
+      v.literal("stopped"),
+      v.literal("starting")
     ),
     // Mirrors the maintenance API's run steps, in run order. Bounded by the
     // number of steps in a run (nine today), so it stays a field rather than
@@ -377,11 +403,14 @@ export default defineSchema({
     .index("by_event", ["eventId"])
     .index("by_received_at", ["receivedAt"]),
 
-  // instanceMembers: users who have access to an instance
+  // instanceMembers: a user's role on one engine. It is independent of their
+  // org role except where lib/teamAccess.ts grantEngineRole's invariants tie them.
   instanceMembers: defineTable({
     instanceId: v.id("instances"),
     userId: v.id("users"),
-    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    role: engineRoleValidator,
+    // Absent on rows written before it was recorded.
+    createdAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_instance", ["instanceId"])
@@ -1468,6 +1497,34 @@ export default defineSchema({
     .index("by_at", ["at"])
     .index("by_actor", ["actor", "at"])
     .index("by_target", ["target", "at"]),
+
+  // orgBilling: the management plane's last projection of an org's billing,
+  // at most one row per org, written only by ops/billingProjection.ts
+  // applyBillingProjection. Once a row exists it drives the org's entitlements;
+  // an org without one is gated as before billing existed. See lib/orgBilling.ts.
+  orgBilling: defineTable({
+    accountId: v.id("accounts"),
+    ...orgBillingFields,
+    updatedAt: v.number(),
+  }).index("by_account", ["accountId"]),
+
+  // opsRequests: the ops API's billing projection pushes by the caller's Idempotency-Key,
+  // so a retry replays the first success instead of writing twice. Claimed and
+  // settled in the same mutation as the write; see lib/ops/idempotency.ts.
+  opsRequests: defineTable({
+    write: opsRequestKindValidator,
+    accountId: v.string(),
+    key: v.string(),
+    // Canonical JSON of the validated body; the same key with another body is refused.
+    fingerprint: v.string(),
+    state: v.union(v.literal("pending"), v.literal("done")),
+    // done: the answer, as JSON, replayed to every repeat.
+    result: v.optional(v.string()),
+    // pending: when the running call claimed it. done: when it settled.
+    claimedAt: v.number(),
+  })
+    .index("by_key", ["write", "accountId", "key"])
+    .index("by_claimed_at", ["claimedAt"]),
 
   // licenses: written by account creation before plans existed, always
   // free with no features, and read by nothing. Emptied by

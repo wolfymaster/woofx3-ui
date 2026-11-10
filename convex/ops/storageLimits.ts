@@ -26,9 +26,10 @@ export interface HostedStorageLimitsDto {
 
 export async function hostedStorageLimitsDto(
   ctx: QueryCtx,
-  instance: Doc<"instances">
+  instance: Doc<"instances">,
+  now: number
 ): Promise<HostedStorageLimitsDto> {
-  const entitlements = await accountEntitlements(ctx, instance.accountId);
+  const entitlements = await accountEntitlements(ctx, instance.accountId, now);
   const override = instance.hostedStorageLimits ?? {};
   return {
     inherited: hostedStorageLimits(entitlements),
@@ -88,6 +89,6 @@ export const set = internalMutation({
     const hostedStorageLimits = cleared ? undefined : limits;
     await ctx.db.patch(id, { hostedStorageLimits });
     await audit("ok");
-    return { ok: true, result: await hostedStorageLimitsDto(ctx, { ...instance, hostedStorageLimits }) };
+    return { ok: true, result: await hostedStorageLimitsDto(ctx, { ...instance, hostedStorageLimits }, Date.now()) };
   },
 });

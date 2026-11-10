@@ -332,7 +332,7 @@ function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererPr
 
   let placeholder: string;
   if (!instanceId) {
-    placeholder = "No instance selected";
+    placeholder = "No engine selected";
   } else if (loading) {
     placeholder = "Loading commands...";
   } else if (empty) {

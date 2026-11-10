@@ -196,7 +196,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
       </div>
 
       {!status.canManage && (
-        <p className="text-xs text-muted-foreground">Only an owner or admin of this instance can change it.</p>
+        <p className="text-xs text-muted-foreground">Only an owner or admin of this engine can change it.</p>
       )}
 
       {trigger?.needsConfirmation && (

@@ -8,7 +8,7 @@
 A **configurable workspace** of resizable panels. Users add, remove, resize, and
 configure dashboard widgets. The dashboard keeps its own state (layout, notes,
 pinned counters, highlights) behind the engine gateway's `dashboard` namespace:
-with an account Convex stores it, the layout per user per instance
+with an account Convex stores it, the layout per user per engine
 (`dashboardLayouts`); in the desktop app's local mode the engine's local UI
 settings do (see [Data sources](#data-sources)).
 
@@ -62,7 +62,7 @@ settings do (see [Data sources](#data-sources)).
   Note this covers a widget's *settings*, which are per user along with the layout
   row they live in. Content that belongs to the channel rather than the viewer —
   macros, the command bar's counters, the shoutout queue — lives in its own
-  instance-scoped table instead.
+  engine-scoped table instead.
 
 ## Widgets
 
@@ -84,7 +84,7 @@ settings do (see [Data sources](#data-sources)).
 | `macro-pad` | automation | One-click buttons — see below |
 | `stream-stats` | utility | Viewers, uptime, category, and follows/subs/bits/raids pushed since the page loaded |
 | `recent-streams` | utility | Totals for the last sessions, through `streamOps.useRecentRecaps` — see below |
-| `notes` | utility | Scratch pad shared by everyone on the instance — see below |
+| `notes` | utility | Scratch pad shared by everyone on the engine — see below |
 
 Saved panels can hold two retired types, `live-events` and `alert-log`. Both
 render the Events widget (`REPLACED_WIDGET_TYPES` in the catalog) and keep their
@@ -166,22 +166,22 @@ Onboarding ends at the dashboard, so the panel holds what comes after it. Items 
 
 | Item | Done when | Offers |
 |---|---|---|
-| Connect Twitch (problem only) | the instance has a Twitch link; hidden otherwise | Connect Twitch (`/setup/connect`) |
+| Connect Twitch (problem only) | the engine has a Twitch link; hidden otherwise | Connect Twitch (`/setup/connect`) |
 | Platforms installed (problem only) | hidden unless a chosen platform's `moduleInstalls` entry is `failed` or `needs_approval` | Retry (`setup.retryApply`); the module page on a needs-approval |
 | Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
-| Add your overlay to your streaming app | the overlay page recorded a finished test (`defaultSeed.useStatus().overlayDone.outcome === "finished"`); left out for an instance that was never seeded | **Copy link** (the seeded scene's link, from `overlays.useBrowserSourceUrlRequest`), Show me how (`/setup/overlay`). Done, it keeps both, with the page as Open your overlay, and stays ahead of what is left; the panel can hide, so the Scenes page also links to `/setup/overlay` |
+| Add your overlay to your streaming app | the overlay page recorded a finished test (`defaultSeed.useStatus().overlayDone.outcome === "finished"`); left out for an engine that was never seeded | **Copy link** (the seeded scene's link, from `overlays.useBrowserSourceUrlRequest`), Show me how (`/setup/overlay`). Done, it keeps both, with the page as Open your overlay, and stays ahead of what is left; the panel can hide, so the Scenes page also links to `/setup/overlay` |
 | Send a test alert | same record as the overlay item | Send a test alert (`/setup/overlay`, which matches the test to its alert) |
 | Make the alerts yours | the streamer says so (`alerts`) | Open alerts, **Done** |
-| Bring your setup from Firebot or Streamer.bot | the instance has a setup import | Import (`/admin/backup`), **Not for me** |
+| Bring your setup from Firebot or Streamer.bot | the engine has a setup import | Import (`/admin/backup`), **Not for me** |
 | Add chat commands and thank-yous | any starter pack item is installed | Browse starter packs, **Not for me** |
 | Using OBS scenes or Spotify? Connect them | the OBS or Spotify module is installed | Open the marketplace, **Not for me** |
-| Publish your page | the instance's page is published | Your page, **Not for me** |
+| Publish your page | the engine's page is published | Your page, **Not for me** |
 
 - **Items the checklist records itself.** Live overlay presence only exists while the overlay page polls, so the overlay and test alert items rest on the fact the page records when a test finishes. Only `alerts` and the platform settings are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
 - **Dismissing optional items.** **Not for me** records `dismissed:<id>` in the same list, and the item leaves the panel, so the panel can finish and hide.
 - **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Twitch never does: connecting it is its setup, and a missing link has its own problem item. Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the checklist (`platform-settings:<id>`).
 - **OBS connection.** "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
-- **When it hides.** The rail item disappears once every item is done or dismissed, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance.
+- **When it hides.** The rail item disappears once every item is done or dismissed, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per engine.
 
 ## Notes
 
@@ -191,7 +191,7 @@ Notes used to be private per member (`dashboardNotes`, now read only by the migr
 
 ## Recent streams
 
-`recent-streams` lists the instance's last ten sessions through the gateway's
+`recent-streams` lists the engine's last ten sessions through the gateway's
 `streamOps.useRecentRecaps`, newest first: in the hosted app the stored
 summaries in `streamSessionSummaries` (`convex/streamSessionSummaries.ts`), in
 local mode the engine's own sessions (see [Stream recaps](./stream-recaps.md#local-mode)).
@@ -277,7 +277,7 @@ The widget is three stacked sections, ordered by how fast each has to happen:
 table; every action enforces it and the widget reads it through
 `moderation.access` only to disable and explain.
 
-| Capability | Instance roles | Twitch scope |
+| Capability | Engine roles | Twitch scope |
 |------------|----------------|--------------|
 | Add (and list) blocked terms | owner, admin, member | `moderator:manage:blocked_terms` |
 | Remove blocked terms | owner, admin | `moderator:manage:blocked_terms` |
@@ -350,7 +350,7 @@ catalog action, or an HTTP request. Its own
 edit mode (distinct from the dashboard's) enables drag-to-reorder via dnd-kit plus
 per-button edit and delete.
 
-**There is one macro pad per instance, and it is shared.** The buttons and their
+**There is one macro pad per engine, and it is shared.** The buttons and their
 order are kept behind the engine gateway's `macros` namespace, not in the widget's
 config: with an account in the `macros` table (`convex/macros.ts`), in the desktop
 app's local mode in the engine's local UI settings (see [Data sources](#data-sources)).
@@ -434,7 +434,7 @@ show without the dashboard open.
 
 1. On the dashboard, open the macro pad's edit mode and click the pencil on the
    macro.
-2. Switch on **Remote trigger**. Only an owner or admin of the instance can do this,
+2. Switch on **Remote trigger**. Only an owner or admin of the engine can do this,
    and doing it approves what the macro does right now.
 3. Copy the token (or the full URL, or one of the ready-made examples) right away.
    **It is shown once**: woofx3 keeps only a SHA-256 hash of it, so if you lose it,
@@ -474,8 +474,8 @@ until an owner or admin approves the macro as it now stands.
   (a browser extension, a web-based deck) cannot use remote triggers.
 - Each trigger accepts one press a second, with bursts of up to five; beyond that
   it answers `429` with a `Retry-After` header.
-- An unknown or revoked token, or one whose macro or instance is gone or whose
-  instance is not connected to its engine, answers `404`.
+- An unknown or revoked token, or one whose macro or engine is gone or whose
+  engine is not connected, answers `404`.
 - `409` means the run was refused with a reason in the body: the macro needs
   re-confirming, no Twitch account is linked, or the engine refused the command
   (for example "Command is disabled"). `502` / `504` mean the engine could not be
@@ -547,8 +547,7 @@ makes the calls with the broadcaster's link token and answers with Twitch's
 own status and body. `convex/lib/twitchEngineHelix.ts` is the one place that
 chooses:
 
-- `twitchHelixRoute` picks the engine whenever the instance is registered with
-  one, and calls Helix from Convex with the link token otherwise.
+- `twitchHelixRoute` picks the engine whenever the engine is registered, and calls Helix from Convex with the link token otherwise.
 - `helixResponse` hands the engine's answer back as a `Response`, so each
   module's status checks, parsers and error sentences are the same on both
   paths.
@@ -594,7 +593,7 @@ instead of a card that shows data and refuses every button.
   case-sensitively, so "fps" to "FPS" can be saved. Titles are at most 140
   characters, counted in code points so an emoji is one.
 - **Saved presets** (`streamInfoPresets`) are named title/category/tags sets,
-  instance-scoped because they describe the channel, not the viewer. Saving
+  engine-scoped because they describe the channel, not the viewer. Saving
   under an existing name replaces it. Rows are bounded (name, title, tags and
   category lengths), and box art must be a `https://static-cdn.jtvnw.net/` URL
   since it renders for everyone on the account. Applying a preset sends all
@@ -679,7 +678,7 @@ and shows a confirmation card — avatar, display name, partner/affiliate — be
 anything is queued, so a mistyped name is caught by a face. You can shout out
 someone who is not currently in chat; the list is a convenience, not a filter.
 
-The queue is instance-scoped (`shoutoutQueue`), one row per entry, so reordering
+The queue is engine-scoped (`shoutoutQueue`), one row per entry, so reordering
 rewrites `sortOrder` only on the rows that moved and removal is a single delete —
 the queue is edited by hand while a scheduled processor writes to it. A processor
 run (`processQueue`) sends at most one shoutout and reschedules itself: the

@@ -139,7 +139,7 @@ export function StorageSettings() {
           className="rounded-md border px-4 py-3 text-sm text-muted-foreground"
           data-testid="storage-settings-read-only"
         >
-          Only an owner or admin of this instance can change storage or the public URL. These settings are read-only for
+          Only an owner or admin of this engine can change storage or the public URL. These settings are read-only for
           you.
         </p>
       )}

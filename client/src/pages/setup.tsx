@@ -112,7 +112,7 @@ export default function Setup() {
           <AskAdminToConnectTwitch />
         ) : (
           <div className="rounded-md border p-4 space-y-3 text-sm" data-testid="text-setup-admin-only">
-            <p>Only an owner or admin can change this account&apos;s setup.</p>
+            <p>Only an owner or admin can change this organization&apos;s setup.</p>
             <Button asChild variant="outline" size="sm">
               <Link href="/">Back to the dashboard</Link>
             </Button>

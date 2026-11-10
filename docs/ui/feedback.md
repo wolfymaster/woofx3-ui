@@ -1,7 +1,7 @@
 # Feedback
 
 `/help/feedback` is a voting board for ideas and bug reports. It is one list
-for the whole product, not per account or instance: every signed-in user sees
+for the whole product, not per account or engine: every signed-in user sees
 every post, can post, vote and comment. All of it lives in Convex
 (`convex/feedback.ts`); the engine is not involved.
 

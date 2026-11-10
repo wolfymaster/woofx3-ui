@@ -49,7 +49,7 @@ function messageFor(code: OAuthErrorCode, provider: OAuthProviderLabel): string 
       return `This ${provider} connection was not started from a signed-in session. Please start again.`;
     }
     case "not_permitted": {
-      return `You do not have permission to connect ${provider} for this instance.`;
+      return `You do not have permission to connect ${provider} for this engine.`;
     }
     case "token_exchange_failed": {
       return `${provider} did not accept the authorization. Please try again.`;
@@ -76,7 +76,7 @@ function messageFor(code: OAuthErrorCode, provider: OAuthProviderLabel): string 
       return `This ${provider} connection was started by a different woofx3 user. Nothing was linked.`;
     }
     case "relink_mismatch": {
-      return `This instance is linked to a different ${provider} account. Sign in to ${provider} as that account to reconnect, or disconnect it first.`;
+      return `This engine is linked to a different ${provider} account. Sign in to ${provider} as that account to reconnect, or disconnect it first.`;
     }
     case "engine_write_failed": {
       return `${provider} was authorized, but saving the connection failed. Please try again.`;

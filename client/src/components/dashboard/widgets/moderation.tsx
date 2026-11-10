@@ -26,7 +26,7 @@ export function ModerationWidget() {
         <ShieldAlert className="mb-3 h-8 w-8 text-muted-foreground/50" />
         <p className="text-sm text-muted-foreground">
           {access === null
-            ? "You are not a member of this instance"
+            ? "You are not a member of this engine"
             : "Connect Twitch in Settings → Integrations to moderate chat"}
         </p>
       </div>

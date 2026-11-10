@@ -113,7 +113,7 @@ export default function MarketplaceListing() {
             <CardContent className="space-y-3 pt-6">
               <p className="font-medium">We couldn't find that listing.</p>
               <p className="text-sm text-muted-foreground">
-                It may have been retired, or it may not be published to your instance.
+                It may have been retired, or it may not be published to your engine.
               </p>
               <Button size="sm" variant="outline" onClick={() => navigate(MARKETPLACE_PATH)}>
                 Back to the marketplace

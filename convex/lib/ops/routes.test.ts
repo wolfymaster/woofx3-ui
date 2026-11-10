@@ -34,6 +34,21 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/audit")).toEqual({ method: "GET", name: "audit.list" });
     expect(matchOpsRoute("GET", "/api/ops/plans")).toEqual({ method: "GET", name: "plans.list" });
     expect(matchOpsRoute("GET", "/api/ops/notifications")).toEqual({ method: "GET", name: "notifications.list" });
+    expect(matchOpsRoute("GET", "/api/ops/payments/strays")).toBeNull();
+  });
+
+  it("names the billing projection push, and no other write under an account", () => {
+    for (const write of ["plan", "exemption", "suspend", "discount"]) {
+      expect(matchOpsRoute("POST", `/api/ops/accounts/k1/${write}`)).toBeNull();
+    }
+    expect(matchOpsRoute("POST", "/api/ops/accounts/k1/billing-projection")).toEqual({
+      method: "POST",
+      name: "accounts.billingProjection",
+      accountId: "k1",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/accounts/k1/billing-projection")).toBeNull();
+    expect(matchOpsRoute("POST", "/api/ops/accounts/k1/delete")).toBeNull();
+    expect(matchOpsRoute("GET", "/api/ops/accounts/k1/plan")).toBeNull();
   });
 
   it("names each notification write", () => {

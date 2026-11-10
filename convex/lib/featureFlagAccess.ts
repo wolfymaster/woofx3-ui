@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { accountEntitlements } from "./entitlementAccess";
+import { engineAvailability } from "./entitlementAccess";
 import { type FeatureFlagKey, type FeatureFlagSubject, isFlagOn } from "./featureFlags";
 import { getInstanceMembership } from "./teamAccess";
 
@@ -28,7 +28,8 @@ export async function featureFlagSubject(
     accountId: instance.accountId,
     instanceId,
     hosting: instance.hosting ?? "external",
-    entitlements: (await accountEntitlements(ctx, instance.accountId)).features,
+    // A self-hosted engine offers no paid feature, so flag rules never see one there.
+    entitlements: await engineFeatures(ctx, instanceId),
   };
 }
 
@@ -57,4 +58,9 @@ export async function requireFeatureFlag(
   if (!(await isFeatureFlagOn(ctx, key, subject))) {
     throw new ConvexError<string>(`This feature isn't available yet (${key})`);
   }
+}
+
+async function engineFeatures(ctx: QueryCtx, instanceId: Id<"instances">): Promise<string[]> {
+  const availability = await engineAvailability(ctx, instanceId, Date.now());
+  return availability.availability === "hosted" ? availability.entitlements.features : [];
 }

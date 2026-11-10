@@ -53,6 +53,10 @@ crons.interval("workflow run orphan step cleanup", { hours: 24 }, internal.workf
 // nothing reads them.
 crons.interval("engine alert cleanup", { hours: 24 }, internal.engineAlerts.cleanupOld, {});
 
+// Ops API idempotency keys only answer the backoffice's retries; past
+// retention nothing retries them.
+crons.interval("ops request cleanup", { hours: 24 }, internal.ops.requests.cleanupOld, {});
+
 // Maintenance callback ids exist only to reject a redelivery of an event already
 // applied; once the sender has stopped retrying they are dead weight.
 crons.interval("maintenance callback id cleanup", { hours: 24 }, internal.provisioningInternal.cleanupOldEvents);

@@ -18,7 +18,8 @@ export type OpsRoute =
   | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
   | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
   | { method: "POST"; name: "notifications.create" }
-  | { method: "POST"; name: "notifications.delete"; notificationId: string };
+  | { method: "POST"; name: "notifications.delete"; notificationId: string }
+  | { method: "POST"; name: "accounts.billingProjection"; accountId: string };
 
 /** What an operator can do to a customer's managed engine, exactly as the customer could. */
 export type EngineAction = "upgrade" | "retry" | "delete";
@@ -43,6 +44,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     }
     if (segments.length === 3 && first === "instances" && second && third === "storage-limits") {
       return { method, name: "instances.setStorageLimits", instanceId: second };
+    }
+    if (segments.length === 3 && first === "accounts" && second && third === "billing-projection") {
+      return { method, name: "accounts.billingProjection", accountId: second };
     }
     if (segments.length === 1 && first === "notifications") {
       return { method, name: "notifications.create" };

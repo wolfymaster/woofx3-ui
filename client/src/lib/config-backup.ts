@@ -140,7 +140,7 @@ export function backupFileName(instanceName: string, date: Date): string {
   const year = date.getFullYear().toString().padStart(4, "0");
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
   const day = date.getDate().toString().padStart(2, "0");
-  return `woofx3-backup-${slug || "instance"}-${year}-${month}-${day}.json`;
+  return `woofx3-backup-${slug || "engine"}-${year}-${month}-${day}.json`;
 }
 
 /** Why a picked file cannot be imported, or null when it can be sent for a preview. */

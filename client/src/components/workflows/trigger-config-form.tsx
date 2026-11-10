@@ -135,7 +135,7 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
 
   let placeholder: string;
   if (!instanceId || !resourceKind) {
-    placeholder = "No instance selected";
+    placeholder = "No engine selected";
   } else if (loading) {
     placeholder = "Loading...";
   } else if (empty) {

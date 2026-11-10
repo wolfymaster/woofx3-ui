@@ -1,0 +1,47 @@
+id: WUI-CPY-001
+title: Visible copy says engine, never instance
+lang: typescript
+scope:
+  include: ["client/src/**/*.tsx"]
+  exclude: ["client/src/components/ui/**"]
+  skip_tests: true
+category: naming
+severity: warn
+enforcement: static
+static:
+  engine: ast-grep
+  rule_file: astgrep/wui-cpy-001.yml
+statement: >
+  Text the user reads says "instance" for what the product calls an engine:
+  JSX text, or the string value of a visible attribute (`title`,
+  `description`, `placeholder`, `label`, `alt`, `aria-label`, `tooltip`) or
+  of a `title`, `description`, `message`, `subtitle` or `label` property.
+  The word is the data model's name (`instanceId`, `instances.update`,
+  `data-testid="button-delete-instance"`); the UI says "engine", or "woofx3
+  engine". Only visible copy is judged: identifiers, routes, test ids and
+  strings with no whitespace are never matched. "Resource instance", "form
+  instance", "widget instance" and "instance of" use the word in its
+  ordinary sense and are skipped. The check reads a single string node, so
+  copy built from several pieces or kept in a constant outside JSX and
+  those properties is not seen.
+rationale: >
+  A product that calls the same thing an engine in the nav and an instance
+  in an error message makes the user wonder whether there are two things.
+  The dashboard was swept once; this keeps new copy from drifting back.
+violation_examples:
+  - note: An empty state names the engine an instance.
+    code: |
+      <EmptyState title="No instance connected" description="Pick an instance to continue." />
+non_violation_examples:
+  - note: The same words as an engine.
+    code: |
+      <EmptyState title="No engine connected" description="Pick an engine to continue." />
+  - note: Near miss. Identifiers and test ids keep the data model's name.
+    code: |
+      <Button data-testid="button-delete-instance" onClick={() => deleteInstance({ instanceId })}>Delete engine</Button>
+  - note: Near miss. A resource instance is a different thing.
+    code: |
+      <p>No resource instances for this module.</p>
+context_needs: [enclosing_decl]
+status: draft
+metrics: { precision: 1, recall: 1, agreement: 1, last_eval: "2026-11-08" }

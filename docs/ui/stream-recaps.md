@@ -54,7 +54,7 @@ recap, and that activity appears in no stream's totals or timeline.
 
 `listRecent` and `get` add `inProgress` to each row instead
 (`isSummaryInProgress` in `shared/stream-recap.ts`): true only while the
-instance's `instanceLiveState` says it is live and, when the engine has
+engine's `instanceLiveState` says it is live and, when the engine has
 announced its session, that session is this row's. It is derived on every read
 and never stored, so a session reads as finished the moment its stream goes
 down, reads as in progress again if the next broadcast continues it, and an
@@ -66,7 +66,7 @@ On the live-to-offline transition, whether from the `stream.offline` callback
 or a poll, `instanceLiveState` schedules `streamRecap.snapshotAfterStreamOffline`
 15 seconds later, once the engine has closed the live segment. That snapshot
 records the stream's final figures and the segment's end even when nobody has
-a recap open. A redelivered offline callback finds the instance already offline
+a recap open. A redelivered offline callback finds the engine already offline
 and schedules nothing.
 
 ## Where each part comes from
@@ -83,12 +83,12 @@ and schedules nothing.
 
 The stored summary is what makes the page load instantly and survive an engine
 that is down or has lost its database. The engine detail is fetched once per
-visit by a Convex action that checks instance membership and runs the three
+visit by a Convex action that checks engine membership and runs the three
 engine calls concurrently, each on its own capnweb batch session. The action
 copies only the fields the page shows (`shared/stream-recap.ts`). A null
 answer from the engine means it no longer knows the session (a later split or
 merge retired its id), and the page says so. A failed call is sorted by
-`classifyEngineCallError`: the gateway refusing this instance's client
+`classifyEngineCallError`: the gateway refusing this engine's client
 credentials (`rejected`, fixed by registering again, so no retry), no answer or
 a non-2xx batch response (`unreachable`), or an error the engine returned
 (`failed`). The last two carry a short error text the notice shows.
@@ -159,7 +159,7 @@ Twitch's 500-character announcement limit. "Copy thank-you message" copies it;
 
 The Clips section lists the Twitch clips created during the session, most
 viewed first, and the header shows the most viewed one as "Top clip".
-`streamRecap.loadClips` checks instance membership, reads the stored summary's
+`streamRecap.loadClips` checks engine membership, reads the stored summary's
 segments, and asks Helix for the broadcaster's clips created between the first
 going-live and the last going-down plus ten minutes (`clipWindow` in
 `convex/lib/recapClips.ts`), since people keep clipping the last moments right

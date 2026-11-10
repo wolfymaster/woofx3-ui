@@ -165,20 +165,11 @@ describe("bySlug", () => {
     expect(editing?.draft.content).toEqual(content([PUBLIC_COUNTER]));
   });
 
-  test("answers an external engine whose plan lapsed as unavailable, and serves it again once renewed", async () => {
-    const f = await seeded({ hosting: "external", entitled: true });
+  test("answers an engine that is no longer managed as unavailable, even with the userPages feature", async () => {
+    const f = await seeded({ hosting: "managed", entitled: true });
     await publishContent(f, content([PUBLIC_COUNTER]));
-    const setFeatures = (features: string[]) =>
-      f.t.run(async (ctx) => {
-        const plan = await ctx.db.query("plans").first();
-        if (plan) {
-          await ctx.db.patch(plan._id, { features });
-        }
-      });
-    await setFeatures([]);
+    await f.t.run((ctx) => ctx.db.patch(f.instanceId, { hosting: "external" }));
     expect(await lookup(f)).toEqual({ kind: "unavailable" });
-    await setFeatures(["userPages"]);
-    expect((await lookup(f)).kind).toBe("page");
   });
 
   test("serves a managed engine's page whatever its plan", async () => {

@@ -25,7 +25,7 @@ export function CapabilityNote({
     status === "needs-reconnect"
       ? `Needs reconnect: reconnect Twitch in Settings → Integrations to ${action}.`
       : status === "not-allowed"
-        ? `Only the instance's owners and admins can ${action}.`
+        ? `Only the engine's owners and admins can ${action}.`
         : "Connect Twitch in Settings → Integrations.";
   return (
     <p className="text-xs text-muted-foreground" data-testid={`moderation-note-${capability}`}>

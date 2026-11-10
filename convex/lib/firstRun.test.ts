@@ -92,13 +92,13 @@ describe("linkedNames", () => {
       name: "renames everything still on the placeholder",
       current: placeholders,
       display: "Wolfy",
-      expected: { account: "Wolfy", instance: "Wolfy's Instance", user: "Wolfy" },
+      expected: { account: "Wolfy", instance: "Wolfy's Engine", user: "Wolfy" },
     },
     {
       name: "leaves an edited account alone",
       current: { ...placeholders, account: "Studio" },
       display: "Wolfy",
-      expected: { instance: "Wolfy's Instance", user: "Wolfy" },
+      expected: { instance: "Wolfy's Engine", user: "Wolfy" },
     },
     {
       name: "leaves an edited instance alone",
@@ -110,7 +110,7 @@ describe("linkedNames", () => {
       name: "leaves a user's name alone",
       current: { ...placeholders, user: "Jane" },
       display: "Wolfy",
-      expected: { account: "Wolfy", instance: "Wolfy's Instance" },
+      expected: { account: "Wolfy", instance: "Wolfy's Engine" },
     },
     {
       name: "fills a blank user name",
@@ -120,7 +120,7 @@ describe("linkedNames", () => {
     },
     {
       name: "does nothing on a later reconnect",
-      current: { account: "Wolfy", instance: "Wolfy's Instance", user: "Wolfy" },
+      current: { account: "Wolfy", instance: "Wolfy's Engine", user: "Wolfy" },
       display: "Renamed",
       expected: {},
     },
@@ -128,7 +128,7 @@ describe("linkedNames", () => {
       name: "keeps a non-Latin display name",
       current: placeholders,
       display: "狼",
-      expected: { account: "狼", instance: "狼's Instance", user: "狼" },
+      expected: { account: "狼", instance: "狼's Engine", user: "狼" },
     },
     { name: "ignores a blank display name", current: placeholders, display: "  ", expected: {} },
   ])("$name", ({ current, display, expected }) => {

@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { type LimitValue, validateEntitlementInput, validatePlanKey } from "./entitlements";
+import { orgBillingFor } from "./orgBilling";
 
 /**
  * Writes to plans and account assignments. The CLI and the ops API both go
@@ -89,7 +90,12 @@ export interface AccountPlanInput {
   expiresAt?: number;
 }
 
-/** Sets an account's plan and its overrides, replacing any it had. */
+/**
+ * Sets an account's plan and its overrides, replacing any it had. Refused for
+ * an org with a billing projection: the projection is authoritative and
+ * ignores these rows, so a write would silently do nothing. Such orgs get
+ * their plan, exemptions and overrides from the management plane.
+ */
 export async function setAccountPlan(
   ctx: MutationCtx,
   accountId: Id<"accounts">,
@@ -98,6 +104,11 @@ export async function setAccountPlan(
 ): Promise<void> {
   if (!(await ctx.db.get(accountId))) {
     throw new Error(`No account ${accountId}`);
+  }
+  if ((await orgBillingFor(ctx, accountId)) !== null) {
+    throw new Error(
+      `Account ${accountId} is billed by the management plane; change its plan, exemption or overrides there`
+    );
   }
   validateEntitlementInput({ features: input.addFeatures, removeFeatures: input.removeFeatures, limits: input.limits });
   if (input.expiresAt !== undefined && input.expiresAt <= Date.now()) {
@@ -143,7 +154,7 @@ export async function clearAccountPlan(ctx: MutationCtx, accountId: Id<"accounts
   }
 }
 
-async function planByKey(ctx: MutationCtx, key: string) {
+export async function planByKey(ctx: MutationCtx, key: string) {
   return ctx.db
     .query("plans")
     .withIndex("by_key", (q) => q.eq("key", key))

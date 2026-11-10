@@ -18,7 +18,7 @@ import {
   setupNeedsTwitch,
 } from "./lib/setupPlatforms";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
-import { findOrCreateManagedInstance, markFirstRun } from "./provisioningInternal";
+import { findOrCreateManagedInstance, markFirstRun, startTrialIfNew } from "./provisioningInternal";
 
 // Bounds for reads of tables that hold a handful of rows per key.
 const MAX_SETUP_PLATFORMS = 50;
@@ -386,10 +386,13 @@ export const ensureFirstRun = mutation({
       throw new Error("Managed engines are not configured");
     }
     const account = await ensureOwnAccount(ctx, userId);
-    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account, userId);
+    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account);
     if (created) {
       await markFirstRun(ctx, instanceId);
     }
+    // Choosing a hosted engine is what starts the trial, so onboarding can say
+    // so before the engine is built.
+    await startTrialIfNew(ctx, account._id);
     return instanceId;
   },
 });

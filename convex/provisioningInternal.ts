@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { switchedStatus } from "./lib/engineSwitch";
+import { requireUsableSubscription } from "./lib/entitlementAccess";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
 import {
   decideRedeployEvent,
@@ -10,7 +12,9 @@ import {
   type RedeployEvent,
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
-import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { billingFor } from "./lib/orgBilling";
+import { requireOrgActionFor } from "./lib/orgRoles";
+import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { performRegistration } from "./registration";
 
@@ -93,14 +97,16 @@ export const reserveManagedInstance = internalMutation({
     newCreateRequestId: v.string(),
   },
   handler: async (ctx, { accountId, userId, slug, newRegistrationToken, newCreateRequestId }) => {
-    // The account owner only: an engine is a resource the account is billed
-    // for, which is a narrower question than who may manage its team.
-    const account = await ctx.db.get(accountId);
-    if (!account || account.ownerId !== userId) {
-      throw new Error("Not authorized");
-    }
+    const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
 
-    const { instanceId } = await findOrCreateManagedInstance(ctx, account, userId);
+    const { instanceId } = await findOrCreateManagedInstance(ctx, account);
+    await startTrialIfNew(ctx, accountId);
+    // Every managed request (onboarding, the username form, retry) comes
+    // through here, so a suspended org can't build an engine nothing would stop.
+    // An org the plane has not yet reported on is a new one: nothing to refuse.
+    if ((await billingFor(ctx, accountId)) !== null) {
+      await requireUsableSubscription(ctx, accountId);
+    }
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -182,10 +188,38 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
   }
 }
 
+/**
+ * Throws `subscription_suspended` unless the org's billing projection is
+ * usable, for actions that resume a managed engine's run
+ * outside `reserveManagedInstance`. An org with no billing yet is not
+ * suspended, so it passes.
+ */
+export const assertCanResumeEngine = internalQuery({
+  args: { accountId: v.id("accounts") },
+  handler: async (ctx, { accountId }): Promise<null> => {
+    if ((await billingFor(ctx, accountId)) !== null) {
+      await requireUsableSubscription(ctx, accountId);
+    }
+    return null;
+  },
+});
+
+/**
+ * An org's first managed engine asks the management plane to start its trial
+ * (`ensure` is idempotent). An org that already has billing, in any state,
+ * needs nothing. The call is scheduled, never awaited here: a mutation cannot call out,
+ * and the scheduled action retries a failure itself.
+ */
+export async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">): Promise<void> {
+  if ((await billingFor(ctx, accountId)) !== null) {
+    return;
+  }
+  await ctx.scheduler.runAfter(0, internal.billingCommands.ensureBilling, { accountId });
+}
+
 export async function findOrCreateManagedInstance(
   ctx: MutationCtx,
-  account: Doc<"accounts">,
-  userId: Id<"users">
+  account: Doc<"accounts">
 ): Promise<{ instanceId: Id<"instances">; created: boolean }> {
   const instances = await ctx.db
     .query("instances")
@@ -205,18 +239,7 @@ export async function findOrCreateManagedInstance(
     hosting: "managed",
     createdAt: Date.now(),
   });
-  await ensureInstanceMember(ctx, instanceId, userId, "owner");
-
-  const teammates = await ctx.db
-    .query("accountMembers")
-    .withIndex("by_account", (q) => q.eq("accountId", account._id))
-    .collect();
-  for (const teammate of teammates) {
-    if (teammate.userId === userId) {
-      continue;
-    }
-    await ensureInstanceMember(ctx, instanceId, teammate.userId, mapAccountRoleToInstanceRole(teammate.role));
-  }
+  await grantNewEngineMembers(ctx, instanceId);
   return { instanceId, created: true };
 }
 
@@ -533,7 +556,15 @@ export const applyCallbackEvent = internalMutation({
     ),
     url: v.optional(v.string()),
     version: v.optional(v.string()),
-    runKind: v.optional(v.union(v.literal("provision"), v.literal("deprovision"), v.literal("redeploy"))),
+    runKind: v.optional(
+      v.union(
+        v.literal("provision"),
+        v.literal("deprovision"),
+        v.literal("redeploy"),
+        v.literal("stop"),
+        v.literal("start")
+      )
+    ),
     error: v.optional(v.string()),
     runId: v.optional(v.string()),
     // Why a running step is still waiting.
@@ -587,6 +618,10 @@ export const applyCallbackEvent = internalMutation({
           error: args.error,
           detail: args.detail,
         };
+        if (args.runKind === "stop") {
+          // A stop has nothing to show while it runs; engine.stopped settles it.
+          return { handled: true, duplicate: false };
+        }
         if (args.runKind === "redeploy") {
           await applyRedeployEvent(ctx, row, {
             type: "engine.run.step",
@@ -635,11 +670,27 @@ export const applyCallbackEvent = internalMutation({
         }
         // A failed teardown leaves the engine deprovisioning until a retry
         // finishes, so the row says so too: presenting it as an engine that
-        // failed to be built would offer the user the opposite repair.
+        // failed to be built would offer the user the opposite repair. A
+        // failed stop or start is `failed`, which provisioning.retry resumes.
         const status = args.runKind === "deprovision" ? "deprovisioning" : "failed";
+        const error = `${step}: ${args.error ?? "the maintenance API reported a failure"}`;
+        await ctx.db.patch(row._id, { status, error, updatedAt: Date.now() });
+        return { handled: true, duplicate: false };
+      }
+
+      // stylegate:ignore ANY-ABS-002 reason="Follows applyCallbackEvent's existing switch over maintenance event types; moving every case to a handler table is its own refactor"
+      case "engine.stopped":
+      case "engine.started": {
+        const move = args.eventType === "engine.stopped" ? "stopped" : "started";
+        const status = switchedStatus(row.status, move);
+        if (status === null) {
+          logger.warn("maintenance webhook: engine switch doesn't apply", { status: row.status, move });
+          return { handled: false, duplicate: false };
+        }
         await ctx.db.patch(row._id, {
           status,
-          error: `${step}: ${args.error ?? "the maintenance API reported a failure"}`,
+          error: undefined,
+          ...(move === "started" && args.version ? { reportedVersion: args.version } : {}),
           updatedAt: Date.now(),
         });
         return { handled: true, duplicate: false };

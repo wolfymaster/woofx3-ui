@@ -26,7 +26,7 @@ export function AdminOnly({ children }: { children: ReactNode }) {
         <ShieldAlert className="h-8 w-8 mx-auto text-muted-foreground" />
         <h1 className="text-lg font-semibold">Admins only</h1>
         <p className="text-sm text-muted-foreground">
-          Instance settings can be changed by the account's owner and admins. Ask one of them if something here needs
+          Engine settings can be changed by the organization's owner and admins. Ask one of them if something here needs
           changing.
         </p>
         <Button asChild variant="outline" size="sm">

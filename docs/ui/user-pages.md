@@ -9,7 +9,7 @@ The page is not part of the dashboard. It is its own Vite entry, `client/src/use
 - **Base `/u/`.** The marketing site owns `woofx3.tv`, and its edge forwards only `woofx3.tv/u/*` to the dashboard's origin (`stream.woofx3.tv`), keeping the path. Everything the page loads therefore sits under `/u/`: its HTML, `/u/assets/*` for scripts, styles, the font and the favicon. The page has no `publicDir`, since the dashboard's public files are served from the root.
 - **Output `dist/u`.** `bun run build` builds the dashboard into `dist`, then the page into `dist/u`, so one image serves both. `deploy/Caddyfile` answers every `/u/` path with `/u/index.html` and serves `/u/assets/*` as immutable files (see [Deploying](/ops/deploy)).
 - **Not in the desktop app.** The desktop shell bundles the dashboard's own build, which never lists the page's HTML as an input, so the page cannot end up in it.
-- **No dashboard sign-in.** It talks to Convex with a plain `ConvexReactClient`: no auth provider, no engine gateway, nothing scoped to an instance. A viewer can sign in with Twitch, but that gives them a viewer session of their own, which the page passes to its queries as an argument (see [Sections only some viewers see](#sections-only-some-viewers-see)).
+- **No dashboard sign-in.** It talks to Convex with a plain `ConvexReactClient`: no auth provider, no engine gateway, nothing scoped to an engine. A viewer can sign in with Twitch, but that gives them a viewer session of their own, which the page passes to its queries as an argument (see [Sections only some viewers see](#sections-only-some-viewers-see)).
 
 ### Import boundary
 
@@ -92,7 +92,7 @@ Where browser storage is blocked, the page behaves as signed out.
 
 A form is an instance of the bundled `woofx3:form` resource kind, made and edited at `/stream/forms`. Its title and button text are the kind's settings, and its questions are the `fields` setting, written by the form page's question editor (`FormQuestionsEditor`) because a question's choices are a list inside a list, which a kind's schema can't declare. A page's form widget holds only the instance's canonical id, so one form can sit on several pages and an edit reaches them all at once, without publishing.
 
-`publicSettings` projects the definition into `userPageState` like any binding, and `parseFormDefinition` reads it for the public page and for each submit. A form that was deleted, has no questions yet, or whose stored settings break the rules reads as unavailable: the page says so and a submit is refused as `form_stale`. A deleted form's row goes with it; bringing it back under the same id takes a publish. Canonical ids don't leave Convex, so a visitor names a form by its widget's id (`widgetId`), and Convex writes the instance's canonical id on the row as `formId`.
+`publicSettings` projects the definition into `userPageState` like any binding, and `parseFormDefinition` reads it for the public page and for each submit. A form that was deleted, has no questions yet, or whose stored settings break the rules reads as unavailable: the page says so and a submit is refused as `form_stale`. A deleted form's row goes with it; bringing it back under the same id takes a publish. Canonical ids don't leave Convex, so a visitor names a form by its widget's id (`widgetId`), and Convex writes the engine's canonical id on the row as `formId`.
 
 A visitor's answers go through the edge to Convex, wait in an outbox and reach the engine from there. A submit never calls the engine, so forms keep working while it is offline.
 
@@ -128,7 +128,7 @@ The page mints an idempotency key and keeps it until an answer changes, so resen
 
 ### Delivering
 
-`pageSubmissions` holds each answer as `pending`, `delivered` or `failed`. `pageSubmissionQueues` holds, per instance, the pending count the cap checks (`USER_PAGE_LIMITS.pendingSubmissionsPerPage`) and when the engine is next worth contacting. Tunables are in `SUBMISSION_DELIVERY` (`convex/lib/userPageSubmissions.ts`).
+`pageSubmissions` holds each answer as `pending`, `delivered` or `failed`. `pageSubmissionQueues` holds, per engine, the pending count the cap checks (`USER_PAGE_LIMITS.pendingSubmissionsPerPage`) and when the engine is next worth contacting. Tunables are in `SUBMISSION_DELIVERY` (`convex/lib/userPageSubmissions.ts`).
 
 A pass (`convex/lib/userPageFormDelivery.ts`) is scheduled on insert and by a one-minute sweep. It takes the queue's lease, checks the engine answers (`getEngineInfo`), sends the oldest due rows and saves each outcome as it arrives.
 
@@ -138,9 +138,9 @@ A pass (`convex/lib/userPageFormDelivery.ts`) is scheduled on insert and by a on
 | The engine refused it as malformed (`UserPageSubmissionRefused: …`) | `failed`, with the reason | |
 | Any other error from the call | Pending, backs off alone | |
 | A timeout or failed connection during a send | Pending, backs off | Engine backs off, pass stops |
-| The engine does not answer that check, or the instance has no engine credentials | Untouched | Engine backs off |
+| The engine does not answer that check, or the engine has no credentials | Untouched | Engine backs off |
 
-Backing off the engine on the queue row means an offline engine costs one probe per interval, however many answers wait. Pending rows never expire. Delivered rows are deleted after 30 days; failed ones stay until the streamer retries them or the instance is deleted. Only managed engines have pages today, and every route to the engine is behind `SubmissionTransport`.
+Backing off the engine on the queue row means an offline engine costs one probe per interval, however many answers wait. Pending rows never expire. Delivered rows are deleted after 30 days; failed ones stay until the streamer retries them or the engine is deleted. Only managed engines have pages today, and every route to the engine is behind `SubmissionTransport`.
 
 ### What can be delivered
 
