@@ -46,6 +46,11 @@ export function useMarketplaceInstallRequest() {
   return useEngineGateway().modules.useMarketplaceInstallRequest();
 }
 
+/** Installs a held listing with its license key. Needs an engine with the `marketplace.licenseKeys` capability. */
+export function useLicensedInstallRequest() {
+  return useEngineGateway().modules.useLicensedInstallRequest();
+}
+
 /** Installs a marketplace scene or alert bundle onto the engine. */
 export function useMarketplaceBundleInstallRequest() {
   return useEngineGateway().modules.useBundleInstallRequest();

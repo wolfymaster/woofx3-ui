@@ -50,6 +50,11 @@ interface ListingInstallButtonProps {
   state: ListingInstallState;
   /** Installs a module or theme. Bundles install through this component. */
   onInstallModule?: () => void;
+  /**
+   * Buys a module or theme through its install, which asks for approval
+   * before anything is paid. Without it, Buy opens checkout directly.
+   */
+  onPurchaseModule?: () => void;
   /** Called after a bundle install writes its scene or composition. */
   onBundleInstalled?: (result: { kind: "scene" | "alert"; engineId: string }) => void;
   /** Opens the base module a theme needs. */
@@ -66,6 +71,7 @@ export function ListingInstallButton({
   listing,
   state,
   onInstallModule,
+  onPurchaseModule,
   onBundleInstalled,
   onOpenBaseModule,
   onOpenListing,
@@ -146,7 +152,13 @@ export function ListingInstallButton({
           state={state}
           working={working}
           disabled={!instanceId}
-          onPurchase={() => void startCheckout()}
+          onPurchase={() => {
+            if (onPurchaseModule && !isBundleListing(listing.type)) {
+              onPurchaseModule();
+              return;
+            }
+            void startCheckout();
+          }}
           onOpenListing={onOpenListing}
           onInstall={() => {
             if (isBundleListing(listing.type)) {

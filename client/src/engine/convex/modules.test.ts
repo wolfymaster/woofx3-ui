@@ -57,6 +57,62 @@ describe("modules.useMarketplaceInstallRequest", () => {
   });
 });
 
+describe("modules.useLicensedInstallRequest", () => {
+  test("installs the listing with its key and approvals, and passes the engine's answer on", async () => {
+    result = { status: "installed", moduleKey: "obs:1.2.0:abcdef1" };
+    const install = renderInScope(() => convexModulesGateway.useLicensedInstallRequest());
+    const answer = await install({
+      listingId: "listing-1",
+      licenseKey: "W3X-AAAA",
+      approvedPermissions: ["obs.control"],
+      approvedLocalEndpoints: ["obs"],
+    });
+    expect(calls).toEqual([
+      {
+        name: "marketplace:installWithLicense",
+        args: {
+          instanceId,
+          listingId: "listing-1",
+          licenseKey: "W3X-AAAA",
+          approvedPermissions: ["obs.control"],
+          approvedLocalEndpoints: ["obs"],
+        },
+      },
+    ]);
+    expect(answer).toEqual({ status: "installed", moduleKey: "obs:1.2.0:abcdef1" });
+  });
+
+  test("a build asking for more comes back as what it asks for", async () => {
+    result = {
+      status: "needs_approval",
+      name: "OBS",
+      version: "2.0.0",
+      unapproved: ["x"],
+      unapprovedLocalEndpoints: [],
+    };
+    const install = renderInScope(() => convexModulesGateway.useLicensedInstallRequest());
+    const answer = await install({
+      listingId: "listing-1",
+      licenseKey: "W3X-AAAA",
+      approvedPermissions: [],
+      approvedLocalEndpoints: [],
+    });
+    expect(answer).toEqual({ status: "needs_approval", unapproved: ["x"], unapprovedLocalEndpoints: [] });
+  });
+
+  test("refuses to install through the account without a key", async () => {
+    const install = renderInScope(() => convexModulesGateway.useLicensedInstallRequest());
+    const failure = await install({
+      listingId: "listing-1",
+      licenseKey: null,
+      approvedPermissions: [],
+      approvedLocalEndpoints: [],
+    }).catch((err: Error) => err.message);
+    expect(failure).toBe("An install through the account needs the listing's license key");
+    expect(calls).toEqual([]);
+  });
+});
+
 describe("modules.useDetailRequest", () => {
   test("asks for the detail of a marketplace id", async () => {
     result = { id: "listing-1", name: "OBS" };

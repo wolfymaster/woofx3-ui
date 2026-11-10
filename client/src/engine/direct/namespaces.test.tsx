@@ -1237,6 +1237,45 @@ describe("modules", () => {
     expect(String(await install("listing", [], []).catch((error: Error) => error))).toContain("Sign in");
   });
 
+  test("a licensed install sends the key when there is one, and answers needs_approval with what the build asks", async () => {
+    const { runtime, state } = await connected();
+    const install = renderDirect(() => directModulesGateway(runtime).useLicensedInstallRequest()).current();
+    const approvals = { approvedPermissions: ["chat.read"], approvedLocalEndpoints: ["obs"] };
+    expect(await install({ listingId: "listing", licenseKey: null, ...approvals })).toEqual({
+      status: "installed",
+      moduleKey: "listing:1.0.0:abc1234",
+    });
+    await install({ listingId: "listing", licenseKey: "W3X-AAAA", ...approvals });
+    expect(state.callsOf("installMarketplaceListing")).toEqual([
+      ["listing", approvals],
+      ["listing", { ...approvals, licenseKey: "W3X-AAAA" }],
+    ]);
+
+    state.listingInstall = {
+      status: "needs_approval",
+      name: "Cozy",
+      version: "2.0.0",
+      unapproved: ["chat.write"],
+      unapprovedLocalEndpoints: ["obs"],
+    };
+    expect(await install({ listingId: "listing", licenseKey: null, ...approvals })).toEqual({
+      status: "needs_approval",
+      unapproved: ["chat.write"],
+      unapprovedLocalEndpoints: ["obs"],
+    });
+    state.listingInstall = { status: "payment_required", name: "Cozy", version: "2.0.0" };
+    expect(
+      String(await install({ listingId: "listing", licenseKey: null, ...approvals }).catch((e: Error) => e))
+    ).toContain("Sign in");
+  });
+
+  test("an engine with no account acquires nothing itself: it claims as it installs", async () => {
+    const { runtime, state } = await connected();
+    const acquire = renderDirect(() => directMarketplaceGateway(runtime).useAcquireForInstallRequest()).current();
+    expect(await acquire("listing")).toEqual({ status: "licensed", licenseKey: null });
+    expect(state.callsOf("installMarketplaceListing")).toEqual([]);
+  });
+
   test("a bundle install answers with what it made, and a paid bundle asks for a sign-in", async () => {
     const { runtime, state } = await connected();
     const install = renderDirect(() => directModulesGateway(runtime).useBundleInstallRequest()).current();

@@ -6,6 +6,8 @@ import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
   InstalledModule,
+  LicensedInstall,
+  LicensedInstallOutcome,
   MarketplaceBundleInstall,
   ModuleArchiveInstall,
   ModuleAsset,
@@ -164,6 +166,37 @@ function useMarketplaceInstallRequest() {
   );
 }
 
+function toLicensedInstallOutcome(
+  result: FunctionReturnType<typeof api.marketplace.installWithLicense>
+): LicensedInstallOutcome {
+  switch (result.status) {
+    case "installed":
+      return { status: "installed", moduleKey: result.moduleKey };
+    case "needs_approval":
+      return {
+        status: "needs_approval",
+        unapproved: result.unapproved,
+        unapprovedLocalEndpoints: result.unapprovedLocalEndpoints,
+      };
+  }
+}
+
+/** Convex holds the account, so it always acquires first and the key is never null here. */
+function useLicensedInstallRequest() {
+  const installWithLicense = useInstanceAction(api.marketplace.installWithLicense);
+  return useCallback(
+    async ({ listingId, licenseKey, approvedPermissions, approvedLocalEndpoints }: LicensedInstall) => {
+      if (licenseKey === null) {
+        throw new Error("An install through the account needs the listing's license key");
+      }
+      return toLicensedInstallOutcome(
+        await installWithLicense({ listingId, licenseKey, approvedPermissions, approvedLocalEndpoints })
+      );
+    },
+    [installWithLicense]
+  );
+}
+
 function useAssets(moduleId: ModuleId, kinds: readonly string[] | undefined): ModuleAsset[] | undefined {
   return useQuery(api.moduleAssets.listForModule, {
     moduleId: fromModuleId(moduleId),
@@ -221,6 +254,7 @@ export const convexModulesGateway: ModulesGateway = {
   useReconcileUninstallRequest,
   useWorkflowsRequest,
   useMarketplaceInstallRequest,
+  useLicensedInstallRequest,
   useBundleInstallRequest,
   useStorageUsageRequest,
   useArchiveInstallRequest,
