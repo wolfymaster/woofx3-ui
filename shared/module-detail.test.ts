@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { installedDetail, marketplaceMetadataOf, parseManifestSettings } from "./module-detail";
+import { installedDetail, listingDeclarations, marketplaceMetadataOf, parseManifestSettings } from "./module-detail";
 
 describe("parseManifestSettings", () => {
   test("keeps the kind a resource_ref setting links, so the settings pane can offer a picker", () => {
@@ -102,4 +102,49 @@ describe("marketplaceMetadataOf", () => {
   test("a listing with nothing to add adds nothing", () => {
     expect(marketplaceMetadataOf(null)).toEqual({ workflows: [] });
   });
+});
+
+describe("listingDeclarations", () => {
+  const obs = { id: "obs", name: "OBS", protocol: "websocket" };
+  const cases: { name: string; payload: unknown; expected: ReturnType<typeof listingDeclarations> }[] = [
+    {
+      name: "reads permissions and local endpoints from a wrapped detail",
+      payload: { module: { permissions: ["obs.control"], localEndpoints: [obs] } },
+      expected: { permissions: ["obs.control"], localEndpoints: [obs] },
+    },
+    {
+      name: "reads an unwrapped detail",
+      payload: { permissions: [], localEndpoints: [] },
+      expected: { permissions: [], localEndpoints: [] },
+    },
+    {
+      name: "is unknown from a marketplace that does not send them",
+      payload: { module: { id: "chat-tools" } },
+      expected: null,
+    },
+    {
+      name: "is unknown when only one of the two is sent",
+      payload: { module: { permissions: ["obs.control"] } },
+      expected: null,
+    },
+    {
+      name: "leaves out endpoints it cannot show and entries that are not strings",
+      payload: {
+        module: {
+          permissions: ["twitch.channel", 7],
+          localEndpoints: [
+            obs,
+            { id: "midi", name: "MIDI", protocol: "serial" },
+            { id: "x", name: " ", protocol: "http" },
+          ],
+        },
+      },
+      expected: { permissions: ["twitch.channel"], localEndpoints: [obs] },
+    },
+  ];
+  for (const { name, payload, expected } of cases) {
+    test(name, () => {
+      expect(listingDeclarations(payload)).toEqual(expected);
+    });
+  }
 });

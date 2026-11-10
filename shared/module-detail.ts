@@ -1,5 +1,5 @@
 import { type ConfigField, LIST_ITEM_FIELD_TYPES, parseFieldList } from "@woofx3/api/ui-schema";
-import { type LocalEndpointSummary, localEndpointSummaries } from "./local-endpoints";
+import { type LocalEndpointSummary, type LocalProtocol, localEndpointSummaries } from "./local-endpoints";
 import {
   installedFunctionSummaries,
   type ModuleFunctionSummary,
@@ -98,6 +98,37 @@ export function manifestDeclarations(manifest: unknown): ManifestDeclarations {
     return { permissions: null, localEndpoints: null };
   }
   return { permissions: parseManifestPermissions(manifest), localEndpoints: localEndpointSummaries(manifest) };
+}
+
+const LISTING_LOCAL_PROTOCOLS: ReadonlySet<string> = new Set<LocalProtocol>(["websocket", "http"]);
+
+/**
+ * What a marketplace module detail (`GET /modules/{id}`, wrapped in `module`
+ * or not) says its current build asks to approve. The marketplace reads them
+ * from the build's manifest with the ids the engine checks an install
+ * against, so consent can be asked before anything is claimed or paid for,
+ * without the archive. Null from a marketplace that does not send them.
+ *
+ * An endpoint with a protocol the dashboard cannot show is left out, as an
+ * archive read leaves it out; an install whose build still declares it comes
+ * back as `needs_approval`.
+ */
+export function listingDeclarations(payload: unknown): ManifestDeclarations | null {
+  const raw = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const module = raw.module && typeof raw.module === "object" ? (raw.module as Record<string, unknown>) : raw;
+  if (!Array.isArray(module.permissions) || !Array.isArray(module.localEndpoints)) {
+    return null;
+  }
+  const localEndpoints: LocalEndpointSummary[] = [];
+  for (const entry of module.localEndpoints) {
+    const o = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const name = asStr(o.name).trim();
+    if (typeof o.id !== "string" || name === "" || !LISTING_LOCAL_PROTOCOLS.has(asStr(o.protocol))) {
+      continue;
+    }
+    localEndpoints.push({ id: o.id, name, protocol: o.protocol as LocalProtocol });
+  }
+  return { permissions: asStrArr(module.permissions), localEndpoints };
 }
 
 function parseManifestSettingAction(value: unknown, oauthIntegrations: string[]): ManifestSettingAction | undefined {

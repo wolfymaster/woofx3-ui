@@ -1,6 +1,7 @@
 import { assetsOfKinds, manifestAssets } from "@shared/module-assets";
 import {
   applyMarketplaceMetadata,
+  listingDeclarations,
   type MarketplaceMergeData,
   marketplaceDetail,
   marketplaceMetadataOf,
@@ -105,10 +106,12 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
         runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(moduleId)),
         inspectListing(moduleId),
       ]);
+      const record = catalogModuleRecord(listing);
+      const declared = listingDeclarations(record);
       return toModuleDetail({
-        ...marketplaceDetail(moduleId, catalogModuleRecord(listing), null),
-        permissions: inspection?.permissions ?? null,
-        localEndpoints: inspection ? inspectionLocalEndpoints(inspection) : null,
+        ...marketplaceDetail(moduleId, record, null),
+        permissions: declared?.permissions ?? inspection?.permissions ?? null,
+        localEndpoints: declared?.localEndpoints ?? (inspection ? inspectionLocalEndpoints(inspection) : null),
       });
     }
 
