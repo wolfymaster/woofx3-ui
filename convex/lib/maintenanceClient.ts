@@ -8,7 +8,6 @@
  * the fields the UI actually reads are declared, since a response gaining a
  * field must not break this client.
  */
-import { OUTBOUND_FETCH_TIMEOUT_MS } from "./outboundTimeouts";
 
 /** A non-2xx answer, carrying the API's stable error code so callers can branch on it. */
 export class MaintenanceApiError extends Error {
@@ -130,7 +129,6 @@ async function request<T>(path: string, init: { method: string; body?: unknown; 
   }
 
   const response = await fetch(`${config.baseUrl}${path}`, {
-    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     method: init.method,
     headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
