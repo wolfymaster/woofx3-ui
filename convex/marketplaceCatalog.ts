@@ -314,8 +314,9 @@ export const createCheckout = action({
   },
   handler: async (ctx, args): Promise<CheckoutResult> =>
     withClientErrors(async () => {
-      // A purchase spends the account's money, so it takes more than membership.
-      await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
+      // Payments are the account's, so only its owner may start one; any
+      // member may still acquire a listing that costs nothing.
+      await requireInstanceRoleInAction(ctx, args.instanceId, "owner");
       const buyerRef = await buyerRefFor(ctx, args.instanceId);
       const base = returnUrl(args.returnPath);
       const separator = base.includes("?") ? "&" : "?";
