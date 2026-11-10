@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getFunctionName } from "convex/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { generateOpaqueToken, hashOpaqueToken } from "./lib/oauthHandoff";
@@ -7,7 +9,7 @@ import { VIEWER_HANDOFF_TTL_MS, VIEWER_LOGIN_STATE_TTL_MS, VIEWER_SESSION_TTL_MS
 import { type FakeViewerCtx, fakeViewerCtx, seed } from "./lib/viewerDb.fakes";
 import { requireViewer, viewerFromSession } from "./lib/viewerSessionAuth";
 import { consumeViewerLoginState } from "./viewerLogin";
-import { redeemViewerHandoff } from "./viewerSession";
+import { exchangeHandoff, redeemViewerHandoff } from "./viewerSession";
 
 const NOW = 1_800_000_000_000;
 const STATE_HASH = "c".repeat(64);
@@ -148,5 +150,27 @@ describe("a viewer session is not a dashboard session", () => {
     const fake = fakeViewerCtx();
     fake.identity = { subject: "users:1|authSessions:1" };
     expect(await viewerFromSession(fake.ctx, generateOpaqueToken())).toBeNull();
+  });
+});
+
+describe("exchangeHandoff", () => {
+  test("is never refused by a deployment-wide bucket", async () => {
+    const calls: string[] = [];
+    const ctx = {
+      // Any call other than the redeem is the rate limiter component: answer it as an empty bucket.
+      runMutation: async (ref: Parameters<typeof getFunctionName>[0]) => {
+        calls.push(getFunctionName(ref));
+        return getFunctionName(ref) === getFunctionName(internal.viewerSession.redeemHandoff)
+          ? { ok: true, expiresAt: NOW }
+          : { ok: false, retryAfter: 1000 };
+      },
+    };
+    const handler = (exchangeHandoff as unknown as { _handler: (c: typeof ctx, a: object) => Promise<{ ok: boolean }> })
+      ._handler;
+
+    const result = await handler(ctx, { code: generateOpaqueToken(), nonce: generateOpaqueToken() });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([getFunctionName(internal.viewerSession.redeemHandoff)]);
   });
 });

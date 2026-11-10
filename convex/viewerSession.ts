@@ -3,7 +3,6 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, type MutationCtx, mutation, query } from "./_generated/server";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { VIEWER_SESSION_TTL_MS, type ViewerHandoffRefusal, viewerHandoffRefusal } from "./lib/viewerAuth";
-import { viewerRateLimiter } from "./lib/viewerRateLimits";
 import { viewerFromSession, viewerSessionByToken } from "./lib/viewerSessionAuth";
 
 // A viewer's session on a user page. The page holds the session token (one
@@ -12,7 +11,7 @@ import { viewerFromSession, viewerSessionByToken } from "./lib/viewerSessionAuth
 
 export type ExchangeHandoffResult =
   | { ok: true; sessionToken: string; expiresAt: number }
-  | { ok: false; error: ViewerHandoffRefusal | "rate_limited" };
+  | { ok: false; error: ViewerHandoffRefusal };
 
 const viewerProfileValidator = v.object({
   displayName: v.string(),
@@ -36,7 +35,9 @@ export const me = query({
  * Turns the one-time code a sign-in returned to the page, plus the nonce the
  * page kept from when it started that sign-in, into a session token. An
  * action so the token comes from a fresh random source; only its hash is
- * stored.
+ * stored. Not rate limited: a code is 256 random bits and works once, and
+ * with no caller identity a deployment-wide bucket would only let one script
+ * lock every viewer out of sign-in.
  */
 export const exchangeHandoff = action({
   args: { code: v.string(), nonce: v.string() },
@@ -44,19 +45,10 @@ export const exchangeHandoff = action({
     v.object({ ok: v.literal(true), sessionToken: v.string(), expiresAt: v.number() }),
     v.object({
       ok: v.literal(false),
-      error: v.union(
-        v.literal("handoff_invalid"),
-        v.literal("handoff_expired"),
-        v.literal("nonce_mismatch"),
-        v.literal("rate_limited")
-      ),
+      error: v.union(v.literal("handoff_invalid"), v.literal("handoff_expired"), v.literal("nonce_mismatch")),
     })
   ),
   handler: async (ctx, { code, nonce }): Promise<ExchangeHandoffResult> => {
-    const limit = await viewerRateLimiter.limit(ctx, "viewerHandoffExchange");
-    if (!limit.ok) {
-      return { ok: false, error: "rate_limited" };
-    }
     if (!isOpaqueToken(code) || !isOpaqueToken(nonce)) {
       return { ok: false, error: "handoff_invalid" };
     }

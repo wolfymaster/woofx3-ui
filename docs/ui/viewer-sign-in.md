@@ -25,7 +25,7 @@ A page can live on a custom domain, which can't share cookies with the Convex de
    - stores a one-time handoff in `viewerHandoffs` under the SHA-256 of a random code, and redirects back to the page with `?viewer_code=<code>`.
 
    A declined consent or a failed exchange redirects back with `?viewer_auth_error=<code>` instead (`ViewerAuthErrorCode` in `convex/lib/viewerAuth.ts`). The page maps each code to its own text. A request with no usable state gets a plain 400, because there is nowhere safe to send it.
-4. **Handoff.** The page calls `viewerSession.exchangeHandoff({ code, nonce })`. The handoff row is deleted on every attempt. It turns into a session only within five minutes and only with the nonce the sign-in started with. A callback link opened in another browser therefore signs nobody in. Failures come back as `handoff_invalid`, `handoff_expired`, `nonce_mismatch` or `rate_limited`.
+4. **Handoff.** The page calls `viewerSession.exchangeHandoff({ code, nonce })`. The handoff row is deleted on every attempt. It turns into a session only within five minutes and only with the nonce the sign-in started with. A callback link opened in another browser therefore signs nobody in. Failures come back as `handoff_invalid`, `handoff_expired` or `nonce_mismatch`. The exchange has no rate limit: a code is 256 random bits and works once, and a deployment-wide bucket would let one script lock every viewer out.
 5. **Session.** On success the page gets a session token valid for 30 days and stores it for its own origin. Only the token's SHA-256 is stored, in `viewerSessions`. The page passes the token to every page function. `viewerSession.signOut({ sessionToken })` deletes the session, and a scheduled job deletes it at expiry. So a session row exists only while the session is live, and queries need no clock to refuse an expired one.
 
 `viewerSession.me({ sessionToken })` returns the signed-in viewer's display name and avatar, or null.
@@ -53,7 +53,6 @@ Behind it, the Convex buckets in `convex/lib/viewerRateLimits.ts` are a deployme
 | Bucket | Applies to | Limit |
 |--------|------------|-------|
 | `viewerLoginStart` | the start route, deployment-wide | 6000 per hour, burst 600 |
-| `viewerHandoffExchange` | `exchangeHandoff`, deployment-wide | 6000 per hour, burst 600 |
 | `viewerRolesRefresh` | `viewerRoles.refresh`, per viewer, only when Twitch is about to be called | 120 per hour, burst 20 |
 
 ## Secrets at rest

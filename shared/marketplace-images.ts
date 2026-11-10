@@ -25,7 +25,8 @@ export interface MarketplaceImages {
   banner?: MarketplaceBannerUrls;
 }
 
-function httpUrl(value: unknown): string | null {
+/** The value if it is an http(s) URL string; any other scheme (`javascript:`, `data:`) is null. */
+export function httpUrl(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }

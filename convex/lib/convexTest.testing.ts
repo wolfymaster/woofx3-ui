@@ -71,3 +71,21 @@ type MigrationRef = FunctionReference<
 export async function runMigration(t: ReturnType<typeof newBackend>, migration: MigrationRef): Promise<void> {
   await t.mutation(migration, { cursor: null, dryRun: false, oneBatchOnly: true, batchSize: 10_000 });
 }
+
+/**
+ * Lets a chain of scheduled functions, each scheduling the next, run until
+ * the newest job has finished. Fails after `maxRounds` rounds so a chain that
+ * never ends fails the test instead of hanging it.
+ */
+export async function finishScheduledChain(t: ReturnType<typeof newBackend>, maxRounds = 10_000): Promise<void> {
+  for (let round = 0; round < maxRounds; round++) {
+    await t.finishInProgressScheduledFunctions();
+    const newest = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").order("desc").first());
+    const waiting = newest !== null && (newest.state.kind === "pending" || newest.state.kind === "inProgress");
+    if (!waiting) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`scheduled functions still waiting after ${maxRounds} rounds`);
+}

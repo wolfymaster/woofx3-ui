@@ -4,6 +4,7 @@
 // caller's decision.
 
 import { readTwitchUserAnswer, type TwitchChannelRole, type TwitchUser } from "@shared/twitch-users";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./outboundTimeouts";
 import { helixResponse, type TwitchHelixRoute } from "./twitchEngineHelix";
 
 const TWITCH_USERS_URL = "https://api.twitch.tv/helix/users";
@@ -30,6 +31,7 @@ export async function fetchTwitchUser(
   const query = "login" in by ? `login=${encodeURIComponent(by.login)}` : `id=${encodeURIComponent(by.id)}`;
   const direct = () =>
     fetch(`${TWITCH_USERS_URL}?${query}`, {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${credentials.accessToken}`, "Client-Id": credentials.clientId },
     });
   const response = route
@@ -55,6 +57,7 @@ export async function fetchTwitchAppCredentials(): Promise<HelixCredentials> {
     throw new Error("AUTH_TWITCH_ID/AUTH_TWITCH_SECRET env vars are not set");
   }
   const response = await fetch(TWITCH_TOKEN_URL, {
+    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret }),
@@ -83,6 +86,7 @@ export async function fetchHasChannelRole(
 ): Promise<boolean | undefined> {
   const url = `${CHANNEL_ROLE_URLS[role]}?broadcaster_id=${encodeURIComponent(broadcasterUserId)}&user_id=${encodeURIComponent(userId)}`;
   const response = await fetch(url, {
+    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     headers: { Authorization: `Bearer ${credentials.accessToken}`, "Client-Id": credentials.clientId },
   });
   if (!response.ok) {

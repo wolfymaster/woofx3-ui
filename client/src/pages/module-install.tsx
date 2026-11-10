@@ -1,4 +1,3 @@
-import Editor from "@monaco-editor/react";
 import { localEndpointSummaries } from "@shared/local-endpoints";
 import { parseManifestPermissions } from "@shared/module-permissions";
 import {
@@ -37,6 +36,7 @@ import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } 
 import { getLanguageFromPath } from "@/lib/module-files";
 import { bareModuleKey } from "@/lib/module-key";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
+import { Editor } from "@/lib/monaco";
 import { cn } from "@/lib/utils";
 
 interface FileNode {

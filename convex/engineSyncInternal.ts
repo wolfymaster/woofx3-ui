@@ -1,11 +1,18 @@
 import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
 import { bareModuleKey } from "@shared/module-key";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { reconcileEndpoints } from "./inboundWebhooks";
-import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
-import { ensureSyncRow } from "./lib/engineSync/syncRow";
+import { cleanupBatchSize, cleanupBatchSizeArg } from "./lib/cleanupBatch";
+import {
+  computeNextEligibleAt,
+  computeNextEligibleAtAfterError,
+  ENGINE_SYNC_CONFIG,
+  holdsRunLease,
+} from "./lib/engineSync/config";
+import { ensureSyncRow, readSyncState } from "./lib/engineSync/syncRow";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { resolveProvenance } from "./lib/marketplaceInstallIdentity";
 import { recordedProvenance } from "./lib/marketplaceInstallRecords";
@@ -15,21 +22,6 @@ import { getInstanceMembership } from "./lib/teamAccess";
 
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 import { upsertWorkflowGroupFromWebhook, workflowGroupFields } from "./workflowGroups";
-
-// One-shot cleanup for the orphan instanceSync rows that exist in the
-// pre-spec deployment. Safe to delete after the first prod deploy.
-export const dropAllInstanceSync = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    // One-shot cleanup. Orphan count is small (3 in dev as of writing) — take
-    // a generous ceiling that's still well under Convex read limits.
-    const rows = await ctx.db.query("instanceSync").take(100);
-    for (const r of rows) {
-      await ctx.db.delete(r._id);
-    }
-    return rows.length;
-  },
-});
 
 /**
  * Reconcile the local `chatCommands` mirror against a full snapshot
@@ -863,6 +855,28 @@ export const reconcileFunctions = internalMutation({
   },
 });
 
+/**
+ * Push an instance that cannot be synced (it has no engine credentials yet)
+ * out by its sync interval, so the sweep does not pick it up on every tick.
+ * Registration starts its own run once credentials exist.
+ */
+export const deferUnsyncable = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const sync = await ctx.db
+      .query("instanceSync")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (!sync) {
+      return;
+    }
+    const now = Date.now();
+    await ctx.db.patch(sync._id, {
+      nextEligibleAt: computeNextEligibleAt(now, sync.syncIntervalMs, ENGINE_SYNC_CONFIG.jitterMs),
+    });
+  },
+});
+
 /** Fetch the instance bundle needed to open a capnweb session. */
 export const getInstanceBundle = internalQuery({
   args: { instanceId: v.id("instances") },
@@ -889,7 +903,17 @@ export const ensureInstanceSyncRow = internalMutation({
   handler: async (ctx, { instanceId }): Promise<Doc<"instanceSync">> => ensureSyncRow(ctx, instanceId),
 });
 
-/** Start a syncRuns row in "running" state and mark instanceSync.status="running". */
+/** The error an abandoned run is closed with. */
+export const ABANDONED_RUN_ERROR = "The sync stopped before it finished.";
+
+/**
+ * Start a syncRuns row in "running" state and mark instanceSync.status="running".
+ *
+ * The instance's nextEligibleAt moves to the end of the run's lease, which
+ * keeps the sweep off it while the run is alive and hands it back if the run
+ * dies without reaching finalizeRun. Earlier runs past their lease are closed
+ * as errors, so their "running" status never outlives them.
+ */
 export const startRun = internalMutation({
   args: {
     instanceId: v.id("instances"),
@@ -902,7 +926,21 @@ export const startRun = internalMutation({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .first();
     if (sync) {
-      await ctx.db.patch(sync._id, { status: "running", lastError: "" });
+      await ctx.db.patch(sync._id, {
+        status: "running",
+        lastError: "",
+        nextEligibleAt: now + ENGINE_SYNC_CONFIG.runLeaseMs,
+      });
+    }
+    const recentRuns = await ctx.db
+      .query("syncRuns")
+      .withIndex("by_instance_recent", (q) => q.eq("instanceId", instanceId))
+      .order("desc")
+      .take(5);
+    for (const run of recentRuns) {
+      if (run.status === "running" && !holdsRunLease(run.startedAt, now)) {
+        await ctx.db.patch(run._id, { status: "error", completedAt: now, error: ABANDONED_RUN_ERROR });
+      }
     }
     return ctx.db.insert("syncRuns", {
       instanceId,
@@ -1020,36 +1058,30 @@ export const getSyncStateForUser = internalQuery({
     if (!(await getInstanceMembership(ctx, instanceId, userId))) {
       return null;
     }
-    const syncState = await ctx.db
-      .query("instanceSync")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .first();
-    const recentRuns = await ctx.db
-      .query("syncRuns")
-      .withIndex("by_instance_recent", (q) => q.eq("instanceId", instanceId))
-      .order("desc")
-      .take(5);
-    const currentRun = recentRuns.find((r) => r.status === "running") ?? null;
-    return { syncState, currentRun, recentRuns };
+    return readSyncState(ctx, instanceId, Date.now());
   },
 });
 
 /**
  * Delete syncRuns rows older than `runHistoryRetentionMs`. Runs on a daily
- * cron. Bounded by `.take(200)` per invocation so a single run can't blow
- * past Convex per-mutation limits — the next day's run picks up any
- * remainder.
+ * cron. Each pass deletes at most `runHistoryCleanupBatch` rows so it stays
+ * inside Convex per-mutation limits, and a full batch schedules the next pass
+ * at once, so the chain ends only when a batch comes back short.
  */
 export const cleanupOldRuns = internalMutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { batchSize: cleanupBatchSizeArg },
+  handler: async (ctx, args) => {
+    const batchSize = cleanupBatchSize(args.batchSize, ENGINE_SYNC_CONFIG.runHistoryCleanupBatch);
     const cutoff = Date.now() - ENGINE_SYNC_CONFIG.runHistoryRetentionMs;
     const old = await ctx.db
       .query("syncRuns")
       .withIndex("by_started_at", (q) => q.lt("startedAt", cutoff))
-      .take(200);
+      .take(batchSize);
     for (const r of old) {
       await ctx.db.delete(r._id);
+    }
+    if (old.length === batchSize) {
+      await ctx.scheduler.runAfter(0, internal.engineSyncInternal.cleanupOldRuns, { batchSize: args.batchSize });
     }
     return old.length;
   },

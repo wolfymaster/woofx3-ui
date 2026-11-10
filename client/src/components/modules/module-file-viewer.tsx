@@ -1,7 +1,7 @@
-import Editor, { type OnMount } from "@monaco-editor/react";
 import { useCallback, useState } from "react";
 import { useTheme } from "@/hooks/use-theme";
 import { getLanguageFromPath } from "@/lib/module-files";
+import { Editor, type OnMount } from "@/lib/monaco";
 
 /** Tall enough for a short function to show whole; longer files scroll inside the viewer. */
 const MAX_HEIGHT_PX = 480;

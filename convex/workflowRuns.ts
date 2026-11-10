@@ -1,7 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { type ObjectType, v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type MutationCtx, type QueryCtx, query } from "./_generated/server";
+import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
+import { cleanupBatchSize, cleanupBatchSizeArg } from "./lib/cleanupBatch";
 import { hasRecordedTriggerEvent } from "./lib/runTriggerEvent";
 import { getInstanceMembership } from "./lib/teamAccess";
 
@@ -320,3 +322,126 @@ export async function recordRunStepFromWebhook(
     await ctx.db.insert("workflowRunSteps", row);
   }
 }
+
+/** How long run history is kept, counted from when Convex first stored the run. */
+export const WORKFLOW_RUN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Runs one cleanup pass deletes, each with its steps; a full batch schedules
+ * the next pass at once. Smaller than other cleanups because each run brings
+ * its steps with it.
+ */
+export const WORKFLOW_RUN_CLEANUP_BATCH = 50;
+
+/**
+ * Deletes a run and its steps. Steps are keyed by the engine's run id, which
+ * is only unique within one engine, so they are matched on the instance too.
+ */
+async function deleteRunWithSteps(ctx: MutationCtx, run: Doc<"workflowRuns">): Promise<void> {
+  const steps = await ctx.db
+    .query("workflowRunSteps")
+    .withIndex("by_run", (q) => q.eq("runId", run.engineRunId))
+    .collect();
+  for (const step of steps) {
+    if (step.instanceId === run.instanceId) {
+      await ctx.db.delete(step._id);
+    }
+  }
+  await ctx.db.delete(run._id);
+}
+
+/**
+ * Deletes runs past `WORKFLOW_RUN_RETENTION_MS`, oldest first, with their
+ * steps. Runs on a daily cron (see crons.ts) and continues in further passes
+ * until a batch comes back short.
+ */
+export const cleanupOld = internalMutation({
+  args: { batchSize: cleanupBatchSizeArg },
+  handler: async (ctx, args) => {
+    const batchSize = cleanupBatchSize(args.batchSize, WORKFLOW_RUN_CLEANUP_BATCH);
+    const cutoff = Date.now() - WORKFLOW_RUN_RETENTION_MS;
+    const old = await ctx.db
+      .query("workflowRuns")
+      .withIndex("by_creation_time", (q) => q.lt("_creationTime", cutoff))
+      .take(batchSize);
+    for (const run of old) {
+      await deleteRunWithSteps(ctx, run);
+    }
+    if (old.length === batchSize) {
+      await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOld, { batchSize: args.batchSize });
+    }
+    return old.length;
+  },
+});
+
+/** Steps one orphan-step cleanup pass reads; a pass that is not the last schedules the next at once. */
+export const WORKFLOW_RUN_STEP_CLEANUP_BATCH = 200;
+
+/**
+ * Deletes steps past `WORKFLOW_RUN_RETENTION_MS` whose run never arrived.
+ * Steps can land before their run, and `cleanupOld` reaches steps only
+ * through a run, so a step whose run was never recorded would be kept
+ * forever. An old step whose run does exist is left to that run's cleanup;
+ * because such steps stay in the index, passes walk it with a cursor rather
+ * than re-reading from the front. Runs on a daily cron (see crons.ts) and
+ * chains passes until the cursor reaches the end of the index.
+ *
+ * A cursor is valid only for the exact query that produced it, range bound
+ * included, so a chained pass reuses the first pass's cutoff instead of
+ * reading the clock again.
+ */
+export const cleanupOrphanSteps = internalMutation({
+  args: {
+    next: v.optional(v.object({ cursor: v.string(), cutoff: v.number() })),
+    batchSize: cleanupBatchSizeArg,
+  },
+  handler: async (ctx, args) => {
+    const batchSize = cleanupBatchSize(args.batchSize, WORKFLOW_RUN_STEP_CLEANUP_BATCH);
+    const cutoff = args.next?.cutoff ?? Date.now() - WORKFLOW_RUN_RETENTION_MS;
+    const cursor = args.next?.cursor ?? null;
+    const page = await ctx.db
+      .query("workflowRunSteps")
+      .withIndex("by_creation_time", (q) => q.lt("_creationTime", cutoff))
+      .paginate({ cursor, numItems: batchSize });
+    let deleted = 0;
+    for (const step of page.page) {
+      const runs = await ctx.db
+        .query("workflowRuns")
+        .withIndex("by_engine_id", (q) => q.eq("engineRunId", step.runId))
+        .collect();
+      if (!runs.some((run) => run.instanceId === step.instanceId)) {
+        await ctx.db.delete(step._id);
+        deleted++;
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.workflowRuns.cleanupOrphanSteps, {
+        next: { cursor: page.continueCursor, cutoff },
+        batchSize: args.batchSize,
+      });
+    }
+    return deleted;
+  },
+});
+
+/**
+ * Deletes every run of a deleted instance, with its steps, in passes that
+ * continue while a batch comes back full. Scheduled by
+ * instances.deleteInstanceData, so a long history never pushes the instance
+ * delete past Convex per-mutation limits.
+ */
+export const deleteForInstance = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const runs = await ctx.db
+      .query("workflowRuns")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .take(WORKFLOW_RUN_CLEANUP_BATCH);
+    for (const run of runs) {
+      await deleteRunWithSteps(ctx, run);
+    }
+    if (runs.length === WORKFLOW_RUN_CLEANUP_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.workflowRuns.deleteForInstance, { instanceId });
+    }
+  },
+});

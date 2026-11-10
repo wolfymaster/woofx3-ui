@@ -4,6 +4,7 @@ import { type ObjectType, v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type MutationCtx, type QueryCtx, query } from "./_generated/server";
+import { cleanupBatchSize, cleanupBatchSizeArg } from "./lib/cleanupBatch";
 
 // Audit trail of every engine webhook event received (source: "webhook",
 // written by convex/http.ts's POST /api/webhooks/woofx3 handler) plus every
@@ -11,6 +12,9 @@ import { action, internalMutation, internalQuery, type MutationCtx, type QueryCt
 // See convex/schema.ts's engineEventLog table doc for the payload contract.
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/** Rows one cleanup pass deletes; a full batch schedules the next pass at once. */
+export const EVENT_LOG_CLEANUP_BATCH = 200;
 
 async function membershipFor(
   ctx: QueryCtx,
@@ -227,19 +231,24 @@ export const retrigger = action({
 });
 
 /**
- * Deletes rows older than RETENTION_MS. Runs on a daily cron (see crons.ts) —
- * mirrors engineSyncInternal.cleanupOldRuns.
+ * Deletes rows older than RETENTION_MS. Runs on a daily cron (see crons.ts) and
+ * continues in further passes until a batch comes back short, so any backlog
+ * clears without one mutation reading an unbounded set.
  */
 export const cleanupOld = internalMutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { batchSize: cleanupBatchSizeArg },
+  handler: async (ctx, args) => {
+    const batchSize = cleanupBatchSize(args.batchSize, EVENT_LOG_CLEANUP_BATCH);
     const cutoff = Date.now() - RETENTION_MS;
     const old = await ctx.db
       .query("engineEventLog")
       .withIndex("by_received_at", (q) => q.lt("receivedAt", cutoff))
-      .take(200);
+      .take(batchSize);
     for (const row of old) {
       await ctx.db.delete(row._id);
+    }
+    if (old.length === batchSize) {
+      await ctx.scheduler.runAfter(0, internal.engineEventLog.cleanupOld, { batchSize: args.batchSize });
     }
     return old.length;
   },
