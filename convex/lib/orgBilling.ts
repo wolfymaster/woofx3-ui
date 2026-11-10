@@ -1,9 +1,9 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { lifecycleReasonValidator } from "./billingLifecycle";
 import { type AccountPlanRow, limitValuesValidator, type SubscriptionSummary } from "./entitlements";
-import { planTierValidator, subscriptionStateValidator } from "./organization";
+import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./organization";
 import type { AppliedDiscount } from "./payments/provider";
 import { subscriptionFor } from "./subscriptions";
 
@@ -11,7 +11,15 @@ import { subscriptionFor } from "./subscriptions";
 // pushed (`orgBilling`) and enforces from it. Nothing here calls the plane, so
 // entitlements keep working while it is down.
 
-/** The fields of a projection the plane pushes, minus the account (a string on the wire, an id once stored). */
+/** What the portal shows of a projected discount; the plane owns the discount, so Convex keeps only its label. */
+export const projectedDiscountValidator = v.object({ label: v.string() });
+export type ProjectedDiscount = Infer<typeof projectedDiscountValidator>;
+
+/**
+ * The fields of a projection the plane pushes, minus the account (a string on
+ * the wire, an id once stored). The ops route rejects unknown fields, so Convex
+ * must learn a field here before the plane starts sending it.
+ */
 export const orgBillingFields = {
   version: v.number(),
   tier: v.union(planTierValidator, v.null()),
@@ -21,7 +29,11 @@ export const orgBillingFields = {
   trialEndsAt: v.union(v.number(), v.null()),
   graceEndsAt: v.union(v.number(), v.null()),
   periodEnd: v.union(v.number(), v.null()),
-  discountLabel: v.union(v.string(), v.null()),
+  interval: v.union(billingIntervalValidator, v.null()),
+  exemptUntil: v.union(v.number(), v.null()),
+  spinDownAt: v.union(v.number(), v.null()),
+  hasProviderSubscription: v.boolean(),
+  discount: v.union(projectedDiscountValidator, v.null()),
   overrides: v.object({
     addFeatures: v.array(v.string()),
     removeFeatures: v.array(v.string()),
@@ -36,16 +48,13 @@ export async function orgBillingFor(ctx: QueryCtx, accountId: Id<"accounts">): P
     .unique();
 }
 
-/**
- * What the gates read about an org's billing, whichever record holds it.
- * `summary` is null when no plan applies (a projection with no tier).
- */
+/** What the gates read about an org's billing, whichever record holds it. */
 export interface BillingView {
-  summary: SubscriptionSummary | null;
+  summary: SubscriptionSummary;
   addOns: readonly string[];
   spinDownAt: number | null;
   hasProviderSubscription: boolean;
-  discount: AppliedDiscount | null;
+  discount: AppliedDiscount | ProjectedDiscount | null;
   /** A projection's own overrides; a subscription has none here (`accountPlans` applies instead). */
   overrides: AccountPlanRow | null;
 }
@@ -62,19 +71,25 @@ export function subscriptionSummary(row: Doc<"subscriptions">): SubscriptionSumm
   };
 }
 
-/** The standing's date as the subscription row keeps it: the trial end while trialing, else the period end. */
-export function projectionSummary(row: Doc<"orgBilling">): SubscriptionSummary | null {
-  if (row.tier === null) {
-    return null;
-  }
+/**
+ * The standing's date as the subscription row keeps it: the trial end while
+ * trialing, else the period end.
+ *
+ * A projection with no tier keeps its standing, reason and dates, so a
+ * suspended one still locks the dashboard and a trialing one still prompts.
+ * `plan` is null: usability follows the standing alone, but no plan or add-on
+ * feature is granted and the org gets no seat limit unless it has a managed
+ * engine (see orgSeatLimit).
+ */
+export function projectionSummary(row: Doc<"orgBilling">): SubscriptionSummary {
   return {
     plan: row.tier,
-    interval: null,
+    interval: row.interval,
     state: row.standing,
     stateReason: row.reason,
     nextBillingAt: row.standing === "trialing" ? row.trialEndsAt : row.periodEnd,
     graceEndsAt: row.graceEndsAt,
-    exemptUntil: null,
+    exemptUntil: row.exemptUntil,
   };
 }
 
@@ -89,9 +104,9 @@ export async function billingFor(ctx: QueryCtx, accountId: Id<"accounts">): Prom
     return {
       summary: projectionSummary(projection),
       addOns: projection.addOns,
-      spinDownAt: null,
-      hasProviderSubscription: false,
-      discount: null,
+      spinDownAt: projection.spinDownAt,
+      hasProviderSubscription: projection.hasProviderSubscription,
+      discount: projection.discount,
       overrides: projection.overrides,
     };
   }

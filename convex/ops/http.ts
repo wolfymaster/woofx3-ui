@@ -197,7 +197,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       const outcome = await accountBillingWrite(ctx, route.write, body, operator);
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
-    case "orgs.billingProjection": {
+    case "accounts.billingProjection": {
       const parsed = parseBillingProjectionRequest(await request.json().catch(() => null));
       if (!parsed.ok) {
         return error(400, "invalid_billing_projection", parsed.message);
@@ -212,7 +212,12 @@ export const opsHandler = httpAction(async (ctx, request) => {
       if (idempotencyKey.value !== projectionIdempotencyKey(route.accountId, parsed.value.version)) {
         return error(400, "invalid_idempotency_key", "Idempotency-Key must be {accountId}:{version}");
       }
-      const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, parsed.value);
+      const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, {
+        ...parsed.value,
+        actor: auth.actor,
+        // authenticateOps required a reason for this write.
+        auditReason: auth.reason ?? "",
+      });
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
     case "audit.list": {

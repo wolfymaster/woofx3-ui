@@ -1,8 +1,7 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import type { MutationCtx } from "../../_generated/server";
 import type { ParseResult } from "../notifications";
 import type { SubscriptionDto } from "./dto";
-import type { AccountBillingWrite } from "./routes";
 
 // The ops API's billing writes run once per caller-chosen Idempotency-Key, so
 // the backoffice can retry after a timeout or a 5xx without writing twice.
@@ -30,7 +29,8 @@ export const OPS_REQUESTS = {
   maxCleanupPasses: 50,
 } as const;
 
-export const accountBillingWriteValidator = v.union(
+/** Every write the ops API runs once per key: the subscription writes and the plane's billing projection. */
+export const opsRequestKindValidator = v.union(
   v.literal("plan"),
   v.literal("exemption"),
   v.literal("suspend"),
@@ -38,8 +38,7 @@ export const accountBillingWriteValidator = v.union(
   v.literal("projection")
 );
 
-/** Every write the ops API runs once per key: the subscription writes and the plane's billing projection. */
-export type OpsRequestKind = AccountBillingWrite | "projection";
+export type OpsRequestKind = Infer<typeof opsRequestKindValidator>;
 
 /** One write's identity: the route, the organization it changes and the caller's key. */
 export interface OpsRequestId {

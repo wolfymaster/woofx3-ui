@@ -5,7 +5,7 @@ import { mutation, type QueryCtx, query } from "./_generated/server";
 import { accountEntitlements, orgSeatLimit } from "./lib/entitlementAccess";
 import type { Entitlements, SubscriptionSummary } from "./lib/entitlements";
 import type { EngineRole, OrgRole } from "./lib/organization";
-import { billingFor } from "./lib/orgBilling";
+import { billingFor, type ProjectedDiscount } from "./lib/orgBilling";
 import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
 import type { AppliedDiscount } from "./lib/payments/provider";
 import { linkedPlatformNames, memberDisplayName, memberEmailField } from "./lib/teamAccess";
@@ -34,7 +34,7 @@ export interface OrgSubscription extends SubscriptionSummary {
   spinDownAt: number | null;
   /** A provider subscription exists, so plan changes go through the provider's portal. */
   hasProviderSubscription: boolean;
-  discount: AppliedDiscount | null;
+  discount: AppliedDiscount | ProjectedDiscount | null;
 }
 
 /** `createEngine` is enforced by the server's engine creation paths and no screen asks about it, so it isn't sent. */

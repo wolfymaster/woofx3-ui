@@ -21,7 +21,7 @@ export type OpsRoute =
   | { method: "POST"; name: "notifications.create" }
   | { method: "POST"; name: "notifications.delete"; notificationId: string }
   | { method: "POST"; name: "accounts.billing"; accountId: string; write: AccountBillingWrite }
-  | { method: "POST"; name: "orgs.billingProjection"; accountId: string };
+  | { method: "POST"; name: "accounts.billingProjection"; accountId: string };
 
 /** What an operator can change about an organization's subscription. */
 export type AccountBillingWrite = "plan" | "exemption" | "suspend" | "discount";
@@ -72,8 +72,8 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     if (segments.length === 3 && first === "accounts" && second && third && ACCOUNT_BILLING_WRITES.has(third)) {
       return { method, name: "accounts.billing", accountId: second, write: third as AccountBillingWrite };
     }
-    if (segments.length === 3 && first === "orgs" && second && third === "billing") {
-      return { method, name: "orgs.billingProjection", accountId: second };
+    if (segments.length === 3 && first === "accounts" && second && third === "billing-projection") {
+      return { method, name: "accounts.billingProjection", accountId: second };
     }
     if (segments.length === 1 && first === "notifications") {
       return { method, name: "notifications.create" };

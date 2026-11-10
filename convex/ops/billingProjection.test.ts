@@ -19,7 +19,11 @@ const wire = (accountId: string, version: number, overrides: object = {}) => ({
   trialEndsAt: null,
   graceEndsAt: null,
   periodEnd: 1_800_000_000_000,
-  discountLabel: null,
+  interval: null,
+  exemptUntil: null,
+  spinDownAt: null,
+  hasProviderSubscription: false,
+  discount: null,
   overrides: { addFeatures: [], removeFeatures: [], limits: { "org.members": 9 } },
   ...overrides,
 });
@@ -36,7 +40,7 @@ function parsed(body: object) {
   if (!result.ok) {
     throw new Error(result.message);
   }
-  return result.value;
+  return { ...result.value, actor: "billing-plane", auditReason: "projection push" };
 }
 
 const rows = (t: Backend) => t.run((ctx) => ctx.db.query("orgBilling").collect());
@@ -97,8 +101,44 @@ describe("parseBillingProjectionRequest", () => {
     ["a missing overrides", { ...valid, overrides: undefined }],
     ["an extra field", { ...valid, price: 1 }],
     ["a string time", { ...valid, periodEnd: "soon" }],
+    ["trialing with no trial end", { ...valid, standing: "trialing", trialEndsAt: null }],
+    ["an unknown interval", { ...valid, interval: "week" }],
+    ["a non-boolean hasProviderSubscription", { ...valid, hasProviderSubscription: "yes" }],
+    ["a discount with no label", { ...valid, discount: {} }],
+    ["a discount with extra keys", { ...valid, discount: { label: "x", percent: 5 } }],
+    ["the retired discountLabel field", { ...valid, discountLabel: null }],
+    ["an unknown added feature", { ...valid, overrides: { ...valid.overrides, addFeatures: ["nope"] } }],
+    ["an unknown removed feature", { ...valid, overrides: { ...valid.overrides, removeFeatures: ["nope"] } }],
+    ["an unknown limit", { ...valid, overrides: { ...valid.overrides, limits: { nope: 1 } } }],
+    [
+      "a feature both added and removed",
+      { ...valid, overrides: { addFeatures: ["business"], removeFeatures: ["business"], limits: {} } },
+    ],
   ])("rejects %s", (_name, body) => {
     expect(parseBillingProjectionRequest(body).ok).toBe(false);
+  });
+
+  test("accepts the portal fields, a trialing standing with its end, and null (unlimited) limits", () => {
+    expect(
+      parsed({
+        ...valid,
+        standing: "trialing",
+        trialEndsAt: 5,
+        interval: "year",
+        exemptUntil: 6,
+        spinDownAt: 7,
+        hasProviderSubscription: true,
+        discount: { label: "50% off" },
+        overrides: { ...valid.overrides, limits: { "org.members": null } },
+      })
+    ).toMatchObject({
+      interval: "year",
+      exemptUntil: 6,
+      spinDownAt: 7,
+      hasProviderSubscription: true,
+      discount: { label: "50% off" },
+      overrides: { limits: [{ key: "org.members", value: null }] },
+    });
   });
 
   test("accepts a null tier and turns limits into a list", () => {
@@ -109,7 +149,7 @@ describe("parseBillingProjectionRequest", () => {
   });
 });
 
-describe("POST /api/ops/orgs/:id/billing", () => {
+describe("POST /api/ops/accounts/:id/billing-projection", () => {
   let previous: string | undefined;
   beforeEach(() => {
     previous = process.env[OPS_SECRET_ENV];
@@ -136,12 +176,42 @@ describe("POST /api/ops/orgs/:id/billing", () => {
       string,
       string
     >;
-    return t.fetch(`/api/ops/orgs/${accountId}/billing`, {
+    return t.fetch(`/api/ops/accounts/${accountId}/billing-projection`, {
       method: "POST",
       headers: defined,
       body: JSON.stringify(body),
     });
   }
+
+  test("an unknown override key is a 400, not dropped", async () => {
+    const t = newBackend();
+    const accountId = await org(t);
+    const response = await post(
+      t,
+      accountId,
+      wire(accountId, 1, { overrides: { addFeatures: ["nope"], removeFeatures: [], limits: {} } })
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "invalid_billing_projection" } });
+    expect(await rows(t)).toEqual([]);
+  });
+
+  test("an applied push is audited with the operator; a replay and a stale push are not", async () => {
+    const t = newBackend();
+    const accountId = await org(t);
+    await post(t, accountId, wire(accountId, 2));
+    await post(t, accountId, wire(accountId, 2));
+    await post(t, accountId, wire(accountId, 1));
+    const audit = await t.run((ctx) => ctx.db.query("opsAuditLog").collect());
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      actor: "billing-plane",
+      action: "accounts.billingProjection",
+      target: accountId,
+      reason: "projection push",
+      result: "ok",
+    });
+  });
 
   test("applies a push, then replays it", async () => {
     const t = newBackend();

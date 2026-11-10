@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
+import { recordOpsAudit } from "../lib/ops/audit";
 import { claimOpsRequest, type OpsRequestId, requestFingerprint, settleOpsRequest } from "../lib/ops/idempotency";
 import { orgBillingFields, orgBillingFor } from "../lib/orgBilling";
 
@@ -19,11 +20,15 @@ export function projectionIdempotencyKey(accountId: string, version: number): st
  * Upserts the org's projection unless a version at least as new is stored
  * (`applied: false`, with the stored version). Run once per idempotency key:
  * a repeat replays the first answer, the same key with another body is 409.
- * An unknown org is 404 and claims nothing.
+ * An unknown org is 404 and claims nothing. A push that is applied is audited
+ * with the operator, in the same mutation; a replay or a stale push is not.
  */
 export const applyBillingProjection = internalMutation({
-  args: { accountId: v.string(), ...orgBillingFields },
-  handler: async (ctx, { accountId: rawAccountId, ...projection }): Promise<ProjectionWriteResult> => {
+  args: { accountId: v.string(), actor: v.string(), auditReason: v.string(), ...orgBillingFields },
+  handler: async (
+    ctx,
+    { accountId: rawAccountId, actor, auditReason, ...projection }
+  ): Promise<ProjectionWriteResult> => {
     const accountId = ctx.db.normalizeId("accounts", rawAccountId);
     if (accountId === null || (await ctx.db.get(accountId)) === null) {
       return { ok: false, status: 404, code: "not_found", message: "No such account" };
@@ -54,6 +59,14 @@ export const applyBillingProjection = internalMutation({
         await ctx.db.replace(stored._id, row);
       }
       result = { applied: true, version: projection.version };
+      await recordOpsAudit(ctx, {
+        actor,
+        action: "accounts.billingProjection",
+        target: rawAccountId,
+        reason: auditReason,
+        request: { version: projection.version, tier: projection.tier, standing: projection.standing },
+        result: "ok",
+      });
     }
     await settleOpsRequest(ctx, id, { ok: true, result }, Date.now());
     return { ok: true, result };

@@ -189,10 +189,10 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
 }
 
 /**
- * Throws `subscription_suspended` unless the org's subscription is usable, for
- * actions that resume a managed engine's run outside `reserveManagedInstance`.
- * An org with no subscription row yet predates subscriptions and is not
- * suspended, so it passes until the subscription migration gives it one.
+ * Throws `subscription_suspended` unless the org's billing (projection or
+ * subscription row) is usable, for actions that resume a managed engine's run
+ * outside `reserveManagedInstance`. An org with no billing yet is not
+ * suspended, so it passes.
  */
 export const assertCanResumeEngine = internalQuery({
   args: { accountId: v.id("accounts") },
@@ -206,7 +206,8 @@ export const assertCanResumeEngine = internalQuery({
 
 /**
  * An org's first managed engine starts its Starter trial. An org that already
- * has a subscription row, in any state, gets no second one.
+ * has billing (a projection or a subscription row), in any state, gets no
+ * trial of its own.
  */
 export async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">, now: number): Promise<void> {
   if ((await billingFor(ctx, accountId)) !== null) {

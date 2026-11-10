@@ -14,7 +14,7 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
-import { accountBillingWriteValidator } from "./lib/ops/idempotency";
+import { opsRequestKindValidator } from "./lib/ops/idempotency";
 import {
   billingIntervalValidator,
   engineRoleValidator,
@@ -1529,7 +1529,7 @@ export default defineSchema({
   // so a retry replays the first success instead of writing twice. Claimed and
   // settled in the same mutation as the write; see lib/ops/idempotency.ts.
   opsRequests: defineTable({
-    write: accountBillingWriteValidator,
+    write: opsRequestKindValidator,
     accountId: v.string(),
     key: v.string(),
     // Canonical JSON of the validated body; the same key with another body is refused.

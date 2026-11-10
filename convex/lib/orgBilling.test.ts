@@ -50,7 +50,11 @@ async function giveProjection(t: Backend, accountId: Id<"accounts">, projection:
       trialEndsAt: null,
       graceEndsAt: null,
       periodEnd: null,
-      discountLabel: null,
+      interval: null,
+      exemptUntil: null,
+      spinDownAt: null,
+      hasProviderSubscription: false,
+      discount: null,
       overrides: NO_OVERRIDES,
       updatedAt: NOW,
       ...projection,
@@ -95,13 +99,57 @@ describe("standing drives the gates the same from a projection as from a subscri
       expect(resolved.subscription?.state).toBe(standing);
     }
   });
+});
 
-  test("a projection with no tier grants no plan and is not usable", async () => {
+describe("a projection with no tier keeps its standing", () => {
+  test.each<[Standing, boolean]>([
+    ["trialing", true],
+    ["active", true],
+    ["past_due", true],
+    ["exempt", true],
+    ["suspended", false],
+  ])("%s: usable is %p, and no plan or add-on feature is granted", async (standing, usable) => {
     const t = newBackend();
     const accountId = await seedOrg(t);
-    await giveProjection(t, accountId, { tier: null, standing: "trialing" });
-    expect((await entitlements(t, accountId)).plan).toBeNull();
-    expect(await refusal(t, accountId)).toBe("subscription_suspended");
+    const reason = standing === "suspended" || standing === "past_due" ? ("payment_failed" as const) : null;
+    await giveProjection(t, accountId, {
+      tier: null,
+      standing,
+      reason,
+      trialEndsAt: standing === "trialing" ? 111 : null,
+      addOns: ["userPages"],
+    });
+    expect(await refusal(t, accountId)).toBe(usable ? null : "subscription_suspended");
+    const resolved = await entitlements(t, accountId);
+    expect(resolved.plan).toBeNull();
+    expect(resolved.features).toEqual([]);
+    expect(resolved.subscription).toMatchObject({ plan: null, state: standing, stateReason: reason });
+  });
+
+  test("a self-hosted-only org with a no-tier projection has no seat limit", async () => {
+    const t = newBackend();
+    const accountId = await seedOrg(t);
+    await t.run((ctx) =>
+      ctx.db.insert("instances", {
+        accountId,
+        name: "Box",
+        url: "https://b.example",
+        hosting: "external",
+        createdAt: 1,
+      })
+    );
+    await giveProjection(t, accountId, { tier: null, standing: "trialing", trialEndsAt: 111 });
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).toBeNull();
+  });
+
+  test("a managed engine seats a no-tier org", async () => {
+    const t = newBackend();
+    const accountId = await seedOrg(t);
+    await t.run((ctx) =>
+      ctx.db.insert("instances", { accountId, name: "Box", url: "https://b.example", hosting: "managed", createdAt: 1 })
+    );
+    await giveProjection(t, accountId, { tier: null, standing: "trialing", trialEndsAt: 111 });
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).not.toBeNull();
   });
 });
 

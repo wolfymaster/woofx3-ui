@@ -53,9 +53,9 @@ async function registeredEnginesOf(ctx: QueryCtx, userId: Id<"users">): Promise<
 }
 
 /**
- * Locked while the org's subscription is suspended. Only hosted engines are
- * billed, and an org with no subscription row yet (before the subscription
- * migration) keeps its engine.
+ * Locked while the org's billing (projection or subscription row) is
+ * suspended. Only hosted engines are billed, and an org with no billing yet
+ * keeps its engine.
  */
 async function suspendedEntry(
   ctx: QueryCtx,
@@ -120,7 +120,7 @@ export const entry = query({
 /**
  * What onboarding tells the owner about paying for a hosted engine:
  * - trial: the org is on its free trial, so the engine just gets built
- * - choosePlan: the trial is used up and the subscription isn't usable, so no
+ * - choosePlan: the trial is used up and its billing isn't usable, so no
  *   engine is built until the owner picks a plan in the portal
  */
 export type PlanPrompt = { kind: "trial"; endsAt: number } | { kind: "choosePlan" };

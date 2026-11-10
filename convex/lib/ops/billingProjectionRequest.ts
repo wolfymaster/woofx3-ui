@@ -1,8 +1,16 @@
 import type { Infer } from "convex/values";
 import { lifecycleReasonValidator } from "../billingLifecycle";
+import { type LimitValue, validateEntitlementInput } from "../entitlements";
 import type { ParseResult } from "../notifications";
-import { PLAN_TIERS, type PlanTier, SUBSCRIPTION_STATES, type SubscriptionState } from "../organization";
-import type { orgBillingFields } from "../orgBilling";
+import {
+  BILLING_INTERVALS,
+  type BillingInterval,
+  PLAN_TIERS,
+  type PlanTier,
+  SUBSCRIPTION_STATES,
+  type SubscriptionState,
+} from "../organization";
+import { orgBillingFields } from "../orgBilling";
 
 // The body of the plane's billing projection push. Shape and range checks run
 // here so a malformed push is a 400; whether it is newer than what Convex holds
@@ -24,30 +32,19 @@ const isStringArray = (value: unknown): value is string[] =>
 const isNullableTime = (value: unknown): value is number | null =>
   value === null || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
 
-const FIELDS = [
-  "accountId",
-  "version",
-  "tier",
-  "addOns",
-  "standing",
-  "reason",
-  "trialEndsAt",
-  "graceEndsAt",
-  "periodEnd",
-  "discountLabel",
-  "overrides",
-] as const;
+const FIELDS: readonly string[] = ["accountId", ...Object.keys(orgBillingFields)];
 
 /** An `OrgBillingProjection` (spec: billing in the management plane), times in epoch ms. */
 export function parseBillingProjectionRequest(body: unknown): ParseResult<BillingProjectionRequest> {
   if (!isRecord(body)) {
     return fail("body must be a JSON object");
   }
-  const extra = Object.keys(body).find((key) => !(FIELDS as readonly string[]).includes(key));
+  const extra = Object.keys(body).find((key) => !FIELDS.includes(key));
   if (extra !== undefined) {
     return fail(`Unknown field "${extra}"`);
   }
-  const { accountId, version, tier, addOns, standing, reason, discountLabel, overrides } = body;
+  const { accountId, version, tier, addOns, standing, reason, interval, hasProviderSubscription, discount, overrides } =
+    body;
   if (typeof accountId !== "string" || accountId === "") {
     return fail("accountId must be a non-empty string");
   }
@@ -69,13 +66,25 @@ export function parseBillingProjectionRequest(body: unknown): ParseResult<Billin
   if (standing === "suspended" && reason === null) {
     return fail("a suspended standing needs a reason");
   }
-  for (const field of ["trialEndsAt", "graceEndsAt", "periodEnd"] as const) {
+  if (standing === "trialing" && body.trialEndsAt === null) {
+    return fail("a trialing standing needs trialEndsAt");
+  }
+  if (interval !== null && !BILLING_INTERVALS.includes(interval as BillingInterval)) {
+    return fail(`interval must be null or one of ${BILLING_INTERVALS.join(", ")}`);
+  }
+  if (typeof hasProviderSubscription !== "boolean") {
+    return fail("hasProviderSubscription must be a boolean");
+  }
+  for (const field of ["trialEndsAt", "graceEndsAt", "periodEnd", "exemptUntil", "spinDownAt"] as const) {
     if (!isNullableTime(body[field])) {
       return fail(`${field} must be null or epoch milliseconds`);
     }
   }
-  if (discountLabel !== null && typeof discountLabel !== "string") {
-    return fail("discountLabel must be null or a string");
+  if (
+    discount !== null &&
+    !(isRecord(discount) && Object.keys(discount).length === 1 && typeof discount.label === "string")
+  ) {
+    return fail("discount must be null or { label: string }");
   }
   if (!isRecord(overrides) || !isStringArray(overrides.addFeatures) || !isStringArray(overrides.removeFeatures)) {
     return fail("overrides needs addFeatures and removeFeatures as arrays of strings, and limits as an object");
@@ -84,12 +93,21 @@ export function parseBillingProjectionRequest(body: unknown): ParseResult<Billin
   if (!isRecord(limits)) {
     return fail("overrides.limits must be an object of amounts");
   }
-  const limitList: { key: string; value: number }[] = [];
+  const limitList: LimitValue[] = [];
   for (const [key, value] of Object.entries(limits)) {
-    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-      return fail(`limit "${key}" must be a whole number of at least 0`);
+    if (value !== null && typeof value !== "number") {
+      return fail(`limit "${key}" must be a number, or null for unlimited`);
     }
     limitList.push({ key, value });
+  }
+  try {
+    validateEntitlementInput({
+      features: overrides.addFeatures,
+      removeFeatures: overrides.removeFeatures,
+      limits: limitList,
+    });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "invalid overrides");
   }
   return {
     ok: true,
@@ -103,7 +121,11 @@ export function parseBillingProjectionRequest(body: unknown): ParseResult<Billin
       trialEndsAt: body.trialEndsAt as number | null,
       graceEndsAt: body.graceEndsAt as number | null,
       periodEnd: body.periodEnd as number | null,
-      discountLabel,
+      interval: interval as BillingInterval | null,
+      exemptUntil: body.exemptUntil as number | null,
+      spinDownAt: body.spinDownAt as number | null,
+      hasProviderSubscription,
+      discount: discount as BillingProjectionRequest["discount"],
       overrides: { addFeatures: overrides.addFeatures, removeFeatures: overrides.removeFeatures, limits: limitList },
     },
   };

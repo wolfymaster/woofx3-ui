@@ -51,10 +51,10 @@ export async function accountEntitlements(
   const billing = await billingFor(ctx, accountId);
   if (billing !== null) {
     const { summary } = billing;
-    const plan = summary !== null && isUsable(summary) ? await tierPlan(ctx, summary.plan) : null;
+    const plan = summary.plan !== null && isUsable(summary) ? await tierPlan(ctx, summary.plan) : null;
     return resolveEntitlements(plan, await billingOverrides(ctx, accountId, billing), nowMs, ENTITLEMENT_CATALOG, {
       subscription: summary,
-      grantedFeatures: summary === null ? [] : addOnFeatures(summary, billing.addOns),
+      grantedFeatures: addOnFeatures(summary, billing.addOns),
     });
   }
   const assignment = await accountPlanFor(ctx, accountId);
@@ -146,7 +146,7 @@ export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove so
 /**
  * The org's `org.members` limit (every org member, owner included), or null
  * when no seat limit applies. Seats belong to the org, not to an engine: the
- * limit applies once the org has a subscription or any managed engine,
+ * limit applies once the org has a plan (subscription or projection tier) or any managed engine,
  * whichever engine a person joins through. An org with only self-hosted
  * engines has none, nor does a plan without one.
  */
@@ -155,8 +155,9 @@ export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, now
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
+  const billing = await billingFor(ctx, accountId);
   const seated =
-    (await billingFor(ctx, accountId)) !== null || instances.some((instance) => instance.hosting === "managed");
+    (billing !== null && billing.summary.plan !== null) || instances.some((instance) => instance.hosting === "managed");
   if (!seated) {
     return null;
   }
