@@ -158,6 +158,7 @@ type DirectFakeSurface = Pick<
   | "marketplaceGetAuthor"
   | "inspectMarketplaceListing"
   | "installMarketplaceListing"
+  | "getInstalledModuleLicense"
   | "installMarketplaceBundle"
   | "getModuleManifest"
   | "getModuleSettings"
@@ -268,6 +269,8 @@ export class FakeEngineState {
   authors: Record<string, (query: MarketplaceAuthorQuery | undefined) => unknown> = {};
   /** Listing inspections by id; an id not here is refused, as a paid listing is without a buyer token. */
   inspections: Record<string, MarketplaceListingInspection> = {};
+  /** License keys of installed modules by manifest id; a module not here has none. */
+  moduleLicenses: Record<string, { listingId: string; key: string }> = {};
   /** What `installMarketplaceListing` and `installMarketplaceBundle` answer. */
   listingInstall: MarketplaceInstallResult = { status: "installed", moduleKey: "listing:1.0.0:abc1234" };
   bundleInstall: MarketplaceBundleInstallResult = {
@@ -885,6 +888,11 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
   ): Promise<MarketplaceInstallResult> {
     this.state.record("installMarketplaceListing", listingId, request);
     return this.state.listingInstall;
+  }
+
+  async getInstalledModuleLicense(moduleId: string): Promise<{ listingId: string; key: string } | null> {
+    this.state.record("getInstalledModuleLicense", moduleId);
+    return this.state.moduleLicenses[moduleId] ?? null;
   }
 
   async installMarketplaceBundle(listingId: string, buyerToken?: string): Promise<MarketplaceBundleInstallResult> {

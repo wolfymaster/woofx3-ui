@@ -279,6 +279,10 @@ export default function Modules() {
   // A module that ships with the engine cannot be uninstalled, so it offers no Remove.
   const shownModule = selectedModule?.source === "installed" ? selectedModule.module : installedModuleForMarketplace;
   const removableModule = shownModule && shownModule.provenance !== "builtIn" ? shownModule : null;
+  const licensedModule =
+    shownModule?.marketplaceListingId && meta?.identifier
+      ? { moduleId: meta.identifier, listingId: shownModule.marketplaceListingId }
+      : undefined;
 
   return (
     <>
@@ -333,6 +337,7 @@ export default function Modules() {
                         localEndpoints={detailProps?.localEndpoints}
                         latestLocalEndpoints={detailProps?.latestLocalEndpoints}
                         credits={creditedListing?.credits}
+                        license={licensedModule}
                         onRemove={removableModule ? () => handleDelete(removableModule) : undefined}
                         onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
                         onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}

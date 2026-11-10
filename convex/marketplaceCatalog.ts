@@ -42,7 +42,12 @@ import {
   fetchListingContent,
   marketplaceAccessForInstanceId,
 } from "./lib/marketplaceEntitlement";
-import { type AcquireForInstallResult, acquireOutcomeOfError, licensedFromAcquire } from "./lib/marketplaceLicense";
+import {
+  type AcquireForInstallResult,
+  acquireOutcomeOfError,
+  heldLicenseKey,
+  licensedFromAcquire,
+} from "./lib/marketplaceLicense";
 
 // The marketplace storefront, across every listing type.
 //
@@ -273,6 +278,24 @@ export const acquireForInstall = action({
         }
         throw err;
       }
+    }),
+});
+
+/**
+ * The license key the account holds for a listing, for the module page to
+ * show when asked; null when it holds none. Read from the marketplace each
+ * time and never kept here.
+ */
+export const licenseKey = action({
+  args: { instanceId: v.id("instances"), listingId: v.string() },
+  handler: async (ctx, args): Promise<string | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      return heldLicenseKey(
+        await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET"),
+        args.listingId
+      );
     }),
 });
 

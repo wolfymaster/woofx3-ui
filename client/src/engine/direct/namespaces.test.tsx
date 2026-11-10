@@ -13,6 +13,7 @@ import {
   type UISettingValue,
   type Workflow,
 } from "@woofx3/api";
+import { ENGINE_CAPABILITIES } from "@woofx3/api/capabilities";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
 import type { MacroId, MacroInput, WorkflowRun } from "@/engine/types";
@@ -1267,6 +1268,21 @@ describe("modules", () => {
     expect(
       String(await install({ listingId: "listing", licenseKey: null, ...approvals }).catch((e: Error) => e))
     ).toContain("Sign in");
+  });
+
+  test("a module's license key comes from the engine, and an engine too old for keys has none", async () => {
+    const { runtime, state, engine } = await connected();
+    state.moduleLicenses = { cozy: { listingId: "cozy", key: "W3X-AAAA" } };
+    const read = renderDirect(() => directModulesGateway(runtime).useLicenseKeyRequest()).current();
+
+    engine.capabilities = [];
+    expect(await read({ moduleId: "cozy", listingId: "cozy" })).toBeNull();
+    expect(state.callsOf("getInstalledModuleLicense")).toEqual([]);
+
+    engine.capabilities = [ENGINE_CAPABILITIES.marketplaceLicenseKeys];
+    expect(await read({ moduleId: "cozy", listingId: "cozy" })).toBe("W3X-AAAA");
+    expect(await read({ moduleId: "other", listingId: "other" })).toBeNull();
+    expect(state.callsOf("getInstalledModuleLicense")).toEqual([["cozy"], ["other"]]);
   });
 
   test("an engine with no account acquires nothing itself: it claims as it installs", async () => {

@@ -92,6 +92,7 @@ import type {
   ModuleFileContent,
   ModuleFileList,
   ModuleId,
+  ModuleLicenseLookup,
   ModuleOAuthConnect,
   ModuleOAuthFinish,
   ModuleResourceInstance,
@@ -501,6 +502,12 @@ export interface ModulesGateway {
    * engine's reason when it refuses the install.
    */
   useLicensedInstallRequest(): (install: LicensedInstall) => Promise<LicensedInstallOutcome>;
+  /**
+   * The license key the module was installed with, or that the account holds
+   * for its listing; null when there is none to show. A credential: show it
+   * only when asked, and never log it.
+   */
+  useLicenseKeyRequest(): (module: ModuleLicenseLookup) => Promise<string | null>;
   /**
    * Installs a marketplace bundle (a scene or an alert) onto the engine and
    * resolves with what it made. Rejects for a listing the instance may not install.
