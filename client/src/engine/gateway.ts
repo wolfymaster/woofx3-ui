@@ -1,4 +1,3 @@
-import type { InstanceRole } from "@convex/lib/instanceRoles";
 import type {
   DatabaseRecord,
   DatabaseRecordCreate,
@@ -69,6 +68,7 @@ import type {
   InstallAcquireOutcome,
   InstalledModule,
   InstanceLiveState,
+  InstanceRole,
   KnownBoxArt,
   LicensedInstall,
   LicensedInstallOutcome,
