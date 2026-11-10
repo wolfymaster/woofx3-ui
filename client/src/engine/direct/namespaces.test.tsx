@@ -1149,6 +1149,23 @@ describe("modules", () => {
     expect(detail.triggers).toMatchObject([{ key: "paid.tipped", name: "Tipped" }]);
   });
 
+  test("a listing's detail takes its permissions from the listing, so a paid one can be reviewed before buying", async () => {
+    const { runtime, state } = await connected();
+    const obs = { id: "obs", name: "OBS", protocol: "websocket" };
+    state.listings = {
+      paid: {
+        listing: {
+          id: "paid",
+          name: "Paid",
+          version: "1.0.0",
+          module: { permissions: ["obs.control"], localEndpoints: [obs] },
+        },
+      },
+    };
+    const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("paid");
+    expect(detail).toMatchObject({ permissions: ["obs.control"], localEndpoints: [obs] });
+  });
+
   test("only declared settings are read, and only declared settings are written", async () => {
     const { runtime, state } = await connected();
     state.modules = [installed("cozy", { id: "cozy", settings: [{ id: "color", label: "Color", type: "string" }] })];
