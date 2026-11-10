@@ -1,5 +1,22 @@
 # woofx3 desktop changelog
 
+## [0.5.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.4.0...woofx3-v0.5.0) (2026-11-10)
+
+### Features
+
+* **desktop:** move update toast to top right, add dismiss and header icon ([c597377](https://github.com/wolfymaster/woofx3-ui/commit/c59737741df6e764bcf7e641c1c7794c7a9c0b1e))
+
+### Bug Fixes
+
+* **client:** read the header user without casting to any ([da86633](https://github.com/wolfymaster/woofx3-ui/commit/da86633bf74bba7e4fa2d5682f5cd203d24b7933))
+* **desktop:** drop the static "On this computer" label from the local header ([ab1f4d6](https://github.com/wolfymaster/woofx3-ui/commit/ab1f4d62bc5c6e28d301151979618d941762d696))
+* **marketplace:** keep only http(s) author and credit links ([6a6b21d](https://github.com/wolfymaster/woofx3-ui/commit/6a6b21d8ab6ec21d86cf3e896f2e775ece89d580))
+* **modules:** bundle Monaco so the file viewer loads under the desktop CSP ([8e25f71](https://github.com/wolfymaster/woofx3-ui/commit/8e25f715ee40bda328fbbdf5f686de94ecf27376))
+
+### Performance Improvements
+
+* **convex:** send the alert list only the fields its readers use ([099514f](https://github.com/wolfymaster/woofx3-ui/commit/099514f2595d2f1119c3cf1d36f019d083cce504))
+
 ## [0.4.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.3.0...woofx3-v0.4.0) (2026-11-09)
 
 ### ⚠ BREAKING CHANGES
