@@ -7,6 +7,7 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
 import { useMarketplaceAcquireForInstallRequest } from "@/engine/hooks/use-marketplace";
 import { useLicensedInstallRequest, useMarketplaceInstallRequest } from "@/engine/hooks/use-modules";
+import { useInstanceRole } from "@/hooks/use-instance-role";
 import { useStartPayment } from "@/hooks/use-start-payment";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
@@ -18,6 +19,7 @@ import {
   installFlowBusy,
   transition,
 } from "@/lib/install-flow";
+import { canStartPayment } from "@/lib/marketplace-access";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 
 // Installing a marketplace module from the browser.
@@ -219,6 +221,7 @@ function useLicensedModuleInstall(
   const acquireForInstall = useMarketplaceAcquireForInstallRequest();
   const installWithLicense = useLicensedInstallRequest();
   const startPayment = useStartPayment();
+  const canPay = canStartPayment(useInstanceRole());
   const [state, setState] = useState<InstallFlowState>(INSTALL_FLOW_IDLE);
   const commands = useRef({ acquireForInstall, installWithLicense, startPayment });
   commands.current = { acquireForInstall, installWithLicense, startPayment };
@@ -313,6 +316,7 @@ function useLicensedModuleInstall(
           mode: request.mode,
           permissions: consent.approved,
           localEndpoints: consent.approvedLocalEndpoints,
+          canPay,
           knownLocalEndpoints: consent.nextEndpoints,
         },
         prompt: needsPrompt(consent)
@@ -320,7 +324,7 @@ function useLicensedModuleInstall(
           : null,
       });
     },
-    [dispatch]
+    [dispatch, canPay]
   );
 
   const confirmPurchase = useCallback(
