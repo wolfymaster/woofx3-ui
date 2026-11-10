@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AppliedDiscount } from "@convex/lib/payments/provider";
+import type { AppliedDiscount } from "@convex/lib/billingClient";
 import { describeDiscount, formatPrice, formatSeats } from "./format";
 
 describe("describeDiscount", () => {

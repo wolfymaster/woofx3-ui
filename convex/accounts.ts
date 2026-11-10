@@ -1,8 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { PLACEHOLDER_NAME } from "./lib/firstRun";
+import { isMaintenanceConfigured } from "./lib/maintenanceClient";
 
 export const getMyAccount = query({
   args: {},
@@ -36,6 +38,9 @@ async function insertAccount(ctx: MutationCtx, userId: Id<"users">, name: string
   const now = Date.now();
   const accountId = await ctx.db.insert("accounts", { name, ownerId: userId, createdAt: now });
   await ctx.db.insert("accountMembers", { accountId, userId, role: "owner", createdAt: now });
+  if (isMaintenanceConfigured()) {
+    await ctx.scheduler.runAfter(0, internal.billingCommands.ensureBilling, { accountId });
+  }
   return accountId;
 }
 

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ConvexError } from "convex/values";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   CHECKOUT_ATTEMPT,
@@ -481,74 +480,6 @@ describe("payments webhook", () => {
   });
 });
 
-describe("billing actions", () => {
-  test("an org admin may not start a checkout or open the portal", async () => {
-    const t = newBackend();
-    const { accountId, adminId } = await seedOrg(t);
-    const asAdmin = t.withIdentity({ subject: `${adminId}|s` });
-    await expect(
-      asAdmin.action(api.billing.startCheckout, { accountId, plan: "starter", interval: "month" })
-    ).rejects.toThrow("Your organization role doesn't allow this");
-    await expect(asAdmin.action(api.billing.openPortal, { accountId })).rejects.toThrow(
-      "Your organization role doesn't allow this"
-    );
-  });
-
-  test("an org already paying is sent to the portal instead of a second checkout", async () => {
-    const t = newBackend();
-    const { accountId, ownerId } = await seedOrg(t);
-    const provider = new FakePaymentProvider();
-    provider.subscriptions.set("sub_1", providerSubscription(accountId));
-    await subscribe(t, provider, accountId);
-    await expect(
-      t.withIdentity({ subject: `${ownerId}|s` }).action(api.billing.startCheckout, {
-        accountId,
-        plan: "pro",
-        interval: "year",
-      })
-    ).rejects.toThrow("already has a subscription");
-  });
-
-  for (const state of ["past_due", "suspended"] as const) {
-    test(`a ${state} org whose subscription is failing is sent to the portal, not a second checkout`, async () => {
-      const t = newBackend();
-      const { accountId, ownerId } = await seedOrg(t);
-      const provider = new FakePaymentProvider();
-      provider.subscriptions.set("sub_1", providerSubscription(accountId));
-      await subscribe(t, provider, accountId);
-      provider.subscriptions.set(
-        "sub_1",
-        providerSubscription(accountId, {
-          standing: "payment_failed",
-          providerStatus: "past_due",
-          observedAt: T0 + 2 * DAY,
-        })
-      );
-      await deliver(t, provider, "evt_failed");
-      if (state === "suspended") {
-        await t.run((ctx) =>
-          applyTransition(ctx, {
-            accountId,
-            event: { kind: "GraceExpired" },
-            now: T0 + 16 * DAY,
-            actor: "test",
-            origin: "signup",
-          })
-        );
-      }
-      expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.state).toBe(state);
-      const refusal = await t
-        .withIdentity({ subject: `${ownerId}|s` })
-        .action(api.billing.startCheckout, { accountId, plan: "pro", interval: "month" })
-        .then(
-          () => null,
-          (error: unknown) => (error instanceof ConvexError ? error.data : error)
-        );
-      expect(refusal).toMatchObject({ code: "subscription_exists" });
-    });
-  }
-});
-
 describe("checkoutRefusal", () => {
   const OPEN = { customerRef: null, providerStanding: null, state: null, stateReason: null } as const;
   const CASES: Array<[string, Parameters<typeof checkoutRefusal>[0], string | null]> = [
@@ -591,25 +522,6 @@ describe("checkoutRefusal", () => {
       expect(checkoutRefusal(context)?.code ?? null).toBe(expected);
     });
   }
-
-  test("an org an operator suspended during its trial gets no checkout to pay", async () => {
-    const t = newBackend();
-    const { accountId, ownerId } = await seedOrg(t);
-    for (const event of [{ kind: "TrialStarted", billingDelayDays: 30 }, { kind: "OperatorSuspended" }] as const) {
-      await t.run((ctx) => applyTransition(ctx, { accountId, event, now: T0, actor: "test", origin: "signup" }));
-    }
-    const refusal = await t
-      .withIdentity({ subject: `${ownerId}|s` })
-      .action(api.billing.startCheckout, { accountId, plan: "pro", interval: "month" })
-      .then(
-        () => null,
-        (error: unknown) => (error instanceof ConvexError ? error.data : error)
-      );
-    expect(refusal).toEqual({
-      code: "suspended_by_operator",
-      message: "Your organization's account is suspended. Contact woofx3 support.",
-    });
-  });
 });
 
 describe("internal mutations", () => {

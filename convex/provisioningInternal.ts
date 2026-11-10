@@ -3,7 +3,6 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { scheduleEngineStopRetry } from "./billing";
-import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { switchedStatus } from "./lib/engineSwitch";
 import { requireUsableSubscription } from "./lib/entitlementAccess";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
@@ -16,7 +15,6 @@ import {
 } from "./lib/maintenanceUpgrade";
 import { billingFor } from "./lib/orgBilling";
 import { requireOrgActionFor } from "./lib/orgRoles";
-import { applyTransition } from "./lib/subscriptions";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { performRegistration } from "./registration";
@@ -103,10 +101,13 @@ export const reserveManagedInstance = internalMutation({
     const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
 
     const { instanceId } = await findOrCreateManagedInstance(ctx, account);
-    await startTrialIfNew(ctx, accountId, Date.now());
+    await startTrialIfNew(ctx, accountId);
     // Every managed request (onboarding, the username form, retry) comes
     // through here, so a suspended org can't build an engine nothing would stop.
-    await requireUsableSubscription(ctx, accountId);
+    // An org the plane has not yet reported on is a new one: nothing to refuse.
+    if ((await billingFor(ctx, accountId)) !== null) {
+      await requireUsableSubscription(ctx, accountId);
+    }
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -205,24 +206,16 @@ export const assertCanResumeEngine = internalQuery({
 });
 
 /**
- * An org's first managed engine starts its Starter trial. An org that already
- * has billing (a projection or a subscription row), in any state, gets no
- * trial of its own.
+ * An org's first managed engine asks the management plane to start its trial
+ * (`ensure` is idempotent). An org that already has billing, in any state,
+ * needs nothing. The call is scheduled, never awaited here: the plane's
+ * reconciler heals a missed one, and a mutation cannot call out.
  */
-export async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">, now: number): Promise<void> {
+export async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">): Promise<void> {
   if ((await billingFor(ctx, accountId)) !== null) {
     return;
   }
-  const result = await applyTransition(ctx, {
-    accountId,
-    event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
-    now,
-    actor: "signup",
-    origin: "signup",
-  });
-  if (!result.ok) {
-    throw new Error(`startTrialIfNew: ${result.error.event} is illegal from ${result.error.from}`);
-  }
+  await ctx.scheduler.runAfter(0, internal.billingCommands.ensureBilling, { accountId });
 }
 
 export async function findOrCreateManagedInstance(

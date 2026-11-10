@@ -4,7 +4,6 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   type ActionCtx,
-  action,
   internalAction,
   internalMutation,
   internalQuery,
@@ -41,16 +40,13 @@ import {
 } from "./lib/maintenanceClient";
 import {
   type BillingInterval,
-  billingIntervalValidator,
   type PlanTier,
-  planTierValidator,
   type SubscriptionState,
   subscriptionStateValidator,
 } from "./lib/organization";
 import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
 import { orgPortalUrl, paymentsConfig } from "./lib/payments/config";
 import {
-  type AppliedDiscount,
   type CheckoutPurpose,
   type Invoice,
   type PaymentError,
@@ -843,26 +839,8 @@ export const billingContext = internalQuery({
   },
 });
 
-async function requireBillingManager(ctx: ActionCtx, accountId: Id<"accounts">) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    throw new ConvexError({ code: "not_authenticated", message: "Not authenticated" });
-  }
-  const context: BillingContext = await ctx.runQuery(internal.billing.billingContext, {
-    accountId,
-    userId,
-  });
-  return context;
-}
-
 function providerFailure(error: PaymentError): ConvexError<PaymentError> {
   return new ConvexError<PaymentError>(error);
-}
-
-// stylegate:ignore ANY-LAY-004 reason="A Convex action handler is the composition root: no process outlives one call to inject a shared client from"
-function configuredProvider(): { provider: PaymentProvider; portalUrl: string } {
-  const config = paymentsConfig();
-  return { provider: paymentProvider(config), portalUrl: config.ORG_PORTAL_URL };
 }
 
 /**
@@ -1009,67 +987,6 @@ export function checkoutRefusal(context: BillingContext): CheckoutRefusal | null
   return null;
 }
 
-/** A provider checkout for a plan, for an org `checkoutRefusal` lets check out. Returns its URL. */
-export const startCheckout = action({
-  args: {
-    accountId: v.id("accounts"),
-    plan: planTierValidator,
-    interval: billingIntervalValidator,
-    promotionCode: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<{ url: string }> => {
-    const context = await requireBillingManager(ctx, args.accountId);
-    const refusal = checkoutRefusal(context);
-    if (refusal !== null) {
-      throw new ConvexError<CheckoutRefusal>(refusal);
-    }
-    const { provider, portalUrl } = configuredProvider();
-    return openSubscriptionCheckout(
-      { provider, runMutation: ctx.runMutation, portalUrl },
-      context.customerRef,
-      args,
-      Date.now()
-    );
-  },
-});
-
-/** What a promotion code would take off, before checkout; null when it doesn't exist or is inactive. */
-export const previewPromotionCode = action({
-  args: { accountId: v.id("accounts"), code: v.string() },
-  handler: async (ctx, { accountId, code }): Promise<AppliedDiscount | null> => {
-    await requireBillingManager(ctx, accountId);
-    const trimmed = code.trim();
-    if (trimmed === "") {
-      return null;
-    }
-    const result = await configuredProvider().provider.lookupPromotionCode(trimmed);
-    if (!result.ok) {
-      throw providerFailure(result.error);
-    }
-    return result.value;
-  },
-});
-
-/** The provider's customer portal, where plan, interval, payment method and cancellation change. */
-export const openPortal = action({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, { accountId }): Promise<{ url: string }> => {
-    const context = await requireBillingManager(ctx, accountId);
-    if (context.customerRef === null) {
-      throw new ConvexError({ code: "no_customer", message: "Choose a plan first; there is nothing to manage yet." });
-    }
-    const { provider, portalUrl } = configuredProvider();
-    const result = await provider.createPortalSession({
-      customerRef: context.customerRef,
-      returnUrl: `${portalUrl}/billing`,
-    });
-    if (!result.ok) {
-      throw providerFailure(result.error);
-    }
-    return result.value;
-  },
-});
-
 /** How many invoices the portal lists; older ones are in the provider's portal. */
 export const INVOICE_PAGE_SIZE = 24;
 
@@ -1093,28 +1010,6 @@ export async function listOrgInvoices(provider: PaymentProvider, customerRef: st
   }
   return result.value;
 }
-
-/** The org's invoices for its owner; null for anyone else, so the portal hides the page. */
-export const invoices = action({
-  args: { accountId: v.id("accounts") },
-  handler: async (ctx, { accountId }): Promise<Invoice[] | null> => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      return null;
-    }
-    const customer: { allowed: boolean; customerRef: string | null } = await ctx.runQuery(
-      internal.billing.invoiceCustomer,
-      { accountId, userId }
-    );
-    if (!customer.allowed) {
-      return null;
-    }
-    if (customer.customerRef === null) {
-      return [];
-    }
-    return listOrgInvoices(configuredProvider().provider, customer.customerRef);
-  },
-});
 
 // ---------------------------------------------------------------------------
 // Provider webhooks

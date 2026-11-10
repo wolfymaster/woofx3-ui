@@ -1,5 +1,5 @@
+import type { AppliedDiscount, DiscountDuration } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
-import type { AppliedDiscount, DiscountDuration } from "@convex/lib/payments/provider";
 import type { MyOrganization } from "@convex/organizations";
 
 export const PLAN_NAMES: Record<PlanTier, string> = { starter: "Starter", pro: "Pro" };

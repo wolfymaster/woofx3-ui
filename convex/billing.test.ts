@@ -82,7 +82,7 @@ describe("applyTransition", () => {
 });
 
 describe("first managed engine", () => {
-  test("starts the trial once, however often provisioning is retried", async () => {
+  test("creates no Convex trial, however often provisioning is retried", async () => {
     const t = newBackend();
     const { accountId, ownerId } = await seedOrg(t);
     const reserve = (n: number) =>
@@ -95,8 +95,8 @@ describe("first managed engine", () => {
       });
     await reserve(1);
     await expect(reserve(2)).rejects.toThrow("already");
-    expect((await subscription(t, accountId))?.state).toBe("trialing");
-    expect(await transitions(t, accountId)).toEqual([[null, "TrialStarted", "trialing"]]);
+    expect(await subscription(t, accountId)).toBeNull();
+    expect(await transitions(t, accountId)).toEqual([]);
   });
 });
 

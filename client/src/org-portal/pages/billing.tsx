@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
+import type { AppliedDiscount } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
-import type { AppliedDiscount } from "@convex/lib/payments/provider";
 import type { OrgSubscription } from "@convex/organizations";
 import { useAction } from "convex/react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
@@ -82,7 +82,7 @@ function useProviderRedirect() {
 
 function ManageBillingButton() {
   const { organization } = useOrganization();
-  const openPortal = useAction(api.billing.openPortal);
+  const openPortal = useAction(api.billingCommands.openPortal);
   const { busy, go } = useProviderRedirect();
   return (
     <Button
@@ -99,9 +99,9 @@ function ManageBillingButton() {
 
 function PlanChooser() {
   const { organization } = useOrganization();
-  const startCheckout = useAction(api.billing.startCheckout);
-  const openPortal = useAction(api.billing.openPortal);
-  const previewPromotionCode = useAction(api.billing.previewPromotionCode);
+  const startCheckout = useAction(api.billingCommands.startCheckout);
+  const openPortal = useAction(api.billingCommands.openPortal);
+  const previewPromotionCode = useAction(api.billingCommands.previewPromotionCode);
   const [choice, setChoice] = useState(choiceKey("starter", "month"));
   const [code, setCode] = useState("");
   const [preview, setPreview] = useState<{ code: string; discount: AppliedDiscount | null } | null>(null);
