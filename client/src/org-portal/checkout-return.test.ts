@@ -22,13 +22,31 @@ describe("parseCheckoutReturn", () => {
 
 describe("nextCheckoutPoll", () => {
   const MAX = 3;
-  const answered = (state: "open" | "awaiting_payment" | "complete" | "expired"): CheckoutPollEvent => ({
-    type: "answered",
-    state,
-  });
+  const answered = (
+    state: "open" | "awaiting_payment" | "complete" | "expired",
+    reflected = true
+  ): CheckoutPollEvent => ({ type: "answered", state, reflected });
 
   test.each<[string, CheckoutPoll, CheckoutPollEvent, CheckoutPoll]>([
     ["complete ends it", INITIAL_CHECKOUT_POLL, answered("complete"), { phase: "complete" }],
+    [
+      "paid but not yet projected keeps asking",
+      INITIAL_CHECKOUT_POLL,
+      answered("complete", false),
+      { phase: "polling", attempts: 1 },
+    ],
+    [
+      "paid but never projected times out",
+      { phase: "polling", attempts: MAX - 1 },
+      answered("complete", false),
+      { phase: "timed_out" },
+    ],
+    [
+      "projected after a few asks completes",
+      { phase: "polling", attempts: 2 },
+      answered("complete"),
+      { phase: "complete" },
+    ],
     ["expired ends it", INITIAL_CHECKOUT_POLL, answered("expired"), { phase: "expired" }],
     ["open keeps asking", INITIAL_CHECKOUT_POLL, answered("open"), { phase: "polling", attempts: 1 }],
     [

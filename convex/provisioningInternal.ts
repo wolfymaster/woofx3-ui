@@ -207,8 +207,8 @@ export const assertCanResumeEngine = internalQuery({
 /**
  * An org's first managed engine asks the management plane to start its trial
  * (`ensure` is idempotent). An org that already has billing, in any state,
- * needs nothing. The call is scheduled, never awaited here: the plane's
- * reconciler heals a missed one, and a mutation cannot call out.
+ * needs nothing. The call is scheduled, never awaited here: a mutation cannot call out,
+ * and the scheduled action retries a failure itself.
  */
 export async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">): Promise<void> {
   if ((await billingFor(ctx, accountId)) !== null) {
