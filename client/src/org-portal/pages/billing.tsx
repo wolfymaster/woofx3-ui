@@ -208,7 +208,7 @@ function PlanChooser() {
 }
 
 /** Asks the plane how the checkout the customer just paid for stands until it settles or the bound is reached. */
-function useCheckoutPoll(checkoutId: string | null): CheckoutPoll | null {
+function useCheckoutPoll(checkoutId: string | null, reflected: boolean): CheckoutPoll | null {
   const checkoutState = useAction(api.billingCommands.checkoutState);
   const [poll, dispatch] = useReducer(
     (current: CheckoutPoll, event: CheckoutPollEvent) => nextCheckoutPoll(current, event, CHECKOUT_POLL.maxAttempts),
@@ -225,7 +225,7 @@ function useCheckoutPoll(checkoutId: string | null): CheckoutPoll | null {
       async () => {
         let event: CheckoutPollEvent;
         try {
-          event = { type: "answered", state: (await checkoutState({ checkoutId })).state };
+          event = { type: "answered", state: (await checkoutState({ checkoutId })).state, reflected };
         } catch {
           // A failed ask is one spent attempt; the bound ends the polling.
           event = { type: "failed" };
@@ -240,15 +240,18 @@ function useCheckoutPoll(checkoutId: string | null): CheckoutPoll | null {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [checkoutId, checkoutState, settled, attempts]);
+  }, [checkoutId, checkoutState, settled, attempts, reflected]);
   return checkoutId === null ? null : poll;
 }
 
 export default function BillingPage() {
   const { organization } = useOrganization();
   const checkoutReturn = parseCheckoutReturn(useSearch());
-  const poll = useCheckoutPoll(checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null);
   const view = billingView(organization);
+  const poll = useCheckoutPoll(
+    checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null,
+    view.kind === "provider_managed"
+  );
   const isOwner = organization.can.manageBilling;
 
   return (

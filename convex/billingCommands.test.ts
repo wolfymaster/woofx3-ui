@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConvexError } from "convex/values";
-import { api } from "./_generated/api";
-import { ensureOrgBilling } from "./billingCommands";
+import { api, internal } from "./_generated/api";
+import { ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
 import { billingErr } from "./lib/billingClient";
 import { FakeBillingClient } from "./lib/billingClient.fakes";
 import { newBackend } from "./lib/convexTest.testing";
@@ -93,10 +93,10 @@ describe("startCheckout", () => {
     ["already_subscribed", "This organization already has a subscription. Change it in Manage billing."],
     ["subscription_exists", "Your payment method needs attention. Update it in the billing portal."],
     ["suspended_by_operator", "Your organization's account is suspended. Contact woofx3 support."],
-    [
-      "checkout_in_progress",
-      "A checkout for this organization is already open. Finish it, or start again in half an hour.",
-    ],
+    ["checkout_in_progress", "A payment for this organization is being confirmed. Check back in a few minutes."],
+    ["account_not_found", "We could not find this organization's billing account. Contact woofx3 support."],
+    ["checkout_not_found", "We could not find that checkout. Choose a plan to start again."],
+    ["payment_refused", "We could not start your payment. Please contact support if this continues."],
   ])("%s reaches the portal with its code and wording", async (code, message) => {
     const t = newBackend();
     const { ownerId, accountId } = await seedOrg(t);
@@ -197,11 +197,32 @@ describe("checkoutState", () => {
 });
 
 describe("ensure", () => {
-  test("a plane failure is logged and never thrown", async () => {
+  test("a plane failure is reported as false, never thrown", async () => {
     const client = new FakeBillingClient();
     client.ensureAnswer = billingErr("payment_unavailable", "down");
-    await ensureOrgBilling(client, "acc1" as never);
+    expect(await ensureOrgBilling(client, "acc1" as never)).toBe(false);
     expect(client.calls).toEqual([{ command: "ensure", args: ["acc1"] }]);
+  });
+
+  test.each([
+    [0, 0.5, 120_000],
+    [0, 0, 96_000],
+    [0, 0.999999, 144_000],
+    [3, 0.5, 960_000],
+    [11, 0.5, 4 * 60 * 60_000],
+  ])("retry delay after attempt %d with random %s is %d ms", (attempt, random, expected) => {
+    expect(ensureRetryDelayMs(attempt, random)).toBeCloseTo(expected, -2);
+  });
+
+  test("a failed attempt schedules the next; the last one gives up without scheduling", async () => {
+    answers["/ensure"] = { status: 503, body: { error: { code: "payment_unavailable", message: "down" } } };
+    const t = newBackend();
+    const { accountId } = await seedOrg(t);
+    await t.action(internal.billingCommands.ensureBilling, { accountId });
+    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(jobs.map((job) => job.args)).toEqual([[{ accountId, attempt: 1 }]]);
+    await t.action(internal.billingCommands.ensureBilling, { accountId, attempt: ENSURE_RETRY.maxAttempts - 1 });
+    expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toHaveLength(1);
   });
 
   test("creating an account, placeholder or not, never asks the plane for a trial", async () => {

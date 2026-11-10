@@ -34,7 +34,9 @@ const FRIENDLY_MESSAGES: Partial<Record<BillingError["code"], string>> = {
   already_subscribed: "This organization already has a subscription. Change it in Manage billing.",
   subscription_exists: "Your payment method needs attention. Update it in the billing portal.",
   suspended_by_operator: "Your organization's account is suspended. Contact woofx3 support.",
-  checkout_in_progress: "A checkout for this organization is already open. Finish it, or start again in half an hour.",
+  checkout_in_progress: "A payment for this organization is being confirmed. Check back in a few minutes.",
+  account_not_found: "We could not find this organization's billing account. Contact woofx3 support.",
+  checkout_not_found: "We could not find that checkout. Choose a plan to start again.",
   no_customer: "Choose a plan first; there is nothing to manage yet.",
   exempt: "This organization's plan is complimentary, so there is nothing to buy.",
   not_configured: "Billing is not configured on this deployment.",
@@ -43,7 +45,7 @@ const FRIENDLY_MESSAGES: Partial<Record<BillingError["code"], string>> = {
   invalid_return_path: "That page can't be used to return from billing.",
   subscription_not_found: "Your billing is still being set up. Try again in a moment.",
   payment_unavailable: RETRY_MESSAGE,
-  payment_refused: RETRY_MESSAGE,
+  payment_refused: "We could not start your payment. Please contact support if this continues.",
   identity_unavailable: RETRY_MESSAGE,
   unreachable: RETRY_MESSAGE,
 };
@@ -166,23 +168,55 @@ export const checkoutState = action({
 });
 
 /**
- * Asks the plane to start the org's trial. Best effort: a failure is logged
- * and never blocks what created the org, because the plane's reconciler
- * ensures every org it can list.
+ * `ensure` is idempotent, so every attempt may be repeated. Delays double from
+ * `baseDelayMs` up to `maxDelayMs`, each spread by +/- `jitterRatio`; twelve
+ * attempts span about a day.
  */
-export async function ensureOrgBilling(client: BillingClient, accountId: Id<"accounts">): Promise<void> {
-  const result = await client.ensure(accountId);
-  if (!result.ok) {
-    logger.warn("billing ensure failed; the plane's reconciler will retry", { accountId, error: result.error });
-  }
+export const ENSURE_RETRY = {
+  maxAttempts: 12,
+  baseDelayMs: 2 * 60_000,
+  maxDelayMs: 4 * 60 * 60_000,
+  jitterRatio: 0.2,
+} as const;
+
+/** How long to wait after failed attempt number `attempt` (0-based); `random` is in [0, 1). */
+export function ensureRetryDelayMs(attempt: number, random: number): number {
+  const delay = Math.min(ENSURE_RETRY.baseDelayMs * 2 ** attempt, ENSURE_RETRY.maxDelayMs);
+  return Math.round(delay * (1 + ENSURE_RETRY.jitterRatio * (2 * random - 1)));
 }
 
+/** Asks the plane to start the org's trial; whether it succeeded. Failures are logged by the caller's retry policy. */
+export async function ensureOrgBilling(client: BillingClient, accountId: Id<"accounts">): Promise<boolean> {
+  const result = await client.ensure(accountId);
+  if (!result.ok) {
+    logger.warn("billing ensure failed", { accountId, error: result.error });
+  }
+  return result.ok;
+}
+
+/**
+ * Starts the org's trial and never blocks what created the org. A failure is
+ * retried here on the Convex scheduler, because the plane's reconciler may be
+ * off. After the last attempt the org stays without billing, which hosts it
+ * unbilled, so the exhaustion is logged at error level for operators to act on.
+ */
 export const ensureBilling = internalAction({
-  args: { accountId: v.id("accounts") },
-  handler: async (_ctx, { accountId }): Promise<void> => {
+  args: { accountId: v.id("accounts"), attempt: v.optional(v.number()) },
+  handler: async (ctx, { accountId, attempt = 0 }): Promise<void> => {
     const client = billingClientFromEnv();
-    if (client !== null) {
-      await ensureOrgBilling(client, accountId);
+    if (client === null || (await ensureOrgBilling(client, accountId))) {
+      return;
     }
+    if (attempt + 1 >= ENSURE_RETRY.maxAttempts) {
+      logger.error("billing ensure gave up; this org has no billing and is hosted unbilled until it is fixed", {
+        accountId,
+        attempts: attempt + 1,
+      });
+      return;
+    }
+    await ctx.scheduler.runAfter(ensureRetryDelayMs(attempt, Math.random()), internal.billingCommands.ensureBilling, {
+      accountId,
+      attempt: attempt + 1,
+    });
   },
 });
