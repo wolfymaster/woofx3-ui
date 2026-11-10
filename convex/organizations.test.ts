@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { listOrgInvoices } from "./billing";
-import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
 import type { EngineRole, OrgRole } from "./lib/organization";
-import { FakePaymentProvider } from "./lib/payments/fake";
-import { applyTransition } from "./lib/subscriptions";
+import { insertProjection } from "./lib/orgBilling.testing";
 import { seedMissingTierPlans } from "./seeds/plans";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -19,8 +16,9 @@ interface Org {
 }
 
 const NOW = Date.UTC(2026, 10, 1);
+const DAY = 24 * 60 * 60 * 1000;
 
-/** An org with a trialing subscription, a hosted engine and a self-hosted one, both owned by its owner. */
+/** An org with a trialing projection, a hosted engine and a self-hosted one, both owned by its owner. */
 async function seedOrg(t: Backend): Promise<Org> {
   return t.run(async (ctx) => {
     await seedMissingTierPlans(ctx, "test");
@@ -44,16 +42,7 @@ async function seedOrg(t: Backend): Promise<Org> {
     for (const instanceId of [hostedId, selfHostedId]) {
       await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
     }
-    const trial = await applyTransition(ctx, {
-      accountId,
-      event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
-      now: NOW,
-      actor: "test",
-      origin: "signup",
-    });
-    if (!trial.ok) {
-      throw new Error("trial start was illegal");
-    }
+    await insertProjection(ctx, accountId, { standing: "trialing", trialEndsAt: NOW + 30 * DAY });
     return { accountId, ownerId, hostedId, selfHostedId };
   });
 }
@@ -227,22 +216,5 @@ describe("organizations.rename", () => {
     await expect(
       as(t, adminId).mutation(api.organizations.rename, { accountId: org.accountId, name: "   " })
     ).rejects.toThrow("1 to 64 characters");
-  });
-});
-
-describe("billing.invoices", () => {
-  test("reads the customer's invoices from the provider, and surfaces its failure", async () => {
-    const provider = new FakePaymentProvider();
-    const invoice = {
-      id: "in_1",
-      periodStart: NOW,
-      amountCents: 3000,
-      status: "paid" as const,
-      hostedUrl: "https://invoice.example/1",
-    };
-    provider.invoices.set("cus_1", [invoice]);
-    expect(await listOrgInvoices(provider, "cus_1")).toEqual([invoice]);
-    provider.outage = { ok: false, error: { code: "provider_unavailable", message: "down" } };
-    await expect(listOrgInvoices(provider, "cus_1")).rejects.toMatchObject({ data: { code: "provider_unavailable" } });
   });
 });

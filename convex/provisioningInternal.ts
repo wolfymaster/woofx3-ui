@@ -2,7 +2,6 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
-import { scheduleEngineStopRetry } from "./billing";
 import { switchedStatus } from "./lib/engineSwitch";
 import { requireUsableSubscription } from "./lib/entitlementAccess";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
@@ -190,8 +189,8 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
 }
 
 /**
- * Throws `subscription_suspended` unless the org's billing (projection or
- * subscription row) is usable, for actions that resume a managed engine's run
+ * Throws `subscription_suspended` unless the org's billing projection is
+ * usable, for actions that resume a managed engine's run
  * outside `reserveManagedInstance`. An org with no billing yet is not
  * suspended, so it passes.
  */
@@ -676,10 +675,6 @@ export const applyCallbackEvent = internalMutation({
         const status = args.runKind === "deprovision" ? "deprovisioning" : "failed";
         const error = `${step}: ${args.error ?? "the maintenance API reported a failure"}`;
         await ctx.db.patch(row._id, { status, error, updatedAt: Date.now() });
-        if (args.runKind === "stop") {
-          // A suspended org's engine must stop; provisioning.retry is refused while suspended.
-          await scheduleEngineStopRetry(ctx, { ...row, status, error }, Math.random());
-        }
         return { handled: true, duplicate: false };
       }
 
@@ -695,7 +690,6 @@ export const applyCallbackEvent = internalMutation({
         await ctx.db.patch(row._id, {
           status,
           error: undefined,
-          stopRetries: undefined,
           ...(move === "started" && args.version ? { reportedVersion: args.version } : {}),
           updatedAt: Date.now(),
         });

@@ -1,7 +1,7 @@
 # Organization portal
 
 **Routes:** `/org`, `/org/billing`, `/org/members`, `/org/engines`, `/org/invoices`
-**Primary files:** `client/src/org-portal/`, `convex/organizations.ts`, `convex/billing.ts`
+**Primary files:** `client/src/org-portal/`, `convex/organizations.ts`, `convex/billingCommands.ts`
 
 The portal is where an organization's owner and admins manage the organization and its billing. It is a route group inside the dashboard app, not a separate app.
 
@@ -19,8 +19,8 @@ The portal is where an organization's owner and admins manage the organization a
 - `organizations.rename` (owner and admin). Engines are renamed with `instances.update`.
 - Billing actions are the owner's (`manageBilling`) and live in `convex/billingCommands.ts`: `startCheckout`, `previewPromotionCode`, `openPortal`, `invoices` (answers null to anyone else) and `checkoutState` (where a checkout stands, for the page the customer returns to). Each asks the management plane through `convex/lib/billingClient.ts`, server-side and only for something a person just did; the plane reads invoices live and woofx3 stores none. The client authenticates with `MAINTENANCE_API_URL` / `MAINTENANCE_API_KEY`, whose key needs the `billing:read` and `billing:write` scopes. A checkout's `Idempotency-Key` derives from the org, the terms and a 30-minute window, so a retry or double click opens one checkout.
 - A new org asks the plane to `ensure` its billing (`billingCommands.ensureBilling`, scheduled, best effort): a failure is logged and never blocks creating the org, and the plane's reconciler heals it.
-- Money moves through the payments module (`convex/lib/payments/`), behind `PaymentProvider`. The provider's webhooks arrive at `POST /payments/stripe/webhook` (`convex/paymentsHttp.ts`) and are kept as received in `paymentEvents`. Its configuration is `PAYMENTS_PROVIDER` (`stripe`), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `ORG_PORTAL_URL`, validated by `paymentsConfig()`.
-- Every checkout we open is a `paymentSessions` row (`open`, `complete` or `expired`), unique on the provider's session id, holding its purpose (the plan it charges) and amount. A session event is applied by that row, never by the provider's metadata: an unknown session is acknowledged and ignored, and a closed one changes nothing. Only a paid checkout binds a provider subscription to an organization. Opening a checkout expires the organization's older open session at the provider. A second live subscription for an organization is logged as an error and recorded in `paymentEvents` with outcome `stray`, for an operator to settle.
+- Convex holds no payment code and no billing lifecycle. The management plane owns subscriptions, trials, exemptions, discounts and the provider's webhooks, and pushes each org's billing to Convex as a projection (`orgBilling`, one row per org, written by `POST /api/ops/accounts/:id/billing-projection`; see [Ops API](../patterns/ops-api.md)). `organizations.mine`, the access gates and the entitlements all read it through `billingFor` (`convex/lib/orgBilling.ts`) and never call the plane, so they keep working while it is down. An org with no projection row yet behaves as one with no subscription: nothing is refused, and its plan is its operator assignment or the default.
+- The billing banner (`convex/billingBanner.ts`) is computed from the projection: the last week of a trial, and while a payment is overdue. Billing emails and their schedule belong to the plane; Convex sends none.
 
 ## Who sees what
 

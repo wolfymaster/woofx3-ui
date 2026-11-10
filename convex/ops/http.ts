@@ -1,21 +1,14 @@
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
-import { type ActionCtx, httpAction } from "../_generated/server";
+import { httpAction } from "../_generated/server";
 import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops/auth";
 import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
-import {
-  parseDiscountRequest,
-  parseExemptionRequest,
-  parsePlanRequest,
-  parseSuspendRequest,
-} from "../lib/ops/billingRequests";
 import { parseIdempotencyKey } from "../lib/ops/idempotency";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { type AssignmentRow, tallyPlanAccounts } from "../lib/ops/planCounts";
-import { type AccountBillingWrite, matchOpsRoute, PAGE_LIMIT, parsePageLimit } from "../lib/ops/routes";
+import { matchOpsRoute } from "../lib/ops/routes";
 import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
-import type { BillingWriteResult } from "./billing";
 import { projectionIdempotencyKey } from "./billingProjection";
 
 /**
@@ -152,13 +145,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
     }
     case "notifications.list":
       return ok(await ctx.runQuery(internal.ops.notifications.list, { cursor }));
-    case "payments.strays": {
-      const limit = parsePageLimit(url.searchParams.get("limit"));
-      if (limit === null) {
-        return error(400, "invalid_limit", `limit must be a whole number from 1 to ${PAGE_LIMIT.max}`);
-      }
-      return ok(await ctx.runQuery(internal.ops.reads.listStrayPayments, { cursor, limit }));
-    }
     case "notifications.create": {
       const body = await request.json().catch(() => null);
       const parsed = parseNotificationRequest(body);
@@ -179,22 +165,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
         actor: auth.actor,
         reason: auth.reason ?? "",
       });
-      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
-    }
-    case "accounts.billing": {
-      const idempotencyKey = parseIdempotencyKey(request.headers);
-      if (!idempotencyKey.ok) {
-        return error(400, "invalid_idempotency_key", idempotencyKey.message);
-      }
-      const body = await request.json().catch(() => null);
-      // authenticateOps required a reason for this write.
-      const operator = {
-        accountId: route.accountId,
-        actor: auth.actor,
-        reason: auth.reason ?? "",
-        idempotencyKey: idempotencyKey.value,
-      };
-      const outcome = await accountBillingWrite(ctx, route.write, body, operator);
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
     case "accounts.billingProjection": {
@@ -230,49 +200,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
     }
   }
 });
-
-type Operator = { accountId: string; actor: string; reason: string; idempotencyKey: string };
-
-/** One subscription write, its body parsed first: a malformed one is a 400 and changes nothing. */
-async function accountBillingWrite(
-  ctx: ActionCtx,
-  write: AccountBillingWrite,
-  body: unknown,
-  operator: Operator
-): Promise<BillingWriteResult> {
-  const invalid = (message: string): BillingWriteResult => ({
-    ok: false,
-    status: 400,
-    code: `invalid_${write}`,
-    message,
-  });
-  switch (write) {
-    case "plan": {
-      const parsed = parsePlanRequest(body);
-      return parsed.ok
-        ? ctx.runMutation(internal.ops.billing.setPlan, { ...operator, plan: parsed.value.plan })
-        : invalid(parsed.message);
-    }
-    case "exemption": {
-      const parsed = parseExemptionRequest(body);
-      return parsed.ok
-        ? ctx.runMutation(internal.ops.billing.setExemption, { ...operator, exemption: parsed.value })
-        : invalid(parsed.message);
-    }
-    case "suspend": {
-      const parsed = parseSuspendRequest(body);
-      return parsed.ok
-        ? ctx.runMutation(internal.ops.billing.suspend, { ...operator, suspendReason: parsed.value.reason })
-        : invalid(parsed.message);
-    }
-    case "discount": {
-      const parsed = parseDiscountRequest(body);
-      return parsed.ok
-        ? ctx.runAction(internal.ops.billing.applyDiscount, { ...operator, ...parsed.value })
-        : invalid(parsed.message);
-    }
-  }
-}
 
 type ProvisioningStatus = Doc<"engineProvisioning">["status"];
 

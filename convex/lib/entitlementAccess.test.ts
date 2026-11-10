@@ -30,16 +30,23 @@ async function seedOrg(t: Backend, plan: "starter" | "pro", state: SubscriptionS
       ctx.db.insert("instances", { accountId, name: hosting, url: "https://e", hosting, createdAt: 1 });
     const managedId = await engine("managed");
     const externalId = await engine("external");
-    await ctx.db.insert("subscriptions", {
+    await ctx.db.insert("orgBilling", {
       accountId,
-      plan,
-      state,
-      stateReason: state === "suspended" ? "operator" : undefined,
-      stateSince: NOW,
+      version: 1,
+      tier: plan,
       addOns: [],
-      origin: "operator",
+      standing: state,
+      reason: state === "suspended" ? "operator" : null,
+      trialEndsAt: null,
+      graceEndsAt: null,
+      periodEnd: null,
+      interval: null,
+      exemptUntil: null,
+      spinDownAt: null,
+      hasProviderSubscription: false,
+      discount: null,
+      overrides: { addFeatures: [], removeFeatures: [], limits: [] },
       updatedAt: NOW,
-      updatedBy: "test",
     });
     return { accountId, managedId, externalId };
   });

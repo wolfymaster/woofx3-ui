@@ -49,16 +49,23 @@ function as(t: Backend, userId: Id<"users">) {
 
 async function suspend(t: Backend, accountId: Id<"accounts">) {
   await t.run(async (ctx) => {
-    await ctx.db.insert("subscriptions", {
+    await ctx.db.insert("orgBilling", {
       accountId,
-      plan: "starter",
-      state: "suspended",
-      stateReason: "no_payment_method",
-      stateSince: 1,
+      version: 1,
+      tier: "starter",
       addOns: [],
-      origin: "signup",
+      standing: "suspended",
+      reason: "no_payment_method",
+      trialEndsAt: null,
+      graceEndsAt: null,
+      periodEnd: null,
+      interval: null,
+      exemptUntil: null,
+      spinDownAt: null,
+      hasProviderSubscription: false,
+      discount: null,
+      overrides: { addFeatures: [], removeFeatures: [], limits: [] },
       updatedAt: 1,
-      updatedBy: "test",
     });
   });
 }

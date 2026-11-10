@@ -152,8 +152,6 @@ export interface ProvisioningDto {
   reportedVersion: string | null;
   error: string | null;
   registrationAttempts: number;
-  /** Retries issued for a failed billing stop; at the cap the engine waits for an operator. */
-  stopRetries: number;
   upgrade: {
     fromVersion: string;
     toVersion: string;
@@ -187,7 +185,6 @@ export function provisioningDto(row: Doc<"engineProvisioning">): ProvisioningDto
     reportedVersion: row.reportedVersion ?? null,
     error: row.error ?? null,
     registrationAttempts: row.registrationAttempts ?? 0,
-    stopRetries: row.stopRetries ?? 0,
     upgrade: row.upgrade
       ? {
           fromVersion: row.upgrade.fromVersion,
@@ -225,36 +222,6 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
     request: entry.request ?? null,
     result: entry.result,
     at: entry.at,
-  };
-}
-
-/** A live provider subscription an org's row doesn't follow, for an operator to settle at the provider. */
-export interface StrayPaymentDto {
-  eventId: string;
-  type: string;
-  /** Null when the org no longer exists. */
-  account: { id: string; name: string } | null;
-  subscriptionRef: string;
-  customerRef: string;
-  /** What the checkout charged, in cents; null when the stray did not come through one of our checkouts. */
-  amountCents: number | null;
-  detail: string | null;
-  at: number;
-}
-
-export function strayPaymentDto(event: Doc<"paymentEvents">, account: Doc<"accounts"> | null): StrayPaymentDto {
-  if (event.stray === undefined) {
-    throw new Error(`strayPaymentDto: payment event ${event.eventId} has no stray details`);
-  }
-  return {
-    eventId: event.eventId,
-    type: event.type,
-    account: account === null ? null : { id: account._id, name: account.name },
-    subscriptionRef: event.stray.subscriptionRef,
-    customerRef: event.stray.customerRef,
-    amountCents: event.stray.amountCents,
-    detail: event.error ?? null,
-    at: event.receivedAt,
   };
 }
 
@@ -301,74 +268,3 @@ export const FORBIDDEN_RESPONSE_KEYS: ReadonlySet<string> = new Set([
   "sessionId",
   "clientId",
 ]);
-
-export interface SubscriptionDto {
-  plan: string;
-  interval: string | null;
-  state: string;
-  stateReason: string | null;
-  stateSince: number;
-  trialStartedAt: number | null;
-  nextBillingAt: number | null;
-  graceEndsAt: number | null;
-  nextRetryAt: number | null;
-  exemptUntil: number | null;
-  spinDownAt: number | null;
-  addOns: string[];
-  discount: Doc<"subscriptions">["discount"] | null;
-  provider: string | null;
-  providerCustomerId: string | null;
-  providerSubscriptionId: string | null;
-  providerStatus: string | null;
-  origin: string;
-  updatedAt: number;
-  updatedBy: string;
-}
-
-export function subscriptionDto(row: Doc<"subscriptions">): SubscriptionDto {
-  return {
-    plan: row.plan,
-    interval: row.interval ?? null,
-    state: row.state,
-    stateReason: row.stateReason ?? null,
-    stateSince: row.stateSince,
-    trialStartedAt: row.trialStartedAt ?? null,
-    nextBillingAt: row.nextBillingAt ?? null,
-    graceEndsAt: row.graceEndsAt ?? null,
-    nextRetryAt: row.nextRetryAt ?? null,
-    exemptUntil: row.exemptUntil ?? null,
-    spinDownAt: row.spinDownAt ?? null,
-    addOns: row.addOns,
-    discount: row.discount ?? null,
-    provider: row.provider ?? null,
-    providerCustomerId: row.providerCustomerId ?? null,
-    providerSubscriptionId: row.providerSubscriptionId ?? null,
-    providerStatus: row.providerStatus ?? null,
-    origin: row.origin,
-    updatedAt: row.updatedAt,
-    updatedBy: row.updatedBy,
-  };
-}
-
-export interface SubscriptionTransitionDto {
-  from: string | null;
-  to: string;
-  event: string;
-  reason: string | null;
-  actor: string;
-  at: number;
-  /** What the transition left for an operator, such as a renewal the provider never resolved. */
-  note: string | null;
-}
-
-export function subscriptionTransitionDto(row: Doc<"subscriptionTransitions">): SubscriptionTransitionDto {
-  return {
-    from: row.from ?? null,
-    to: row.to,
-    event: row.event,
-    reason: row.reason ?? null,
-    actor: row.actor,
-    at: row.at,
-    note: row.note ?? null,
-  };
-}

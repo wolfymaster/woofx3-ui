@@ -22,7 +22,7 @@ export function BillingBanner() {
   const { optimisticInstanceId } = useInstance();
   const now = useMinuteClock();
   const banner = useQuery(
-    api.billing.bannerForViewer,
+    api.billingBanner.forViewer,
     visible && optimisticInstanceId ? { instanceId: optimisticInstanceId, now } : "skip"
   );
   if (!visible || !banner) {

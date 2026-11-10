@@ -1,11 +1,13 @@
 import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { lifecycleReasonValidator } from "./billingLifecycle";
 import { type AccountPlanRow, limitValuesValidator, type SubscriptionSummary } from "./entitlements";
-import { billingIntervalValidator, planTierValidator, subscriptionStateValidator } from "./organization";
-import type { AppliedDiscount } from "./payments/provider";
-import { subscriptionFor } from "./subscriptions";
+import {
+  billingIntervalValidator,
+  lifecycleReasonValidator,
+  planTierValidator,
+  subscriptionStateValidator,
+} from "./organization";
 
 // The management plane owns billing; Convex keeps the last projection it was
 // pushed (`orgBilling`) and enforces from it. Nothing here calls the plane, so
@@ -54,27 +56,11 @@ export interface BillingView {
   addOns: readonly string[];
   spinDownAt: number | null;
   hasProviderSubscription: boolean;
-  discount: AppliedDiscount | ProjectedDiscount | null;
-  /** A projection's own overrides; a subscription has none here (`accountPlans` applies instead). */
-  overrides: AccountPlanRow | null;
-}
-
-export function subscriptionSummary(row: Doc<"subscriptions">): SubscriptionSummary {
-  return {
-    plan: row.plan,
-    interval: row.interval ?? null,
-    state: row.state,
-    stateReason: row.stateReason ?? null,
-    nextBillingAt: row.nextBillingAt ?? null,
-    graceEndsAt: row.graceEndsAt ?? null,
-    exemptUntil: row.exemptUntil ?? null,
-  };
+  discount: ProjectedDiscount | null;
+  overrides: AccountPlanRow;
 }
 
 /**
- * The standing's date as the subscription row keeps it: the trial end while
- * trialing, else the period end.
- *
  * A projection with no tier keeps its standing, reason and dates, so a
  * suspended one still locks the dashboard and a trialing one still prompts.
  * `plan` is null: usability follows the standing alone, but no plan or add-on
@@ -94,32 +80,23 @@ export function projectionSummary(row: Doc<"orgBilling">): SubscriptionSummary {
 }
 
 /**
- * The org's billing: its projection when the plane has pushed one, which is
- * then authoritative, else its subscription row, else null. An org with
- * neither is gated as it was before billing existed.
+ * The org's billing: its projection once the plane has pushed one, which is
+ * then authoritative. An org with no projection row yet returns null and
+ * behaves as an org with no subscription did before billing existed: its
+ * gates stay open (callers check for null before requiring a usable standing)
+ * and its entitlements come from its operator assignment or the default plan.
  */
 export async function billingFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise<BillingView | null> {
   const projection = await orgBillingFor(ctx, accountId);
-  if (projection !== null) {
-    return {
-      summary: projectionSummary(projection),
-      addOns: projection.addOns,
-      spinDownAt: projection.spinDownAt,
-      hasProviderSubscription: projection.hasProviderSubscription,
-      discount: projection.discount,
-      overrides: projection.overrides,
-    };
-  }
-  const row = await subscriptionFor(ctx, accountId);
-  if (row === null) {
+  if (projection === null) {
     return null;
   }
   return {
-    summary: subscriptionSummary(row),
-    addOns: row.addOns,
-    spinDownAt: row.spinDownAt ?? null,
-    hasProviderSubscription: row.providerSubscriptionId !== undefined,
-    discount: row.discount ?? null,
-    overrides: null,
+    summary: projectionSummary(projection),
+    addOns: projection.addOns,
+    spinDownAt: projection.spinDownAt,
+    hasProviderSubscription: projection.hasProviderSubscription,
+    discount: projection.discount,
+    overrides: projection.overrides,
   };
 }

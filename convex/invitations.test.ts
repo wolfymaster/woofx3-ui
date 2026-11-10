@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend, runMigration } from "./lib/convexTest.testing";
 import { accountEntitlements, SEATS_FULL } from "./lib/entitlementAccess";
 import type { EngineRole, OrgRole } from "./lib/organization";
-import { applyTransition } from "./lib/subscriptions";
+import { insertProjection } from "./lib/orgBilling.testing";
 import { seedMissingTierPlans } from "./seeds/plans";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -112,16 +111,7 @@ async function fillSeats(t: Backend, org: Org): Promise<void> {
   await t.run(async (ctx) => {
     await seedMissingTierPlans(ctx, "test");
     await ctx.db.patch(org.instanceId, { hosting: "managed" });
-    const trial = await applyTransition(ctx, {
-      accountId: org.accountId,
-      event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
-      now: Date.now(),
-      actor: "test",
-      origin: "signup",
-    });
-    if (!trial.ok) {
-      throw new Error("trial start was illegal");
-    }
+    await insertProjection(ctx, org.accountId, { standing: "trialing", trialEndsAt: Date.now() + 30 * DAY_MS });
   });
   const { limits } = await t.run((ctx) => accountEntitlements(ctx, org.accountId, Date.now()));
   const limit = limits["org.members"];

@@ -175,12 +175,9 @@ describe("boundary", () => {
     readFileSync(new URL(file, import.meta.url), "utf8")
   );
 
-  test("the billing path names no payment provider and imports no in-Convex billing code", () => {
+  test("the billing path names no payment provider", () => {
     for (const source of sources) {
       expect(source).not.toMatch(/stripe/i);
-      expect(source).not.toMatch(
-        /from "(\.\.?\/)+(billing|payments|paymentsHttp|lib\/payments\/[^"]*|payments\/[^"]*|billingLifecycle|lib\/billingLifecycle|lib\/subscriptions)"/
-      );
     }
   });
 });

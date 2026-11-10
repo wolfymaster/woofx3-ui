@@ -1,10 +1,10 @@
 import type { Infer } from "convex/values";
-import { lifecycleReasonValidator } from "../billingLifecycle";
 import { type LimitValue, validateEntitlementInput } from "../entitlements";
 import type { ParseResult } from "../notifications";
 import {
   BILLING_INTERVALS,
   type BillingInterval,
+  lifecycleReasonValidator,
   PLAN_TIERS,
   type PlanTier,
   SUBSCRIPTION_STATES,

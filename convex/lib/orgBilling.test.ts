@@ -4,6 +4,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
 import { accountEntitlements, orgSeatLimit, requireUsableSubscription } from "./entitlementAccess";
+import { billingFor } from "./orgBilling";
 import { upsertPlan } from "./plans";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -20,22 +21,6 @@ async function seedOrg(t: Backend): Promise<Id<"accounts">> {
     const ownerId = await ctx.db.insert("users", { name: "Owner" });
     return ctx.db.insert("accounts", { name: "Org", ownerId, createdAt: 1 });
   });
-}
-
-async function giveSubscription(t: Backend, accountId: Id<"accounts">, plan: "starter" | "pro", state: Standing) {
-  await t.run((ctx) =>
-    ctx.db.insert("subscriptions", {
-      accountId,
-      plan,
-      state,
-      stateReason: state === "suspended" ? "operator" : undefined,
-      stateSince: NOW,
-      addOns: [],
-      origin: "operator",
-      updatedAt: NOW,
-      updatedBy: "test",
-    })
-  );
 }
 
 async function giveProjection(t: Backend, accountId: Id<"accounts">, projection: Partial<Doc<"orgBilling">> = {}) {
@@ -72,7 +57,7 @@ const refusal = (t: Backend, accountId: Id<"accounts">) =>
       (error: { data: { code: string } }) => error.data.code
     );
 
-describe("standing drives the gates the same from a projection as from a subscription", () => {
+describe("standing drives the gates", () => {
   test.each<[Standing, boolean]>([
     ["trialing", true],
     ["active", true],
@@ -81,23 +66,14 @@ describe("standing drives the gates the same from a projection as from a subscri
     ["suspended", false],
   ])("%s: usable is %p", async (standing, usable) => {
     const reason = standing === "suspended" || standing === "past_due" ? ("payment_failed" as const) : null;
-    const fromRow = newBackend();
-    const rowOrg = await seedOrg(fromRow);
-    await giveSubscription(fromRow, rowOrg, "pro", standing);
-    const fromProjection = newBackend();
-    const projectionOrg = await seedOrg(fromProjection);
-    await giveProjection(fromProjection, projectionOrg, { tier: "pro", standing, reason });
-
-    for (const [t, accountId] of [
-      [fromRow, rowOrg],
-      [fromProjection, projectionOrg],
-    ] as const) {
-      expect(await refusal(t, accountId)).toBe(usable ? null : "subscription_suspended");
-      const resolved = await entitlements(t, accountId);
-      expect(resolved.plan?.key ?? null).toBe(usable ? "pro" : null);
-      expect(resolved.features.includes("business")).toBe(usable);
-      expect(resolved.subscription?.state).toBe(standing);
-    }
+    const t = newBackend();
+    const accountId = await seedOrg(t);
+    await giveProjection(t, accountId, { tier: "pro", standing, reason });
+    expect(await refusal(t, accountId)).toBe(usable ? null : "subscription_suspended");
+    const resolved = await entitlements(t, accountId);
+    expect(resolved.plan?.key ?? null).toBe(usable ? "pro" : null);
+    expect(resolved.features.includes("business")).toBe(usable);
+    expect(resolved.subscription?.state).toBe(standing);
   });
 });
 
@@ -154,21 +130,22 @@ describe("a projection with no tier keeps its standing", () => {
 });
 
 describe("with and without a projection", () => {
-  test("no row of either kind keeps the default-plan behaviour", async () => {
+  test("no projection row keeps the default-plan behaviour: no billing, no seat limit", async () => {
     const t = newBackend();
     const accountId = await seedOrg(t);
+    expect(await t.run((ctx) => billingFor(ctx, accountId))).toBeNull();
     expect((await entitlements(t, accountId)).subscription).toBeNull();
     expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).toBeNull();
   });
 
-  test("a projection wins over a subscription row", async () => {
+  test("no projection row leaves a managed engine's gates open, as an org with no subscription had", async () => {
     const t = newBackend();
     const accountId = await seedOrg(t);
-    await giveSubscription(t, accountId, "pro", "active");
-    await giveProjection(t, accountId, { tier: "starter", standing: "suspended", reason: "operator" });
-    const resolved = await entitlements(t, accountId);
-    expect(resolved.plan).toBeNull();
-    expect(resolved.subscription).toMatchObject({ plan: "starter", state: "suspended" });
+    await t.run((ctx) =>
+      ctx.db.insert("instances", { accountId, name: "Box", url: "https://b.example", hosting: "managed", createdAt: 1 })
+    );
+    expect(await t.query(internal.provisioningInternal.assertCanResumeEngine, { accountId })).toBeNull();
+    expect((await entitlements(t, accountId)).subscription).toBeNull();
   });
 
   test("a projection alone seats the org, so its member limit applies", async () => {
@@ -222,7 +199,7 @@ describe("overrides and add-ons layer over the tier's plan", () => {
     expect(resolved.limits).not.toHaveProperty("notALimit");
   });
 
-  test("overrides still apply while suspended, as accountPlans overrides do on a subscription", async () => {
+  test("overrides still apply while suspended", async () => {
     const t = newBackend();
     const accountId = await seedOrg(t);
     await giveProjection(t, accountId, {

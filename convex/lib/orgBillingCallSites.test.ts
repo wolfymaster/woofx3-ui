@@ -6,7 +6,6 @@ import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
 import { requireUsableSubscription } from "./entitlementAccess";
 import { upsertPlan } from "./plans";
-import { subscriptionFor } from "./subscriptions";
 
 // Each call site that reads billing through billingFor, driven by a projection.
 
@@ -137,14 +136,22 @@ describe("organizations.mine", () => {
 
 describe("startTrialIfNew", () => {
   test.each<["starter" | null]>([["starter"], [null]])(
-    "starts no Convex trial when a projection exists (tier %p)",
+    "schedules no ensure call when a projection exists (tier %p)",
     async (tier) => {
       const t = newBackend();
       const { accountId } = await seed(t);
       await project(t, accountId, { tier, standing: "trialing", trialEndsAt: TRIAL_END });
       await t.run((ctx) => startTrialIfNew(ctx, accountId));
-      expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toBeNull();
+      expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toEqual([]);
       await t.run((ctx) => requireUsableSubscription(ctx, accountId));
     }
   );
+
+  test("asks the plane to ensure billing when no projection exists", async () => {
+    const t = newBackend();
+    const { accountId } = await seed(t);
+    await t.run((ctx) => startTrialIfNew(ctx, accountId));
+    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(jobs.map((job) => job.name)).toEqual(["billingCommands:ensureBilling"]);
+  });
 });

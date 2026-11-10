@@ -1,9 +1,7 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import type { LifecycleReason } from "./billingLifecycle";
 import {
-  type AccountPlanRow,
   addOnFeatures,
   ENTITLEMENT_CATALOG,
   type EntitlementFeatureKey,
@@ -13,7 +11,8 @@ import {
   resolveEntitlements,
   type SubscriptionSummary,
 } from "./entitlements";
-import { type BillingView, billingFor } from "./orgBilling";
+import type { LifecycleReason } from "./organization";
+import { billingFor } from "./orgBilling";
 
 /** The plan for accounts without an active assignment, or null when operators have marked none. */
 export async function defaultPlan(ctx: QueryCtx): Promise<Doc<"plans"> | null> {
@@ -36,12 +35,11 @@ async function tierPlan(ctx: QueryCtx, key: string): Promise<Doc<"plans">> {
 }
 
 /**
- * The org's entitlements at `nowMs`. With billing (a projection from the
- * management plane, else a subscription), its plan applies in a usable state
- * and none applies while suspended. An org with neither keeps the operator
- * assignment or default plan it had before billing existed. A projection
- * carries its own overrides; on a subscription, operator overrides
- * (`accountPlans`) apply on top.
+ * The org's entitlements at `nowMs`. With a billing projection from the
+ * management plane, its tier's plan applies in a usable standing and none
+ * applies while suspended, with the overrides the projection carries. An org
+ * without one keeps the operator assignment (`accountPlans`) or default plan
+ * it had before billing existed.
  */
 export async function accountEntitlements(
   ctx: QueryCtx,
@@ -52,7 +50,7 @@ export async function accountEntitlements(
   if (billing !== null) {
     const { summary } = billing;
     const plan = summary.plan !== null && isUsable(summary) ? await tierPlan(ctx, summary.plan) : null;
-    return resolveEntitlements(plan, await billingOverrides(ctx, accountId, billing), nowMs, ENTITLEMENT_CATALOG, {
+    return resolveEntitlements(plan, billing.overrides, nowMs, ENTITLEMENT_CATALOG, {
       subscription: summary,
       grantedFeatures: addOnFeatures(summary, billing.addOns),
     });
@@ -76,19 +74,6 @@ async function accountPlanFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise
     .query("accountPlans")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .unique();
-}
-
-/** The per-account changes layered over the tier's plan, never a plan assignment. */
-async function billingOverrides(
-  ctx: QueryCtx,
-  accountId: Id<"accounts">,
-  billing: BillingView
-): Promise<AccountPlanRow | null> {
-  if (billing.overrides !== null) {
-    return billing.overrides;
-  }
-  const assignment = await accountPlanFor(ctx, accountId);
-  return assignment === null ? null : { ...assignment, planId: undefined };
 }
 
 /**
@@ -123,7 +108,7 @@ export function hasFeature(availability: EngineAvailability, feature: Entitlemen
 export type EntitlementRefusal = { code: "subscription_suspended"; reason: LifecycleReason | null; message: string };
 
 /**
- * The org's subscription when it is usable; throws while it is suspended or
+ * The org's billing summary when it is usable; throws while it is suspended or
  * missing. For managed-engine paths only: self-hosted engines need none.
  */
 export async function requireUsableSubscription(
@@ -146,7 +131,7 @@ export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove so
 /**
  * The org's `org.members` limit (every org member, owner included), or null
  * when no seat limit applies. Seats belong to the org, not to an engine: the
- * limit applies once the org has a plan (subscription or projection tier) or any managed engine,
+ * limit applies once the org has a plan (a projection tier) or any managed engine,
  * whichever engine a person joins through. An org with only self-hosted
  * engines has none, nor does a plan without one.
  */

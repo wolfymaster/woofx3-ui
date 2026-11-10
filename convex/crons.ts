@@ -1,6 +1,5 @@
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
-import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 
 const crons = cronJobs();
@@ -17,15 +16,6 @@ crons.interval(
   "sweep expired workflow pending operations",
   { hours: 24 },
   internal.workflowInternal.sweepExpiredPending
-);
-
-// Advances billing timers (trial end, retries, grace, spin-down, exemption
-// end). Reads only subscriptions whose earliest timer is due.
-crons.interval(
-  "billing evaluator",
-  { minutes: BILLING_LIFECYCLE.evaluatorIntervalMinutes },
-  internal.billing.evaluateDue,
-  {}
 );
 
 crons.interval("engine sync sweep", { minutes: ENGINE_SYNC_CONFIG.sweepIntervalMinutes }, internal.engineSync.sweep);

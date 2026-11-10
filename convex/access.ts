@@ -2,8 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
-import type { LifecycleReason } from "./lib/billingLifecycle";
 import { isUsable } from "./lib/entitlements";
+import type { LifecycleReason } from "./lib/organization";
 import { billingFor } from "./lib/orgBilling";
 import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import { getInstanceMembership } from "./lib/teamAccess";
@@ -53,8 +53,7 @@ async function registeredEnginesOf(ctx: QueryCtx, userId: Id<"users">): Promise<
 }
 
 /**
- * Locked while the org's billing (projection or subscription row) is
- * suspended. Only hosted engines are billed, and an org with no billing yet
+ * Locked while the org's billing projection is suspended. Only hosted engines are billed, and an org with no billing yet
  * keeps its engine.
  */
 async function suspendedEntry(

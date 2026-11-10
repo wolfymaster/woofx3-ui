@@ -5,6 +5,7 @@ import {
   currentRelease,
   deleteEngine,
   ensureCompanionRoute,
+  getEngine,
   isEngineNotFound,
   isMaintenanceConfigured,
   MaintenanceApiError,
@@ -12,7 +13,6 @@ import {
   redeployRefusal,
   removeCompanionRoute,
   retryRun,
-  stopEngine,
 } from "./maintenanceClient";
 
 const realFetch = globalThis.fetch;
@@ -140,7 +140,7 @@ describe("deadline", () => {
       return new Response(JSON.stringify({ engine, run }), { status: 202 });
     }) as typeof fetch;
 
-    await stopEngine("eng_1", "key");
+    await getEngine("eng_1");
 
     expect(signal).toBeInstanceOf(AbortSignal);
     expect(signal?.aborted).toBe(false);

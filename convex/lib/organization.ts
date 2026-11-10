@@ -34,3 +34,13 @@ export const subscriptionStateValidator = v.union(
 export type PlanTier = Infer<typeof planTierValidator>;
 export type BillingInterval = Infer<typeof billingIntervalValidator>;
 export type SubscriptionState = Infer<typeof subscriptionStateValidator>;
+
+/** Why a projected standing is past_due or suspended. */
+export const lifecycleReasonValidator = v.union(
+  v.literal("no_payment_method"),
+  v.literal("payment_failed"),
+  v.literal("subscription_canceled"),
+  v.literal("provider_ended"),
+  v.literal("operator")
+);
+export type LifecycleReason = Infer<typeof lifecycleReasonValidator>;

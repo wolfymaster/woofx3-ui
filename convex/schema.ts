@@ -2,11 +2,6 @@ import { authTables } from "@convex-dev/auth/server";
 import { bindableResourceKindValidator, formFieldTypeValidator, pageContentValidator } from "@shared/user-pages";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import {
-  lifecycleEventKindValidator,
-  lifecycleReasonValidator,
-  providerStandingValidator,
-} from "./lib/billingLifecycle";
 import { defaultSeedValidator, overlayDoneValidator } from "./lib/defaultSeedValidator";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { limitValuesValidator } from "./lib/entitlements";
@@ -15,16 +10,8 @@ import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
 import { opsRequestKindValidator } from "./lib/ops/idempotency";
-import {
-  billingIntervalValidator,
-  engineRoleValidator,
-  orgRoleValidator,
-  planTierValidator,
-  subscriptionStateValidator,
-} from "./lib/organization";
+import { engineRoleValidator, orgRoleValidator } from "./lib/organization";
 import { orgBillingFields } from "./lib/orgBilling";
-import { appliedDiscountValidator, checkoutPurposeValidator, strayPaymentValidator } from "./lib/payments/provider";
-import { paymentSessionStateValidator } from "./lib/payments/sessions";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -369,11 +356,6 @@ export default defineSchema({
     // Registration is retried on a backoff after the engine reports ready;
     // this counts the attempts made so far so the schedule can advance.
     registrationAttempts: v.optional(v.number()),
-    // Retries issued for a failed stop of a suspended org's engine. At
-    // ENGINE_STOP_RETRY.maxAttempts they stop and the engine waits for an
-    // operator. Cleared when the engine stops or starts, and when the org
-    // leaves the suspension they were issued in.
-    stopRetries: v.optional(v.number()),
     // The latest upgrade of this engine, kept after it ends so the engine page
     // can say how it went.
     upgrade: v.optional(
@@ -1517,8 +1499,8 @@ export default defineSchema({
 
   // orgBilling: the management plane's last projection of an org's billing,
   // at most one row per org, written only by ops/billingProjection.ts
-  // applyBillingProjection. Once a row exists it, not `subscriptions`, drives
-  // the org's entitlements; see lib/orgBilling.ts.
+  // applyBillingProjection. Once a row exists it drives the org's entitlements;
+  // an org without one is gated as before billing existed. See lib/orgBilling.ts.
   orgBilling: defineTable({
     accountId: v.id("accounts"),
     ...orgBillingFields,
@@ -1573,128 +1555,6 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_default", ["isDefault"]),
-
-  // subscriptions: an organization's plan and billing state, at most one per
-  // org, created when it first asks for a managed engine. Only
-  // lib/subscriptions.ts applyTransition writes it; its lifecycle fields are
-  // the state machine's (lib/billingLifecycle.ts), asserted on every write.
-  subscriptions: defineTable({
-    accountId: v.id("accounts"),
-    // What is billed, or what an exemption grants.
-    plan: planTierValidator,
-    // Set once a provider subscription exists.
-    interval: v.optional(billingIntervalValidator),
-    state: subscriptionStateValidator,
-    // Why past_due or suspended.
-    stateReason: v.optional(lifecycleReasonValidator),
-    stateSince: v.number(),
-    // Set once; a second trial is refused.
-    trialStartedAt: v.optional(v.number()),
-    // The next billing evaluation: trial end, migration date or period end.
-    // Absent on an active subscription while a renewal check with the provider is out.
-    nextBillingAt: v.optional(v.number()),
-    // past_due: when it is suspended.
-    graceEndsAt: v.optional(v.number()),
-    // past_due: the next re-evaluation. active with a renewal check out, or
-    // suspended once engines stop: when that effect is issued again.
-    nextRetryAt: v.optional(v.number()),
-    // exempt: absent means indefinitely.
-    exemptUntil: v.optional(v.number()),
-    // suspended: when managed engines stop. Absent while suspended once they have.
-    spinDownAt: v.optional(v.number()),
-    // The earliest timer above: the only field the evaluator reads.
-    nextCheckAt: v.optional(v.number()),
-    // The transition that last issued a rechecked effect (stopping the managed
-    // engines, or a renewal check). An action of an earlier issue stands down
-    // for it; a transition that issues neither leaves it.
-    effectIssuedBy: v.optional(v.id("subscriptionTransitions")),
-    // AddOnKey values, validated against ADD_ONS on write.
-    addOns: v.array(v.string()),
-    // The provider's active discount, mirrored for display.
-    discount: v.optional(appliedDiscountValidator),
-    provider: v.optional(v.literal("stripe")),
-    providerCustomerId: v.optional(v.string()),
-    providerSubscriptionId: v.optional(v.string()),
-    // The raw provider status, for operators; providerStanding is its mapping.
-    providerStatus: v.optional(v.string()),
-    providerStanding: v.optional(providerStandingValidator),
-    providerEndedReason: v.optional(v.union(v.literal("subscription_canceled"), v.literal("provider_ended"))),
-    providerPeriodEnd: v.optional(v.number()),
-    // Provider state observed at or before this is stale and ignored.
-    providerSyncedAt: v.optional(v.number()),
-    origin: v.union(v.literal("signup"), v.literal("migration"), v.literal("operator")),
-    updatedAt: v.number(),
-    // "provider:stripe", "evaluator", an operator's email, or "migration".
-    updatedBy: v.string(),
-  })
-    .index("by_account", ["accountId"])
-    .index("by_next_check", ["nextCheckAt"])
-    .index("by_state", ["state"])
-    .index("by_provider_subscription", ["provider", "providerSubscriptionId"])
-    .index("by_provider_customer", ["provider", "providerCustomerId"]),
-
-  // subscriptionTransitions: append-only history of every lifecycle change,
-  // for audit, support and counting paid orgs. `from` is absent when the
-  // transition created the subscription.
-  subscriptionTransitions: defineTable({
-    accountId: v.id("accounts"),
-    from: v.optional(subscriptionStateValidator),
-    to: subscriptionStateValidator,
-    event: lifecycleEventKindValidator,
-    reason: v.optional(lifecycleReasonValidator),
-    actor: v.string(),
-    at: v.number(),
-    // Set when its warnings went out in-app only, because the owner has no email address.
-    ownerEmailMissing: v.optional(v.boolean()),
-    // What the transition left for an operator, such as a renewal the provider never resolved.
-    note: v.optional(v.string()),
-  }).index("by_account_at", ["accountId", "at"]),
-
-  // paymentEvents: every provider webhook as received, deduplicated on its
-  // event id, with what applying it did.
-  paymentEvents: defineTable({
-    provider: v.literal("stripe"),
-    eventId: v.string(),
-    type: v.string(),
-    // The provider API version we pinned, as a number we bump.
-    schemaVersion: v.number(),
-    rawPayload: v.string(),
-    accountId: v.optional(v.id("accounts")),
-    // "received" until it has been processed; a failed one is processed again on redelivery.
-    // "stray": about a subscription of ours the org's row doesn't follow, for an operator to settle.
-    outcome: v.union(
-      v.literal("received"),
-      v.literal("applied"),
-      v.literal("ignored"),
-      v.literal("stray"),
-      v.literal("failed")
-    ),
-    error: v.optional(v.string()),
-    // Set exactly when the outcome is "stray".
-    stray: v.optional(strayPaymentValidator),
-    receivedAt: v.number(),
-  })
-    .index("by_provider_event", ["provider", "eventId"])
-    .index("by_received_at", ["receivedAt"])
-    .index("by_outcome", ["outcome", "receivedAt"]),
-
-  // paymentSessions: every checkout we opened, unique on the provider's
-  // session id. `purpose` is the quote the session charges, and decides what
-  // its payment grants; `ref` is the id of our row it is for (the org, for a
-  // subscription).
-  paymentSessions: defineTable({
-    provider: v.literal("stripe"),
-    providerSessionId: v.string(),
-    purpose: checkoutPurposeValidator,
-    ref: v.string(),
-    state: paymentSessionStateValidator,
-    amountCents: v.number(),
-    currency: v.literal("usd"),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_provider_session", ["provider", "providerSessionId"])
-    .index("by_purpose_ref_state", ["purpose.kind", "ref", "state"]),
 
   // accountPlans: an account's plan, at most one row per account. No row, or
   // an expired one, means the default plan with no overrides.

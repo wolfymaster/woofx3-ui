@@ -3,18 +3,16 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { orgSeatLimit } from "../lib/entitlementAccess";
-import { isAssignmentActive } from "../lib/entitlements";
+import { orgBillingFor } from "../lib/orgBilling";
 import { orgRoleOf } from "../lib/orgRoles";
-import { subscriptionFor } from "../lib/subscriptions";
 import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
 import { logger } from "../logger";
 import { migrations } from "./index";
-import { isPlanTier } from "./subscriptions";
 
 // Brings existing data to the organization model's invariants (I1-I4 in
-// lib/teamAccess.ts and lib/orgRoles.ts). The run order with the
-// subscription and invitation migrations, and what to do with each violation
-// checkOrgInvariantsAll reports, are in docs/ops/deploy.md and
+// lib/teamAccess.ts and lib/orgRoles.ts). The run order with the invitation
+// migrations, and what to do with each violation checkOrgInvariantsAll
+// reports, are in docs/ops/deploy.md and
 // docs/ops/org-migrations.md.
 
 /**
@@ -168,9 +166,9 @@ export type InvariantViolation =
     }
   | { invariant: "I4"; accountId: Id<"accounts">; instanceId: Id<"instances">; userId: Id<"users"> }
   | {
-      invariant: "subscription";
+      invariant: "billing";
       accountId: Id<"accounts">;
-      detail: "managed_engine_without_subscription" | "comped_not_exempt";
+      detail: "managed_engine_without_projection";
     }
   | { invariant: "owner_user_missing"; accountId: Id<"accounts">; userId: Id<"users"> }
   | {
@@ -181,20 +179,7 @@ export type InvariantViolation =
     }
   | { invariant: "orphan_engine"; accountId: Id<"accounts">; instanceId: Id<"instances"> };
 
-/** Whether the org holds an active operator assignment of a tier plan, which M6 turns into an exemption. */
-async function isComped(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<boolean> {
-  const assignment = await ctx.db
-    .query("accountPlans")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .unique();
-  if (assignment?.planId === undefined || !isAssignmentActive(assignment, nowMs)) {
-    return false;
-  }
-  const plan = await ctx.db.get(assignment.planId);
-  return plan !== null && isPlanTier(plan.key);
-}
-
-async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">, nowMs: number): Promise<InvariantViolation[]> {
+async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<InvariantViolation[]> {
   const violations: InvariantViolation[] = [];
   const accountId = account._id;
   const userGone = new Map<Id<"users">, boolean>();
@@ -250,11 +235,8 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">, nowMs: num
     .query("engineProvisioning")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .take(50);
-  if (provisioning.some((row) => row.status !== "deleted") && (await subscriptionFor(ctx, accountId)) === null) {
-    violations.push({ invariant: "subscription", accountId, detail: "managed_engine_without_subscription" });
-  }
-  if ((await isComped(ctx, accountId, nowMs)) && (await subscriptionFor(ctx, accountId))?.state !== "exempt") {
-    violations.push({ invariant: "subscription", accountId, detail: "comped_not_exempt" });
+  if (provisioning.some((row) => row.status !== "deleted") && (await orgBillingFor(ctx, accountId)) === null) {
+    violations.push({ invariant: "billing", accountId, detail: "managed_engine_without_projection" });
   }
 
   const instances = await ctx.db
@@ -330,7 +312,7 @@ const CHECK_PAGE_SIZE = 50;
 
 /**
  * M5, one page of orgs: the invariant violations it finds, including orgs
- * with a managed engine but no subscription, and the orgs over their seat
+ * with a managed engine but no billing projection yet, and the orgs over their seat
  * limit, which are reported but are not violations. Read-only. I5
  * (members hold only engines they were granted) has no stored trace to check.
  */
@@ -342,7 +324,7 @@ export const checkOrgInvariants = internalQuery({
     const overLimit: OverSeatLimit[] = [];
     const now = Date.now();
     for (const account of page.page) {
-      violations.push(...(await orgViolations(ctx, account, now)));
+      violations.push(...(await orgViolations(ctx, account)));
       const over = await overSeatLimit(ctx, account._id, now);
       if (over !== null) {
         overLimit.push(over);
