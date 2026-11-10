@@ -48,6 +48,12 @@ describe("matchOpsRoute", () => {
         write,
       });
     }
+    expect(matchOpsRoute("POST", "/api/ops/orgs/k1/billing")).toEqual({
+      method: "POST",
+      name: "orgs.billingProjection",
+      accountId: "k1",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/orgs/k1/billing")).toBeNull();
     expect(matchOpsRoute("POST", "/api/ops/accounts/k1/delete")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/accounts/k1/plan")).toBeNull();
   });

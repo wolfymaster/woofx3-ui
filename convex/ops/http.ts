@@ -2,6 +2,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { type ActionCtx, httpAction } from "../_generated/server";
 import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops/auth";
+import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
 import {
   parseDiscountRequest,
   parseExemptionRequest,
@@ -15,6 +16,7 @@ import { type AccountBillingWrite, matchOpsRoute, PAGE_LIMIT, parsePageLimit } f
 import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
 import type { BillingWriteResult } from "./billing";
+import { projectionIdempotencyKey } from "./billingProjection";
 
 /**
  * The ops API: what the internal backoffice reads about users, accounts and
@@ -193,6 +195,24 @@ export const opsHandler = httpAction(async (ctx, request) => {
         idempotencyKey: idempotencyKey.value,
       };
       const outcome = await accountBillingWrite(ctx, route.write, body, operator);
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "orgs.billingProjection": {
+      const parsed = parseBillingProjectionRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_billing_projection", parsed.message);
+      }
+      if (parsed.value.accountId !== route.accountId) {
+        return error(400, "invalid_billing_projection", "accountId must match the account in the path");
+      }
+      const idempotencyKey = parseIdempotencyKey(request.headers);
+      if (!idempotencyKey.ok) {
+        return error(400, "invalid_idempotency_key", idempotencyKey.message);
+      }
+      if (idempotencyKey.value !== projectionIdempotencyKey(route.accountId, parsed.value.version)) {
+        return error(400, "invalid_idempotency_key", "Idempotency-Key must be {accountId}:{version}");
+      }
+      const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, parsed.value);
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
     case "audit.list": {
