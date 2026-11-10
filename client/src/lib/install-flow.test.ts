@@ -17,6 +17,7 @@ const APPROVAL: InstallApproval = {
   mode: "install",
   permissions: ["obs.control"],
   localEndpoints: ["obs"],
+  canPay: true,
   knownLocalEndpoints: [OBS],
 };
 const PROMPT = { permissions: ["obs.control"], localEndpoints: [OBS] };
@@ -111,6 +112,24 @@ const cases: Case[] = [
     event: { type: "acquire_answered", outcome: { status: "payment_required", intent: INTENT } },
     to: needsPayment,
     command: { kind: "start_payment", listingId: "obs-scenes", intent: INTENT },
+  },
+  {
+    name: "a member who is not the account owner is told an owner must buy it, and no payment starts",
+    from: { step: "acquiring", approval: { ...APPROVAL, canPay: false } },
+    event: { type: "acquire_answered", outcome: { status: "payment_required", intent: INTENT } },
+    to: {
+      step: "failed",
+      reason: "owner_must_purchase",
+      message: "Only the account owner can buy this. Ask an owner to purchase it.",
+    },
+    command: null,
+  },
+  {
+    name: "a member can still install a listing that costs nothing",
+    from: { step: "acquiring", approval: { ...APPROVAL, canPay: false } },
+    event: { type: "acquire_answered", outcome: { status: "licensed", licenseKey: "W3X-KEY" } },
+    to: { step: "installing", approval: { ...APPROVAL, canPay: false }, moduleKey: null },
+    command: { kind: "install", approval: { ...APPROVAL, canPay: false }, licenseKey: "W3X-KEY" },
   },
   {
     name: "a refusal fails with the marketplace's reason",

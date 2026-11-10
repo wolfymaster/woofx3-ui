@@ -5,6 +5,7 @@ import type {
   LicensedInstallOutcome,
   MarketplacePurchaseIntent,
 } from "@/engine/types";
+import { OWNER_MUST_PURCHASE_MESSAGE } from "@/lib/marketplace-access";
 import type { PaymentStart } from "@/lib/marketplace-payment";
 
 // One marketplace install, as a state machine: consent, then holding the
@@ -23,6 +24,8 @@ export interface InstallApproval {
   mode: "install" | "update";
   permissions: string[];
   localEndpoints: string[];
+  /** Whether the streamer may start a payment, which only the account owner may. */
+  canPay: boolean;
   /**
    * The local endpoints the build is known to declare, so an engine asking
    * for one by id can be shown to the streamer by name.
@@ -40,6 +43,8 @@ export type InstallFailureReason =
   | InstallRefusalReason
   /** The purchase could not be started. */
   | "payment_unavailable"
+  /** The listing costs money and the streamer is not the account owner. */
+  | "owner_must_purchase"
   /** Back from paying, but the marketplace does not show the purchase yet. */
   | "payment_pending"
   /** The build asks for access the streamer was not shown. */
@@ -173,6 +178,9 @@ function acquireAnswered(state: InstallFlowState, outcome: InstallAcquireOutcome
         command: { kind: "install", approval: state.approval, licenseKey: outcome.licenseKey },
       };
     case "payment_required":
+      if (!state.approval.canPay) {
+        return failed("owner_must_purchase", OWNER_MUST_PURCHASE_MESSAGE);
+      }
       return {
         state: { step: "needs_payment", approval: state.approval, intent: outcome.intent },
         command: { kind: "start_payment", listingId: state.approval.listingId, intent: outcome.intent },
