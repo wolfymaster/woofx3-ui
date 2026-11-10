@@ -1507,7 +1507,7 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_account", ["accountId"]),
 
-  // opsRequests: the ops API's billing writes by the caller's Idempotency-Key,
+  // opsRequests: the ops API's billing projection pushes by the caller's Idempotency-Key,
   // so a retry replays the first success instead of writing twice. Claimed and
   // settled in the same mutation as the write; see lib/ops/idempotency.ts.
   opsRequests: defineTable({
@@ -1517,7 +1517,7 @@ export default defineSchema({
     // Canonical JSON of the validated body; the same key with another body is refused.
     fingerprint: v.string(),
     state: v.union(v.literal("pending"), v.literal("done")),
-    // done: the subscription answered, as JSON, replayed to every repeat.
+    // done: the answer, as JSON, replayed to every repeat.
     result: v.optional(v.string()),
     // pending: when the running call claimed it. done: when it settled.
     claimedAt: v.number(),
