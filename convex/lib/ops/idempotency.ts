@@ -1,8 +1,7 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import type { MutationCtx } from "../../_generated/server";
 import type { ParseResult } from "../notifications";
 import type { SubscriptionDto } from "./dto";
-import type { AccountBillingWrite } from "./routes";
 
 // The ops API's billing writes run once per caller-chosen Idempotency-Key, so
 // the backoffice can retry after a timeout or a 5xx without writing twice.
@@ -30,25 +29,29 @@ export const OPS_REQUESTS = {
   maxCleanupPasses: 50,
 } as const;
 
-export const accountBillingWriteValidator = v.union(
+/** Every write the ops API runs once per key: the subscription writes and the plane's billing projection. */
+export const opsRequestKindValidator = v.union(
   v.literal("plan"),
   v.literal("exemption"),
   v.literal("suspend"),
-  v.literal("discount")
+  v.literal("discount"),
+  v.literal("projection")
 );
+
+export type OpsRequestKind = Infer<typeof opsRequestKindValidator>;
 
 /** One write's identity: the route, the organization it changes and the caller's key. */
 export interface OpsRequestId {
-  write: AccountBillingWrite;
+  write: OpsRequestKind;
   accountId: string;
   key: string;
 }
 
-type Answer =
-  | { ok: true; result: SubscriptionDto }
+type Answer<R> =
+  | { ok: true; result: R }
   | { ok: false; status: 409; code: "idempotency_mismatch" | "in_progress"; message: string };
 
-export type OpsRequestClaim = { kind: "claimed" } | { kind: "answered"; outcome: Answer };
+export type OpsRequestClaim<R = SubscriptionDto> = { kind: "claimed" } | { kind: "answered"; outcome: Answer<R> };
 
 /** The request's `Idempotency-Key`, or why it is missing or malformed. */
 export function parseIdempotencyKey(headers: Headers): ParseResult<string> {
@@ -85,12 +88,12 @@ async function findRequest(ctx: MutationCtx, id: OpsRequestId) {
  * success for the same request, 409 `idempotency_mismatch` for a different one
  * under the same key, and 409 `in_progress` while the first is still running.
  */
-export async function claimOpsRequest(
+export async function claimOpsRequest<R = SubscriptionDto>(
   ctx: MutationCtx,
   id: OpsRequestId,
   fingerprint: string,
   now: number
-): Promise<OpsRequestClaim> {
+): Promise<OpsRequestClaim<R>> {
   const row = await findRequest(ctx, id);
   if (row === null) {
     await ctx.db.insert("opsRequests", { ...id, fingerprint, state: "pending", claimedAt: now });
@@ -111,7 +114,7 @@ export async function claimOpsRequest(
     if (row.result === undefined) {
       throw new Error(`claimOpsRequest: settled request ${row._id} has no stored result`);
     }
-    return { kind: "answered", outcome: { ok: true, result: JSON.parse(row.result) as SubscriptionDto } };
+    return { kind: "answered", outcome: { ok: true, result: JSON.parse(row.result) as R } };
   }
   if (now - row.claimedAt < OPS_REQUESTS.staleClaimMs) {
     return {
@@ -127,7 +130,7 @@ export async function claimOpsRequest(
 export async function settleOpsRequest(
   ctx: MutationCtx,
   id: OpsRequestId,
-  outcome: { ok: true; result: SubscriptionDto } | { ok: false },
+  outcome: { ok: true; result: unknown } | { ok: false },
   now: number
 ): Promise<void> {
   const row = await findRequest(ctx, id);

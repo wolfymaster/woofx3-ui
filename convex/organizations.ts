@@ -5,9 +5,9 @@ import { mutation, type QueryCtx, query } from "./_generated/server";
 import { accountEntitlements, orgSeatLimit } from "./lib/entitlementAccess";
 import type { Entitlements, SubscriptionSummary } from "./lib/entitlements";
 import type { EngineRole, OrgRole } from "./lib/organization";
+import { billingFor, type ProjectedDiscount } from "./lib/orgBilling";
 import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
 import type { AppliedDiscount } from "./lib/payments/provider";
-import { subscriptionFor } from "./lib/subscriptions";
 import { linkedPlatformNames, memberDisplayName, memberEmailField } from "./lib/teamAccess";
 
 // The org portal's reads. Storage calls an organization an account; these
@@ -34,7 +34,7 @@ export interface OrgSubscription extends SubscriptionSummary {
   spinDownAt: number | null;
   /** A provider subscription exists, so plan changes go through the provider's portal. */
   hasProviderSubscription: boolean;
-  discount: AppliedDiscount | null;
+  discount: AppliedDiscount | ProjectedDiscount | null;
 }
 
 /** `createEngine` is enforced by the server's engine creation paths and no screen asks about it, so it isn't sent. */
@@ -100,16 +100,16 @@ async function orgSubscription(
   role: OrgRole,
   entitlements: Entitlements
 ): Promise<OrgSubscription | null> {
-  const row = await subscriptionFor(ctx, accountId);
+  const billing = await billingFor(ctx, accountId);
   const summary = entitlements.subscription;
-  if (row === null || summary === null) {
+  if (billing === null || summary === null) {
     return null;
   }
   return {
     ...summary,
-    spinDownAt: row.spinDownAt ?? null,
-    hasProviderSubscription: row.providerSubscriptionId !== undefined,
-    discount: orgCan(role, "manageBilling") ? (row.discount ?? null) : null,
+    spinDownAt: billing.spinDownAt,
+    hasProviderSubscription: billing.hasProviderSubscription,
+    discount: orgCan(role, "manageBilling") ? billing.discount : null,
   };
 }
 

@@ -12,8 +12,11 @@ const STATE_LABELS: Record<SubscriptionState, string> = {
 
 const INTERVAL_LABELS: Record<BillingInterval, string> = { month: "monthly", year: "yearly" };
 
-/** "Starter, monthly"; just the plan before a provider subscription sets the interval. */
+/** "Starter, monthly"; just the plan before a provider subscription sets the interval; "No plan" when none applies. */
 export function planLabel(subscription: OrgSubscription): string {
+  if (subscription.plan === null) {
+    return "No plan";
+  }
   const name = PLAN_NAMES[subscription.plan];
   return subscription.interval === null ? name : `${name}, ${INTERVAL_LABELS[subscription.interval]}`;
 }

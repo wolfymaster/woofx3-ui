@@ -38,7 +38,9 @@ function SubscriptionSummary({ subscription }: { subscription: OrgSubscription }
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Current</p>
           <p className="font-medium" data-testid="text-billing-plan">
             {planLabel(subscription)}
-            {subscription.interval ? ` - ${formatPrice(subscription.plan, subscription.interval)}` : ""}
+            {subscription.interval && subscription.plan
+              ? ` - ${formatPrice(subscription.plan, subscription.interval)}`
+              : ""}
           </p>
         </div>
         <div>

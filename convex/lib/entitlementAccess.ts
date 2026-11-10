@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import type { LifecycleReason } from "./billingLifecycle";
 import {
+  type AccountPlanRow,
   addOnFeatures,
   ENTITLEMENT_CATALOG,
   type EntitlementFeatureKey,
@@ -12,7 +13,7 @@ import {
   resolveEntitlements,
   type SubscriptionSummary,
 } from "./entitlements";
-import { subscriptionFor } from "./subscriptions";
+import { type BillingView, billingFor } from "./orgBilling";
 
 /** The plan for accounts without an active assignment, or null when operators have marked none. */
 export async function defaultPlan(ctx: QueryCtx): Promise<Doc<"plans"> | null> {
@@ -34,47 +35,29 @@ async function tierPlan(ctx: QueryCtx, key: string): Promise<Doc<"plans">> {
   return plan;
 }
 
-export function subscriptionSummary(row: Doc<"subscriptions"> | null): SubscriptionSummary | null {
-  if (row === null) {
-    return null;
-  }
-  return {
-    plan: row.plan,
-    interval: row.interval ?? null,
-    state: row.state,
-    stateReason: row.stateReason ?? null,
-    nextBillingAt: row.nextBillingAt ?? null,
-    graceEndsAt: row.graceEndsAt ?? null,
-    exemptUntil: row.exemptUntil ?? null,
-  };
-}
-
 /**
- * The org's entitlements at `nowMs`. With a subscription, its plan applies in
- * a usable state and none applies while suspended. An org without one yet
- * keeps the operator assignment or default plan it had before subscriptions,
- * until the subscription migrations have run. Operator overrides
- * (`accountPlans`) apply on top either way.
+ * The org's entitlements at `nowMs`. With billing (a projection from the
+ * management plane, else a subscription), its plan applies in a usable state
+ * and none applies while suspended. An org with neither keeps the operator
+ * assignment or default plan it had before billing existed. A projection
+ * carries its own overrides; on a subscription, operator overrides
+ * (`accountPlans`) apply on top.
  */
 export async function accountEntitlements(
   ctx: QueryCtx,
   accountId: Id<"accounts">,
   nowMs: number
 ): Promise<Entitlements> {
-  const assignment = await ctx.db
-    .query("accountPlans")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .unique();
-  const row = await subscriptionFor(ctx, accountId);
-  const subscription = subscriptionSummary(row);
-  if (row !== null) {
-    const plan = subscription !== null && isUsable(subscription) ? await tierPlan(ctx, subscription.plan) : null;
-    const overrides = assignment === null ? null : { ...assignment, planId: undefined };
-    return resolveEntitlements(plan, overrides, nowMs, ENTITLEMENT_CATALOG, {
-      subscription,
-      grantedFeatures: addOnFeatures(subscription, row.addOns),
+  const billing = await billingFor(ctx, accountId);
+  if (billing !== null) {
+    const { summary } = billing;
+    const plan = summary.plan !== null && isUsable(summary) ? await tierPlan(ctx, summary.plan) : null;
+    return resolveEntitlements(plan, await billingOverrides(ctx, accountId, billing), nowMs, ENTITLEMENT_CATALOG, {
+      subscription: summary,
+      grantedFeatures: addOnFeatures(summary, billing.addOns),
     });
   }
+  const assignment = await accountPlanFor(ctx, accountId);
   let plan: Doc<"plans"> | null;
   if (isAssignmentActive(assignment, nowMs) && assignment.planId !== undefined) {
     plan = await ctx.db.get(assignment.planId);
@@ -86,6 +69,26 @@ export async function accountEntitlements(
     plan = await defaultPlan(ctx);
   }
   return resolveEntitlements(plan, assignment, nowMs);
+}
+
+async function accountPlanFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise<Doc<"accountPlans"> | null> {
+  return ctx.db
+    .query("accountPlans")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .unique();
+}
+
+/** The per-account changes layered over the tier's plan, never a plan assignment. */
+async function billingOverrides(
+  ctx: QueryCtx,
+  accountId: Id<"accounts">,
+  billing: BillingView
+): Promise<AccountPlanRow | null> {
+  if (billing.overrides !== null) {
+    return billing.overrides;
+  }
+  const assignment = await accountPlanFor(ctx, accountId);
+  return assignment === null ? null : { ...assignment, planId: undefined };
 }
 
 /**
@@ -127,7 +130,7 @@ export async function requireUsableSubscription(
   ctx: QueryCtx,
   accountId: Id<"accounts">
 ): Promise<SubscriptionSummary> {
-  const subscription = subscriptionSummary(await subscriptionFor(ctx, accountId));
+  const subscription = (await billingFor(ctx, accountId))?.summary ?? null;
   if (subscription === null || !isUsable(subscription)) {
     throw new ConvexError<EntitlementRefusal>({
       code: "subscription_suspended",
@@ -143,7 +146,7 @@ export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove so
 /**
  * The org's `org.members` limit (every org member, owner included), or null
  * when no seat limit applies. Seats belong to the org, not to an engine: the
- * limit applies once the org has a subscription or any managed engine,
+ * limit applies once the org has a plan (subscription or projection tier) or any managed engine,
  * whichever engine a person joins through. An org with only self-hosted
  * engines has none, nor does a plan without one.
  */
@@ -152,8 +155,9 @@ export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, now
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
+  const billing = await billingFor(ctx, accountId);
   const seated =
-    (await subscriptionFor(ctx, accountId)) !== null || instances.some((instance) => instance.hosting === "managed");
+    (billing !== null && billing.summary.plan !== null) || instances.some((instance) => instance.hosting === "managed");
   if (!seated) {
     return null;
   }

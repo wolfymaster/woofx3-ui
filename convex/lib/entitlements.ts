@@ -150,9 +150,13 @@ export interface AccountPlanRow {
   expiresAt?: number;
 }
 
-/** The org's subscription, as entitlements report it; null when it has none. */
+/**
+ * The org's subscription, as entitlements report it; null when it has none.
+ * `plan` is null for a billing projection that names no tier: its standing
+ * still decides usability, but no plan or add-on feature is granted.
+ */
 export interface SubscriptionSummary {
-  plan: PlanTier;
+  plan: PlanTier | null;
   interval: BillingInterval | null;
   state: SubscriptionState;
   stateReason: LifecycleReason | null;
@@ -177,7 +181,7 @@ export function addOnFeatures(
   addOns: readonly string[],
   registry: Readonly<Record<string, AddOnDefinition>> = ADD_ONS
 ): string[] {
-  if (subscription === null || !isUsable(subscription)) {
+  if (subscription === null || subscription.plan === null || !isUsable(subscription)) {
     return [];
   }
   const keys = subscription.plan === "pro" ? Object.keys(registry) : addOns.filter((key) => hasKey(registry, key));

@@ -14,7 +14,7 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
-import { accountBillingWriteValidator } from "./lib/ops/idempotency";
+import { opsRequestKindValidator } from "./lib/ops/idempotency";
 import {
   billingIntervalValidator,
   engineRoleValidator,
@@ -22,6 +22,7 @@ import {
   planTierValidator,
   subscriptionStateValidator,
 } from "./lib/organization";
+import { orgBillingFields } from "./lib/orgBilling";
 import { appliedDiscountValidator, checkoutPurposeValidator, strayPaymentValidator } from "./lib/payments/provider";
 import { paymentSessionStateValidator } from "./lib/payments/sessions";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
@@ -1514,11 +1515,21 @@ export default defineSchema({
     .index("by_actor", ["actor", "at"])
     .index("by_target", ["target", "at"]),
 
+  // orgBilling: the management plane's last projection of an org's billing,
+  // at most one row per org, written only by ops/billingProjection.ts
+  // applyBillingProjection. Once a row exists it, not `subscriptions`, drives
+  // the org's entitlements; see lib/orgBilling.ts.
+  orgBilling: defineTable({
+    accountId: v.id("accounts"),
+    ...orgBillingFields,
+    updatedAt: v.number(),
+  }).index("by_account", ["accountId"]),
+
   // opsRequests: the ops API's billing writes by the caller's Idempotency-Key,
   // so a retry replays the first success instead of writing twice. Claimed and
   // settled in the same mutation as the write; see lib/ops/idempotency.ts.
   opsRequests: defineTable({
-    write: accountBillingWriteValidator,
+    write: opsRequestKindValidator,
     accountId: v.string(),
     key: v.string(),
     // Canonical JSON of the validated body; the same key with another body is refused.

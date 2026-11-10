@@ -50,6 +50,8 @@ export default function InvoicesPage() {
         <CardContent data-testid="text-active-discount">
           {discount === null ? (
             <p className="text-sm text-muted-foreground">None.</p>
+          ) : "label" in discount ? (
+            <p>{discount.label}</p>
           ) : (
             <p>
               {describeDiscount(discount)}
