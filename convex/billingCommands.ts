@@ -21,13 +21,31 @@ import { logger } from "./logger";
 // the caller manages the org's billing, then asks the management plane to do
 // the work (convex/lib/billingClient.ts). Never called on a read path.
 
-/** What the portal shows for refusals it branches on; the plane's own wording is used for the rest. */
-const REFUSAL_MESSAGES: Partial<Record<BillingError["code"], string>> = {
+const GENERIC_MESSAGE =
+  "Billing hit a problem. Try again in a moment, or contact woofx3 support if it keeps happening.";
+const RETRY_MESSAGE = "Billing is unavailable right now. Try again in a moment.";
+
+/**
+ * What the portal shows for each code. The plane's own wording never reaches
+ * a person; a code not listed (including any the plane adds later) gets the
+ * generic message.
+ */
+const FRIENDLY_MESSAGES: Partial<Record<BillingError["code"], string>> = {
   already_subscribed: "This organization already has a subscription. Change it in Manage billing.",
   subscription_exists: "Your payment method needs attention. Update it in the billing portal.",
   suspended_by_operator: "Your organization's account is suspended. Contact woofx3 support.",
   checkout_in_progress: "A checkout for this organization is already open. Finish it, or start again in half an hour.",
   no_customer: "Choose a plan first; there is nothing to manage yet.",
+  exempt: "This organization's plan is complimentary, so there is nothing to buy.",
+  not_configured: "Billing is not configured on this deployment.",
+  unknown_discount: "That promotion code can't be used.",
+  promotion_code_not_found: "That promotion code doesn't exist or is no longer active.",
+  invalid_return_path: "That page can't be used to return from billing.",
+  subscription_not_found: "Your billing is still being set up. Try again in a moment.",
+  payment_unavailable: RETRY_MESSAGE,
+  payment_refused: RETRY_MESSAGE,
+  identity_unavailable: RETRY_MESSAGE,
+  unreachable: RETRY_MESSAGE,
 };
 
 const NOT_CONFIGURED: BillingError = {
@@ -37,7 +55,7 @@ const NOT_CONFIGURED: BillingError = {
 
 /** The error the portal receives: `{ code, message }`, where `code` is what it branches on. */
 export function billingConvexError(error: BillingError): ConvexError<BillingError> {
-  return new ConvexError<BillingError>({ code: error.code, message: REFUSAL_MESSAGES[error.code] ?? error.message });
+  return new ConvexError<BillingError>({ code: error.code, message: FRIENDLY_MESSAGES[error.code] ?? GENERIC_MESSAGE });
 }
 
 function unwrap<T>(result: BillingResult<T>): T {
@@ -98,7 +116,9 @@ export const startCheckout = action({
   handler: async (ctx, { accountId, plan, interval, promotionCode }): Promise<{ url: string; checkoutId: string }> => {
     const client = await requireManagerClient(ctx, accountId);
     const terms = { accountId, tier: plan, interval, promotionCode: promotionCode?.trim() || undefined };
-    return unwrap(await client.startCheckout({ ...terms, idempotencyKey: checkoutIdempotencyKey(terms, Date.now()) }));
+    return unwrap(
+      await client.startCheckout({ ...terms, idempotencyKey: await checkoutIdempotencyKey(terms, Date.now()) })
+    );
   },
 });
 

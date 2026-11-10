@@ -27,7 +27,6 @@ export type BillingInterval = (typeof BILLING_INTERVALS)[number];
 
 /** Decided by the plane for this request and state: asking again gets the same answer. */
 export const BILLING_REFUSAL_CODES = [
-  "subscription_not_found",
   "account_not_found",
   "already_subscribed",
   // A failing subscription is mended in the customer portal, which the caller should open.
@@ -38,11 +37,23 @@ export const BILLING_REFUSAL_CODES = [
   "unknown_discount",
   "promotion_code_not_found",
   "checkout_not_found",
+  // An operator-exempt org has nothing to buy.
+  "exempt",
+  "invalid_return_path",
 ] as const;
 export type BillingRefusalCode = (typeof BILLING_REFUSAL_CODES)[number];
 
-/** A dependency of the plane failed; nothing was decided and a retry may succeed. */
-export const BILLING_OUTAGE_CODES = ["payment_unavailable", "payment_refused", "identity_unavailable"] as const;
+/**
+ * A dependency of the plane failed; nothing was decided and a retry may succeed.
+ * `subscription_not_found` is here because the plane creates the row moments after an org's first
+ * managed engine, so asking again soon works.
+ */
+export const BILLING_OUTAGE_CODES = [
+  "payment_unavailable",
+  "payment_refused",
+  "identity_unavailable",
+  "subscription_not_found",
+] as const;
 
 /** Failures between Convex and the plane that the plane did not decide. */
 export const BILLING_TRANSPORT_CODES = [
@@ -146,7 +157,7 @@ export interface BillingClient {
   /** Starts the org's trial if it has no billing yet. Idempotent. */
   ensure(accountId: string): Promise<BillingResult<{ accountId: string; version: number }>>;
   startCheckout(request: CheckoutRequest): Promise<BillingResult<{ url: string; checkoutId: string }>>;
-  /** The plane returns the customer to its own billing page; the caller cannot choose where. */
+  /** The plane returns the customer to its billing page; it also accepts a `returnPath`, which no page sends yet. */
   openPortal(accountId: string): Promise<BillingResult<{ url: string }>>;
   listInvoices(accountId: string): Promise<BillingResult<Invoice[]>>;
   /** `null` when no active code by that name exists. */
@@ -164,13 +175,23 @@ export function ensureIdempotencyKey(accountId: string): string {
  * plane answers a double click or a retry with the one checkout the first
  * opened; other terms or a later window get a new key.
  */
-export function checkoutIdempotencyKey(
+export async function checkoutIdempotencyKey(
   request: Pick<CheckoutRequest, "accountId" | "tier" | "interval" | "promotionCode">,
   nowMs: number
-): string {
+): Promise<string> {
   const windowStart = Math.floor(nowMs / BILLING_CLIENT.checkoutKeyWindowMs) * BILLING_CLIENT.checkoutKeyWindowMs;
-  const terms = [request.tier, request.interval, encodeURIComponent(request.promotionCode ?? "")].join(":");
-  return `checkout:${request.accountId}:${terms}:${windowStart}`;
+  const code = request.promotionCode ?? "";
+  // Hashed past a few characters so a long code cannot push the key over the plane's 255-character limit.
+  const codePart = code.length <= MAX_INLINE_CODE_LENGTH ? encodeURIComponent(code) : `sha256-${await sha256Hex(code)}`;
+  return `checkout:${request.accountId}:${request.tier}:${request.interval}:${codePart}:${windowStart}`;
+}
+
+/** Longest promotion code kept readable in a checkout key. */
+const MAX_INLINE_CODE_LENGTH = 40;
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export interface BillingClientConfig {
@@ -300,11 +321,8 @@ export class HttpBillingClient implements BillingClient {
         signal: AbortSignal.timeout(BILLING_CLIENT.requestTimeoutMs),
       });
       text = await response.text();
-    } catch (error) {
-      return billingErr(
-        "unreachable",
-        `The billing service did not answer: ${error instanceof Error ? error.message : String(error)}`
-      );
+    } catch {
+      return billingErr("unreachable", "The billing service did not answer.");
     }
     if (!response.ok) {
       return { ok: false, error: errorFrom(text, response.status) };

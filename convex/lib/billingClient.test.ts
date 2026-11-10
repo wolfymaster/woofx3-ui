@@ -46,9 +46,9 @@ describe("idempotency keys", () => {
     expect(ensureIdempotencyKey("acc1")).toBe("ensure:acc1");
   });
 
-  test("a checkout key is stable inside a window and across retries", () => {
+  test("a checkout key is stable inside a window and across retries", async () => {
     const start = 5 * WINDOW;
-    expect(checkoutIdempotencyKey(TERMS, start)).toBe(checkoutIdempotencyKey(TERMS, start + WINDOW - 1));
+    expect(await checkoutIdempotencyKey(TERMS, start)).toBe(await checkoutIdempotencyKey(TERMS, start + WINDOW - 1));
   });
 
   test.each([
@@ -57,8 +57,23 @@ describe("idempotency keys", () => {
     ["another interval", { ...TERMS, interval: "month" as const }, 5 * WINDOW],
     ["another code", { ...TERMS, promotionCode: "OTHER" }, 5 * WINDOW],
     ["another org", { ...TERMS, accountId: "acc2" }, 5 * WINDOW],
-  ])("differs for %s", (_name, terms, at) => {
-    expect(checkoutIdempotencyKey(terms, at)).not.toBe(checkoutIdempotencyKey(TERMS, 5 * WINDOW));
+  ])("differs for %s", async (_name, terms, at) => {
+    expect(await checkoutIdempotencyKey(terms, at)).not.toBe(await checkoutIdempotencyKey(TERMS, 5 * WINDOW));
+  });
+});
+
+describe("long promotion codes", () => {
+  const long = { ...TERMS, promotionCode: "X".repeat(500) };
+
+  test("keep the key under 255 characters and stable across retries", async () => {
+    const key = await checkoutIdempotencyKey(long, 0);
+    expect(key.length).toBeLessThan(255);
+    expect(await checkoutIdempotencyKey(long, 1)).toBe(key);
+  });
+
+  test("still tell two long codes apart", async () => {
+    const other = { ...long, promotionCode: `${long.promotionCode}Y` };
+    expect(await checkoutIdempotencyKey(other, 0)).not.toBe(await checkoutIdempotencyKey(long, 0));
   });
 });
 
@@ -157,16 +172,34 @@ describe("error mapping", () => {
     expect(await client.openPortal("acc1")).toMatchObject({ ok: false, error: { code: "unreachable" } });
   });
 
-  test("the portal sees the original wording for refusals it branches on, and the plane's for the rest", () => {
+  test("the portal sees friendly wording for every code, never the plane's own", () => {
     const refusal = billingConvexError({ code: "suspended_by_operator", message: "plane words" });
     expect(refusal).toBeInstanceOf(ConvexError);
     expect(refusal.data).toEqual({
       code: "suspended_by_operator",
       message: "Your organization's account is suspended. Contact woofx3 support.",
     });
-    expect(billingConvexError({ code: "payment_unavailable", message: "plane words" }).data.message).toBe(
-      "plane words"
+    for (const code of ["subscription_not_found", "unreachable", "payment_unavailable"] as const) {
+      const { message } = billingConvexError({ code, message: "plane words" }).data;
+      expect(message).toMatch(/try again/i);
+    }
+    expect(billingConvexError({ code: "exempt", message: "plane words" }).data.message).toMatch(/complimentary/);
+    expect(billingConvexError({ code: "unexpected_response", message: "answered 409" }).data.message).not.toContain(
+      "409"
     );
+  });
+
+  test("a refusal code the client does not know becomes unexpected_response", async () => {
+    plane(409, { error: { code: "brand_new_refusal", message: "plane words" } });
+    expect(await client.openPortal("acc1")).toMatchObject({ ok: false, error: { code: "unexpected_response" } });
+  });
+
+  test("an unreachable plane's error carries no fetch internals", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("fetch failed: ECONNREFUSED 10.0.0.1");
+    }) as typeof fetch;
+    const result = await client.openPortal("acc1");
+    expect(JSON.stringify(result)).not.toContain("ECONNREFUSED");
   });
 });
 
