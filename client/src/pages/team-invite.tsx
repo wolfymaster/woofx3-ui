@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { TwitchInviteCandidate } from "@convex/invitations";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { ArrowLeft, Copy, Link as LinkIcon, Loader2, Mail, Search, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
@@ -15,6 +15,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
+import { teamInviteAccess } from "@/lib/team-invite-access";
 
 type InviteMethod = "twitch" | "email";
 type InviteRole = "admin" | "member";
@@ -41,6 +42,9 @@ function inviteUrl(token: string): string {
 export default function TeamInvite() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
+
+  const teamData = useQuery(api.engineMembers.listForEngine, instanceId ? { instanceId } : "skip");
+  const access = teamInviteAccess(teamData);
 
   const lookupTwitchUser = useAction(api.invitations.lookupTwitchUser);
   const createInvite = useAction(api.invitations.create);
@@ -116,6 +120,21 @@ export default function TeamInvite() {
       <div className="p-6 lg:p-8 max-w-2xl mx-auto">
         <PageHeader title="Invite a team member" actions={backLink} />
         <p className="text-sm text-muted-foreground">No engine available yet.</p>
+      </div>
+    );
+  }
+
+  if (access !== "allowed") {
+    return (
+      <div className="p-6 lg:p-8 max-w-2xl mx-auto">
+        <PageHeader title="Invite a team member" actions={backLink} />
+        {access === "loading" ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading" />
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="text-invite-not-allowed">
+            Only engine admins can invite people. Ask an admin of this engine to send the invitation.
+          </p>
+        )}
       </div>
     );
   }
