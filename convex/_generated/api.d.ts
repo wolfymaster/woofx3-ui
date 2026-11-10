@@ -73,6 +73,7 @@ import type * as lib_companionEndpoints from "../lib/companionEndpoints.js";
 import type * as lib_companionRecords from "../lib/companionRecords.js";
 import type * as lib_completionPolling from "../lib/completionPolling.js";
 import type * as lib_configBundle from "../lib/configBundle.js";
+import type * as lib_dateText from "../lib/dateText.js";
 import type * as lib_defaultSeedValidator from "../lib/defaultSeedValidator.js";
 import type * as lib_definitionCatalog from "../lib/definitionCatalog.js";
 import type * as lib_engineAlertLifecycle from "../lib/engineAlertLifecycle.js";
@@ -147,6 +148,7 @@ import type * as lib_oauthHandoff from "../lib/oauthHandoff.js";
 import type * as lib_oauthState from "../lib/oauthState.js";
 import type * as lib_ops_audit from "../lib/ops/audit.js";
 import type * as lib_ops_auth from "../lib/ops/auth.js";
+import type * as lib_ops_billingProjectionRequest from "../lib/ops/billingProjectionRequest.js";
 import type * as lib_ops_billingRequests from "../lib/ops/billingRequests.js";
 import type * as lib_ops_dto from "../lib/ops/dto.js";
 import type * as lib_ops_idempotency from "../lib/ops/idempotency.js";
@@ -154,6 +156,7 @@ import type * as lib_ops_notificationRequest from "../lib/ops/notificationReques
 import type * as lib_ops_planCounts from "../lib/ops/planCounts.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
+import type * as lib_orgBilling from "../lib/orgBilling.js";
 import type * as lib_orgRoles from "../lib/orgRoles.js";
 import type * as lib_organization from "../lib/organization.js";
 import type * as lib_payments_config from "../lib/payments/config.js";
@@ -264,6 +267,7 @@ import type * as oauthConnectHandoff from "../oauthConnectHandoff.js";
 import type * as obsStatus from "../obsStatus.js";
 import type * as ops_audit from "../ops/audit.js";
 import type * as ops_billing from "../ops/billing.js";
+import type * as ops_billingProjection from "../ops/billingProjection.js";
 import type * as ops_engines from "../ops/engines.js";
 import type * as ops_eventRate from "../ops/eventRate.js";
 import type * as ops_http from "../ops/http.js";
@@ -405,6 +409,7 @@ declare const fullApi: ApiFromModules<{
   "lib/companionRecords": typeof lib_companionRecords;
   "lib/completionPolling": typeof lib_completionPolling;
   "lib/configBundle": typeof lib_configBundle;
+  "lib/dateText": typeof lib_dateText;
   "lib/defaultSeedValidator": typeof lib_defaultSeedValidator;
   "lib/definitionCatalog": typeof lib_definitionCatalog;
   "lib/engineAlertLifecycle": typeof lib_engineAlertLifecycle;
@@ -479,6 +484,7 @@ declare const fullApi: ApiFromModules<{
   "lib/oauthState": typeof lib_oauthState;
   "lib/ops/audit": typeof lib_ops_audit;
   "lib/ops/auth": typeof lib_ops_auth;
+  "lib/ops/billingProjectionRequest": typeof lib_ops_billingProjectionRequest;
   "lib/ops/billingRequests": typeof lib_ops_billingRequests;
   "lib/ops/dto": typeof lib_ops_dto;
   "lib/ops/idempotency": typeof lib_ops_idempotency;
@@ -486,6 +492,7 @@ declare const fullApi: ApiFromModules<{
   "lib/ops/planCounts": typeof lib_ops_planCounts;
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
+  "lib/orgBilling": typeof lib_orgBilling;
   "lib/orgRoles": typeof lib_orgRoles;
   "lib/organization": typeof lib_organization;
   "lib/payments/config": typeof lib_payments_config;
@@ -596,6 +603,7 @@ declare const fullApi: ApiFromModules<{
   obsStatus: typeof obsStatus;
   "ops/audit": typeof ops_audit;
   "ops/billing": typeof ops_billing;
+  "ops/billingProjection": typeof ops_billingProjection;
   "ops/engines": typeof ops_engines;
   "ops/eventRate": typeof ops_eventRate;
   "ops/http": typeof ops_http;
@@ -693,6 +701,225 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
-  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
+  rateLimiter: {
+    lib: {
+      checkRateLimit: FunctionReference<
+        "query",
+        "internal",
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          count?: number;
+          key?: string;
+          name: string;
+          reserve?: boolean;
+          throws?: boolean;
+        },
+        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
+      >;
+      clearAll: FunctionReference<
+        "mutation",
+        "internal",
+        { before?: number },
+        null
+      >;
+      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+      getValue: FunctionReference<
+        "query",
+        "internal",
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          key?: string;
+          name: string;
+          sampleShards?: number;
+        },
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          shard: number;
+          ts: number;
+          value: number;
+        }
+      >;
+      rateLimit: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          count?: number;
+          key?: string;
+          name: string;
+          reserve?: boolean;
+          throws?: boolean;
+        },
+        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
+      >;
+      resetRateLimit: FunctionReference<
+        "mutation",
+        "internal",
+        { key?: string; name: string },
+        null
+      >;
+    };
+    time: {
+      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+    };
+  };
+  migrations: {
+    lib: {
+      cancel: FunctionReference<
+        "mutation",
+        "internal",
+        { name: string },
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }
+      >;
+      cancelAll: FunctionReference<
+        "mutation",
+        "internal",
+        { sinceTs?: number },
+        Array<{
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }>
+      >;
+      clearAll: FunctionReference<
+        "mutation",
+        "internal",
+        { before?: number },
+        null
+      >;
+      getStatus: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; names?: Array<string> },
+        Array<{
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }>
+      >;
+      migrate: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          dryRun: boolean;
+          fnHandle: string;
+          name: string;
+          next?: Array<{ fnHandle: string; name: string }>;
+          oneBatchOnly?: boolean;
+          reset?: boolean;
+        },
+        {
+          batchSize?: number;
+          cursor?: string | null;
+          error?: string;
+          isDone: boolean;
+          latestEnd?: number;
+          latestStart: number;
+          name: string;
+          next?: Array<string>;
+          processed: number;
+          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+        }
+      >;
+    };
+  };
 };
