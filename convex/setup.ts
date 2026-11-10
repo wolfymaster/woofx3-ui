@@ -392,7 +392,7 @@ export const ensureFirstRun = mutation({
     }
     // Choosing a hosted engine is what starts the trial, so onboarding can say
     // so before the engine is built.
-    await startTrialIfNew(ctx, account._id, Date.now());
+    await startTrialIfNew(ctx, account._id);
     return instanceId;
   },
 });

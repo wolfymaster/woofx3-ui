@@ -142,7 +142,7 @@ describe("startTrialIfNew", () => {
       const t = newBackend();
       const { accountId } = await seed(t);
       await project(t, accountId, { tier, standing: "trialing", trialEndsAt: TRIAL_END });
-      await t.run((ctx) => startTrialIfNew(ctx, accountId, NOW));
+      await t.run((ctx) => startTrialIfNew(ctx, accountId));
       expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toBeNull();
       await t.run((ctx) => requireUsableSubscription(ctx, accountId));
     }

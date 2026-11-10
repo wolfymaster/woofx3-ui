@@ -69,29 +69,35 @@ describe("the trial starts before the engine is built", () => {
     process.env.MAINTENANCE_API_KEY = saved.key;
   });
 
-  test("choosing a hosted engine starts the trial once", async () => {
-    const t = newBackend();
-    const userId = await t.run((ctx) => ctx.db.insert("users", { name: "New" }));
-    const user = as(t, userId);
-    const instanceId = await user.mutation(api.setup.ensureFirstRun, {});
-    await user.mutation(api.setup.ensureFirstRun, {});
-    const account = await t.run((ctx) =>
-      ctx.db
-        .query("accounts")
-        .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-        .unique()
-    );
-    if (account === null) {
-      throw new Error("ensureFirstRun made no account");
+  test("choosing a hosted engine asks the plane for the trial and creates none locally", async () => {
+    const realFetch = globalThis.fetch;
+    const asked: Array<{ path: string; key: string | null }> = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      asked.push({ path: new URL(String(input)).pathname, key: new Headers(init?.headers).get("idempotency-key") });
+      return new Response(JSON.stringify({ accountId: "x", version: 1 }), { status: 201 });
+    }) as typeof fetch;
+    try {
+      const t = newBackend();
+      const userId = await t.run((ctx) => ctx.db.insert("users", { name: "New" }));
+      await as(t, userId).mutation(api.setup.ensureFirstRun, {});
+      const account = await t.run((ctx) =>
+        ctx.db
+          .query("accounts")
+          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+          .unique()
+      );
+      if (account === null) {
+        throw new Error("ensureFirstRun made no account");
+      }
+      await Bun.sleep(100);
+      expect(await t.run((ctx) => subscriptionFor(ctx, account._id))).toBeNull();
+      expect(asked.length).toBeGreaterThan(0);
+      for (const call of asked) {
+        expect(call).toEqual({ path: `/v1/billing/accounts/${account._id}/ensure`, key: `ensure:${account._id}` });
+      }
+    } finally {
+      globalThis.fetch = realFetch;
     }
-    const subscription = await t.run((ctx) => subscriptionFor(ctx, account._id));
-    expect(subscription).toMatchObject({ state: "trialing", plan: "starter", origin: "signup" });
-    const history = await t.run((ctx) => ctx.db.query("subscriptionTransitions").collect());
-    expect(history).toHaveLength(1);
-    expect(await user.query(api.access.planPrompt, { instanceId })).toEqual({
-      kind: "trial",
-      endsAt: subscription?.nextBillingAt ?? -1,
-    });
   });
 
   test("connecting a self-hosted engine starts no subscription", async () => {

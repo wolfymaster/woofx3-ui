@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import type { Invoice } from "@convex/lib/payments/provider";
+import type { Invoice } from "@convex/lib/billingClient";
 import { useAction } from "convex/react";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -17,7 +17,7 @@ type InvoiceList =
 
 export default function InvoicesPage() {
   const { organization } = useOrganization();
-  const listInvoices = useAction(api.billing.invoices);
+  const listInvoices = useAction(api.billingCommands.invoices);
   const [list, setList] = useState<InvoiceList>({ state: "loading" });
   const discount = organization.subscription?.discount ?? null;
 

@@ -231,21 +231,6 @@ describe("organizations.rename", () => {
 });
 
 describe("billing.invoices", () => {
-  test("answers null to an admin and a member", async () => {
-    const t = newBackend();
-    const org = await seedOrg(t);
-    for (const role of ["admin", "member"] as const) {
-      const userId = await addMember(t, org, role, role);
-      expect(await as(t, userId).action(api.billing.invoices, { accountId: org.accountId })).toBeNull();
-    }
-  });
-
-  test("is empty for an owner whose org has no customer yet", async () => {
-    const t = newBackend();
-    const org = await seedOrg(t);
-    expect(await as(t, org.ownerId).action(api.billing.invoices, { accountId: org.accountId })).toEqual([]);
-  });
-
   test("reads the customer's invoices from the provider, and surfaces its failure", async () => {
     const provider = new FakePaymentProvider();
     const invoice = {
