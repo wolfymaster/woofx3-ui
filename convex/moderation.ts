@@ -31,6 +31,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, query } from "./_generated/server";
 import type { EngineApi } from "./lib/engineInstanceUrl";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
@@ -196,6 +197,7 @@ export async function helix(
       viaEngine: request.viaEngine,
       direct: () =>
         fetch(url, {
+          signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
           method,
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),

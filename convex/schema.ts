@@ -1316,7 +1316,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_state", ["state"])
-    .index("by_nonce_hash", ["nonceHash"]),
+    .index("by_nonce_hash", ["nonceHash"])
+    .index("by_created_at", ["createdAt"]),
 
   // twitchPendingAuth: one-time token bridging Convex HTTP callback → frontend signIn
   twitchPendingAuth: defineTable({
@@ -1915,7 +1916,7 @@ export default defineSchema({
     // same step twice.
     .index("by_attempt", ["runId", "taskId", "attempt"]),
 
-  // alertHistory: bounded history of fired alerts
+  // alertHistory: nothing reads or writes it any more; kept because production may still hold rows.
   alertHistory: defineTable({
     instanceId: v.id("instances"),
     sceneId: v.id("scenes"),

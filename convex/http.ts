@@ -4,6 +4,7 @@ import type { InboundWebhookResponse } from "@woofx3/api";
 import type { CallbackEnvelope } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import type { WebhookEventResult } from "./engineEvents";
@@ -12,6 +13,7 @@ import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from ".
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { engineActivityPatch } from "./lib/engineSync/activity";
+import { admitInboundWebhook, inboundWebhookRateLimiter } from "./lib/inboundWebhookLimits";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
   buildForwardedRequest,
@@ -50,6 +52,7 @@ import { registerUserPageFormRoutes } from "./userPageFormsHttp";
 import { registerViewerAuthRoutes } from "./viewerAuthHttp";
 import "./browserSource";
 import "./moduleWebhook";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 
 const http = httpRouter();
 
@@ -260,6 +263,7 @@ http.route({
     logger.info("state valid, exchanging code", { isIntegration: !!instanceId });
 
     const tokenRes = await fetch("https://id.twitch.tv/oauth2/token", {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -282,6 +286,7 @@ http.route({
     logger.info("token exchange ok");
 
     const userRes = await fetch("https://api.twitch.tv/helix/users", {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         "Client-Id": process.env.AUTH_TWITCH_ID,
@@ -440,8 +445,29 @@ http.route({
   path: "/api/webhooks/woofx3",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    // Checked before the body is read: a caller without the instance's secret gets a 401, not a parse or a log line.
+    const authHeader = request.headers.get("Authorization");
+    const providedSecret = authHeader?.replace("Bearer ", "");
+    if (!providedSecret) {
+      logger.warn("webhook: missing Authorization header");
+      return corsJson({ error: "Missing Authorization header" }, 401);
+    }
+    const instance = await ctx.runQuery(internal.instances.getByWebhookSecret, { webhookSecret: providedSecret });
+    if (!instance) {
+      logger.warn("webhook: unauthorized - no instance found for provided secret");
+      return corsJson({ error: "Unauthorized" }, 401);
+    }
+
     const body = await request.text();
-    const payload = JSON.parse(body);
+    let payload: { type?: string; data?: { type?: string } };
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      return corsJson({ error: "Body must be JSON" }, 400);
+    }
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      return corsJson({ error: "Body must be a JSON object" }, 400);
+    }
 
     logger.info("webhook: incoming request", {
       type: payload.type,
@@ -449,29 +475,19 @@ http.route({
     });
 
     if (!payload.type) {
-      logger.warn("webhook: missing type field", { payload: body });
+      // Field names only: the body may carry anything the sender chose.
+      logger.warn("webhook: missing type field", { fields: Object.keys(payload) });
       return corsJson({ error: "Missing required field: type" }, 400);
-    }
-
-    // Validate webhook secret (callbackToken) via Bearer token
-    const authHeader = request.headers.get("Authorization");
-    const providedSecret = authHeader?.replace("Bearer ", "");
-    if (!providedSecret) {
-      logger.warn("webhook: missing Authorization header");
-      return corsJson({ error: "Missing Authorization header" }, 401);
     }
 
     // An engine on the maintenance event queue sends its events there; one
     // that has not moved yet (too old to support an events target) posts them here.
     const eventType: string = payload.data?.type ?? payload.type;
     if (!ENGINE_REQUEST_TYPES.has(eventType)) {
-      const result = await ctx.runMutation(internal.engineEvents.applyFromWebhook, {
-        webhookSecret: providedSecret,
-        body,
-      });
+      const result = await ctx.runMutation(internal.engineEvents.applyFromWebhook, { instanceId: instance._id, body });
       return legacyEventResponse(result, eventType);
     }
-    return answerEngineRequest(ctx, providedSecret, payload as CallbackEnvelope, eventType);
+    return answerEngineRequest(ctx, instance, payload as CallbackEnvelope, eventType);
   }),
 });
 
@@ -506,16 +522,10 @@ function legacyEventResponse(result: WebhookEventResult, eventType: string): Res
 
 async function answerEngineRequest(
   ctx: ActionCtx,
-  webhookSecret: string,
+  instance: Doc<"instances">,
   envelope: CallbackEnvelope,
   eventType: string
 ): Promise<Response> {
-  const instance = await ctx.runQuery(internal.instances.getByWebhookSecret, { webhookSecret });
-  if (!instance) {
-    logger.warn("webhook: unauthorized - no instance found for provided secret");
-    return corsJson({ error: "Unauthorized" }, 401);
-  }
-
   // A request shows the engine is running and may hold changes a scheduled
   // sync would mirror. Checked here first so most requests do not run a
   // mutation for it.
@@ -800,6 +810,12 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
   const endpoint = await ctx.runQuery(internal.inboundWebhooks.getByEndpointId, { endpointId: path.endpointId });
   if (!endpoint || !endpoint.isEnabled) {
     return new Response(null, { status: 404 });
+  }
+  const admission = await admitInboundWebhook(() =>
+    inboundWebhookRateLimiter.limit(ctx, "inboundWebhookDelivery", { key: endpoint._id })
+  );
+  if (!admission.ok) {
+    return new Response(null, { status: 429, headers: { "Retry-After": String(admission.retryAfterSeconds) } });
   }
 
   if (Number(request.headers.get("content-length") ?? "0") > MAX_INBOUND_BODY_BYTES) {

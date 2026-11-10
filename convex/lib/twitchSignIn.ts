@@ -22,6 +22,12 @@ import { OAUTH_ERROR_CODES } from "./oauthErrors";
 /** How long a started sign-in waits for Twitch to answer before its state is dropped. */
 export const TWITCH_SIGN_IN_STATE_TTL_MS = 10 * 60 * 1000;
 
+/** The sweep that deletes sign-in states Twitch never answered (twitchAuth.sweepExpiredStates). */
+export const TWITCH_SIGN_IN_STATE_SWEEP = {
+  intervalMinutes: 5,
+  batchSize: 200,
+} as const;
+
 /** How long a finished sign-in, or a desktop sign-in's outcome, waits to be claimed. */
 export const TWITCH_PENDING_SIGN_IN_TTL_MS = 5 * 60 * 1000;
 

@@ -8,8 +8,10 @@
  * leaked, without touching the other.
  *
  * Sealed form: `<keyId>.<base64url(12-byte IV)>.<base64url(ciphertext + tag)>`.
- * The key id names the key that sealed the value, so a later rotation can open
- * values sealed under the old key while sealing new ones under the next.
+ * The key id names the key that sealed the value. `open` accepts only the
+ * current key's id and refuses anything else, so rotating a key means
+ * re-sealing every stored value under the new one (or having each user
+ * reconnect their account); values sealed under a retired key cannot be read.
  *
  * Web Crypto only, so it runs in the default Convex runtime and in tests.
  */
