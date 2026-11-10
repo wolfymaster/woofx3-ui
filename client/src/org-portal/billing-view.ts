@@ -1,4 +1,4 @@
-import type { CheckoutRefusal } from "@convex/billing";
+import type { BillingRefusalCode } from "@convex/lib/billingClient";
 import type { MyOrganization, OrgSubscription } from "@convex/organizations";
 import { ConvexError } from "convex/values";
 
@@ -41,7 +41,7 @@ export function billingView(organization: Pick<MyOrganization, "engines" | "subs
  */
 export type CheckoutRefusalAction = "open_portal" | "contact_support";
 
-const REFUSAL_ACTIONS: Partial<Record<CheckoutRefusal["code"], CheckoutRefusalAction>> = {
+const REFUSAL_ACTIONS: Partial<Record<BillingRefusalCode, CheckoutRefusalAction>> = {
   subscription_exists: "open_portal",
   suspended_by_operator: "contact_support",
 };
@@ -54,5 +54,5 @@ export function checkoutRefusalAction(error: unknown): CheckoutRefusalAction | n
   if (typeof data !== "object" || data === null || !("code" in data) || typeof data.code !== "string") {
     return null;
   }
-  return REFUSAL_ACTIONS[data.code as CheckoutRefusal["code"]] ?? null;
+  return REFUSAL_ACTIONS[data.code as BillingRefusalCode] ?? null;
 }

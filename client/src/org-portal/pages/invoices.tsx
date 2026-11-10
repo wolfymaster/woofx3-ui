@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { actionErrorMessage } from "@/lib/action-error";
-import { describeDiscount, formatCents, formatDay } from "../format";
+import { formatCents, formatDay } from "../format";
 import { useOrganization } from "../organization-context";
 
 type InvoiceList =
@@ -48,19 +48,7 @@ export default function InvoicesPage() {
           <CardTitle>Active discount</CardTitle>
         </CardHeader>
         <CardContent data-testid="text-active-discount">
-          {discount === null ? (
-            <p className="text-sm text-muted-foreground">None.</p>
-          ) : "label" in discount ? (
-            <p>{discount.label}</p>
-          ) : (
-            <p>
-              {describeDiscount(discount)}
-              {discount.code ? <span className="text-muted-foreground"> (code {discount.code})</span> : null}
-              {discount.endsAt ? (
-                <span className="text-muted-foreground">, until {formatDay(discount.endsAt)}</span>
-              ) : null}
-            </p>
-          )}
+          {discount === null ? <p className="text-sm text-muted-foreground">None.</p> : <p>{discount.label}</p>}
         </CardContent>
       </Card>
       <Card>
