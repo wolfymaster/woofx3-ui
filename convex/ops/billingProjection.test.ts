@@ -183,6 +183,37 @@ describe("POST /api/ops/accounts/:id/billing-projection", () => {
     });
   }
 
+  test.each([
+    ["POST", "plan"],
+    ["POST", "exemption"],
+    ["POST", "suspend"],
+    ["POST", "discount"],
+  ])("%s /api/ops/accounts/:id/%s is no longer served", async (method, write) => {
+    const t = newBackend();
+    const accountId = await org(t);
+    const response = await t.fetch(`/api/ops/accounts/${accountId}/${write}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${SECRET}`,
+        "X-Woofx3-Actor": "ops@woofx3.tv",
+        "X-Woofx3-Reason": encodeURIComponent("support ticket 12"),
+        "Idempotency-Key": "key-removed-route-1",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ reason: "chargeback" }),
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
+  });
+
+  test("the stray payments read is no longer served", async () => {
+    const t = newBackend();
+    const response = await t.fetch("/api/ops/payments/strays", {
+      headers: { Authorization: `Bearer ${SECRET}`, "X-Woofx3-Actor": "ops@woofx3.tv" },
+    });
+    expect(response.status).toBe(404);
+  });
+
   test("an unknown override key is a 400, not dropped", async () => {
     const t = newBackend();
     const accountId = await org(t);

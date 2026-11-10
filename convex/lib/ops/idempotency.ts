@@ -2,11 +2,12 @@ import { type Infer, v } from "convex/values";
 import type { MutationCtx } from "../../_generated/server";
 import type { ParseResult } from "../notifications";
 
-// The ops API's billing writes run once per caller-chosen Idempotency-Key, so
-// the backoffice can retry after a timeout or a 5xx without writing twice.
+// The ops API's billing projection push runs once per caller-chosen
+// Idempotency-Key, so the management plane can retry after a timeout or a 5xx
+// without writing twice.
 // A key is claimed (pending), then settled: a success is kept and replayed to
 // every repeat; a refusal releases the key, so the same request can be sent
-// again once the organization allows it.
+// again.
 
 export const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
 
@@ -28,14 +29,8 @@ export const OPS_REQUESTS = {
   maxCleanupPasses: 50,
 } as const;
 
-/** Every write the ops API runs once per key: the subscription writes and the plane's billing projection. */
-export const opsRequestKindValidator = v.union(
-  v.literal("plan"),
-  v.literal("exemption"),
-  v.literal("suspend"),
-  v.literal("discount"),
-  v.literal("projection")
-);
+/** Every write the ops API runs once per key: the management plane's billing projection push. */
+export const opsRequestKindValidator = v.literal("projection");
 
 export type OpsRequestKind = Infer<typeof opsRequestKindValidator>;
 
