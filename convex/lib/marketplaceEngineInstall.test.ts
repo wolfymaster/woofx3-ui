@@ -241,6 +241,19 @@ describe("installModuleThroughEngine", () => {
     expect(t.recorded).toEqual([KEY]);
   });
 
+  test("hands the engine the license key, so it downloads with it instead of claiming", async () => {
+    const t = moduleInstallDeps(async () => ({ status: "installed", moduleKey: KEY }));
+    await installModuleThroughEngine(t.deps, { ...APPROVAL, licenseKey: "W3X-AAAA-BBBB" });
+
+    const [, request] = t.engine.calls[0].args as [string, MarketplaceInstallRequest];
+    expect(request).toEqual({
+      approvedPermissions: ["chat.read"],
+      approvedLocalEndpoints: ["obs"],
+      buyerToken: TOKEN,
+      licenseKey: "W3X-AAAA-BBBB",
+    });
+  });
+
   test("a later edition installs under its manifest id and is recorded as the listing it came from", async () => {
     const key = "cozy:2.0.0:abcdef0";
     const t = moduleInstallDeps(async () => ({ status: "installed", moduleKey: key }));

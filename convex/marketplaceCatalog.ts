@@ -42,6 +42,7 @@ import {
   fetchListingContent,
   marketplaceAccessForInstanceId,
 } from "./lib/marketplaceEntitlement";
+import { type AcquireForInstallResult, acquireOutcomeOfError, licensedFromAcquire } from "./lib/marketplaceLicense";
 
 // The marketplace storefront, across every listing type.
 //
@@ -240,6 +241,38 @@ export const entitlements = action({
       const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
       const ids = Array.isArray(obj.listingIds) ? obj.listingIds : [];
       return ids.filter((id): id is string => typeof id === "string");
+    }),
+});
+
+export type { AcquireForInstallResult };
+
+/**
+ * Makes the account hold a listing so it can be installed, after the
+ * streamer approved what it asks for: claims a free one, confirms one already
+ * held, and answers with its license key; one that costs money answers with
+ * the purchase to pay. Asking again is safe: a held listing answers with the
+ * same key, and an unpaid one with the same purchase.
+ *
+ * The key goes back to the browser, which hands it to `installWithLicense`;
+ * it is not kept here.
+ */
+export const acquireForInstall = action({
+  args: { instanceId: v.id("instances"), listingId: v.string() },
+  handler: async (ctx, args): Promise<AcquireForInstallResult> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      try {
+        return licensedFromAcquire(
+          await marketplaceAuthed(`/catalog/${encodeURIComponent(args.listingId)}/acquire`, "POST", { buyerRef })
+        );
+      } catch (err) {
+        const outcome = acquireOutcomeOfError(err);
+        if (outcome !== null) {
+          return outcome;
+        }
+        throw err;
+      }
     }),
 });
 

@@ -19,6 +19,7 @@ import { type CatalogListing, isModuleListing, parseCatalogDetail } from "@share
 import type {
   MarketplaceBundleInstallResult as EngineBundleInstallResult,
   MarketplaceInstallResult as EngineModuleInstallResult,
+  MarketplaceInstallRequest,
   MarketplaceListingInspection,
   ModuleFileList,
 } from "@woofx3/api";
@@ -287,17 +288,27 @@ export async function installModuleThroughEngine(
     manifestId: string;
     approvedPermissions: readonly string[];
     approvedLocalEndpoints: readonly string[];
+    /**
+     * The listing's license key, from `acquire`. With it the engine downloads
+     * with the key and claims nothing; only an engine with the
+     * `marketplace.licenseKeys` capability reads it.
+     */
+    licenseKey?: string;
   }
 ): Promise<MarketplaceInstallResult> {
   const buyerToken = await deps.buyerToken();
   const since = deps.now();
+  const engineRequest: MarketplaceInstallRequest = {
+    approvedPermissions: [...request.approvedPermissions],
+    approvedLocalEndpoints: [...request.approvedLocalEndpoints],
+    buyerToken,
+  };
+  if (request.licenseKey !== undefined) {
+    engineRequest.licenseKey = request.licenseKey;
+  }
   let result: EngineModuleInstallResult;
   try {
-    result = await deps.engine().installMarketplaceListing(request.listingId, {
-      approvedPermissions: [...request.approvedPermissions],
-      approvedLocalEndpoints: [...request.approvedLocalEndpoints],
-      buyerToken,
-    });
+    result = await deps.engine().installMarketplaceListing(request.listingId, engineRequest);
   } catch (err) {
     throw engineFailure(err);
   }
