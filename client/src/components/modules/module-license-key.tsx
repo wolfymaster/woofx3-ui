@@ -2,9 +2,11 @@ import { Check, Copy, Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useModuleLicenseKeyRequest } from "@/engine/hooks/use-modules";
+import { useViewerRole } from "@/engine/hooks/use-viewer-role";
 import type { ModuleLicenseLookup } from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
 import { useLogger } from "@/lib/logger-context";
+import { canSeeLicenseKey } from "@/lib/marketplace-access";
 
 const COPIED_LABEL_MS = 2_000;
 const MASK = "••••-••••-••••-••••";
@@ -13,9 +15,15 @@ const COPY_LABELS = { idle: "Copy", copied: "Copied", failed: "Couldn't copy" } 
 /**
  * The license key a marketplace module is held with, masked until asked for:
  * the key downloads the module. Shows nothing when there is no key, and
- * nothing when it cannot be read, since the page works without it.
+ * nothing when it cannot be read, since the page works without it. Only
+ * owners and admins see it: for anyone else the key is never even requested,
+ * which is why the lookup lives in a component that mounts only for them.
  */
-export function ModuleLicenseKey({ moduleId, listingId }: ModuleLicenseLookup) {
+export function ModuleLicenseKey(lookup: ModuleLicenseLookup) {
+  return canSeeLicenseKey(useViewerRole()) ? <LicenseKeyPanel {...lookup} /> : null;
+}
+
+function LicenseKeyPanel({ moduleId, listingId }: ModuleLicenseLookup) {
   const getLicenseKey = useModuleLicenseKeyRequest();
   const logger = useLogger();
   const [licenseKey, setLicenseKey] = useState<string | null>(null);

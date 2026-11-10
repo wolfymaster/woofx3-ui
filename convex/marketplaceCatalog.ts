@@ -290,7 +290,8 @@ export const licenseKey = action({
   args: { instanceId: v.id("instances"), listingId: v.string() },
   handler: async (ctx, args): Promise<string | null> =>
     withClientErrors(async () => {
-      await requireInstanceRoleInAction(ctx, args.instanceId);
+      // The key downloads the module, so it is shown to owners and admins only.
+      await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
       const buyerRef = await buyerRefFor(ctx, args.instanceId);
       return heldLicenseKey(
         await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET"),
