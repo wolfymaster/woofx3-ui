@@ -3,7 +3,7 @@ import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
-import { accountEntitlements, engineAvailability, hasFeature, orgSeatsFull } from "./entitlementAccess";
+import { accountEntitlements, engineAvailability, hasFeature, orgSeatLimit, orgSeatsFull } from "./entitlementAccess";
 import {
   addOnFeatures,
   ENTITLEMENT_FEATURES,
@@ -11,6 +11,7 @@ import {
   type SubscriptionSummary,
 } from "./entitlements";
 import type { SubscriptionState } from "./organization";
+import { orgBillingFor } from "./orgBilling";
 import { upsertPlan } from "./plans";
 import { grantEngineRole } from "./teamAccess";
 
@@ -241,6 +242,8 @@ describe("seat limit", () => {
       }
       return accountId;
     });
+    expect(await t.run((ctx) => orgBillingFor(ctx, accountId))).toBeNull();
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).toBeNull();
     expect(await t.run((ctx) => orgSeatsFull(ctx, accountId, NOW))).toBe(false);
   });
 
