@@ -38,5 +38,7 @@ export function directSessionGateway(runtime: DirectRuntime): SessionGateway {
     useReconnectRequest: () => reconnectNow,
     useConnected: () => useConnected(runtime),
     useCapabilities: () => useEngineQuery(runtime, capabilitiesRead(runtime)),
+    // A direct engine is the caller's own, with no account to share it: they own it.
+    useRole: () => "owner",
   };
 }
