@@ -26,6 +26,7 @@ import {
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, type MutationCtx, mutation, query } from "./_generated/server";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
@@ -65,6 +66,7 @@ export async function fetchChannelInfo(call: AuthorizedTwitchCall, route: Twitch
     viaEngine: (engine) => engine.twitchGetChannelInformation(),
     direct: () =>
       fetch(`${TWITCH_CHANNELS_URL}?broadcaster_id=${call.broadcasterUserId}`, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         headers: helixHeaders(call),
       }),
   });
@@ -83,6 +85,7 @@ export async function fetchCategory(
     viaEngine: (engine) => engine.twitchGetGames({ id: categoryId }),
     direct: () =>
       fetch(`${TWITCH_GAMES_URL}?id=${encodeURIComponent(categoryId)}`, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         headers: helixHeaders(call),
       }),
   });
@@ -135,7 +138,7 @@ export async function searchCategoriesOnTwitch(
     operation: "searchCategories",
     kind: "read",
     viaEngine: (engine) => engine.twitchSearchCategories({ query: text, first: SEARCH_RESULT_LIMIT }),
-    direct: () => fetch(url, { headers: helixHeaders(call) }),
+    direct: () => fetch(url, { signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS), headers: helixHeaders(call) }),
   });
   return readSearchCategoriesAnswer(response);
 }
@@ -201,6 +204,7 @@ export async function modifyChannelInformation(
     viaEngine: (engine) => engine.twitchModifyChannelInformation(patch),
     direct: () =>
       fetch(`${TWITCH_CHANNELS_URL}?broadcaster_id=${call.broadcasterUserId}`, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "PATCH",
         headers: { ...helixHeaders(call), "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -234,6 +238,7 @@ export async function createMarkerOnTwitch(
     viaEngine: (engine) => engine.twitchCreateStreamMarker(description ? { description } : {}),
     direct: () =>
       fetch(TWITCH_MARKERS_URL, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "POST",
         headers: { ...helixHeaders(call), "Content-Type": "application/json" },
         body: JSON.stringify(

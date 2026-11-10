@@ -4,6 +4,7 @@ import { TWITCH_NOT_CONNECTED_MESSAGE } from "@shared/twitch-link-refusal";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import type { AuthorizedTwitchCall } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 
@@ -62,6 +63,7 @@ export async function createClipOnTwitch(
     viaEngine: (engine) => engine.twitchCreateClip(),
     direct: () =>
       fetch(`${TWITCH_CLIPS_URL}?broadcaster_id=${broadcasterUserId}`, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,

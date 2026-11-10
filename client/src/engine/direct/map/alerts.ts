@@ -40,7 +40,7 @@ function epochMs(field: string, raw: string): number {
 
 /**
  * One alert as `listAlerts` returns it, read at `now`. A status a newer
- * engine writes reads as `unknown`, with the raw value in `engineStatus`.
+ * engine writes reads as `unknown`.
  * An alert still on its way that the engine has not reported on for
  * `ALERT_UNCONFIRMED_AFTER_MS` is marked unconfirmed from the moment it went
  * quiet that long; nothing marks it later, so the mark is as fresh as the read.
@@ -57,17 +57,9 @@ export function toEngineAlert(snapshot: AlertSnapshot, now: number): EngineAlert
     payload: snapshot.payload || undefined,
     workflowId: snapshot.workflowId || undefined,
     sourceEventId: snapshot.sourceEventId || undefined,
-    engineStatus: status === "unknown" ? snapshot.status : undefined,
-    envelopeId: snapshot.envelopeId || undefined,
-    dispatchedAt: snapshot.dispatchedAt,
-    playedAt: snapshot.playedAt,
-    completedAt: snapshot.completedAt,
     error: snapshot.error || undefined,
     engineCreatedAt: snapshot.createdAt,
-    engineUpdatedAt: snapshot.updatedAt,
-    engineVersion: snapshot.version,
     createdAt,
-    progressedAt,
     unconfirmedAt: UNSETTLED.has(status) && now >= quietSince ? quietSince : undefined,
   };
 }

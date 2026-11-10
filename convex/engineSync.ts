@@ -7,9 +7,11 @@ import { isEngineActive } from "./lib/engineSync/activity";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
 import { reconcileDatabase } from "./lib/engineSync/steps/databases";
+import { readSyncState } from "./lib/engineSync/syncRow";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
+import { logger } from "./logger";
 
 /**
  * Orchestrator: runs every registered sync step for an instance in order,
@@ -26,6 +28,7 @@ export const runSync = internalAction({
   handler: async (ctx, { instanceId, trigger }) => {
     const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, { instanceId });
     if (!bundle) {
+      await ctx.runMutation(internal.engineSyncInternal.deferUnsyncable, { instanceId });
       return { skipped: true, reason: "no-bundle" } as const;
     }
 
@@ -109,34 +112,34 @@ export const reconcileDatabaseNow = internalAction({
 });
 
 /**
- * Cron entry point. One mutation per tick, reading only rows whose
+ * Cron entry point. Each pass reads at most `sweepBatchSize` rows whose
  * nextEligibleAt has passed, so an idle fleet costs a single empty index read
- * however many instances exist. Instances get their row at registration (see
+ * however many instances exist. A full batch schedules the next pass at once,
+ * up to `sweepMaxChainedRuns` passes per tick, so a large fleet is not capped
+ * at one batch per tick. Instances get their row at registration (see
  * ensureSyncRow), so nothing here has to look for instances without one.
  *
  * An instance whose engine has not called the woofx3 webhook within the
  * inactivity window is pushed out by that window instead of synced: nothing
  * on it has changed for a sync to pick up.
+ *
+ * A run in flight keeps its row out of the due set: the sweep and startRun
+ * move nextEligibleAt to the end of the run's lease. A "running" row that is
+ * due again is a run that died without finalizing, and is synced like any
+ * other.
  */
 export const sweep = internalMutation({
-  args: {},
-  handler: async (ctx): Promise<{ scheduled: number; deferred: number }> => {
+  args: { chainedRun: v.optional(v.number()) },
+  handler: async (ctx, { chainedRun = 0 }): Promise<{ scheduled: number; deferred: number }> => {
     const now = Date.now();
     const due = await ctx.db
       .query("instanceSync")
       .withIndex("by_next_eligible", (q) => q.lte("nextEligibleAt", now))
-      // Over-read: rows mid-run are skipped and do not count toward the batch.
-      .take(ENGINE_SYNC_CONFIG.sweepBatchSize * 4);
+      .take(ENGINE_SYNC_CONFIG.sweepBatchSize);
 
     let scheduled = 0;
     let deferred = 0;
     for (const row of due) {
-      if (scheduled + deferred >= ENGINE_SYNC_CONFIG.sweepBatchSize) {
-        break;
-      }
-      if (row.status === "running") {
-        continue;
-      }
       const instance = await ctx.db.get(row.instanceId);
       if (!instance) {
         // Its instance is gone and its nextEligibleAt will never move again,
@@ -149,6 +152,9 @@ export const sweep = internalMutation({
         deferred++;
         continue;
       }
+      // Claim the row for the run's lease, so a sweep before the run starts
+      // does not schedule it again.
+      await ctx.db.patch(row._id, { nextEligibleAt: now + ENGINE_SYNC_CONFIG.runLeaseMs });
       await ctx.scheduler.runAfter(0, internal.engineSync.runSync, {
         instanceId: row.instanceId,
         trigger: "scheduled",
@@ -156,6 +162,15 @@ export const sweep = internalMutation({
       scheduled++;
     }
 
+    // Every row read is now deleted, deferred or claimed, so the next pass
+    // reads the rows behind them.
+    if (due.length === ENGINE_SYNC_CONFIG.sweepBatchSize) {
+      if (chainedRun < ENGINE_SYNC_CONFIG.sweepMaxChainedRuns) {
+        await ctx.scheduler.runAfter(0, internal.engineSync.sweep, { chainedRun: chainedRun + 1 });
+      } else {
+        logger.warn("engineSync.sweep: chained-run cap reached; the next tick continues", { chainedRun });
+      }
+    }
     return { scheduled, deferred };
   },
 });
@@ -164,9 +179,6 @@ export const sweep = internalMutation({
  * Reactive query the UI subscribes to. Returns the per-instance sync state,
  * the in-flight run (if any), and the last 5 runs. Returns null unless the
  * caller is a member of the instance.
- *
- * Implemented with inline `ctx.db` reads because Convex queries cannot call
- * other queries via `ctx.runQuery`.
  */
 export const getSyncState = query({
   args: { instanceId: v.id("instances") },
@@ -174,23 +186,14 @@ export const getSyncState = query({
     if (!(await isInstanceMember(ctx, instanceId))) {
       return null;
     }
-    const syncState = await ctx.db
-      .query("instanceSync")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .first();
-    const recentRuns = await ctx.db
-      .query("syncRuns")
-      .withIndex("by_instance_recent", (q) => q.eq("instanceId", instanceId))
-      .order("desc")
-      .take(5);
-    const currentRun = recentRuns.find((r) => r.status === "running") ?? null;
-    return { syncState, currentRun, recentRuns };
+    return readSyncState(ctx, instanceId, Date.now());
   },
 });
 
 /**
  * Manual-trigger action. Bypasses the activity gate (the gate only applies to
- * scheduled sweeps). Rejects if a run is already in flight for this instance.
+ * scheduled sweeps). Rejects if a run is already in flight for this instance;
+ * a run past its lease is not in flight (see readSyncState).
  *
  * The "already running" check is a best-effort read just before scheduling —
  * two simultaneous clicks could race past it and schedule two runs. That's

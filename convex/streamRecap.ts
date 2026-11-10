@@ -19,6 +19,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import {
   type ClipWindow,
   clipWindow,
@@ -267,6 +268,7 @@ async function fetchClipsInWindow(
       params.set("after", cursor);
     }
     const response = await fetch(`${TWITCH_CLIPS_URL}?${params}`, {
+      signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${credentials.accessToken}`, "Client-Id": credentials.clientId },
     });
     if (response.status === 401) {
@@ -359,6 +361,7 @@ export type RecapMarkersResult =
 
 async function helixGet(twitch: AuthorizedTwitchCall, url: string, what: string): Promise<unknown> {
   const response = await fetch(url, {
+    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     headers: { Authorization: `Bearer ${twitch.accessToken}`, "Client-Id": twitch.clientId },
   });
   if (response.status === 401) {

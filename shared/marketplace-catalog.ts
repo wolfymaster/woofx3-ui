@@ -7,7 +7,7 @@
  * mirrors how `marketplace.ts` has always treated module listings.
  */
 
-import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./marketplace-images";
+import { httpUrl, type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./marketplace-images";
 
 /**
  * A kind of marketplace listing.
@@ -304,7 +304,7 @@ function parseCredits(value: unknown): ListingCredit[] {
     }
     const credit: ListingCredit = { name };
     credit.role = optionalString(obj.role);
-    credit.url = optionalString(obj.url);
+    credit.url = httpUrl(obj.url) ?? undefined;
     credit.avatarUrl = optionalString(obj.avatarUrl);
     credit.note = optionalString(obj.note);
     out.push(credit);
@@ -562,7 +562,7 @@ export function parseAuthorPage(payload: unknown): AuthorPage | null {
   const links: MarketplaceAuthorLink[] = [];
   for (const entry of Array.isArray(authorObj.links) ? authorObj.links : []) {
     const item = asObject(entry);
-    const url = asString(item.url);
+    const url = httpUrl(item.url);
     if (!url) {
       continue;
     }

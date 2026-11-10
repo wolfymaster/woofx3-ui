@@ -17,7 +17,6 @@ import type * as adBreaks from "../adBreaks.js";
 import type * as alertActions from "../alertActions.js";
 import type * as alertCompositionActions from "../alertCompositionActions.js";
 import type * as alertCompositions from "../alertCompositions.js";
-import type * as alertLog from "../alertLog.js";
 import type * as auth from "../auth.js";
 import type * as billingBanner from "../billingBanner.js";
 import type * as billingCommands from "../billingCommands.js";
@@ -67,6 +66,7 @@ import type * as lib_alertQueueResults from "../lib/alertQueueResults.js";
 import type * as lib_billingBanner from "../lib/billingBanner.js";
 import type * as lib_billingClient from "../lib/billingClient.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
+import type * as lib_cleanupBatch from "../lib/cleanupBatch.js";
 import type * as lib_commandWorkflow from "../lib/commandWorkflow.js";
 import type * as lib_companionAuth from "../lib/companionAuth.js";
 import type * as lib_companionCodes from "../lib/companionCodes.js";
@@ -115,6 +115,7 @@ import type * as lib_firstRun from "../lib/firstRun.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
 import type * as lib_hostedStorage from "../lib/hostedStorage.js";
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
+import type * as lib_inboundWebhookLimits from "../lib/inboundWebhookLimits.js";
 import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
 import type * as lib_instanceAccess from "../lib/instanceAccess.js";
@@ -158,6 +159,7 @@ import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequ
 import type * as lib_orgBilling from "../lib/orgBilling.js";
 import type * as lib_orgRoles from "../lib/orgRoles.js";
 import type * as lib_organization from "../lib/organization.js";
+import type * as lib_outboundTimeouts from "../lib/outboundTimeouts.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_placementOpacity from "../lib/placementOpacity.js";
@@ -313,7 +315,6 @@ import type * as viewerFacts from "../viewerFacts.js";
 import type * as viewerLogin from "../viewerLogin.js";
 import type * as viewerRoles from "../viewerRoles.js";
 import type * as viewerSession from "../viewerSession.js";
-import type * as webhookAuth from "../webhookAuth.js";
 import type * as workflowActions from "../workflowActions.js";
 import type * as workflowCatalog from "../workflowCatalog.js";
 import type * as workflowCatalogContext from "../workflowCatalogContext.js";
@@ -340,7 +341,6 @@ declare const fullApi: ApiFromModules<{
   alertActions: typeof alertActions;
   alertCompositionActions: typeof alertCompositionActions;
   alertCompositions: typeof alertCompositions;
-  alertLog: typeof alertLog;
   auth: typeof auth;
   billingBanner: typeof billingBanner;
   billingCommands: typeof billingCommands;
@@ -390,6 +390,7 @@ declare const fullApi: ApiFromModules<{
   "lib/billingBanner": typeof lib_billingBanner;
   "lib/billingClient": typeof lib_billingClient;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
+  "lib/cleanupBatch": typeof lib_cleanupBatch;
   "lib/commandWorkflow": typeof lib_commandWorkflow;
   "lib/companionAuth": typeof lib_companionAuth;
   "lib/companionCodes": typeof lib_companionCodes;
@@ -438,6 +439,7 @@ declare const fullApi: ApiFromModules<{
   "lib/gettingStarted": typeof lib_gettingStarted;
   "lib/hostedStorage": typeof lib_hostedStorage;
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;
+  "lib/inboundWebhookLimits": typeof lib_inboundWebhookLimits;
   "lib/inboundWebhookPath": typeof lib_inboundWebhookPath;
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
   "lib/instanceAccess": typeof lib_instanceAccess;
@@ -481,6 +483,7 @@ declare const fullApi: ApiFromModules<{
   "lib/orgBilling": typeof lib_orgBilling;
   "lib/orgRoles": typeof lib_orgRoles;
   "lib/organization": typeof lib_organization;
+  "lib/outboundTimeouts": typeof lib_outboundTimeouts;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
   "lib/placementOpacity": typeof lib_placementOpacity;
@@ -636,7 +639,6 @@ declare const fullApi: ApiFromModules<{
   viewerLogin: typeof viewerLogin;
   viewerRoles: typeof viewerRoles;
   viewerSession: typeof viewerSession;
-  webhookAuth: typeof webhookAuth;
   workflowActions: typeof workflowActions;
   workflowCatalog: typeof workflowCatalog;
   workflowCatalogContext: typeof workflowCatalogContext;
@@ -675,225 +677,6 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  rateLimiter: {
-    lib: {
-      checkRateLimit: FunctionReference<
-        "query",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          count?: number;
-          key?: string;
-          name: string;
-          reserve?: boolean;
-          throws?: boolean;
-        },
-        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
-      >;
-      clearAll: FunctionReference<
-        "mutation",
-        "internal",
-        { before?: number },
-        null
-      >;
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
-      getValue: FunctionReference<
-        "query",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          key?: string;
-          name: string;
-          sampleShards?: number;
-        },
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          shard: number;
-          ts: number;
-          value: number;
-        }
-      >;
-      rateLimit: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          count?: number;
-          key?: string;
-          name: string;
-          reserve?: boolean;
-          throws?: boolean;
-        },
-        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
-      >;
-      resetRateLimit: FunctionReference<
-        "mutation",
-        "internal",
-        { key?: string; name: string },
-        null
-      >;
-    };
-    time: {
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
-    };
-  };
-  migrations: {
-    lib: {
-      cancel: FunctionReference<
-        "mutation",
-        "internal",
-        { name: string },
-        {
-          batchSize?: number;
-          cursor?: string | null;
-          error?: string;
-          isDone: boolean;
-          latestEnd?: number;
-          latestStart: number;
-          name: string;
-          next?: Array<string>;
-          processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
-        }
-      >;
-      cancelAll: FunctionReference<
-        "mutation",
-        "internal",
-        { sinceTs?: number },
-        Array<{
-          batchSize?: number;
-          cursor?: string | null;
-          error?: string;
-          isDone: boolean;
-          latestEnd?: number;
-          latestStart: number;
-          name: string;
-          next?: Array<string>;
-          processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
-        }>
-      >;
-      clearAll: FunctionReference<
-        "mutation",
-        "internal",
-        { before?: number },
-        null
-      >;
-      getStatus: FunctionReference<
-        "query",
-        "internal",
-        { limit?: number; names?: Array<string> },
-        Array<{
-          batchSize?: number;
-          cursor?: string | null;
-          error?: string;
-          isDone: boolean;
-          latestEnd?: number;
-          latestStart: number;
-          name: string;
-          next?: Array<string>;
-          processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
-        }>
-      >;
-      migrate: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          batchSize?: number;
-          cursor?: string | null;
-          dryRun: boolean;
-          fnHandle: string;
-          name: string;
-          next?: Array<{ fnHandle: string; name: string }>;
-          oneBatchOnly?: boolean;
-          reset?: boolean;
-        },
-        {
-          batchSize?: number;
-          cursor?: string | null;
-          error?: string;
-          isDone: boolean;
-          latestEnd?: number;
-          latestStart: number;
-          name: string;
-          next?: Array<string>;
-          processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
-        }
-      >;
-    };
-  };
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
 };

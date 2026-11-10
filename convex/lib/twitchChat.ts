@@ -1,4 +1,5 @@
 import { readSentMessageIdAnswer } from "@shared/twitch-chat";
+import { OUTBOUND_FETCH_TIMEOUT_MS } from "./outboundTimeouts";
 import type { AuthorizedTwitchCall } from "./twitchAuth";
 import { helixResponse, type TwitchHelixRoute } from "./twitchEngineHelix";
 
@@ -23,6 +24,7 @@ export async function sendChatMessage(
     viaEngine: (engine) => engine.twitchSendChatMessage({ message: text, ...(options.pin ? { pin: true } : {}) }),
     direct: () =>
       fetch(TWITCH_MESSAGES_URL, {
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
         method: "POST",
         headers: {
           Authorization: `Bearer ${twitch.accessToken}`,
