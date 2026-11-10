@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import { useMutation } from "convex/react";
 import { Activity, Check, ChevronDown, MonitorPlay, Pencil, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import { Uptime } from "@/components/common/uptime";
@@ -30,6 +30,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
+import { IS_DESKTOP } from "@/lib/desktop";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
 import { shortcutModifierLabel } from "@/lib/shortcut-modifier";
@@ -146,6 +147,9 @@ function InstanceBar() {
 
 type EngineConnection = "connected" | "limited" | "upgrading" | "disconnected";
 
+// IS_DESKTOP is a build constant, so the web build carries none of it.
+const DesktopUpdateIndicator = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateIndicator")) : null;
+
 const ENGINE_CONNECTION: Record<EngineConnection, { label: string; dot: string; text: string }> = {
   connected: { label: "Connected", dot: "bg-green-500", text: "text-green-600 dark:text-green-400" },
   limited: { label: "Limited", dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
@@ -208,7 +212,7 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
   const { signOut } = useAuthActions();
   const [location] = useLocation();
 
-  const displayName = (user as any)?.name || "User";
+  const displayName = user?.name || "User";
   const initials = displayName
     .split(" ")
     .map((n: string) => n[0])
@@ -246,6 +250,11 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
       </nav>
 
       <div className="flex items-center gap-2 shrink-0">
+        {DesktopUpdateIndicator && (
+          <Suspense fallback={null}>
+            <DesktopUpdateIndicator />
+          </Suspense>
+        )}
         <UtilityNav sections={sectionsFor(UTILITY_SECTIONS, isAdmin)} location={location} />
 
         <Separator orientation="vertical" className="h-6 hidden md:block" />
@@ -270,7 +279,7 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 w-9 rounded-full p-0" data-testid="button-user-menu">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={(user as any)?.image} />
+                <AvatarImage src={user?.image} />
                 <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
                   {initials}
                 </AvatarFallback>
@@ -281,7 +290,7 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium">{displayName}</p>
-                <p className="text-xs text-muted-foreground">{(user as any)?.email || ""}</p>
+                <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
