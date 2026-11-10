@@ -7,7 +7,7 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
 import { useMarketplaceAcquireForInstallRequest } from "@/engine/hooks/use-marketplace";
 import { useLicensedInstallRequest, useMarketplaceInstallRequest } from "@/engine/hooks/use-modules";
-import { useInstanceRole } from "@/hooks/use-instance-role";
+import { useViewerRole } from "@/engine/hooks/use-viewer-role";
 import { useStartPayment } from "@/hooks/use-start-payment";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
@@ -221,7 +221,7 @@ function useLicensedModuleInstall(
   const acquireForInstall = useMarketplaceAcquireForInstallRequest();
   const installWithLicense = useLicensedInstallRequest();
   const startPayment = useStartPayment();
-  const canPay = canStartPayment(useInstanceRole());
+  const canPay = canStartPayment(useViewerRole());
   const [state, setState] = useState<InstallFlowState>(INSTALL_FLOW_IDLE);
   const commands = useRef({ acquireForInstall, installWithLicense, startPayment });
   commands.current = { acquireForInstall, installWithLicense, startPayment };
