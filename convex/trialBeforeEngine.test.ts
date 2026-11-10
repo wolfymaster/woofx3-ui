@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { BILLING_LIFECYCLE } from "./lib/billingLifecycle";
 import { newBackend } from "./lib/convexTest.testing";
-import { applyTransition, subscriptionFor } from "./lib/subscriptions";
+import { orgBillingFor } from "./lib/orgBilling";
+import { insertProjection } from "./lib/orgBilling.testing";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -35,21 +35,11 @@ async function addEngine(
   });
 }
 
-/** A trial run to its end with no payment method: past_due, then suspended. */
+/** The plane's projection of a trial that ended with no payment method: suspended. */
 async function suspend(t: Backend, accountId: Id<"accounts">) {
-  const start = Date.now() - 60 * DAY;
-  await t.run(async (ctx) => {
-    await applyTransition(ctx, {
-      accountId,
-      event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
-      now: start,
-      actor: "test",
-      origin: "signup",
-    });
-  });
-  await t.mutation(internal.billing.evaluateOrg, { accountId, now: start + 30 * DAY });
-  await t.mutation(internal.billing.evaluateOrg, { accountId, now: start + 45 * DAY });
-  expect((await t.run((ctx) => subscriptionFor(ctx, accountId)))?.state).toBe("suspended");
+  await t.run((ctx) =>
+    insertProjection(ctx, accountId, { standing: "suspended", reason: "no_payment_method", version: 2 })
+  );
 }
 
 function as(t: Backend, userId: Id<"users">) {
@@ -90,7 +80,7 @@ describe("the trial starts before the engine is built", () => {
         throw new Error("ensureFirstRun made no account");
       }
       await Bun.sleep(100);
-      expect(await t.run((ctx) => subscriptionFor(ctx, account._id))).toBeNull();
+      expect(await t.run((ctx) => orgBillingFor(ctx, account._id))).toBeNull();
       expect(asked.length).toBeGreaterThan(0);
       for (const call of asked) {
         expect(call).toEqual({ path: `/v1/billing/accounts/${account._id}/ensure`, key: `ensure:${account._id}` });
@@ -100,13 +90,13 @@ describe("the trial starts before the engine is built", () => {
     }
   });
 
-  test("connecting a self-hosted engine starts no subscription", async () => {
+  test("connecting a self-hosted engine starts no billing projection", async () => {
     const t = newBackend();
     const userId = await t.run((ctx) => ctx.db.insert("users", { name: "Self" }));
     const user = as(t, userId);
     const accountId = await user.mutation(api.accounts.ensureMyAccount, {});
     const instanceId = await user.mutation(api.instances.create, { accountId, name: "Box", url: "localhost:8080" });
-    expect(await t.run((ctx) => subscriptionFor(ctx, accountId))).toBeNull();
+    expect(await t.run((ctx) => orgBillingFor(ctx, accountId))).toBeNull();
     expect(await user.query(api.access.planPrompt, { instanceId })).toBeNull();
   });
 });
@@ -189,7 +179,7 @@ describe("resuming a managed engine while suspended", () => {
     expect(calls).toBe(0);
   });
 
-  test("an org from before subscriptions may still resume", async () => {
+  test("an org with no billing projection may still resume", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t);
     expect(await t.query(internal.provisioningInternal.assertCanResumeEngine, { accountId })).toBeNull();
@@ -211,17 +201,11 @@ describe("access.planPrompt", () => {
     const instanceId = await addEngine(t, accountId, [ownerId, adminId], "managed");
     const admin = as(t, adminId);
     await t.run((ctx) =>
-      applyTransition(ctx, {
-        accountId,
-        event: { kind: "TrialStarted", billingDelayDays: BILLING_LIFECYCLE.trialDays },
-        now: Date.now(),
-        actor: "test",
-        origin: "signup",
-      })
+      insertProjection(ctx, accountId, { standing: "trialing", trialEndsAt: Date.now() + 30 * DAY })
     );
     expect(await admin.query(api.access.planPrompt, { instanceId })).toBeNull();
     await t.run(async (ctx) => {
-      const row = await subscriptionFor(ctx, accountId);
+      const row = await orgBillingFor(ctx, accountId);
       if (row !== null) {
         await ctx.db.delete(row._id);
       }

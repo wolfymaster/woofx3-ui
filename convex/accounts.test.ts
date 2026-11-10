@@ -11,15 +11,23 @@ describe("accounts", () => {
       const ownerId = await ctx.db.insert("users", { name: "Owner" });
       const accountId = await ctx.db.insert("accounts", { name: "Org", ownerId, createdAt: 1 });
       await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
-      await ctx.db.insert("subscriptions", {
+      await ctx.db.insert("orgBilling", {
         accountId,
-        plan: "starter",
-        state: "active",
-        stateSince: 1,
+        version: 1,
+        tier: "starter",
         addOns: [],
-        origin: "operator",
+        standing: "active",
+        reason: null,
+        trialEndsAt: null,
+        graceEndsAt: null,
+        periodEnd: null,
+        interval: null,
+        exemptUntil: null,
+        spinDownAt: null,
+        hasProviderSubscription: true,
+        discount: null,
+        overrides: { addFeatures: [], removeFeatures: [], limits: [] },
         updatedAt: 1,
-        updatedBy: "test",
       });
       return { ownerId, accountId };
     });

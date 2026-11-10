@@ -15,19 +15,12 @@ import {
   type ProvisioningDto,
   planSummaryDto,
   provisioningDto,
-  type StrayPaymentDto,
-  type SubscriptionDto,
-  type SubscriptionTransitionDto,
-  strayPaymentDto,
-  subscriptionDto,
-  subscriptionTransitionDto,
   type UserDto,
   type UserRefDto,
   userDto,
   userRefDto,
 } from "../lib/ops/dto";
 import type { AssignmentRow, PlanRow } from "../lib/ops/planCounts";
-import { subscriptionFor } from "../lib/subscriptions";
 import { type HostedStorageLimitsDto, hostedStorageLimitsDto } from "./storageLimits";
 
 /**
@@ -169,13 +162,7 @@ export interface AccountDetailDto {
   invitations: InvitationDto[];
   entitlements: PlanSummaryDto;
   instances: { instance: InstanceDto; provisioning: ProvisioningDto | null }[];
-  subscription: SubscriptionDto | null;
-  /** The latest first. */
-  transitions: SubscriptionTransitionDto[];
 }
-
-/** Subscription history shown with an account. */
-const ACCOUNT_TRANSITIONS_SHOWN = 20;
 
 export const getAccount = internalQuery({
   args: { accountId: v.string(), now: v.number() },
@@ -215,20 +202,12 @@ export const getAccount = internalQuery({
         provisioning: provisioning ? provisioningDto(provisioning) : null,
       });
     }
-    const subscription = await subscriptionFor(ctx, accountId);
-    const transitions = await ctx.db
-      .query("subscriptionTransitions")
-      .withIndex("by_account_at", (index) => index.eq("accountId", accountId))
-      .order("desc")
-      .take(ACCOUNT_TRANSITIONS_SHOWN);
     return {
       account: await toAccountSummary(ctx, account, args.now),
       members,
       invitations: invitations.filter((invitation) => invitation.status === "pending").map(invitationDto),
       entitlements: planSummaryDto(await accountEntitlements(ctx, accountId, args.now)),
       instances,
-      subscription: subscription ? subscriptionDto(subscription) : null,
-      transitions: transitions.map(subscriptionTransitionDto),
     };
   },
 });
@@ -438,24 +417,6 @@ export const listAudit = internalQuery({
           : base.withIndex("by_at").order("desc");
     const result = await ordered.paginate({ numItems: PAGE_SIZE * 2, cursor });
     return { page: result.page.map(auditEntryDto), cursor: result.isDone ? null : result.continueCursor };
-  },
-});
-
-/** Stray payments, newest first, at most `limit` a page. */
-export const listStrayPayments = internalQuery({
-  args: { cursor: cursorArg, limit: v.number() },
-  handler: async (ctx, { cursor, limit }): Promise<Page<StrayPaymentDto>> => {
-    const result = await ctx.db
-      .query("paymentEvents")
-      .withIndex("by_outcome", (index) => index.eq("outcome", "stray"))
-      .order("desc")
-      .paginate({ numItems: limit, cursor });
-    const page = await Promise.all(
-      result.page.map(async (event) =>
-        strayPaymentDto(event, event.accountId === undefined ? null : await ctx.db.get(event.accountId))
-      )
-    );
-    return { page, cursor: result.isDone ? null : result.continueCursor };
   },
 });
 

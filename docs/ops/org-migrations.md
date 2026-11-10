@@ -8,7 +8,7 @@ Rows are fixed on the Convex dashboard's **Data** page for the deployment (produ
 bunx convex run migrations/index:run '{"fn": "migrations/organizations:orgOwnerRows", "reset": true}'
 ```
 
-Then run M5 again. Violations that are not listed here (`I1` to `I4`, `managed_engine_without_subscription`) mean M1, M2 or M3 has not run to `success` yet: check `lib:getStatus` and finish or resume it.
+Then run M5 again. Violations that are not listed here (`I1` to `I4`) mean M1 or M2 has not run to `success` yet: check `lib:getStatus` and finish or resume it.
 
 ## `duplicate_membership`
 
@@ -28,7 +28,7 @@ The user has several `accountMembers` rows in the org. Every membership lookup r
 { "invariant": "owner_user_missing", "accountId": "...", "userId": "..." }
 ```
 
-The org's `ownerId` names a user that no longer exists. M1 migrated the org's other members but could not give the owner a row or its engines. M3 still started the org's trial if it has a managed engine, so billing runs, but its warnings go to nobody.
+The org's `ownerId` names a user that no longer exists. M1 migrated the org's other members but could not give the owner a row or its engines. The management plane still bills the org if it has a managed engine, but nobody receives its billing emails.
 
 1. Decide who owns the org now, usually its longest-standing admin. If nobody is left, the org is abandoned: leave it, and stop its managed engines when its trial lapses.
 2. On `accounts`, set the org's `ownerId` to that user.
@@ -56,13 +56,13 @@ The `instances` row points at an org that no longer exists. Nobody can reach the
 1. Check `engineProvisioning` for the `instanceId`. A managed engine still running costs money: deprovision it first.
 2. Delete the `instances` row and its `instanceMembers` rows.
 
-## `comped_not_exempt`
+## `managed_engine_without_projection`
 
 ```json
-{ "invariant": "subscription", "accountId": "...", "detail": "comped_not_exempt" }
+{ "invariant": "billing", "accountId": "...", "detail": "managed_engine_without_projection" }
 ```
 
-The org has an active operator plan assignment on a tier plan (`starter` or `pro`) but its subscription is not `exempt`.
+The org has a managed engine that is not deleted, but the management plane has not pushed it a billing projection (no `orgBilling` row). Until it does, the org is gated as one with no subscription: nothing is refused and its entitlements are its plan assignment or the default plan.
 
-- If M6 (`migrations/subscriptions:exemptionsFromPlanAssignments`) has not run yet, run it: it also converts any trial with no provider subscription (one M3 started, or a signup trial started after the deploy).
-- If it has run, the subscription was changed since (the org paid, or an operator moved it). M6 leaves those alone (a provider subscription, or an active, past due, suspended or exempt state). Decide whether the comp still applies: grant the exemption through the ops API (`POST /api/ops/accounts/:id/exemption`, see [Ops API](../patterns/ops-api.md)), or remove the plan assignment.
+- The plane's reconciler creates the billing record for every org it lists through the ops API and pushes the projection. Run it, or call `ensure` for the org, then run M5 again.
+- If the plane has the org but no projection arrives, check the plane's projection outbox for a failed push to `POST /api/ops/accounts/:id/billing-projection` (see [Ops API](../patterns/ops-api.md)).

@@ -1,7 +1,6 @@
 import { type Infer, v } from "convex/values";
 import type { MutationCtx } from "../../_generated/server";
 import type { ParseResult } from "../notifications";
-import type { SubscriptionDto } from "./dto";
 
 // The ops API's billing writes run once per caller-chosen Idempotency-Key, so
 // the backoffice can retry after a timeout or a 5xx without writing twice.
@@ -51,7 +50,7 @@ type Answer<R> =
   | { ok: true; result: R }
   | { ok: false; status: 409; code: "idempotency_mismatch" | "in_progress"; message: string };
 
-export type OpsRequestClaim<R = SubscriptionDto> = { kind: "claimed" } | { kind: "answered"; outcome: Answer<R> };
+export type OpsRequestClaim<R> = { kind: "claimed" } | { kind: "answered"; outcome: Answer<R> };
 
 /** The request's `Idempotency-Key`, or why it is missing or malformed. */
 export function parseIdempotencyKey(headers: Headers): ParseResult<string> {
@@ -88,7 +87,7 @@ async function findRequest(ctx: MutationCtx, id: OpsRequestId) {
  * success for the same request, 409 `idempotency_mismatch` for a different one
  * under the same key, and 409 `in_progress` while the first is still running.
  */
-export async function claimOpsRequest<R = SubscriptionDto>(
+export async function claimOpsRequest<R>(
   ctx: MutationCtx,
   id: OpsRequestId,
   fingerprint: string,

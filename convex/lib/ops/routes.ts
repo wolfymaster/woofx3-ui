@@ -15,40 +15,16 @@ export type OpsRoute =
   | { method: "GET"; name: "audit.list" }
   | { method: "GET"; name: "plans.list" }
   | { method: "GET"; name: "notifications.list" }
-  | { method: "GET"; name: "payments.strays" }
   | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
   | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
   | { method: "POST"; name: "notifications.create" }
   | { method: "POST"; name: "notifications.delete"; notificationId: string }
-  | { method: "POST"; name: "accounts.billing"; accountId: string; write: AccountBillingWrite }
   | { method: "POST"; name: "accounts.billingProjection"; accountId: string };
-
-/** What an operator can change about an organization's subscription. */
-export type AccountBillingWrite = "plan" | "exemption" | "suspend" | "discount";
-
-const ACCOUNT_BILLING_WRITES: ReadonlySet<string> = new Set<AccountBillingWrite>([
-  "plan",
-  "exemption",
-  "suspend",
-  "discount",
-]);
 
 /** What an operator can do to a customer's managed engine, exactly as the customer could. */
 export type EngineAction = "upgrade" | "retry" | "delete";
 
 const ENGINE_ACTIONS: ReadonlySet<string> = new Set<EngineAction>(["upgrade", "retry", "delete"]);
-
-/** The `limit` a list route takes: how many items a page holds at most. */
-export const PAGE_LIMIT = { default: 25, max: 100 } as const;
-
-/** A `limit` query value, the default when absent; null when it is not a whole number in range. */
-export function parsePageLimit(value: string | null): number | null {
-  if (value === null) {
-    return PAGE_LIMIT.default;
-  }
-  const limit = /^\d{1,3}$/.test(value) ? Number(value) : Number.NaN;
-  return limit >= 1 && limit <= PAGE_LIMIT.max ? limit : null;
-}
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -68,9 +44,6 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     }
     if (segments.length === 3 && first === "instances" && second && third === "storage-limits") {
       return { method, name: "instances.setStorageLimits", instanceId: second };
-    }
-    if (segments.length === 3 && first === "accounts" && second && third && ACCOUNT_BILLING_WRITES.has(third)) {
-      return { method, name: "accounts.billing", accountId: second, write: third as AccountBillingWrite };
     }
     if (segments.length === 3 && first === "accounts" && second && third === "billing-projection") {
       return { method, name: "accounts.billingProjection", accountId: second };
@@ -113,9 +86,6 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
       }
       if (first === "engines" && second === "event-path") {
         return { method, name: "engines.eventPath" };
-      }
-      if (first === "payments" && second === "strays") {
-        return { method, name: "payments.strays" };
       }
       if (first === "users" && second) {
         return { method, name: "users.get", userId: second };

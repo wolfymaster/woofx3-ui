@@ -1,6 +1,5 @@
 import { v } from "convex/values";
-import type { LifecycleReason } from "./billingLifecycle";
-import type { BillingInterval, PlanTier, SubscriptionState } from "./organization";
+import type { BillingInterval, LifecycleReason, PlanTier, SubscriptionState } from "./organization";
 
 /**
  * Entitlements: what an account's plan includes. A feature is a yes or no
@@ -93,7 +92,7 @@ export interface AddOnDefinition {
 }
 
 /**
- * Paid upgrades: bought one by one on Starter (`subscriptions.addOns`), all
+ * Paid upgrades: bought one by one on Starter (the projection's `addOns`), all
  * included on Pro.
  */
 export const ADD_ONS = {} as const satisfies Record<string, AddOnDefinition>;
