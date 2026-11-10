@@ -3,10 +3,9 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
 import type { LifecycleReason } from "./lib/billingLifecycle";
-import { subscriptionSummary } from "./lib/entitlementAccess";
 import { isUsable } from "./lib/entitlements";
+import { billingFor } from "./lib/orgBilling";
 import { orgCan, orgRoleOf } from "./lib/orgRoles";
-import { subscriptionFor } from "./lib/subscriptions";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 // Bounds the read of a user's engine memberships; a user is on a handful.
@@ -66,12 +65,12 @@ async function suspendedEntry(
   if (engine.hosting !== "managed") {
     return null;
   }
-  const subscription = await subscriptionFor(ctx, engine.accountId);
+  const subscription = (await billingFor(ctx, engine.accountId))?.summary ?? null;
   if (subscription === null || subscription.state !== "suspended") {
     return null;
   }
-  if (subscription.stateReason === undefined) {
-    throw new Error(`subscription ${subscription._id} is suspended with no reason`);
+  if (subscription.stateReason === null) {
+    throw new Error(`org ${engine.accountId} is suspended with no reason`);
   }
   const account = await ctx.db.get(engine.accountId);
   if (account === null) {
@@ -149,7 +148,7 @@ export const planPrompt = query({
     if (!orgCan(await orgRoleOf(ctx, account, userId), "manageBilling")) {
       return null;
     }
-    const subscription = subscriptionSummary(await subscriptionFor(ctx, account._id));
+    const subscription = (await billingFor(ctx, account._id))?.summary ?? null;
     if (subscription === null) {
       return null;
     }
