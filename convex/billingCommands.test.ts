@@ -155,7 +155,7 @@ describe("invoices", () => {
     answers["/invoices"] = { status: 503, body: { error: { code: "payment_unavailable", message: "later" } } };
     expect(await errorData(as(t, ownerId).action(api.billingCommands.invoices, { accountId }))).toEqual({
       code: "payment_unavailable",
-      message: "later",
+      message: "Billing is unavailable right now. Try again in a moment.",
     });
   });
 });
@@ -204,13 +204,12 @@ describe("ensure", () => {
     expect(client.calls).toEqual([{ command: "ensure", args: ["acc1"] }]);
   });
 
-  test("creating an org schedules ensure and an ensure failure leaves the org in place", async () => {
+  test("creating an account, placeholder or not, never asks the plane for a trial", async () => {
     const t = newBackend();
     const userId = await t.run((ctx) => ctx.db.insert("users", { name: "New" }));
-    answers["/ensure"] = { status: 503, body: { error: { code: "payment_unavailable", message: "down" } } };
     const accountId = await as(t, userId).mutation(api.accounts.ensureMyAccount, {});
     await Bun.sleep(100);
-    expect(seen.map((call) => call.path)).toEqual([`/v1/billing/accounts/${accountId}/ensure`]);
+    expect(seen).toEqual([]);
     expect(await t.run((ctx) => ctx.db.get(accountId))).not.toBeNull();
   });
 });

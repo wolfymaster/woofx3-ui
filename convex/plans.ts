@@ -11,6 +11,9 @@ import { clearAccountPlan, deletePlan, setAccountPlan, setDefaultPlan, upsertPla
  *   bunx convex run plans:upsert '{"key": "pro", "name": "Pro", "features": [], "limits": [], "offered": true}'
  *   bunx convex run plans:setDefault '{"key": "free"}'
  *   bunx convex run plans:setAccount '{"accountId": "…", "planKey": "pro", "addFeatures": [], "removeFeatures": [], "limits": []}'
+ *
+ * `setAccount` only works for orgs the management plane has not projected billing for
+ * (self-hosted-only orgs); for any other org it throws, and the plane owns the plan.
  */
 
 const CLI = "cli";
