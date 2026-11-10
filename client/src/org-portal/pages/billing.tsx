@@ -4,7 +4,7 @@ import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
 import { useAction } from "convex/react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,16 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
 import { billingView, checkoutRefusalAction } from "../billing-view";
+import {
+  CHECKOUT_CANCELLED_TEXT,
+  CHECKOUT_POLL,
+  CHECKOUT_POLL_TEXT,
+  type CheckoutPoll,
+  type CheckoutPollEvent,
+  INITIAL_CHECKOUT_POLL,
+  nextCheckoutPoll,
+  parseCheckoutReturn,
+} from "../checkout-return";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "../format";
 import { useOrganization } from "../organization-context";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
@@ -197,9 +207,47 @@ function PlanChooser() {
   );
 }
 
+/** Asks the plane how the checkout the customer just paid for stands until it settles or the bound is reached. */
+function useCheckoutPoll(checkoutId: string | null): CheckoutPoll | null {
+  const checkoutState = useAction(api.billingCommands.checkoutState);
+  const [poll, dispatch] = useReducer(
+    (current: CheckoutPoll, event: CheckoutPollEvent) => nextCheckoutPoll(current, event, CHECKOUT_POLL.maxAttempts),
+    INITIAL_CHECKOUT_POLL
+  );
+  const settled = poll.phase !== "polling";
+  const attempts = poll.phase === "polling" ? poll.attempts : -1;
+  useEffect(() => {
+    if (checkoutId === null || settled) {
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(
+      async () => {
+        let event: CheckoutPollEvent;
+        try {
+          event = { type: "answered", state: (await checkoutState({ checkoutId })).state };
+        } catch {
+          // A failed ask is one spent attempt; the bound ends the polling.
+          event = { type: "failed" };
+        }
+        if (!cancelled) {
+          dispatch(event);
+        }
+      },
+      attempts === 0 ? 0 : CHECKOUT_POLL.intervalMs
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [checkoutId, checkoutState, settled, attempts]);
+  return checkoutId === null ? null : poll;
+}
+
 export default function BillingPage() {
   const { organization } = useOrganization();
-  const checkoutDone = new URLSearchParams(useSearch()).get("checkout") === "done";
+  const checkoutReturn = parseCheckoutReturn(useSearch());
+  const poll = useCheckoutPoll(checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null);
   const view = billingView(organization);
   const isOwner = organization.can.manageBilling;
 
@@ -210,9 +258,16 @@ export default function BillingPage() {
         {isOwner ? null : <CardDescription>Only the organization&apos;s owner changes the plan.</CardDescription>}
       </CardHeader>
       <CardContent className="space-y-6">
-        {checkoutDone && view.kind !== "no_subscription_needed" ? (
+        {checkoutReturn.kind === "cancelled" ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-checkout-cancelled">
+            {CHECKOUT_CANCELLED_TEXT}
+          </p>
+        ) : null}
+        {checkoutReturn.kind === "done" && view.kind !== "no_subscription_needed" ? (
           <p className="text-sm text-muted-foreground" data-testid="text-checkout-done">
-            Thanks! Your payment is being confirmed, and your plan updates here in a moment.
+            {poll === null
+              ? "Thanks! Your payment is being confirmed, and your plan updates here in a moment."
+              : CHECKOUT_POLL_TEXT[poll.phase]}
           </p>
         ) : null}
         {view.kind === "no_subscription_needed" ? (
