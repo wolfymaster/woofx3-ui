@@ -218,6 +218,8 @@ export interface EngineDetailDto {
   account: AccountSummaryDto | null;
   /** Null when the instance is gone or someone else hosts the engine, so it has no hosted storage. */
   hostedStorage: HostedStorageLimitsDto | null;
+  /** True while the owner's stream is live; false when it is offline or the instance has never reported. */
+  isLive: boolean;
 }
 
 export const engineByMaintenanceId = internalQuery({
@@ -232,11 +234,18 @@ export const engineByMaintenanceId = internalQuery({
     }
     const instance = await ctx.db.get(row.instanceId);
     const account = await ctx.db.get(row.accountId);
+    const live = instance
+      ? await ctx.db
+          .query("instanceLiveState")
+          .withIndex("by_instance", (index) => index.eq("instanceId", instance._id))
+          .first()
+      : null;
     return {
       provisioning: provisioningDto(row),
       instance: instance ? instanceDto(instance) : null,
       account: account ? await toAccountSummary(ctx, account, now) : null,
       hostedStorage: instance?.hosting === "managed" ? await hostedStorageLimitsDto(ctx, instance, now) : null,
+      isLive: live?.isLive ?? false,
     };
   },
 });
