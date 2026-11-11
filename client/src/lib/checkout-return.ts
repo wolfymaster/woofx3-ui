@@ -56,3 +56,22 @@ export const CHECKOUT_POLL_TEXT: Record<CheckoutPoll["phase"], string> = {
 };
 
 export const CHECKOUT_CANCELLED_TEXT = "Checkout cancelled. Nothing was charged.";
+
+/**
+ * `search` without what a payment page added on its return (`checkout`,
+ * `checkoutId`, the marketplace's `purchase`), so a reload after the purchase
+ * settled does not follow it again. Other parameters stay. Empty, or `?...`.
+ */
+export function withoutCheckoutReturn(search: string): string {
+  const params = new URLSearchParams(search);
+  for (const key of ["checkout", "checkoutId", "purchase"]) {
+    params.delete(key);
+  }
+  const rest = params.toString();
+  return rest === "" ? "" : `?${rest}`;
+}
+
+/** Whether a purchase the page came back with has settled into a step a reload must not repeat. */
+export function purchaseReturnSettled(step: string | undefined): boolean {
+  return step === "licensed" || step === "installed";
+}

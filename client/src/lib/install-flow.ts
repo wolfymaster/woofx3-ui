@@ -58,6 +58,8 @@ export type InstallFailureReason =
   | "payment_expired"
   /** Paid, but billing could not grant the listing; support settles it. */
   | "payment_needs_review"
+  /** Billing has no such checkout for this engine's organization: it was opened on another engine. */
+  | "payment_elsewhere"
   /** The build asks for access the streamer was not shown. */
   | "needs_approval"
   | "install_failed";
@@ -106,6 +108,8 @@ export type InstallFlowEvent =
   /** The streamer asks again about a payment that was still being confirmed. */
   | { type: "purchase_rechecked" }
   | { type: "checkout_answered"; state: PurchaseCheckoutState }
+  /** Billing has no such checkout for this engine's organization, or the streamer may not ask for it. */
+  | { type: "checkout_not_found" }
   | { type: "install_answered"; outcome: LicensedInstallOutcome }
   /** What the engine reported for the build it accepted. */
   | { type: "install_reported"; outcome: { status: "succeeded" } | { status: "failed"; message: string } }
@@ -134,6 +138,8 @@ const PAYMENT_PENDING_MESSAGE =
   "Your payment is still being confirmed. Check again in a minute; you won't be charged twice.";
 const PAYMENT_EXPIRED_MESSAGE =
   "That checkout expired before it was paid, so nothing was charged. Buy it again to install it.";
+const PAYMENT_ELSEWHERE_MESSAGE =
+  "This payment belongs to a different organization or engine. Switch to the engine you bought it on, then open the link again.";
 const PAYMENT_NEEDS_REVIEW_MESSAGE =
   "Your payment went through, but the module couldn't be added to your organization. woofx3 support will add it or refund you; contact them if you don't hear back.";
 
@@ -331,6 +337,12 @@ export function transition(state: InstallFlowState, event: InstallFlowEvent): In
 
     case "checkout_answered":
       return checkoutAnswered(state, event.state);
+
+    case "checkout_not_found":
+      // Decided: asking again would get the same answer, so the wait ends here instead of running out its bound.
+      return state.step === "finalizing_payment" && state.phase === "checkout"
+        ? failed("payment_elsewhere", PAYMENT_ELSEWHERE_MESSAGE)
+        : stay(state);
 
     case "install_answered": {
       if (state.step !== "installing" || state.moduleKey !== null) {

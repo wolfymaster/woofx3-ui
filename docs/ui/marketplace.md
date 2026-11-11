@@ -355,6 +355,24 @@ phases:
    is asked again until it answers `licensed`, and the flow moves to
    `licensed` for the streamer to install.
 
+The return names only the checkout, so the browser remembers which engine
+opened it (`lib/purchase-engines.ts`, in local storage, keyed by checkout id).
+On the return the page selects that engine first (`usePurchaseReturnEngine`),
+when the caller is still on it, and otherwise follows the purchase on the
+engine already selected; storage that is blocked or empty changes nothing
+else. A checkout billing does not know for the engine's organization
+(`checkout_not_found`, a malformed id, or a caller who may not manage that
+organization's billing) is decided, so the wait ends at once as
+`payment_elsewhere` and asks the streamer to switch engines; only outages are
+asked again. Once the purchase is `licensed` (or installed), the page drops
+`checkout`, `checkoutId` and `purchase` from the address, so a reload does not
+follow it again.
+
+The runner (`lib/install-runner.ts`) parks its waits when the hook unmounts
+and arms them again when it mounts, as React's StrictMode does on every
+mount, so a flow survives a remount; answers that arrive while it is
+unmounted are dropped.
+
 Both phases share one bound, `CHECKOUT_POLL` (`lib/checkout-return.ts`, the
 same one the plan checkout's return uses): every unanswered or unfinished ask
 counts. Past it the flow fails as `payment_pending` and keeps the purchase,

@@ -7,7 +7,7 @@ import {
 import type { CatalogListingDetail } from "@shared/marketplace-catalog";
 import { isBundleListing, isModuleListing } from "@shared/marketplace-catalog";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { CreditsCard } from "@/components/marketplace/credits-card";
 import { EmoteGrid } from "@/components/marketplace/emote-grid";
@@ -28,12 +28,19 @@ import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { actionErrorMessage } from "@/lib/action-error";
-import { CHECKOUT_CANCELLED_TEXT, CHECKOUT_POLL_TEXT, parseCheckoutReturn } from "@/lib/checkout-return";
+import {
+  CHECKOUT_CANCELLED_TEXT,
+  CHECKOUT_POLL_TEXT,
+  parseCheckoutReturn,
+  purchaseReturnSettled,
+  withoutCheckoutReturn,
+} from "@/lib/checkout-return";
 import { listingInstallState } from "@/lib/listing-install-state";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
 import { BANNER_ASPECT } from "@/lib/marketplace-banner";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from "@/lib/marketplace-route";
+import { browserPurchaseEngineStorage, forgetPurchaseEngine } from "@/lib/purchase-engines";
 import { cn } from "@/lib/utils";
 
 // One listing's page, for any of the five types.
@@ -145,6 +152,9 @@ export default function MarketplaceListing() {
               void refetch();
               void quote.refetch();
             }}
+            onPurchaseSettled={() =>
+              navigate(`${marketplaceListingPath(listingId)}${withoutCheckoutReturn(searchString)}`, { replace: true })
+            }
           />
         )}
       </div>
@@ -157,15 +167,18 @@ function ListingBody({
   quote,
   purchaseReturn,
   onRefetch,
+  onPurchaseSettled,
 }: {
   listing: CatalogListingDetail;
   quote: MarketplaceQuote;
   /** Set when the browser came back here from paying for this listing; `checkoutId` is billing's, when it named one. */
   purchaseReturn: { checkoutId: string | null } | null;
+  /** The purchase the page came back with is held or installed: drop the return from the address. */
+  onPurchaseSettled: () => void;
   onRefetch: () => void;
 }) {
   const { instanceId: engineInstanceId } = useEngineScope();
-  const { purchases } = useMarketplaceMode();
+  const { purchases, usePurchaseReturnEngine } = useMarketplaceMode();
   const [, navigate] = useLocation();
   const meta = listingTypeMeta(listing.type);
 
@@ -237,11 +250,26 @@ function ListingBody({
   const install = useModuleInstall(onRefetch, onRefetch);
   const confirmPurchase = install.licensed?.confirmPurchase;
   const returnedCheckoutId = purchaseReturn?.checkoutId;
+  // Followed on the engine the checkout was opened on, so an organization's
+  // checkout is never asked about, or paid again, as another's.
+  const onPurchaseEngine = usePurchaseReturnEngine(returnedCheckoutId ?? null);
   useEffect(() => {
-    if (returnedCheckoutId !== undefined && confirmPurchase) {
+    if (returnedCheckoutId !== undefined && onPurchaseEngine && confirmPurchase) {
       confirmPurchase({ listingId: listing.id, checkoutId: returnedCheckoutId });
     }
-  }, [returnedCheckoutId, confirmPurchase, listing.id]);
+  }, [returnedCheckoutId, onPurchaseEngine, confirmPurchase, listing.id]);
+  const installStep = install.licensed?.step;
+  const settledPurchase = useRef(onPurchaseSettled);
+  settledPurchase.current = onPurchaseSettled;
+  useEffect(() => {
+    if (returnedCheckoutId === undefined || !purchaseReturnSettled(installStep)) {
+      return;
+    }
+    if (returnedCheckoutId !== null) {
+      forgetPurchaseEngine(browserPurchaseEngineStorage(), returnedCheckoutId);
+    }
+    settledPurchase.current();
+  }, [returnedCheckoutId, installStep]);
   const recheckPurchase = install.licensed?.recheckPurchase ?? null;
   const [removing, setRemoving] = useState(false);
   const [bundleInstalled, setBundleInstalled] = useState<{ kind: "scene" | "alert" } | null>(null);

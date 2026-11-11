@@ -221,6 +221,25 @@ const cases: Case[] = [
     command: { kind: "read_checkout", checkoutId: "c1", afterMs: CHECKOUT_POLL.intervalMs },
   },
   {
+    name: "a checkout billing does not know for this engine ends the wait at once, with nothing to check again",
+    from: awaitingCheckout,
+    event: { type: "checkout_not_found" },
+    to: {
+      step: "failed",
+      reason: "payment_elsewhere",
+      message:
+        "This payment belongs to a different organization or engine. Switch to the engine you bought it on, then open the link again.",
+    },
+    command: null,
+  },
+  {
+    name: "a late not-found while waiting on the grant changes nothing",
+    from: awaitingGrant,
+    event: { type: "checkout_not_found" },
+    to: awaitingGrant,
+    command: null,
+  },
+  {
     name: "a paid checkout acquires again for the grant",
     from: awaitingCheckout,
     event: { type: "checkout_answered", state: "complete" },

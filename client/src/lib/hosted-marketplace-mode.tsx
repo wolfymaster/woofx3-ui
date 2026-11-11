@@ -1,12 +1,14 @@
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { LocalEndpointPanel } from "@/components/modules/local-endpoint-panel";
 import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
 import { useInstance } from "@/hooks/use-instance";
 import { useModuleOAuthReturn } from "@/hooks/use-module-oauth-return";
 import type { MarketplaceMode, ModuleSettingSources, SettingSource } from "@/lib/marketplace-mode";
+import { browserPurchaseEngineStorage, engineToSelectForReturn, purchaseEngineOf } from "@/lib/purchase-engines";
+import { $currentInstanceId } from "@/lib/stores";
 
 // The hosted app's Marketplace tab: an account that buys listings and takes
 // uploads, inbound webhooks relayed from this deployment's site, and local
@@ -77,10 +79,32 @@ function HostedModuleSettingsExtras({ moduleId }: { moduleId: string }) {
   );
 }
 
+function useHostedPurchaseReturnEngine(checkoutId: string | null): boolean {
+  const { instance, instances, isLoading } = useInstance();
+  const remembered = useMemo(
+    () => (checkoutId === null ? null : purchaseEngineOf(browserPurchaseEngineStorage(), checkoutId)),
+    [checkoutId]
+  );
+  const target = isLoading
+    ? null
+    : engineToSelectForReturn(
+        remembered,
+        instance?._id ?? null,
+        instances.map((row) => row._id)
+      );
+  useEffect(() => {
+    if (target !== null) {
+      $currentInstanceId.set(target);
+    }
+  }, [target]);
+  return !isLoading && target === null;
+}
+
 export const hostedMarketplaceMode: MarketplaceMode = {
   purchases: true,
   uploads: true,
   ModuleSettingsExtras: HostedModuleSettingsExtras,
   useSettingSources: useHostedSettingSources,
   useOAuthReturn: useModuleOAuthReturn,
+  usePurchaseReturnEngine: useHostedPurchaseReturnEngine,
 };

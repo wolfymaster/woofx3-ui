@@ -118,7 +118,7 @@ import type {
   PinHistoryEntryId,
   PinnedMessage,
   PublishedTestEvent,
-  PurchaseCheckoutState,
+  PurchaseCheckoutRead,
   ReadOptions,
   RecapClips,
   RecapMarkers,
@@ -566,8 +566,8 @@ export interface MarketplaceGateway {
    * refusal, written for the streamer, for an intent it will not charge.
    */
   usePurchaseCheckoutRequest(): (intentId: string) => Promise<{ url: string; checkoutId: string }>;
-  /** Where a purchase checkout the browser came back from stands. */
-  usePurchaseCheckoutStateRequest(): (checkoutId: string) => Promise<PurchaseCheckoutState>;
+  /** Where a purchase checkout the browser came back from stands. Rejects only for an outage worth retrying. */
+  usePurchaseCheckoutStateRequest(): (checkoutId: string) => Promise<PurchaseCheckoutRead>;
 }
 
 /**

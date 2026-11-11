@@ -15,16 +15,15 @@ import { useOrganizationAccess } from "@/engine/hooks/use-organization-access";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
   INSTALL_FLOW_IDLE,
-  type InstallCommand,
-  type InstallFlowEvent,
   type InstallFlowState,
   type InstallFlowStep,
   installFlowBusy,
   type PendingPurchase,
-  transition,
 } from "@/lib/install-flow";
+import { createInstallRunner } from "@/lib/install-runner";
 import { canStartPayment } from "@/lib/marketplace-access";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
+import { browserPurchaseEngineStorage, rememberPurchaseEngine } from "@/lib/purchase-engines";
 
 // Installing a marketplace module from the browser.
 //
@@ -233,104 +232,32 @@ function useLicensedModuleInstall(
   const commands = useRef({ acquireForInstall, installWithLicense, startPayment, readCheckout });
   commands.current = { acquireForInstall, installWithLicense, startPayment, readCheckout };
 
-  // The flow's state lives in the runner, so a command's answer moves the
-  // state it was asked from rather than the render it was asked in. A flow
-  // the streamer left or restarted must not be moved by its own late answers:
-  // each flow gets a generation, and an answer from an older one is dropped.
-  const [runner] = useState(() => {
-    let current: InstallFlowState = INSTALL_FLOW_IDLE;
-    let generation = 0;
-    const timers = new Set<ReturnType<typeof setTimeout>>();
+  const { instanceId } = useEngineScope();
+  const scopeInstance = useRef(instanceId);
+  scopeInstance.current = instanceId;
 
-    const startsFlow = (event: InstallFlowEvent): boolean =>
-      (event.type === "install_requested" ||
-        event.type === "payment_returned" ||
-        event.type === "purchase_rechecked") &&
-      !installFlowBusy(current);
-
-    const dispatch = (event: InstallFlowEvent): void => {
-      if (startsFlow(event)) {
-        generation += 1;
-      }
-      const next = transition(current, event);
-      current = next.state;
-      setState(next.state);
-      if (next.command !== null) {
-        run(next.command, generation);
-      }
-    };
-
-    const answer = (flow: number, event: InstallFlowEvent): void => {
-      if (flow === generation) {
-        dispatch(event);
-      }
-    };
-
-    /** Runs `call` after `afterMs`, unless its flow has ended by then or the hook has unmounted. */
-    const later = (flow: number, afterMs: number | undefined, call: () => void): void => {
-      if (afterMs === undefined) {
-        call();
-        return;
-      }
-      const timer = setTimeout(() => {
-        timers.delete(timer);
-        if (flow === generation) {
-          call();
+  const [runner] = useState(() =>
+    createInstallRunner({
+      requests: () => commands.current,
+      onState: setState,
+      openUrl: (url) => window.location.assign(url),
+      onCheckoutOpened: (checkoutId) => {
+        if (scopeInstance.current !== null) {
+          rememberPurchaseEngine(browserPurchaseEngineStorage(), checkoutId, scopeInstance.current, Date.now());
         }
-      }, afterMs);
-      timers.add(timer);
-    };
-
-    const run = (command: InstallCommand, flow: number): void => {
-      const failed = (err: unknown) => answer(flow, { type: "command_failed", message: actionErrorMessage(err) });
-      switch (command.kind) {
-        case "acquire":
-          later(flow, command.afterMs, () => {
-            commands.current
-              .acquireForInstall(command.listingId)
-              .then((outcome) => answer(flow, { type: "acquire_answered", outcome }), failed);
-          });
-          return;
-        case "read_checkout":
-          later(flow, command.afterMs, () => {
-            commands.current
-              .readCheckout(command.checkoutId)
-              .then((checkout) => answer(flow, { type: "checkout_answered", state: checkout }), failed);
-          });
-          return;
-        case "start_payment":
-          commands.current
-            .startPayment(command.intent.id)
-            .then(({ url }) => answer(flow, { type: "payment_answered", url }), failed);
-          return;
-        case "open_checkout":
-          window.location.assign(command.url);
-          return;
-        case "install":
-          commands.current
-            .installWithLicense({
-              listingId: command.approval.listingId,
-              licenseKey: command.licenseKey,
-              approvedPermissions: command.approval.permissions,
-              approvedLocalEndpoints: command.approval.localEndpoints,
-            })
-            .then((outcome) => answer(flow, { type: "install_answered", outcome }), failed);
-          return;
-      }
-    };
-
-    const stop = (): void => {
-      generation += 1;
-      for (const timer of timers) {
-        clearTimeout(timer);
-      }
-      timers.clear();
-    };
-
-    return { dispatch, current: () => current, stop };
-  });
+      },
+      errorMessage: actionErrorMessage,
+      timers: {
+        set: (run, afterMs) => setTimeout(run, afterMs),
+        clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+      },
+    })
+  );
   const { dispatch } = runner;
-  useEffect(() => runner.stop, [runner]);
+  useEffect(() => {
+    runner.start();
+    return runner.stop;
+  }, [runner]);
 
   const pendingModuleKey = state.step === "installing" ? state.moduleKey : null;
   const onReport = (report: InstallReport) => {

@@ -1576,6 +1576,14 @@ export interface MarketplacePurchaseIntent {
  */
 export type PurchaseCheckoutState = "open" | "awaiting_payment" | "complete" | "expired" | "needs_review";
 
+/**
+ * What asking about a purchase checkout came to. `not_found` is decided, not
+ * an outage: billing has no such checkout for the organization that owns the
+ * scope's engine, or the caller may not ask for that organization. Asking
+ * again gets the same answer.
+ */
+export type PurchaseCheckoutRead = { kind: "state"; state: PurchaseCheckoutState } | { kind: "not_found" };
+
 /** Why the marketplace will not let this account hold a listing now. */
 export type InstallRefusalReason =
   | "account_required"
