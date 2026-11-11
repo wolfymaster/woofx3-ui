@@ -68,7 +68,6 @@ import type {
   InstallAcquireOutcome,
   InstalledModule,
   InstanceLiveState,
-  InstanceRole,
   KnownBoxArt,
   LicensedInstall,
   LicensedInstallOutcome,
@@ -862,12 +861,6 @@ export interface SessionGateway {
    * reported yet. Gate on it through `useEngineCapability`.
    */
   useCapabilities(): Live<readonly string[]>;
-  /**
-   * The caller's role on the scope's instance, which mirrors their role on
-   * the account that owns it: null when they hold none. Gate what only an
-   * owner or an admin may do on it. The server refuses the rest regardless.
-   */
-  useRole(): Live<InstanceRole | null>;
   /** What the caller may do in the organization that owns the scope's instance: null when they are not in it. */
   useOrganizationAccess(): Live<OrganizationAccess | null>;
 }
