@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import type { SessionGateway } from "@/engine/gateway";
 import type { Live } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
+import { useInstanceRole } from "@/hooks/use-instance-role";
 import { useLogger } from "@/lib/logger-context";
 import { $engineUrl } from "@/lib/stores";
 import { transport } from "@/lib/transport";
@@ -81,4 +82,5 @@ export const convexSessionGateway: SessionGateway = {
   useReconnectRequest: () => reconnectNow,
   useConnected,
   useCapabilities,
+  useRole: useInstanceRole,
 };

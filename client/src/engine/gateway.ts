@@ -65,9 +65,13 @@ import type {
   FormSubmissionId,
   FormSubmissionQueueStatus,
   HostedStorageUsage,
+  InstallAcquireOutcome,
   InstalledModule,
   InstanceLiveState,
+  InstanceRole,
   KnownBoxArt,
+  LicensedInstall,
+  LicensedInstallOutcome,
   ListingQuote,
   Live,
   Macro,
@@ -493,6 +497,12 @@ export interface ModulesGateway {
     approvedLocalEndpoints: string[]
   ) => Promise<{ moduleKey: string }>;
   /**
+   * Installs or updates a module or theme listing the account holds, on an
+   * engine with the `marketplace.licenseKeys` capability. Rejects with the
+   * engine's reason when it refuses the install.
+   */
+  useLicensedInstallRequest(): (install: LicensedInstall) => Promise<LicensedInstallOutcome>;
+  /**
    * Installs a marketplace bundle (a scene or an alert) onto the engine and
    * resolves with what it made. Rejects for a listing the instance may not install.
    */
@@ -535,6 +545,12 @@ export interface MarketplaceGateway {
   useEntitlementsRequest(): () => Promise<string[]>;
   /** Starts buying a listing, returning to `returnPath`, a path in this app, when done. */
   useCheckoutRequest(): (listingId: string, returnPath: string) => Promise<MarketplaceCheckout>;
+  /**
+   * Makes the account hold a listing it is about to install: claims a free
+   * one, confirms one held, or answers with the purchase to pay. Safe to ask
+   * again; the answer follows what the account holds.
+   */
+  useAcquireForInstallRequest(): (listingId: string) => Promise<InstallAcquireOutcome>;
 }
 
 /**
@@ -838,6 +854,12 @@ export interface SessionGateway {
    * reported yet. Gate on it through `useEngineCapability`.
    */
   useCapabilities(): Live<readonly string[]>;
+  /**
+   * The caller's role on the scope's instance, which mirrors their role on
+   * the account that owns it: null when they hold none. Gate what only an
+   * owner or an admin may do on it. The server refuses the rest regardless.
+   */
+  useRole(): Live<InstanceRole | null>;
 }
 
 /**

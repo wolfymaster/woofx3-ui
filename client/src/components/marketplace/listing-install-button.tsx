@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { useEngineScope } from "@/engine/context";
 import { useMarketplaceCheckoutRequest } from "@/engine/hooks/use-marketplace";
 import { useMarketplaceBundleInstallRequest } from "@/engine/hooks/use-modules";
+import { useViewerRole } from "@/engine/hooks/use-viewer-role";
 import { actionErrorMessage } from "@/lib/action-error";
 import { formatAmount } from "@/lib/listing-type";
+import { canStartPayment, OWNER_MUST_PURCHASE_MESSAGE } from "@/lib/marketplace-access";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,6 +52,11 @@ interface ListingInstallButtonProps {
   state: ListingInstallState;
   /** Installs a module or theme. Bundles install through this component. */
   onInstallModule?: () => void;
+  /**
+   * Buys a module or theme through its install, which asks for approval
+   * before anything is paid. Without it, Buy opens checkout directly.
+   */
+  onPurchaseModule?: () => void;
   /** Called after a bundle install writes its scene or composition. */
   onBundleInstalled?: (result: { kind: "scene" | "alert"; engineId: string }) => void;
   /** Opens the base module a theme needs. */
@@ -66,6 +73,7 @@ export function ListingInstallButton({
   listing,
   state,
   onInstallModule,
+  onPurchaseModule,
   onBundleInstalled,
   onOpenBaseModule,
   onOpenListing,
@@ -75,6 +83,7 @@ export function ListingInstallButton({
 }: ListingInstallButtonProps) {
   const { instanceId } = useEngineScope();
   const createCheckout = useMarketplaceCheckoutRequest();
+  const canPay = canStartPayment(useViewerRole());
   const installBundle = useMarketplaceBundleInstallRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +155,14 @@ export function ListingInstallButton({
           state={state}
           working={working}
           disabled={!instanceId}
-          onPurchase={() => void startCheckout()}
+          canPay={canPay}
+          onPurchase={() => {
+            if (onPurchaseModule && !isBundleListing(listing.type)) {
+              onPurchaseModule();
+              return;
+            }
+            void startCheckout();
+          }}
           onOpenListing={onOpenListing}
           onInstall={() => {
             if (isBundleListing(listing.type)) {
@@ -172,6 +188,7 @@ function PrimaryAction({
   state,
   working,
   disabled,
+  canPay,
   onPurchase,
   onInstall,
   onOpenListing,
@@ -179,6 +196,7 @@ function PrimaryAction({
   state: ListingInstallState;
   working: boolean;
   disabled: boolean;
+  canPay: boolean;
   onPurchase: () => void;
   onInstall: () => void;
   onOpenListing?: (listingId: string) => void;
@@ -253,10 +271,11 @@ function PrimaryAction({
     const amount = formatAmount(state.amountCents, state.currency);
     return (
       <>
-        <Button className="gap-2" disabled={disabled || working} onClick={onPurchase}>
+        <Button className="gap-2" disabled={disabled || working || !canPay} onClick={onPurchase}>
           {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
           {state.upgradeFrom ? `Upgrade for ${amount}` : `Buy for ${amount}`}
         </Button>
+        {!canPay && <p className="text-xs text-muted-foreground">{OWNER_MUST_PURCHASE_MESSAGE}</p>}
         {state.upgradeFrom && (
           <p className="text-xs text-muted-foreground">Upgrade price, because you own an earlier edition.</p>
         )}

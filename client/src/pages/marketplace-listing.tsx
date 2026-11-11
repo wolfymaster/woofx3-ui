@@ -128,6 +128,7 @@ export default function MarketplaceListing() {
           <ListingBody
             listing={listing}
             quote={quote}
+            purchaseReturned={purchaseOutcome === "success"}
             onRefetch={() => {
               void refetch();
               void quote.refetch();
@@ -142,10 +143,13 @@ export default function MarketplaceListing() {
 function ListingBody({
   listing,
   quote,
+  purchaseReturned,
   onRefetch,
 }: {
   listing: CatalogListingDetail;
   quote: MarketplaceQuote;
+  /** The browser came back here from paying for this listing. */
+  purchaseReturned: boolean;
   onRefetch: () => void;
 }) {
   const { instanceId: engineInstanceId } = useEngineScope();
@@ -218,7 +222,13 @@ function ListingBody({
     loadedDetail?.listingId === listing.id ? loadedDetail.load : { status: "loading" };
   const moduleDetail = detailLoad.status === "ready" ? detailLoad.detail : null;
 
-  const install = useModuleInstall(onRefetch);
+  const install = useModuleInstall(onRefetch, onRefetch);
+  const confirmPurchase = install.licensed?.confirmPurchase;
+  useEffect(() => {
+    if (purchaseReturned && confirmPurchase) {
+      confirmPurchase(listing.id);
+    }
+  }, [purchaseReturned, confirmPurchase, listing.id]);
   const [removing, setRemoving] = useState(false);
   const [bundleInstalled, setBundleInstalled] = useState<{ kind: "scene" | "alert" } | null>(null);
 
@@ -324,6 +334,7 @@ function ListingBody({
             state={state}
             isInstalling={install.isInstalling}
             onInstallModule={requestModuleInstall}
+            onPurchaseModule={install.licensed ? requestModuleInstall : undefined}
             onBundleInstalled={(result) => {
               setBundleInstalled({ kind: result.kind });
               onRefetch();

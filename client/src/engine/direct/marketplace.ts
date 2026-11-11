@@ -10,7 +10,7 @@ import {
 } from "@shared/marketplace-catalog";
 import { parseMarketplaceCatalogError } from "@woofx3/api";
 import type { MarketplaceGateway } from "@/engine/gateway";
-import type { MarketplacePageRequest, MarketplaceSearchQuery } from "@/engine/types";
+import type { InstallAcquireOutcome, MarketplacePageRequest, MarketplaceSearchQuery } from "@/engine/types";
 import { useEngineRequest } from "./query";
 import type { DirectRuntime } from "./runtime";
 import { unsupportedRequest } from "./unsupported";
@@ -96,6 +96,13 @@ export function directMarketplaceGateway(runtime: DirectRuntime): MarketplaceGat
     }
   };
 
+  /**
+   * An engine with no account holds nothing to acquire with: handed no key,
+   * it claims a free listing itself as it installs it, and answers a paid one
+   * with `payment_required`.
+   */
+  const acquireForInstall = async (): Promise<InstallAcquireOutcome> => ({ status: "licensed", licenseKey: null });
+
   return {
     useSearchRequest: () => useEngineRequest(search),
     useListingRequest: () => useEngineRequest(listing),
@@ -104,5 +111,6 @@ export function directMarketplaceGateway(runtime: DirectRuntime): MarketplaceGat
     useQuoteRequest: unsupportedRequest("marketplace.useQuoteRequest"),
     useEntitlementsRequest: unsupportedRequest("marketplace.useEntitlementsRequest"),
     useCheckoutRequest: unsupportedRequest("marketplace.useCheckoutRequest"),
+    useAcquireForInstallRequest: () => useEngineRequest(acquireForInstall),
   };
 }

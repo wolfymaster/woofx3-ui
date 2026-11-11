@@ -2,7 +2,12 @@ import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { MarketplaceGateway } from "@/engine/gateway";
-import type { MarketplaceCheckout, MarketplacePageRequest, MarketplaceSearchQuery } from "@/engine/types";
+import type {
+  InstallAcquireOutcome,
+  MarketplaceCheckout,
+  MarketplacePageRequest,
+  MarketplaceSearchQuery,
+} from "@/engine/types";
 import { useInstanceAction } from "./scope";
 
 // The catalog actions read the marketplace for the instance's account: its
@@ -76,6 +81,27 @@ function useCheckoutRequest() {
   );
 }
 
+function toInstallAcquireOutcome(
+  result: FunctionReturnType<typeof api.marketplaceCatalog.acquireForInstall>
+): InstallAcquireOutcome {
+  switch (result.status) {
+    case "licensed":
+      return { status: "licensed", licenseKey: result.license.key };
+    case "payment_required":
+      return { status: "payment_required", intent: { ...result.intent } };
+    case "refused":
+      return { status: "refused", reason: result.reason, message: result.message };
+  }
+}
+
+function useAcquireForInstallRequest() {
+  const acquireForInstall = useInstanceAction(api.marketplaceCatalog.acquireForInstall);
+  return useCallback(
+    (listingId: string) => acquireForInstall({ listingId }).then(toInstallAcquireOutcome),
+    [acquireForInstall]
+  );
+}
+
 export const convexMarketplaceGateway: MarketplaceGateway = {
   useSearchRequest,
   useListingRequest,
@@ -84,4 +110,5 @@ export const convexMarketplaceGateway: MarketplaceGateway = {
   useQuoteRequest,
   useEntitlementsRequest,
   useCheckoutRequest,
+  useAcquireForInstallRequest,
 };

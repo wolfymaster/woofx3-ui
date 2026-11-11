@@ -1,0 +1,63 @@
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { getFunctionName } from "convex/server";
+import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
+
+// The module mock below is installed once, before the gateway is imported, so
+// what it records and answers lives here and is reset before every test.
+// stylegate:ignore ANY-LAY-005 reason="bun module mocks are file-scoped; this fixture is reset in beforeEach"
+const calls: Array<{ name: string; args: unknown }> = [];
+// stylegate:ignore ANY-LAY-005 reason="bun module mocks are file-scoped; this fixture is reset in beforeEach"
+let result: unknown = null;
+
+// Bun runs every test file in one process and a module mock is not undone,
+// so the rest of convex/react stays real for the files loaded after this one.
+const convexReact = await import("convex/react");
+
+mock.module("convex/react", () => ({
+  ...convexReact,
+  useAction: (action: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
+    calls.push({ name: getFunctionName(action), args });
+    return Promise.resolve(result);
+  },
+}));
+
+const { convexMarketplaceGateway } = await import("./marketplace");
+
+beforeEach(() => {
+  calls.length = 0;
+  result = null;
+});
+
+describe("marketplace.useAcquireForInstallRequest", () => {
+  const intent = { id: "pi_1", amountCents: 900, currency: "usd", kind: "full", expiresAt: "2026-11-11T12:00:00Z" };
+  const cases: { name: string; answer: unknown; expected: unknown }[] = [
+    {
+      name: "a license answers with its key",
+      answer: { status: "licensed", license: { key: "W3X-AAAA", listingId: "listing-1", edition: 1 } },
+      expected: { status: "licensed", licenseKey: "W3X-AAAA" },
+    },
+    {
+      name: "a price answers with the purchase to pay",
+      answer: { status: "payment_required", intent },
+      expected: { status: "payment_required", intent },
+    },
+    {
+      name: "a refusal keeps its reason and sentence",
+      answer: { status: "refused", reason: "downloads_blocked", message: "pulled" },
+      expected: { status: "refused", reason: "downloads_blocked", message: "pulled" },
+    },
+  ];
+  for (const { name, answer, expected } of cases) {
+    test(name, async () => {
+      result = answer;
+      const acquire = renderInScope(() => convexMarketplaceGateway.useAcquireForInstallRequest());
+      expect(await acquire("listing-1")).toEqual(expected as Awaited<ReturnType<typeof acquire>>);
+      expect(calls).toEqual([
+        {
+          name: "marketplaceCatalog:acquireForInstall",
+          args: { instanceId: TEST_INSTANCE_ID, listingId: "listing-1" },
+        },
+      ]);
+    });
+  }
+});

@@ -7,11 +7,13 @@ import {
   marketplaceMetadataOf,
 } from "@shared/module-detail";
 import { declaredSettingsOnly } from "@shared/module-settings-visibility";
-import type { EngineModuleSummary, MarketplaceListingInspection } from "@woofx3/api";
+import type { EngineModuleSummary, MarketplaceInstallRequest, MarketplaceListingInspection } from "@woofx3/api";
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
   EngineWorkflowOption,
   InstalledModule,
+  LicensedInstall,
+  LicensedInstallOutcome,
   MarketplaceBundleInstall,
   ModuleAsset,
   ModuleDetail,
@@ -224,6 +226,31 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     }
   };
 
+  const licensedInstall = async (install: LicensedInstall): Promise<LicensedInstallOutcome> => {
+    const request: MarketplaceInstallRequest = {
+      approvedPermissions: install.approvedPermissions,
+      approvedLocalEndpoints: install.approvedLocalEndpoints,
+    };
+    if (install.licenseKey !== null) {
+      request.licenseKey = install.licenseKey;
+    }
+    const result = await runtime.call("installMarketplaceListing", (api) =>
+      api.installMarketplaceListing(install.listingId, request)
+    );
+    switch (result.status) {
+      case "installed":
+        return { status: "installed", moduleKey: result.moduleKey };
+      case "needs_approval":
+        return {
+          status: "needs_approval",
+          unapproved: result.unapproved,
+          unapprovedLocalEndpoints: result.unapprovedLocalEndpoints,
+        };
+      case "payment_required":
+        throw new Error(paidListingMessage(result.name));
+    }
+  };
+
   const bundleInstall = async (listingId: string): Promise<MarketplaceBundleInstall> => {
     const result = await runtime.call("installMarketplaceBundle", (api) => api.installMarketplaceBundle(listingId));
     if (result.status === "payment_required") {
@@ -246,6 +273,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     useReconcileUninstallRequest: () => useEngineRequest(reconcileUninstall),
     useWorkflowsRequest: () => useEngineRequest(workflows),
     useMarketplaceInstallRequest: () => useEngineRequest(marketplaceInstall),
+    useLicensedInstallRequest: () => useEngineRequest(licensedInstall),
     useBundleInstallRequest: () => useEngineRequest(bundleInstall),
     useStorageUsageRequest: () => useEngineRequest(storageUsage),
     useArchiveInstallRequest: unsupportedRequest("modules.useArchiveInstallRequest"),

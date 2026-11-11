@@ -56,3 +56,12 @@ describe("engine capabilities", () => {
     reader.unmount();
   });
 });
+
+describe("the caller's role", () => {
+  test("is the owner of the engine they run directly", async () => {
+    const { runtime } = await connected();
+    const reader = renderDirect(() => directSessionGateway(runtime).useRole());
+    expect(await reader.until((value) => value !== undefined, "the role")).toBe("owner");
+    reader.unmount();
+  });
+});
