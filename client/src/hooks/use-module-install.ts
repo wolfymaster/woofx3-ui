@@ -27,11 +27,11 @@ import { browserPurchaseEngineStorage, rememberPurchaseEngine } from "@/lib/purc
 
 // Installing a marketplace module from the browser.
 //
-// Extracted from pages/modules.tsx so the marketplace storefront installs
-// through exactly the same path rather than a second copy of it. The flow has
-// several parts that have to stay together to be correct -- the approval
-// gate, the engine's progress events, and the timeout -- and two
-// implementations of that would drift.
+// One install path for both pages: the marketplace storefront and the
+// installed modules page drive this, so a second implementation would drift.
+// The flow has several parts that have to stay together to be correct -- the
+// approval gate, the payment wait, the engine's progress events, and the
+// timeout.
 //
 // An engine with the `marketplace.licenseKeys` capability installs with a
 // license: the account acquires the listing (paying first when it costs

@@ -167,7 +167,10 @@ export async function marketplaceModuleEngineFor(
       payload && typeof payload === "object" ? (payload as { listing?: unknown }).listing : null
     );
   } catch (err) {
-    console.warn(`Marketplace listing ${listingId} could not be read for the engine path:`, err);
+    logger.warn("marketplace listing could not be read for the engine path", {
+      listingId,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
   if (!listing) {
@@ -175,7 +178,7 @@ export async function marketplaceModuleEngineFor(
   }
   const reason = moduleListingStaysOnConvex(listing);
   if (reason !== null) {
-    console.info(`Marketplace install of ${listingId} stays on the Convex path: ${reason}`);
+    logger.info("marketplace install stays on the Convex path", { listingId, reason });
     return null;
   }
   return { engine, listing };
