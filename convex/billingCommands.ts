@@ -12,7 +12,9 @@ import {
   type CheckoutState,
   checkoutIdempotencyKey,
   type Invoice,
+  marketplaceCheckoutIdempotencyKey,
 } from "./lib/billingClient";
+import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import { billingIntervalValidator, planTierValidator } from "./lib/organization";
 import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
 import { logger } from "./logger";
@@ -43,6 +45,15 @@ const FRIENDLY_MESSAGES: Partial<Record<BillingError["code"], string>> = {
   unknown_discount: "That promotion code can't be used.",
   promotion_code_not_found: "That promotion code doesn't exist or is no longer active.",
   invalid_return_path: "That page can't be used to return from billing.",
+  intent_not_found: "We could not find that purchase for this organization. Click Buy again to start over.",
+  intent_not_payable: "That price has ended. Click Buy again for a fresh one.",
+  intent_expiring: "That price is about to end. Click Buy again for a fresh one.",
+  intent_already_paid: "This purchase is already paid and is being confirmed. Try installing again in a minute.",
+  intent_invalid: "This purchase can't be paid here. Contact woofx3 support.",
+  listing_unavailable: "This listing isn't on sale right now.",
+  marketplace_unavailable: RETRY_MESSAGE,
+  marketplace_refused: RETRY_MESSAGE,
+  marketplace_not_configured: "Module purchases aren't set up on this deployment.",
   subscription_not_found: "Your billing is still being set up. Try again in a moment.",
   payment_unavailable: RETRY_MESSAGE,
   payment_refused: "We could not start your payment. Please contact support if this continues.",
@@ -163,6 +174,38 @@ export const checkoutState = action({
   handler: async (ctx, { accountId, checkoutId }): Promise<{ state: CheckoutState }> => {
     const client = await requireManagerClient(ctx, accountId);
     return { state: unwrap(await client.checkoutState(checkoutId, accountId)).state };
+  },
+});
+
+/**
+ * A checkout for a module purchase: pays the marketplace purchase intent `intentId` that acquiring a listing on this
+ * engine answered, for the organization that owns the engine. Only its billing manager may pay. The plane checks the
+ * intent is that organization's, open and payable, and charges its amount; paying returns the buyer to the listing.
+ */
+export const startMarketplaceCheckout = action({
+  args: { instanceId: v.id("instances"), intentId: v.string() },
+  handler: async (ctx, { instanceId, intentId }): Promise<{ url: string; checkoutId: string }> => {
+    const { accountId } = await requireOrgActionOnInstanceInAction(ctx, instanceId, "manageBilling");
+    const client = requireClient();
+    const request = { accountId, intentId: intentId.trim() };
+    if (request.intentId === "") {
+      throw billingConvexError({ code: "intent_not_found", message: "No purchase intent was named." });
+    }
+    return unwrap(
+      await client.startMarketplaceCheckout({
+        ...request,
+        idempotencyKey: await marketplaceCheckoutIdempotencyKey(request, Date.now()),
+      })
+    );
+  },
+});
+
+/** Where a module purchase's checkout stands, for the listing page the buyer returns to. Billing managers only. */
+export const marketplaceCheckoutState = action({
+  args: { instanceId: v.id("instances"), checkoutId: v.string() },
+  handler: async (ctx, { instanceId, checkoutId }): Promise<{ state: CheckoutState }> => {
+    const { accountId } = await requireOrgActionOnInstanceInAction(ctx, instanceId, "manageBilling");
+    return { state: unwrap(await requireClient().checkoutState(checkoutId, accountId)).state };
   },
 });
 

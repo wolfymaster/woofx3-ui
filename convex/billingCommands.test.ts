@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
 import { billingErr } from "./lib/billingClient";
 import { FakeBillingClient } from "./lib/billingClient.fakes";
@@ -119,6 +120,98 @@ describe("startCheckout", () => {
         as(t, ownerId).action(api.billingCommands.startCheckout, { accountId, plan: "pro", interval: "month" })
       )
     ).toMatchObject({ code: "not_configured" });
+  });
+});
+
+async function seedEngine(t: Backend, accountId: Id<"accounts">) {
+  return t.run(async (ctx) => {
+    const memberId = await ctx.db.insert("users", { name: "Member" });
+    await ctx.db.insert("accountMembers", { accountId, userId: memberId, role: "member", createdAt: 1 });
+    const instanceId = await ctx.db.insert("instances", {
+      accountId,
+      name: "Engine",
+      url: "https://e.test",
+      createdAt: 1,
+    });
+    return { memberId, instanceId };
+  });
+}
+
+describe("startMarketplaceCheckout", () => {
+  test("the owner pays the intent for the engine's org, with a key derived from it", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const { instanceId } = await seedEngine(t, accountId);
+    answers["/marketplace-checkouts"] = { status: 200, body: { url: "https://pay.example/m", checkoutId: "c9" } };
+    const args = { instanceId, intentId: " pi_1 " };
+    expect(await as(t, ownerId).action(api.billingCommands.startMarketplaceCheckout, args)).toEqual({
+      url: "https://pay.example/m",
+      checkoutId: "c9",
+    });
+    await as(t, ownerId).action(api.billingCommands.startMarketplaceCheckout, args);
+    expect(seen[0]).toMatchObject({
+      path: `/v1/billing/accounts/${accountId}/marketplace-checkouts`,
+      method: "POST",
+      body: { intentId: "pi_1" },
+    });
+    expect(seen[0]?.idempotencyKey).toMatch(new RegExp(`^marketplace-checkout:${accountId}:pi_1:\\d+$`));
+    expect(seen[1]?.idempotencyKey).toBe(seen[0]?.idempotencyKey ?? "");
+  });
+
+  test("an admin or member is refused before the plane is asked", async () => {
+    const t = newBackend();
+    const { adminId, accountId } = await seedOrg(t);
+    const { memberId, instanceId } = await seedEngine(t, accountId);
+    for (const userId of [adminId, memberId]) {
+      expect(
+        await errorData(
+          as(t, userId).action(api.billingCommands.startMarketplaceCheckout, { instanceId, intentId: "pi_1" })
+        )
+      ).toMatchObject({ code: "not_authorized", action: "manageBilling" });
+    }
+    expect(seen).toEqual([]);
+  });
+
+  test.each([
+    ["intent_expiring", 409, "That price is about to end. Click Buy again for a fresh one."],
+    [
+      "intent_already_paid",
+      409,
+      "This purchase is already paid and is being confirmed. Try installing again in a minute.",
+    ],
+    ["intent_not_found", 404, "We could not find that purchase for this organization. Click Buy again to start over."],
+    ["marketplace_not_configured", 503, "Module purchases aren't set up on this deployment."],
+  ])("%s reaches the browser with its code and wording", async (code, status, message) => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const { instanceId } = await seedEngine(t, accountId);
+    answers["/marketplace-checkouts"] = { status, body: { error: { code, message: "plane words" } } };
+    expect(
+      await errorData(
+        as(t, ownerId).action(api.billingCommands.startMarketplaceCheckout, { instanceId, intentId: "pi_1" })
+      )
+    ).toEqual({ code, message });
+  });
+});
+
+describe("marketplaceCheckoutState", () => {
+  test("the owner reads the state as the engine's org; a member is refused", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const { memberId, instanceId } = await seedEngine(t, accountId);
+    answers["/checkouts/c9"] = {
+      status: 200,
+      body: { id: "c9", accountId, purposeKind: "marketplace", state: "needs_review" },
+    };
+    expect(
+      await as(t, ownerId).action(api.billingCommands.marketplaceCheckoutState, { instanceId, checkoutId: "c9" })
+    ).toEqual({ state: "needs_review" });
+    expect(seen.map((call) => call.search)).toEqual([`?accountId=${accountId}`]);
+    expect(
+      await errorData(
+        as(t, memberId).action(api.billingCommands.marketplaceCheckoutState, { instanceId, checkoutId: "c9" })
+      )
+    ).toMatchObject({ code: "not_authorized" });
   });
 });
 
