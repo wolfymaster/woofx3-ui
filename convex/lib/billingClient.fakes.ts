@@ -54,8 +54,8 @@ export class FakeBillingClient implements BillingClient {
     return this.promotionAnswer;
   }
 
-  async checkoutState(checkoutId: string) {
-    this.calls.push({ command: "checkoutState", args: [checkoutId] });
-    return this.checkoutStateAnswer ?? billingOk({ id: checkoutId, accountId: "unknown", state: "open" as const });
+  async checkoutState(checkoutId: string, accountId: string) {
+    this.calls.push({ command: "checkoutState", args: [checkoutId, accountId] });
+    return this.checkoutStateAnswer ?? billingOk({ id: checkoutId, accountId, state: "open" as const });
   }
 }

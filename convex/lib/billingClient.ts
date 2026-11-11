@@ -128,7 +128,8 @@ export interface Invoice {
   hostedUrl: string | null;
 }
 
-export const CHECKOUT_STATES = ["open", "awaiting_payment", "complete", "expired"] as const;
+/** `needs_review` is a module purchase that was paid but could not be granted; support settles it. */
+export const CHECKOUT_STATES = ["open", "awaiting_payment", "complete", "expired", "needs_review"] as const;
 export type CheckoutState = (typeof CHECKOUT_STATES)[number];
 
 export interface CheckoutView {
@@ -162,7 +163,8 @@ export interface BillingClient {
   listInvoices(accountId: string): Promise<BillingResult<Invoice[]>>;
   /** `null` when no active code by that name exists. */
   lookupPromotionCode(code: string): Promise<BillingResult<AppliedDiscount | null>>;
-  checkoutState(checkoutId: string): Promise<BillingResult<CheckoutView>>;
+  /** `accountId` is the org the caller acts for; another org's checkout answers `checkout_not_found`. */
+  checkoutState(checkoutId: string, accountId: string): Promise<BillingResult<CheckoutView>>;
 }
 
 /** One `ensure` per org ever means one key per org. */
@@ -296,9 +298,12 @@ export class HttpBillingClient implements BillingClient {
     return result;
   }
 
-  checkoutState(checkoutId: string) {
+  checkoutState(checkoutId: string, accountId: string) {
     return this.send(
-      { method: "GET", path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}` },
+      {
+        method: "GET",
+        path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?accountId=${encodeURIComponent(accountId)}`,
+      },
       checkoutViewSchema
     );
   }

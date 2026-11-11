@@ -154,16 +154,15 @@ export const invoices = action({
   },
 });
 
-/** Where a checkout stands, for the page the customer returns to. Only the org's billing managers may ask. */
+/**
+ * Where one of the org's checkouts stands, for the page the customer returns to. Only the org's billing managers may
+ * ask; the plane answers another org's checkout as `checkout_not_found`.
+ */
 export const checkoutState = action({
-  args: { checkoutId: v.string() },
-  handler: async (ctx, { checkoutId }): Promise<{ state: CheckoutState }> => {
-    const userId = await requireUser(ctx);
-    const view = unwrap(await requireClient().checkoutState(checkoutId));
-    if (!(await ctx.runQuery(internal.billingCommands.mayManageBilling, { accountId: view.accountId, userId }))) {
-      throw new ConvexError({ code: "not_authorized", message: "Your organization role doesn't allow this" });
-    }
-    return { state: view.state };
+  args: { accountId: v.id("accounts"), checkoutId: v.string() },
+  handler: async (ctx, { accountId, checkoutId }): Promise<{ state: CheckoutState }> => {
+    const client = await requireManagerClient(ctx, accountId);
+    return { state: unwrap(await client.checkoutState(checkoutId, accountId)).state };
   },
 });
 

@@ -126,6 +126,15 @@ describe("requests", () => {
     });
   });
 
+  test("checkoutState asks for the checkout as the org it is for", async () => {
+    const seen = plane(200, { id: "c1", accountId: "acc 1", purposeKind: "marketplace", state: "needs_review" });
+    expect(await client.checkoutState("c1", "acc 1")).toEqual({
+      ok: true,
+      value: { id: "c1", accountId: "acc 1", state: "needs_review" },
+    });
+    expect(seen[0]?.url).toBe("https://plane.test/v1/billing/checkouts/c1?accountId=acc%201");
+  });
+
   test("an unknown promotion code is null, not an error", async () => {
     const seen = plane(404, { error: { code: "promotion_code_not_found", message: "No active promotion code x." } });
     expect(await client.lookupPromotionCode(" x y ")).toEqual({ ok: true, value: null });

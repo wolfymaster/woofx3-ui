@@ -13,6 +13,7 @@ const saved = { url: process.env.MAINTENANCE_API_URL, key: process.env.MAINTENAN
 
 interface Seen {
   path: string;
+  search: string;
   method: string;
   idempotencyKey: string | null;
   body: unknown;
@@ -27,10 +28,11 @@ beforeEach(() => {
   process.env.MAINTENANCE_API_URL = "https://plane.test";
   process.env.MAINTENANCE_API_KEY = "key";
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const path = new URL(String(input)).pathname;
+    const { pathname: path, search } = new URL(String(input));
     const headers = new Headers(init?.headers);
     seen.push({
       path,
+      search,
       method: init?.method ?? "GET",
       idempotencyKey: headers.get("idempotency-key"),
       body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
@@ -178,20 +180,34 @@ describe("previewPromotionCode", () => {
 });
 
 describe("checkoutState", () => {
-  test("the owner of the checkout's org reads the state; anyone else is refused", async () => {
+  test("the org's owner reads the state, asking for that org; anyone else is refused before the plane is asked", async () => {
     const t = newBackend();
     const { ownerId, adminId, accountId } = await seedOrg(t);
     answers["/checkouts/c1"] = {
       status: 200,
       body: { id: "c1", accountId, purposeKind: "subscription", state: "complete" },
     };
-    expect(await as(t, ownerId).action(api.billingCommands.checkoutState, { checkoutId: "c1" })).toEqual({
+    expect(await as(t, ownerId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" })).toEqual({
       state: "complete",
     });
+    expect(seen.map((call) => call.search)).toEqual([`?accountId=${accountId}`]);
     expect(
-      await errorData(as(t, adminId).action(api.billingCommands.checkoutState, { checkoutId: "c1" }))
+      await errorData(as(t, adminId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" }))
     ).toMatchObject({
       code: "not_authorized",
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  test("another org's checkout reads as not found", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    answers["/checkouts/c1"] = { status: 404, body: { error: { code: "checkout_not_found", message: "x" } } };
+    expect(
+      await errorData(as(t, ownerId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" }))
+    ).toEqual({
+      code: "checkout_not_found",
+      message: "We could not find that checkout. Choose a plan to start again.",
     });
   });
 });
