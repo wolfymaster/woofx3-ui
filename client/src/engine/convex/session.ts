@@ -3,7 +3,7 @@ import { useStore } from "@nanostores/react";
 import { useQuery } from "convex/react";
 import { useEffect } from "react";
 import type { SessionGateway } from "@/engine/gateway";
-import type { Live } from "@/engine/types";
+import type { Live, OrganizationAccess } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useInstanceRole } from "@/hooks/use-instance-role";
 import { useLogger } from "@/lib/logger-context";
@@ -77,10 +77,16 @@ function useConnected(): boolean {
   return useStore($engineConnected);
 }
 
+function useOrganizationAccess(): Live<OrganizationAccess | null> {
+  const instanceId = useScopeInstanceId();
+  return useQuery(api.organizations.capabilitiesForInstance, instanceId ? { instanceId } : "skip");
+}
+
 export const convexSessionGateway: SessionGateway = {
   useLiveConnection,
   useReconnectRequest: () => reconnectNow,
   useConnected,
   useCapabilities,
   useRole: useInstanceRole,
+  useOrganizationAccess,
 };

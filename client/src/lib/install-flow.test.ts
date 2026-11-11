@@ -114,13 +114,13 @@ const cases: Case[] = [
     command: { kind: "start_payment", listingId: "obs-scenes", intent: INTENT },
   },
   {
-    name: "a member who is not the account owner is told an owner must buy it, and no payment starts",
+    name: "a member who is not the organization's owner is told the owner must buy it, and no payment starts",
     from: { step: "acquiring", approval: { ...APPROVAL, canPay: false } },
     event: { type: "acquire_answered", outcome: { status: "payment_required", intent: INTENT } },
     to: {
       step: "failed",
       reason: "owner_must_purchase",
-      message: "Only the account owner can buy this. Ask an owner to purchase it.",
+      message: "Only the organization's owner can buy this. Ask them to purchase it.",
     },
     command: null,
   },

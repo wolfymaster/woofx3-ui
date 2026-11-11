@@ -2,7 +2,7 @@ import { Check, Copy, Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useModuleLicenseKeyRequest } from "@/engine/hooks/use-modules";
-import { useViewerRole } from "@/engine/hooks/use-viewer-role";
+import { useOrganizationAccess } from "@/engine/hooks/use-organization-access";
 import type { ModuleLicenseLookup } from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
 import { useLogger } from "@/lib/logger-context";
@@ -20,7 +20,7 @@ const COPY_LABELS = { idle: "Copy", copied: "Copied", failed: "Couldn't copy" } 
  * which is why the lookup lives in a component that mounts only for them.
  */
 export function ModuleLicenseKey(lookup: ModuleLicenseLookup) {
-  return canSeeLicenseKey(useViewerRole()) ? <LicenseKeyPanel {...lookup} /> : null;
+  return canSeeLicenseKey(useOrganizationAccess()) ? <LicenseKeyPanel {...lookup} /> : null;
 }
 
 function LicenseKeyPanel({ moduleId, listingId }: ModuleLicenseLookup) {

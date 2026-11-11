@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useEngineScope } from "@/engine/context";
 import { useMarketplaceCheckoutRequest } from "@/engine/hooks/use-marketplace";
 import { useMarketplaceBundleInstallRequest } from "@/engine/hooks/use-modules";
-import { useViewerRole } from "@/engine/hooks/use-viewer-role";
+import { useOrganizationAccess } from "@/engine/hooks/use-organization-access";
 import { actionErrorMessage } from "@/lib/action-error";
 import { formatAmount } from "@/lib/listing-type";
 import { canStartPayment, OWNER_MUST_PURCHASE_MESSAGE } from "@/lib/marketplace-access";
@@ -83,7 +83,7 @@ export function ListingInstallButton({
 }: ListingInstallButtonProps) {
   const { instanceId } = useEngineScope();
   const createCheckout = useMarketplaceCheckoutRequest();
-  const canPay = canStartPayment(useViewerRole());
+  const canPay = canStartPayment(useOrganizationAccess());
   const installBundle = useMarketplaceBundleInstallRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

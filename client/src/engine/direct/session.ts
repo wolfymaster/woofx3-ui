@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { SessionGateway } from "@/engine/gateway";
+import type { OrganizationAccess } from "@/engine/types";
 import { directKeys as k } from "./keys";
 import { type EngineRead, useConnected, useEngineQuery } from "./query";
 import type { DirectRuntime } from "./runtime";
@@ -15,6 +16,9 @@ function capabilitiesRead(runtime: DirectRuntime): EngineRead<readonly string[]>
       (await runtime.call("getEngineCapabilities", (api) => api.getEngineCapabilities())).capabilities,
   };
 }
+
+/** A direct engine has no organization behind it; whoever runs it holds everything it has. */
+const OWN_ENGINE_ACCESS: OrganizationAccess = { viewBilling: true, manageBilling: true };
 
 /**
  * The live connection is the runtime's own engine session. Its engine and
@@ -40,5 +44,6 @@ export function directSessionGateway(runtime: DirectRuntime): SessionGateway {
     useCapabilities: () => useEngineQuery(runtime, capabilitiesRead(runtime)),
     // A direct engine is the caller's own, with no account to share it: they own it.
     useRole: () => "owner",
+    useOrganizationAccess: () => OWN_ENGINE_ACCESS,
   };
 }

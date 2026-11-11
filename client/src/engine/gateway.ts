@@ -110,6 +110,7 @@ import type {
   NotRunningWorkflow,
   ObsStatus,
   OpenSessionRefresh,
+  OrganizationAccess,
   OverlayDoneOutcome,
   OverlayFacts,
   OverlayPresence,
@@ -867,6 +868,8 @@ export interface SessionGateway {
    * owner or an admin may do on it. The server refuses the rest regardless.
    */
   useRole(): Live<InstanceRole | null>;
+  /** What the caller may do in the organization that owns the scope's instance: null when they are not in it. */
+  useOrganizationAccess(): Live<OrganizationAccess | null>;
 }
 
 /**

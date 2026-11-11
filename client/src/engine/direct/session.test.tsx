@@ -57,6 +57,18 @@ describe("engine capabilities", () => {
   });
 });
 
+describe("the caller's organization access", () => {
+  test("holds everything on the engine they run directly", async () => {
+    const { runtime } = await connected();
+    const reader = renderDirect(() => directSessionGateway(runtime).useOrganizationAccess());
+    expect(await reader.until((value) => value !== undefined, "the access")).toEqual({
+      viewBilling: true,
+      manageBilling: true,
+    });
+    reader.unmount();
+  });
+});
+
 describe("the caller's role", () => {
   test("is the owner of the engine they run directly", async () => {
     const { runtime } = await connected();

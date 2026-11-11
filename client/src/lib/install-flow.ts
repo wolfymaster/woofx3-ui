@@ -24,7 +24,7 @@ export interface InstallApproval {
   mode: "install" | "update";
   permissions: string[];
   localEndpoints: string[];
-  /** Whether the streamer may start a payment, which only the account owner may. */
+  /** Whether the streamer may start a payment, which only the organization's owner may. */
   canPay: boolean;
   /**
    * The local endpoints the build is known to declare, so an engine asking
@@ -43,7 +43,7 @@ export type InstallFailureReason =
   | InstallRefusalReason
   /** The purchase could not be started. */
   | "payment_unavailable"
-  /** The listing costs money and the streamer is not the account owner. */
+  /** The listing costs money and the streamer is not the organization's owner. */
   | "owner_must_purchase"
   /** Back from paying, but the marketplace does not show the purchase yet. */
   | "payment_pending"
