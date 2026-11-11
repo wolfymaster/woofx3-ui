@@ -1,5 +1,24 @@
 # woofx3 desktop changelog
 
+## [0.7.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.6.0...woofx3-v0.7.0) (2026-11-11)
+
+### Features
+
+* **marketplace:** ask for install approval from the listing's declarations ([67ee0d9](https://github.com/wolfymaster/woofx3-ui/commit/67ee0d96c5111d4238b6c3c64fd051b3195a08d5))
+* **marketplace:** install through a license on engines that take keys ([dcfe4fe](https://github.com/wolfymaster/woofx3-ui/commit/dcfe4fe5278b96d9a515f8785cef92d39f97c82a))
+* **marketplace:** only the account owner starts a payment ([fbd55a4](https://github.com/wolfymaster/woofx3-ui/commit/fbd55a4bdd8764351c9c4a13c541929574840450))
+* **marketplace:** pay for a module through billing and follow the payment back ([1e9f4d1](https://github.com/wolfymaster/woofx3-ui/commit/1e9f4d1ab1583813393b75e95c81b9a9f6beacae))
+* **modules:** only owners and admins see a module's license key ([2c04ddf](https://github.com/wolfymaster/woofx3-ui/commit/2c04ddf79abfb4e974f3257093eb935e10f5c15f))
+* **modules:** show an installed module's license key, hidden until asked ([8754ead](https://github.com/wolfymaster/woofx3-ui/commit/8754ead1bb753255cce66c56cead99322a88da1a))
+
+### Bug Fixes
+
+* **billing:** ask for a checkout's state as the organization it is for ([f1bac91](https://github.com/wolfymaster/woofx3-ui/commit/f1bac91b1c5ea5e740d8a60ccc9660b25294915b))
+* **engine:** name the role type in engine types, not Convex's ([53a1203](https://github.com/wolfymaster/woofx3-ui/commit/53a1203d8fa8d77cff7a184c4ed23aa99f1b9945))
+* **marketplace:** follow a purchase on the engine that opened it ([8b15bc3](https://github.com/wolfymaster/woofx3-ui/commit/8b15bc3f193da1ad7afaac5fc1db2f318994e64c))
+* **marketplace:** gate purchases and license keys on the organization role ([87ef969](https://github.com/wolfymaster/woofx3-ui/commit/87ef9695d166ddf57621cacbefbc383f0a81e381))
+* **marketplace:** read the caller's role through the engine gateway ([83733e1](https://github.com/wolfymaster/woofx3-ui/commit/83733e14987439a9f0efb10ddf9d1d87b460960f))
+
 ## [0.6.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.5.0...woofx3-v0.6.0) (2026-11-10)
 
 ### Features
