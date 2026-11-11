@@ -188,17 +188,23 @@ export function marketplaceEngineSession(engine: EngineCredentials): Marketplace
 
 // --- engine errors ---
 
-/** What the streamer is told for each code the marketplace refuses an engine's claim or download with. */
-const INSTALL_REFUSAL_COPY: Readonly<Record<string, string>> = {
-  ...MARKETPLACE_REFUSAL_COPY,
-  listing_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
-  module_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
-  payment_required: "This module hasn't been bought in this organization yet.",
-  not_entitled: "This organization's license doesn't unlock this module. Reload the page, then install it again.",
-  buyer_mismatch: "This module's license belongs to another organization, so it can't be installed here.",
-  activation_limit:
-    "This module's license is already on as many engines as it allows. Remove it from another engine, then try again.",
-};
+/**
+ * What the streamer is told for each code the marketplace refuses an engine's
+ * claim or download with. A Map, not an object: the code is the marketplace's
+ * text, and a code like `constructor` must not read Object's own members.
+ */
+const INSTALL_REFUSAL_COPY: ReadonlyMap<string, string> = new Map(
+  Object.entries({
+    ...MARKETPLACE_REFUSAL_COPY,
+    listing_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
+    module_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
+    payment_required: "This module hasn't been bought in this organization yet.",
+    not_entitled: "This organization's license doesn't unlock this module. Reload the page, then install it again.",
+    buyer_mismatch: "This module's license belongs to another organization, so it can't be installed here.",
+    activation_limit:
+      "This module's license is already on as many engines as it allows. Remove it from another engine, then try again.",
+  })
+);
 
 const INSTALL_REFUSED_COPY =
   "The marketplace refused this install. Try again, or contact woofx3 support if it keeps happening.";
@@ -221,7 +227,7 @@ export function marketplaceInstallFailureCopy(err: unknown): string | null {
       if (failure.code === "listing_unavailable" && failure.message.trim() !== "") {
         return failure.message;
       }
-      return INSTALL_REFUSAL_COPY[failure.code] ?? INSTALL_REFUSED_COPY;
+      return INSTALL_REFUSAL_COPY.get(failure.code) ?? INSTALL_REFUSED_COPY;
     case "timeout":
     case "unreachable":
       return MARKETPLACE_UNREACHABLE_COPY;

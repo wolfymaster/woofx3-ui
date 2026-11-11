@@ -448,6 +448,14 @@ describe("engineFailure", () => {
     ["listing_not_found", 404, "This listing is no longer in the marketplace."],
     ["module_not_found", 404, "This listing is no longer in the marketplace."],
     ["listing_unavailable", 409, unavailable],
+    ...["constructor", "__proto__", "toString"].map(
+      (code) =>
+        [
+          code,
+          400,
+          "The marketplace refused this install. Try again, or contact woofx3 support if it keeps happening.",
+        ] as const
+    ),
     [
       "install_id_required",
       400,
