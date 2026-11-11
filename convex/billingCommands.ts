@@ -166,6 +166,18 @@ export const invoices = action({
 });
 
 /**
+ * The state of one of `accountId`'s checkouts. The plane answers another org's checkout as not found; the view's own
+ * account is checked here too, so an answer for another org is refused even from a plane that ignores `?accountId=`.
+ */
+async function orgCheckoutState(client: BillingClient, checkoutId: string, accountId: string): Promise<CheckoutState> {
+  const view = unwrap(await client.checkoutState(checkoutId, accountId));
+  if (view.accountId !== accountId) {
+    throw billingConvexError({ code: "checkout_not_found", message: `Checkout ${checkoutId} is another org's.` });
+  }
+  return view.state;
+}
+
+/**
  * Where one of the org's checkouts stands, for the page the customer returns to. Only the org's billing managers may
  * ask; the plane answers another org's checkout as `checkout_not_found`.
  */
@@ -173,7 +185,7 @@ export const checkoutState = action({
   args: { accountId: v.id("accounts"), checkoutId: v.string() },
   handler: async (ctx, { accountId, checkoutId }): Promise<{ state: CheckoutState }> => {
     const client = await requireManagerClient(ctx, accountId);
-    return { state: unwrap(await client.checkoutState(checkoutId, accountId)).state };
+    return { state: await orgCheckoutState(client, checkoutId, accountId) };
   },
 });
 
@@ -205,7 +217,7 @@ export const marketplaceCheckoutState = action({
   args: { instanceId: v.id("instances"), checkoutId: v.string() },
   handler: async (ctx, { instanceId, checkoutId }): Promise<{ state: CheckoutState }> => {
     const { accountId } = await requireOrgActionOnInstanceInAction(ctx, instanceId, "manageBilling");
-    return { state: unwrap(await requireClient().checkoutState(checkoutId, accountId)).state };
+    return { state: await orgCheckoutState(requireClient(), checkoutId, accountId) };
   },
 });
 

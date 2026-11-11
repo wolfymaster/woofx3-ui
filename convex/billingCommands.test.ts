@@ -292,6 +292,18 @@ describe("checkoutState", () => {
     expect(seen).toHaveLength(1);
   });
 
+  test("a view of another org's checkout is refused even when the plane answers it", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    answers["/checkouts/c1"] = {
+      status: 200,
+      body: { id: "c1", accountId: "someone-else", purposeKind: "subscription", state: "complete" },
+    };
+    expect(
+      await errorData(as(t, ownerId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" }))
+    ).toMatchObject({ code: "checkout_not_found" });
+  });
+
   test("another org's checkout reads as not found", async () => {
     const t = newBackend();
     const { ownerId, accountId } = await seedOrg(t);
