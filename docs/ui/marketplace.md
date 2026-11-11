@@ -192,8 +192,10 @@ card, so a card shows **Buy · $X** for a paid listing the account does not hold
 1. A listing the quote prices shows **Buy for $X** (or **Upgrade for $X**).
    `marketplaceCatalog.createCheckout` takes a return **path**, never a URL,
    and joins it onto `APP_BASE_URL` on the server — so a Stripe payment page
-   can only ever return the buyer into woofx3. A purchase spends the account's
-   money, so it needs `admin`. The marketplace charges its own quote.
+   can only ever return the buyer into woofx3. A purchase spends the
+   organization's money, so it needs the organization's `manageBilling` (its
+   owner), whatever the caller's role on the engine. The marketplace charges
+   its own quote.
 2. Stripe sends the buyer back to the listing with `?purchase=success`. The
    entitlement is granted by a webhook from Stripe to the *marketplace*, a
    separate round trip, so the page reads the quote again and says so rather
@@ -248,11 +250,16 @@ start with.
 
 What differs on the engine path:
 
-- `payment_required` becomes the same "hasn't been bought on this account"
-  error a 402 from `acquireListing` raises. Other refusals (a 409 for an
-  unpriced or superseded listing, a 404) reach the browser as a ConvexError
-  carrying the engine's message, because capnweb passes only an error's
-  message and the engine reports those refusals by throwing.
+- `payment_required` becomes the same "hasn't been bought in this
+  organization" error a 402 from `acquireListing` raises. Other refusals
+  arrive as a thrown error, because capnweb passes only an error's message.
+  The engine writes a marketplace refusal in the catalog error format
+  (`marketplace_http status=... code=...`), so `engineFailure` reads the code
+  back and tells it in written copy (`activation_limit`, `not_entitled`,
+  `buyer_mismatch`, and the codes acquire refuses with); an unknown code gets
+  a generic line, and the raw text goes to the log. `listing_unavailable`
+  keeps the marketplace's message, which it writes for a person. An engine
+  failure that is not a marketplace refusal passes its message on as it is.
 - The engine acquires before it checks consent, so a module install that
   comes back `needs_approval` has already claimed a free listing.
 - The install key is only known once the engine has hashed the archive, so
@@ -262,6 +269,87 @@ What differs on the engine path:
   watches the key the action returns.
 - Reading one file of a module that is not installed still uses the archive
   fetched by Convex, because the engine has no call for it.
+
+## Licensed installs
+
+An engine that reports the `marketplace.licenseKeys` capability installs a
+module or theme listing with the organization's **license key**, and claims
+nothing itself. The browser runs the install as a state machine
+(`client/src/lib/install-flow.ts`), driven by `useLicensedModuleInstall` in
+`hooks/use-module-install.ts`.
+
+### The actions
+
+- **`marketplaceCatalog.acquireForInstall`** asks the marketplace's
+  `POST /catalog/{id}/acquire` for the organization's buyer. It answers one of
+  three outcomes (`convex/lib/marketplaceLicense.ts`): `licensed` with the
+  license (`key`, `listingId`, `edition`); `payment_required` with the purchase
+  intent to pay (id, amount, currency, `full` or `upgrade`, expiry), from a 402;
+  or `refused` with a reason and a line written for the streamer
+  (`acquireOutcomeOfError`). Asking again is safe: a held listing answers the
+  same key, an unpaid one the same intent. An acquire answer without a license
+  throws, because a marketplace that cannot issue keys cannot serve this flow.
+- **`marketplace.installWithLicense`** hands the key, the listing id and the
+  streamer's approvals to the engine's `installMarketplaceListing`. The engine
+  downloads the build with the key and checks the manifest it fetched against
+  the approvals, so the browser can neither substitute a file nor install a
+  permission nobody approved: a build asking for more answers `needs_approval`.
+- **`marketplaceCatalog.licenseKey`** reads the key the organization holds for
+  one listing from `GET /entitlements`, for the module page's key control.
+
+Any member may acquire and install. Only the organization's owner
+(`manageBilling`) may pay, and only its owner and admins (`viewBilling`) may
+read a key. Both are checked on the organization that owns the engine
+(`requireOrgActionOnInstanceInAction`), and the browser reads the same answer
+from `organizations.capabilitiesForInstance` through the session gateway's
+`useOrganizationAccess`.
+
+### The license key
+
+A key downloads the module, so it is a credential. It travels from the
+marketplace through Convex to the browser and on to the engine, and Convex
+neither logs nor stores it. The key control (`ModuleLicenseKey`) mounts only
+for a caller who may see keys, so anyone else is never sent one; it shows the
+key masked until asked.
+
+### The state machine
+
+`transition(state, event)` is pure: it returns the next state and at most one
+named command (`acquire`, `start_payment`, `open_checkout`, `install`), and
+the hook runs the command and feeds its answer back as an event. Each flow
+gets a generation, so a late answer from a flow the streamer left changes
+nothing.
+
+| Step | Means | Leaves on |
+|---|---|---|
+| `idle` | Nothing running | `install_requested` → `consenting`, or `acquiring` when nothing new needs approval |
+| `consenting` | The approval dialog is open | approve → `acquiring`; cancel → `idle` |
+| `acquiring` | `acquire` running | `licensed` answer → `installing`; `payment_required` → `needs_payment` (owner) or `failed` (anyone else); refused → `failed` |
+| `needs_payment` | Starting the checkout | a checkout URL → the browser goes to it |
+| `finalizing_payment` | Back from paying | acquire again |
+| `licensed` | Held after a payment, ready to install | dismissed → `idle` |
+| `installing` | The engine has the build; `moduleKey` once it accepted | the engine's report → `installed` or `failed`; `needs_approval` → `consenting` with only what is new |
+| `installed`, `failed` | Done | dismissed → `idle` |
+
+Consent comes before acquire, so a streamer who backs out claims nothing.
+Every command is idempotent, so a reload starts again from what the
+marketplace and the engine say.
+
+### Transitional paths
+
+These cover engines and purchases the licensed flow does not reach yet. Each
+must be deleted once its condition holds:
+
+- **The unlicensed install** (`useUnlicensedModuleInstall`, the Convex
+  `installModule` action) runs on an engine without `marketplace.licenseKeys`.
+- **The Convex download path** in `installFromMarketplace` fetches the archive
+  in Convex without a key. Both go once every engine reports the capability,
+  which nothing counts yet, and before the marketplace requires a key for every
+  download, which would break them.
+- **The marketplace's own Stripe checkout** (`marketplaceCatalog.createCheckout`,
+  `useStartPayment`) charges the marketplace's quote. It goes once purchases
+  are paid through the management plane's billing, which charges the purchase
+  intent itself, and before the marketplace deletes its Stripe checkout.
 
 ## Author pages
 
