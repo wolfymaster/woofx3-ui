@@ -1,12 +1,14 @@
 import { v } from "convex/values";
+import type { BillingInterval, LifecycleReason, PlanTier, SubscriptionState } from "./organization";
 
 /**
  * Entitlements: what an account's plan includes. A feature is a yes or no
  * ("advanced reports"); a limit is an amount ("asset storage, in bytes").
- * They belong to the account, whatever hosts its engines, and are enforced
+ * They belong to the organization and apply only to its hosted (managed)
+ * engines: a self-hosted engine needs no subscription and never offers a paid
+ * feature (lib/entitlementAccess.ts engineAvailability). They are enforced
  * where the thing they gate runs: Convex functions, cloud services, and the
- * resources maintenance provisions. An engine never enforces a plan; a
- * self-hosted engine has every capability its build has.
+ * resources maintenance provisions. An engine never enforces a plan.
  *
  * Which features and limits exist is code, because a feature means nothing
  * until code checks it. Which plans include them, and which plan each
@@ -35,6 +37,15 @@ export const ENTITLEMENT_FEATURES = {
   userPages: {
     description: "A public page for your channel",
   },
+  "userPages.customDomain": {
+    description: "Your public page on your own domain",
+  },
+  "marketplace.premiumIncluded": {
+    description: "woofx3 premium modules included",
+  },
+  business: {
+    description: "Back-office tools for running the business",
+  },
 } as const satisfies Record<string, EntitlementFeatureDefinition>;
 
 /** Every limit a plan or an account override can set. */
@@ -60,7 +71,32 @@ export const ENTITLEMENT_LIMITS = {
     unit: "bytes",
     default: 500 * 1024 * 1024,
   },
+  // Counts accountMembers, owner included; checked by orgSeatsFull whenever
+  // someone new would join the org (lib/entitlementAccess.ts).
+  "org.members": {
+    description: "People in the organization",
+    unit: "seats",
+    default: 5,
+  },
+  "analytics.retentionDays": {
+    description: "How long analytics are kept",
+    unit: "days",
+    default: 30,
+  },
 } as const satisfies Record<string, EntitlementLimitDefinition>;
+
+export interface AddOnDefinition {
+  description: string;
+  /** What the add-on grants. */
+  features: readonly EntitlementFeatureKey[];
+}
+
+/**
+ * Paid upgrades: bought one by one on Starter (the projection's `addOns`), all
+ * included on Pro.
+ */
+export const ADD_ONS = {} as const satisfies Record<string, AddOnDefinition>;
+export type AddOnKey = keyof typeof ADD_ONS;
 
 export type EntitlementFeatureKey = keyof typeof ENTITLEMENT_FEATURES;
 export type EntitlementLimitKey = keyof typeof ENTITLEMENT_LIMITS;
@@ -113,9 +149,49 @@ export interface AccountPlanRow {
   expiresAt?: number;
 }
 
+/**
+ * The org's subscription, as entitlements report it; null when it has none.
+ * `plan` is null for a billing projection that names no tier: its standing
+ * still decides usability, but no plan or add-on feature is granted.
+ */
+export interface SubscriptionSummary {
+  plan: PlanTier | null;
+  interval: BillingInterval | null;
+  state: SubscriptionState;
+  stateReason: LifecycleReason | null;
+  nextBillingAt: number | null;
+  graceEndsAt: number | null;
+  exemptUntil: number | null;
+}
+
+/** States in which the subscription's plan applies; `suspended` grants none. */
+export const USABLE_SUBSCRIPTION_STATES: readonly SubscriptionState[] = ["trialing", "active", "past_due", "exempt"];
+
+export function isUsable(subscription: SubscriptionSummary): boolean {
+  return USABLE_SUBSCRIPTION_STATES.includes(subscription.state);
+}
+
+/**
+ * The features add-ons grant on a usable subscription: every add-on on Pro,
+ * the ones bought on Starter. Unknown add-on keys grant nothing.
+ */
+export function addOnFeatures(
+  subscription: SubscriptionSummary | null,
+  addOns: readonly string[],
+  registry: Readonly<Record<string, AddOnDefinition>> = ADD_ONS
+): string[] {
+  if (subscription === null || subscription.plan === null || !isUsable(subscription)) {
+    return [];
+  }
+  const keys = subscription.plan === "pro" ? Object.keys(registry) : addOns.filter((key) => hasKey(registry, key));
+  return keys.flatMap((key) => registry[key]?.features ?? []);
+}
+
 export interface Entitlements {
   /** The plan the account is on; null when no plan applies, not even a default. */
   plan: { key: string; name: string } | null;
+  /** The org's subscription; null when it has none. */
+  subscription: SubscriptionSummary | null;
   features: string[];
   /** Every limit code knows, null meaning unlimited. */
   limits: Record<string, number | null>;
@@ -126,6 +202,14 @@ export interface Entitlements {
 export function isAssignmentActive(assignment: AccountPlanRow | null, nowMs: number): assignment is AccountPlanRow {
   return assignment !== null && (assignment.expiresAt === undefined || assignment.expiresAt > nowMs);
 }
+
+/** What the subscription adds to a resolution: itself, for reporting, and the features its add-ons grant. */
+export interface BillingGrant {
+  subscription: SubscriptionSummary | null;
+  grantedFeatures: readonly string[];
+}
+
+const NO_BILLING: BillingGrant = { subscription: null, grantedFeatures: [] };
 
 /**
  * Resolves what an account may use. `plan` is the plan that applies (the
@@ -139,11 +223,13 @@ export function resolveEntitlements(
   plan: PlanRow | null,
   assignment: AccountPlanRow | null,
   nowMs: number,
-  catalog: EntitlementCatalog = ENTITLEMENT_CATALOG
+  catalog: EntitlementCatalog = ENTITLEMENT_CATALOG,
+  billing: BillingGrant = NO_BILLING
 ): Entitlements {
+  const { subscription, grantedFeatures } = billing;
   const active = isAssignmentActive(assignment, nowMs) ? assignment : null;
   const known = (key: string) => hasKey(catalog.features, key);
-  const features = new Set((plan?.features ?? []).filter(known));
+  const features = new Set([...(plan?.features ?? []), ...grantedFeatures].filter(known));
   for (const feature of active?.addFeatures ?? []) {
     if (known(feature)) {
       features.add(feature);
@@ -168,6 +254,7 @@ export function resolveEntitlements(
 
   return {
     plan: plan ? { key: plan.key, name: plan.name } : null,
+    subscription,
     features: [...features].sort(),
     limits,
     ...(active?.expiresAt !== undefined ? { expiresAt: active.expiresAt } : {}),

@@ -193,7 +193,7 @@ export default function CommandEditor() {
         <EmptyState
           icon={MessageSquare}
           title="This command isn't here any more"
-          description="It was deleted, or the link is from another instance."
+          description="It was deleted, or the link is from another engine."
           action={{ label: "Back to commands", onClick: () => navigate(COMMAND_LIST_PATH) }}
         />
       </div>

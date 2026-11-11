@@ -12,9 +12,9 @@ Only owners and admins can import.
    - **Firebot**: a `.firebotsetup` file, or a backup zip from Settings > Backups. A backup is the whole profile, sounds and overlay files included, so only the JSON files the import reads are unzipped (with `fflate`). The profile Firebot was last signed into is used, and its files are gathered into the same `components` shape a setup file has.
    - **Streamer.bot**: an export string pasted from Import/Export, or a `.sb` file.
 2. **Convert and review.** The opened document is sent to `setupImports.analyze` in chunks, because Convex limits one string to 1 MiB. `analyze` converts it, then stores the result as a `setupImports` row with one `setupImportItems` row per engine object. Nothing reaches the engine yet. The panel shows each item with what it does and what could not come over.
-3. **Import.** `setupImports.start` queues it, and `setupImports.apply` creates the items in the background, reporting each item's outcome as it goes. The report stays on the page, and the instance's latest import is shown when the page is opened again.
+3. **Import.** `setupImports.start` queues it, and `setupImports.apply` creates the items in the background, reporting each item's outcome as it goes. The report stays on the page, and the engine's latest import is shown when the page is opened again.
 
-Converting does not need the catalog. Items name actions by canonical ref (`woofx3:action:chat.reply`) and triggers by event subject, the way starter packs do, so a file can be reviewed before the engine or its modules exist. The refs are resolved against the instance's catalog only when the import is applied.
+Converting does not need the catalog. Items name actions by canonical ref (`woofx3:action:chat.reply`) and triggers by event subject, the way starter packs do, so a file can be reviewed before the engine or its modules exist. The refs are resolved against the engine's catalog only when the import is applied.
 
 ## What comes over
 

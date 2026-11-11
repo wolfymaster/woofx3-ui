@@ -292,7 +292,7 @@ describe("installModuleThroughEngine", () => {
   test("payment_required is the refusal the Convex path's acquire raises for a 402", async () => {
     const t = moduleInstallDeps(async () => ({ status: "payment_required", name: "OBS Scenes", version: "1.4.2" }));
     const message = await convexErrorMessage(installModuleThroughEngine(t.deps, APPROVAL));
-    expect(message).toBe("OBS Scenes hasn't been bought on this account.");
+    expect(message).toBe("OBS Scenes hasn't been bought in this organization.");
     expect(message).toBe(
       acquireRefusal(new MarketplaceError(402, "payment_required", "payment required"), "OBS Scenes")
     );

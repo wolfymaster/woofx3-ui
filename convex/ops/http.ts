@@ -2,11 +2,14 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { httpAction } from "../_generated/server";
 import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops/auth";
+import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
+import { parseIdempotencyKey } from "../lib/ops/idempotency";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { type AssignmentRow, tallyPlanAccounts } from "../lib/ops/planCounts";
 import { matchOpsRoute } from "../lib/ops/routes";
 import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
+import { projectionIdempotencyKey } from "./billingProjection";
 
 /**
  * The ops API: what the internal backoffice reads about users, accounts and
@@ -50,9 +53,12 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(user);
     }
     case "accounts.list":
-      return ok(await ctx.runQuery(internal.ops.reads.searchAccounts, { q, cursor }));
+      return ok(await ctx.runQuery(internal.ops.reads.searchAccounts, { q, cursor, now: Date.now() }));
     case "accounts.get": {
-      const account = await ctx.runQuery(internal.ops.reads.getAccount, { accountId: route.accountId });
+      const account = await ctx.runQuery(internal.ops.reads.getAccount, {
+        accountId: route.accountId,
+        now: Date.now(),
+      });
       if (account === null) {
         return error(404, "not_found", "No such account");
       }
@@ -72,13 +78,16 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(await ctx.runQuery(internal.ops.reads.listEngines, { status, cursor }));
     }
     case "engines.moduleStorageLimits": {
-      return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor }));
+      return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor, now: Date.now() }));
     }
     case "engines.eventPath": {
       return ok(await ctx.runQuery(internal.ops.reads.engineEventPaths, { cursor }));
     }
     case "engines.byMaintenanceId": {
-      const engine = await ctx.runQuery(internal.ops.reads.engineByMaintenanceId, { engineId: route.engineId });
+      const engine = await ctx.runQuery(internal.ops.reads.engineByMaintenanceId, {
+        engineId: route.engineId,
+        now: Date.now(),
+      });
       return engine === null ? error(404, "not_found", "No such engine") : ok(engine);
     }
     case "instances.health": {
@@ -158,6 +167,29 @@ export const opsHandler = httpAction(async (ctx, request) => {
       });
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
+    case "accounts.billingProjection": {
+      const parsed = parseBillingProjectionRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_billing_projection", parsed.message);
+      }
+      if (parsed.value.accountId !== route.accountId) {
+        return error(400, "invalid_billing_projection", "accountId must match the account in the path");
+      }
+      const idempotencyKey = parseIdempotencyKey(request.headers);
+      if (!idempotencyKey.ok) {
+        return error(400, "invalid_idempotency_key", idempotencyKey.message);
+      }
+      if (idempotencyKey.value !== projectionIdempotencyKey(route.accountId, parsed.value.version)) {
+        return error(400, "invalid_idempotency_key", "Idempotency-Key must be {accountId}:{version}");
+      }
+      const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, {
+        ...parsed.value,
+        actor: auth.actor,
+        // authenticateOps required a reason for this write.
+        auditReason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
     case "audit.list": {
       const actor = url.searchParams.get("actor") ?? undefined;
       const target = url.searchParams.get("target") ?? undefined;
@@ -181,6 +213,9 @@ const PROVISIONING_STATUSES: ReadonlySet<string> = new Set<ProvisioningStatus>([
   "failed",
   "deprovisioning",
   "deleted",
+  "stopping",
+  "stopped",
+  "starting",
 ]);
 
 function isProvisioningStatus(status: string): status is ProvisioningStatus {

@@ -33,6 +33,7 @@ export default defineConfig({
             { text: "Assets", link: "/ui/assets" },
             { text: "Scenes & overlays", link: "/ui/scenes" },
             { text: "Admin & team", link: "/ui/admin-team" },
+            { text: "Organization portal", link: "/ui/org-portal" },
             { text: "Importing from Firebot and Streamer.bot", link: "/ui/setup-imports" },
             { text: "Auth & onboarding", link: "/ui/auth-onboarding" },
             { text: "Viewer sign-in", link: "/ui/viewer-sign-in" },
@@ -65,6 +66,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { text: "Deploying to production", link: "/ops/deploy" },
+            { text: "Organization migration runbook", link: "/ops/org-migrations" },
             { text: "Pull request previews", link: "/ops/previews" },
             { text: "Companion releases", link: "/ops/companion-releases" },
             { text: "woofx3 releases", link: "/ops/woofx3-releases" },

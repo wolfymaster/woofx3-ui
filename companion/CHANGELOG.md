@@ -1,5 +1,52 @@
 # woofx3 desktop changelog
 
+## [0.6.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.5.0...woofx3-v0.6.0) (2026-11-10)
+
+### Features
+
+* **access:** the dashboard needs an engine ([978fbdd](https://github.com/wolfymaster/woofx3-ui/commit/978fbdde647d4694612a693ed413439fbdb5b7d3))
+* **billing:** call the management plane for checkout, portal and invoices ([b86adac](https://github.com/wolfymaster/woofx3-ui/commit/b86adac906be6348b8d2aea801eb03c9d3ac8161))
+* **billing:** finish checkout on the return page ([8e86925](https://github.com/wolfymaster/woofx3-ui/commit/8e86925f1cb67a1bead9c6e4260fc613f5fbae23))
+* **billing:** payment provider adapter with Stripe ([d1a8d1a](https://github.com/wolfymaster/woofx3-ui/commit/d1a8d1a68de3fe8d4440fbf880814791f60c21fd))
+* **billing:** warn the owner in-app and by email ([3c02dc4](https://github.com/wolfymaster/woofx3-ui/commit/3c02dc44a3f9a14ef8fa04384188a511c03f68ea))
+* **entitlements:** availability, plan, state and add-ons ([ce3132e](https://github.com/wolfymaster/woofx3-ui/commit/ce3132ea62070ed7d80bab0cd372215a1e205cb1))
+* **invites:** an invitation grants one engine ([08498bc](https://github.com/wolfymaster/woofx3-ui/commit/08498bca6c5fc0a42a98bc2bd6ed94d4394f8c89))
+* **onboarding:** start the trial before the engine is built ([61d482a](https://github.com/wolfymaster/woofx3-ui/commit/61d482ad427f3e016bdf1f48c15646ee30152c55))
+* **org-portal:** organization and billing pages at /org ([bcde52a](https://github.com/wolfymaster/woofx3-ui/commit/bcde52a60675a1fd82f9d2716268beaca8222d84))
+* **org-portal:** remove "Create another engine" from the Engines page ([4077218](https://github.com/wolfymaster/woofx3-ui/commit/40772186fc2380f01dbdd5208d86380ccbd91922))
+* **org-portal:** send ?start=trial without an engine to onboarding ([4e3bf1c](https://github.com/wolfymaster/woofx3-ui/commit/4e3bf1cbd26db7e580f2cf379077e86ad6fca710))
+* **org:** only the owner creates engines ([bfd5dbb](https://github.com/wolfymaster/woofx3-ui/commit/bfd5dbbee147ca27380be1f6249f85d1f9d32942))
+* **settings:** personal settings page ([ddb1584](https://github.com/wolfymaster/woofx3-ui/commit/ddb1584de3da98c76b527999720e7281ba492814))
+* **team:** show member emails to the org owner only, masked by default ([b8cde22](https://github.com/wolfymaster/woofx3-ui/commit/b8cde22304979cc1da34fb63c488ec8cca64a29f))
+* **team:** team lists this engine's members ([f59b1cf](https://github.com/wolfymaster/woofx3-ui/commit/f59b1cf715f9dff02fc7aba6d5ab3b39aef7834c))
+* **ui:** engine switcher in the profile menu ([3e00cb5](https://github.com/wolfymaster/woofx3-ui/commit/3e00cb54d81740cfa8ba52215b4222479dc9ef80))
+* **ui:** rename the engine in Engine Settings ([9f66c0b](https://github.com/wolfymaster/woofx3-ui/commit/9f66c0bf9c551a3b819357026312af729731cdd2))
+
+### Bug Fixes
+
+* **accept-invite:** log an unexpected accept failure with its request id ([fceabba](https://github.com/wolfymaster/woofx3-ui/commit/fceabba6e0154f2470821f72b11db61e4b8d24c8))
+* **access:** type the suspended reason from the entry ([3c98c6c](https://github.com/wolfymaster/woofx3-ui/commit/3c98c6cdb891d823a1d8b3bf61b8d5d119859f42))
+* **billing:** refuse checkout while an operator suspends the org ([51f2788](https://github.com/wolfymaster/woofx3-ui/commit/51f2788f57c1646336aae51e6fd2a31b3a7e88d3))
+* **billing:** retry ensure on the Convex scheduler and sharpen checkout copy ([5ad80c3](https://github.com/wolfymaster/woofx3-ui/commit/5ad80c335d86857bbc44c497b79d6164f6e2bf32))
+* **billing:** send a failing subscription to the portal, not checkout ([ef305b4](https://github.com/wolfymaster/woofx3-ui/commit/ef305b4c2acb83ac81e91a2a7dfe2b17483d52da))
+* **copy:** point at the profile menu's engine switch, not a workspace ([647e07c](https://github.com/wolfymaster/woofx3-ui/commit/647e07ce7ae40d3533b9b7c3ea4458210442cc60))
+* **deps:** bump convex to 1.46+ for the migrations runner ([44377fd](https://github.com/wolfymaster/woofx3-ui/commit/44377fdcf8240319747d411de1b9f3fc0e9ea42b))
+* **entitlements:** pass the clock into queries that resolve entitlements ([928b54b](https://github.com/wolfymaster/woofx3-ui/commit/928b54bb6e652a46b0e81f73b800654277127f07))
+* **invitations:** answer full seats and wrong account on accept as outcomes ([0be6d32](https://github.com/wolfymaster/woofx3-ui/commit/0be6d32f3b6eecdca7342bed39805ed80c626eaf))
+* **invites:** accept answers expected outcomes as values and the page explains them ([ef7e342](https://github.com/wolfymaster/woofx3-ui/commit/ef7e342f54f1a716e3cbd3e1500de8d0e08688bc))
+* **onboarding:** keep the plan prompt outside the org portal's build boundary ([c72f5be](https://github.com/wolfymaster/woofx3-ui/commit/c72f5be7496670a0b46fd4f83e304e9e555986e1))
+* **org-portal:** start a trial only for someone on no engine ([3c2303d](https://github.com/wolfymaster/woofx3-ui/commit/3c2303d876fe772696fe55bd9665901452be9f83))
+* **orgs:** show no seat limit for orgs with only self-hosted engines ([c8ced25](https://github.com/wolfymaster/woofx3-ui/commit/c8ced25bd57121bf378ff962b350cda67d40f998))
+* **portal:** handle a billing projection with no plan or a labelled discount ([2c691e6](https://github.com/wolfymaster/woofx3-ui/commit/2c691e6580a8807cfe5f7a5afe4e917a4f72f2c4))
+* **settings:** clear the password error when either field is edited ([ef080c6](https://github.com/wolfymaster/woofx3-ui/commit/ef080c6bc05bb02dae47d782a68facf8d2b86a30))
+* **settings:** tell a rate-limited password change from a wrong one ([af5c23b](https://github.com/wolfymaster/woofx3-ui/commit/af5c23b11beee6af0379fa75ccc92fc678a04700))
+* **team:** gate the invite page on the engine-admin check the server enforces ([1df0739](https://github.com/wolfymaster/woofx3-ui/commit/1df0739a3850cf5513661fc43abf7e0f534aad73))
+* **team:** keep the email toggle label stable and name the mask ([47c7002](https://github.com/wolfymaster/woofx3-ui/commit/47c7002285bf7756cfe864bf78f7086e2db55c8d))
+* **team:** pass the clock into invitations.listForEngine ([af5a0f8](https://github.com/wolfymaster/woofx3-ui/commit/af5a0f8c10f2588021eb963a728a450d6d3e227e))
+* **team:** show refusal messages instead of request ids ([8d062bb](https://github.com/wolfymaster/woofx3-ui/commit/8d062bbbefabd058885273f531a00f44eba7e245))
+* **ui:** cap engine names at 100 characters ([ebc7e38](https://github.com/wolfymaster/woofx3-ui/commit/ebc7e389367a8d3f845e09d1399b2108eb7fe49f))
+* **ui:** show a coded ConvexError's message ([df79c5d](https://github.com/wolfymaster/woofx3-ui/commit/df79c5d6a228f5609ec8a57959c6752d5d43dbe3))
+
 ## [0.5.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.4.0...woofx3-v0.5.0) (2026-11-10)
 
 ### Features

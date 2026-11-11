@@ -113,7 +113,7 @@ export default function Supporters() {
       {engineInstanceId ? (
         <SupportersView engineInstanceId={engineInstanceId} />
       ) : (
-        <p className="text-sm text-muted-foreground">No instance available yet.</p>
+        <p className="text-sm text-muted-foreground">No engine available yet.</p>
       )}
     </div>
   );

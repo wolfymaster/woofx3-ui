@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { SuspendedEngine } from "@/components/layout/suspended-engine";
 import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
@@ -37,22 +38,19 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
 }
 
 /**
- * Redirects users who haven't completed onboarding. Sits inside the shell and
+ * Redirects users who can't use the dashboard yet. Sits inside the shell and
  * gates only the content area, so the shell paints while the check is in flight.
  *
- * Onboarding is for getting an engine, so it is done once the user can reach
- * a registered instance, their own or one they were invited to. Someone who
- * only uses another account's instance, such as a moderator who does not
- * stream, never owns an account or an instance and is never sent there.
- *
- * An instance row alone is not onboarding done: a new user has one before
- * Twitch is connected, a managed engine has one from the moment provisioning
- * starts, and a failed bring-your-own registration leaves one behind too. Only
- * `clientId` says the handshake happened, which is what every screen past this
- * point depends on, so anything short of that goes back to onboarding, which
- * passes the user on to wherever setup is: connecting, or the overlay page while
- * the engine is built. That holds across a refresh or a return days later,
- * because all of it is read from the server.
+ * The dashboard needs an engine: where to go is the server's answer
+ * (`access.entry`). A user with no registered engine, their own or one they
+ * were invited to, is sent to onboarding, which passes them on to wherever
+ * setup is: connecting, or the overlay page while the engine is built. That
+ * holds across a refresh or a return days later, and for someone removed from
+ * their only engine. A selected engine that isn't usable is swapped for the
+ * one the server chose. A hosted engine whose organization is suspended shows
+ * the suspended page instead of its content. Someone who only uses another
+ * account's engine, such as a moderator who does not stream, is never sent to
+ * onboarding.
  *
  * The app also depends on Twitch, so an instance with no Twitch link goes to
  * setup until one exists. Only an owner or admin can connect it; anyone else
@@ -73,18 +71,26 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  */
 export function OnboardingGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
-  const { instance, instances, isLoading: instancesLoading } = useInstance();
+  const { instance, optimisticInstanceId, setInstance } = useInstance();
+  const entry = useQuery(api.access.entry, isAuthenticated ? { selectedInstanceId: optimisticInstanceId } : "skip");
+  const enteredEngine = entry?.kind === "engine" && entry.instanceId === instance?._id;
   const setup = useQuery(api.setup.status, instance ? { instanceId: instance._id } : "skip");
   const [location, navigate] = useLocation();
   const [onDashboard] = useRoute("/");
-  const hasRegisteredInstance = instances.some((candidate) => Boolean(candidate?.clientId));
-  const isChecking = instancesLoading || (instance !== null && setup === undefined);
-  const needsOnboarding = !hasRegisteredInstance;
+  const switching = entry?.kind === "engine" && !enteredEngine;
+  const isChecking = entry === undefined || entry === null || switching || (enteredEngine && setup === undefined);
+  const needsOnboarding = entry?.kind === "createEngine";
   const needsTwitch =
-    !needsOnboarding && setup !== undefined && setup !== null && setup.twitchRequired && setup.twitchUsername === null;
+    enteredEngine && setup !== undefined && setup !== null && setup.twitchRequired && setup.twitchUsername === null;
 
   useEffect(() => {
-    if (!isAuthenticated || isChecking) {
+    if (switching && entry?.kind === "engine") {
+      setInstance(entry.instanceId);
+    }
+  }, [switching, entry, setInstance]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isChecking || entry?.kind === "suspended") {
       return;
     }
     if (needsOnboarding) {
@@ -105,13 +111,15 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     if (overlayPageRedirects(setup.overlayPending, location)) {
       navigate(setupStepPath("overlay"));
     }
-  }, [isAuthenticated, isChecking, needsOnboarding, needsTwitch, setup, location, navigate]);
+  }, [isAuthenticated, isChecking, entry, needsOnboarding, needsTwitch, setup, location, navigate]);
 
   let content: ReactNode = children;
   if (isChecking) {
     content = <ContentPlaceholder onDashboard={onDashboard} />;
   } else if (needsOnboarding) {
     content = null;
+  } else if (entry?.kind === "suspended") {
+    content = <SuspendedEngine entry={entry} />;
   } else if (needsTwitch) {
     content = setup?.canManageSetup ? null : (
       <div className="max-w-lg mx-auto p-6">

@@ -1,6 +1,6 @@
 # Convex backend and HTTP surface (high level)
 
-Convex is the **multi-tenant control plane**: auth, accounts, instances, assets, workflows UI state, module repository, scenes, alerts, browser source keys, and **server-side proxy actions** to the engine.
+Convex is the **multi-tenant control plane**: auth, accounts, engines, assets, workflows UI state, module repository, scenes, alerts, browser source keys, and **server-side proxy actions** to the engine.
 
 ## Function modules (indicative)
 
@@ -9,24 +9,24 @@ Convex is the **multi-tenant control plane**: auth, accounts, instances, assets,
 | Identity & tenants | `auth.ts`, `users.ts`, `accounts.ts`, `instances.ts` |
 | Workflows (UI + sync) | `workflows.ts`, `workflowCatalog.ts`, `workflowCatalogContext.ts`, `starterPacks.ts`, `seeds/triggerActions.ts` |
 | Modules | `moduleRepository.ts`, `moduleEngine.ts`, `moduleWebhook.ts`, `moduleWidgets.ts`, `triggerDefinitions.ts`, `actionDefinitions.ts`, `inboundWebhooks.ts` (third-party webhook endpoints) |
-| Async realtime bus | `transientEvents.ts` — ephemeral per-instance `{correlationKey → progress/success/error}` entries used by the UI to observe async engine round-trips; TTL-cleaned by a scheduled mutation |
+| Async realtime bus | `transientEvents.ts` — ephemeral per-engine `{correlationKey → progress/success/error}` entries used by the UI to observe async engine round-trips; TTL-cleaned by a scheduled mutation |
 | Media | `assets.ts`, `folders.ts`, `lib/storage/*` |
 | Scenes & overlays | `scenes.ts`, `sceneActions.ts`, `browserSource.ts`, `compositionPreview.ts` |
 | Alert log | `engineAlerts.ts` (mirror of the engine's dispatch log, plus the Alerts dashboard's `overview` counters; rows older than seven days are deleted by a daily cron, `cleanupOld`), `alertActions.ts` (`replayAlert`, `skipCurrentAlert` and `clearAlertQueue` proxies) |
 | Platform | `twitchAuth.ts`, `chatCommands.ts`, `dashboardLayouts.ts` |
 | Engine connectivity | `engineHealth.ts`, `lib/engineInstanceUrl.ts`, `registration.ts` |
-| Companion app | `companionPairing.ts` (linking the signed-in desktop app), `companions.ts` (token-authenticated companion functions, the instance's one companion for the admin card, revoke), `lib/companionCodes.ts`, `lib/companionRecords.ts` — see [Companion app](/ui/companion) |
+| Companion app | `companionPairing.ts` (linking the signed-in desktop app), `companions.ts` (token-authenticated companion functions, the engine's one companion for the admin card, revoke), `lib/companionCodes.ts`, `lib/companionRecords.ts` — see [Companion app](/ui/companion) |
 
-## Instance access
+## Engine access
 
-An instance id is not a secret, so every public query, mutation and action that takes one (or a row id that resolves to one: a module, scene or resource) must check the caller's `instanceMembers` row. Being signed in is not enough. Use `requireInstanceRole` / `requireInstanceRoleInAction` (`lib/instanceAccess.ts`) where a refusal should throw, and `isInstanceMember` (`lib/teamAccess.ts`) in live queries that should answer a non-member with nothing. Roles are ordered in `lib/instanceRoles.ts`:
+An engine id is not a secret, so every public query, mutation and action that takes one (or a row id that resolves to one: a module, scene or resource) must check the caller's `instanceMembers` row. Being signed in is not enough. Use `requireInstanceRole` / `requireInstanceRoleInAction` (`lib/instanceAccess.ts`) where a refusal should throw, and `isInstanceMember` (`lib/teamAccess.ts`) in live queries that should answer a non-member with nothing. Roles are ordered in `lib/instanceRoles.ts`:
 
-- **member:** read everything on the instance and change its content (modules, module settings, resources, scenes, workflows, dashboards).
-- **admin or owner:** also change what the instance is bound to (engine registration, deletion, the linked Twitch channel, pairing a companion app).
+- **member:** read everything on the engine and change its content (modules, module settings, resources, scenes, workflows, dashboards).
+- **admin or owner:** also change what the engine is bound to (engine registration, deletion, the linked Twitch channel, pairing a companion app).
 
-Functions the companion app calls (`companions.self`, `heartbeat`, `unpair`) have no user session. They authenticate with the companion's device token instead of instance membership: only the token's SHA-256 hash is stored, the `companions` row is the credential, and a token with no row, or whose approver is no longer an admin, fails closed. See [Companion app](/ui/companion#tokens-and-revocation).
+Functions the companion app calls (`companions.self`, `heartbeat`, `unpair`) have no user session. They authenticate with the companion's device token instead of engine membership: only the token's SHA-256 hash is stored, the `companions` row is the credential, and a token with no row, or whose approver is no longer an admin, fails closed. See [Companion app](/ui/companion#tokens-and-revocation).
 
-Secret values stay off the client. Module `secret` settings and storage credentials are masked by the engine before they reach Convex. Platform tokens and the instance's `webhookSecret` are stripped from public queries. The instance `clientSecret` is the one exception: the browser's live engine WebSocket authenticates with it.
+Secret values stay off the client. Module `secret` settings and storage credentials are masked by the engine before they reach Convex. Platform tokens and the engine's `webhookSecret` are stripped from public queries. The engine `clientSecret` is the one exception: the browser's live engine WebSocket authenticates with it.
 
 Generated API types live in `convex/_generated/`. Follow **`convex/_generated/ai/guidelines.md`** when adding functions.
 
@@ -46,7 +46,7 @@ Paths evolve — read `http.ts` and the imported route modules when integrating.
 ## Engine vs Convex (reminder)
 
 - **UI → engine (sensitive / server):** Convex **actions** call the instance’s engine URL with its client credentials — not the browser.
-- **Engine → UI:** engine **events** reach Convex in batches through the maintenance event queue; the engine's **requests** hit `/api/webhooks/woofx3` with the instance’s callback token.
+- **Engine → UI:** engine **events** reach Convex in batches through the maintenance event queue; the engine's **requests** hit `/api/webhooks/woofx3` with the engine’s callback token.
 - **Browser ↔ engine (realtime):** **`WoofxTransport`** only — not used for Convex proxy calls.
 
 This file is only a map; precise contracts belong next to the functions and in `CLAUDE.md`.

@@ -131,7 +131,7 @@ function ChooseExport({ canImport, onRead }: { canImport: boolean; onRead: () =>
     <div className="space-y-5">
       {!canImport && (
         <Alert>
-          <AlertDescription>Only owners and admins of this instance can import a setup.</AlertDescription>
+          <AlertDescription>Only owners and admins of this engine can import a setup.</AlertDescription>
         </Alert>
       )}
 

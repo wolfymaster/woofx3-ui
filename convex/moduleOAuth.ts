@@ -102,12 +102,12 @@ export const start = action({
     }
     const role = await ctx.runQuery(internal.instances.memberRole, { instanceId, userId });
     if (role === null) {
-      throw new ConvexError("You are not a member of this instance.");
+      throw new ConvexError("You are not a member of this engine.");
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     const engine = engineCredentials(instance);
     if (!instance || !engine) {
-      throw new ConvexError("This instance is not connected to its engine yet.");
+      throw new ConvexError("This engine is not connected yet.");
     }
 
     const resolved = await resolveConnect(ctx, instance, engine, moduleId, integration);

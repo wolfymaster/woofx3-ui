@@ -41,7 +41,7 @@ export function TestEventPicker({ sections, selectedId, onSelect, id = "test-eve
         // replaced by choosing another, not by reopening the sheet.
         <p className="text-sm text-muted-foreground">
           {selectedId
-            ? "That trigger is no longer registered on this instance. Pick another one above."
+            ? "That trigger is no longer registered on this engine. Pick another one above."
             : "Pick a trigger to fire."}
         </p>
       )}

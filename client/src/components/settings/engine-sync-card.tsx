@@ -74,7 +74,7 @@ export function EngineSyncCard() {
         <CardTitle className="text-lg">Engine sync</CardTitle>
         <CardDescription>
           Brings this site up to date with everything on your engine. It runs on its own about every 8 hours while the
-          instance is in use.
+          engine is in use.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

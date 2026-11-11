@@ -564,7 +564,7 @@ function GroupsTab({
         <EmptyState
           icon={Users}
           title="No groups found"
-          description="Built-in groups are seeded by the engine for every application, so this usually means the instance hasn't synced yet. Create a custom group, or check the engine connection in Settings."
+          description="Built-in groups are seeded by the engine for every application, so this usually means the engine hasn't synced yet. Create a custom group, or check the engine connection in Settings."
           action={{ label: "Add Group", onClick: () => navigate(COMMAND_GROUP_NEW_ROUTE) }}
         />
       ) : (

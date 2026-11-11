@@ -5,7 +5,7 @@ import { acquireRefusal, contentRefusal, publicListingIsFree } from "./marketpla
 describe("acquireRefusal", () => {
   test("a listing that costs money has not been bought", () => {
     const err = new MarketplaceError(402, "payment_required", "this listing costs 900 usd for this buyer");
-    expect(acquireRefusal(err, "Cozy Alerts")).toBe("Cozy Alerts hasn't been bought on this account.");
+    expect(acquireRefusal(err, "Cozy Alerts")).toBe("Cozy Alerts hasn't been bought in this organization.");
   });
 
   test("an unavailable listing says why, in the marketplace's words", () => {
@@ -63,7 +63,7 @@ describe("publicListingIsFree", () => {
 describe("contentRefusal", () => {
   test("content the account does not hold has not been bought", () => {
     const err = new MarketplaceError(403, "not_entitled", "this account does not hold this listing");
-    expect(contentRefusal(err, "Cozy Alerts")).toBe("Cozy Alerts hasn't been bought on this account.");
+    expect(contentRefusal(err, "Cozy Alerts")).toBe("Cozy Alerts hasn't been bought in this organization.");
   });
 
   test("content refused for want of a token says so", () => {

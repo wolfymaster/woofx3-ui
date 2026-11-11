@@ -508,7 +508,7 @@ function ModuleUpload() {
 
   const handleInstall = useCallback(async () => {
     if (!instanceId) {
-      setInstallError("No instance selected. Please select an instance first.");
+      setInstallError("No engine selected. Please select an engine first.");
       return;
     }
 

@@ -21,7 +21,7 @@ Because writes round-trip through the engine, the UI is **eventually consistent*
 
 **Identity & keying:** the cache is keyed on `engineSceneId` (the engine's stable id) via the `by_engine_scene_id` index — never on `name` or a positional `.first()`. Routes use `engineSceneId` as the `:id` param (`getByEngineSceneId`). Webhook upserts/deletes are idempotent on redelivery.
 
-**Authorization:** scene actions and cache queries gate on instance membership (any role) — consistent with the engine having no user/role concept.
+**Authorization:** scene actions and cache queries gate on engine membership (any role) — consistent with the engine having no user/role concept.
 
 ## Layout
 

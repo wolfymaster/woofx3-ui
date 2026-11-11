@@ -106,7 +106,7 @@ async function connect(
     }
   }
   if (!context.clientId || !context.clientSecret) {
-    throw new ConvexError("This instance is not registered with its engine yet.");
+    throw new ConvexError("This engine is not registered yet.");
   }
   const { url, clientId, clientSecret } = context;
   return () => createEngineRpcSession<EngineApi & ConfigBundleEngineApi>(url, clientId, clientSecret);

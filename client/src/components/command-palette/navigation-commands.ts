@@ -65,12 +65,13 @@ function pageCommand(item: NavItem, section?: string): PaletteCommand {
  * Every destination in the menu for an instance hosted this way, in menu order, plus the
  * pages it only reaches by a link. Instance settings are left out for a non-admin.
  * `resourceKindItems` are the pages of the kinds installed modules declare, which the
- * menu lists under Alerts.
+ * menu lists under Alerts. The invite action is offered only when `canInviteTeammates`.
  */
 export function navigationCommands(
   hosting: InstanceHosting,
   isAdmin: boolean,
-  resourceKindItems: NavItem[] = []
+  resourceKindItems: NavItem[] = [],
+  canInviteTeammates = false
 ): PaletteCommand[] {
   const sections = sectionsFor([...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS], isAdmin);
   const pages: PaletteCommand[] = [];
@@ -97,7 +98,7 @@ export function navigationCommands(
     action: { type: "navigate", href: COMMAND_GROUPS_PATH },
   });
 
-  const create: PaletteCommand[] = [
+  const allCreate: PaletteCommand[] = [
     {
       id: "create:workflow",
       title: "New workflow",
@@ -153,6 +154,7 @@ export function navigationCommands(
       action: { type: "navigate", href: "/team/invite" },
     },
   ];
+  const create = allCreate.filter((command) => canInviteTeammates || command.id !== "create:invite");
 
   return [...pages, ...create];
 }

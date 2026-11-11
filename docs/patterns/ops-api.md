@@ -2,7 +2,7 @@
 
 ## Context
 
-The internal backoffice (woofx3-maintenance `backoffice/`) shows operators managed engines from the maintenance API. It also needs the users, accounts and instances behind them, and later has to change plans and act on customer engines. None of that is reachable from outside Convex:
+The internal backoffice (woofx3-maintenance `backoffice/`) shows operators managed engines from the maintenance API. It also needs the users, accounts and engines behind them, and has to act on customer engines. None of that is reachable from outside Convex:
 
 - Public functions are gated by Convex Auth and per-tenant roles. Adding a staff role to `users` would let a bug or a role change in this app turn a customer into an operator.
 - A deploy key can push code and read or write every table. That is far too much for a web app to hold.
@@ -25,6 +25,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
     - Responses are `{ data }` or `{ error: { code, message } }`, with no CORS headers.
     - Each is built field by field from `convex/lib/ops/dto.ts`. They never contain registration tokens, instance client ids or secrets, invitation tokens, OAuth or platform tokens, or session tokens.
     - A test walks every DTO for forbidden keys and for secret values.
+- **Billing is not edited here.** Subscriptions, exemptions, discounts, tier changes and suspensions are the management plane's, changed in its own operator tooling; this API only receives the projection it pushes, and offers no route to write any of it.
 - **Audit:** `opsAuditLog` records every write, in the same mutation as the change, and every read of a single user or account. It is indexed by time, operator and target.
 
 | Route | Returns |
@@ -32,10 +33,10 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
 | `GET /api/ops/users?q=&cursor=` | Users, newest first. `q` is an email address exactly, a Twitch user id exactly, or words of the name. |
 | `GET /api/ops/users/:id` | A user, their account and instance memberships, and how many sessions are active. |
 | `GET /api/ops/accounts?q=&cursor=` | Accounts with owner, member count, plan and managed engine count; `q` searches the name. |
-| `GET /api/ops/accounts/:id` | An account, its members, pending invitations, resolved entitlements, instances, and each instance's provisioning. |
+| `GET /api/ops/accounts/:id` | An account, its members, pending invitations, resolved entitlements, instances, and each instance's provisioning. Billing is not part of it: the management plane owns it. |
 | `GET /api/ops/engines?status=&cursor=` | Every `engineProvisioning` row, or those in one status, for drift checks against the maintenance API. |
 | `GET /api/ops/engines/module-storage-limits?cursor=` | Each managed engine's module storage limit (`storage.moduleStorageBytes` after its override), by maintenance engine id, a page at a time; `null` is unlimited. A page may hold fewer rows than its size: rows without a maintenance engine are skipped. The backoffice compares these with maintenance's replica sizes to flag engines over their limit. |
-| `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply). |
+| `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply), and `isLive`, whether its stream is live now. |
 | `GET /api/ops/instances/:id/health` | Live state, sync state, recent alerts and failing workflows. |
 | `GET /api/ops/audit?actor=&target=&cursor=` | The audit log, newest first, for one operator or one target. |
 | `GET /api/ops/plans` | Every plan with how many accounts are on it, resolved as entitlements are: an active assignment's plan, else the default. Walks every account and assignment a page per query, so it is not a single snapshot; the backoffice prices it for expected revenue. |
@@ -55,7 +56,15 @@ Operators also set what only an operator may:
 | Route | Does |
 |---|---|
 | `POST /api/ops/instances/:instanceId/storage-limits` | Replaces a managed engine's hosted storage override, `{ totalBytes?, fileBytes?, moduleStorageBytes? }` in bytes. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears the override. An engine someone else hosts answers `409 not_managed`. |
+| `POST /api/ops/accounts/:id/billing-projection` | The management plane's billing projection: tier (or `null`), add-ons, standing and its dates, `interval`, `exemptUntil`, `spinDownAt`, `hasProviderSubscription`, `discount` (`{ label }` or `null`) and entitlement overrides (`limits` values may be `null` for unlimited). `Idempotency-Key` must be `{accountId}:{version}`. Stored in `orgBilling` unless an equal or newer version is already held (`{ applied: false, version }`). Unknown fields, unknown override keys, a feature both added and removed, and a `trialing` standing with no `trialEndsAt` answer `400 invalid_billing_projection`, so Convex must learn a field before the plane sends it. Once an org has a projection it drives its entitlements; an org without one is gated as one with no subscription was before billing existed. An applied push is audited with the actor and reason. |
 
+- **Idempotency keys:** the billing projection push runs once per key, so the management plane can retry after a timeout or a `5xx`.
+    - It takes an `Idempotency-Key` header, `{accountId}:{version}`. Missing or malformed, it answers `400 invalid_idempotency_key`.
+    - A key belongs to one route and one organization, and to the validated body it first came with. The `X-Woofx3-Reason` header is not part of it.
+    - A repeat of a success answers the first `200` and its body again and changes nothing; it writes no audit row either. The same key with another body answers `409 idempotency_mismatch`. That is terminal: the plane must not retry it, and must send a higher version instead. (`in_progress` is the only retryable 409.)
+    - A refusal (`400`, `404`, `409`) does not use the key up: the same request can be sent again with it, and is decided afresh.
+    - The key is claimed and settled in `opsRequests`, in the same mutation as the write and its audit row. A claim left by a call that died is taken over after 15 minutes.
+    - Keys are kept 30 days, then deleted by a daily cleanup.
 - **One implementation:** both paths run `convex/lib/managedEngineActions.ts`. The provisioning row, the runs, the callbacks and a rollback are identical; only `upgrade.requestedBy` names the operator, as `{ operator: email }`.
 - **Not shown to the customer:** `provisioning.forInstance` strips `requestedBy`, and the customer sees the run like any other.
 - **No duplicates:** the maintenance API's idempotency keys come from the row's state, so a repeated request is answered by the run already started.

@@ -1,4 +1,6 @@
+import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
+import { useQuery } from "convex/react";
 import { ArrowLeft, ChevronRight, CornerDownLeft, Loader2 } from "lucide-react";
 import { type KeyboardEvent, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -16,6 +18,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import {
   inlineArgument,
   type PaletteSection,
@@ -26,6 +29,7 @@ import {
   SCOPE_PREFIXES,
 } from "@/lib/command-palette";
 import { $paletteRecents } from "@/lib/stores";
+import { teamInviteAccess } from "@/lib/team-invite-access";
 import { cn } from "@/lib/utils";
 import { navigationCommands } from "./navigation-commands";
 import type { PaletteCommand, PalettePrompt } from "./types";
@@ -103,9 +107,11 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
   const hosting = instance?.hosting;
   const isAdmin = useIsInstanceAdmin() ?? false;
   const resourceKindItems = useResourceKindNavItems();
+  const teamData = useQuery(api.engineMembers.listForEngine, instance?._id ? { instanceId: instance._id } : "skip");
+  const canInviteTeammates = teamInviteAccess(teamData) === "allowed";
   const navigation = useMemo(
-    () => navigationCommands(hosting, isAdmin, resourceKindItems),
-    [hosting, isAdmin, resourceKindItems]
+    () => navigationCommands(hosting, isAdmin, resourceKindItems, canInviteTeammates),
+    [hosting, isAdmin, resourceKindItems, canInviteTeammates]
   );
   const items = useItemCommands(instance);
   const actions = useActionCommands(instance, instances, setInstance);
@@ -154,7 +160,7 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
     } catch (err) {
       toast({
         title: `${label} failed`,
-        description: err instanceof Error ? err.message : String(err),
+        description: actionErrorMessage(err),
         variant: "destructive",
       });
     } finally {
@@ -344,7 +350,7 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
         )}
         <CommandInput value={query} onValueChange={changeQuery} placeholder={placeholder} data-testid="palette-input" />
         <CommandList className="max-h-[min(60vh,440px)]">
-          <CommandEmpty>{instance ? "Nothing matches." : "Nothing matches — pick an instance for more."}</CommandEmpty>
+          <CommandEmpty>{instance ? "Nothing matches." : "Nothing matches — pick an engine for more."}</CommandEmpty>
           {sections.map((section, sectionIndex) => (
             <div key={section.heading}>
               {sectionIndex > 0 && <CommandSeparator />}

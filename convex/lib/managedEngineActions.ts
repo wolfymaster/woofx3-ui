@@ -133,6 +133,9 @@ export async function retryManagedEngineRow(
   if (row.status === "deprovisioning") {
     throw new Error("This engine is being deleted");
   }
+  // Customer and operator retries both land here, so this one check keeps a
+  // suspended org's engine from being rebuilt.
+  await ctx.runQuery(internal.provisioningInternal.assertCanResumeEngine, { accountId: row.accountId });
 
   const redeploy = redeployRunFailed(row);
   if (row.publicUrl && !redeploy) {

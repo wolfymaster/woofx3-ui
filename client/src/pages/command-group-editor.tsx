@@ -160,7 +160,7 @@ export default function CommandGroupEditor() {
         <EmptyState
           icon={Users}
           title="This group isn't here any more"
-          description="It was deleted, or the link is from another instance."
+          description="It was deleted, or the link is from another engine."
           action={{ label: "Back to groups", onClick: () => navigate(COMMAND_GROUPS_PATH) }}
         />
       </div>

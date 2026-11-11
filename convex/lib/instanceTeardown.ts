@@ -36,7 +36,7 @@ export async function deleteInstanceAndEngine(ctx: ActionCtx, instance: Doc<"ins
     } catch (err) {
       if (!isEngineNotFound(err)) {
         throw new Error(
-          `Couldn't remove the managed engine, so the instance was kept: ${err instanceof Error ? err.message : String(err)}`
+          `Couldn't remove the managed engine, so the engine was kept: ${err instanceof Error ? err.message : String(err)}`
         );
       }
     }

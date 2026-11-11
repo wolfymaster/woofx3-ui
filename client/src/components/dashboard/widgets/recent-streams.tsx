@@ -90,7 +90,7 @@ export function RecentStreamsWidget() {
           <div className="py-8 px-3 text-center">
             <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
             <p className="text-sm text-muted-foreground">
-              {instanceId ? "No streams yet. A stream shows up here once you go live." : "No instance connected"}
+              {instanceId ? "No streams yet. A stream shows up here once you go live." : "No engine connected"}
             </p>
           </div>
         ) : (

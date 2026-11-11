@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { TwitchInviteCandidate } from "@convex/invitations";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { ArrowLeft, Copy, Link as LinkIcon, Loader2, Mail, Search, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
+import { teamInviteAccess } from "@/lib/team-invite-access";
 
 type InviteMethod = "twitch" | "email";
 type InviteRole = "admin" | "member";
@@ -27,23 +29,22 @@ type TwitchLookup =
 
 const TEAM_PATH = "/team";
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 function inviteUrl(token: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   return `${origin}/auth/accept-invite?token=${encodeURIComponent(token)}`;
 }
 
 /**
- * Invites one person to the account's team, by Twitch username or by email.
+ * Invites one person to the current engine's team, by Twitch username or by email.
  * A Twitch invite is only created after the inviter has seen who the name
  * belongs to, so a typo cannot hand access to a stranger.
  */
 export default function TeamInvite() {
   const { instance } = useInstance();
-  const accountId = instance?.accountId;
+  const instanceId = instance?._id;
+
+  const teamData = useQuery(api.engineMembers.listForEngine, instanceId ? { instanceId } : "skip");
+  const access = teamInviteAccess(teamData);
 
   const lookupTwitchUser = useAction(api.invitations.lookupTwitchUser);
   const createInvite = useAction(api.invitations.create);
@@ -65,29 +66,29 @@ export default function TeamInvite() {
   }
 
   async function runLookup() {
-    if (!accountId || login.trim() === "") {
+    if (!instanceId || login.trim() === "") {
       return;
     }
     setLookup({ state: "looking" });
     try {
-      const candidate = await lookupTwitchUser({ accountId, login });
+      const candidate = await lookupTwitchUser({ instanceId, login });
       setLookup(candidate ? { state: "found", candidate } : { state: "not-found" });
     } catch (err) {
-      setLookup({ state: "failed", message: errorMessage(err) });
+      setLookup({ state: "failed", message: actionErrorMessage(err) });
     }
   }
 
   async function submit(target: { kind: "twitch"; twitchUserId: string } | { kind: "email"; email: string }) {
-    if (!accountId) {
+    if (!instanceId) {
       return;
     }
     setSubmitting(true);
     try {
-      const { token } = await createInvite({ accountId, role, target });
+      const { token } = await createInvite({ instanceId, engineRole: role, target });
       setLink(inviteUrl(token));
       toast({ title: "Invitation created", description: "Share the link with your teammate." });
     } catch (err) {
-      toast({ title: "Could not invite", description: errorMessage(err), variant: "destructive" });
+      toast({ title: "Could not invite", description: actionErrorMessage(err), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -114,11 +115,26 @@ export default function TeamInvite() {
     </Button>
   );
 
-  if (!accountId) {
+  if (!instanceId) {
     return (
       <div className="p-6 lg:p-8 max-w-2xl mx-auto">
         <PageHeader title="Invite a team member" actions={backLink} />
-        <p className="text-sm text-muted-foreground">No instance available yet.</p>
+        <p className="text-sm text-muted-foreground">No engine available yet.</p>
+      </div>
+    );
+  }
+
+  if (access !== "allowed") {
+    return (
+      <div className="p-6 lg:p-8 max-w-2xl mx-auto">
+        <PageHeader title="Invite a team member" actions={backLink} />
+        {access === "loading" ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading" />
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="text-invite-not-allowed">
+            Only engine admins can invite people. Ask an admin of this engine to send the invitation.
+          </p>
+        )}
       </div>
     );
   }
@@ -307,8 +323,8 @@ function RoleField({ role, onChange }: { role: InviteRole; onChange: (role: Invi
       </Select>
       <p className="text-xs text-muted-foreground">
         {role === "admin"
-          ? "Can manage team settings and members."
-          : "Can use workflows, assets, and engine features for this account."}
+          ? "Can manage this engine, its settings and its team."
+          : "Can use this engine's alerts, scenes, media and other features."}
       </p>
     </div>
   );

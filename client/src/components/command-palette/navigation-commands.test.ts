@@ -46,4 +46,10 @@ describe("navigationCommands", () => {
     const ids = navigationCommands("external", true).map((command) => command.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  test("offers the invite action only to someone who can invite", () => {
+    const ids = (canInvite: boolean) => navigationCommands("external", true, [], canInvite).map((c) => c.id);
+    expect(ids(true)).toContain("create:invite");
+    expect(ids(false)).not.toContain("create:invite");
+  });
 });

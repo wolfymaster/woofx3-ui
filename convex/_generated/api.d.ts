@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as access from "../access.js";
 import type * as accountMembers from "../accountMembers.js";
 import type * as accounts from "../accounts.js";
 import type * as actionDefinitions from "../actionDefinitions.js";
@@ -17,6 +18,8 @@ import type * as alertActions from "../alertActions.js";
 import type * as alertCompositionActions from "../alertCompositionActions.js";
 import type * as alertCompositions from "../alertCompositions.js";
 import type * as auth from "../auth.js";
+import type * as billingBanner from "../billingBanner.js";
+import type * as billingCommands from "../billingCommands.js";
 import type * as browserSource from "../browserSource.js";
 import type * as chatCommandActions from "../chatCommandActions.js";
 import type * as chatCommandGroups from "../chatCommandGroups.js";
@@ -44,6 +47,7 @@ import type * as engineEvents from "../engineEvents.js";
 import type * as engineEventsHttp from "../engineEventsHttp.js";
 import type * as engineHealth from "../engineHealth.js";
 import type * as engineInfo from "../engineInfo.js";
+import type * as engineMembers from "../engineMembers.js";
 import type * as engineSync from "../engineSync.js";
 import type * as engineSyncInternal from "../engineSyncInternal.js";
 import type * as entitlements from "../entitlements.js";
@@ -59,6 +63,8 @@ import type * as instances from "../instances.js";
 import type * as integrationCredentials from "../integrationCredentials.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_alertQueueResults from "../lib/alertQueueResults.js";
+import type * as lib_billingBanner from "../lib/billingBanner.js";
+import type * as lib_billingClient from "../lib/billingClient.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
 import type * as lib_cleanupBatch from "../lib/cleanupBatch.js";
 import type * as lib_commandWorkflow from "../lib/commandWorkflow.js";
@@ -78,6 +84,7 @@ import type * as lib_engineEvents_move from "../lib/engineEvents/move.js";
 import type * as lib_engineInstanceUrl from "../lib/engineInstanceUrl.js";
 import type * as lib_engineObsStatus from "../lib/engineObsStatus.js";
 import type * as lib_engineRelay from "../lib/engineRelay.js";
+import type * as lib_engineSwitch from "../lib/engineSwitch.js";
 import type * as lib_engineSync_activity from "../lib/engineSync/activity.js";
 import type * as lib_engineSync_config from "../lib/engineSync/config.js";
 import type * as lib_engineSync_steps from "../lib/engineSync/steps.js";
@@ -115,6 +122,7 @@ import type * as lib_instanceAccess from "../lib/instanceAccess.js";
 import type * as lib_instanceRoles from "../lib/instanceRoles.js";
 import type * as lib_instanceTeardown from "../lib/instanceTeardown.js";
 import type * as lib_integrationClientId from "../lib/integrationClientId.js";
+import type * as lib_invitationEngine from "../lib/invitationEngine.js";
 import type * as lib_invitationTarget from "../lib/invitationTarget.js";
 import type * as lib_knownDiscoverers from "../lib/knownDiscoverers.js";
 import type * as lib_macroExecution from "../lib/macroExecution.js";
@@ -142,11 +150,16 @@ import type * as lib_oauthHandoff from "../lib/oauthHandoff.js";
 import type * as lib_oauthState from "../lib/oauthState.js";
 import type * as lib_ops_audit from "../lib/ops/audit.js";
 import type * as lib_ops_auth from "../lib/ops/auth.js";
+import type * as lib_ops_billingProjectionRequest from "../lib/ops/billingProjectionRequest.js";
 import type * as lib_ops_dto from "../lib/ops/dto.js";
+import type * as lib_ops_idempotency from "../lib/ops/idempotency.js";
 import type * as lib_ops_notificationRequest from "../lib/ops/notificationRequest.js";
 import type * as lib_ops_planCounts from "../lib/ops/planCounts.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
+import type * as lib_orgBilling from "../lib/orgBilling.js";
+import type * as lib_orgRoles from "../lib/orgRoles.js";
+import type * as lib_organization from "../lib/organization.js";
 import type * as lib_outboundTimeouts from "../lib/outboundTimeouts.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
@@ -216,13 +229,15 @@ import type * as macros from "../macros.js";
 import type * as marketplace from "../marketplace.js";
 import type * as marketplaceCatalog from "../marketplaceCatalog.js";
 import type * as marketplaceInstalls from "../marketplaceInstalls.js";
-import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
 import type * as migrations_backfillCommandActions from "../migrations/backfillCommandActions.js";
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
 import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
+import type * as migrations_index from "../migrations/index.js";
+import type * as migrations_invitations from "../migrations/invitations.js";
 import type * as migrations_moveEnginesToEventQueue from "../migrations/moveEnginesToEventQueue.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
+import type * as migrations_organizations from "../migrations/organizations.js";
 import type * as moderation from "../moderation.js";
 import type * as moduleAssets from "../moduleAssets.js";
 import type * as moduleDetail from "../moduleDetail.js";
@@ -244,12 +259,15 @@ import type * as notifications from "../notifications.js";
 import type * as oauthConnectHandoff from "../oauthConnectHandoff.js";
 import type * as obsStatus from "../obsStatus.js";
 import type * as ops_audit from "../ops/audit.js";
+import type * as ops_billingProjection from "../ops/billingProjection.js";
 import type * as ops_engines from "../ops/engines.js";
 import type * as ops_eventRate from "../ops/eventRate.js";
 import type * as ops_http from "../ops/http.js";
 import type * as ops_notifications from "../ops/notifications.js";
 import type * as ops_reads from "../ops/reads.js";
+import type * as ops_requests from "../ops/requests.js";
 import type * as ops_storageLimits from "../ops/storageLimits.js";
+import type * as organizations from "../organizations.js";
 import type * as pageIntros from "../pageIntros.js";
 import type * as pins from "../pins.js";
 import type * as plans from "../plans.js";
@@ -264,6 +282,7 @@ import type * as resources from "../resources.js";
 import type * as sceneActions from "../sceneActions.js";
 import type * as sceneWidgets from "../sceneWidgets.js";
 import type * as scenes from "../scenes.js";
+import type * as seeds_plans from "../seeds/plans.js";
 import type * as seeds_preview from "../seeds/preview.js";
 import type * as seeds_triggerActions from "../seeds/triggerActions.js";
 import type * as setup from "../setup.js";
@@ -290,6 +309,7 @@ import type * as userPageForms from "../userPageForms.js";
 import type * as userPageFormsHttp from "../userPageFormsHttp.js";
 import type * as userPages from "../userPages.js";
 import type * as userPagesPublic from "../userPagesPublic.js";
+import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 import type * as viewerAuthHttp from "../viewerAuthHttp.js";
 import type * as viewerFacts from "../viewerFacts.js";
@@ -313,6 +333,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  access: typeof access;
   accountMembers: typeof accountMembers;
   accounts: typeof accounts;
   actionDefinitions: typeof actionDefinitions;
@@ -322,6 +343,8 @@ declare const fullApi: ApiFromModules<{
   alertCompositionActions: typeof alertCompositionActions;
   alertCompositions: typeof alertCompositions;
   auth: typeof auth;
+  billingBanner: typeof billingBanner;
+  billingCommands: typeof billingCommands;
   browserSource: typeof browserSource;
   chatCommandActions: typeof chatCommandActions;
   chatCommandGroups: typeof chatCommandGroups;
@@ -349,6 +372,7 @@ declare const fullApi: ApiFromModules<{
   engineEventsHttp: typeof engineEventsHttp;
   engineHealth: typeof engineHealth;
   engineInfo: typeof engineInfo;
+  engineMembers: typeof engineMembers;
   engineSync: typeof engineSync;
   engineSyncInternal: typeof engineSyncInternal;
   entitlements: typeof entitlements;
@@ -364,6 +388,8 @@ declare const fullApi: ApiFromModules<{
   integrationCredentials: typeof integrationCredentials;
   invitations: typeof invitations;
   "lib/alertQueueResults": typeof lib_alertQueueResults;
+  "lib/billingBanner": typeof lib_billingBanner;
+  "lib/billingClient": typeof lib_billingClient;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
   "lib/cleanupBatch": typeof lib_cleanupBatch;
   "lib/commandWorkflow": typeof lib_commandWorkflow;
@@ -383,6 +409,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineInstanceUrl": typeof lib_engineInstanceUrl;
   "lib/engineObsStatus": typeof lib_engineObsStatus;
   "lib/engineRelay": typeof lib_engineRelay;
+  "lib/engineSwitch": typeof lib_engineSwitch;
   "lib/engineSync/activity": typeof lib_engineSync_activity;
   "lib/engineSync/config": typeof lib_engineSync_config;
   "lib/engineSync/steps": typeof lib_engineSync_steps;
@@ -420,6 +447,7 @@ declare const fullApi: ApiFromModules<{
   "lib/instanceRoles": typeof lib_instanceRoles;
   "lib/instanceTeardown": typeof lib_instanceTeardown;
   "lib/integrationClientId": typeof lib_integrationClientId;
+  "lib/invitationEngine": typeof lib_invitationEngine;
   "lib/invitationTarget": typeof lib_invitationTarget;
   "lib/knownDiscoverers": typeof lib_knownDiscoverers;
   "lib/macroExecution": typeof lib_macroExecution;
@@ -447,11 +475,16 @@ declare const fullApi: ApiFromModules<{
   "lib/oauthState": typeof lib_oauthState;
   "lib/ops/audit": typeof lib_ops_audit;
   "lib/ops/auth": typeof lib_ops_auth;
+  "lib/ops/billingProjectionRequest": typeof lib_ops_billingProjectionRequest;
   "lib/ops/dto": typeof lib_ops_dto;
+  "lib/ops/idempotency": typeof lib_ops_idempotency;
   "lib/ops/notificationRequest": typeof lib_ops_notificationRequest;
   "lib/ops/planCounts": typeof lib_ops_planCounts;
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
+  "lib/orgBilling": typeof lib_orgBilling;
+  "lib/orgRoles": typeof lib_orgRoles;
+  "lib/organization": typeof lib_organization;
   "lib/outboundTimeouts": typeof lib_outboundTimeouts;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
@@ -521,13 +554,15 @@ declare const fullApi: ApiFromModules<{
   marketplace: typeof marketplace;
   marketplaceCatalog: typeof marketplaceCatalog;
   marketplaceInstalls: typeof marketplaceInstalls;
-  "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
   "migrations/backfillCommandActions": typeof migrations_backfillCommandActions;
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
   "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
+  "migrations/index": typeof migrations_index;
+  "migrations/invitations": typeof migrations_invitations;
   "migrations/moveEnginesToEventQueue": typeof migrations_moveEnginesToEventQueue;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
+  "migrations/organizations": typeof migrations_organizations;
   moderation: typeof moderation;
   moduleAssets: typeof moduleAssets;
   moduleDetail: typeof moduleDetail;
@@ -549,12 +584,15 @@ declare const fullApi: ApiFromModules<{
   oauthConnectHandoff: typeof oauthConnectHandoff;
   obsStatus: typeof obsStatus;
   "ops/audit": typeof ops_audit;
+  "ops/billingProjection": typeof ops_billingProjection;
   "ops/engines": typeof ops_engines;
   "ops/eventRate": typeof ops_eventRate;
   "ops/http": typeof ops_http;
   "ops/notifications": typeof ops_notifications;
   "ops/reads": typeof ops_reads;
+  "ops/requests": typeof ops_requests;
   "ops/storageLimits": typeof ops_storageLimits;
+  organizations: typeof organizations;
   pageIntros: typeof pageIntros;
   pins: typeof pins;
   plans: typeof plans;
@@ -569,6 +607,7 @@ declare const fullApi: ApiFromModules<{
   sceneActions: typeof sceneActions;
   sceneWidgets: typeof sceneWidgets;
   scenes: typeof scenes;
+  "seeds/plans": typeof seeds_plans;
   "seeds/preview": typeof seeds_preview;
   "seeds/triggerActions": typeof seeds_triggerActions;
   setup: typeof setup;
@@ -595,6 +634,7 @@ declare const fullApi: ApiFromModules<{
   userPageFormsHttp: typeof userPageFormsHttp;
   userPages: typeof userPages;
   userPagesPublic: typeof userPagesPublic;
+  userSettings: typeof userSettings;
   users: typeof users;
   viewerAuthHttp: typeof viewerAuthHttp;
   viewerFacts: typeof viewerFacts;
@@ -639,138 +679,6 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  rateLimiter: {
-    lib: {
-      checkRateLimit: FunctionReference<
-        "query",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          count?: number;
-          key?: string;
-          name: string;
-          reserve?: boolean;
-          throws?: boolean;
-        },
-        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
-      >;
-      clearAll: FunctionReference<
-        "mutation",
-        "internal",
-        { before?: number },
-        null
-      >;
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
-      getValue: FunctionReference<
-        "query",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          key?: string;
-          name: string;
-          sampleShards?: number;
-        },
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          shard: number;
-          ts: number;
-          value: number;
-        }
-      >;
-      rateLimit: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          count?: number;
-          key?: string;
-          name: string;
-          reserve?: boolean;
-          throws?: boolean;
-        },
-        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
-      >;
-      resetRateLimit: FunctionReference<
-        "mutation",
-        "internal",
-        { key?: string; name: string },
-        null
-      >;
-    };
-    time: {
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
-    };
-  };
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
 };

@@ -241,7 +241,7 @@ export function viewerLayerStatus(state: StreamRecapEngineState, hasViewerValues
 function engineEventsProblem(result: Exclude<RecapTimelineEvents, { status: "ok" }>): string {
   switch (result.status) {
     case "unregistered":
-      return "This instance isn't registered with an engine.";
+      return "This engine isn't registered yet.";
     case "unknown_session":
       return "The engine no longer has this session.";
     case "rejected":

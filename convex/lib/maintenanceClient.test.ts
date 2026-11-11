@@ -5,6 +5,7 @@ import {
   currentRelease,
   deleteEngine,
   ensureCompanionRoute,
+  getEngine,
   isEngineNotFound,
   isMaintenanceConfigured,
   MaintenanceApiError,
@@ -128,6 +129,21 @@ describe("createEngine", () => {
 
     expect(error.code).toBe("http_error");
     expect(error.status).toBe(502);
+  });
+});
+
+describe("deadline", () => {
+  it("bounds every request with an abort signal, so a hung API can't outlive the action", async () => {
+    let signal: AbortSignal | null | undefined;
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      signal = init?.signal;
+      return new Response(JSON.stringify({ engine, run }), { status: 202 });
+    }) as typeof fetch;
+
+    await getEngine("eng_1");
+
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
   });
 });
 

@@ -57,22 +57,22 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
     return (
       <EmptyState
         icon={BellRing}
-        title="No instance connected"
-        description="Pick an instance from the workspace switcher to see what its alerts have been doing."
+        title="No engine connected"
+        description="Pick an engine with Switch engine in your profile menu to see what its alerts have been doing."
       />
     );
   }
 
   // The query answers null only when the signed-in user may not read this
-  // instance, which the workspace switcher should already prevent. Said out
-  // loud rather than left as an endless skeleton, because a page that waits
-  // forever is the hardest kind of broken to report.
+  // instance, which the profile menu's engine switch should already prevent.
+  // Said out loud rather than left as an endless skeleton, because a page that
+  // waits forever is the hardest kind of broken to report.
   if (overview === null) {
     return (
       <EmptyState
         icon={BellRing}
         title="Alerts are not readable here"
-        description="This account does not have access to the selected instance. Pick another from the workspace switcher."
+        description="You aren't on this engine's team. Pick another engine with Switch engine in your profile menu."
       />
     );
   }

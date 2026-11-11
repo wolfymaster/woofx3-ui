@@ -77,3 +77,48 @@ Without `PLATFORM_TOKEN_ENCRYPTION_KEY`, connecting Twitch and every Twitch call
 - **Convex**: there is no automatic rollback. Revert the change on `master` and merge; the revert deploys like any other commit. A schema change that existing documents cannot satisfy fails `convex deploy`, which also stops the UI job, so fix the data or the schema before retrying.
 
 A UI rollback that predates a Convex change can call functions whose arguments have since changed. Roll back both together when a change touched both.
+
+## Data migrations
+
+Tracked migrations use the `@convex-dev/migrations` component: each one is defined in a file under `convex/migrations/` and run by name through the runner (add `--prod` for production):
+
+```bash
+bunx convex run migrations/index:run '{"fn": "migrations/<file>:<name>"}'
+```
+
+The component records progress per migration:
+
+- **The runner returns before the migration is done.** A table larger than one batch (100 documents by default) keeps running in the background after the command prints `Migration started.` Watch it until `state` is `success`:
+  ```bash
+  bunx convex run --component migrations --watch lib:getStatus '{"names": ["migrations/<file>:<name>"]}'
+  ```
+- **Running it again is safe.** While it is in progress the runner only reports `Migration running.`; once finished it reports `Migration already done.` and changes nothing.
+- **Stopping and resuming.** `bunx convex run --component migrations lib:cancel '{"name": "migrations/<file>:<name>"}'` stops it after the current batch. Running the same `migrations/index:run` command again, without `reset`, resumes from the stored cursor. A migration that failed resumes the same way once the cause is fixed.
+- **`"reset": true` starts over from the first document.** It skips the in-progress check, so only use it when `lib:getStatus` shows the migration is not `inProgress`, for example to run a finished migration again after an operator fixed data by hand. Every migration here is idempotent, so a rerun only touches what still needs it.
+
+### Organization migrations
+
+These bring existing data to the organization model. Each one runs to `success` before the next (the chain below does that for you). The table lists them in the order they were designed; the command to run is in [Starting the chain](#starting-the-chain):
+
+| Step | Command `fn` | Why it goes here |
+|---|---|---|
+| M1 | `migrations/organizations:orgOwnerRows` | Gives each org its owner row and the owner its engines. M2 relies on the owner being known so it never makes the owner an admin. |
+| M2 | `migrations/organizations:orgMembershipFromEngines` | Puts every engine member in the engine's org; engine owners who do not own the org become org admins. |
+| M4 | `migrations/invitations:invitationEngineTarget` | Points pending invitations at an engine. Only needs M1 and M2 to have settled who is in each org. |
+| M5 | `migrations/organizations:checkOrgInvariantsAll` | Read-only report, run directly: `bunx convex run migrations/organizations:checkOrgInvariantsAll`. |
+
+M1 and M2 converge in either order. The chain below is still the one to use.
+
+Billing is not migrated here. The management plane owns subscriptions, trials and exemptions, and pushes each org's billing projection to Convex; its reconciler makes sure every org has one. An org with no projection yet is gated as an org with no subscription is: its entitlements are its operator plan assignment or the default plan, and nothing is refused.
+
+### Starting the chain
+
+Start it as soon as the "Deploy Convex" job goes green, while the UI image is still building. The migrations do not depend on each other, so they run in one chain (each starts when the previous one finishes):
+
+```bash
+bunx convex run migrations/index:run '{"fn":"migrations/organizations:orgOwnerRows","next":["migrations/organizations:orgMembershipFromEngines","migrations/invitations:invitationEngineTarget"]}'
+```
+
+Then watch the last one (`migrations/invitations:invitationEngineTarget`) with `lib:getStatus` until it reports `success`, and run M5 (`bunx convex run migrations/organizations:checkOrgInvariantsAll`). If one in the chain fails, the chain stops there: fix the cause and run the same command again; finished migrations are skipped.
+
+M5 returns `total` and a list of `violations`, each with an `invariant`, the `accountId` and, where it applies, the `userId` or `instanceId`. `total` must be `0` before the old plan-assignment shapes are removed. `overSeatLimit` lists orgs with more members than their plan's seats; that is on purpose (M2 keeps everyone who already had access) and is not a violation: those orgs keep their members and only stop taking new ones. What each violation means and how to resolve it is in [Organization migration runbook](./org-migrations.md).

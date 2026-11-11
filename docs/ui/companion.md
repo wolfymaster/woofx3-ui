@@ -7,9 +7,9 @@
 
 The woofx3 app (Tauri 2), the desktop build of woofx3, runs on the streamer's PC and lives in the tray. It has one window, **the dashboard** (`main`): the same dashboard as the web app, built for the desktop (`bun run build:desktop`). It opens at launch and from the tray's **Open woofx3** or a left click on the icon.
 
-The tray menu holds **Open woofx3**, a status line saying whether this computer is linked to an instance, **Restart to update to X** once an [update](#updates) is ready, and **Quit**. Everything else is in the dashboard.
+The tray menu holds **Open woofx3**, a status line saying whether this computer is linked to an engine, **Restart to update to X** once an [update](#updates) is ready, and **Quit**. Everything else is in the dashboard.
 
-The companion part holds outbound connections from that PC to woofx3, so it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC. Signed in to an account, the dashboard [links](#linking-the-desktop-app) the PC to its instance by itself. Once linked, it serves the [local endpoints](#integrations) of modules installed on its instance, such as OBS's WebSocket server, to a cloud engine through the relay, survives restarts, and [updates itself](#updates). It does not carry a local engine's traffic yet.
+The companion part holds outbound connections from that PC to woofx3, so it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC. Signed in to an account, the dashboard [links](#linking-the-desktop-app) the PC to its engine by itself. Once linked, it serves the [local endpoints](#integrations) of modules installed on its engine, such as OBS's WebSocket server, to a cloud engine through the relay, survives restarts, and [updates itself](#updates). It does not carry a local engine's traffic yet.
 
 ## Two products
 
@@ -103,7 +103,7 @@ While setup runs, the default seed (the overlay scene and alerts, `client/src/en
 
 Local mode's dashboard (`LocalDashboard.tsx`) is the hosted one with local mode's widget catalog (`client/src/lib/dashboard-widgets/local-catalog.ts`). It leaves out the widgets whose data only Convex keeps: pinned messages (their history). Its macro pad keeps its buttons on the engine and runs them there, but has no remote trigger URLs, which Convex serves. It has no getting started checklist or starter packs nudge either, which belong to an account's setup. A layout that names one of them shows it as not available here. The Starter Packs page itself is served, as are Logs (the engine's event log, without the hosted app's retrigger), Appearance and Integrations (linking Twitch with a code typed on any device).
 
-The dashboard's own data that Convex keeps per user or instance (which page intros were closed, the dashboard's layout, notes, pinned counters, highlights, the macro pad, stream info presets) local mode keeps in the engine's local UI settings (`client/src/engine/direct/ui-settings.ts`): one namespace per kind of data, read whole, cached, and refreshed by `ui.setting.changed`. An edit that must not lose another window's change is a read-modify-write against the revision it read, retried on a conflict; [the dashboard page](./dashboard.md#data-sources) lists its namespaces. The name an editor shows to others editing the same scene comes from the app root (`ViewerNameProvider`): the account's name when signed in, "This computer" in local mode.
+The dashboard's own data that Convex keeps per user or engine (which page intros were closed, the dashboard's layout, notes, pinned counters, highlights, the macro pad, stream info presets) local mode keeps in the engine's local UI settings (`client/src/engine/direct/ui-settings.ts`): one namespace per kind of data, read whole, cached, and refreshed by `ui.setting.changed`. An edit that must not lose another window's change is a read-modify-write against the revision it read, retried on a conflict; [the dashboard page](./dashboard.md#data-sources) lists its namespaces. The name an editor shows to others editing the same scene comes from the app root (`ViewerNameProvider`): the account's name when signed in, "This computer" in local mode.
 
 Stream recaps are served too, the list and a recap's page, from the engine's own session history; see [Stream recaps](./stream-recaps.md#local-mode). So is the dashboard's Recent Streams widget, and the Supporters page, whose Shout out sends at once since local mode keeps no shoutout queue; see [the overview](./overview.md).
 
@@ -111,7 +111,7 @@ The Marketplace tab is served too: the Installed view, a module's page, the stor
 
 ## Integrations
 
-A module that controls something on the streamer's network declares it in `local[]` (an endpoint with a protocol, the settings holding its host, port and password, and optionally how to discover it). The dashboard's controls are generated from those entries for the modules installed on the linked instance; nothing in them is written per integration. They appear in two places, both from `client/src/desktop/LocalConnections.tsx`: on a module's Settings tab (`ModuleLocalConnections`, replacing the status text of `LocalEndpointPanel`) and under **On this computer** on Admin > Integrations (`ThisComputerConnections`). They show only in the desktop app on the instance's linked computer, because addresses exist only there; anywhere else `LocalEndpointPanel` says what it can see from Convex. `LocalConnectionsGuide` asks once per endpoint nobody has set up, since the relay stays off until one is on. The Rust side (`companion/src-tauri/src/integrations.rs`) runs while the pairing is paired and confirmed, and stops with it.
+A module that controls something on the streamer's network declares it in `local[]` (an endpoint with a protocol, the settings holding its host, port and password, and optionally how to discover it). The dashboard's controls are generated from those entries for the modules installed on the linked engine; nothing in them is written per integration. They appear in two places, both from `client/src/desktop/LocalConnections.tsx`: on a module's Settings tab (`ModuleLocalConnections`, replacing the status text of `LocalEndpointPanel`) and under **On this computer** on Admin > Integrations (`ThisComputerConnections`). They show only in the desktop app on the engine's linked computer, because addresses exist only there; anywhere else `LocalEndpointPanel` says what it can see from Convex. `LocalConnectionsGuide` asks once per endpoint nobody has set up, since the relay stays off until one is on. The Rust side (`companion/src-tauri/src/integrations.rs`) runs while the pairing is paired and confirmed, and stops with it.
 
 It subscribes to `companionIntegrations.forCompanion` with the companion's token, and subscribes again with backoff if that fails or ends. The query lists each installed module's endpoints with their setting keys (never values), the copy Convex keeps of what the companion recorded, `manualKeys` (settings the streamer saved by hand), and `relayAvailable`. A deployment without these functions answers "Could not find public function", and the controls say "Local connections need a newer woofx3". Any other error text from Convex is replaced with a fixed message before it is logged or shown, since Convex's own messages can quote a function's arguments, the token among them.
 
@@ -149,11 +149,11 @@ An address gets there only from discovery on this PC or from the streamer confir
 
 A stream already open is checked again whenever the store or the installed modules change. Turning the endpoint off, confirming another address, using the discovered one instead, or uninstalling its module closes every stream whose endpoint no longer resolves to the address it dialled, with 4403.
 
-The file is written atomically. It is stamped with the companion id and instance id from `companions.self`, and a session for any other pairing ignores it and starts empty. Pairing the same installation to the same instance again keeps it, since approval updates that installation's companion row in place and its id does not change; the confirmed addresses exist only on this PC. It is deleted when the companion unpairs or is revoked.
+The file is written atomically. It is stamped with the companion id and engine id from `companions.self`, and a session for any other pairing ignores it and starts empty. Pairing the same installation to the same engine again keeps it, since approval updates that installation's companion row in place and its id does not change; the confirmed addresses exist only on this PC. It is deleted when the companion unpairs or is revoked.
 
 ### Filling in module settings
 
-For an enabled endpoint that dials the discovered address, the companion calls `companionIntegrationsActions.reportDiscovered` with host `127.0.0.1` and the discovered port, leaving out any key in `manualKeys`. It sends the password only with the opt-in on, and only when its SHA-256 differs from the digest it stored after the last successful send. The digest is dropped when the password setting becomes manual or stops being manual, so "Use the companion's value" in the browser sends it again. Convex writes only the settings `local[]` names, on modules installed on the companion's instance, and records them as provided by the companion. The companion sends a report only when its values or `manualKeys` changed, and waits 10 minutes before retrying a failed one, since reports are rate limited and every settings write makes the engine reconnect to OBS. An address the streamer typed may be another PC, so nothing is reported for it.
+For an enabled endpoint that dials the discovered address, the companion calls `companionIntegrationsActions.reportDiscovered` with host `127.0.0.1` and the discovered port, leaving out any key in `manualKeys`. It sends the password only with the opt-in on, and only when its SHA-256 differs from the digest it stored after the last successful send. The digest is dropped when the password setting becomes manual or stops being manual, so "Use the companion's value" in the browser sends it again. Convex writes only the settings `local[]` names, on modules installed on the companion's engine, and records them as provided by the companion. The companion sends a report only when its values or `manualKeys` changed, and waits 10 minutes before retrying a failed one, since reports are rate limited and every settings write makes the engine reconnect to OBS. An address the streamer typed may be another PC, so nothing is reported for it.
 
 ## The relay connection
 
@@ -163,7 +163,7 @@ How the relay ends a connection decides what the companion does next:
 
 | From the relay | The companion |
 |---|---|
-| Close 4001, or HTTP 409 `{"error":"displaced"}` at the upgrade | Stops: another companion for the instance took over |
+| Close 4001, or HTTP 409 `{"error":"displaced"}` at the upgrade | Stops: another companion for the engine took over |
 | Close 4000 | This companion connected again; reconnects with backoff |
 | HTTP 409 `{"error":"stale_credential"}` at the upgrade | Mints a fresh credential and retries with backoff |
 | Close 4401 | Mints again and reconnects |
@@ -173,7 +173,7 @@ How the relay ends a connection decides what the companion does next:
 | Not needed | No enabled endpoint, or integrations are not running |
 | Connecting, Connected | |
 | Retrying | "Retrying in N s" and the last error |
-| Displaced | Another companion connection for the instance took over. The companion does not take it back on its own; **Reconnect** does |
+| Displaced | Another companion connection for the engine took over. The companion does not take it back on its own; **Reconnect** does |
 | Refused | woofx3 would not issue a credential. The companion asks again when `forCompanion` changes, after 5 minutes, or on **Reconnect**. A revoked companion hears it from `companions.self` and unpairs |
 
 ## Local mode
@@ -246,28 +246,28 @@ The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/s
 
 ## Pairing
 
-The desktop app pairs by [linking itself](#linking-the-desktop-app) to the instance it is signed in to. It generates its own token: 32 bytes from the OS RNG, base64url, prefixed `wfxc_`, kept in the OS credential store (Credential Manager on Windows). Only the token's SHA-256 hash ever leaves the app, so no secret travels back to it and a lost response cannot strand a link.
+The desktop app pairs by [linking itself](#linking-the-desktop-app) to the engine it is signed in to. It generates its own token: 32 bytes from the OS RNG, base64url, prefixed `wfxc_`, kept in the OS credential store (Credential Manager on Windows). Only the token's SHA-256 hash ever leaves the app, so no secret travels back to it and a lost response cannot strand a link.
 
-The **installation id** is a UUID the app generates once and keeps in its app data directory. Linking from an installation that already has a row on that instance replaces that row's token, keeping its id, so linking the same PC again does not leave a duplicate.
+The **installation id** is a UUID the app generates once and keeps in its app data directory. Linking from an installation that already has a row on that engine replaces that row's token, keeping its id, so linking the same PC again does not leave a duplicate.
 
-The stored pairing (`core/src/stored_token.rs`) holds the token, whether it is confirmed, and the instance's name and id. A pairing stored before the id was kept has none until `companions.self` next names the instance. A stored token that was never confirmed, left by the code pairing older versions offered, is given up on start.
+The stored pairing (`core/src/stored_token.rs`) holds the token, whether it is confirmed, and the engine's name and id. A pairing stored before the id was kept has none until `companions.self` next names the engine. A stored token that was never confirmed, left by the code pairing older versions offered, is given up on start.
 
 ### Linking the desktop app
 
-When an admin or owner of the selected instance is signed in to the dashboard in the desktop app (companion mode), the app makes its computer that instance's companion by itself, with no code to approve and nothing to confirm. `client/src/desktop/AppLink.tsx` runs it; it is mounted in the hosted root only in the desktop build, so the web build and local mode never load it.
+When an admin or owner of the selected engine is signed in to the dashboard in the desktop app (companion mode), the app makes its computer that engine's companion by itself, with no code to approve and nothing to confirm. `client/src/desktop/AppLink.tsx` runs it; it is mounted in the hosted root only in the desktop build, so the web build and local mode never load it.
 
-1. The dashboard asks the host `companion_link_status`: the instance this computer is the confirmed companion of (its id and name), plus its installation id, device name and version. If that is the selected instance, nothing happens. A stored pairing that names no instance id is left alone too, since which instance it belongs to cannot be told.
+1. The dashboard asks the host `companion_link_status`: the engine this computer is the confirmed companion of (its id and name), plus its installation id, device name and version. If that is the selected engine, nothing happens. A stored pairing that names no engine id is left alone too, since which engine it belongs to cannot be told.
 2. `begin_app_link` generates a fresh token in the Rust process and keeps it in memory, not yet in the credential store. It returns only the token's hash, with the installation id, device name and version. Starting again replaces a token that never finished.
-3. The dashboard calls `companionPairing.linkSignedInApp` with the instance and those values. It requires the admin role on the instance, checks the hash, installation id, device name and version, and is rate limited per user. It writes the `companions` row already confirmed, approved by the caller, through `writeCompanionCredential` (`convex/lib/companionRecords.ts`), so this installation's existing row keeps its id and gets the new token. Calling it again with the same installation and hash changes nothing.
-4. `finish_app_link` gives up any previous pairing, stores the token as confirmed with the instance's name and id, and starts the paired session.
+3. The dashboard calls `companionPairing.linkSignedInApp` with the engine and those values. It requires the admin role on the engine, checks the hash, installation id, device name and version, and is rate limited per user. It writes the `companions` row already confirmed, approved by the caller, through `writeCompanionCredential` (`convex/lib/companionRecords.ts`), so this installation's existing row keeps its id and gets the new token. Calling it again with the same installation and hash changes nothing.
+4. `finish_app_link` gives up any previous pairing, stores the token as confirmed with the engine's name and id, and starts the paired session.
 
-If another installation is the instance's companion, `linkSignedInApp` writes nothing and answers with that computer's name and last-seen time. The dashboard asks "Use this computer for local connections?" in a small prompt the person can dismiss. Choosing this computer calls the mutation again with `replaceOtherComputer`, which replaces the other companion (see [One companion per instance](#one-companion-per-instance)); the other PC drops to Unpaired.
+If another installation is the engine's companion, `linkSignedInApp` writes nothing and answers with that computer's name and last-seen time. The dashboard asks "Use this computer for local connections?" in a small prompt the person can dismiss. Choosing this computer calls the mutation again with `replaceOtherComputer`, which replaces the other companion (see [One companion per engine](#one-companion-per-engine)); the other PC drops to Unpaired.
 
-The dashboard tries once per instance per run of the app. Anyone below admin is skipped without a word. A failure is shown with **Try again**, and never retried on its own.
+The dashboard tries once per engine per run of the app. Anyone below admin is skipped without a word. A failure is shown with **Try again**, and never retried on its own.
 
-### One companion per instance
+### One companion per engine
 
-An instance has at most one companion. Linking a different installation **replaces** the current companion: its row and presence row are deleted in the same transaction, and the old companion's `companions.self` subscription turns null, so it drops to Unpaired at once. Linking the same installation again updates the row in place and keeps its id. The app never replaces another computer without asking (see [Linking the desktop app](#linking-the-desktop-app)).
+An engine has at most one companion. Linking a different installation **replaces** the current companion: its row and presence row are deleted in the same transaction, and the old companion's `companions.self` subscription turns null, so it drops to Unpaired at once. Linking the same installation again updates the row in place and keeps its id. The app never replaces another computer without asking (see [Linking the desktop app](#linking-the-desktop-app)).
 
 Because there is only one companion, holding a confirmed companion row is the privilege, and a replacement is visible: the replaced computer drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows a link replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
 
@@ -279,9 +279,9 @@ Only the token's hash is stored. The `companions` row is the credential: a token
 - `companions.heartbeat` — every 60 seconds once confirmed. It writes `companionPresence`, a separate table, so the heartbeat does not re-run subscriptions that read the companion itself.
 - `companions.unpair` — the companion giving up its token, as when the desktop app links again. It clears its local token first, so an offline Convex never keeps it.
 - `companions.revoke` — an admin removing the companion from the Companion card. Deleting the row is the revocation.
-- `companions.forInstance` — the instance's companion for its members (null when there is none), with device, version, pairing date, last heartbeat and whether the device confirmed it.
+- `companions.forInstance` — the engine's companion for its members (null when there is none), with device, version, pairing date, last heartbeat and whether the device confirmed it.
 
-A companion acts with its approver's authority, so it stays paired only while the person who approved it is still an admin or owner of the instance. Removing them, or lowering them to member, unpairs it, the same rule as remote macro triggers. Deleting the instance deletes its companion and its presence row.
+A companion acts with its approver's authority, so it stays paired only while the person who approved it is still an admin or owner of the engine. Removing them, or lowering them to member, unpairs it, the same rule as remote macro triggers. Deleting the engine deletes its companion and its presence row.
 
 ## The Companion card
 
@@ -299,7 +299,7 @@ OBS <-ws 127.0.0.1:4455- Companion ==(outbound WSS)== Relay DO <==wss /bridge/<m
 
 1. The companion subscribes to `companionIntegrations.forCompanion({ token })`: each installed module's endpoints, the setting keys they name (never values), what the companion last recorded, which keys the streamer set by hand (`manualKeys`), and `relayAvailable`. Null unless the token is a confirmed companion's.
 2. It discovers what it can (OBS's port from obs-websocket's own config file) or the streamer confirms an address in the host's native dialog, and records it with `companionIntegrations.setEndpoint`. The companion keeps the address it dials in its own store; the copy in `companionEndpoints` is for display. Enabling needs an address.
-3. It fills in the module's settings with `companionIntegrationsActions.reportDiscovered`: only keys `local[]` names, only on modules installed on its instance, never a `manual` key, and nothing when the report is unchanged, since every setting write makes the engine reconnect. Provenance is read again right before each key is written, so a key the streamer saves by hand meanwhile is skipped. Convex never stores the password, and refuses one unless all of these hold:
+3. It fills in the module's settings with `companionIntegrationsActions.reportDiscovered`: only keys `local[]` names, only on modules installed on its engine, never a `manual` key, and nothing when the report is unchanged, since every setting write makes the engine reconnect. Provenance is read again right before each key is written, so a key the streamer saves by hand meanwhile is skipped. Convex never stores the password, and refuses one unless all of these hold:
    - the streamer opted in through the dashboard and the host's native dialog (`sharesPassword`);
    - the endpoint is turned on;
    - the endpoint's discoverer may hand this module a secret. The allowlist is in `convex/lib/knownDiscoverers.ts`; `obs-websocket` serves only `woofx3_obs`. Another module that declares the same discoverer still gets the host and port, never the password. The companion enforces the same table.
@@ -308,10 +308,10 @@ OBS <-ws 127.0.0.1:4455- Companion ==(outbound WSS)== Relay DO <==wss /bridge/<m
 
 ### Relay hostnames and credentials
 
-- **Hostnames.** Each instance's bridge is served on a hostname the maintenance API allocates (`PUT /v1/companion-routes/{instanceId}`, derived from the instance id, so idempotent), stored as `instances.companionHostname`. Convex checks only its shape (`c-` and twelve base32 characters, under any domain) and otherwise takes it as the API returns it. The companion itself connects to the fixed `RELAY_URL`.
-- **Changing the relay's domain.** The domain comes from the maintenance API's `PUBLIC_BASE_DOMAIN`. Convex caches the hostname and never asks again, so changing that domain requires clearing `companionHostname` on every instance. Each instance then allocates its hostname again on its next sync or credential request.
+- **Hostnames.** Each engine's bridge is served on a hostname the maintenance API allocates (`PUT /v1/companion-routes/{instanceId}`, derived from the engine id, so idempotent), stored as `instances.companionHostname`. Convex checks only its shape (`c-` and twelve base32 characters, under any domain) and otherwise takes it as the API returns it. The companion itself connects to the fixed `RELAY_URL`.
+- **Changing the relay's domain.** The domain comes from the maintenance API's `PUBLIC_BASE_DOMAIN`. Convex caches the hostname and never asks again, so changing that domain requires clearing `companionHostname` on every engine. Each engine then allocates its hostname again on its next sync or credential request.
 - **Credentials** are `wfxr1.<kid>.<claims>.<HMAC-SHA256>` (`convex/lib/relayCredential.ts`), lasting five minutes, minted only by Convex with `RELAY_SIGNING_KEY` / `RELAY_SIGNING_KEY_ID`; the relay holds the same key and checks them without a lookup. A companion credential is issued only to a confirmed companion with an endpoint to bridge, and is rate limited.
-- **The callback.** `relay.credential.requested` answers `{ relay: { bridgeOrigin, endpoints, credential, expiresAt } }`, or `{ relay: null }` when the instance bridges nothing, which makes the engine clear its relay configuration. The answer is never cached. A successful request is not logged at all, since an engine asks about every four minutes. A failure is logged and recorded in `engineEventLog` with the error, never a credential.
+- **The callback.** `relay.credential.requested` answers `{ relay: { bridgeOrigin, endpoints, credential, expiresAt } }`, or `{ relay: null }` when the engine bridges nothing, which makes the engine clear its relay configuration. The answer is never cached. A successful request is not logged at all, since an engine asks about every four minutes. A failure is logged and recorded in `engineEventLog` with the error, never a credential.
 
 ### Revocation
 
@@ -323,12 +323,12 @@ All three must hold, or the module settings page is unchanged and nothing is bri
 
 - Convex env has `RELAY_URL`, `RELAY_SIGNING_KEY` and `RELAY_SIGNING_KEY_ID`.
 - The maintenance API is configured (`MAINTENANCE_API_URL`, `MAINTENANCE_API_KEY`). A self-hosted dashboard without it offers no bridge.
-- The instance has a confirmed companion.
+- The engine has a confirmed companion.
 
 ### Data
 
-- `companionEndpoints`: per companion and endpoint, `enabled`, the display `address`, `discovered`, `sharesPassword`. Deleted with the companion, and with the module when it is uninstalled. Re-pairing the same installation to the same instance keeps them; the companion wipes its own store when it pairs to a different instance.
-- `moduleSettingProvenance`: per instance, module and setting key, `companion` (with `companionValue` for non-secrets) or `manual`. No row means never touched. Deleted when the module is uninstalled (`cascadeDeleteModuleRecord` in `convex/moduleWebhook.ts`) or the instance is deleted.
+- `companionEndpoints`: per companion and endpoint, `enabled`, the display `address`, `discovered`, `sharesPassword`. Deleted with the companion, and with the module when it is uninstalled. Re-pairing the same installation to the same engine keeps them; the companion wipes its own store when it pairs to a different engine.
+- `moduleSettingProvenance`: per engine, module and setting key, `companion` (with `companionValue` for non-secrets) or `manual`. No row means never touched. Deleted when the module is uninstalled (`cascadeDeleteModuleRecord` in `convex/moduleWebhook.ts`) or the engine is deleted.
 
 ### Keeping the engine in step
 
@@ -343,7 +343,7 @@ Every change goes through `scheduleRelaySync` (`convex/lib/companionEndpoints.ts
 
 Each call bumps `instances.relaySyncVersion`. A `syncEngine` run checks that version before it sends, and does nothing once a newer one exists, so an endpoint turned on and then off cannot reach the engine in reverse order. A failed run retries after 10 s, 60 s and 5 min.
 
-Every 15 minutes the `companion relay resync` cron (`companionRelay.resyncBridgedInstances`) sends the configuration again to each instance with an endpoint turned on. It pages through the enabled rows of `companionEndpoints` only, so an idle deployment costs one empty index read. This repairs an engine that restarted, or one whose session cleared its configuration with `setRelayConfig(null)`. The engine's own credential requests also heal it, since a `{ relay: null }` answer clears a configuration it should not hold.
+Every 15 minutes the `companion relay resync` cron (`companionRelay.resyncBridgedInstances`) sends the configuration again to each engine with an endpoint turned on. It pages through the enabled rows of `companionEndpoints` only, so an idle deployment costs one empty index read. This repairs an engine that restarted, or one whose session cleared its configuration with `setRelayConfig(null)`. The engine's own credential requests also heal it, since a `{ relay: null }` answer clears a configuration it should not hold.
 
 ## Companion states
 
@@ -356,7 +356,7 @@ Every type the dashboard receives or sends, the event names and the command name
 | `starting` | Before the stored token has been read |
 | `offline` | A token is stored but Convex has not answered within a few seconds, so whether it is still paired cannot be told |
 | `unpaired` | No token: the dashboard has not linked this computer, or the link was revoked |
-| `paired` | Linked. Carries the instance and whether Convex is connected |
+| `paired` | Linked. Carries the engine and whether Convex is connected |
 | `error` | The credential store failed, or the connection to Convex could not be opened |
 
 On start, a confirmed token resumes the paired session. An unconfirmed token, left by a code pairing nobody can finish any more, is given up and released on the server.
