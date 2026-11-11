@@ -51,6 +51,11 @@ export function useLicensedInstallRequest() {
   return useEngineGateway().modules.useLicensedInstallRequest();
 }
 
+/** The key an installed marketplace module is licensed with; null when there is none to show. */
+export function useModuleLicenseKeyRequest() {
+  return useEngineGateway().modules.useLicenseKeyRequest();
+}
+
 /** Installs a marketplace scene or alert bundle onto the engine. */
 export function useMarketplaceBundleInstallRequest() {
   return useEngineGateway().modules.useBundleInstallRequest();

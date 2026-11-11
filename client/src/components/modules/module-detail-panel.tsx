@@ -25,6 +25,7 @@ import { ListField } from "@/components/common/list-field";
 import { CreditsCard } from "@/components/marketplace/credits-card";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { ModuleFileContentView, ModuleFilesTab } from "@/components/modules/module-files";
+import { ModuleLicenseKey } from "@/components/modules/module-license-key";
 import {
   ModuleLocalEndpointList,
   ModuleLocalEndpointsSection,
@@ -50,7 +51,7 @@ import {
   useSyncModuleResourceInstancesRequest,
 } from "@/engine/hooks/use-module-resources";
 import { useModuleSettingsRequest, useUpdateModuleSettingRequest } from "@/engine/hooks/use-modules";
-import type { ManifestResourceKind, ManifestSettingField, ModuleId } from "@/engine/types";
+import type { ManifestResourceKind, ManifestSettingField, ModuleId, ModuleLicenseLookup } from "@/engine/types";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -134,6 +135,8 @@ interface ModuleDetailPanelProps {
   latestLocalEndpoints?: LocalEndpointSummary[] | null;
   /** Who the listing this module came from credits; empty for a module with no listing. */
   credits?: ListingCredit[];
+  /** An installed marketplace module, whose license key the rail offers. */
+  license?: ModuleLicenseLookup;
 }
 
 type TopTab = "details" | "definitions" | "files" | "settings" | "resources";
@@ -178,6 +181,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     localEndpoints,
     latestLocalEndpoints,
     credits = [],
+    license,
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
@@ -298,6 +302,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           <div className="w-56 shrink-0 space-y-4 overflow-y-auto">
             <CreditsCard credits={credits} listingName={module.name} compact />
             <ModuleMetaRail module={module} />
+            {license && <ModuleLicenseKey moduleId={license.moduleId} listingId={license.listingId} />}
           </div>
         </div>
       )}

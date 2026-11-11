@@ -142,3 +142,21 @@ export function acquireOutcomeOfError(err: unknown): AcquireForInstallResult | n
       return null;
   }
 }
+
+/**
+ * The key the account holds for `listingId` in a `GET /entitlements` answer
+ * (`licenses: [{listingId, source, key}]`), or null when it holds none.
+ */
+export function heldLicenseKey(payload: unknown, listingId: string): string | null {
+  const licenses = asRecord(payload).licenses;
+  if (!Array.isArray(licenses)) {
+    throw new Error("The marketplace answered entitlements without licenses");
+  }
+  for (const entry of licenses) {
+    const license = asRecord(entry);
+    if (license.listingId === listingId) {
+      return nonEmptyString(license.key);
+    }
+  }
+  return null;
+}

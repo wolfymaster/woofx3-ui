@@ -1607,6 +1607,13 @@ export type LicensedInstallOutcome =
   | { status: "installed"; moduleKey: string }
   | { status: "needs_approval"; unapproved: string[]; unapprovedLocalEndpoints: string[] };
 
+/** An installed marketplace module, as its license key is looked up: by engine module id or by listing. */
+export interface ModuleLicenseLookup {
+  /** The engine's id for the module: its manifest id. */
+  moduleId: string;
+  listingId: string;
+}
+
 /** What installing a marketplace bundle (a scene or an alert) made on the engine. */
 export interface MarketplaceBundleInstall {
   kind: "scene" | "alert";

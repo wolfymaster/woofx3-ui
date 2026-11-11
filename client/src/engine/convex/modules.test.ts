@@ -113,6 +113,15 @@ describe("modules.useLicensedInstallRequest", () => {
   });
 });
 
+describe("modules.useLicenseKeyRequest", () => {
+  test("reads the account's key for the module's listing", async () => {
+    result = "W3X-AAAA";
+    const read = renderInScope(() => convexModulesGateway.useLicenseKeyRequest());
+    expect(await read({ moduleId: "obs", listingId: "obs-v2" })).toBe("W3X-AAAA");
+    expect(calls).toEqual([{ name: "marketplaceCatalog:licenseKey", args: { instanceId, listingId: "obs-v2" } }]);
+  });
+});
+
 describe("modules.useDetailRequest", () => {
   test("asks for the detail of a marketplace id", async () => {
     result = { id: "listing-1", name: "OBS" };

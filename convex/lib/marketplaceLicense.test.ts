@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { MarketplaceError } from "./marketplaceApi";
-import { type AcquireForInstallResult, acquireOutcomeOfError, licensedFromAcquire } from "./marketplaceLicense";
+import {
+  type AcquireForInstallResult,
+  acquireOutcomeOfError,
+  heldLicenseKey,
+  licensedFromAcquire,
+} from "./marketplaceLicense";
 
 const LICENSE = { key: "W3X-AAAA-BBBB-CCCC", listingId: "cozy-alerts", edition: 1 };
 const INTENT = {
@@ -132,6 +137,33 @@ describe("acquireOutcomeOfError", () => {
         return;
       }
       expect(acquireOutcomeOfError(err)).toEqual(expected);
+    });
+  }
+});
+
+describe("heldLicenseKey", () => {
+  const licenses = [
+    { listingId: "cozy-alerts", source: "free", key: "W3X-AAAA" },
+    { listingId: "legacy", source: "grant", key: "" },
+  ];
+  const cases: { name: string; payload: unknown; listingId: string; expected: string | null | { throws: string } }[] = [
+    { name: "the key held for the listing", payload: { licenses }, listingId: "cozy-alerts", expected: "W3X-AAAA" },
+    { name: "a listing the account does not hold has none", payload: { licenses }, listingId: "other", expected: null },
+    { name: "an empty key is none", payload: { licenses }, listingId: "legacy", expected: null },
+    {
+      name: "a marketplace that sends no licenses cannot answer",
+      payload: { listingIds: ["cozy-alerts"] },
+      listingId: "cozy-alerts",
+      expected: { throws: "The marketplace answered entitlements without licenses" },
+    },
+  ];
+  for (const { name, payload, listingId, expected } of cases) {
+    test(name, () => {
+      if (expected !== null && typeof expected === "object") {
+        expect(() => heldLicenseKey(payload, listingId)).toThrow(expected.throws);
+        return;
+      }
+      expect(heldLicenseKey(payload, listingId)).toBe(expected);
     });
   }
 });

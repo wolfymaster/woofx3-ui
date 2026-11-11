@@ -13,6 +13,7 @@ import type {
   ModuleAsset,
   ModuleDetail,
   ModuleId,
+  ModuleLicenseLookup,
   ModuleProvenance,
   ModuleStorageUsage,
 } from "@/engine/types";
@@ -197,6 +198,12 @@ function useLicensedInstallRequest() {
   );
 }
 
+/** The account holds the license, so it is read from the marketplace by listing. */
+function useLicenseKeyRequest() {
+  const licenseKey = useInstanceAction(api.marketplaceCatalog.licenseKey);
+  return useCallback(({ listingId }: ModuleLicenseLookup) => licenseKey({ listingId }), [licenseKey]);
+}
+
 function useAssets(moduleId: ModuleId, kinds: readonly string[] | undefined): ModuleAsset[] | undefined {
   return useQuery(api.moduleAssets.listForModule, {
     moduleId: fromModuleId(moduleId),
@@ -255,6 +262,7 @@ export const convexModulesGateway: ModulesGateway = {
   useWorkflowsRequest,
   useMarketplaceInstallRequest,
   useLicensedInstallRequest,
+  useLicenseKeyRequest,
   useBundleInstallRequest,
   useStorageUsageRequest,
   useArchiveInstallRequest,

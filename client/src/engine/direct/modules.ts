@@ -8,6 +8,7 @@ import {
 } from "@shared/module-detail";
 import { declaredSettingsOnly } from "@shared/module-settings-visibility";
 import type { EngineModuleSummary, MarketplaceInstallRequest, MarketplaceListingInspection } from "@woofx3/api";
+import { ENGINE_CAPABILITIES } from "@woofx3/api/capabilities";
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
   EngineWorkflowOption,
@@ -20,6 +21,7 @@ import type {
   ModuleFileContent,
   ModuleFileList,
   ModuleId,
+  ModuleLicenseLookup,
   ModuleSettingValue,
   ModuleStorageUsage,
 } from "@/engine/types";
@@ -251,6 +253,16 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     }
   };
 
+  /** An engine with no account keeps the key it installed with; an engine too old for keys has none. */
+  const licenseKey = async ({ moduleId }: ModuleLicenseLookup): Promise<string | null> => {
+    const { capabilities } = await runtime.call("getEngineCapabilities", (api) => api.getEngineCapabilities());
+    if (!capabilities.includes(ENGINE_CAPABILITIES.marketplaceLicenseKeys)) {
+      return null;
+    }
+    const license = await runtime.call("getInstalledModuleLicense", (api) => api.getInstalledModuleLicense(moduleId));
+    return license?.key ?? null;
+  };
+
   const bundleInstall = async (listingId: string): Promise<MarketplaceBundleInstall> => {
     const result = await runtime.call("installMarketplaceBundle", (api) => api.installMarketplaceBundle(listingId));
     if (result.status === "payment_required") {
@@ -274,6 +286,7 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     useWorkflowsRequest: () => useEngineRequest(workflows),
     useMarketplaceInstallRequest: () => useEngineRequest(marketplaceInstall),
     useLicensedInstallRequest: () => useEngineRequest(licensedInstall),
+    useLicenseKeyRequest: () => useEngineRequest(licenseKey),
     useBundleInstallRequest: () => useEngineRequest(bundleInstall),
     useStorageUsageRequest: () => useEngineRequest(storageUsage),
     useArchiveInstallRequest: unsupportedRequest("modules.useArchiveInstallRequest"),
