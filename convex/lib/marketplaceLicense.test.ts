@@ -80,7 +80,7 @@ describe("acquireOutcomeOfError", () => {
       expected: {
         status: "refused",
         reason: "account_required",
-        message: "Sign in to your account to get this listing.",
+        message: "Sign in with your organization to get this listing.",
       },
     },
     {

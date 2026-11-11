@@ -6,6 +6,7 @@ import type {
   MarketplaceInstallRequest,
   MarketplaceListingInspection,
 } from "@woofx3/api";
+import { formatMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
 import { getFunctionName } from "convex/server";
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
@@ -424,6 +425,54 @@ describe("engineFailure", () => {
   test("keeps a ConvexError as it is", () => {
     const original = new ConvexError("already readable");
     expect(engineFailure(original)).toBe(original);
+  });
+
+  const unavailable = "Edition 2 replaces this listing.";
+  test.each([
+    [
+      "activation_limit",
+      409,
+      "This module's license is already on as many engines as it allows. Remove it from another engine, then try again.",
+    ],
+    [
+      "not_entitled",
+      403,
+      "This organization's license doesn't unlock this module. Reload the page, then install it again.",
+    ],
+    ["buyer_mismatch", 403, "This module's license belongs to another organization, so it can't be installed here."],
+    ["account_required", 401, "Sign in with your organization to get this listing."],
+    ["entitlement_revoked", 403, "Your access to this listing has ended, so it can't be installed again."],
+    ["downloads_blocked", 410, "This listing has been pulled from the marketplace and can't be installed."],
+    ["rate_limited", 429, "The marketplace is busy right now. Try again in a moment."],
+    ["payment_required", 402, "This module hasn't been bought in this organization yet."],
+    ["listing_not_found", 404, "This listing is no longer in the marketplace."],
+    ["module_not_found", 404, "This listing is no longer in the marketplace."],
+    ["listing_unavailable", 409, unavailable],
+    [
+      "install_id_required",
+      400,
+      "The marketplace refused this install. Try again, or contact woofx3 support if it keeps happening.",
+    ],
+  ])("a marketplace %s refusal is told in the streamer's words", (code, status, expected) => {
+    const err = engineFailure(
+      new Error(
+        formatMarketplaceCatalogError({
+          kind: "http",
+          status,
+          code,
+          message: code === "listing_unavailable" ? unavailable : "raw marketplace words",
+        })
+      )
+    );
+    expect(err.data).toBe(expected);
+  });
+
+  test.each([
+    ["timeout", "Your engine couldn't reach the marketplace. Try again in a moment."],
+    ["unreachable", "Your engine couldn't reach the marketplace. Try again in a moment."],
+    ["disabled", "Marketplace installs are turned off on this engine."],
+  ] as const)("a marketplace %s is told in the streamer's words", (kind, expected) => {
+    expect(engineFailure(new Error(formatMarketplaceCatalogError({ kind, message: "raw" }))).data).toBe(expected);
   });
 });
 

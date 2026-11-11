@@ -43,6 +43,19 @@ export type AcquireForInstallResult =
   /** Nobody may acquire it for this account now. `message` is written for the streamer. */
   | { status: "refused"; reason: AcquireRefusalReason; message: string };
 
+/**
+ * What the streamer is told for each refusal the marketplace makes by code,
+ * wherever it reaches them: from acquire here, or from the engine's install
+ * (`engineFailure`). The marketplace's own wording is meant for API callers.
+ */
+export const MARKETPLACE_REFUSAL_COPY = {
+  account_required: "Sign in with your organization to get this listing.",
+  entitlement_revoked: "Your access to this listing has ended, so it can't be installed again.",
+  not_found: "This listing is no longer in the marketplace.",
+  downloads_blocked: "This listing has been pulled from the marketplace and can't be installed.",
+  rate_limited: "The marketplace is busy right now. Try again in a moment.",
+} as const satisfies Partial<Record<AcquireRefusalReason, string>>;
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
@@ -108,18 +121,18 @@ export function acquireOutcomeOfError(err: unknown): AcquireForInstallResult | n
     }
     case 401:
       return err.code === "account_required"
-        ? { status: "refused", reason: "account_required", message: "Sign in to your account to get this listing." }
+        ? { status: "refused", reason: "account_required", message: MARKETPLACE_REFUSAL_COPY.account_required }
         : null;
     case 403:
       return err.code === "entitlement_revoked"
         ? {
             status: "refused",
             reason: "entitlement_revoked",
-            message: "Your access to this listing has ended, so it can't be installed again.",
+            message: MARKETPLACE_REFUSAL_COPY.entitlement_revoked,
           }
         : null;
     case 404:
-      return { status: "refused", reason: "not_found", message: "This listing is no longer in the marketplace." };
+      return { status: "refused", reason: "not_found", message: MARKETPLACE_REFUSAL_COPY.not_found };
     case 409:
       // The marketplace says why (unpriced, unpublished, replaced by a newer
       // edition), and writes that message for a person.
@@ -130,13 +143,13 @@ export function acquireOutcomeOfError(err: unknown): AcquireForInstallResult | n
       return {
         status: "refused",
         reason: "downloads_blocked",
-        message: "This listing has been pulled from the marketplace and can't be installed.",
+        message: MARKETPLACE_REFUSAL_COPY.downloads_blocked,
       };
     case 429:
       return {
         status: "refused",
         reason: "rate_limited",
-        message: "The marketplace is busy right now. Try again in a moment.",
+        message: MARKETPLACE_REFUSAL_COPY.rate_limited,
       };
     default:
       return null;
