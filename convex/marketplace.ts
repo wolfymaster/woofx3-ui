@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { unapprovedLocalEndpointIds } from "@shared/local-endpoints";
+import { type CatalogListing, isModuleListing, parseCatalogDetail } from "@shared/marketplace-catalog";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "@shared/marketplace-images";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "@shared/module-permissions";
 import { ConvexError, v } from "convex/values";
@@ -12,8 +13,10 @@ import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
+import { marketplaceGet, withClientErrors } from "./lib/marketplaceApi";
 import {
   type EngineCredentials,
+  type EngineModuleInstallDeps,
   installModuleThroughEngine,
   type MarketplaceInstallResult,
   marketplaceEngineSession,
@@ -450,6 +453,39 @@ export const getModule = action({
 
 export type { MarketplaceInstallResult };
 
+/** What `installModuleThroughEngine` needs to install `listing` on `engine` for `instanceId`. */
+function engineModuleInstallDeps(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  engine: EngineCredentials,
+  listing: CatalogListing
+): EngineModuleInstallDeps {
+  return {
+    engine: () => marketplaceEngineSession(engine),
+    buyerToken: () => buyerTokenFor(ctx, instanceId),
+    emitProgress: async (progress, since) => {
+      await ctx.runMutation(internal.transientEvents.emitUnlessNewer, {
+        instanceId,
+        correlationKey: progress.moduleKey,
+        type: "module.install",
+        status: "progress",
+        message: progress.message,
+        data: progress.data,
+        since,
+      });
+    },
+    recordInstall: async (moduleKey) => {
+      await ctx.runMutation(internal.marketplaceInstalls.record, {
+        instanceId,
+        moduleKey,
+        listingId: listing.id,
+        edition: listing.edition,
+      });
+    },
+    now: Date.now,
+  };
+}
+
 /**
  * Installs the marketplace's current build of a module on an engine, provided
  * every permission its archive declares is in `approvedPermissions` and every
@@ -478,41 +514,22 @@ async function installFromMarketplace(
   const viaEngine = await marketplaceModuleEngineFor(ctx, instanceId, marketplaceModuleId);
   if (viaEngine) {
     const { listing } = viaEngine;
-    return await installModuleThroughEngine(
-      {
-        engine: () => marketplaceEngineSession(viaEngine.engine),
-        buyerToken: () => buyerTokenFor(ctx, instanceId),
-        emitProgress: async (progress, since) => {
-          await ctx.runMutation(internal.transientEvents.emitUnlessNewer, {
-            instanceId,
-            correlationKey: progress.moduleKey,
-            type: "module.install",
-            status: "progress",
-            message: progress.message,
-            data: progress.data,
-            since,
-          });
-        },
-        recordInstall: async (moduleKey) => {
-          await ctx.runMutation(internal.marketplaceInstalls.record, {
-            instanceId,
-            moduleKey,
-            listingId: listing.id,
-            edition: listing.edition,
-          });
-        },
-        now: Date.now,
-      },
-      {
-        listingId: marketplaceModuleId,
-        listingName: listing.name,
-        manifestId: listingManifestId(listing),
-        approvedPermissions,
-        approvedLocalEndpoints,
-      }
-    );
+    return await installModuleThroughEngine(engineModuleInstallDeps(ctx, instanceId, viaEngine.engine, listing), {
+      listingId: marketplaceModuleId,
+      listingName: listing.name,
+      manifestId: listingManifestId(listing),
+      approvedPermissions,
+      approvedLocalEndpoints,
+    });
   }
 
+  // The Convex download path: Convex fetches the archive itself, without a
+  // license key, so it works only while the marketplace still serves free and
+  // held listings without one. It stays for engines on the dev tier or without
+  // buyer tokens, and for those without `marketplace.licenseKeys`. Delete it
+  // with the browser's unlicensed install (`useUnlicensedModuleInstall`) once
+  // every engine reports that capability, and before the marketplace requires
+  // a key for every download.
   const access = await marketplaceAccessForInstance(ctx, instanceId);
   const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`, access);
   const rawModule =
@@ -595,6 +612,25 @@ async function installFromMarketplace(
   }
 }
 
+/** The instance's engine, for a signed-in user who may act on the instance. */
+async function registeredEngineForUser(ctx: ActionCtx, instanceId: Id<"instances">): Promise<EngineCredentials> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new Error("Not authenticated");
+  }
+  const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, {
+    instanceId,
+    userId,
+  });
+  if (!bundle) {
+    throw new Error("Not authorized or instance not found");
+  }
+  if (!bundle.clientId || !bundle.clientSecret) {
+    throw new Error("Instance is not registered with the engine");
+  }
+  return { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret };
+}
+
 export const installModule = action({
   args: {
     instanceId: v.id("instances"),
@@ -611,25 +647,9 @@ export const installModule = action({
     ctx,
     { instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }
   ): Promise<{ moduleKey: string }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, {
-      instanceId,
-      userId,
-    });
-    if (!bundle) {
-      throw new Error("Not authorized or instance not found");
-    }
-    if (!bundle.clientId || !bundle.clientSecret) {
-      throw new Error("Instance is not registered with the engine");
-    }
-
     const result = await installFromMarketplace(ctx, {
       instanceId,
-      engine: { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret },
+      engine: await registeredEngineForUser(ctx, instanceId),
       marketplaceModuleId,
       approvedPermissions,
       approvedLocalEndpoints,
@@ -643,6 +663,52 @@ export const installModule = action({
     }
     return { moduleKey: result.moduleKey };
   },
+});
+
+/**
+ * Installs a module or theme listing the account holds, on an engine with the
+ * `marketplace.licenseKeys` capability, with the license key
+ * `acquireForInstall` answered. The engine downloads the build with the key
+ * and checks it against the approvals, so a build asking for more comes back
+ * as `needs_approval` and installs nothing. Engine failures throw with the
+ * engine's message.
+ */
+export const installWithLicense = action({
+  args: {
+    instanceId: v.id("instances"),
+    listingId: v.string(),
+    licenseKey: v.string(),
+    approvedPermissions: v.array(v.string()),
+    approvedLocalEndpoints: v.array(v.string()),
+  },
+  handler: async (
+    ctx,
+    { instanceId, listingId, licenseKey, approvedPermissions, approvedLocalEndpoints }
+  ): Promise<MarketplaceInstallResult> =>
+    withClientErrors(async () => {
+      const engine = await registeredEngineForUser(ctx, instanceId);
+      const payload = await marketplaceGet(
+        `/catalog/${encodeURIComponent(listingId)}`,
+        await marketplaceAccessForInstance(ctx, instanceId)
+      );
+      const listing = parseCatalogDetail(
+        payload && typeof payload === "object" ? (payload as { listing?: unknown }).listing : null
+      );
+      if (!listing) {
+        throw new ConvexError(`Marketplace listing ${listingId} was not found`);
+      }
+      if (!isModuleListing(listing.type)) {
+        throw new ConvexError(`${listing.name} is a ${listing.type} listing and does not install as a module`);
+      }
+      return await installModuleThroughEngine(engineModuleInstallDeps(ctx, instanceId, engine, listing), {
+        listingId: listing.id,
+        listingName: listing.name,
+        manifestId: listingManifestId(listing),
+        approvedPermissions,
+        approvedLocalEndpoints,
+        licenseKey,
+      });
+    }),
 });
 
 /**

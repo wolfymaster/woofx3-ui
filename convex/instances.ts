@@ -10,7 +10,7 @@ import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
-import { requireOrgAction } from "./lib/orgRoles";
+import { orgActionValidator, requireOrgAction, requireOrgActionFor } from "./lib/orgRoles";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
 import { markFirstRun } from "./provisioningInternal";
@@ -213,6 +213,22 @@ export const getMembership = internalQuery({
       .query("instanceMembers")
       .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
       .first();
+  },
+});
+
+/**
+ * The instance's organization when `userId` may take `action` in it; throws
+ * the `OrgRefusal` otherwise. For actions that act for an instance's
+ * organization, such as paying for or reading what it holds in the marketplace.
+ */
+export const requireOrgActionOnInstance = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users"), action: orgActionValidator },
+  handler: async (ctx, { instanceId, userId, action }): Promise<Id<"accounts">> => {
+    const instance = await ctx.db.get(instanceId);
+    if (instance === null) {
+      throw new ConvexError("Engine not found");
+    }
+    return (await requireOrgActionFor(ctx, instance.accountId, userId, action)).account._id;
   },
 });
 

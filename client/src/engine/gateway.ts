@@ -65,9 +65,12 @@ import type {
   FormSubmissionId,
   FormSubmissionQueueStatus,
   HostedStorageUsage,
+  InstallAcquireOutcome,
   InstalledModule,
   InstanceLiveState,
   KnownBoxArt,
+  LicensedInstall,
+  LicensedInstallOutcome,
   ListingQuote,
   Live,
   Macro,
@@ -89,6 +92,7 @@ import type {
   ModuleFileContent,
   ModuleFileList,
   ModuleId,
+  ModuleLicenseLookup,
   ModuleOAuthConnect,
   ModuleOAuthFinish,
   ModuleResourceInstance,
@@ -105,6 +109,7 @@ import type {
   NotRunningWorkflow,
   ObsStatus,
   OpenSessionRefresh,
+  OrganizationAccess,
   OverlayDoneOutcome,
   OverlayFacts,
   OverlayPresence,
@@ -113,6 +118,7 @@ import type {
   PinHistoryEntryId,
   PinnedMessage,
   PublishedTestEvent,
+  PurchaseCheckoutRead,
   ReadOptions,
   RecapClips,
   RecapMarkers,
@@ -493,6 +499,18 @@ export interface ModulesGateway {
     approvedLocalEndpoints: string[]
   ) => Promise<{ moduleKey: string }>;
   /**
+   * Installs or updates a module or theme listing the account holds, on an
+   * engine with the `marketplace.licenseKeys` capability. Rejects with the
+   * engine's reason when it refuses the install.
+   */
+  useLicensedInstallRequest(): (install: LicensedInstall) => Promise<LicensedInstallOutcome>;
+  /**
+   * The license key the module was installed with, or that the account holds
+   * for its listing; null when there is none to show. A credential: show it
+   * only when asked, and never log it.
+   */
+  useLicenseKeyRequest(): (module: ModuleLicenseLookup) => Promise<string | null>;
+  /**
    * Installs a marketplace bundle (a scene or an alert) onto the engine and
    * resolves with what it made. Rejects for a listing the instance may not install.
    */
@@ -535,6 +553,21 @@ export interface MarketplaceGateway {
   useEntitlementsRequest(): () => Promise<string[]>;
   /** Starts buying a listing, returning to `returnPath`, a path in this app, when done. */
   useCheckoutRequest(): (listingId: string, returnPath: string) => Promise<MarketplaceCheckout>;
+  /**
+   * Makes the account hold a listing it is about to install: claims a free
+   * one, confirms one held, or answers with the purchase to pay. Safe to ask
+   * again; the answer follows what the account holds.
+   */
+  useAcquireForInstallRequest(): (listingId: string) => Promise<InstallAcquireOutcome>;
+  /**
+   * Starts paying the purchase intent an acquire answered, through billing.
+   * The payment page returns the browser to the listing with
+   * `?checkout=done&checkoutId=...` (or `cancelled`). Rejects with billing's
+   * refusal, written for the streamer, for an intent it will not charge.
+   */
+  usePurchaseCheckoutRequest(): (intentId: string) => Promise<{ url: string; checkoutId: string }>;
+  /** Where a purchase checkout the browser came back from stands. Rejects only for an outage worth retrying. */
+  usePurchaseCheckoutStateRequest(): (checkoutId: string) => Promise<PurchaseCheckoutRead>;
 }
 
 /**
@@ -838,6 +871,8 @@ export interface SessionGateway {
    * reported yet. Gate on it through `useEngineCapability`.
    */
   useCapabilities(): Live<readonly string[]>;
+  /** What the caller may do in the organization that owns the scope's instance: null when they are not in it. */
+  useOrganizationAccess(): Live<OrganizationAccess | null>;
 }
 
 /**

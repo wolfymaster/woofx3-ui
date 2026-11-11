@@ -28,12 +28,18 @@ export function marketplaceBaseUrl(): string {
   return url.replace(/\/$/, "");
 }
 
-/** Raised for a non-2xx answer, carrying the marketplace's own error code. */
+/**
+ * Raised for a non-2xx answer, carrying the marketplace's own error code and
+ * the whole parsed body, for an answer that carries more than its error (a
+ * 402 from acquire carries the purchase intent). `body` is null when the
+ * answer was not JSON.
+ */
 export class MarketplaceError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
-    message: string
+    message: string,
+    readonly body: unknown = null
   ) {
     super(message);
     this.name = "MarketplaceError";
@@ -69,7 +75,7 @@ function errorFrom(status: number, body: string, path: string): MarketplaceError
     const parsed = JSON.parse(body) as { error?: { code?: unknown; message?: unknown } };
     const code = typeof parsed.error?.code === "string" ? parsed.error.code : "unknown";
     const message = typeof parsed.error?.message === "string" ? parsed.error.message : body;
-    return new MarketplaceError(status, code, message);
+    return new MarketplaceError(status, code, message, parsed);
   } catch {
     return new MarketplaceError(status, "unknown", `Marketplace request to ${path} failed: ${status}`);
   }

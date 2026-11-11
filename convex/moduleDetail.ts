@@ -3,6 +3,7 @@
 import {
   applyMarketplaceMetadata,
   installedDetail,
+  listingDeclarations,
   type MarketplaceMergeData,
   type ModuleDetailResult,
   manifestDeclarations,
@@ -88,15 +89,19 @@ export const getModuleDetail = action({
       marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`, access),
       readMarketplaceManifest(ctx, instanceId, moduleId, access),
     ]);
-    return { ...marketplaceDetail(moduleId, payload, manifest), ...manifestDeclarations(manifest) };
+    return {
+      ...marketplaceDetail(moduleId, payload, manifest),
+      ...(listingDeclarations(payload) ?? manifestDeclarations(manifest)),
+    };
   },
 });
 
 /**
  * Null when the archive cannot be read, which includes a paid module this
  * account has not bought: its archive is the product. The detail view still
- * renders: the permissions and local endpoints show as unknown, and functions
- * lose their file paths. Install does not depend on this read: it re-reads the
+ * renders: functions lose their file paths, and the permissions and local
+ * endpoints come from the listing, or show as unknown when the marketplace
+ * does not send them. Install does not depend on this read: it re-reads the
  * archive and refuses permissions the streamer did not approve.
  */
 async function readMarketplaceManifest(

@@ -18,7 +18,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { requireInstanceRoleInAction, requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import {
   MarketplaceError,
   marketplaceAuthed,
@@ -42,6 +42,12 @@ import {
   fetchListingContent,
   marketplaceAccessForInstanceId,
 } from "./lib/marketplaceEntitlement";
+import {
+  type AcquireForInstallResult,
+  acquireOutcomeOfError,
+  heldLicenseKey,
+  licensedFromAcquire,
+} from "./lib/marketplaceLicense";
 
 // The marketplace storefront, across every listing type.
 //
@@ -243,6 +249,58 @@ export const entitlements = action({
     }),
 });
 
+export type { AcquireForInstallResult };
+
+/**
+ * Makes the account hold a listing so it can be installed, after the
+ * streamer approved what it asks for: claims a free one, confirms one already
+ * held, and answers with its license key; one that costs money answers with
+ * the purchase to pay. Asking again is safe: a held listing answers with the
+ * same key, and an unpaid one with the same purchase.
+ *
+ * The key goes back to the browser, which hands it to `installWithLicense`;
+ * it is not kept here.
+ */
+export const acquireForInstall = action({
+  args: { instanceId: v.id("instances"), listingId: v.string() },
+  handler: async (ctx, args): Promise<AcquireForInstallResult> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      try {
+        return licensedFromAcquire(
+          await marketplaceAuthed(`/catalog/${encodeURIComponent(args.listingId)}/acquire`, "POST", { buyerRef })
+        );
+      } catch (err) {
+        const outcome = acquireOutcomeOfError(err);
+        if (outcome !== null) {
+          return outcome;
+        }
+        throw err;
+      }
+    }),
+});
+
+/**
+ * The license key the account holds for a listing, for the module page to
+ * show when asked; null when it holds none. Read from the marketplace each
+ * time and never kept here.
+ */
+export const licenseKey = action({
+  args: { instanceId: v.id("instances"), listingId: v.string() },
+  handler: async (ctx, args): Promise<string | null> =>
+    withClientErrors(async () => {
+      // The key downloads the module and is what the organization paid for,
+      // so it is shown to those who see the organization's billing.
+      await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "viewBilling");
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      return heldLicenseKey(
+        await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET"),
+        args.listingId
+      );
+    }),
+});
+
 export type CheckoutResult =
   | { status: "redirect"; url: string }
   /** Already bought. The button becomes Install without a round trip to Stripe. */
@@ -271,7 +329,15 @@ function returnUrl(returnPath: string): string {
   return `${base}${returnPath}`;
 }
 
-/** Starts a Stripe checkout for a paid listing. */
+/**
+ * Starts the marketplace's own Stripe checkout for a paid listing.
+ *
+ * Transitional: the management plane's billing charges a purchase intent by
+ * its id instead (`billingCommands.startMarketplaceCheckout`), and module
+ * installs on an engine with license keys already pay that way. Delete this
+ * once overlay and alert bundles and engines without license keys pay through
+ * billing too, and before the marketplace deletes its Stripe checkout.
+ */
 export const createCheckout = action({
   args: {
     instanceId: v.id("instances"),
@@ -281,8 +347,9 @@ export const createCheckout = action({
   },
   handler: async (ctx, args): Promise<CheckoutResult> =>
     withClientErrors(async () => {
-      // A purchase spends the account's money, so it takes more than membership.
-      await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
+      // Payments are the organization's, so only who manages its billing may
+      // start one; any member may still acquire a listing that costs nothing.
+      await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "manageBilling");
       const buyerRef = await buyerRefFor(ctx, args.instanceId);
       const base = returnUrl(args.returnPath);
       const separator = base.includes("?") ? "&" : "?";

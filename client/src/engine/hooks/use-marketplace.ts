@@ -33,3 +33,18 @@ export function useMarketplaceEntitlementsRequest() {
 export function useMarketplaceCheckoutRequest() {
   return useEngineGateway().marketplace.useCheckoutRequest();
 }
+
+/** Makes the account hold a listing it is about to install; see `useLicensedInstallRequest`. */
+export function useMarketplaceAcquireForInstallRequest() {
+  return useEngineGateway().marketplace.useAcquireForInstallRequest();
+}
+
+/** Needs an account: pays the purchase intent an acquire answered, through billing. */
+export function useMarketplacePurchaseCheckoutRequest() {
+  return useEngineGateway().marketplace.usePurchaseCheckoutRequest();
+}
+
+/** Needs an account: where a purchase checkout the browser came back from stands. */
+export function useMarketplacePurchaseCheckoutStateRequest() {
+  return useEngineGateway().marketplace.usePurchaseCheckoutStateRequest();
+}

@@ -5,6 +5,8 @@ import {
   INITIAL_CHECKOUT_POLL,
   nextCheckoutPoll,
   parseCheckoutReturn,
+  purchaseReturnSettled,
+  withoutCheckoutReturn,
 } from "./checkout-return";
 
 describe("parseCheckoutReturn", () => {
@@ -78,5 +80,29 @@ describe("nextCheckoutPoll", () => {
     ["a timed out poll stays timed out", { phase: "timed_out" }, answered("complete"), { phase: "timed_out" }],
   ])("%s", (_name, poll, event, expected) => {
     expect(nextCheckoutPoll(poll, event, MAX)).toEqual(expected);
+  });
+});
+
+describe("withoutCheckoutReturn", () => {
+  test.each([
+    ["?checkout=done&checkoutId=c1", ""],
+    ["?tab=settings&checkout=done&checkoutId=c1", "?tab=settings"],
+    ["?purchase=success", ""],
+    ["?checkout=cancelled&checkoutId=c1&tab=readme", "?tab=readme"],
+    ["", ""],
+  ])("%p becomes %p", (search, expected) => {
+    expect(withoutCheckoutReturn(search)).toBe(expected);
+  });
+});
+
+describe("purchaseReturnSettled", () => {
+  test.each([
+    ["licensed", true],
+    ["installed", true],
+    ["finalizing_payment", false],
+    ["failed", false],
+    [undefined, false],
+  ])("%p settles the return: %p", (step, expected) => {
+    expect(purchaseReturnSettled(step)).toBe(expected);
   });
 });

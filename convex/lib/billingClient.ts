@@ -40,6 +40,14 @@ export const BILLING_REFUSAL_CODES = [
   // An operator-exempt org has nothing to buy.
   "exempt",
   "invalid_return_path",
+  // A module purchase: the marketplace's purchase intent is missing or another org's, redeemed or expired, too close
+  // to expiring to pay (acquiring again gives a fresh one), already paid, or for an amount billing cannot charge.
+  "intent_not_found",
+  "intent_not_payable",
+  "intent_expiring",
+  "intent_already_paid",
+  "intent_invalid",
+  "listing_unavailable",
 ] as const;
 export type BillingRefusalCode = (typeof BILLING_REFUSAL_CODES)[number];
 
@@ -53,6 +61,10 @@ export const BILLING_OUTAGE_CODES = [
   "payment_refused",
   "identity_unavailable",
   "subscription_not_found",
+  "marketplace_unavailable",
+  "marketplace_refused",
+  // Module purchases are not set up on the plane.
+  "marketplace_not_configured",
 ] as const;
 
 /** Failures between Convex and the plane that the plane did not decide. */
@@ -128,7 +140,8 @@ export interface Invoice {
   hostedUrl: string | null;
 }
 
-export const CHECKOUT_STATES = ["open", "awaiting_payment", "complete", "expired"] as const;
+/** `needs_review` is a module purchase that was paid but could not be granted; support settles it. */
+export const CHECKOUT_STATES = ["open", "awaiting_payment", "complete", "expired", "needs_review"] as const;
 export type CheckoutState = (typeof CHECKOUT_STATES)[number];
 
 export interface CheckoutView {
@@ -153,16 +166,29 @@ export interface CheckoutRequest {
   idempotencyKey: string;
 }
 
+export interface MarketplaceCheckoutRequest {
+  accountId: string;
+  /** The marketplace's purchase intent; the plane charges its amount, never one the caller names. */
+  intentId: string;
+  /** Stable across retries of one user intent; see `marketplaceCheckoutIdempotencyKey`. */
+  idempotencyKey: string;
+}
+
 export interface BillingClient {
   /** Starts the org's trial if it has no billing yet. Idempotent. */
   ensure(accountId: string): Promise<BillingResult<{ accountId: string; version: number }>>;
   startCheckout(request: CheckoutRequest): Promise<BillingResult<{ url: string; checkoutId: string }>>;
+  /** A checkout for a module purchase; paying it returns the buyer to the listing's page. */
+  startMarketplaceCheckout(
+    request: MarketplaceCheckoutRequest
+  ): Promise<BillingResult<{ url: string; checkoutId: string }>>;
   /** The plane returns the customer to its billing page; it also accepts a `returnPath`, which no page sends yet. */
   openPortal(accountId: string): Promise<BillingResult<{ url: string }>>;
   listInvoices(accountId: string): Promise<BillingResult<Invoice[]>>;
   /** `null` when no active code by that name exists. */
   lookupPromotionCode(code: string): Promise<BillingResult<AppliedDiscount | null>>;
-  checkoutState(checkoutId: string): Promise<BillingResult<CheckoutView>>;
+  /** `accountId` is the org the caller acts for; another org's checkout answers `checkout_not_found`. */
+  checkoutState(checkoutId: string, accountId: string): Promise<BillingResult<CheckoutView>>;
 }
 
 /** One `ensure` per org ever means one key per org. */
@@ -186,7 +212,23 @@ export async function checkoutIdempotencyKey(
   return `checkout:${request.accountId}:${request.tier}:${request.interval}:${codePart}:${windowStart}`;
 }
 
-/** Longest promotion code kept readable in a checkout key. */
+/**
+ * One key per org, purchase intent and window, as for plans: a retry or a double click gets the one checkout, and a
+ * later window a new one, since the plane replays a stored answer for as long as it keeps the key.
+ */
+export async function marketplaceCheckoutIdempotencyKey(
+  request: Pick<MarketplaceCheckoutRequest, "accountId" | "intentId">,
+  nowMs: number
+): Promise<string> {
+  const windowStart = Math.floor(nowMs / BILLING_CLIENT.checkoutKeyWindowMs) * BILLING_CLIENT.checkoutKeyWindowMs;
+  const intentPart =
+    request.intentId.length <= MAX_INLINE_CODE_LENGTH
+      ? encodeURIComponent(request.intentId)
+      : `sha256-${await sha256Hex(request.intentId)}`;
+  return `marketplace-checkout:${request.accountId}:${intentPart}:${windowStart}`;
+}
+
+/** Longest promotion code or intent id kept readable in a checkout key. */
 const MAX_INLINE_CODE_LENGTH = 40;
 
 async function sha256Hex(text: string): Promise<string> {
@@ -265,6 +307,18 @@ export class HttpBillingClient implements BillingClient {
     );
   }
 
+  startMarketplaceCheckout(request: MarketplaceCheckoutRequest) {
+    return this.send(
+      {
+        method: "POST",
+        path: `/v1/billing/accounts/${encodeURIComponent(request.accountId)}/marketplace-checkouts`,
+        idempotencyKey: request.idempotencyKey,
+        body: { intentId: request.intentId },
+      },
+      checkoutOpenedSchema
+    );
+  }
+
   openPortal(accountId: string) {
     return this.send(
       { method: "POST", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/portal-sessions` },
@@ -296,9 +350,12 @@ export class HttpBillingClient implements BillingClient {
     return result;
   }
 
-  checkoutState(checkoutId: string) {
+  checkoutState(checkoutId: string, accountId: string) {
     return this.send(
-      { method: "GET", path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}` },
+      {
+        method: "GET",
+        path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?accountId=${encodeURIComponent(accountId)}`,
+      },
       checkoutViewSchema
     );
   }

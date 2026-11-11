@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import type { AppliedDiscount } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
@@ -13,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
-import { billingView, checkoutRefusalAction } from "../billing-view";
 import {
   CHECKOUT_CANCELLED_TEXT,
   CHECKOUT_POLL,
@@ -23,7 +23,8 @@ import {
   INITIAL_CHECKOUT_POLL,
   nextCheckoutPoll,
   parseCheckoutReturn,
-} from "../checkout-return";
+} from "@/lib/checkout-return";
+import { billingView, checkoutRefusalAction } from "../billing-view";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "../format";
 import { useOrganization } from "../organization-context";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
@@ -208,7 +209,11 @@ function PlanChooser() {
 }
 
 /** Asks the plane how the checkout the customer just paid for stands until it settles or the bound is reached. */
-function useCheckoutPoll(checkoutId: string | null, reflected: boolean): CheckoutPoll | null {
+function useCheckoutPoll(
+  accountId: Id<"accounts">,
+  checkoutId: string | null,
+  reflected: boolean
+): CheckoutPoll | null {
   const checkoutState = useAction(api.billingCommands.checkoutState);
   const [poll, dispatch] = useReducer(
     (current: CheckoutPoll, event: CheckoutPollEvent) => nextCheckoutPoll(current, event, CHECKOUT_POLL.maxAttempts),
@@ -225,7 +230,7 @@ function useCheckoutPoll(checkoutId: string | null, reflected: boolean): Checkou
       async () => {
         let event: CheckoutPollEvent;
         try {
-          event = { type: "answered", state: (await checkoutState({ checkoutId })).state, reflected };
+          event = { type: "answered", state: (await checkoutState({ accountId, checkoutId })).state, reflected };
         } catch {
           // A failed ask is one spent attempt; the bound ends the polling.
           event = { type: "failed" };
@@ -240,7 +245,7 @@ function useCheckoutPoll(checkoutId: string | null, reflected: boolean): Checkou
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [checkoutId, checkoutState, settled, attempts, reflected]);
+  }, [accountId, checkoutId, checkoutState, settled, attempts, reflected]);
   return checkoutId === null ? null : poll;
 }
 
@@ -249,6 +254,7 @@ export default function BillingPage() {
   const checkoutReturn = parseCheckoutReturn(useSearch());
   const view = billingView(organization);
   const poll = useCheckoutPoll(
+    organization.accountId,
     checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null,
     view.kind === "provider_managed"
   );

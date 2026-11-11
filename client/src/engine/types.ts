@@ -1560,6 +1560,75 @@ export type MarketplaceCheckout =
 
 // ==================== Marketplace installs and starter packs ====================
 
+/** What the marketplace asks to be paid before the account holds a listing. `expiresAt` is ISO 8601. */
+export interface MarketplacePurchaseIntent {
+  id: string;
+  amountCents: number;
+  currency: string;
+  kind: "full" | "upgrade";
+  expiresAt: string;
+}
+
+/**
+ * Where billing's checkout for a purchase intent stands. `awaiting_payment` is
+ * a delayed payment method not settled yet; `needs_review` was paid but could
+ * not be granted, which support settles.
+ */
+export type PurchaseCheckoutState = "open" | "awaiting_payment" | "complete" | "expired" | "needs_review";
+
+/**
+ * What asking about a purchase checkout came to. `not_found` is decided, not
+ * an outage: billing has no such checkout for the organization that owns the
+ * scope's engine, or the caller may not ask for that organization. Asking
+ * again gets the same answer.
+ */
+export type PurchaseCheckoutRead = { kind: "state"; state: PurchaseCheckoutState } | { kind: "not_found" };
+
+/** Why the marketplace will not let this account hold a listing now. */
+export type InstallRefusalReason =
+  | "account_required"
+  | "entitlement_revoked"
+  | "downloads_blocked"
+  | "listing_unavailable"
+  | "not_found"
+  | "rate_limited";
+
+/** What asking to hold a listing before installing it came to. */
+export type InstallAcquireOutcome =
+  /**
+   * Held. `licenseKey` is what the engine downloads with; null where the
+   * engine claims the listing itself, as an engine without an account does.
+   */
+  | { status: "licensed"; licenseKey: string | null }
+  | { status: "payment_required"; intent: MarketplacePurchaseIntent }
+  /** `message` is written for the streamer. */
+  | { status: "refused"; reason: InstallRefusalReason; message: string };
+
+/** A module or theme listing to install with its license, and everything the streamer approved for it. */
+export interface LicensedInstall {
+  listingId: string;
+  licenseKey: string | null;
+  approvedPermissions: string[];
+  approvedLocalEndpoints: string[];
+}
+
+/**
+ * What the engine made of a licensed install. `installed` means it accepted
+ * the build: progress and the outcome follow under `moduleKey`
+ * (`transientEvents`). `needs_approval` installed nothing, because the build
+ * asks for more than was approved.
+ */
+export type LicensedInstallOutcome =
+  | { status: "installed"; moduleKey: string }
+  | { status: "needs_approval"; unapproved: string[]; unapprovedLocalEndpoints: string[] };
+
+/** An installed marketplace module, as its license key is looked up: by engine module id or by listing. */
+export interface ModuleLicenseLookup {
+  /** The engine's id for the module: its manifest id. */
+  moduleId: string;
+  listingId: string;
+}
+
 /** What installing a marketplace bundle (a scene or an alert) made on the engine. */
 export interface MarketplaceBundleInstall {
   kind: "scene" | "alert";
@@ -1890,3 +1959,15 @@ export type { ModerationActionRecord, ModerationConfig };
 
 /** The chat moderation config, or that the instance's engine is too old to moderate chat. */
 export type ChatModerationRead = { kind: "unsupported" } | { kind: "ready"; config: ModerationConfig };
+
+/**
+ * What the caller may do in the organization that owns the scope's instance.
+ * Payments and license keys are the organization's, so its role decides them,
+ * not the instance role.
+ */
+export interface OrganizationAccess {
+  /** See the organization's billing, and the license keys it holds. */
+  viewBilling: boolean;
+  /** Pay for the organization. */
+  manageBilling: boolean;
+}

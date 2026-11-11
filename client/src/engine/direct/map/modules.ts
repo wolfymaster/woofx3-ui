@@ -55,7 +55,7 @@ function slugged(items: unknown): Record<string, unknown>[] {
 
 /**
  * The marketplace module record the shared detail readers take
- * (`marketplaceDetail`, `marketplaceMetadataOf`), from the engine's
+ * (`marketplaceDetail`, `marketplaceMetadataOf`, `listingDeclarations`), from the engine's
  * `marketplaceGetListing` answer. That answer is the catalog's
  * `{listing}`, which keeps the listing's own fields at its top and what the
  * module declares under `listing.module`; the readers want both in one record.
@@ -77,6 +77,8 @@ export function catalogModuleRecord(payload: unknown): { module: Record<string, 
       actions: slugged(declared.actions),
       functions: declared.functions,
       widgets: slugged(declared.widgets),
+      permissions: declared.permissions,
+      localEndpoints: declared.localEndpoints,
     },
   };
 }

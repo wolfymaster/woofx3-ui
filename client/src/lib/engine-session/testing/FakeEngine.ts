@@ -3,6 +3,7 @@ import {
   type CallbackEnvelope,
   ENGINE_CAPABILITIES_SCHEMA,
   type EngineCapabilities,
+  type EngineCapability,
   type EngineEventFrame,
   type EngineEventMessage,
   type EngineEventSubscriber,
@@ -55,7 +56,7 @@ export class FakeApi extends RpcTarget implements FakeEngineSurface {
     this.engine.capabilityReads += 1;
     return {
       schema: this.engine.capabilitySchema as typeof ENGINE_CAPABILITIES_SCHEMA,
-      capabilities: supportedEngineCapabilities("local"),
+      capabilities: this.engine.capabilities ?? supportedEngineCapabilities("local"),
     };
   }
 
@@ -99,6 +100,8 @@ export class FakeEngine {
   clientSecret = "ab".repeat(32);
   /** The schema its capability report claims; another than the client reads makes it incompatible. */
   capabilitySchema: number = ENGINE_CAPABILITIES_SCHEMA;
+  /** The capability ids it reports; null reports what a local engine of this build supports. */
+  capabilities: EngineCapability[] | null = null;
   /** False makes every new session break before it answers, as an engine that is down does. */
   reachable = true;
   /** Methods that never answer, as an engine that hangs does. */

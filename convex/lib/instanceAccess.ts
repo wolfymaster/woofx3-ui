@@ -1,8 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx, QueryCtx } from "../_generated/server";
 import { type InstanceRole, roleSatisfies } from "./instanceRoles";
+import type { OrgAction, OrgRefusal } from "./orgRoles";
 import { getInstanceMembership } from "./teamAccess";
 
 // Guards for public functions that act on one instance. An instance id is not
@@ -46,4 +48,23 @@ export async function requireInstanceRoleInAction(
     throw new Error("Not authorized for this instance");
   }
   return userId;
+}
+
+/**
+ * The caller and the instance's organization when the caller's role in that
+ * organization allows `action`. For what belongs to the organization rather
+ * than the engine, such as payments and license keys: the organization role
+ * decides, not the instance role. Throws a `ConvexError<OrgRefusal>` otherwise.
+ */
+export async function requireOrgActionOnInstanceInAction(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  action: OrgAction
+): Promise<{ userId: Id<"users">; accountId: Id<"accounts"> }> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new ConvexError<OrgRefusal>({ code: "not_authenticated", message: "Not authenticated" });
+  }
+  const accountId = await ctx.runQuery(internal.instances.requireOrgActionOnInstance, { instanceId, userId, action });
+  return { userId, accountId };
 }

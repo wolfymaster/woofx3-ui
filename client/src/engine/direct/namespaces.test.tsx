@@ -13,6 +13,7 @@ import {
   type UISettingValue,
   type Workflow,
 } from "@woofx3/api";
+import { ENGINE_CAPABILITIES } from "@woofx3/api/capabilities";
 import { GatewayUnsupportedError } from "@/engine/errors";
 import { NoInstanceSelectedError } from "@/engine/scope";
 import type { MacroId, MacroInput, WorkflowRun } from "@/engine/types";
@@ -1149,6 +1150,23 @@ describe("modules", () => {
     expect(detail.triggers).toMatchObject([{ key: "paid.tipped", name: "Tipped" }]);
   });
 
+  test("a listing's detail takes its permissions from the listing, so a paid one can be reviewed before buying", async () => {
+    const { runtime, state } = await connected();
+    const obs = { id: "obs", name: "OBS", protocol: "websocket" };
+    state.listings = {
+      paid: {
+        listing: {
+          id: "paid",
+          name: "Paid",
+          version: "1.0.0",
+          module: { permissions: ["obs.control"], localEndpoints: [obs] },
+        },
+      },
+    };
+    const detail = await renderDirect(() => directModulesGateway(runtime).useDetailRequest()).current()("paid");
+    expect(detail).toMatchObject({ permissions: ["obs.control"], localEndpoints: [obs] });
+  });
+
   test("only declared settings are read, and only declared settings are written", async () => {
     const { runtime, state } = await connected();
     state.modules = [installed("cozy", { id: "cozy", settings: [{ id: "color", label: "Color", type: "string" }] })];
@@ -1218,6 +1236,60 @@ describe("modules", () => {
     );
     state.listingInstall = { status: "payment_required", name: "Cozy", version: "2.0.0" };
     expect(String(await install("listing", [], []).catch((error: Error) => error))).toContain("Sign in");
+  });
+
+  test("a licensed install sends the key when there is one, and answers needs_approval with what the build asks", async () => {
+    const { runtime, state } = await connected();
+    const install = renderDirect(() => directModulesGateway(runtime).useLicensedInstallRequest()).current();
+    const approvals = { approvedPermissions: ["chat.read"], approvedLocalEndpoints: ["obs"] };
+    expect(await install({ listingId: "listing", licenseKey: null, ...approvals })).toEqual({
+      status: "installed",
+      moduleKey: "listing:1.0.0:abc1234",
+    });
+    await install({ listingId: "listing", licenseKey: "W3X-AAAA", ...approvals });
+    expect(state.callsOf("installMarketplaceListing")).toEqual([
+      ["listing", approvals],
+      ["listing", { ...approvals, licenseKey: "W3X-AAAA" }],
+    ]);
+
+    state.listingInstall = {
+      status: "needs_approval",
+      name: "Cozy",
+      version: "2.0.0",
+      unapproved: ["chat.write"],
+      unapprovedLocalEndpoints: ["obs"],
+    };
+    expect(await install({ listingId: "listing", licenseKey: null, ...approvals })).toEqual({
+      status: "needs_approval",
+      unapproved: ["chat.write"],
+      unapprovedLocalEndpoints: ["obs"],
+    });
+    state.listingInstall = { status: "payment_required", name: "Cozy", version: "2.0.0" };
+    expect(
+      String(await install({ listingId: "listing", licenseKey: null, ...approvals }).catch((e: Error) => e))
+    ).toContain("Sign in");
+  });
+
+  test("a module's license key comes from the engine, and an engine too old for keys has none", async () => {
+    const { runtime, state, engine } = await connected();
+    state.moduleLicenses = { cozy: { listingId: "cozy", key: "W3X-AAAA" } };
+    const read = renderDirect(() => directModulesGateway(runtime).useLicenseKeyRequest()).current();
+
+    engine.capabilities = [];
+    expect(await read({ moduleId: "cozy", listingId: "cozy" })).toBeNull();
+    expect(state.callsOf("getInstalledModuleLicense")).toEqual([]);
+
+    engine.capabilities = [ENGINE_CAPABILITIES.marketplaceLicenseKeys];
+    expect(await read({ moduleId: "cozy", listingId: "cozy" })).toBe("W3X-AAAA");
+    expect(await read({ moduleId: "other", listingId: "other" })).toBeNull();
+    expect(state.callsOf("getInstalledModuleLicense")).toEqual([["cozy"], ["other"]]);
+  });
+
+  test("an engine with no account acquires nothing itself: it claims as it installs", async () => {
+    const { runtime, state } = await connected();
+    const acquire = renderDirect(() => directMarketplaceGateway(runtime).useAcquireForInstallRequest()).current();
+    expect(await acquire("listing")).toEqual({ status: "licensed", licenseKey: null });
+    expect(state.callsOf("installMarketplaceListing")).toEqual([]);
   });
 
   test("a bundle install answers with what it made, and a paid bundle asks for a sign-in", async () => {

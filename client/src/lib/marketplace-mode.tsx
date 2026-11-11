@@ -51,6 +51,14 @@ export interface MarketplaceMode {
    * A hook, like `useSettingSources`.
    */
   useOAuthReturn: (returnSearch?: string) => [ModuleOAuthResult | null, () => void];
+  /**
+   * Back from paying with `checkoutId` (null when not), selects the engine
+   * the checkout was opened on when this browser remembers it and the caller
+   * is still on it. True once the page is on the engine to follow the
+   * purchase on, which is the selected one when nothing is remembered. A hook,
+   * like `useSettingSources`.
+   */
+  usePurchaseReturnEngine: (checkoutId: string | null) => boolean;
 }
 
 const MarketplaceModeContext = createContext<MarketplaceMode | null>(null);
