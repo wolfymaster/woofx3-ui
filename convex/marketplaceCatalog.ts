@@ -329,7 +329,15 @@ function returnUrl(returnPath: string): string {
   return `${base}${returnPath}`;
 }
 
-/** Starts a Stripe checkout for a paid listing. */
+/**
+ * Starts the marketplace's own Stripe checkout for a paid listing.
+ *
+ * Transitional: the management plane's billing charges a purchase intent by
+ * its id instead. Delete this once nothing pays through it (installs on an
+ * engine with license keys, overlay and alert bundles, and engines without
+ * license keys all pay through billing), and before the marketplace deletes
+ * its Stripe checkout.
+ */
 export const createCheckout = action({
   args: {
     instanceId: v.id("instances"),
