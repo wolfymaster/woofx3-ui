@@ -7,6 +7,7 @@ import type {
   MarketplaceCheckout,
   MarketplacePageRequest,
   MarketplaceSearchQuery,
+  PurchaseCheckoutState,
 } from "@/engine/types";
 import { useInstanceAction } from "./scope";
 
@@ -102,6 +103,19 @@ function useAcquireForInstallRequest() {
   );
 }
 
+function usePurchaseCheckoutRequest() {
+  const start = useInstanceAction(api.billingCommands.startMarketplaceCheckout);
+  return useCallback((intentId: string) => start({ intentId }), [start]);
+}
+
+function usePurchaseCheckoutStateRequest() {
+  const read = useInstanceAction(api.billingCommands.marketplaceCheckoutState);
+  return useCallback(
+    async (checkoutId: string): Promise<PurchaseCheckoutState> => (await read({ checkoutId })).state,
+    [read]
+  );
+}
+
 export const convexMarketplaceGateway: MarketplaceGateway = {
   useSearchRequest,
   useListingRequest,
@@ -111,4 +125,6 @@ export const convexMarketplaceGateway: MarketplaceGateway = {
   useEntitlementsRequest,
   useCheckoutRequest,
   useAcquireForInstallRequest,
+  usePurchaseCheckoutRequest,
+  usePurchaseCheckoutStateRequest,
 };

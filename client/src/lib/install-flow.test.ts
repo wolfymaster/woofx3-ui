@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { MarketplacePurchaseIntent } from "@/engine/types";
+import { CHECKOUT_POLL } from "@/lib/checkout-return";
 import {
   INSTALL_FLOW_IDLE,
   type InstallApproval,
@@ -33,7 +34,25 @@ const KEY = "obs-scenes:1.0.0:abc1234";
 const consenting: InstallFlowState = { step: "consenting", approval: APPROVAL, prompt: PROMPT };
 const acquiring: InstallFlowState = { step: "acquiring", approval: APPROVAL };
 const needsPayment: InstallFlowState = { step: "needs_payment", approval: APPROVAL, intent: INTENT };
-const finalizing: InstallFlowState = { step: "finalizing_payment", listingId: "obs-scenes" };
+const PURCHASE = { listingId: "obs-scenes", checkoutId: "c1" };
+const awaitingCheckout: InstallFlowState = {
+  step: "finalizing_payment",
+  purchase: PURCHASE,
+  phase: "checkout",
+  attempts: 0,
+};
+const awaitingGrant: InstallFlowState = {
+  step: "finalizing_payment",
+  purchase: PURCHASE,
+  phase: "entitlement",
+  attempts: 0,
+};
+const stillPending: InstallFlowState = {
+  step: "failed",
+  reason: "payment_pending",
+  message: "Your payment is still being confirmed. Check again in a minute; you won't be charged twice.",
+  purchase: PURCHASE,
+};
 const installRequested: InstallFlowState = { step: "installing", approval: APPROVAL, moduleKey: null };
 const installAccepted: InstallFlowState = { step: "installing", approval: APPROVAL, moduleKey: KEY };
 
@@ -152,53 +171,130 @@ const cases: Case[] = [
   {
     name: "a checkout page sends the browser there",
     from: needsPayment,
-    event: { type: "payment_answered", outcome: { status: "redirect", url: "https://pay.example/s/1" } },
+    event: { type: "payment_answered", url: "https://pay.example/s/1" },
     to: needsPayment,
     command: { kind: "open_checkout", url: "https://pay.example/s/1" },
   },
   {
-    name: "nothing owed after all acquires again",
+    name: "a payment billing will not start fails with billing's words",
     from: needsPayment,
-    event: { type: "payment_answered", outcome: { status: "settled" } },
-    to: acquiring,
-    command: acquireCommand,
-  },
-  {
-    name: "a payment that cannot start fails",
-    from: needsPayment,
-    event: { type: "payment_answered", outcome: { status: "unavailable", message: "no purchases here" } },
-    to: { step: "failed", reason: "payment_unavailable", message: "no purchases here" },
+    event: { type: "command_failed", message: "That price is about to end. Click Buy again for a fresh one." },
+    to: {
+      step: "failed",
+      reason: "payment_unavailable",
+      message: "That price is about to end. Click Buy again for a fresh one.",
+    },
     command: null,
   },
   // payment return
   {
-    name: "back from paying, the purchase is confirmed by acquiring again",
+    name: "back from paying, the flow follows billing's checkout first",
     from: INSTALL_FLOW_IDLE,
-    event: { type: "payment_returned", listingId: "obs-scenes" },
-    to: finalizing,
+    event: { type: "payment_returned", purchase: PURCHASE },
+    to: awaitingCheckout,
+    command: { kind: "read_checkout", checkoutId: "c1" },
+  },
+  {
+    name: "a return that names no checkout waits on the grant alone",
+    from: INSTALL_FLOW_IDLE,
+    event: { type: "payment_returned", purchase: { listingId: "obs-scenes", checkoutId: null } },
+    to: {
+      step: "finalizing_payment",
+      purchase: { listingId: "obs-scenes", checkoutId: null },
+      phase: "entitlement",
+      attempts: 0,
+    },
     command: acquireCommand,
   },
   {
-    name: "a confirmed purchase is held and waits for the streamer to install it",
-    from: finalizing,
+    name: "a checkout not paid yet is asked about again after the interval",
+    from: awaitingCheckout,
+    event: { type: "checkout_answered", state: "awaiting_payment" },
+    to: { ...awaitingCheckout, attempts: 1 },
+    command: { kind: "read_checkout", checkoutId: "c1", afterMs: CHECKOUT_POLL.intervalMs },
+  },
+  {
+    name: "an unanswered ask counts toward the bound and asks again",
+    from: awaitingCheckout,
+    event: { type: "command_failed", message: "offline" },
+    to: { ...awaitingCheckout, attempts: 1 },
+    command: { kind: "read_checkout", checkoutId: "c1", afterMs: CHECKOUT_POLL.intervalMs },
+  },
+  {
+    name: "a paid checkout acquires again for the grant",
+    from: awaitingCheckout,
+    event: { type: "checkout_answered", state: "complete" },
+    to: awaitingGrant,
+    command: acquireCommand,
+  },
+  {
+    name: "an expired checkout says nothing was charged",
+    from: awaitingCheckout,
+    event: { type: "checkout_answered", state: "expired" },
+    to: {
+      step: "failed",
+      reason: "payment_expired",
+      message: "That checkout expired before it was paid, so nothing was charged. Buy it again to install it.",
+    },
+    command: null,
+  },
+  {
+    name: "a paid checkout that could not be granted points to support",
+    from: awaitingCheckout,
+    event: { type: "checkout_answered", state: "needs_review" },
+    to: {
+      step: "failed",
+      reason: "payment_needs_review",
+      message:
+        "Your payment went through, but the module couldn't be added to your organization. woofx3 support will add it or refund you; contact them if you don't hear back.",
+    },
+    command: null,
+  },
+  {
+    name: "a late checkout answer while waiting on the grant changes nothing",
+    from: awaitingGrant,
+    event: { type: "checkout_answered", state: "open" },
+    to: awaitingGrant,
+    command: null,
+  },
+  {
+    name: "a granted purchase is held and waits for the streamer to install it",
+    from: awaitingGrant,
     event: { type: "acquire_answered", outcome: { status: "licensed", licenseKey: "W3X-KEY" } },
     to: { step: "licensed", listingId: "obs-scenes" },
     command: null,
   },
   {
-    name: "a purchase the marketplace does not show yet is still pending, and nothing is charged again",
-    from: finalizing,
+    name: "a grant not there yet acquires again after the interval, and nothing is charged again",
+    from: awaitingGrant,
     event: { type: "acquire_answered", outcome: { status: "payment_required", intent: INTENT } },
-    to: {
-      step: "failed",
-      reason: "payment_pending",
-      message: "Your purchase is still being confirmed. Reload the page in a moment, then install it.",
-    },
+    to: { ...awaitingGrant, attempts: 1 },
+    command: { kind: "acquire", listingId: "obs-scenes", afterMs: CHECKOUT_POLL.intervalMs },
+  },
+  {
+    name: "past the bound the payment is still being confirmed, and can be checked again",
+    from: { ...awaitingGrant, attempts: CHECKOUT_POLL.maxAttempts - 1 },
+    event: { type: "acquire_answered", outcome: { status: "payment_required", intent: INTENT } },
+    to: stillPending,
+    command: null,
+  },
+  {
+    name: "checking again follows the purchase from the start",
+    from: stillPending,
+    event: { type: "purchase_rechecked" },
+    to: awaitingCheckout,
+    command: { kind: "read_checkout", checkoutId: "c1" },
+  },
+  {
+    name: "checking again does nothing for a failure that is not a pending payment",
+    from: { step: "failed", reason: "install_failed", message: "boom" },
+    event: { type: "purchase_rechecked" },
+    to: { step: "failed", reason: "install_failed", message: "boom" },
     command: null,
   },
   {
     name: "a refusal after paying fails with its reason",
-    from: finalizing,
+    from: awaitingGrant,
     event: {
       type: "acquire_answered",
       outcome: { status: "refused", reason: "entitlement_revoked", message: "ended" },
@@ -309,7 +405,7 @@ describe("installFlowBusy", () => {
     { state: consenting, busy: true },
     { state: acquiring, busy: true },
     { state: needsPayment, busy: true },
-    { state: finalizing, busy: true },
+    { state: awaitingCheckout, busy: true },
     { state: { step: "licensed", listingId: "obs-scenes" }, busy: false },
     { state: installAccepted, busy: true },
     { state: { step: "installed", moduleKey: KEY }, busy: false },

@@ -5,10 +5,13 @@ import type { PermissionApprovalMode } from "@/components/modules/module-permiss
 import { useEngineScope } from "@/engine/context";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
-import { useMarketplaceAcquireForInstallRequest } from "@/engine/hooks/use-marketplace";
+import {
+  useMarketplaceAcquireForInstallRequest,
+  useMarketplacePurchaseCheckoutRequest,
+  useMarketplacePurchaseCheckoutStateRequest,
+} from "@/engine/hooks/use-marketplace";
 import { useLicensedInstallRequest, useMarketplaceInstallRequest } from "@/engine/hooks/use-modules";
 import { useOrganizationAccess } from "@/engine/hooks/use-organization-access";
-import { useStartPayment } from "@/hooks/use-start-payment";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
   INSTALL_FLOW_IDLE,
@@ -17,6 +20,7 @@ import {
   type InstallFlowState,
   type InstallFlowStep,
   installFlowBusy,
+  type PendingPurchase,
   transition,
 } from "@/lib/install-flow";
 import { canStartPayment } from "@/lib/marketplace-access";
@@ -32,8 +36,8 @@ import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-perm
 //
 // An engine with the `marketplace.licenseKeys` capability installs with a
 // license: the account acquires the listing (paying first when it costs
-// money) and the engine downloads it with the key. Any other engine installs
-// by listing id alone, as it always has.
+// money, through billing's checkout for the purchase intent) and the engine
+// downloads it with the key. Any other engine installs by listing id alone.
 
 /** How long to wait for the engine before calling an install failed. */
 const INSTALL_TIMEOUT_MS = 60_000;
@@ -78,8 +82,10 @@ export interface ApprovalDialogProps {
 /** The licensed install's own controls, for a page that pays as well as installs. */
 export interface LicensedInstallFlow {
   step: InstallFlowStep;
-  /** The browser came back from paying for `listingId`: confirm the purchase so it can be installed. */
-  confirmPurchase: (listingId: string) => void;
+  /** The browser came back from paying: follow the purchase until it can be installed. */
+  confirmPurchase: (purchase: PendingPurchase) => void;
+  /** Set while a payment is still being confirmed past the wait: asks about it again. */
+  recheckPurchase: (() => void) | null;
 }
 
 export interface ModuleInstall {
@@ -220,11 +226,12 @@ function useLicensedModuleInstall(
 ): ModuleInstall {
   const acquireForInstall = useMarketplaceAcquireForInstallRequest();
   const installWithLicense = useLicensedInstallRequest();
-  const startPayment = useStartPayment();
+  const startPayment = useMarketplacePurchaseCheckoutRequest();
+  const readCheckout = useMarketplacePurchaseCheckoutStateRequest();
   const canPay = canStartPayment(useOrganizationAccess());
   const [state, setState] = useState<InstallFlowState>(INSTALL_FLOW_IDLE);
-  const commands = useRef({ acquireForInstall, installWithLicense, startPayment });
-  commands.current = { acquireForInstall, installWithLicense, startPayment };
+  const commands = useRef({ acquireForInstall, installWithLicense, startPayment, readCheckout });
+  commands.current = { acquireForInstall, installWithLicense, startPayment, readCheckout };
 
   // The flow's state lives in the runner, so a command's answer moves the
   // state it was asked from rather than the render it was asked in. A flow
@@ -233,9 +240,16 @@ function useLicensedModuleInstall(
   const [runner] = useState(() => {
     let current: InstallFlowState = INSTALL_FLOW_IDLE;
     let generation = 0;
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+
+    const startsFlow = (event: InstallFlowEvent): boolean =>
+      (event.type === "install_requested" ||
+        event.type === "payment_returned" ||
+        event.type === "purchase_rechecked") &&
+      !installFlowBusy(current);
 
     const dispatch = (event: InstallFlowEvent): void => {
-      if ((event.type === "install_requested" || event.type === "payment_returned") && !installFlowBusy(current)) {
+      if (startsFlow(event)) {
         generation += 1;
       }
       const next = transition(current, event);
@@ -252,18 +266,42 @@ function useLicensedModuleInstall(
       }
     };
 
+    /** Runs `call` after `afterMs`, unless its flow has ended by then or the hook has unmounted. */
+    const later = (flow: number, afterMs: number | undefined, call: () => void): void => {
+      if (afterMs === undefined) {
+        call();
+        return;
+      }
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        if (flow === generation) {
+          call();
+        }
+      }, afterMs);
+      timers.add(timer);
+    };
+
     const run = (command: InstallCommand, flow: number): void => {
       const failed = (err: unknown) => answer(flow, { type: "command_failed", message: actionErrorMessage(err) });
       switch (command.kind) {
         case "acquire":
-          commands.current
-            .acquireForInstall(command.listingId)
-            .then((outcome) => answer(flow, { type: "acquire_answered", outcome }), failed);
+          later(flow, command.afterMs, () => {
+            commands.current
+              .acquireForInstall(command.listingId)
+              .then((outcome) => answer(flow, { type: "acquire_answered", outcome }), failed);
+          });
+          return;
+        case "read_checkout":
+          later(flow, command.afterMs, () => {
+            commands.current
+              .readCheckout(command.checkoutId)
+              .then((checkout) => answer(flow, { type: "checkout_answered", state: checkout }), failed);
+          });
           return;
         case "start_payment":
           commands.current
-            .startPayment({ listingId: command.listingId, intent: command.intent })
-            .then((outcome) => answer(flow, { type: "payment_answered", outcome }), failed);
+            .startPayment(command.intent.id)
+            .then(({ url }) => answer(flow, { type: "payment_answered", url }), failed);
           return;
         case "open_checkout":
           window.location.assign(command.url);
@@ -281,9 +319,18 @@ function useLicensedModuleInstall(
       }
     };
 
-    return { dispatch, current: () => current };
+    const stop = (): void => {
+      generation += 1;
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+      timers.clear();
+    };
+
+    return { dispatch, current: () => current, stop };
   });
   const { dispatch } = runner;
+  useEffect(() => runner.stop, [runner]);
 
   const pendingModuleKey = state.step === "installing" ? state.moduleKey : null;
   const onReport = (report: InstallReport) => {
@@ -328,9 +375,11 @@ function useLicensedModuleInstall(
   );
 
   const confirmPurchase = useCallback(
-    (listingId: string) => dispatch({ type: "payment_returned", listingId }),
+    (purchase: PendingPurchase) => dispatch({ type: "payment_returned", purchase }),
     [dispatch]
   );
+  const recheck = useCallback(() => dispatch({ type: "purchase_rechecked" }), [dispatch]);
+  const recheckPurchase = state.step === "failed" && state.purchase !== undefined ? recheck : null;
   const dismissError = useCallback(() => {
     if (runner.current().step === "failed") {
       dispatch({ type: "dismissed" });
@@ -355,7 +404,7 @@ function useLicensedModuleInstall(
       onApprove: () => dispatch({ type: "consent_given" }),
       onCancel: () => dispatch({ type: "consent_withdrawn" }),
     },
-    licensed: { step: state.step, confirmPurchase },
+    licensed: { step: state.step, confirmPurchase, recheckPurchase },
   };
 }
 

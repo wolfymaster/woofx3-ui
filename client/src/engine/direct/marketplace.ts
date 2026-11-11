@@ -112,5 +112,7 @@ export function directMarketplaceGateway(runtime: DirectRuntime): MarketplaceGat
     useEntitlementsRequest: unsupportedRequest("marketplace.useEntitlementsRequest"),
     useCheckoutRequest: unsupportedRequest("marketplace.useCheckoutRequest"),
     useAcquireForInstallRequest: () => useEngineRequest(acquireForInstall),
+    usePurchaseCheckoutRequest: unsupportedRequest("marketplace.usePurchaseCheckoutRequest"),
+    usePurchaseCheckoutStateRequest: unsupportedRequest("marketplace.usePurchaseCheckoutStateRequest"),
   };
 }

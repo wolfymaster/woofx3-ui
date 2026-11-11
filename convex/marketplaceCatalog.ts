@@ -333,10 +333,10 @@ function returnUrl(returnPath: string): string {
  * Starts the marketplace's own Stripe checkout for a paid listing.
  *
  * Transitional: the management plane's billing charges a purchase intent by
- * its id instead. Delete this once nothing pays through it (installs on an
- * engine with license keys, overlay and alert bundles, and engines without
- * license keys all pay through billing), and before the marketplace deletes
- * its Stripe checkout.
+ * its id instead (`billingCommands.startMarketplaceCheckout`), and module
+ * installs on an engine with license keys already pay that way. Delete this
+ * once overlay and alert bundles and engines without license keys pay through
+ * billing too, and before the marketplace deletes its Stripe checkout.
  */
 export const createCheckout = action({
   args: {

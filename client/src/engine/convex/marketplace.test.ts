@@ -61,3 +61,23 @@ describe("marketplace.useAcquireForInstallRequest", () => {
     });
   }
 });
+
+describe("marketplace purchase checkouts", () => {
+  test("paying an intent asks billing for the scope's engine", async () => {
+    result = { url: "https://pay.example/m", checkoutId: "c9" };
+    const start = renderInScope(() => convexMarketplaceGateway.usePurchaseCheckoutRequest());
+    expect(await start("pi_1")).toEqual({ url: "https://pay.example/m", checkoutId: "c9" });
+    expect(calls).toEqual([
+      { name: "billingCommands:startMarketplaceCheckout", args: { instanceId: TEST_INSTANCE_ID, intentId: "pi_1" } },
+    ]);
+  });
+
+  test("a returned checkout's state is read for the scope's engine", async () => {
+    result = { state: "needs_review" };
+    const read = renderInScope(() => convexMarketplaceGateway.usePurchaseCheckoutStateRequest());
+    expect(await read("c9")).toBe("needs_review");
+    expect(calls).toEqual([
+      { name: "billingCommands:marketplaceCheckoutState", args: { instanceId: TEST_INSTANCE_ID, checkoutId: "c9" } },
+    ]);
+  });
+});

@@ -1569,6 +1569,13 @@ export interface MarketplacePurchaseIntent {
   expiresAt: string;
 }
 
+/**
+ * Where billing's checkout for a purchase intent stands. `awaiting_payment` is
+ * a delayed payment method not settled yet; `needs_review` was paid but could
+ * not be granted, which support settles.
+ */
+export type PurchaseCheckoutState = "open" | "awaiting_payment" | "complete" | "expired" | "needs_review";
+
 /** Why the marketplace will not let this account hold a listing now. */
 export type InstallRefusalReason =
   | "account_required"
