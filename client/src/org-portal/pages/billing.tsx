@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
-import { billingView, checkoutRefusalAction } from "../billing-view";
 import {
   CHECKOUT_CANCELLED_TEXT,
   CHECKOUT_POLL,
@@ -24,7 +23,8 @@ import {
   INITIAL_CHECKOUT_POLL,
   nextCheckoutPoll,
   parseCheckoutReturn,
-} from "../checkout-return";
+} from "@/lib/checkout-return";
+import { billingView, checkoutRefusalAction } from "../billing-view";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "../format";
 import { useOrganization } from "../organization-context";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
