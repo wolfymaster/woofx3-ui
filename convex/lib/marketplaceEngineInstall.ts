@@ -23,6 +23,7 @@ import type {
   MarketplaceListingInspection,
   ModuleFileList,
 } from "@woofx3/api";
+import { parseMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
 import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -33,6 +34,7 @@ import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAcces
 import { marketplaceGet } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
 import { notBoughtMessage } from "./marketplaceEntitlement";
+import { MARKETPLACE_REFUSAL_COPY } from "./marketplaceLicense";
 
 export interface EngineCredentials {
   url: string;
@@ -187,17 +189,73 @@ export function marketplaceEngineSession(engine: EngineCredentials): Marketplace
 // --- engine errors ---
 
 /**
+ * What the streamer is told for each code the marketplace refuses an engine's
+ * claim or download with. A Map, not an object: the code is the marketplace's
+ * text, and a code like `constructor` must not read Object's own members.
+ */
+const INSTALL_REFUSAL_COPY: ReadonlyMap<string, string> = new Map(
+  Object.entries({
+    ...MARKETPLACE_REFUSAL_COPY,
+    listing_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
+    module_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
+    payment_required: "This module hasn't been bought in this organization yet.",
+    not_entitled: "This organization's license doesn't unlock this module. Reload the page, then install it again.",
+    buyer_mismatch: "This module's license belongs to another organization, so it can't be installed here.",
+    activation_limit:
+      "This module's license is already on as many engines as it allows. Remove it from another engine, then try again.",
+  })
+);
+
+const INSTALL_REFUSED_COPY =
+  "The marketplace refused this install. Try again, or contact woofx3 support if it keeps happening.";
+const MARKETPLACE_UNREACHABLE_COPY = "Your engine couldn't reach the marketplace. Try again in a moment.";
+const MARKETPLACE_DISABLED_COPY = "Marketplace installs are turned off on this engine.";
+
+/**
+ * What to tell the streamer about a marketplace failure the engine passed on
+ * in the catalog error format, or null for any other engine failure. A
+ * `listing_unavailable` keeps the marketplace's message, which it writes for
+ * a person (unpriced, unpublished, replaced by a newer edition).
+ */
+export function marketplaceInstallFailureCopy(err: unknown): string | null {
+  const failure = parseMarketplaceCatalogError(err);
+  if (failure === null) {
+    return null;
+  }
+  switch (failure.kind) {
+    case "http":
+      if (failure.code === "listing_unavailable" && failure.message.trim() !== "") {
+        return failure.message;
+      }
+      return INSTALL_REFUSAL_COPY.get(failure.code) ?? INSTALL_REFUSED_COPY;
+    case "timeout":
+    case "unreachable":
+      return MARKETPLACE_UNREACHABLE_COPY;
+    case "disabled":
+      return MARKETPLACE_DISABLED_COPY;
+  }
+}
+
+/**
  * An engine failure as an error the browser can read. Convex shows only
  * "Server Error" for anything but a ConvexError, and capnweb passes only an
- * error's name and message, so the engine's message is all there is to show.
- * It is passed on as it is, never parsed: refusals the streamer must act on
- * (payment required, needs approval) arrive as results instead.
+ * error's name and message. A marketplace refusal the engine passed on keeps
+ * its code in that message, so it is told in the streamer's words and the raw
+ * text goes to the log; any other engine message is passed on as it is.
+ * Refusals the streamer must act on in the flow (payment required, needs
+ * approval) arrive as results instead.
  */
 export function engineFailure(err: unknown): ConvexError<string> {
   if (err instanceof ConvexError) {
     return err;
   }
-  return new ConvexError(err instanceof Error ? err.message : String(err));
+  const raw = err instanceof Error ? err.message : String(err);
+  const copy = marketplaceInstallFailureCopy(err);
+  if (copy === null) {
+    return new ConvexError(raw);
+  }
+  logger.warn("marketplace refused an engine install", { error: raw });
+  return new ConvexError(copy);
 }
 
 // --- module installs ---

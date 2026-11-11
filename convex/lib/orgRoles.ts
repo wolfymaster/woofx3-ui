@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import type { OrgRole } from "./organization";
@@ -33,6 +33,17 @@ const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
 };
 
 export const ORG_ACTIONS = Object.keys(ALLOWED) as OrgAction[];
+
+export const orgActionValidator = v.union(
+  v.literal("viewOrganization"),
+  v.literal("renameOrganization"),
+  v.literal("manageMembers"),
+  v.literal("viewMemberEmails"),
+  v.literal("manageEngines"),
+  v.literal("createEngine"),
+  v.literal("viewBilling"),
+  v.literal("manageBilling")
+);
 
 /** Whether `role` (null when not in the org) may take `action`. Pure. */
 export function orgCan(role: OrgRole | null, action: OrgAction): boolean {

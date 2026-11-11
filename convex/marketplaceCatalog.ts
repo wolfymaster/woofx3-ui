@@ -18,7 +18,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { requireInstanceRoleInAction, requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import {
   MarketplaceError,
   marketplaceAuthed,
@@ -290,8 +290,9 @@ export const licenseKey = action({
   args: { instanceId: v.id("instances"), listingId: v.string() },
   handler: async (ctx, args): Promise<string | null> =>
     withClientErrors(async () => {
-      // The key downloads the module, so it is shown to owners and admins only.
-      await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
+      // The key downloads the module and is what the organization paid for,
+      // so it is shown to those who see the organization's billing.
+      await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "viewBilling");
       const buyerRef = await buyerRefFor(ctx, args.instanceId);
       return heldLicenseKey(
         await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET"),
@@ -328,7 +329,15 @@ function returnUrl(returnPath: string): string {
   return `${base}${returnPath}`;
 }
 
-/** Starts a Stripe checkout for a paid listing. */
+/**
+ * Starts the marketplace's own Stripe checkout for a paid listing.
+ *
+ * Transitional: the management plane's billing charges a purchase intent by
+ * its id instead. Delete this once nothing pays through it (installs on an
+ * engine with license keys, overlay and alert bundles, and engines without
+ * license keys all pay through billing), and before the marketplace deletes
+ * its Stripe checkout.
+ */
 export const createCheckout = action({
   args: {
     instanceId: v.id("instances"),
@@ -338,9 +347,9 @@ export const createCheckout = action({
   },
   handler: async (ctx, args): Promise<CheckoutResult> =>
     withClientErrors(async () => {
-      // Payments are the account's, so only its owner may start one; any
-      // member may still acquire a listing that costs nothing.
-      await requireInstanceRoleInAction(ctx, args.instanceId, "owner");
+      // Payments are the organization's, so only who manages its billing may
+      // start one; any member may still acquire a listing that costs nothing.
+      await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "manageBilling");
       const buyerRef = await buyerRefFor(ctx, args.instanceId);
       const base = returnUrl(args.returnPath);
       const separator = base.includes("?") ? "&" : "?";

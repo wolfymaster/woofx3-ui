@@ -1,33 +1,38 @@
 import { describe, expect, test } from "bun:test";
-import type { InstanceRole } from "@convex/lib/instanceRoles";
+import type { OrgRole } from "@convex/lib/organization";
+import { orgCan } from "@convex/lib/orgRoles";
+import type { OrganizationAccess } from "@/engine/types";
 import { canSeeLicenseKey, canStartPayment } from "./marketplace-access";
 
+/** The access the server answers for each organization role. */
+function accessOf(role: OrgRole): OrganizationAccess {
+  return { viewBilling: orgCan(role, "viewBilling"), manageBilling: orgCan(role, "manageBilling") };
+}
+
 describe("canStartPayment", () => {
-  const cases: { role: InstanceRole | null | undefined; allowed: boolean }[] = [
-    { role: "owner", allowed: true },
-    { role: "admin", allowed: false },
-    { role: "member", allowed: false },
-    { role: null, allowed: false },
-    { role: undefined, allowed: false },
-  ];
-  for (const { role, allowed } of cases) {
-    test(`${String(role)} ${allowed ? "may" : "may not"} start a payment`, () => {
-      expect(canStartPayment(role)).toBe(allowed);
-    });
-  }
+  test.each([
+    ["owner", true],
+    ["admin", false],
+    ["member", false],
+  ] as const)("an organization %s may start a payment: %p", (role, allowed) => {
+    expect(canStartPayment(accessOf(role))).toBe(allowed);
+  });
+
+  test.each([null, undefined])("%p access may not start a payment", (access) => {
+    expect(canStartPayment(access)).toBe(false);
+  });
 });
 
 describe("canSeeLicenseKey", () => {
-  const cases: { role: InstanceRole | null | undefined; allowed: boolean }[] = [
-    { role: "owner", allowed: true },
-    { role: "admin", allowed: true },
-    { role: "member", allowed: false },
-    { role: null, allowed: false },
-    { role: undefined, allowed: false },
-  ];
-  for (const { role, allowed } of cases) {
-    test(`${String(role)} ${allowed ? "may" : "may not"} see a license key`, () => {
-      expect(canSeeLicenseKey(role)).toBe(allowed);
-    });
-  }
+  test.each([
+    ["owner", true],
+    ["admin", true],
+    ["member", false],
+  ] as const)("an organization %s may see a license key: %p", (role, allowed) => {
+    expect(canSeeLicenseKey(accessOf(role))).toBe(allowed);
+  });
+
+  test.each([null, undefined])("%p access may not see a license key", (access) => {
+    expect(canSeeLicenseKey(access)).toBe(false);
+  });
 });

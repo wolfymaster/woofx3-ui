@@ -1945,5 +1945,14 @@ export type { ModerationActionRecord, ModerationConfig };
 /** The chat moderation config, or that the instance's engine is too old to moderate chat. */
 export type ChatModerationRead = { kind: "unsupported" } | { kind: "ready"; config: ModerationConfig };
 
-/** What a person may do on an instance, as the account that owns it grants: owners and admins manage it, members use it. */
-export type InstanceRole = "owner" | "admin" | "member";
+/**
+ * What the caller may do in the organization that owns the scope's instance.
+ * Payments and license keys are the organization's, so its role decides them,
+ * not the instance role.
+ */
+export interface OrganizationAccess {
+  /** See the organization's billing, and the license keys it holds. */
+  viewBilling: boolean;
+  /** Pay for the organization. */
+  manageBilling: boolean;
+}

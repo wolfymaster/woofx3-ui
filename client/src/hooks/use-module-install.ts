@@ -7,7 +7,7 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
 import { useMarketplaceAcquireForInstallRequest } from "@/engine/hooks/use-marketplace";
 import { useLicensedInstallRequest, useMarketplaceInstallRequest } from "@/engine/hooks/use-modules";
-import { useViewerRole } from "@/engine/hooks/use-viewer-role";
+import { useOrganizationAccess } from "@/engine/hooks/use-organization-access";
 import { useStartPayment } from "@/hooks/use-start-payment";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
@@ -221,7 +221,7 @@ function useLicensedModuleInstall(
   const acquireForInstall = useMarketplaceAcquireForInstallRequest();
   const installWithLicense = useLicensedInstallRequest();
   const startPayment = useStartPayment();
-  const canPay = canStartPayment(useViewerRole());
+  const canPay = canStartPayment(useOrganizationAccess());
   const [state, setState] = useState<InstallFlowState>(INSTALL_FLOW_IDLE);
   const commands = useRef({ acquireForInstall, installWithLicense, startPayment });
   commands.current = { acquireForInstall, installWithLicense, startPayment };
@@ -364,7 +364,17 @@ interface PendingApproval {
   consent: Consent;
 }
 
-/** The install on an engine without license keys: by listing id, with the approvals. */
+/**
+ * The install on an engine without license keys: by listing id, with the
+ * approvals, through the Convex `installModule` action.
+ *
+ * Kept only for engines that do not report the `marketplace.licenseKeys`
+ * capability. Delete it, with `installModule`'s Convex download path, once
+ * every engine reports that capability; nothing counts that coverage yet, so
+ * the deletion waits on it being counted. It must be gone before the
+ * marketplace stops serving downloads without a license key, which would
+ * break it.
+ */
 function useUnlicensedModuleInstall(onInstalled?: (moduleKey: string) => void): ModuleInstall {
   const { instanceId } = useEngineScope();
   const installMarketplaceModule = useMarketplaceInstallRequest();

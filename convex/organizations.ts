@@ -143,6 +143,25 @@ async function myOrganization(
   };
 }
 
+/**
+ * What the caller may do in the organization that owns `instanceId`, for an
+ * engine's screens that act for it (paying for a listing, reading a license
+ * key); null when they are not in it or the engine does not exist.
+ */
+export const capabilitiesForInstance = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<OrgCapabilities | null> => {
+    const userId = await getAuthUserId(ctx);
+    const instance = await ctx.db.get(instanceId);
+    const account = instance === null ? null : await ctx.db.get(instance.accountId);
+    if (userId === null || account === null) {
+      return null;
+    }
+    const role = await orgRoleOf(ctx, account, userId);
+    return role === null ? null : capabilities(role);
+  },
+});
+
 /** The organizations the caller belongs to, each as their role may see it. `now` (ms) resolves the plan. */
 export const mine = query({
   args: { now: v.number() },

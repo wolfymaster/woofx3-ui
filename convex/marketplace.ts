@@ -523,6 +523,13 @@ async function installFromMarketplace(
     });
   }
 
+  // The Convex download path: Convex fetches the archive itself, without a
+  // license key, so it works only while the marketplace still serves free and
+  // held listings without one. It stays for engines on the dev tier or without
+  // buyer tokens, and for those without `marketplace.licenseKeys`. Delete it
+  // with the browser's unlicensed install (`useUnlicensedModuleInstall`) once
+  // every engine reports that capability, and before the marketplace requires
+  // a key for every download.
   const access = await marketplaceAccessForInstance(ctx, instanceId);
   const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`, access);
   const rawModule =
