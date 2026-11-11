@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
+import { ConvexError } from "convex/values";
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // The module mock below is installed once, before the gateway is imported, so
@@ -21,7 +22,7 @@ mock.module("convex/react", () => ({
   },
 }));
 
-const { convexMarketplaceGateway } = await import("./marketplace");
+const { checkoutReadOfError, convexMarketplaceGateway } = await import("./marketplace");
 
 beforeEach(() => {
   calls.length = 0;
@@ -60,4 +61,42 @@ describe("marketplace.useAcquireForInstallRequest", () => {
       ]);
     });
   }
+});
+
+describe("marketplace purchase checkouts", () => {
+  test("paying an intent asks billing for the scope's engine", async () => {
+    result = { url: "https://pay.example/m", checkoutId: "c9" };
+    const start = renderInScope(() => convexMarketplaceGateway.usePurchaseCheckoutRequest());
+    expect(await start("pi_1")).toEqual({ url: "https://pay.example/m", checkoutId: "c9" });
+    expect(calls).toEqual([
+      { name: "billingCommands:startMarketplaceCheckout", args: { instanceId: TEST_INSTANCE_ID, intentId: "pi_1" } },
+    ]);
+  });
+
+  test("a returned checkout's state is read for the scope's engine", async () => {
+    result = { state: "needs_review" };
+    const read = renderInScope(() => convexMarketplaceGateway.usePurchaseCheckoutStateRequest());
+    expect(await read("c9")).toEqual({ kind: "state", state: "needs_review" });
+    expect(calls).toEqual([
+      { name: "billingCommands:marketplaceCheckoutState", args: { instanceId: TEST_INSTANCE_ID, checkoutId: "c9" } },
+    ]);
+  });
+});
+
+describe("checkoutReadOfError", () => {
+  test.each(["checkout_not_found", "bad_request", "not_authorized", "organization_not_found"])(
+    "%s is decided: the checkout is not this engine's",
+    (code) => {
+      expect(checkoutReadOfError(new ConvexError({ code, message: "x" }))).toEqual({ kind: "not_found" });
+    }
+  );
+
+  test.each([
+    ["an outage", new ConvexError({ code: "payment_unavailable", message: "x" })],
+    ["an unreachable plane", new ConvexError({ code: "unreachable", message: "x" })],
+    ["a plain error", new Error("network")],
+    ["a string ConvexError", new ConvexError("x")],
+  ])("%s is retried", (_name, error) => {
+    expect(checkoutReadOfError(error)).toBeNull();
+  });
 });

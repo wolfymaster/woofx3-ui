@@ -7,7 +7,7 @@ import {
 import type { CatalogListingDetail } from "@shared/marketplace-catalog";
 import { isBundleListing, isModuleListing } from "@shared/marketplace-catalog";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { CreditsCard } from "@/components/marketplace/credits-card";
 import { EmoteGrid } from "@/components/marketplace/emote-grid";
@@ -28,11 +28,19 @@ import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { actionErrorMessage } from "@/lib/action-error";
+import {
+  CHECKOUT_CANCELLED_TEXT,
+  CHECKOUT_POLL_TEXT,
+  parseCheckoutReturn,
+  purchaseReturnSettled,
+  withoutCheckoutReturn,
+} from "@/lib/checkout-return";
 import { listingInstallState } from "@/lib/listing-install-state";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
 import { BANNER_ASPECT } from "@/lib/marketplace-banner";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from "@/lib/marketplace-route";
+import { browserPurchaseEngineStorage, forgetPurchaseEngine } from "@/lib/purchase-engines";
 import { cn } from "@/lib/utils";
 
 // One listing's page, for any of the five types.
@@ -55,11 +63,14 @@ export default function MarketplaceListing() {
   // finishes on this page and the streamer lands back on that tab.
   const [oauthResult, dismissOauthResult] = useMarketplaceMode().useOAuthReturn("?tab=settings");
 
-  // Stripe sends the buyer back here. The webhook that grants the entitlement
-  // is a separate round trip from Stripe to the marketplace, so it may not
-  // have landed when this page loads -- hence the re-read and the message,
-  // rather than assuming the button has already flipped.
+  // A payment page sends the buyer back here. Billing's checkout returns with
+  // `?checkout=done&checkoutId=...`, which the licensed install follows until
+  // the listing is granted. The marketplace's own checkout returns with
+  // `?purchase=success`; its webhook grants the entitlement in a separate
+  // round trip, so the page reads the quote again and says so rather than
+  // assuming the button has already flipped.
   const purchaseOutcome = useMemo(() => new URLSearchParams(searchString).get("purchase"), [searchString]);
+  const checkoutReturn = useMemo(() => parseCheckoutReturn(searchString), [searchString]);
   useEffect(() => {
     if (purchaseOutcome === "success") {
       void quote.refetch();
@@ -90,7 +101,9 @@ export default function MarketplaceListing() {
             through; reload if it takes more than a moment.
           </Banner>
         )}
-        {purchaseOutcome === "cancelled" && <Banner tone="muted">Checkout cancelled. Nothing was charged.</Banner>}
+        {(purchaseOutcome === "cancelled" || checkoutReturn.kind === "cancelled") && (
+          <Banner tone="muted">{CHECKOUT_CANCELLED_TEXT}</Banner>
+        )}
         {oauthResult && <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} />}
 
         {error && (
@@ -128,11 +141,20 @@ export default function MarketplaceListing() {
           <ListingBody
             listing={listing}
             quote={quote}
-            purchaseReturned={purchaseOutcome === "success"}
+            purchaseReturn={
+              checkoutReturn.kind === "done"
+                ? { checkoutId: checkoutReturn.checkoutId }
+                : purchaseOutcome === "success"
+                  ? { checkoutId: null }
+                  : null
+            }
             onRefetch={() => {
               void refetch();
               void quote.refetch();
             }}
+            onPurchaseSettled={() =>
+              navigate(`${marketplaceListingPath(listingId)}${withoutCheckoutReturn(searchString)}`, { replace: true })
+            }
           />
         )}
       </div>
@@ -143,17 +165,20 @@ export default function MarketplaceListing() {
 function ListingBody({
   listing,
   quote,
-  purchaseReturned,
+  purchaseReturn,
   onRefetch,
+  onPurchaseSettled,
 }: {
   listing: CatalogListingDetail;
   quote: MarketplaceQuote;
-  /** The browser came back here from paying for this listing. */
-  purchaseReturned: boolean;
+  /** Set when the browser came back here from paying for this listing; `checkoutId` is billing's, when it named one. */
+  purchaseReturn: { checkoutId: string | null } | null;
+  /** The purchase the page came back with is held or installed: drop the return from the address. */
+  onPurchaseSettled: () => void;
   onRefetch: () => void;
 }) {
   const { instanceId: engineInstanceId } = useEngineScope();
-  const { purchases } = useMarketplaceMode();
+  const { purchases, usePurchaseReturnEngine } = useMarketplaceMode();
   const [, navigate] = useLocation();
   const meta = listingTypeMeta(listing.type);
 
@@ -224,11 +249,28 @@ function ListingBody({
 
   const install = useModuleInstall(onRefetch, onRefetch);
   const confirmPurchase = install.licensed?.confirmPurchase;
+  const returnedCheckoutId = purchaseReturn?.checkoutId;
+  // Followed on the engine the checkout was opened on, so an organization's
+  // checkout is never asked about, or paid again, as another's.
+  const onPurchaseEngine = usePurchaseReturnEngine(returnedCheckoutId ?? null);
   useEffect(() => {
-    if (purchaseReturned && confirmPurchase) {
-      confirmPurchase(listing.id);
+    if (returnedCheckoutId !== undefined && onPurchaseEngine && confirmPurchase) {
+      confirmPurchase({ listingId: listing.id, checkoutId: returnedCheckoutId });
     }
-  }, [purchaseReturned, confirmPurchase, listing.id]);
+  }, [returnedCheckoutId, onPurchaseEngine, confirmPurchase, listing.id]);
+  const installStep = install.licensed?.step;
+  const settledPurchase = useRef(onPurchaseSettled);
+  settledPurchase.current = onPurchaseSettled;
+  useEffect(() => {
+    if (returnedCheckoutId === undefined || !purchaseReturnSettled(installStep)) {
+      return;
+    }
+    if (returnedCheckoutId !== null) {
+      forgetPurchaseEngine(browserPurchaseEngineStorage(), returnedCheckoutId);
+    }
+    settledPurchase.current();
+  }, [returnedCheckoutId, installStep]);
+  const recheckPurchase = install.licensed?.recheckPurchase ?? null;
   const [removing, setRemoving] = useState(false);
   const [bundleInstalled, setBundleInstalled] = useState<{ kind: "scene" | "alert" } | null>(null);
 
@@ -356,11 +398,22 @@ function ListingBody({
               {install.progressMessage}
             </p>
           )}
+          {install.licensed?.step === "finalizing_payment" && (
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="text-finalizing-payment">
+              <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" />
+              {CHECKOUT_POLL_TEXT.polling}
+            </p>
+          )}
           {install.error && (
             <p className="flex items-start gap-1.5 text-xs text-destructive">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               {install.error}
             </p>
+          )}
+          {recheckPurchase && (
+            <Button variant="outline" size="sm" onClick={recheckPurchase} data-testid="button-recheck-purchase">
+              Check again
+            </Button>
           )}
           {bundleInstalled && (
             <p className="flex items-start gap-1.5 text-xs text-emerald-600">

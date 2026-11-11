@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
+import { ConvexError } from "convex/values";
 import { useCallback } from "react";
 import type { MarketplaceGateway } from "@/engine/gateway";
 import type {
@@ -7,6 +8,7 @@ import type {
   MarketplaceCheckout,
   MarketplacePageRequest,
   MarketplaceSearchQuery,
+  PurchaseCheckoutRead,
 } from "@/engine/types";
 import { useInstanceAction } from "./scope";
 
@@ -102,6 +104,50 @@ function useAcquireForInstallRequest() {
   );
 }
 
+function usePurchaseCheckoutRequest() {
+  const start = useInstanceAction(api.billingCommands.startMarketplaceCheckout);
+  return useCallback((intentId: string) => start({ intentId }), [start]);
+}
+
+/**
+ * Refusals that decide a checkout read: billing has no such checkout for the
+ * engine's organization (also its answer for another organization's), the id
+ * is not one billing could have made, or the caller may not ask for that
+ * organization. Anything else is an outage the flow asks again after.
+ */
+const DECIDED_CHECKOUT_REFUSALS: ReadonlySet<string> = new Set([
+  "checkout_not_found",
+  "bad_request",
+  "not_authorized",
+  "organization_not_found",
+]);
+
+export function checkoutReadOfError(error: unknown): PurchaseCheckoutRead | null {
+  if (!(error instanceof ConvexError) || typeof error.data !== "object" || error.data === null) {
+    return null;
+  }
+  const code = (error.data as { code?: unknown }).code;
+  return typeof code === "string" && DECIDED_CHECKOUT_REFUSALS.has(code) ? { kind: "not_found" } : null;
+}
+
+function usePurchaseCheckoutStateRequest() {
+  const read = useInstanceAction(api.billingCommands.marketplaceCheckoutState);
+  return useCallback(
+    async (checkoutId: string): Promise<PurchaseCheckoutRead> => {
+      try {
+        return { kind: "state", state: (await read({ checkoutId })).state };
+      } catch (error) {
+        const decided = checkoutReadOfError(error);
+        if (decided === null) {
+          throw error;
+        }
+        return decided;
+      }
+    },
+    [read]
+  );
+}
+
 export const convexMarketplaceGateway: MarketplaceGateway = {
   useSearchRequest,
   useListingRequest,
@@ -111,4 +157,6 @@ export const convexMarketplaceGateway: MarketplaceGateway = {
   useEntitlementsRequest,
   useCheckoutRequest,
   useAcquireForInstallRequest,
+  usePurchaseCheckoutRequest,
+  usePurchaseCheckoutStateRequest,
 };

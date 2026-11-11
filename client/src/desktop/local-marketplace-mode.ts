@@ -27,10 +27,16 @@ function useNoOAuthReturn(): [ModuleOAuthResult | null, () => void] {
   return NO_OAUTH_RETURN;
 }
 
+/** Local mode runs one engine and buys nothing, so a return is always on it. */
+function useOnlyEngine(): boolean {
+  return true;
+}
+
 export const localMarketplaceMode: MarketplaceMode = {
   purchases: false,
   uploads: false,
   ModuleSettingsExtras: null,
   useSettingSources: useNoSettingSources,
   useOAuthReturn: useNoOAuthReturn,
+  usePurchaseReturnEngine: useOnlyEngine,
 };

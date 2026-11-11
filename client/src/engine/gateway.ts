@@ -118,6 +118,7 @@ import type {
   PinHistoryEntryId,
   PinnedMessage,
   PublishedTestEvent,
+  PurchaseCheckoutRead,
   ReadOptions,
   RecapClips,
   RecapMarkers,
@@ -558,6 +559,15 @@ export interface MarketplaceGateway {
    * again; the answer follows what the account holds.
    */
   useAcquireForInstallRequest(): (listingId: string) => Promise<InstallAcquireOutcome>;
+  /**
+   * Starts paying the purchase intent an acquire answered, through billing.
+   * The payment page returns the browser to the listing with
+   * `?checkout=done&checkoutId=...` (or `cancelled`). Rejects with billing's
+   * refusal, written for the streamer, for an intent it will not charge.
+   */
+  usePurchaseCheckoutRequest(): (intentId: string) => Promise<{ url: string; checkoutId: string }>;
+  /** Where a purchase checkout the browser came back from stands. Rejects only for an outage worth retrying. */
+  usePurchaseCheckoutStateRequest(): (checkoutId: string) => Promise<PurchaseCheckoutRead>;
 }
 
 /**

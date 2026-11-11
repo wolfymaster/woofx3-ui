@@ -8,6 +8,7 @@ import {
   checkoutIdempotencyKey,
   ensureIdempotencyKey,
   HttpBillingClient,
+  marketplaceCheckoutIdempotencyKey,
 } from "./billingClient";
 
 const realFetch = globalThis.fetch;
@@ -124,6 +125,36 @@ describe("requests", () => {
       ok: true,
       value: [{ id: "in_1", periodStart: Date.UTC(2026, 10, 1), amountCents: 3000, status: "paid", hostedUrl: null }],
     });
+  });
+
+  test("startMarketplaceCheckout sends the intent and its Idempotency-Key", async () => {
+    const seen = plane(200, { url: "https://pay.example/m", checkoutId: "c9" });
+    expect(
+      await client.startMarketplaceCheckout({ accountId: "acc1", intentId: "pi_1", idempotencyKey: "k9" })
+    ).toEqual({ ok: true, value: { url: "https://pay.example/m", checkoutId: "c9" } });
+    expect(seen[0]).toMatchObject({
+      url: "https://plane.test/v1/billing/accounts/acc1/marketplace-checkouts",
+      method: "POST",
+      headers: { "idempotency-key": "k9" },
+      body: { intentId: "pi_1" },
+    });
+  });
+
+  test("a long intent id is hashed into the marketplace checkout key", async () => {
+    const window = BILLING_CLIENT.checkoutKeyWindowMs;
+    const short = await marketplaceCheckoutIdempotencyKey({ accountId: "acc1", intentId: "pi_1" }, window + 5);
+    expect(short).toBe(`marketplace-checkout:acc1:pi_1:${window}`);
+    const long = await marketplaceCheckoutIdempotencyKey({ accountId: "acc1", intentId: "x".repeat(255) }, window);
+    expect(long).toMatch(/^marketplace-checkout:acc1:sha256-[0-9a-f]{64}:\d+$/);
+  });
+
+  test("checkoutState asks for the checkout as the org it is for", async () => {
+    const seen = plane(200, { id: "c1", accountId: "acc 1", purposeKind: "marketplace", state: "needs_review" });
+    expect(await client.checkoutState("c1", "acc 1")).toEqual({
+      ok: true,
+      value: { id: "c1", accountId: "acc 1", state: "needs_review" },
+    });
+    expect(seen[0]?.url).toBe("https://plane.test/v1/billing/checkouts/c1?accountId=acc%201");
   });
 
   test("an unknown promotion code is null, not an error", async () => {

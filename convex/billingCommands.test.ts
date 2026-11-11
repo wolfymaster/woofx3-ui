@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
 import { billingErr } from "./lib/billingClient";
 import { FakeBillingClient } from "./lib/billingClient.fakes";
@@ -13,6 +14,7 @@ const saved = { url: process.env.MAINTENANCE_API_URL, key: process.env.MAINTENAN
 
 interface Seen {
   path: string;
+  search: string;
   method: string;
   idempotencyKey: string | null;
   body: unknown;
@@ -27,10 +29,11 @@ beforeEach(() => {
   process.env.MAINTENANCE_API_URL = "https://plane.test";
   process.env.MAINTENANCE_API_KEY = "key";
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const path = new URL(String(input)).pathname;
+    const { pathname: path, search } = new URL(String(input));
     const headers = new Headers(init?.headers);
     seen.push({
       path,
+      search,
       method: init?.method ?? "GET",
       idempotencyKey: headers.get("idempotency-key"),
       body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
@@ -120,6 +123,98 @@ describe("startCheckout", () => {
   });
 });
 
+async function seedEngine(t: Backend, accountId: Id<"accounts">) {
+  return t.run(async (ctx) => {
+    const memberId = await ctx.db.insert("users", { name: "Member" });
+    await ctx.db.insert("accountMembers", { accountId, userId: memberId, role: "member", createdAt: 1 });
+    const instanceId = await ctx.db.insert("instances", {
+      accountId,
+      name: "Engine",
+      url: "https://e.test",
+      createdAt: 1,
+    });
+    return { memberId, instanceId };
+  });
+}
+
+describe("startMarketplaceCheckout", () => {
+  test("the owner pays the intent for the engine's org, with a key derived from it", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const { instanceId } = await seedEngine(t, accountId);
+    answers["/marketplace-checkouts"] = { status: 200, body: { url: "https://pay.example/m", checkoutId: "c9" } };
+    const args = { instanceId, intentId: " pi_1 " };
+    expect(await as(t, ownerId).action(api.billingCommands.startMarketplaceCheckout, args)).toEqual({
+      url: "https://pay.example/m",
+      checkoutId: "c9",
+    });
+    await as(t, ownerId).action(api.billingCommands.startMarketplaceCheckout, args);
+    expect(seen[0]).toMatchObject({
+      path: `/v1/billing/accounts/${accountId}/marketplace-checkouts`,
+      method: "POST",
+      body: { intentId: "pi_1" },
+    });
+    expect(seen[0]?.idempotencyKey).toMatch(new RegExp(`^marketplace-checkout:${accountId}:pi_1:\\d+$`));
+    expect(seen[1]?.idempotencyKey).toBe(seen[0]?.idempotencyKey ?? "");
+  });
+
+  test("an admin or member is refused before the plane is asked", async () => {
+    const t = newBackend();
+    const { adminId, accountId } = await seedOrg(t);
+    const { memberId, instanceId } = await seedEngine(t, accountId);
+    for (const userId of [adminId, memberId]) {
+      expect(
+        await errorData(
+          as(t, userId).action(api.billingCommands.startMarketplaceCheckout, { instanceId, intentId: "pi_1" })
+        )
+      ).toMatchObject({ code: "not_authorized", action: "manageBilling" });
+    }
+    expect(seen).toEqual([]);
+  });
+
+  test.each([
+    ["intent_expiring", 409, "That price is about to end. Click Buy again for a fresh one."],
+    [
+      "intent_already_paid",
+      409,
+      "This purchase is already paid and is being confirmed. Try installing again in a minute.",
+    ],
+    ["intent_not_found", 404, "We could not find that purchase for this organization. Click Buy again to start over."],
+    ["marketplace_not_configured", 503, "Module purchases aren't set up on this deployment."],
+  ])("%s reaches the browser with its code and wording", async (code, status, message) => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const { instanceId } = await seedEngine(t, accountId);
+    answers["/marketplace-checkouts"] = { status, body: { error: { code, message: "plane words" } } };
+    expect(
+      await errorData(
+        as(t, ownerId).action(api.billingCommands.startMarketplaceCheckout, { instanceId, intentId: "pi_1" })
+      )
+    ).toEqual({ code, message });
+  });
+});
+
+describe("marketplaceCheckoutState", () => {
+  test("the owner reads the state as the engine's org; a member is refused", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const { memberId, instanceId } = await seedEngine(t, accountId);
+    answers["/checkouts/c9"] = {
+      status: 200,
+      body: { id: "c9", accountId, purposeKind: "marketplace", state: "needs_review" },
+    };
+    expect(
+      await as(t, ownerId).action(api.billingCommands.marketplaceCheckoutState, { instanceId, checkoutId: "c9" })
+    ).toEqual({ state: "needs_review" });
+    expect(seen.map((call) => call.search)).toEqual([`?accountId=${accountId}`]);
+    expect(
+      await errorData(
+        as(t, memberId).action(api.billingCommands.marketplaceCheckoutState, { instanceId, checkoutId: "c9" })
+      )
+    ).toMatchObject({ code: "not_authorized" });
+  });
+});
+
 describe("openPortal", () => {
   test("owner only; a customerless org keeps the no_customer wording", async () => {
     const t = newBackend();
@@ -178,20 +273,46 @@ describe("previewPromotionCode", () => {
 });
 
 describe("checkoutState", () => {
-  test("the owner of the checkout's org reads the state; anyone else is refused", async () => {
+  test("the org's owner reads the state, asking for that org; anyone else is refused before the plane is asked", async () => {
     const t = newBackend();
     const { ownerId, adminId, accountId } = await seedOrg(t);
     answers["/checkouts/c1"] = {
       status: 200,
       body: { id: "c1", accountId, purposeKind: "subscription", state: "complete" },
     };
-    expect(await as(t, ownerId).action(api.billingCommands.checkoutState, { checkoutId: "c1" })).toEqual({
+    expect(await as(t, ownerId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" })).toEqual({
       state: "complete",
     });
+    expect(seen.map((call) => call.search)).toEqual([`?accountId=${accountId}`]);
     expect(
-      await errorData(as(t, adminId).action(api.billingCommands.checkoutState, { checkoutId: "c1" }))
+      await errorData(as(t, adminId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" }))
     ).toMatchObject({
       code: "not_authorized",
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  test("a view of another org's checkout is refused even when the plane answers it", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    answers["/checkouts/c1"] = {
+      status: 200,
+      body: { id: "c1", accountId: "someone-else", purposeKind: "subscription", state: "complete" },
+    };
+    expect(
+      await errorData(as(t, ownerId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" }))
+    ).toMatchObject({ code: "checkout_not_found" });
+  });
+
+  test("another org's checkout reads as not found", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    answers["/checkouts/c1"] = { status: 404, body: { error: { code: "checkout_not_found", message: "x" } } };
+    expect(
+      await errorData(as(t, ownerId).action(api.billingCommands.checkoutState, { accountId, checkoutId: "c1" }))
+    ).toEqual({
+      code: "checkout_not_found",
+      message: "We could not find that checkout. Choose a plan to start again.",
     });
   });
 });

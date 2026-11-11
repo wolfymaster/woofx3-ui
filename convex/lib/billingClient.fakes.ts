@@ -6,13 +6,21 @@ import {
   type CheckoutRequest,
   type CheckoutView,
   type Invoice,
+  type MarketplaceCheckoutRequest,
 } from "./billingClient";
 
 // A scripted BillingClient for tests. The second dot in the file name keeps
 // Convex from deploying it, as it does for *.test.ts.
 
 export interface BillingCall {
-  command: "ensure" | "startCheckout" | "openPortal" | "listInvoices" | "lookupPromotionCode" | "checkoutState";
+  command:
+    | "ensure"
+    | "startCheckout"
+    | "startMarketplaceCheckout"
+    | "openPortal"
+    | "listInvoices"
+    | "lookupPromotionCode"
+    | "checkoutState";
   args: unknown[];
 }
 
@@ -39,6 +47,11 @@ export class FakeBillingClient implements BillingClient {
     return this.checkoutAnswer;
   }
 
+  async startMarketplaceCheckout(request: MarketplaceCheckoutRequest) {
+    this.calls.push({ command: "startMarketplaceCheckout", args: [request] });
+    return this.checkoutAnswer;
+  }
+
   async openPortal(accountId: string) {
     this.calls.push({ command: "openPortal", args: [accountId] });
     return this.portalAnswer;
@@ -54,8 +67,8 @@ export class FakeBillingClient implements BillingClient {
     return this.promotionAnswer;
   }
 
-  async checkoutState(checkoutId: string) {
-    this.calls.push({ command: "checkoutState", args: [checkoutId] });
-    return this.checkoutStateAnswer ?? billingOk({ id: checkoutId, accountId: "unknown", state: "open" as const });
+  async checkoutState(checkoutId: string, accountId: string) {
+    this.calls.push({ command: "checkoutState", args: [checkoutId, accountId] });
+    return this.checkoutStateAnswer ?? billingOk({ id: checkoutId, accountId, state: "open" as const });
   }
 }

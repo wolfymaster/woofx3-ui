@@ -315,7 +315,8 @@ key masked until asked.
 ### The state machine
 
 `transition(state, event)` is pure: it returns the next state and at most one
-named command (`acquire`, `start_payment`, `open_checkout`, `install`), and
+named command (`acquire`, `start_payment`, `open_checkout`, `read_checkout`,
+`install`; `acquire` and `read_checkout` may say to wait first), and
 the hook runs the command and feeds its answer back as an event. Each flow
 gets a generation, so a late answer from a flow the streamer left changes
 nothing.
@@ -325,11 +326,61 @@ nothing.
 | `idle` | Nothing running | `install_requested` → `consenting`, or `acquiring` when nothing new needs approval |
 | `consenting` | The approval dialog is open | approve → `acquiring`; cancel → `idle` |
 | `acquiring` | `acquire` running | `licensed` answer → `installing`; `payment_required` → `needs_payment` (owner) or `failed` (anyone else); refused → `failed` |
-| `needs_payment` | Starting the checkout | a checkout URL → the browser goes to it |
-| `finalizing_payment` | Back from paying | acquire again |
+| `needs_payment` | Starting the checkout | a checkout URL → the browser goes to it; billing refusing → `failed` |
+| `finalizing_payment` | Back from paying | see below |
 | `licensed` | Held after a payment, ready to install | dismissed → `idle` |
 | `installing` | The engine has the build; `moduleKey` once it accepted | the engine's report → `installed` or `failed`; `needs_approval` → `consenting` with only what is new |
 | `installed`, `failed` | Done | dismissed → `idle` |
+
+### Paying and coming back
+
+`start_payment` calls `billingCommands.startMarketplaceCheckout` with the
+intent's id. It asks the management plane
+(`POST /v1/billing/accounts/{id}/marketplace-checkouts`) to open a checkout for
+the organization that owns the engine; only its billing manager may, and the
+plane checks the intent is that organization's, open and payable, and charges
+its amount. A refusal (an intent about to expire, already paid, the listing
+off sale) comes back with its code and a line for the streamer.
+
+The payment page returns to the listing with `?checkout=done&checkoutId=...`
+(or `cancelled`, which only shows a banner). The page hands the checkout to
+the flow as `payment_returned`, and `finalizing_payment` follows it in two
+phases:
+
+1. **checkout**: `read_checkout` asks `billingCommands.marketplaceCheckoutState`
+   until billing says `complete`. `expired` fails with "nothing was charged";
+   `needs_review` (paid, but the grant failed, which support settles) fails
+   pointing to support.
+2. **entitlement**: billing grants the listing after the payment, so `acquire`
+   is asked again until it answers `licensed`, and the flow moves to
+   `licensed` for the streamer to install.
+
+The return names only the checkout, so the browser remembers which engine
+opened it (`lib/purchase-engines.ts`, in local storage, keyed by checkout id).
+On the return the page selects that engine first (`usePurchaseReturnEngine`),
+when the caller is still on it, and otherwise follows the purchase on the
+engine already selected; storage that is blocked or empty changes nothing
+else. A checkout billing does not know for the engine's organization
+(`checkout_not_found`, a malformed id, or a caller who may not manage that
+organization's billing) is decided, so the wait ends at once as
+`payment_elsewhere` and asks the streamer to switch engines; only outages are
+asked again. Once the purchase is `licensed` (or installed), the page drops
+`checkout`, `checkoutId` and `purchase` from the address, so a reload does not
+follow it again.
+
+The runner (`lib/install-runner.ts`) parks its waits when the hook unmounts
+and arms them again when it mounts, as React's StrictMode does on every
+mount, so a flow survives a remount; answers that arrive while it is
+unmounted are dropped.
+
+Both phases share one bound, `CHECKOUT_POLL` (`lib/checkout-return.ts`, the
+same one the plan checkout's return uses): every unanswered or unfinished ask
+counts. Past it the flow fails as `payment_pending` and keeps the purchase,
+and **Check again** (`purchase_rechecked`) starts following it again; nothing
+is charged twice, since billing refuses a second checkout for a paid intent.
+A return from the marketplace's own checkout (`?purchase=success`) names no
+checkout and waits on the grant alone. A refund after the grant revokes the
+entitlement, so a later acquire is refused as `entitlement_revoked`.
 
 Consent comes before acquire, so a streamer who backs out claims nothing.
 Every command is idempotent, so a reload starts again from what the
@@ -346,10 +397,10 @@ must be deleted once its condition holds:
   in Convex without a key. Both go once every engine reports the capability,
   which nothing counts yet, and before the marketplace requires a key for every
   download, which would break them.
-- **The marketplace's own Stripe checkout** (`marketplaceCatalog.createCheckout`,
-  `useStartPayment`) charges the marketplace's quote. It goes once purchases
-  are paid through the management plane's billing, which charges the purchase
-  intent itself, and before the marketplace deletes its Stripe checkout.
+- **The marketplace's own Stripe checkout** (`marketplaceCatalog.createCheckout`)
+  still pays for overlay and alert bundles and for installs on engines without
+  license keys, through the listing button. It goes once those pay through
+  billing too, and before the marketplace deletes its Stripe checkout.
 
 ## Author pages
 
