@@ -21,6 +21,7 @@ import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useDefaultEngineOnSignIn } from "@/hooks/use-default-engine";
+import { useEngineStarting } from "@/hooks/use-engine-starting";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
@@ -28,6 +29,7 @@ import { useCanManageOrganization } from "@/hooks/use-manage-organization";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { IS_DESKTOP } from "@/lib/desktop";
+import { ENGINE_CONNECTION, engineConnection } from "@/lib/engine-connection";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $relayLimitation } from "@/lib/relay-limitation";
 import { shortcutModifierLabel } from "@/lib/shortcut-modifier";
@@ -36,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { BillingBanner } from "./billing-banner";
 import { ConnectionStatusBar } from "./connection-status";
 import { EngineMenuSection } from "./engine-menu";
+import { EngineStartingBanner } from "./engine-starting-banner";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
 import {
   findActiveSection,
@@ -56,32 +59,21 @@ import { ThemeMenuSub } from "./theme-menu";
 import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
 import { UtilityNav } from "./utility-nav";
 
-type EngineConnection = "connected" | "limited" | "upgrading" | "disconnected";
-
 // IS_DESKTOP is a build constant, so the web build carries none of it.
 const DesktopUpdateIndicator = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateIndicator")) : null;
-
-const ENGINE_CONNECTION: Record<EngineConnection, { label: string; dot: string; text: string }> = {
-  connected: { label: "Connected", dot: "bg-green-500", text: "text-green-600 dark:text-green-400" },
-  limited: { label: "Limited", dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
-  upgrading: { label: "Upgrading", dot: "bg-blue-500", text: "text-blue-600 dark:text-blue-400" },
-  disconnected: { label: "Disconnected", dot: "bg-muted-foreground", text: "text-muted-foreground" },
-};
-
-/** An engine that is down for an upgrade is not a lost connection, so it is named for what it is. */
-function engineConnection(connected: boolean, upgrading: boolean, relayLimited: boolean): EngineConnection {
-  if (connected) {
-    return relayLimited ? "limited" : "connected";
-  }
-  return upgrading ? "upgrading" : "disconnected";
-}
 
 function StatusBar() {
   const { connected } = useEngineHealth();
   const engineVersion = useEngineVersion(connected);
   const liveState = useLiveState();
   const relayLimitation = useStore($relayLimitation);
-  const connectionState = engineConnection(connected, useEngineUpgrading(), relayLimitation !== null);
+  const starting = useEngineStarting();
+  const connectionState = engineConnection(
+    connected,
+    useEngineUpgrading(),
+    relayLimitation !== null,
+    starting !== null
+  );
   const connection = ENGINE_CONNECTION[connectionState];
 
   const isLive = liveState?.isLive ?? false;
@@ -90,7 +82,11 @@ function StatusBar() {
   return (
     <div className="h-7 bg-card border-t border-border flex items-center px-4 text-xs shrink-0">
       <ConnectionStatusBar
-        engine={{ ...connection, state: connectionState, version: formatEngineVersion(engineVersion) }}
+        engine={{
+          ...connection,
+          state: connectionState,
+          version: starting ? starting.phase : formatEngineVersion(engineVersion),
+        }}
       />
 
       <StatusBarCenterMount className="flex items-center justify-center shrink-0" />
@@ -281,6 +277,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
         <AppHeader sectionNav={sectionNav} />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />
+        <EngineStartingBanner />
         <BillingBanner />
         <SetupInstallBanner />
 
