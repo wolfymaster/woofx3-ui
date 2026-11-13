@@ -1547,17 +1547,6 @@ export interface MarketplacePageRequest {
   offset: number;
 }
 
-/** What starting a purchase came to. */
-export type MarketplaceCheckout =
-  /** Pay on the marketplace's payment page at `url`. */
-  | { status: "redirect"; url: string }
-  /** The account already holds the listing. */
-  | { status: "already_entitled" }
-  /** Nothing to pay, such as a free upgrade. */
-  | { status: "no_payment_needed" }
-  /** Nothing can be bought here; `message` says why. */
-  | { status: "unavailable"; message: string };
-
 // ==================== Marketplace installs and starter packs ====================
 
 /** What the marketplace asks to be paid before the account holds a listing. `expiresAt` is ISO 8601. */

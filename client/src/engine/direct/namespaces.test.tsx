@@ -1391,7 +1391,7 @@ describe("marketplace", () => {
     expect(await read("nobody", { limit: 1, offset: 0 })).toBeNull();
   });
 
-  test("quotes, entitlements and checkout need an account", async () => {
+  test("quotes and entitlements need an account", async () => {
     const { runtime } = await connected();
     const marketplace = directMarketplaceGateway(runtime);
     const refusals = await Promise.all([
@@ -1400,9 +1400,6 @@ describe("marketplace", () => {
         .catch((error: Error) => error),
       renderDirect(() => marketplace.useEntitlementsRequest())
         .current()()
-        .catch((error: Error) => error),
-      renderDirect(() => marketplace.useCheckoutRequest())
-        .current()("cozy", "/")
         .catch((error: Error) => error),
     ]);
     for (const refusal of refusals) {

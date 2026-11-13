@@ -4,7 +4,6 @@ import { AlertCircle, Check, CreditCard, Download, ExternalLink, Loader2, LogIn 
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useEngineScope } from "@/engine/context";
-import { useMarketplaceCheckoutRequest } from "@/engine/hooks/use-marketplace";
 import { useMarketplaceBundleInstallRequest } from "@/engine/hooks/use-modules";
 import { useOrganizationAccess } from "@/engine/hooks/use-organization-access";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -21,6 +20,9 @@ import { cn } from "@/lib/utils";
  * server-side for anything the account does not hold regardless, so a wrong
  * answer here costs a confusing button rather than a free module.
  */
+
+/** Buying needs the engine to take licenses, which an engine older than v0.71.0 does not. */
+const NO_PURCHASE_PATH_MESSAGE = "Buying needs an engine on woofx3 v0.71.0 or newer.";
 
 export type ListingInstallState =
   /**
@@ -53,18 +55,17 @@ interface ListingInstallButtonProps {
   /** Installs a module or theme. Bundles install through this component. */
   onInstallModule?: () => void;
   /**
-   * Buys a module or theme through its install, which asks for approval
-   * before anything is paid. Without it, Buy opens checkout directly.
+   * Buys a listing, of any type, through the install flow: it claims the
+   * listing for the purchase and asks for approval before anything is paid.
+   * Without it, nothing can be bought here.
    */
-  onPurchaseModule?: () => void;
+  onPurchase?: () => void;
   /** Called after a bundle install writes its scene or composition. */
   onBundleInstalled?: (result: { kind: "scene" | "alert"; engineId: string }) => void;
   /** Opens the base module a theme needs. */
   onOpenBaseModule?: (moduleId: string) => void;
   /** Opens another listing: the newer edition that replaced this one. */
   onOpenListing?: (listingId: string) => void;
-  /** Checkout found nothing to pay, or that the account already holds it: read the quote again. */
-  onQuoteStale?: () => void;
   isInstalling?: boolean;
   className?: string;
 }
@@ -73,48 +74,18 @@ export function ListingInstallButton({
   listing,
   state,
   onInstallModule,
-  onPurchaseModule,
+  onPurchase,
   onBundleInstalled,
   onOpenBaseModule,
   onOpenListing,
-  onQuoteStale,
   isInstalling,
   className,
 }: ListingInstallButtonProps) {
   const { instanceId } = useEngineScope();
-  const createCheckout = useMarketplaceCheckoutRequest();
   const canPay = canStartPayment(useOrganizationAccess());
   const installBundle = useMarketplaceBundleInstallRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const startCheckout = useCallback(async () => {
-    if (!instanceId) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      // A path, not a URL. The server joins it onto the configured app
-      // origin, so a checkout can only ever return the buyer to woofx3.
-      const result = await createCheckout(listing.id, `/marketplace/listing/${encodeURIComponent(listing.id)}`);
-      if (result.status === "redirect") {
-        window.location.assign(result.url);
-        return;
-      }
-      if (result.status === "unavailable") {
-        setError(result.message);
-        return;
-      }
-      // Already held, or nothing to pay: the quote is out of date, and the
-      // fresh one turns the button into Install.
-      onQuoteStale?.();
-    } catch (err) {
-      setError(actionErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [createCheckout, instanceId, listing.id, onQuoteStale]);
 
   const runBundleInstall = useCallback(async () => {
     if (!instanceId) {
@@ -156,12 +127,9 @@ export function ListingInstallButton({
           working={working}
           disabled={!instanceId}
           canPay={canPay}
+          canBuy={onPurchase !== undefined}
           onPurchase={() => {
-            if (onPurchaseModule && !isBundleListing(listing.type)) {
-              onPurchaseModule();
-              return;
-            }
-            void startCheckout();
+            onPurchase?.();
           }}
           onOpenListing={onOpenListing}
           onInstall={() => {
@@ -189,6 +157,7 @@ function PrimaryAction({
   working,
   disabled,
   canPay,
+  canBuy,
   onPurchase,
   onInstall,
   onOpenListing,
@@ -197,6 +166,8 @@ function PrimaryAction({
   working: boolean;
   disabled: boolean;
   canPay: boolean;
+  /** Whether a purchase can be started here at all. */
+  canBuy: boolean;
   onPurchase: () => void;
   onInstall: () => void;
   onOpenListing?: (listingId: string) => void;
@@ -271,11 +242,12 @@ function PrimaryAction({
     const amount = formatAmount(state.amountCents, state.currency);
     return (
       <>
-        <Button className="gap-2" disabled={disabled || working || !canPay} onClick={onPurchase}>
+        <Button className="gap-2" disabled={disabled || working || !canPay || !canBuy} onClick={onPurchase}>
           {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
           {state.upgradeFrom ? `Upgrade for ${amount}` : `Buy for ${amount}`}
         </Button>
         {!canPay && <p className="text-xs text-muted-foreground">{OWNER_MUST_PURCHASE_MESSAGE}</p>}
+        {!canBuy && <p className="text-xs text-muted-foreground">{NO_PURCHASE_PATH_MESSAGE}</p>}
         {state.upgradeFrom && (
           <p className="text-xs text-muted-foreground">Upgrade price, because you own an earlier edition.</p>
         )}

@@ -29,11 +29,6 @@ export function useMarketplaceEntitlementsRequest() {
   return useEngineGateway().marketplace.useEntitlementsRequest();
 }
 
-/** Needs an account: only call where the marketplace mode has purchases. */
-export function useMarketplaceCheckoutRequest() {
-  return useEngineGateway().marketplace.useCheckoutRequest();
-}
-
 /** Makes the account hold a listing it is about to install; see `useLicensedInstallRequest`. */
 export function useMarketplaceAcquireForInstallRequest() {
   return useEngineGateway().marketplace.useAcquireForInstallRequest();

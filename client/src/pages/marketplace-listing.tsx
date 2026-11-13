@@ -64,18 +64,10 @@ export default function MarketplaceListing() {
   const [oauthResult, dismissOauthResult] = useMarketplaceMode().useOAuthReturn("?tab=settings");
 
   // A payment page sends the buyer back here. Billing's checkout returns with
-  // `?checkout=done&checkoutId=...`, which the licensed install follows until
-  // the listing is granted. The marketplace's own checkout returns with
-  // `?purchase=success`; its webhook grants the entitlement in a separate
-  // round trip, so the page reads the quote again and says so rather than
-  // assuming the button has already flipped.
-  const purchaseOutcome = useMemo(() => new URLSearchParams(searchString).get("purchase"), [searchString]);
+  // `?checkout=done&checkoutId=...`, which the install flow follows until the
+  // listing is granted: the grant is a separate round trip behind the
+  // payment, so the page waits rather than assuming the button has flipped.
   const checkoutReturn = useMemo(() => parseCheckoutReturn(searchString), [searchString]);
-  useEffect(() => {
-    if (purchaseOutcome === "success") {
-      void quote.refetch();
-    }
-  }, [purchaseOutcome, quote.refetch]);
 
   if (!listingId) {
     return null;
@@ -95,15 +87,12 @@ export default function MarketplaceListing() {
           Marketplace
         </Button>
 
-        {purchaseOutcome === "success" && (
+        {checkoutReturn.kind === "done" && (
           <Banner tone="success">
-            Thanks — your purchase is being confirmed. The install button appears as soon as Stripe tells us it went
-            through; reload if it takes more than a moment.
+            Thanks — your payment went through. The install button appears as soon as the purchase is confirmed.
           </Banner>
         )}
-        {(purchaseOutcome === "cancelled" || checkoutReturn.kind === "cancelled") && (
-          <Banner tone="muted">{CHECKOUT_CANCELLED_TEXT}</Banner>
-        )}
+        {checkoutReturn.kind === "cancelled" && <Banner tone="muted">{CHECKOUT_CANCELLED_TEXT}</Banner>}
         {oauthResult && <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} />}
 
         {error && (
@@ -141,13 +130,7 @@ export default function MarketplaceListing() {
           <ListingBody
             listing={listing}
             quote={quote}
-            purchaseReturn={
-              checkoutReturn.kind === "done"
-                ? { checkoutId: checkoutReturn.checkoutId }
-                : purchaseOutcome === "success"
-                  ? { checkoutId: null }
-                  : null
-            }
+            purchaseReturn={checkoutReturn.kind === "done" ? { checkoutId: checkoutReturn.checkoutId } : null}
             onRefetch={() => {
               void refetch();
               void quote.refetch();
@@ -286,7 +269,7 @@ function ListingBody({
     bundleInstalled: bundleInstalled !== null,
   });
 
-  const requestModuleInstall = useCallback(() => {
+  const requestInstall = useCallback(() => {
     install.request({
       marketplaceId: listing.id,
       mode: state.kind === "updatable" ? "update" : "install",
@@ -375,15 +358,14 @@ function ListingBody({
             listing={listing}
             state={state}
             isInstalling={install.isInstalling}
-            onInstallModule={requestModuleInstall}
-            onPurchaseModule={install.licensed ? requestModuleInstall : undefined}
+            onInstallModule={requestInstall}
+            onPurchase={install.licensed ? requestInstall : undefined}
             onBundleInstalled={(result) => {
               setBundleInstalled({ kind: result.kind });
               onRefetch();
             }}
             onOpenBaseModule={(moduleId) => navigate(marketplaceListingPath(moduleId))}
             onOpenListing={(id) => navigate(marketplaceListingPath(id))}
-            onQuoteStale={() => void quote.refetch()}
           />
           <PreviewButton listing={listing} className="w-full" />
           {installedRow && installedRow.provenance !== "builtIn" && (

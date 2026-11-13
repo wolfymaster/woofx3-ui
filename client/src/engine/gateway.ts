@@ -79,7 +79,6 @@ import type {
   MacroRunResult,
   MacroVariableValue,
   MarketplaceBundleInstall,
-  MarketplaceCheckout,
   MarketplacePageRequest,
   MarketplaceSearchQuery,
   ModeratedUser,
@@ -551,8 +550,6 @@ export interface MarketplaceGateway {
   useQuoteRequest(): (listingId: string) => Promise<ListingQuote | null>;
   /** The ids of every listing the account holds. */
   useEntitlementsRequest(): () => Promise<string[]>;
-  /** Starts buying a listing, returning to `returnPath`, a path in this app, when done. */
-  useCheckoutRequest(): (listingId: string, returnPath: string) => Promise<MarketplaceCheckout>;
   /**
    * Makes the account hold a listing it is about to install: claims a free
    * one, confirms one held, or answers with the purchase to pay. Safe to ask

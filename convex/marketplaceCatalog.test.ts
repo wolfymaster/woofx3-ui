@@ -11,7 +11,7 @@ import type { OrgRole } from "./lib/organization";
 
 type Backend = ReturnType<typeof newBackend>;
 
-const ENV_KEYS = ["MARKETPLACE_API_URL", "MARKETPLACE_API_TOKEN", "APP_BASE_URL"] as const;
+const ENV_KEYS = ["MARKETPLACE_API_URL", "MARKETPLACE_API_TOKEN"] as const;
 const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const realFetch = globalThis.fetch;
 let marketplaceCalls: string[] = [];
@@ -20,7 +20,6 @@ beforeEach(() => {
   marketplaceCalls = [];
   process.env.MARKETPLACE_API_URL = "https://marketplace.test";
   process.env.MARKETPLACE_API_TOKEN = "token";
-  process.env.APP_BASE_URL = "https://app.test";
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = new URL(String(input));
     marketplaceCalls.push(url.pathname);
@@ -76,38 +75,6 @@ function refusal(promise: Promise<unknown>): Promise<unknown> {
     (error: unknown) => (error instanceof ConvexError ? error.data : error)
   );
 }
-
-describe("createCheckout", () => {
-  test("the organization's owner opens a checkout", async () => {
-    const t = newBackend();
-    const { users, instanceId } = await seed(t);
-    expect(
-      await as(t, users.owner).action(api.marketplaceCatalog.createCheckout, {
-        instanceId,
-        listingId: "cozy",
-        returnPath: "/marketplace/listing/cozy",
-      })
-    ).toEqual({ status: "redirect", url: "https://pay.example/1" });
-  });
-
-  test.each(["admin", "member"] as const)(
-    "an organization %s is refused before the marketplace is asked",
-    async (role) => {
-      const t = newBackend();
-      const { users, instanceId } = await seed(t);
-      expect(
-        await refusal(
-          as(t, users[role]).action(api.marketplaceCatalog.createCheckout, {
-            instanceId,
-            listingId: "cozy",
-            returnPath: "/marketplace/listing/cozy",
-          })
-        )
-      ).toMatchObject({ code: "not_authorized", action: "manageBilling" });
-      expect(marketplaceCalls).toEqual([]);
-    }
-  );
-});
 
 describe("licenseKey", () => {
   test.each(["owner", "admin"] as const)("an organization %s reads the key", async (role) => {
