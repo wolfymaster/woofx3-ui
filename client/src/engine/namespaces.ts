@@ -42,7 +42,6 @@ export const ENGINE_NAMESPACE_MODULES = {
     "marketplaceCatalog.counts",
     "marketplaceCatalog.quote",
     "marketplaceCatalog.entitlements",
-    "marketplaceCatalog.createCheckout",
   ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],

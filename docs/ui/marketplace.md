@@ -190,17 +190,23 @@ card, so a card shows **Buy · $X** for a paid listing the account does not hold
 ## Purchase → install
 
 1. A listing the quote prices shows **Buy for $X** (or **Upgrade for $X**).
-   `marketplaceCatalog.createCheckout` takes a return **path**, never a URL,
-   and joins it onto `APP_BASE_URL` on the server — so a Stripe payment page
-   can only ever return the buyer into woofx3. A purchase spends the
-   organization's money, so it needs the organization's `manageBilling` (its
-   owner), whatever the caller's role on the engine. The marketplace charges
-   its own quote.
-2. Stripe sends the buyer back to the listing with `?purchase=success`. The
-   entitlement is granted by a webhook from Stripe to the *marketplace*, a
-   separate round trip, so the page reads the quote again and says so rather
-   than assuming the button has already flipped.
-3. The button becomes **Install**.
+   Buying starts by claiming the listing
+   (`marketplaceCatalog.acquireForInstall`), which answers with the purchase
+   the marketplace quoted: the amount is the intent's, never the caller's. A
+   purchase spends the organization's money, so it needs the organization's
+   `manageBilling` (its owner), whatever the caller's role on the engine.
+2. The management plane opens the checkout for that intent
+   (`billingCommands.startMarketplaceCheckout`). It owns the payment provider
+   and builds the return itself, so the payment page sends the browser back to
+   the listing with `?checkout=done&checkoutId=…`.
+3. The page follows the payment: it reads the checkout's state
+   (`marketplaceCatalog.checkoutState`) until it settles, then claims the
+   listing again, because the marketplace grants the entitlement behind the
+   payment, in a separate round trip. The button becomes **Install**.
+
+Every listing type buys this way, bundles included: a bundle's install writes
+a scene or an alert composition rather than a module, but the purchase is the
+same purchase.
 
 **The gate is on the server, and it fails closed.** Both install paths call
 `acquireListing` (`convex/lib/marketplaceEntitlement.ts`) before the engine is
@@ -378,9 +384,9 @@ same one the plan checkout's return uses): every unanswered or unfinished ask
 counts. Past it the flow fails as `payment_pending` and keeps the purchase,
 and **Check again** (`purchase_rechecked`) starts following it again; nothing
 is charged twice, since billing refuses a second checkout for a paid intent.
-A return from the marketplace's own checkout (`?purchase=success`) names no
-checkout and waits on the grant alone. A refund after the grant revokes the
-entitlement, so a later acquire is refused as `entitlement_revoked`.
+A return that names no checkout waits on the grant alone. A refund after the
+grant revokes the entitlement, so a later acquire is refused as
+`entitlement_revoked`.
 
 Consent comes before acquire, so a streamer who backs out claims nothing.
 Every command is idempotent, so a reload starts again from what the
@@ -393,14 +399,13 @@ must be deleted once its condition holds:
 
 - **The unlicensed install** (`useUnlicensedModuleInstall`, the Convex
   `installModule` action) runs on an engine without `marketplace.licenseKeys`.
+  Buying on such an engine is refused outright: the purchase needs the same
+  capability, because the license the install carries is what the marketplace
+  grants it.
 - **The Convex download path** in `installFromMarketplace` fetches the archive
   in Convex without a key. Both go once every engine reports the capability,
   which nothing counts yet, and before the marketplace requires a key for every
   download, which would break them.
-- **The marketplace's own Stripe checkout** (`marketplaceCatalog.createCheckout`)
-  still pays for overlay and alert bundles and for installs on engines without
-  license keys, through the listing button. It goes once those pay through
-  billing too, and before the marketplace deletes its Stripe checkout.
 
 ## Author pages
 
@@ -428,12 +433,11 @@ parts only work as a set, and a second copy would have drifted from the first.
 |---|---|
 | `MARKETPLACE_API_URL` | Everything. The marketplace API's origin. |
 | `MARKETPLACE_DEV_TOKEN` | Revealing dev-tier listings to flagged engines. |
-| `MARKETPLACE_API_TOKEN` | Acquire, quotes, checkout and ownership reads. The marketplace gates those on its write token. Never reaches the browser. |
-| `APP_BASE_URL` | Checkout. The origin a return path is joined onto. |
+| `MARKETPLACE_API_TOKEN` | Acquire, quotes and ownership reads. The marketplace gates those on its write token. Never reaches the browser. |
 | `MARKETPLACE_BUYER_SIGNING_KEY` | Minting buyer tokens (`buyerTokenFor`). The Ed25519 private key as JWK JSON. A secret. |
 | `MARKETPLACE_BUYER_SIGNING_KEY_ID` | Minting buyer tokens. The `kid` the marketplace knows the public key by. |
 
-Without `MARKETPLACE_API_TOKEN` and `APP_BASE_URL`, the catalog browses
+Without `MARKETPLACE_API_TOKEN`, the catalog browses
 normally and paid listings cannot be bought or installed.
 
 A buyer token is a five-minute Ed25519 JWS that lets an engine act for one
