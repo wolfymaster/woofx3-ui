@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
 import { isUsable } from "./lib/entitlements";
+import { engineBuildStalled } from "./lib/firstRun";
 import type { LifecycleReason } from "./lib/organization";
 import { billingFor } from "./lib/orgBilling";
 import { orgCan, orgRoleOf } from "./lib/orgRoles";
@@ -14,10 +15,12 @@ const MAX_MEMBERSHIPS = 100;
 /**
  * Where the dashboard sends a signed-in user. The dashboard needs an engine:
  * a user with no registered engine is sent to create one, and a hosted engine
- * whose org is suspended is locked to a page that says so.
+ * whose org is suspended is locked to a page that says so. A managed engine
+ * that is still being built is enterable too, with `starting` telling the
+ * dashboard to show the shell and a waiting state instead of engine panels.
  */
 export type DashboardEntry =
-  | { kind: "engine"; instanceId: Id<"instances"> }
+  | { kind: "engine"; instanceId: Id<"instances">; starting: boolean }
   | { kind: "createEngine"; accountId: Id<"accounts"> | null }
   | {
       kind: "suspended";
@@ -27,29 +30,77 @@ export type DashboardEntry =
       ownerName: string | null;
     };
 
-/**
- * The engine to open: the selected one, else the user's default, else the
- * newest. Each must still be a registered engine the user is a member of.
- */
-function chooseEngine(
-  engines: Doc<"instances">[],
-  selectedId: Id<"instances"> | null,
-  defaultId: Id<"instances"> | undefined
-): Doc<"instances"> | null {
-  const byId = (id: Id<"instances"> | null | undefined) => engines.find((engine) => engine._id === id);
-  const latest = [...engines].sort((a, b) => b.createdAt - a.createdAt)[0];
-  return byId(selectedId) ?? byId(defaultId) ?? latest ?? null;
+/** A membership the dashboard can open, and whether its engine has finished registering. */
+interface EnterableEngine {
+  engine: Doc<"instances">;
+  starting: boolean;
 }
 
-async function registeredEnginesOf(ctx: QueryCtx, userId: Id<"users">): Promise<Doc<"instances">[]> {
+/** The statuses a managed engine passes through while woofx3 builds and registers it. */
+const BUILDING_STATUSES: ReadonlySet<Doc<"engineProvisioning">["status"]> = new Set([
+  "requested",
+  "provisioning",
+  "ready",
+  "registering",
+]);
+
+function byNewest(a: EnterableEngine, b: EnterableEngine): number {
+  return b.engine.createdAt - a.engine.createdAt;
+}
+
+/**
+ * The engine to open: the selected one, else the user's default, else the
+ * newest registered one, else the newest still starting. A registered engine
+ * wins the fallback so an older working one is not hidden behind a new one
+ * that is still coming up.
+ */
+function chooseEngine(
+  engines: EnterableEngine[],
+  selectedId: Id<"instances"> | null,
+  defaultId: Id<"instances"> | undefined
+): EnterableEngine | null {
+  const byId = (id: Id<"instances"> | null | undefined) => engines.find((candidate) => candidate.engine._id === id);
+  const selected = byId(selectedId) ?? byId(defaultId);
+  if (selected) {
+    return selected;
+  }
+  const registered = engines.filter((candidate) => !candidate.starting).sort(byNewest)[0];
+  return registered ?? [...engines].sort(byNewest)[0] ?? null;
+}
+
+async function enterableEnginesOf(ctx: QueryCtx, userId: Id<"users">, now: number): Promise<EnterableEngine[]> {
   const memberships = await ctx.db
     .query("instanceMembers")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .take(MAX_MEMBERSHIPS);
   const engines = await Promise.all(memberships.map((membership) => ctx.db.get(membership.instanceId)));
-  // Only a finished handshake (`clientId`) makes an engine usable; a managed
-  // one still being built, or a failed registration, is onboarding's to finish.
-  return engines.filter((engine): engine is Doc<"instances"> => engine !== null && Boolean(engine.clientId));
+  const enterable: EnterableEngine[] = [];
+  for (const engine of engines) {
+    if (engine === null) {
+      continue;
+    }
+    if (engine.clientId) {
+      enterable.push({ engine, starting: false });
+      continue;
+    }
+    // Only a managed engine woofx3 is actively building is worth opening
+    // early; a failed, torn-down or self-hosted one is onboarding's to finish.
+    if (engine.hosting !== "managed") {
+      continue;
+    }
+    const provisioning = await ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_instance", (q) => q.eq("instanceId", engine._id))
+      .first();
+    if (provisioning === null || !BUILDING_STATUSES.has(provisioning.status)) {
+      continue;
+    }
+    if (engineBuildStalled({ provisioning, managedEngine: true, completedAt: null, now })) {
+      continue;
+    }
+    enterable.push({ engine, starting: true });
+  }
+  return enterable;
 }
 
 /**
@@ -101,7 +152,7 @@ export const entry = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
     const engine = chooseEngine(
-      await registeredEnginesOf(ctx, userId),
+      await enterableEnginesOf(ctx, userId, Date.now()),
       selectedInstanceId,
       settings?.defaultInstanceId
     );
@@ -112,7 +163,13 @@ export const entry = query({
         .first();
       return { kind: "createEngine", accountId: owned?._id ?? null };
     }
-    return (await suspendedEntry(ctx, engine, userId)) ?? { kind: "engine", instanceId: engine._id };
+    return (
+      (await suspendedEntry(ctx, engine.engine, userId)) ?? {
+        kind: "engine",
+        instanceId: engine.engine._id,
+        starting: engine.starting,
+      }
+    );
   },
 });
 
