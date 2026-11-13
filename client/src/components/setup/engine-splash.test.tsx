@@ -79,6 +79,21 @@ describe("EngineSplash", () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
+  test("can skip the game and bring it back", async () => {
+    const renderer = await render(splash({ build: BUILDING }));
+
+    expect(hasTestId(renderer, "duck-hop")).toBe(true);
+    expect(hasTestId(renderer, "stream-chat")).toBe(true);
+
+    await press(renderer, "button-game-toggle");
+    expect(hasTestId(renderer, "duck-hop")).toBe(false);
+    expect(hasTestId(renderer, "stream-chat")).toBe(false);
+    expect(hasTestId(renderer, "text-game-hidden")).toBe(true);
+
+    await press(renderer, "button-game-toggle");
+    expect(hasTestId(renderer, "duck-hop")).toBe(true);
+  });
+
   test("shows the ready card when the build finishes while on screen", async () => {
     const ready = mock(() => undefined);
     const renderer = await render(splash({ build: BUILDING, onReady: ready, autoOpenMs: 50 }));

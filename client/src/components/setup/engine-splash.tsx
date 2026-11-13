@@ -1,21 +1,18 @@
 import { MonitorPlay } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DuckHop } from "@/components/setup/duck-hop";
 import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { RetryButton } from "@/components/setup/retry-button";
+import { StreamChat } from "@/components/setup/stream-chat";
 import { WaitRoomStatusBar } from "@/components/setup/wait-room-status-bar";
 import { Button } from "@/components/ui/button";
+import type { DuckHopEvent } from "@/lib/duck-hop";
 import type { EngineBuild } from "@/lib/engine-build";
 import { LOADING_MESSAGES, nextLoadingMessage } from "@/lib/loading-messages";
 
 const MESSAGE_INTERVAL_MS = 3_200;
 /** How long the ready card waits before opening the dashboard by itself. */
 export const READY_AUTO_OPEN_MS = 8_000;
-/** The level meter's bars, each on its own beat. Heights are fixed so the row never reads as data. */
-const METER_BARS = Array.from({ length: 48 }, (_, index) => ({
-  key: index,
-  delayMs: (index * 137) % 1100,
-  height: 30 + ((index * 53) % 70),
-}));
 
 interface EngineSplashProps {
   build: EngineBuild;
@@ -50,6 +47,8 @@ export function EngineSplash({
   const readyHeading = useRef<HTMLHeadingElement>(null);
   const [showReady, setShowReady] = useState(false);
   const [staying, setStaying] = useState(false);
+  const [chatEvent, setChatEvent] = useState<DuckHopEvent | null>(null);
+  const [gameHidden, setGameHidden] = useState(false);
 
   // A build already finished when this opened has nothing left to wait for, so
   // it opens at once as it always has. One that finishes while this is on
@@ -119,8 +118,8 @@ export function EngineSplash({
         )}
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col">
-        <div className="flex flex-1 flex-col justify-center gap-6 px-6 sm:px-12 lg:px-24">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="my-auto flex w-full flex-col gap-6 px-6 py-6 sm:px-12 lg:px-24">
           {failed ? (
             <>
               <h1
@@ -195,26 +194,36 @@ export function EngineSplash({
                 going.
               </output>
               {build.stage === "building" && (
-                <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />
+                <>
+                  <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />
+                  {gameHidden ? (
+                    <p className="text-sm text-neutral-500" data-testid="text-game-hidden">
+                      The game is hidden.
+                    </p>
+                  ) : (
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_15rem]">
+                      <DuckHop enabled={build.stage === "building"} onEvent={setChatEvent} />
+                      <StreamChat event={chatEvent} />
+                    </div>
+                  )}
+                  <div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200"
+                      onClick={() => setGameHidden((hidden) => !hidden)}
+                      data-testid="button-game-toggle"
+                    >
+                      {gameHidden ? "Show the game" : "Skip the game"}
+                    </Button>
+                  </div>
+                </>
               )}
             </>
           )}
         </div>
       </main>
-
-      <div className="flex h-24 items-end gap-1 px-6 pb-6 sm:h-32" aria-hidden="true">
-        {METER_BARS.map((bar) => (
-          <span
-            key={bar.key}
-            className={
-              failed
-                ? "h-1 flex-1 rounded-sm bg-neutral-700"
-                : "flex-1 origin-bottom rounded-sm bg-primary/70 motion-safe:animate-level-meter"
-            }
-            style={failed ? undefined : { height: `${bar.height}%`, animationDelay: `${bar.delayMs}ms` }}
-          />
-        ))}
-      </div>
 
       {build.stage === "building" && <WaitRoomStatusBar build={build} />}
     </div>
