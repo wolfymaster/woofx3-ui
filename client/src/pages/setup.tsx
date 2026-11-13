@@ -42,7 +42,12 @@ function HostedSplash({ instanceId, status }: HostedStepProps) {
     $currentInstanceId.set(instanceId);
     navigate("/");
   }, [instanceId, navigate]);
-  return <EngineSplash build={useEngineBuild(instanceId, status)} onReady={openDashboard} />;
+  const backToOverlay = useCallback(() => {
+    navigate(setupStepPath("overlay"));
+  }, [navigate]);
+  return (
+    <EngineSplash build={useEngineBuild(instanceId, status)} onReady={openDashboard} onBackToOverlay={backToOverlay} />
+  );
 }
 
 /**
