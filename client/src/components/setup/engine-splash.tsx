@@ -1,20 +1,18 @@
 import { MonitorPlay } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DuckHop } from "@/components/setup/duck-hop";
 import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { RetryButton } from "@/components/setup/retry-button";
+import { StreamChat } from "@/components/setup/stream-chat";
+import { WaitRoomStatusBar } from "@/components/setup/wait-room-status-bar";
 import { Button } from "@/components/ui/button";
+import type { DuckHopEvent } from "@/lib/duck-hop";
 import type { EngineBuild } from "@/lib/engine-build";
 import { LOADING_MESSAGES, nextLoadingMessage } from "@/lib/loading-messages";
 
 const MESSAGE_INTERVAL_MS = 3_200;
 /** How long the ready card waits before opening the dashboard by itself. */
 export const READY_AUTO_OPEN_MS = 8_000;
-/** The level meter's bars, each on its own beat. Heights are fixed so the row never reads as data. */
-const METER_BARS = Array.from({ length: 48 }, (_, index) => ({
-  key: index,
-  delayMs: (index * 137) % 1100,
-  height: 30 + ((index * 53) % 70),
-}));
 
 interface EngineSplashProps {
   build: EngineBuild;
@@ -49,6 +47,8 @@ export function EngineSplash({
   const readyHeading = useRef<HTMLHeadingElement>(null);
   const [showReady, setShowReady] = useState(false);
   const [staying, setStaying] = useState(false);
+  const [chatEvent, setChatEvent] = useState<DuckHopEvent | null>(null);
+  const [gameHidden, setGameHidden] = useState(false);
 
   // A build already finished when this opened has nothing left to wait for, so
   // it opens at once as it always has. One that finishes while this is on
@@ -95,7 +95,7 @@ export function EngineSplash({
   }, [showReady]);
 
   return (
-    <main
+    <div
       className="fixed inset-0 flex flex-col overflow-hidden bg-neutral-950 text-neutral-50"
       data-testid="engine-splash"
     >
@@ -118,99 +118,114 @@ export function EngineSplash({
         )}
       </header>
 
-      <div className="flex flex-1 flex-col justify-center gap-6 px-6 sm:px-12 lg:px-24">
-        {failed ? (
-          <>
-            <h1
-              ref={failureHeading}
-              tabIndex={-1}
-              className="text-3xl font-bold tracking-tight outline-none sm:text-5xl"
-            >
-              We couldn&apos;t finish setting up
-            </h1>
-            <output className="block max-w-prose text-neutral-300" data-testid="text-splash-failed">
-              This usually clears up with a retry.
-            </output>
-            <div>
-              <RetryButton onRetry={build.retry} testId="button-splash-retry" />
-            </div>
-          </>
-        ) : showReady ? (
-          <>
-            <p className="text-lg font-medium text-primary">You&apos;re all set</p>
-            <h1
-              ref={readyHeading}
-              tabIndex={-1}
-              className="text-balance text-4xl font-bold leading-tight tracking-tight outline-none sm:text-6xl"
-              data-testid="text-splash-ready"
-            >
-              Your dashboard is ready
-            </h1>
-            <output className="block max-w-prose text-neutral-400">
-              {staying
-                ? "Staying here. Open your dashboard when you're ready."
-                : "Opening your dashboard in a few seconds."}
-            </output>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={onReady} data-testid="button-splash-open-dashboard">
-                Open dashboard
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-neutral-700 bg-transparent text-neutral-100 hover:bg-neutral-800 hover:text-neutral-50"
-                onClick={onBackToOverlay}
-                data-testid="button-splash-test-alert"
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="my-auto flex w-full flex-col gap-6 px-6 py-6 sm:px-12 lg:px-24">
+          {failed ? (
+            <>
+              <h1
+                ref={failureHeading}
+                tabIndex={-1}
+                className="text-3xl font-bold tracking-tight outline-none sm:text-5xl"
               >
-                Test your alert first
-              </Button>
-              {!staying && (
+                We couldn&apos;t finish setting up
+              </h1>
+              <output className="block max-w-prose text-neutral-300" data-testid="text-splash-failed">
+                This usually clears up with a retry.
+              </output>
+              <div>
+                <RetryButton onRetry={build.retry} testId="button-splash-retry" />
+              </div>
+            </>
+          ) : showReady ? (
+            <>
+              <p className="text-lg font-medium text-primary">You&apos;re all set</p>
+              <h1
+                ref={readyHeading}
+                tabIndex={-1}
+                className="text-balance text-4xl font-bold leading-tight tracking-tight outline-none sm:text-6xl"
+                data-testid="text-splash-ready"
+              >
+                Your dashboard is ready
+              </h1>
+              <output className="block max-w-prose text-neutral-400">
+                {staying
+                  ? "Staying here. Open your dashboard when you're ready."
+                  : "Opening your dashboard in a few seconds."}
+              </output>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={onReady} data-testid="button-splash-open-dashboard">
+                  Open dashboard
+                </Button>
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="text-neutral-400 hover:bg-neutral-800 hover:text-neutral-50"
-                  onClick={() => setStaying(true)}
-                  data-testid="button-splash-stay"
+                  variant="outline"
+                  className="border-neutral-700 bg-transparent text-neutral-100 hover:bg-neutral-800 hover:text-neutral-50"
+                  onClick={onBackToOverlay}
+                  data-testid="button-splash-test-alert"
                 >
-                  Stay here
+                  Test your alert first
                 </Button>
+                {!staying && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-neutral-400 hover:bg-neutral-800 hover:text-neutral-50"
+                    onClick={() => setStaying(true)}
+                    data-testid="button-splash-stay"
+                  >
+                    Stay here
+                  </Button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-medium text-primary">Starting soon</p>
+              <p
+                key={messageIndex}
+                aria-hidden="true"
+                className="min-h-[2.5em] max-w-4xl text-balance text-4xl font-bold leading-tight tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 sm:text-6xl"
+                data-testid="text-splash-message"
+              >
+                {LOADING_MESSAGES[messageIndex]}
+              </p>
+              <output className="block max-w-prose text-neutral-400">
+                Your dashboard is getting ready and opens by itself. You can close this tab and come back; it keeps
+                going.
+              </output>
+              {build.stage === "building" && (
+                <>
+                  <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />
+                  {gameHidden ? (
+                    <p className="text-sm text-neutral-500" data-testid="text-game-hidden">
+                      The game is hidden.
+                    </p>
+                  ) : (
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_15rem]">
+                      <DuckHop enabled={build.stage === "building"} onEvent={setChatEvent} />
+                      <StreamChat event={chatEvent} />
+                    </div>
+                  )}
+                  <div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200"
+                      onClick={() => setGameHidden((hidden) => !hidden)}
+                      data-testid="button-game-toggle"
+                    >
+                      {gameHidden ? "Show the game" : "Skip the game"}
+                    </Button>
+                  </div>
+                </>
               )}
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-lg font-medium text-primary">Starting soon</p>
-            <p
-              key={messageIndex}
-              aria-hidden="true"
-              className="min-h-[2.5em] max-w-4xl text-balance text-4xl font-bold leading-tight tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 sm:text-6xl"
-              data-testid="text-splash-message"
-            >
-              {LOADING_MESSAGES[messageIndex]}
-            </p>
-            <output className="block max-w-prose text-neutral-400">
-              Your dashboard is getting ready and opens by itself. You can close this tab and come back; it keeps going.
-            </output>
-            {build.stage === "building" && (
-              <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />
-            )}
-          </>
-        )}
-      </div>
+            </>
+          )}
+        </div>
+      </main>
 
-      <div className="flex h-24 items-end gap-1 px-6 pb-6 sm:h-32" aria-hidden="true">
-        {METER_BARS.map((bar) => (
-          <span
-            key={bar.key}
-            className={
-              failed
-                ? "h-1 flex-1 rounded-sm bg-neutral-700"
-                : "flex-1 origin-bottom rounded-sm bg-primary/70 motion-safe:animate-level-meter"
-            }
-            style={failed ? undefined : { height: `${bar.height}%`, animationDelay: `${bar.delayMs}ms` }}
-          />
-        ))}
-      </div>
-    </main>
+      {build.stage === "building" && <WaitRoomStatusBar build={build} />}
+    </div>
   );
 }

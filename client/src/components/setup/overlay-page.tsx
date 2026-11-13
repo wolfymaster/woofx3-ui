@@ -6,6 +6,7 @@ import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { OverlayLink } from "@/components/setup/overlay-link";
 import { OverlayStage } from "@/components/setup/overlay-stage";
 import { RetryButton } from "@/components/setup/retry-button";
+import { SceneReadyChecklist } from "@/components/setup/scene-ready-checklist";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEngineAlerts, useOverlayOpen } from "@/engine/hooks/use-alert-queue";
@@ -436,7 +437,12 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
           </output>
         </div>
 
-        {phase.name === "building" && engine.stage === "building" && <EngineBuildProgress build={engine} />}
+        {phase.name === "building" && engine.stage === "building" && (
+          <>
+            <EngineBuildProgress build={engine} />
+            <SceneReadyChecklist />
+          </>
+        )}
 
         {phase.name === "build-failed" && engine.stage === "failed" && (
           <RetryButton onRetry={engine.retry} testId="button-overlay-build-retry" />

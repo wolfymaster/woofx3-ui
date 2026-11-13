@@ -74,8 +74,24 @@ describe("EngineSplash", () => {
     const renderer = await render(splash({ build: BUILDING, onBackToOverlay: back }));
 
     expect(hasTestId(renderer, "button-splash-back")).toBe(true);
+    expect(hasTestId(renderer, "wait-room-status-bar")).toBe(true);
     await press(renderer, "button-splash-back");
     expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  test("can skip the game and bring it back", async () => {
+    const renderer = await render(splash({ build: BUILDING }));
+
+    expect(hasTestId(renderer, "duck-hop")).toBe(true);
+    expect(hasTestId(renderer, "stream-chat")).toBe(true);
+
+    await press(renderer, "button-game-toggle");
+    expect(hasTestId(renderer, "duck-hop")).toBe(false);
+    expect(hasTestId(renderer, "stream-chat")).toBe(false);
+    expect(hasTestId(renderer, "text-game-hidden")).toBe(true);
+
+    await press(renderer, "button-game-toggle");
+    expect(hasTestId(renderer, "duck-hop")).toBe(true);
   });
 
   test("shows the ready card when the build finishes while on screen", async () => {
@@ -88,6 +104,7 @@ describe("EngineSplash", () => {
 
     expect(hasTestId(renderer, "text-splash-ready")).toBe(true);
     expect(hasTestId(renderer, "button-splash-back")).toBe(false);
+    expect(hasTestId(renderer, "wait-room-status-bar")).toBe(false);
     expect(ready).not.toHaveBeenCalled();
 
     await press(renderer, "button-splash-open-dashboard");
