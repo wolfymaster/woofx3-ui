@@ -74,6 +74,7 @@ describe("EngineSplash", () => {
     const renderer = await render(splash({ build: BUILDING, onBackToOverlay: back }));
 
     expect(hasTestId(renderer, "button-splash-back")).toBe(true);
+    expect(hasTestId(renderer, "wait-room-status-bar")).toBe(true);
     await press(renderer, "button-splash-back");
     expect(back).toHaveBeenCalledTimes(1);
   });
@@ -88,6 +89,7 @@ describe("EngineSplash", () => {
 
     expect(hasTestId(renderer, "text-splash-ready")).toBe(true);
     expect(hasTestId(renderer, "button-splash-back")).toBe(false);
+    expect(hasTestId(renderer, "wait-room-status-bar")).toBe(false);
     expect(ready).not.toHaveBeenCalled();
 
     await press(renderer, "button-splash-open-dashboard");

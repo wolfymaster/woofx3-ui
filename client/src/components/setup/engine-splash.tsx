@@ -2,6 +2,7 @@ import { MonitorPlay } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { RetryButton } from "@/components/setup/retry-button";
+import { WaitRoomStatusBar } from "@/components/setup/wait-room-status-bar";
 import { Button } from "@/components/ui/button";
 import type { EngineBuild } from "@/lib/engine-build";
 import { LOADING_MESSAGES, nextLoadingMessage } from "@/lib/loading-messages";
@@ -95,7 +96,7 @@ export function EngineSplash({
   }, [showReady]);
 
   return (
-    <main
+    <div
       className="fixed inset-0 flex flex-col overflow-hidden bg-neutral-950 text-neutral-50"
       data-testid="engine-splash"
     >
@@ -118,85 +119,88 @@ export function EngineSplash({
         )}
       </header>
 
-      <div className="flex flex-1 flex-col justify-center gap-6 px-6 sm:px-12 lg:px-24">
-        {failed ? (
-          <>
-            <h1
-              ref={failureHeading}
-              tabIndex={-1}
-              className="text-3xl font-bold tracking-tight outline-none sm:text-5xl"
-            >
-              We couldn&apos;t finish setting up
-            </h1>
-            <output className="block max-w-prose text-neutral-300" data-testid="text-splash-failed">
-              This usually clears up with a retry.
-            </output>
-            <div>
-              <RetryButton onRetry={build.retry} testId="button-splash-retry" />
-            </div>
-          </>
-        ) : showReady ? (
-          <>
-            <p className="text-lg font-medium text-primary">You&apos;re all set</p>
-            <h1
-              ref={readyHeading}
-              tabIndex={-1}
-              className="text-balance text-4xl font-bold leading-tight tracking-tight outline-none sm:text-6xl"
-              data-testid="text-splash-ready"
-            >
-              Your dashboard is ready
-            </h1>
-            <output className="block max-w-prose text-neutral-400">
-              {staying
-                ? "Staying here. Open your dashboard when you're ready."
-                : "Opening your dashboard in a few seconds."}
-            </output>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={onReady} data-testid="button-splash-open-dashboard">
-                Open dashboard
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-neutral-700 bg-transparent text-neutral-100 hover:bg-neutral-800 hover:text-neutral-50"
-                onClick={onBackToOverlay}
-                data-testid="button-splash-test-alert"
+      <main className="flex min-h-0 flex-1 flex-col">
+        <div className="flex flex-1 flex-col justify-center gap-6 px-6 sm:px-12 lg:px-24">
+          {failed ? (
+            <>
+              <h1
+                ref={failureHeading}
+                tabIndex={-1}
+                className="text-3xl font-bold tracking-tight outline-none sm:text-5xl"
               >
-                Test your alert first
-              </Button>
-              {!staying && (
+                We couldn&apos;t finish setting up
+              </h1>
+              <output className="block max-w-prose text-neutral-300" data-testid="text-splash-failed">
+                This usually clears up with a retry.
+              </output>
+              <div>
+                <RetryButton onRetry={build.retry} testId="button-splash-retry" />
+              </div>
+            </>
+          ) : showReady ? (
+            <>
+              <p className="text-lg font-medium text-primary">You&apos;re all set</p>
+              <h1
+                ref={readyHeading}
+                tabIndex={-1}
+                className="text-balance text-4xl font-bold leading-tight tracking-tight outline-none sm:text-6xl"
+                data-testid="text-splash-ready"
+              >
+                Your dashboard is ready
+              </h1>
+              <output className="block max-w-prose text-neutral-400">
+                {staying
+                  ? "Staying here. Open your dashboard when you're ready."
+                  : "Opening your dashboard in a few seconds."}
+              </output>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={onReady} data-testid="button-splash-open-dashboard">
+                  Open dashboard
+                </Button>
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="text-neutral-400 hover:bg-neutral-800 hover:text-neutral-50"
-                  onClick={() => setStaying(true)}
-                  data-testid="button-splash-stay"
+                  variant="outline"
+                  className="border-neutral-700 bg-transparent text-neutral-100 hover:bg-neutral-800 hover:text-neutral-50"
+                  onClick={onBackToOverlay}
+                  data-testid="button-splash-test-alert"
                 >
-                  Stay here
+                  Test your alert first
                 </Button>
+                {!staying && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-neutral-400 hover:bg-neutral-800 hover:text-neutral-50"
+                    onClick={() => setStaying(true)}
+                    data-testid="button-splash-stay"
+                  >
+                    Stay here
+                  </Button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-medium text-primary">Starting soon</p>
+              <p
+                key={messageIndex}
+                aria-hidden="true"
+                className="min-h-[2.5em] max-w-4xl text-balance text-4xl font-bold leading-tight tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 sm:text-6xl"
+                data-testid="text-splash-message"
+              >
+                {LOADING_MESSAGES[messageIndex]}
+              </p>
+              <output className="block max-w-prose text-neutral-400">
+                Your dashboard is getting ready and opens by itself. You can close this tab and come back; it keeps
+                going.
+              </output>
+              {build.stage === "building" && (
+                <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />
               )}
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-lg font-medium text-primary">Starting soon</p>
-            <p
-              key={messageIndex}
-              aria-hidden="true"
-              className="min-h-[2.5em] max-w-4xl text-balance text-4xl font-bold leading-tight tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 sm:text-6xl"
-              data-testid="text-splash-message"
-            >
-              {LOADING_MESSAGES[messageIndex]}
-            </p>
-            <output className="block max-w-prose text-neutral-400">
-              Your dashboard is getting ready and opens by itself. You can close this tab and come back; it keeps going.
-            </output>
-            {build.stage === "building" && (
-              <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />
-            )}
-          </>
-        )}
-      </div>
+            </>
+          )}
+        </div>
+      </main>
 
       <div className="flex h-24 items-end gap-1 px-6 pb-6 sm:h-32" aria-hidden="true">
         {METER_BARS.map((bar) => (
@@ -211,6 +215,8 @@ export function EngineSplash({
           />
         ))}
       </div>
-    </main>
+
+      {build.stage === "building" && <WaitRoomStatusBar build={build} />}
+    </div>
   );
 }
