@@ -1,5 +1,20 @@
 # woofx3 desktop changelog
 
+## [0.8.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.7.0...woofx3-v0.8.0) (2026-11-13)
+
+### Features
+
+* **marketplace:** buy every listing through the billing plane ([d0669c9](https://github.com/wolfymaster/woofx3-ui/commit/d0669c9efc1a089fc48cd8cebc174bdee34ea150))
+* **onboarding:** give the wait room a duck game and a fake chat ([edfba31](https://github.com/wolfymaster/woofx3-ui/commit/edfba31ef5833c2ed86508758be51923d87a9314))
+* **onboarding:** let the finish wait go back to the overlay and announce readiness ([bd41d73](https://github.com/wolfymaster/woofx3-ui/commit/bd41d7351363ff8e36651e8b9789f28bd2771475))
+* **onboarding:** make the finish wait a wait room with scene prep to do ([8716948](https://github.com/wolfymaster/woofx3-ui/commit/87169482bdc46e44342d68fddd7e8a27fe78304f))
+* **onboarding:** open the dashboard while the engine starts, with a status and a gated body ([df36b8b](https://github.com/wolfymaster/woofx3-ui/commit/df36b8bd260d0dc0887f7155a1cac3c459b3bbeb))
+* **onboarding:** say what the engine build is doing and how long it has been ([e8ae8a2](https://github.com/wolfymaster/woofx3-ui/commit/e8ae8a21a003b7acbe5014193d0250bc89547038))
+
+### Bug Fixes
+
+* **onboarding:** let an invitee set up their own engine ([ca134c4](https://github.com/wolfymaster/woofx3-ui/commit/ca134c446699c8243b8827880db1fe51a6b4093a))
+
 ## [0.7.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.6.0...woofx3-v0.7.0) (2026-11-11)
 
 ### Features
