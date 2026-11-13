@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type OnboardingFacts, type OnboardingRoute, onboardingRoute } from "./onboarding-route";
+import { enginesForOnboarding, type OnboardingFacts, type OnboardingRoute, onboardingRoute } from "./onboarding-route";
 
 const none: OnboardingFacts = {
   instances: [],
@@ -55,5 +55,29 @@ describe("onboardingRoute", () => {
     },
   ])("$name", ({ facts, route }) => {
     expect(onboardingRoute(facts)).toBe(route);
+  });
+});
+
+describe("enginesForOnboarding", () => {
+  const invited = { clientId: "c", hosting: "managed" as const, ownedByMe: false };
+  const mine = { hosting: "managed" as const, ownedByMe: true };
+
+  test.each([
+    {
+      name: "without the flag every engine counts",
+      wants: false,
+      instances: [invited, mine],
+      expected: [invited, mine],
+    },
+    { name: "with the flag an invited engine is not theirs", wants: true, instances: [invited], expected: [] },
+    { name: "with the flag their own engine still counts", wants: true, instances: [invited, mine], expected: [mine] },
+  ])("$name", ({ wants, instances, expected }) => {
+    expect(enginesForOnboarding(instances, wants)).toEqual(expected);
+  });
+
+  test("an invitee who asks for their own engine gets the managed path, not the invited engine's setup", () => {
+    const facts = { ...none, instances: enginesForOnboarding([invited], true) };
+    expect(onboardingRoute(facts)).toBe("managed");
+    expect(onboardingRoute({ ...none, instances: enginesForOnboarding([invited], false) })).toBe("setup");
   });
 });

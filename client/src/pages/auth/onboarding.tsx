@@ -2,14 +2,14 @@ import { api } from "@convex/_generated/api";
 import { PLACEHOLDER_NAME } from "@convex/lib/firstRun";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Loader2, MonitorPlay, Server } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLogger } from "@/lib/logger-context";
-import { type OnboardingRoute, onboardingRoute } from "@/lib/onboarding-route";
+import { enginesForOnboarding, NEW_ENGINE_PARAM, type OnboardingRoute, onboardingRoute } from "@/lib/onboarding-route";
 import { $currentInstanceId } from "@/lib/stores";
 
 /**
@@ -33,7 +33,12 @@ export default function Onboarding() {
   const registerInstance = useAction(api.registration.registerInstance);
   const managedEngines = useQuery(api.provisioning.isAvailable);
   const previewEngine = useQuery(api.previewEngine.get);
-  const instances = useQuery(api.instances.listForCurrentUser);
+  const memberInstances = useQuery(api.instances.listForCurrentUser);
+  const wantsNewEngine = new URLSearchParams(search).has(NEW_ENGINE_PARAM);
+  const instances = useMemo(
+    () => memberInstances && enginesForOnboarding(memberInstances, wantsNewEngine),
+    [memberInstances, wantsNewEngine]
+  );
 
   const [instanceUrl, setInstanceUrl] = useState("localhost:8080");
   const [connecting, setConnecting] = useState(false);

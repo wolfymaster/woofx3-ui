@@ -22,6 +22,7 @@ A new user asks nothing here. `/auth/onboarding` (`client/src/pages/auth/onboard
 - **A preview with a paired engine:** the engine is connected without asking, and the form appears only if that fails. See [Previews](/ops/previews#setup-without-twitch).
 - **No managed engines, or the connect screen's "Running your own server? Connect it" link** (`?external=1`): the form below.
 - **An engine already registered or being built:** straight on to `/setup`, so a user who refreshes or comes back mid-build resumes where setup is.
+- **Setting up an engine of their own** (`?new-engine=1`): someone who was invited to an engine has one, so the dashboard never sends them here, and they would otherwise land in the engine they were invited to. With the flag, onboarding looks only at engines of the user's own organization (`ownedByMe` on `instances.listForCurrentUser`), so an invited engine does not count and the managed or own-server path runs as for a new user. Marketing's sign-up and "create your engine" links carry it through sign-in (`/auth/register?next=/auth/onboarding?new-engine=1`), and **Your settings** shows a "Set up your own engine" card to anyone with no engine of their own. A direct visit to the app never carries it, so an invitee still opens straight into the engine they were invited to.
 
 ### External engine
 
@@ -118,7 +119,7 @@ Setup records that it opened for the signed-in user (`setup.markSeen`, per user 
 
 ## After onboarding
 
-`OnboardingGuard` requires at least one registered engine the user can reach and a Twitch link on the current engine before showing a page inside `BroadcastShell`. Which engine that is comes from the server (`access.entry`): the selected one, else the user's default engine, else the newest created, each only while the user is still a member and the engine is registered. The engine may be one they were invited to: a user who only uses another account's engine, such as a moderator who does not stream, owns no account or engine and never goes through onboarding.
+`OnboardingGuard` requires at least one registered engine the user can reach and a Twitch link on the current engine before showing a page inside `BroadcastShell`. Which engine that is comes from the server (`access.entry`): the selected one, else the user's default engine, else the newest created, each only while the user is still a member and the engine is registered. The engine may be one they were invited to: a user who only uses another account's engine, such as a moderator who does not stream, owns no engine and never goes through onboarding unless they ask to set up their own.
 
 - **No registered engine:** the user goes to onboarding, which passes them on to setup, even mid-build. The dashboard never loads without a registered engine. That includes someone removed from their only engine.
 - **Suspended organization:** a hosted engine whose organization's subscription is suspended shows a full-page notice instead of its content. The owner gets **Reactivate**, linking to the portal's Billing page (not in the desktop app); everyone else is asked to contact the owner. Self-hosted engines are never locked.
