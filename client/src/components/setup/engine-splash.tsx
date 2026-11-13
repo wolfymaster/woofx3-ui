@@ -1,5 +1,6 @@
 import { MonitorPlay } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { RetryButton } from "@/components/setup/retry-button";
 import type { EngineBuild } from "@/lib/engine-build";
 import { LOADING_MESSAGES, nextLoadingMessage } from "@/lib/loading-messages";
@@ -89,6 +90,9 @@ export function EngineSplash({ build, onReady, random = Math.random }: EngineSpl
             <output className="block max-w-prose text-neutral-400">
               Your dashboard is getting ready and opens by itself. You can close this tab and come back; it keeps going.
             </output>
+            {build.stage === "building" && (
+              <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />
+            )}
           </>
         )}
       </div>
