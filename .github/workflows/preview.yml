@@ -176,10 +176,31 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
           CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
         run: |
-          bunx convex deploy --preview-create "$CONVEX_NAME" \
+          bunx convex deploy --preview-name "$CONVEX_NAME" \
             --preview-run seeds/preview:default \
             --cmd-url-env-var-name VITE_CONVEX_URL \
             --cmd 'printf "convex_url=%s\nconvex_site_url=%s\n" "$VITE_CONVEX_URL" "$VITE_CONVEX_SITE_URL" >> "$GITHUB_OUTPUT"'
+
+      # The keys that sign the marketplace's buyer tokens. They are the
+      # deployment's own environment, so they are set here and the functions
+      # are deployed once more, which restarts the node runtime with them.
+      - name: Set the buyer-token signing keys
+        working-directory: woofx3-ui
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
+          BUYER_SIGNING_KEY: ${{ secrets.MARKETPLACE_BUYER_SIGNING_KEY }}
+          BUYER_SIGNING_KEY_ID: ${{ secrets.MARKETPLACE_BUYER_SIGNING_KEY_ID }}
+        run: |
+          bunx convex env set --preview-name "$CONVEX_NAME" MARKETPLACE_BUYER_SIGNING_KEY_ID "$BUYER_SIGNING_KEY_ID"
+          bunx convex env set --preview-name "$CONVEX_NAME" MARKETPLACE_BUYER_SIGNING_KEY "$BUYER_SIGNING_KEY"
+
+      - name: Redeploy with the buyer-token keys
+        working-directory: woofx3-ui
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
+        run: bunx convex deploy --preview-name "$CONVEX_NAME" --preview-run seeds/preview:default
 
       # Sign-in redirects back to SITE_URL, which on a preview is the
       # preview's own address. PREVIEW_DEPLOYMENT marks the deployment as a
