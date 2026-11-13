@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { StartingDashboard } from "@/components/layout/starting-dashboard";
 import { SuspendedEngine } from "@/components/layout/suspended-engine";
 import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
 import { useInstance } from "@/hooks/use-instance";
@@ -48,7 +49,9 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  * holds across a refresh or a return days later, and for someone removed from
  * their only engine. A selected engine that isn't usable is swapped for the
  * one the server chose. A hosted engine whose organization is suspended shows
- * the suspended page instead of its content. Someone who only uses another
+ * the suspended page instead of its content. A managed engine still being
+ * built is entered too, but its pages wait behind `StartingDashboard` until it
+ * registers, so nothing asks an engine that does not exist yet. Someone who only uses another
  * account's engine, such as a moderator who does not stream, is never sent to
  * onboarding.
  *
@@ -120,6 +123,8 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     content = null;
   } else if (entry?.kind === "suspended") {
     content = <SuspendedEngine entry={entry} />;
+  } else if (entry?.kind === "engine" && entry.starting) {
+    content = <StartingDashboard />;
   } else if (needsTwitch) {
     content = setup?.canManageSetup ? null : (
       <div className="max-w-lg mx-auto p-6">
