@@ -26,19 +26,33 @@ function withoutWebhookSecret(instance: Doc<"instances">): Omit<Doc<"instances">
   return rest;
 }
 
+/**
+ * The caller's engines. `ownedByMe` tells an engine of the caller's own
+ * organization from one they were invited to, which the client needs to offer
+ * an invitee a way to set up their own.
+ */
 export const listForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    if (!userId) {
+      return [];
+    }
 
     const memberships = await ctx.db
       .query("instanceMembers")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
+    const owned = await ctx.db
+      .query("accounts")
+      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+      .collect();
+    const ownedAccountIds = new Set(owned.map((account) => account._id));
 
     const instances = await Promise.all(memberships.map((m) => ctx.db.get(m.instanceId)));
-    return instances.filter((instance) => instance !== null).map(withoutWebhookSecret);
+    return instances
+      .filter((instance) => instance !== null)
+      .map((instance) => ({ ...withoutWebhookSecret(instance), ownedByMe: ownedAccountIds.has(instance.accountId) }));
   },
 });
 

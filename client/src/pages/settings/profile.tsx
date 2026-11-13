@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
+import { NEW_ENGINE_ONBOARDING_PATH } from "@/lib/onboarding-route";
 import { PASSWORD_MIN_LENGTH } from "@/lib/register-error";
 
 /** Radix Select cannot hold an empty value, so "no default" is this. */
@@ -219,6 +221,31 @@ function DefaultEngineCard() {
   );
 }
 
+/** For someone who only uses engines they were invited to; anyone with an engine of their own never sees it. */
+function SetUpOwnEngineCard() {
+  const { instances, isLoading } = useInstance();
+  if (isLoading || instances.some((engine) => engine.ownedByMe)) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Set up your own engine</CardTitle>
+        <CardDescription>
+          You're using an engine someone invited you to. Stream yourself? Get your own, with your own overlay, alerts
+          and commands.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button asChild data-testid="button-setup-own-engine">
+          <Link href={NEW_ENGINE_ONBOARDING_PATH}>Set up your own engine</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProfileSettings() {
   const { user } = useConvexUser();
   const methods = useQuery(api.users.signInMethods);
@@ -231,6 +258,7 @@ export default function ProfileSettings() {
           <DisplayNameCard name={user.name ?? ""} fromTwitch={methods.twitch} />
           <PasswordCard hasPassword={methods.password} />
           <DefaultEngineCard />
+          <SetUpOwnEngineCard />
         </div>
       ) : (
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

@@ -35,3 +35,21 @@ export function onboardingRoute(facts: OnboardingFacts): OnboardingRoute {
   }
   return facts.managedAvailable ? "managed" : "own-engine-form";
 }
+
+/**
+ * Marks a visit to onboarding as "set up an engine of my own". Without it,
+ * onboarding is where the dashboard sends someone who has no engine at all; with
+ * it, an engine the user was only invited to does not count as theirs. Marketing
+ * sign-up links and the settings page both carry it.
+ */
+export const NEW_ENGINE_PARAM = "new-engine";
+
+export const NEW_ENGINE_ONBOARDING_PATH = `/auth/onboarding?${NEW_ENGINE_PARAM}=1`;
+
+/** The engines onboarding looks at: only the user's own when they asked to set one up. */
+export function enginesForOnboarding<T extends { ownedByMe: boolean }>(
+  instances: ReadonlyArray<T>,
+  wantsNewEngine: boolean
+): T[] {
+  return wantsNewEngine ? instances.filter((instance) => instance.ownedByMe) : [...instances];
+}
