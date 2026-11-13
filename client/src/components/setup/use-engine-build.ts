@@ -5,7 +5,16 @@ import type { SetupStatus } from "@convex/setup";
 import { useAction, useQuery } from "convex/react";
 import { useCallback, useMemo } from "react";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
-import { type EngineBuild, engineBuildMessage, engineBuildPercent } from "@/lib/engine-build";
+import {
+  type EngineBuild,
+  engineBuildElapsedMinutes,
+  engineBuildIsSlow,
+  engineBuildMessage,
+  engineBuildNote,
+  engineBuildPercent,
+  engineBuildPhaseDetail,
+  engineBuildPhases,
+} from "@/lib/engine-build";
 
 /** The instance's engine build as the waiting screens show it, from its provisioning row. */
 export function useEngineBuild(
@@ -30,10 +39,17 @@ export function useEngineBuild(
     if (provisioning !== undefined && engineBuildStalled({ provisioning, managedEngine, completedAt, now })) {
       return { stage: "failed", retry };
     }
+    const steps = provisioning?.steps ?? [];
+    const elapsedMinutes = engineBuildElapsedMinutes(provisioning?.createdAt, now);
     return {
       stage: "building",
       message: engineBuildMessage(provisioning?.status),
-      percent: engineBuildPercent(provisioning?.steps ?? []),
+      detail: engineBuildPhaseDetail(provisioning?.status, steps),
+      percent: engineBuildPercent(steps),
+      phases: engineBuildPhases(provisioning?.status, steps),
+      elapsedMinutes,
+      slow: engineBuildIsSlow(elapsedMinutes),
+      note: engineBuildNote(steps),
     };
   }, [engineRegistered, managedEngine, completedAt, now, provisioning, retry]);
 }

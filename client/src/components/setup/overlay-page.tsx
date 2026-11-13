@@ -2,11 +2,12 @@ import { DEFAULT_OVERLAY_CANVAS, defaultSceneInput, freeDefaultSceneName } from 
 import { CircleCheck, Loader2, MonitorPlay } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Link } from "wouter";
+import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { OverlayLink } from "@/components/setup/overlay-link";
 import { OverlayStage } from "@/components/setup/overlay-stage";
 import { RetryButton } from "@/components/setup/retry-button";
+import { SceneReadyChecklist } from "@/components/setup/scene-ready-checklist";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEngineAlerts, useOverlayOpen } from "@/engine/hooks/use-alert-queue";
 import {
@@ -109,10 +110,11 @@ function headingOf(phase: OverlayPhase, seedSlow: boolean): string {
   }
 }
 
-function statusOf(phase: OverlayPhase, engine: EngineBuild, seedSlow: boolean): string {
+function statusOf(phase: OverlayPhase, seedSlow: boolean): string {
   switch (phase.name) {
     case "building":
-      return engine.stage === "building" ? `${engine.message}. You can close this tab; it keeps going.` : "";
+      // The progress panel carries the phase, elapsed time and the tab-safe note.
+      return "";
     case "preparing":
       return seedSlow
         ? "We keep trying by ourselves, or you can try again now."
@@ -431,12 +433,15 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
             {(phase.name === "waiting" || (phase.name === "preparing" && !seedSlow)) && (
               <Loader2 className="h-4 w-4 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
             )}
-            {statusOf(phase, engine, seedSlow)}
+            {statusOf(phase, seedSlow)}
           </output>
         </div>
 
         {phase.name === "building" && engine.stage === "building" && (
-          <Progress value={engine.percent} className="h-1.5" aria-label="Setting up" />
+          <>
+            <EngineBuildProgress build={engine} />
+            <SceneReadyChecklist />
+          </>
         )}
 
         {phase.name === "build-failed" && engine.stage === "failed" && (

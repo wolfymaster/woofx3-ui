@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { api } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -25,7 +25,13 @@ async function addEngine(
     hosting = "managed",
     createdAt = 1,
     registered = true,
-  }: { hosting?: Hosting; createdAt?: number; registered?: boolean } = {}
+    provisioning,
+  }: {
+    hosting?: Hosting;
+    createdAt?: number;
+    registered?: boolean;
+    provisioning?: Doc<"engineProvisioning">["status"];
+  } = {}
 ): Promise<Id<"instances">> {
   return t.run(async (ctx) => {
     const instanceId = await ctx.db.insert("instances", {
@@ -38,6 +44,24 @@ async function addEngine(
     });
     for (const userId of members) {
       await ctx.db.insert("instanceMembers", { instanceId, userId, role: "member" });
+    }
+    if (provisioning !== undefined) {
+      const requestedBy = members[0];
+      if (requestedBy === undefined) {
+        throw new Error("addEngine: a provisioning row needs a requesting member");
+      }
+      await ctx.db.insert("engineProvisioning", {
+        instanceId,
+        accountId,
+        requestedBy,
+        slug: `engine-${createdAt}`,
+        status: provisioning,
+        steps: [],
+        registrationToken: "token",
+        registrationAttempts: 0,
+        createdAt,
+        updatedAt: Date.now(),
+      });
     }
     return instanceId;
   });
@@ -80,13 +104,60 @@ describe("access.entry", () => {
     });
   });
 
-  test("an engine still being built is not an engine to enter", async () => {
+  test("a managed engine still being built is an engine to enter, with starting set", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seed(t);
+    const engine = await addEngine(t, accountId, [ownerId], {
+      registered: false,
+      provisioning: "provisioning",
+    });
+    expect(await as(t, ownerId).query(api.access.entry, { selectedInstanceId: null })).toEqual({
+      kind: "engine",
+      instanceId: engine,
+      starting: true,
+    });
+  });
+
+  test("an engine whose build has not started is not an engine to enter", async () => {
     const t = newBackend();
     const { ownerId, accountId } = await seed(t);
     await addEngine(t, accountId, [ownerId], { registered: false });
     expect(await as(t, ownerId).query(api.access.entry, { selectedInstanceId: null })).toEqual({
       kind: "createEngine",
       accountId,
+    });
+  });
+
+  test("a failed build is not an engine to enter", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seed(t);
+    await addEngine(t, accountId, [ownerId], { registered: false, provisioning: "failed" });
+    expect(await as(t, ownerId).query(api.access.entry, { selectedInstanceId: null })).toEqual({
+      kind: "createEngine",
+      accountId,
+    });
+  });
+
+  test("a registered engine is enterable and is not starting", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seed(t);
+    const engine = await addEngine(t, accountId, [ownerId], { provisioning: "registered" });
+    expect(await as(t, ownerId).query(api.access.entry, { selectedInstanceId: null })).toEqual({
+      kind: "engine",
+      instanceId: engine,
+      starting: false,
+    });
+  });
+
+  test("an older registered engine is chosen over a newer one still starting", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seed(t);
+    const registered = await addEngine(t, accountId, [ownerId], { createdAt: 1 });
+    await addEngine(t, accountId, [ownerId], { createdAt: 2, registered: false, provisioning: "provisioning" });
+    expect(await as(t, ownerId).query(api.access.entry, { selectedInstanceId: null })).toEqual({
+      kind: "engine",
+      instanceId: registered,
+      starting: false,
     });
   });
 
@@ -98,6 +169,7 @@ describe("access.entry", () => {
     expect(await mod.query(api.access.entry, { selectedInstanceId: engine })).toEqual({
       kind: "engine",
       instanceId: engine,
+      starting: false,
     });
     await t.run(async (ctx) => {
       const rows = await ctx.db
@@ -123,15 +195,18 @@ describe("access.entry", () => {
     expect(await owner.query(api.access.entry, { selectedInstanceId: null })).toEqual({
       kind: "engine",
       instanceId: newer,
+      starting: false,
     });
     await owner.mutation(api.userSettings.setDefaultEngine, { instanceId: older });
     expect(await owner.query(api.access.entry, { selectedInstanceId: null })).toEqual({
       kind: "engine",
       instanceId: older,
+      starting: false,
     });
     expect(await owner.query(api.access.entry, { selectedInstanceId: newer })).toEqual({
       kind: "engine",
       instanceId: newer,
+      starting: false,
     });
   });
 
@@ -146,6 +221,7 @@ describe("access.entry", () => {
     expect(await owner.query(api.access.entry, { selectedInstanceId: stale })).toEqual({
       kind: "engine",
       instanceId: kept,
+      starting: false,
     });
   });
 
@@ -176,6 +252,7 @@ describe("access.entry", () => {
     expect(await as(t, ownerId).query(api.access.entry, { selectedInstanceId: engine })).toEqual({
       kind: "engine",
       instanceId: engine,
+      starting: false,
     });
   });
 
