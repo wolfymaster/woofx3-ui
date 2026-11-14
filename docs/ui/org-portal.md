@@ -1,15 +1,15 @@
 # Organization portal
 
-**Routes:** `/org`, `/org/billing`, `/org/members`, `/org/engines`, `/org/invoices`
-**Primary files:** `client/src/org-portal/`, `convex/organizations.ts`, `convex/billingCommands.ts`
+**Routes:** `/org` (Plan), `/org/payments`, `/org/people`, `/org/engines`; `/org/billing`, `/org/invoices`, `/org/members` redirect into them
+**Primary files:** `client/src/org-portal/`, `client/src/billing/`, `convex/organizations.ts`, `convex/billingCommands.ts`
 
-The portal is where an organization's owner and admins manage the organization and its billing. It is a route group inside the dashboard app, not a separate app.
+The portal is where an organization's owner and admins manage the organization and its billing. It is a route group inside the dashboard app, not a separate app. The same `client/src/billing/` components are meant to render a person's own sponsorship when that ships (effort 23); see `specs/business-platform/25-account-portal.md`.
 
 ## Where it runs
 
 - On the dashboard origin, so it shares the dashboard's Convex Auth session (kept in `localStorage`, per origin). `woofx3.tv/org/*` is redirected there by the edge.
 - Outside `BroadcastShell` and `OnboardingGuard`, with its own slim layout (`OrgPortal.tsx`): it needs no engine, only a signed-in user. Someone signed out goes through sign-in and back to the same `/org/…` path (`AuthGuard`'s `?next=`, clamped by `safeNextPath`).
-- The marketing site's "Start free trial" link opens `/org/?start=trial`. Someone who owns no organization with an engine is sent straight on to onboarding, which starts the trial (`start-trial.ts`); an owner who already has an engine sees the overview.
+- The marketing site's "Start free trial" link opens `/org/?start=trial`. Someone who owns no organization with an engine is sent straight on to onboarding, which starts the trial (`start-trial.ts`); an owner who already has an engine sees the Plan tab.
 - **Web build only.** `App.tsx` imports it behind `IS_DESKTOP`, so the desktop build carries no `/org` route; `org-portal/boundary.test.ts` holds that.
 
 ## Data
@@ -26,18 +26,17 @@ The portal is where an organization's owner and admins manage the organization a
 
 `portal-pages.ts` maps each page to the org action it needs; pages a role lacks are not in its nav, and their data answers null.
 
-| Page | Owner | Admin | Member |
-|---|---|---|---|
-| Overview | everything | everything, no billing buttons | name, own role, own engines |
-| Plan & billing | full | read-only | hidden |
-| Members | change roles, remove | change roles (not the owner), remove | hidden |
-| Engines | rename, open | rename, open | open the ones they're on |
-| Discounts & invoices | full | hidden | hidden |
+| Tab | Path | Owner | Admin | Member |
+|---|---|---|---|---|
+| Plan | `/org` | plan, state, discount; choose a plan and check out | plan and state, read-only | hidden |
+| Payments | `/org/payments` | invoice history | hidden | hidden |
+| People | `/org/people` | change roles, remove | change roles (not the owner), remove | hidden |
+| Engines | `/org/engines` | rename, open | rename, open | open the ones they're on |
 
-The Engines page lists the organization's engines and has no way to add one. An organization's first engine comes from onboarding.
+A role that lands on a tab it cannot see is sent to its first visible tab: `/org` redirects a member to `/org/engines`. The Engines page lists the organization's engines and has no way to add one. An organization's first engine comes from onboarding.
 
-Plan & billing picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. A checkout is refused while the provider subscription has not ended: one in good standing answers `already_subscribed`, and one whose payments are failing (past due, or suspended with the subscription still alive) answers `subscription_exists`, which sends the owner to the provider's portal to fix the payment method instead of paying for a second subscription. List prices in `format.ts` must match the provider's prices and the marketing pricing page.
+Plan picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. A checkout is refused while the provider subscription has not ended: one in good standing answers `already_subscribed`, and one whose payments are failing (past due, or suspended with the subscription still alive) answers `subscription_exists`, which sends the owner to the provider's portal to fix the payment method instead of paying for a second subscription. List prices in `@/billing/format.ts` must match the provider's prices and the marketing pricing page.
 
 ## Entry points
 
-"Manage organization" in the profile menu and on the Team page, for org owners and admins, on a hosted engine, in the web build (`useCanManageOrganization`). Billing banners and emails link to `/org/billing`.
+"Manage organization" in the profile menu and on the Team page, for org owners and admins, on a hosted engine, in the web build (`useCanManageOrganization`). Billing banners and emails still link to `/org/billing`, which now redirects to the Plan tab; `/org/invoices` and `/org/members` redirect to Payments and People.
