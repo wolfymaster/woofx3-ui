@@ -31,10 +31,15 @@ The portal is where an organization's owner and admins manage the organization a
 | Overview | everything | everything, no billing buttons | name, own role, own engines |
 | Plan & billing | full | read-only | hidden |
 | Members | change roles, remove | change roles (not the owner), remove | hidden |
-| Engines | rename, open | rename, open | open the ones they're on |
+| Engines | rename, open, create | rename, open | open the ones they're on |
 | Discounts & invoices | full | hidden | hidden |
 
-The Engines page lists the organization's engines and has no way to add one. An organization's first engine comes from onboarding.
+The Engines page lists the organization's engines, each with how it is hosted and where its build stands. An organization's first engine comes from onboarding; the owner (`createEngine`) adds more with "Create another engine" (`new-engine-dialog.tsx`):
+
+- **Hosted by woofx3**: a name and an address (the slug, suggested from the name and checked as it is typed with `provisioning.checkSlug`). `provisioning.startNewEngine` makes the instance in the organization through `provisioningInternal.prepareNewEngine`, which gives the owner and the org's admins their engine roles (`grantNewEngineMembers`) and marks it a first run so setup seeds it, then asks the maintenance API for the engine the way the first engine is asked for (`requestEngine`): the same trial `ensure`, the same refusal while the organization is suspended, and the same idempotency key until the outcome is known. Asking again while the engine is being built returns the same engine. Unlike the first engine, it gets no Twitch channel up front; its own setup connects one. A taken address answers `slug_refused`, and the next attempt reuses the same instance. Only one engine of an organization is built at a time.
+- **I run it myself**: a name and a server address, created with `instances.create` and registered with `registration.registerInstance`, as onboarding's own-engine form does. It asks for no subscription.
+
+Either way the new engine becomes the selected one (`$currentInstanceId`) and the dashboard goes to `/setup`, where a hosted engine shows its build progress and Try again (`provisioning.retry`) like the first engine's. Nothing changes the owner's default engine, so signing in still opens the one it did. Plans have no engine-count limit, and seats stay per organization whatever the number of engines.
 
 Plan & billing picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. A checkout is refused while the provider subscription has not ended: one in good standing answers `already_subscribed`, and one whose payments are failing (past due, or suspended with the subscription still alive) answers `subscription_exists`, which sends the owner to the provider's portal to fix the payment method instead of paying for a second subscription. List prices in `format.ts` must match the provider's prices and the marketing pricing page.
 
