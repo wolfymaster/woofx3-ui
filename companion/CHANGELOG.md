@@ -1,5 +1,15 @@
 # woofx3 desktop changelog
 
+## [0.9.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.8.0...woofx3-v0.9.0) (2026-11-14)
+
+### Features
+
+* **onboarding:** add a duck game on the finish page's level meter ([484e637](https://github.com/wolfymaster/woofx3-ui/commit/484e637c3ce476e69b867f41f71452e0fc91b577))
+
+### Reverts
+
+* **onboarding:** bring back the animated level meter, drop the duck game ([ef77f56](https://github.com/wolfymaster/woofx3-ui/commit/ef77f56fde8e2130255e506ff170d466d0b38757))
+
 ## [0.8.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.7.0...woofx3-v0.8.0) (2026-11-13)
 
 ### Features
