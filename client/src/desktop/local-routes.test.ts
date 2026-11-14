@@ -81,6 +81,10 @@ function convexPaths(entry: string): string[] {
       return;
     }
     seen.add(file);
+    // Images and other assets import nothing, and are not source to scan.
+    if (!/\.[cm]?[jt]sx?$/.test(file)) {
+      return;
+    }
     const here = [...chain, relative(REPO, file)];
     if (CONVEX_REACHING_FILES.some((blocked) => file === blocked || file.startsWith(`${blocked}/`))) {
       found.push(here.join(" -> "));
