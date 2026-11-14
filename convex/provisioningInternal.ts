@@ -122,13 +122,7 @@ export const reserveManagedInstance = internalMutation({
 
     const now = Date.now();
     if (existing) {
-      const inFlight =
-        existing.maintenanceEngineId !== undefined &&
-        existing.status !== "failed" &&
-        existing.status !== "deleted" &&
-        existing.status !== "registered";
-      const beingRequested = existing.status === "requested" && now - existing.updatedAt < REQUEST_IN_FLIGHT_MS;
-      if (inFlight || beingRequested) {
+      if (buildInFlight(existing, now)) {
         throw new Error("An engine is already being created for this workspace");
       }
       if (existing.status === "registered") {
@@ -169,6 +163,50 @@ export const reserveManagedInstance = internalMutation({
       updatedAt: now,
     });
     return { instanceId, provisioningId, registrationToken: newRegistrationToken, createRequestId: newCreateRequestId };
+  },
+});
+
+/** An engine the maintenance API is building for the row, or a request for one that is still being made. */
+function buildInFlight(row: Doc<"engineProvisioning">, now: number): boolean {
+  const inFlight =
+    row.maintenanceEngineId !== undefined &&
+    row.status !== "failed" &&
+    row.status !== "deleted" &&
+    row.status !== "registered";
+  const beingRequested = row.status === "requested" && now - row.updatedAt < REQUEST_IN_FLIGHT_MS;
+  return inFlight || beingRequested;
+}
+
+/**
+ * The instance another managed engine of the org is built on, under the name
+ * the owner chose. It is found or made as the first engine's is, so an earlier
+ * attempt that never registered is reused rather than joined by another. While
+ * that instance's engine is being built, it is returned as it is: asking twice
+ * gets the same engine, and `building` tells the caller not to ask the
+ * maintenance API again. Refused for anyone but the owner, and while the org
+ * is suspended; `reserveManagedInstance` asks both again when the engine is
+ * requested.
+ */
+export const prepareNewEngine = internalMutation({
+  args: { accountId: v.id("accounts"), userId: v.id("users"), name: v.string() },
+  handler: async (ctx, { accountId, userId, name }): Promise<{ instanceId: Id<"instances">; building: boolean }> => {
+    const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
+    if ((await billingFor(ctx, accountId)) !== null) {
+      await requireUsableSubscription(ctx, accountId);
+    }
+    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account);
+    const provisioning = await ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (provisioning !== null && buildInFlight(provisioning, Date.now())) {
+      return { instanceId, building: true };
+    }
+    await ctx.db.patch(instanceId, { name });
+    if (created) {
+      await markFirstRun(ctx, instanceId);
+    }
+    return { instanceId, building: false };
   },
 });
 
