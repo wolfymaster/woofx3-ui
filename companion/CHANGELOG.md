@@ -1,5 +1,11 @@
 # woofx3 desktop changelog
 
+## [0.10.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.9.0...woofx3-v0.10.0) (2026-11-14)
+
+### Features
+
+* **org-portal:** consolidate the account portal into four task tabs ([784cc59](https://github.com/wolfymaster/woofx3-ui/commit/784cc59d7674788fb17de85e3105272661a95d32))
+
 ## [0.9.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.8.0...woofx3-v0.9.0) (2026-11-14)
 
 ### Features
