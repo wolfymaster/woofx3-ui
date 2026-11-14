@@ -79,6 +79,15 @@ describe("EngineSplash", () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
+  test("offers the duck game while the build runs and not after it fails", async () => {
+    const building = await render(splash({ build: BUILDING }));
+    expect(hasTestId(building, "text-duck-status")).toBe(true);
+    expect(hasTestId(building, "text-duck-score")).toBe(true);
+
+    const failed = await render(splash({ build: { stage: "failed", retry: async () => undefined } }));
+    expect(hasTestId(failed, "text-duck-status")).toBe(false);
+  });
+
   test("shows the ready card when the build finishes while on screen", async () => {
     const ready = mock(() => undefined);
     const renderer = await render(splash({ build: BUILDING, onReady: ready, autoOpenMs: 50 }));

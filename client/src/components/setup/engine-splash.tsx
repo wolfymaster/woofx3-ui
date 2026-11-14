@@ -1,5 +1,6 @@
 import { MonitorPlay } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DuckHop } from "@/components/setup/duck-hop";
 import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { RetryButton } from "@/components/setup/retry-button";
 import { WaitRoomStatusBar } from "@/components/setup/wait-room-status-bar";
@@ -202,19 +203,21 @@ export function EngineSplash({
         </div>
       </main>
 
-      <div className="flex h-24 items-end gap-1 px-6 pb-6 sm:h-32" aria-hidden="true">
-        {METER_BARS.map((bar) => (
-          <span
-            key={bar.key}
-            className={
-              failed
-                ? "h-1 flex-1 rounded-sm bg-neutral-700"
-                : "flex-1 origin-bottom rounded-sm bg-primary/70 motion-safe:animate-level-meter"
-            }
-            style={failed ? undefined : { height: `${bar.height}%`, animationDelay: `${bar.delayMs}ms` }}
-          />
-        ))}
-      </div>
+      <DuckHop enabled={build.stage === "building"}>
+        <div className="flex h-24 items-end gap-1 px-6 pb-6 sm:h-32" aria-hidden="true">
+          {METER_BARS.map((bar) => (
+            <span
+              key={bar.key}
+              className={
+                failed
+                  ? "h-1 flex-1 rounded-sm bg-neutral-700"
+                  : "flex-1 origin-bottom rounded-sm bg-primary/70 motion-safe:animate-level-meter"
+              }
+              style={failed ? undefined : { height: `${bar.height}%`, animationDelay: `${bar.delayMs}ms` }}
+            />
+          ))}
+        </div>
+      </DuckHop>
 
       {build.stage === "building" && <WaitRoomStatusBar build={build} />}
     </div>
