@@ -1,8 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, query } from "./_generated/server";
+import { ENGINE_NAME_MAX_LENGTH } from "./instances";
 import { slugCandidates } from "./lib/firstRun";
 import {
   createEngine,
@@ -321,6 +322,61 @@ export const startManagedEngine = action({
     const { accountId, login } = await ctx.runQuery(internal.provisioningInternal.firstEngineFacts, { instanceId });
     const twitchChannel = login ?? (await ctx.runQuery(internal.users.twitchChannelForUser, { userId }));
     return requestEngine(ctx, { accountId, userId, slug, twitchChannel });
+  },
+});
+
+/**
+ * Another managed engine for an organization, asked for by its owner from the
+ * organization portal. Unlike the first engine, which is named after the
+ * owner's Twitch login once setup connects it, this one is named and addressed
+ * up front, and has no Twitch channel until its own setup connects one. The
+ * build that follows, its trial and its refusals are the first engine's.
+ *
+ * Asking again while the engine is being built returns the same engine, and a
+ * request whose outcome is unknown is replayed under the same idempotency key
+ * (`requestEngine`), so a double click or a retry never makes a second one.
+ */
+export const startNewEngine = action({
+  args: { accountId: v.id("accounts"), name: v.string(), slug: v.string() },
+  handler: async (ctx, { accountId, name, slug }): Promise<{ instanceId: Id<"instances"> }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    if (!isMaintenanceConfigured()) {
+      throw new Error("Managed engines are not configured");
+    }
+    const engineName = name.trim();
+    if (!engineName || engineName.length > ENGINE_NAME_MAX_LENGTH) {
+      throw new ConvexError({
+        code: "invalid_name",
+        message: `An engine name is 1 to ${ENGINE_NAME_MAX_LENGTH} characters`,
+      });
+    }
+    const prepared = await ctx.runMutation(internal.provisioningInternal.prepareNewEngine, {
+      accountId,
+      userId,
+      name: engineName,
+    });
+    if (prepared.building) {
+      return { instanceId: prepared.instanceId };
+    }
+    let requested: { instanceId: Id<"instances"> };
+    try {
+      requested = await requestEngine(ctx, { accountId, userId, slug, twitchChannel: null });
+    } catch (error) {
+      if (isSlugRefused(error)) {
+        throw new ConvexError({
+          code: "slug_refused",
+          message: "That address is taken or can't be used. Try another.",
+        });
+      }
+      throw error;
+    }
+    if (requested.instanceId !== prepared.instanceId) {
+      throw new Error(`The engine was requested on ${requested.instanceId}, not the prepared ${prepared.instanceId}`);
+    }
+    return { instanceId: requested.instanceId };
   },
 });
 

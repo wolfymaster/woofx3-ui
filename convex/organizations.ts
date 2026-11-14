@@ -36,8 +36,7 @@ export interface OrgSubscription extends SubscriptionSummary {
   discount: ProjectedDiscount | null;
 }
 
-/** `createEngine` is enforced by the server's engine creation paths and no screen asks about it, so it isn't sent. */
-export type OrgCapabilities = Record<Exclude<OrgAction, "createEngine">, boolean>;
+export type OrgCapabilities = Record<OrgAction, boolean>;
 
 export interface MyOrganization {
   accountId: Id<"accounts">;
@@ -56,9 +55,7 @@ export interface MyOrganization {
 }
 
 function capabilities(role: OrgRole): OrgCapabilities {
-  return Object.fromEntries(
-    ORG_ACTIONS.filter((action) => action !== "createEngine").map((action) => [action, orgCan(role, action)])
-  ) as OrgCapabilities;
+  return Object.fromEntries(ORG_ACTIONS.map((action) => [action, orgCan(role, action)])) as OrgCapabilities;
 }
 
 async function orgEngines(ctx: QueryCtx, account: Doc<"accounts">, userId: Id<"users">, all: boolean) {

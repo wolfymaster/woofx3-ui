@@ -21,13 +21,19 @@ interface ConvexAnswers {
 }
 const ConvexAnswersContext = createContext<ConvexAnswers>({ members: null, meId: "owner-user" });
 const convexReact = await import("convex/react");
+const noAction = async () => null;
 mock.module("convex/react", () => ({
   ...convexReact,
   useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
   useMutation: () => async () => null,
+  // One function for every call, as Convex's hook keeps its function stable across renders.
+  useAction: () => noAction,
   useQuery: (query: Parameters<typeof getFunctionName>[0]) => {
     const answers = useContext(ConvexAnswersContext);
     const name = getFunctionName(query);
+    if (name === "provisioning:isAvailable") {
+      return { available: true };
+    }
     if (name === "organizations:members") {
       return answers.members;
     }
@@ -64,6 +70,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
       manageMembers: true,
       viewMemberEmails: owner,
       manageEngines: true,
+      createEngine: owner,
       viewBilling: true,
       manageBilling: owner,
     },
@@ -130,11 +137,16 @@ function text(renderer: ReactTestRenderer, id: string): string[] {
 }
 
 describe("Engines page", () => {
-  test("offers no way to create another engine, even to the owner", async () => {
+  test("offers the owner a way to create another engine", async () => {
     const renderer = await render("owner", <EnginesPage />);
     expect(byTestId(renderer, "row-engine-instance-1").length).toBe(1);
+    expect(byTestId(renderer, "button-create-engine").map(textOf)).toEqual(["Create another engine"]);
+  });
+
+  test("offers an admin no way to create one", async () => {
+    const renderer = await render("admin", <EnginesPage />);
+    expect(byTestId(renderer, "row-engine-instance-1").length).toBe(1);
     expect(byTestId(renderer, "button-create-engine").length).toBe(0);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Create another engine");
   });
 });
 
