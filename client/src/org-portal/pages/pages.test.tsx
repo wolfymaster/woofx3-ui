@@ -48,7 +48,7 @@ mock.module("@/components/ui/avatar", () => ({
 }));
 
 const { default: EnginesPage } = await import("./engines");
-const { default: MembersPage } = await import("./members");
+const { default: PeoplePage } = await import("./people");
 
 const ACCOUNT_ID = "account-1" as Id<"accounts">;
 
@@ -138,10 +138,10 @@ describe("Engines page", () => {
   });
 });
 
-describe("Members page", () => {
+describe("People page", () => {
   test("the owner sees a masked address until they choose to show it", async () => {
     const answers = { members: [member("owner-user", "owner", "owner@example.com")], meId: "owner-user" };
-    const renderer = await render("owner", <MembersPage />, answers);
+    const renderer = await render("owner", <PeoplePage />, answers);
     expect(byTestId(renderer, "text-member-email").map(textOf)).toEqual([MASKED_EMAIL]);
     const [toggle] = byTestId(renderer, "button-toggle-emails");
     expect(toggle.props["aria-pressed"]).toBe(false);
@@ -158,17 +158,17 @@ describe("Members page", () => {
 
   test("hides addresses again on a fresh load", async () => {
     const answers = { members: [member("owner-user", "owner", "owner@example.com")], meId: "owner-user" };
-    const first = await render("owner", <MembersPage />, answers);
+    const first = await render("owner", <PeoplePage />, answers);
     await act(async () => {
       byTestId(first, "button-toggle-emails")[0].props.onClick();
     });
-    const second = await render("owner", <MembersPage />, answers);
+    const second = await render("owner", <PeoplePage />, answers);
     expect(byTestId(second, "text-member-email").map(textOf)).toEqual([MASKED_EMAIL]);
   });
 
   test("someone sent no addresses gets no toggle and no email lines", async () => {
     const answers = { members: [member("owner-user", "owner"), member("admin-user", "admin")], meId: "admin-user" };
-    const renderer = await render("admin", <MembersPage />, answers);
+    const renderer = await render("admin", <PeoplePage />, answers);
     const [row] = byTestId(renderer, "row-org-member-admin-user");
     expect(textOf(row)).not.toContain("—");
     expect(byTestId(renderer, "button-toggle-emails").length).toBe(0);

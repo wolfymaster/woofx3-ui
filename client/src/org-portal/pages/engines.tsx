@@ -3,9 +3,10 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { OrgEngine } from "@convex/organizations";
 import { useMutation } from "convex/react";
 import { useLocation } from "wouter";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { $currentInstanceId } from "@/lib/stores";
 import { useOrganization } from "../organization-context";
@@ -44,51 +45,53 @@ export default function EnginesPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Engines</CardTitle>
-        <CardDescription>
-          {organization.can.manageEngines
+    <>
+      <PageHeader
+        title="Engines"
+        description={
+          organization.can.manageEngines
             ? "Every engine in this organization."
-            : "The engines in this organization you can open."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {organization.engines.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No engines yet.</p>
-        ) : (
-          <Table>
-            <TableBody>
-              {organization.engines.map((engine) => (
-                <TableRow key={engine.instanceId} data-testid={`row-engine-${engine.instanceId}`}>
-                  <TableCell className="font-medium">{engine.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{engine.hosting === "managed" ? "Hosted" : "Self-hosted"}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{engineStatus(engine)}</TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-2">
-                      {engine.canOpen ? (
-                        <Button size="sm" onClick={() => openDashboard(engine.instanceId)}>
-                          Open dashboard
-                        </Button>
-                      ) : null}
-                      {organization.can.manageEngines && engine.canOpen ? (
-                        <RenameDialog
-                          title="Rename engine"
-                          current={engine.name}
-                          onRename={(name) => renameEngine({ instanceId: engine.instanceId, name })}
-                          testId={`button-rename-engine-${engine.instanceId}`}
-                        />
-                      ) : null}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+            : "The engines in this organization you can open."
+        }
+      />
+      <Card>
+        <CardContent>
+          {organization.engines.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No engines yet.</p>
+          ) : (
+            <Table>
+              <TableBody>
+                {organization.engines.map((engine) => (
+                  <TableRow key={engine.instanceId} data-testid={`row-engine-${engine.instanceId}`}>
+                    <TableCell className="font-medium">{engine.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{engine.hosting === "managed" ? "Hosted" : "Self-hosted"}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{engineStatus(engine)}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        {engine.canOpen ? (
+                          <Button size="sm" onClick={() => openDashboard(engine.instanceId)}>
+                            Open dashboard
+                          </Button>
+                        ) : null}
+                        {organization.can.manageEngines && engine.canOpen ? (
+                          <RenameDialog
+                            title="Rename engine"
+                            current={engine.name}
+                            onRename={(name) => renameEngine({ instanceId: engine.instanceId, name })}
+                            testId={`button-rename-engine-${engine.instanceId}`}
+                          />
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }

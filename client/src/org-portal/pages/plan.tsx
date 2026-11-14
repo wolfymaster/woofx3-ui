@@ -3,12 +3,17 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { AppliedDiscount } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
-import { useAction } from "convex/react";
-import { AlertTriangle, ExternalLink } from "lucide-react";
+import { useAction, useMutation } from "convex/react";
 import { useEffect, useReducer, useState } from "react";
 import { useSearch } from "wouter";
+import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
+import { describeDiscount, formatPrice, PLAN_NAMES } from "@/billing/format";
+import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-redirect";
+import { StatusBanner } from "@/billing/status-banner";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -25,8 +30,8 @@ import {
   parseCheckoutReturn,
 } from "@/lib/checkout-return";
 import { billingView, checkoutRefusalAction } from "../billing-view";
-import { describeDiscount, formatPrice, PLAN_NAMES } from "../format";
 import { useOrganization } from "../organization-context";
+import { RenameDialog } from "../rename-dialog";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
 
 const PLAN_CHOICES: Array<{ plan: PlanTier; interval: BillingInterval; note?: string }> = [
@@ -40,72 +45,12 @@ function choiceKey(plan: PlanTier, interval: BillingInterval): string {
   return `${plan}_${interval}`;
 }
 
-function SubscriptionSummary({ subscription }: { subscription: OrgSubscription }) {
-  const notice = subscriptionNotice(subscription);
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Current</p>
-          <p className="font-medium" data-testid="text-billing-plan">
-            {planLabel(subscription)}
-            {subscription.interval && subscription.plan
-              ? ` - ${formatPrice(subscription.plan, subscription.interval)}`
-              : ""}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">State</p>
-          <p className="font-medium" data-testid="text-billing-state">
-            {stateLabel(subscription)}
-          </p>
-        </div>
-      </div>
-      {notice ? (
-        <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
-          <p>{notice}</p>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Sends the browser to a provider page: checkout or the customer portal. `open` answers null when there is none. */
-function useProviderRedirect() {
-  const [busy, setBusy] = useState(false);
-  async function go(open: () => Promise<{ url: string } | null>) {
-    setBusy(true);
-    try {
-      const target = await open();
-      if (target === null) {
-        setBusy(false);
-        return;
-      }
-      window.location.assign(target.url);
-    } catch (error) {
-      toast({ title: "Billing is unavailable", description: actionErrorMessage(error), variant: "destructive" });
-      setBusy(false);
-    }
+/** "Starter, monthly - $60/mo" while a provider subscription sets the interval; the plan name alone otherwise. */
+function planSummary(subscription: OrgSubscription): string {
+  if (subscription.plan === null || subscription.interval === null) {
+    return planLabel(subscription);
   }
-  return { busy, go };
-}
-
-function ManageBillingButton() {
-  const { organization } = useOrganization();
-  const openPortal = useAction(api.billingCommands.openPortal);
-  const { busy, go } = useProviderRedirect();
-  return (
-    <Button
-      variant="outline"
-      disabled={busy}
-      onClick={() => go(() => openPortal({ accountId: organization.accountId }))}
-      data-testid="button-manage-billing"
-    >
-      Manage billing
-      <ExternalLink className="h-4 w-4 ml-2" />
-    </Button>
-  );
+  return `${planLabel(subscription)} - ${formatPrice(subscription.plan, subscription.interval)}`;
 }
 
 function PlanChooser() {
@@ -149,28 +94,34 @@ function PlanChooser() {
           );
         })}
       </RadioGroup>
-      <div className="space-y-2">
-        <Label htmlFor="promotion-code">Promotion code</Label>
-        <div className="flex gap-2 max-w-sm">
-          <Input
-            id="promotion-code"
-            value={code}
-            onChange={(e) => {
-              setCode(e.target.value);
-              setPreview(null);
-            }}
-            data-testid="input-promotion-code"
-          />
-          <Button variant="outline" onClick={applyCode} disabled={code.trim() === ""}>
-            Apply
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-auto px-0 text-sm font-normal underline underline-offset-2">
+            Have a promotion code?
           </Button>
-        </div>
-        {preview ? (
-          <p className="text-sm text-muted-foreground" data-testid="text-promotion-preview">
-            {preview.discount ? describeDiscount(preview.discount) : "That code isn't valid."}
-          </p>
-        ) : null}
-      </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-2 pt-2">
+          <div className="flex gap-2 max-w-sm">
+            <Input
+              aria-label="Promotion code"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setPreview(null);
+              }}
+              data-testid="input-promotion-code"
+            />
+            <Button variant="outline" onClick={applyCode} disabled={code.trim() === ""}>
+              Apply
+            </Button>
+          </div>
+          {preview ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-promotion-preview">
+              {preview.discount ? describeDiscount(preview.discount) : "That code isn't valid."}
+            </p>
+          ) : null}
+        </CollapsibleContent>
+      </Collapsible>
       <Button
         disabled={busy}
         onClick={() =>
@@ -249,8 +200,10 @@ function useCheckoutPoll(
   return checkoutId === null ? null : poll;
 }
 
-export default function BillingPage() {
+export default function PlanPage() {
   const { organization } = useOrganization();
+  const rename = useMutation(api.organizations.rename);
+  const openPortal = useAction(api.billingCommands.openPortal);
   const checkoutReturn = parseCheckoutReturn(useSearch());
   const view = billingView(organization);
   const poll = useCheckoutPoll(
@@ -259,40 +212,73 @@ export default function BillingPage() {
     view.kind === "provider_managed"
   );
   const isOwner = organization.can.manageBilling;
+  const subscription =
+    view.kind === "exempt" || view.kind === "provider_managed" || view.kind === "choose_plan"
+      ? view.subscription
+      : null;
+  const notice = subscription === null ? null : subscriptionNotice(subscription);
+  // The owner is the only one the query gives a discount to.
+  const discount = isOwner ? (organization.subscription?.discount ?? null) : null;
+
+  const items: BillingSummaryItem[] = [];
+  if (subscription !== null) {
+    items.push({ label: "Current plan", value: planSummary(subscription), testId: "text-billing-plan" });
+    items.push({ label: "State", value: stateLabel(subscription), testId: "text-billing-state" });
+  }
+  if (discount !== null) {
+    items.push({ label: "Discount", value: discount.label, testId: "text-active-discount" });
+  }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Plan & billing</CardTitle>
-        {isOwner ? null : <CardDescription>Only the organization&apos;s owner changes the plan.</CardDescription>}
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {checkoutReturn.kind === "cancelled" ? (
-          <p className="text-sm text-muted-foreground" data-testid="text-checkout-cancelled">
-            {CHECKOUT_CANCELLED_TEXT}
-          </p>
-        ) : null}
-        {checkoutReturn.kind === "done" && view.kind !== "no_subscription_needed" ? (
-          <p className="text-sm text-muted-foreground" data-testid="text-checkout-done">
-            {poll === null
-              ? "Thanks! Your payment is being confirmed, and your plan updates here in a moment."
-              : CHECKOUT_POLL_TEXT[poll.phase]}
-          </p>
-        ) : null}
-        {view.kind === "no_subscription_needed" ? (
-          <p data-testid="text-no-subscription-needed">No subscription needed for self-hosted engines.</p>
-        ) : null}
-        {view.kind === "no_plan" ? <p>Your hosted engine has no plan yet.</p> : null}
-        {view.kind === "exempt" ? <SubscriptionSummary subscription={view.subscription} /> : null}
-        {view.kind === "provider_managed" ? (
-          <>
-            <SubscriptionSummary subscription={view.subscription} />
-            {isOwner ? <ManageBillingButton /> : null}
-          </>
-        ) : null}
-        {view.kind === "choose_plan" ? <SubscriptionSummary subscription={view.subscription} /> : null}
-        {(view.kind === "choose_plan" || view.kind === "no_plan") && isOwner ? <PlanChooser /> : null}
-      </CardContent>
-    </Card>
+    <>
+      <PageHeader
+        title="Plan"
+        description="The plan this organization is on and what it pays."
+        actions={
+          organization.can.renameOrganization ? (
+            <RenameDialog
+              title="Rename organization"
+              current={organization.name}
+              onRename={(name) => rename({ accountId: organization.accountId, name })}
+              testId="button-rename-organization"
+            />
+          ) : null
+        }
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Subscription</CardTitle>
+          {isOwner ? null : <CardDescription>Only the organization&apos;s owner changes the plan.</CardDescription>}
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {checkoutReturn.kind === "cancelled" ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-checkout-cancelled">
+              {CHECKOUT_CANCELLED_TEXT}
+            </p>
+          ) : null}
+          {checkoutReturn.kind === "done" && view.kind !== "no_subscription_needed" ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-checkout-done">
+              {poll === null
+                ? "Thanks! Your payment is being confirmed, and your plan updates here in a moment."
+                : CHECKOUT_POLL_TEXT[poll.phase]}
+            </p>
+          ) : null}
+          {view.kind === "no_subscription_needed" ? (
+            <p data-testid="text-no-subscription-needed">No subscription needed for self-hosted engines.</p>
+          ) : null}
+          {view.kind === "no_plan" ? <p>Your hosted engine has no plan yet.</p> : null}
+          {items.length > 0 ? <BillingSummary items={items} /> : null}
+          {notice ? <StatusBanner tone="warning">{notice}</StatusBanner> : null}
+          {view.kind === "provider_managed" && isOwner ? (
+            <ProviderRedirectButton
+              label="Manage billing"
+              testId="button-manage-billing"
+              open={() => openPortal({ accountId: organization.accountId })}
+            />
+          ) : null}
+          {(view.kind === "choose_plan" || view.kind === "no_plan") && isOwner ? <PlanChooser /> : null}
+        </CardContent>
+      </Card>
+    </>
   );
 }

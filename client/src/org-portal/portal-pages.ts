@@ -2,7 +2,7 @@ import type { OrgCapabilities } from "@convex/organizations";
 
 export const ORG_PORTAL_PATH = "/org";
 
-export type PortalPageId = "overview" | "billing" | "members" | "engines" | "invoices";
+export type PortalPageId = "plan" | "payments" | "people" | "engines";
 
 export interface PortalPage {
   id: PortalPageId;
@@ -13,11 +13,10 @@ export interface PortalPage {
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [
-  { id: "overview", label: "Overview", path: ORG_PORTAL_PATH, visibleWith: "viewOrganization" },
-  { id: "billing", label: "Plan & billing", path: `${ORG_PORTAL_PATH}/billing`, visibleWith: "viewBilling" },
-  { id: "members", label: "Members", path: `${ORG_PORTAL_PATH}/members`, visibleWith: "manageMembers" },
+  { id: "plan", label: "Plan", path: ORG_PORTAL_PATH, visibleWith: "viewBilling" },
+  { id: "payments", label: "Payments", path: `${ORG_PORTAL_PATH}/payments`, visibleWith: "manageBilling" },
+  { id: "people", label: "People", path: `${ORG_PORTAL_PATH}/people`, visibleWith: "manageMembers" },
   { id: "engines", label: "Engines", path: `${ORG_PORTAL_PATH}/engines`, visibleWith: "viewOrganization" },
-  { id: "invoices", label: "Discounts & invoices", path: `${ORG_PORTAL_PATH}/invoices`, visibleWith: "manageBilling" },
 ];
 
 /** The pages a role sees in the portal's nav. */
@@ -31,4 +30,12 @@ export function portalPage(id: PortalPageId): PortalPage {
     throw new Error(`No portal page ${id}`);
   }
   return page;
+}
+
+/** Whether a portal tab is the current one; the index matches only exactly, so `/org` is not active on `/org/payments`. */
+export function isActivePage(location: string, path: string): boolean {
+  if (path === ORG_PORTAL_PATH) {
+    return location === ORG_PORTAL_PATH;
+  }
+  return location === path || location.startsWith(`${path}/`);
 }

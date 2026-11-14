@@ -1,6 +1,6 @@
 import type { BillingInterval, SubscriptionState } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
-import { formatDay, PLAN_NAMES } from "./format";
+import { formatDay, PLAN_NAMES } from "@/billing/format";
 
 const STATE_LABELS: Record<SubscriptionState, string> = {
   trialing: "Trial",
