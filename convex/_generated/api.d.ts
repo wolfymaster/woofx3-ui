@@ -197,6 +197,7 @@ import type * as lib_setupInterests from "../lib/setupInterests.js";
 import type * as lib_setupPlatforms from "../lib/setupPlatforms.js";
 import type * as lib_shoutoutEngineRequest from "../lib/shoutoutEngineRequest.js";
 import type * as lib_shoutoutSchedule from "../lib/shoutoutSchedule.js";
+import type * as lib_signUpChallenge from "../lib/signUpChallenge.js";
 import type * as lib_starterPackLedger from "../lib/starterPackLedger.js";
 import type * as lib_teamAccess from "../lib/teamAccess.js";
 import type * as lib_tokenCipher from "../lib/tokenCipher.js";
@@ -523,6 +524,7 @@ declare const fullApi: ApiFromModules<{
   "lib/setupPlatforms": typeof lib_setupPlatforms;
   "lib/shoutoutEngineRequest": typeof lib_shoutoutEngineRequest;
   "lib/shoutoutSchedule": typeof lib_shoutoutSchedule;
+  "lib/signUpChallenge": typeof lib_signUpChallenge;
   "lib/starterPackLedger": typeof lib_starterPackLedger;
   "lib/teamAccess": typeof lib_teamAccess;
   "lib/tokenCipher": typeof lib_tokenCipher;
