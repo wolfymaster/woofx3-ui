@@ -52,4 +52,3 @@ Changing the pricing page means changing these rows and the seed file together.
 - A limit can be soft: tracked and warned about, never refused. Module storage (`storage.moduleStorageBytes`, default 500 MiB) is one: no write is ever refused, the dashboard warns the owner of an engine over it, and the backoffice flags it; see [Modules](../ui/modules.md#module-storage-limit).
 - Prices live in the management plane, not here: a plan says what is included, not what it costs.
 - User pages are a hosted feature: only managed engines may publish one (`userPagesAllowed` in `convex/lib/userPages.ts` is the one place that rule lives).
-- Before plans existed, account creation wrote a `licenses` row per account; `migrations/dropLegacyLicenses` deletes them, and the table goes after that has run.
