@@ -109,7 +109,7 @@ These bring existing data to the organization model. Each one runs to `success` 
 
 M1 and M2 converge in either order. The chain below is still the one to use.
 
-Billing is not migrated here. The management plane owns subscriptions, trials and exemptions, and pushes each org's billing projection to Convex; its reconciler makes sure every org has one. An org with no projection yet is gated as an org with no subscription is: its entitlements are its operator plan assignment or the default plan, and nothing is refused.
+Billing is not migrated here. The management plane owns subscriptions, trials and exemptions, and pushes each org's billing projection to Convex. An org's billing record is created by `ensure`, which Convex calls when the org gets its first managed engine. An org with no projection yet is gated as an org with no subscription is: its entitlements are its operator plan assignment or the default plan, and nothing is refused.
 
 ### Starting the chain
 
