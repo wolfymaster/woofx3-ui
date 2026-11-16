@@ -13,10 +13,13 @@ import { enginesForOnboarding, NEW_ENGINE_PARAM, type OnboardingRoute, onboardin
 import { $currentInstanceId } from "@/lib/stores";
 
 /**
- * Where a signed-in user with no engine lands, on the way to setup. Nothing is
- * asked here: the rows setup works on are made, and setup takes over. The one
- * form is for an engine the user runs themselves, reached by a link on the
- * connect screen, or the only option on a deployment with no managed engines.
+ * Where a user sets up an engine, on the way to setup. The page asks one
+ * question, how to run the engine, and makes nothing until it is answered: an
+ * organization, an engine and a trial only ever follow a press, so someone who
+ * only looks around (or only came to sponsor) is left a plain user. The form
+ * is for an engine the user runs themselves, reached from the question, from a
+ * link on the connect screen, or the only option on a deployment with no
+ * managed engines.
  *
  * All state lives in Convex, so coming back here mid-build goes straight on to
  * wherever setup is.
@@ -45,6 +48,7 @@ export default function Onboarding() {
   const [pairingFailed, setPairingFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [choseManaged, setChoseManaged] = useState(false);
+  const [chosePairedEngine, setChosePairedEngine] = useState(false);
   const started = useRef<OnboardingRoute | null>(null);
 
   const route =
@@ -54,6 +58,7 @@ export default function Onboarding() {
           instances,
           wantsOwnEngine: new URLSearchParams(search).has("external"),
           choseManaged,
+          chosePairedEngine,
           hasPreviewEngine: previewEngine !== null,
           managedAvailable: managedEngines.available,
         });
@@ -92,7 +97,7 @@ export default function Onboarding() {
       navigate("/setup", { replace: true });
       return;
     }
-    if (started.current === route || route === null || route === "own-engine-form") {
+    if (started.current === route || route === null || route === "own-engine-form" || route === "choose") {
       return;
     }
     started.current = route;
@@ -117,6 +122,12 @@ export default function Onboarding() {
     await connectEngine(instanceUrl);
   }
 
+  function chooseOwnEngine() {
+    const params = new URLSearchParams(search);
+    params.set("external", "1");
+    navigate(`/auth/onboarding?${params}`);
+  }
+
   if (!isAuthenticated) {
     return null;
   }
@@ -133,7 +144,47 @@ export default function Onboarding() {
           <span className="font-bold text-2xl tracking-tight">woofx3</span>
         </div>
 
-        {!showForm && !error && (
+        {route === "choose" && !error && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Set up your streaming engine</CardTitle>
+              <CardDescription>
+                Your engine runs your alerts, overlays and chat commands. How would you like to run it?
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {managedEngines?.available && (
+                <Button
+                  className="w-full"
+                  onClick={() => setChoseManaged(true)}
+                  data-testid="button-choose-managed-engine"
+                >
+                  Let woofx3 run it for you
+                </Button>
+              )}
+              {previewEngine && (
+                <Button
+                  className="w-full"
+                  variant={managedEngines?.available ? "outline" : "default"}
+                  onClick={() => setChosePairedEngine(true)}
+                  data-testid="button-connect-preview-engine"
+                >
+                  Connect this preview&apos;s engine
+                </Button>
+              )}
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={chooseOwnEngine}
+                data-testid="button-choose-own-engine"
+              >
+                I run my own engine
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!showForm && route !== "choose" && !error && (
           <output className="flex justify-center py-6" aria-label="Getting you set up">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </output>

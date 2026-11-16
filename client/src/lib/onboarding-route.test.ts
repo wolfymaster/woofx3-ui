@@ -5,13 +5,15 @@ const none: OnboardingFacts = {
   instances: [],
   wantsOwnEngine: false,
   choseManaged: false,
+  chosePairedEngine: false,
   hasPreviewEngine: false,
   managedAvailable: true,
 };
 
 describe("onboardingRoute", () => {
   test.each<{ name: string; facts: OnboardingFacts; route: OnboardingRoute }>([
-    { name: "a new user gets the managed path", facts: none, route: "managed" },
+    { name: "a new user is asked before anything is made", facts: none, route: "choose" },
+    { name: "choosing managed gets the managed path", facts: { ...none, choseManaged: true }, route: "managed" },
     {
       name: "choosing managed gets past a paired engine that would not connect",
       facts: { ...none, hasPreviewEngine: true, choseManaged: true },
@@ -28,8 +30,13 @@ describe("onboardingRoute", () => {
       route: "own-engine-form",
     },
     {
-      name: "a preview connects its paired engine",
-      facts: { ...none, hasPreviewEngine: true },
+      name: "a preview asks before connecting its paired engine",
+      facts: { ...none, hasPreviewEngine: true, managedAvailable: false },
+      route: "choose",
+    },
+    {
+      name: "a preview connects its paired engine once asked to",
+      facts: { ...none, hasPreviewEngine: true, chosePairedEngine: true },
       route: "paired-engine",
     },
     { name: "the link asks for the form", facts: { ...none, wantsOwnEngine: true }, route: "own-engine-form" },
@@ -49,9 +56,9 @@ describe("onboardingRoute", () => {
       route: "setup",
     },
     {
-      name: "a failed registration of the user's own engine gets the managed path",
+      name: "a failed registration of the user's own engine is asked again",
       facts: { ...none, instances: [{ hosting: "external" }] },
-      route: "managed",
+      route: "choose",
     },
   ])("$name", ({ facts, route }) => {
     expect(onboardingRoute(facts)).toBe(route);
@@ -75,9 +82,9 @@ describe("enginesForOnboarding", () => {
     expect(enginesForOnboarding(instances, wants)).toEqual(expected);
   });
 
-  test("an invitee who asks for their own engine gets the managed path, not the invited engine's setup", () => {
+  test("an invitee who asks for their own engine gets the choice, not the invited engine's setup", () => {
     const facts = { ...none, instances: enginesForOnboarding([invited], true) };
-    expect(onboardingRoute(facts)).toBe("managed");
+    expect(onboardingRoute(facts)).toBe("choose");
     expect(onboardingRoute({ ...none, instances: enginesForOnboarding([invited], false) })).toBe("setup");
   });
 });
