@@ -1,5 +1,37 @@
 # woofx3 desktop changelog
 
+## [0.11.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.10.0...woofx3-v0.11.0) (2026-11-16)
+
+### Features
+
+* **account-portal:** create another engine from the Engines page ([69f6a68](https://github.com/wolfymaster/woofx3-ui/commit/69f6a68f6d0db73c9de38daa848b85d1754ee036))
+* **account-portal:** key the portal to the person at /account ([cfcba95](https://github.com/wolfymaster/woofx3-ui/commit/cfcba952e4fb7732465b3e4bca31bba99b10f589))
+* **account-portal:** offer an engine to a user with no organization ([a2250aa](https://github.com/wolfymaster/woofx3-ui/commit/a2250aabe02e91efcf01d17ba4ec6e764687d5ad))
+* **account-portal:** one Account entry in the profile menu ([bd39acb](https://github.com/wolfymaster/woofx3-ui/commit/bd39acb658153842289edde0006d9169ba0fa8d8))
+* **auth:** check password sign-up with Cloudflare Turnstile ([c3da27a](https://github.com/wolfymaster/woofx3-ui/commit/c3da27aee68d75d56a6ee0ad09771df840656803))
+* **onboarding:** make an organization only when an engine is chosen ([b69d0d7](https://github.com/wolfymaster/woofx3-ui/commit/b69d0d7c396ce36030cc3a76379a65847799e0ab))
+* **onboarding:** send a user with no organization to their account ([e2612a0](https://github.com/wolfymaster/woofx3-ui/commit/e2612a047288b054c85c11b8eae9927c2cdfbdfc))
+* **sponsorships:** /sponsor/start confirm screen ([fcc2924](https://github.com/wolfymaster/woofx3-ui/commit/fcc29240d219060de37a535927dd65b02339be07))
+* **sponsorships:** confirm a return from the card-update page ([db6a31b](https://github.com/wolfymaster/woofx3-ui/commit/db6a31bbb3c17c4f80370c0e6f2667eeabe1abad))
+* **sponsorships:** sponsorship section and sponsor rows in the portal ([0d46c2b](https://github.com/wolfymaster/woofx3-ui/commit/0d46c2bee255aeb22a1c3913c8618706a160f2f2))
+
+### Bug Fixes
+
+* **account-portal:** an org with no billing yet has no invoices, not an error ([c624abe](https://github.com/wolfymaster/woofx3-ui/commit/c624abe6d1c198979540e40dc4c8da2881a01af2))
+* **account-portal:** no back-to-dashboard link for a viewer with no engine ([0f654ae](https://github.com/wolfymaster/woofx3-ui/commit/0f654aed0e4dba393f4d58c81e1e2fe483366ba1))
+* **account-portal:** show one error, not an empty state, when billing fails ([0a44c28](https://github.com/wolfymaster/woofx3-ui/commit/0a44c283e680f0ab2100af4548bc558c63949347))
+* **account-portal:** show payment rows as each lookup answers ([ac67f33](https://github.com/wolfymaster/woofx3-ui/commit/ac67f33f4631ac5e8b41129e3b1cabc6c0543709))
+* **account-portal:** stack People and Engines rows at phone widths ([9d79e2c](https://github.com/wolfymaster/woofx3-ui/commit/9d79e2cce04c15f67d187d4be9d8885ab9054275))
+* **account-portal:** tell same-named organizations apart in the switcher ([eb3b515](https://github.com/wolfymaster/woofx3-ui/commit/eb3b515a05ed559c378b312cc63e775e5180feb6))
+* **auth:** bound the wait after sign-in and stop on a session-less result ([11c2972](https://github.com/wolfymaster/woofx3-ui/commit/11c2972abf83e55a99ffb67397cac8c59c54def3))
+* **billing:** reflow the payments list at phone widths and drop an empty link column ([501698c](https://github.com/wolfymaster/woofx3-ui/commit/501698c8f941501854b336dafcbe98539c75a27e))
+* **instances:** only the owner renames an engine ([87973db](https://github.com/wolfymaster/woofx3-ui/commit/87973dbe5d4059949eaef9f4076e2ec62454d530))
+* **organizations:** only the owner renames the organization ([f2bdfac](https://github.com/wolfymaster/woofx3-ui/commit/f2bdfac8dac293990438f95bcfa77aa2b07034a3))
+* **setup:** send a user with no engine to their account like the dashboard does ([0dac834](https://github.com/wolfymaster/woofx3-ui/commit/0dac83431c2a71beef09312657dfd29b93bb2de8))
+* **sponsorships:** a sponsor's cancel always ends at period end ([a36fc5c](https://github.com/wolfymaster/woofx3-ui/commit/a36fc5cbf5c2006f192b00f8e1be7fe533f471dc))
+* **sponsorships:** a sponsorship set to end reads Ending, not Active ([69a7fbf](https://github.com/wolfymaster/woofx3-ui/commit/69a7fbfda52933ba110f70d4d3ebfbb7d245b957))
+* **sponsorships:** the cancel dialog's dismiss button says Keep sponsorship ([a70a01d](https://github.com/wolfymaster/woofx3-ui/commit/a70a01d791c942e59b791df450a594b0714a55f8))
+
 ## [0.10.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.9.0...woofx3-v0.10.0) (2026-11-14)
 
 ### Features
