@@ -8,6 +8,7 @@ import { deleteCompanion } from "./lib/companionRecords";
 import { engineActivityPatch } from "./lib/engineSync/activity";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import { validateExternalEngineUrl } from "./lib/externalEngineUrl";
+import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
@@ -228,13 +229,7 @@ export const update = mutation({
 export const deleteInstance = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId: args.instanceId, userId });
-    if (!membership || membership.role === "member") {
-      throw new Error("Not authorized");
-    }
+    await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "deleteEngine");
 
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
     if (!instance) throw new Error("Instance not found");

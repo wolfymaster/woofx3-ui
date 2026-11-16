@@ -97,6 +97,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
   const provisioning = useQuery(api.provisioning.forInstance, { instanceId });
   const retry = useAction(api.provisioning.retry);
   const deleteEngine = useAction(api.provisioning.deleteManagedEngine);
+  const access = useQuery(api.organizations.capabilitiesForInstance, { instanceId });
   const engineFlag = useAction(api.provisioning.engineFlag);
   const fetchUpgradeInfo = useAction(api.provisioning.upgradeInfo);
   const upgradeEngine = useAction(api.provisioning.upgradeManagedEngine);
@@ -418,15 +419,17 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
               )}
               Retry
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setConfirmOpen(true)}
-              disabled={busy !== null || status === "deleted"}
-              data-testid="button-delete-engine"
-            >
-              {deleteLabel(status, provisioning.error)}
-            </Button>
+            {access?.deleteEngine && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setConfirmOpen(true)}
+                disabled={busy !== null || status === "deleted"}
+                data-testid="button-delete-engine"
+              >
+                {deleteLabel(status, provisioning.error)}
+              </Button>
+            )}
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </CardContent>
