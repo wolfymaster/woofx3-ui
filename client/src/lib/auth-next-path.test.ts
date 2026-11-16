@@ -29,6 +29,18 @@ describe("safeNextPath keeps the account portal links from the marketing site", 
   });
 });
 
+describe("a next carried through the register link", () => {
+  test.each([
+    "/auth/accept-invite?token=abc_DEF-123",
+    "/auth/accept-invite?token=a%2Bb%3D",
+    "/sponsor/start?amountCents=25000&interval=month",
+  ])("%s survives the round trip and is followed", (next) => {
+    const link = withNext("/auth/register", next);
+    const carried = new URLSearchParams(link.split("?")[1]).get("next");
+    expect(safeNextPath(carried, "/auth/onboarding")).toBe(next);
+  });
+});
+
 describe("withNext", () => {
   test("carries the next path, encoded", () => {
     expect(withNext("/auth/register", "/auth/accept-invite?token=a&b")).toBe(
