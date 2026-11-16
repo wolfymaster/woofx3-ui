@@ -114,9 +114,10 @@ jobs:
         env:
           VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
           VITE_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
         run: |
           missing=0
-          for name in VITE_CONVEX_URL VITE_CONVEX_SITE_URL; do
+          for name in VITE_CONVEX_URL VITE_CONVEX_SITE_URL VITE_TURNSTILE_SITE_KEY; do
             if [[ -z "${!name}" ]]; then
               echo "::error::Environment variable ${name} is not set on the production environment"
               missing=1

@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { IS_DESKTOP } from "@/lib/desktop";
 
-const BILLING_PATH = "/org/billing";
+const BILLING_PATH = "/account";
 
 type SuspendedEntry = Extract<DashboardEntry, { kind: "suspended" }>;
 

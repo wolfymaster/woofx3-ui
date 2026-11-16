@@ -3,16 +3,20 @@ export type OnboardingRoute =
   | "setup"
   /** Ask for the address of an engine the user runs. */
   | "own-engine-form"
-  /** A pull request preview's paired engine: connect it without asking. */
+  /** A pull request preview's paired engine, once the user asked to connect it. */
   | "paired-engine"
   /** Make the rows the connect screen works on; the engine follows connecting. */
-  | "managed";
+  | "managed"
+  /** Ask how to run the engine. Nothing is made until the user picks. */
+  | "choose";
 
 export interface OnboardingFacts {
   instances: ReadonlyArray<{ clientId?: string; hosting?: "managed" | "external" }>;
   wantsOwnEngine: boolean;
   /** Pressed "Let woofx3 run it for you", which outranks the form and a paired engine that would not connect. */
   choseManaged: boolean;
+  /** Pressed "Connect this preview's engine". */
+  chosePairedEngine: boolean;
   hasPreviewEngine: boolean;
   managedAvailable: boolean;
 }
@@ -30,10 +34,11 @@ export function onboardingRoute(facts: OnboardingFacts): OnboardingRoute {
   if (facts.choseManaged) {
     return "managed";
   }
-  if (facts.hasPreviewEngine) {
+  if (facts.chosePairedEngine && facts.hasPreviewEngine) {
     return "paired-engine";
   }
-  return facts.managedAvailable ? "managed" : "own-engine-form";
+  // Making an organization, an engine or a trial takes a press: rendering this page never does.
+  return facts.managedAvailable || facts.hasPreviewEngine ? "choose" : "own-engine-form";
 }
 
 /**
@@ -52,4 +57,34 @@ export function enginesForOnboarding<T extends { ownedByMe: boolean }>(
   wantsNewEngine: boolean
 ): T[] {
   return wantsNewEngine ? instances.filter((instance) => instance.ownedByMe) : [...instances];
+}
+
+/** The account portal. It is only in the web build, so this is spelled out rather than imported from it. */
+export const ACCOUNT_PATH = "/account";
+
+/**
+ * Where the dashboard sends a signed-in user it has no engine to open for. An
+ * organization owner whose engine is gone sets up another. A plain user, such
+ * as a sponsor, is not pushed into making one: they go to their account, which
+ * offers it. The desktop app has no account portal, so it always onboards.
+ */
+export function noEnginePath(facts: { ownsOrganization: boolean; hasAccountPortal: boolean }): string {
+  if (facts.ownsOrganization || !facts.hasAccountPortal) {
+    return "/auth/onboarding";
+  }
+  return ACCOUNT_PATH;
+}
+
+/**
+ * Where /setup goes when there is no engine to set up. `ownsOrganization` is null until the server has answered,
+ * and then nothing moves yet.
+ */
+export function setupWithoutEnginePath(facts: {
+  ownsOrganization: boolean | null;
+  hasAccountPortal: boolean;
+}): string | null {
+  if (facts.ownsOrganization === null) {
+    return null;
+  }
+  return noEnginePath({ ownsOrganization: facts.ownsOrganization, hasAccountPortal: facts.hasAccountPortal });
 }

@@ -236,6 +236,10 @@ jobs:
             BUN_VERSION=${{ env.BUN_VERSION }}
             VITE_CONVEX_URL=${{ steps.convex.outputs.convex_url }}
             VITE_CONVEX_SITE_URL=${{ steps.convex.outputs.convex_site_url }}
+            # Cloudflare's always-pass test site key (client/src/lib/sign-up-challenge.ts):
+            # the cloud browsers that test previews cannot solve a real challenge, and
+            # a preview's Convex checks sign-ups with the matching test secret.
+            VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ steps.preview.outputs.image_tag }}
           cache-from: type=gha
@@ -272,6 +276,28 @@ jobs:
           bunx convex env set --preview-name "$CONVEX_NAME" PREVIEW_ENGINE_URL "$ENGINE_URL"
           bunx convex env set --preview-name "$CONVEX_NAME" PREVIEW_ENGINE_VERSION "$ENGINE_RELEASE"
           bunx convex env set --preview-name "$CONVEX_NAME" PREVIEW_ENGINE_REGISTRATION_TOKEN "$REGISTRATION_TOKEN"
+
+      # Billing in a preview runs against the staging maintenance API (Stripe test keys, fake
+      # engine providers); the production variables above only create the preview itself.
+      - name: Point the preview deployment at the staging maintenance API
+        working-directory: woofx3-ui
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
+          STAGING_URL: ${{ vars.STAGING_MAINTENANCE_API_URL }}
+          STAGING_KEY: ${{ secrets.STAGING_MAINTENANCE_API_KEY }}
+          STAGING_OPS_SECRET: ${{ secrets.STAGING_OPS_API_SECRET }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_URL" || -z "$STAGING_KEY" || -z "$STAGING_OPS_SECRET" ]]; then
+            echo "::warning::STAGING_MAINTENANCE_API_URL, STAGING_MAINTENANCE_API_KEY or STAGING_OPS_API_SECRET is unset, so billing is unavailable in this preview"
+            exit 0
+          fi
+          echo "::add-mask::$STAGING_KEY"
+          echo "::add-mask::$STAGING_OPS_SECRET"
+          bunx convex env set --preview-name "$CONVEX_NAME" MAINTENANCE_API_URL "$STAGING_URL"
+          bunx convex env set --preview-name "$CONVEX_NAME" MAINTENANCE_API_KEY "$STAGING_KEY"
+          bunx convex env set --preview-name "$CONVEX_NAME" OPS_API_SECRET "$STAGING_OPS_SECRET"
 
   teardown:
     name: Remove the preview

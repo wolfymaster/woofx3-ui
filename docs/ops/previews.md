@@ -45,7 +45,7 @@ CONVEX_DEPLOY_KEY=<preview deploy key> bunx convex run --preview-name pr-<n> see
 
 A preview can be onboarded with a password account, so automated tests can get through setup without signing in to Twitch. The workflow sets `PREVIEW_DEPLOYMENT=true` on the preview deployment (`convex/lib/previewDeployment.ts`), and with it setup changes in these ways:
 
-- The paired engine connects by itself after sign-up, with no form unless that fails.
+- After sign-up, onboarding asks how to run the engine: "Connect this preview's engine" (`button-connect-preview-engine`) connects the paired engine, with no form unless that fails.
 - **Connect your streaming platform** shows **Skip for now** (`setup.skipTwitch`, refused elsewhere). Skipping finishes setup, and the onboarding guard does not send the user back for a link (`SetupStatus.twitchRequired`).
 - Connecting Twitch instead works as in production.
 - Applying setup installs the Twitch module even if skipping recorded no consent for it, approving what its build asks for (`platformsToApply`). The default alerts need its triggers, and test events work without a linked account.
@@ -83,12 +83,23 @@ These live in the `preview` GitHub Environment (**Settings → Environments → 
 | `MAINTENANCE_API_URL` | variable | The production maintenance API |
 | `PREVIEW_BASE_DOMAIN` | variable | `woofx3.com`; must match the maintenance API's `PREVIEW_BASE_DOMAIN` |
 | `ENGINE_VERSION` | variable | Optional. The engine release previews get when their description names none (`latest` when unset) |
+| `STAGING_MAINTENANCE_API_URL` | variable | The staging maintenance API (fake engine providers, Stripe test keys). Set on the preview's Convex deployment as `MAINTENANCE_API_URL` |
+| `STAGING_MAINTENANCE_API_KEY` | secret | Staging API key with `billing:read`, `billing:write`, `engines:read`, `engines:write`, `email:send` and `engine-events:write`. Set on the Convex deployment as `MAINTENANCE_API_KEY` |
+| `STAGING_OPS_API_SECRET` | secret | The secret the staging API presents to a preview's ops API. Set on the Convex deployment as `OPS_API_SECRET` |
 
 Other Convex environment variables a preview needs (`AUTH_TWITCH_*`, JWT keys, storage configuration, and the two OAuth variables below) come from the Convex project's default environment variables for preview deployments, set in the Convex dashboard.
 
 The maintenance API needs its own configuration for previews, described in its `CLAUDE.md`: a Railway project token for the woofx3 project's staging environment (`RAILWAY_PREVIEW_TOKEN`), that environment registered as its preview pool, the Cloudflare zone of `woofx3.com` (`CLOUDFLARE_PREVIEW_ZONE_ID`, with DNS edit on the API token), and `UI_IMAGE_REPOSITORY`.
 
 Railway and the maintenance API pull the image anonymously from GHCR, so the `woofx3-ui` package must be public.
+
+## Billing in a preview
+
+The production `MAINTENANCE_API_URL` and `MAINTENANCE_API_KEY` above only create the preview. The workflow's last Convex step sets the three `STAGING_*` entries on the preview deployment as `MAINTENANCE_API_URL`, `MAINTENANCE_API_KEY` and `OPS_API_SECRET`, so billing in a preview talks to the staging maintenance API and never to production. If any of the three is empty the step warns and sets none of them; the preview still deploys, with billing unavailable.
+
+Because `MAINTENANCE_API_URL` and `MAINTENANCE_API_KEY` now exist on the deployment, everything that reads them is live in a preview: billing, the "Create another engine" dialog (hosted engines, built by the staging API's fake providers), slug checks for user pages, and engine teardown when an instance is deleted. First-run onboarding is unchanged: a preview paired with an engine still pairs with it rather than building a hosted one.
+
+The staging service holds one return origin for hosted checkout, one `BILLING_PORTAL_URL`, and one ops API URL. They point at a single preview, so only one preview at a time completes a hosted checkout return correctly, and the staging API calls only that preview's ops API. To move them to another preview, change those variables on the staging service in Railway to that preview's UI address and Convex site URL, and redeploy the service.
 
 ## OAuth in a preview
 

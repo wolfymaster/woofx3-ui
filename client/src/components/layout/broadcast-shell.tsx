@@ -1,5 +1,5 @@
 import { useStore } from "@nanostores/react";
-import { Activity, ArrowUpRight, Search } from "lucide-react";
+import { Activity, Search } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { CommandPalette } from "@/components/command-palette/command-palette";
@@ -25,7 +25,6 @@ import { useEngineStarting } from "@/hooks/use-engine-starting";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
-import { useCanManageOrganization } from "@/hooks/use-manage-organization";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { IS_DESKTOP } from "@/lib/desktop";
@@ -128,7 +127,6 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
     .toUpperCase();
 
   const isAdmin = useIsInstanceAdmin() ?? false;
-  const canManageOrganization = useCanManageOrganization();
 
   const openCommandPalette = useCallback(() => {
     $commandPaletteOpen.set(true);
@@ -214,11 +212,10 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
             <DropdownMenuItem asChild>
               <Link href="/team">Team Settings</Link>
             </DropdownMenuItem>
-            {canManageOrganization && (
+            {!IS_DESKTOP && (
               <DropdownMenuItem asChild>
-                <Link href="/org" data-testid="menu-manage-organization">
-                  Manage organization
-                  <ArrowUpRight className="h-4 w-4 ml-auto" />
+                <Link href="/account" data-testid="menu-account">
+                  Account
                 </Link>
               </DropdownMenuItem>
             )}

@@ -52,7 +52,12 @@ export default function Login() {
     setError(null);
     setIsLoading(true);
     try {
-      await signIn("password", { email, password, flow: "signIn" });
+      const { signingIn } = await signIn("password", { email, password, flow: "signIn" });
+      if (!signingIn) {
+        setError("Invalid email or password.");
+        setIsLoading(false);
+        return;
+      }
       navigateAfterSignIn(getLoginNextPath());
     } catch (e) {
       setError("Invalid email or password.");

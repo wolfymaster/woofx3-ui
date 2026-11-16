@@ -41,6 +41,7 @@ import {
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
+import { SPONSOR_START_PATH } from "@/sponsorship/sponsorship-text";
 import { convexClient as convex } from "./lib/convexClient";
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
@@ -94,11 +95,13 @@ const DesktopRelayWatch = IS_DESKTOP ? lazy(() => import("@/desktop/RelayWatch")
 const DesktopUpdateBanner = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateBanner")) : null;
 const DesktopLocalConnectionsGuide = IS_DESKTOP ? lazy(() => import("@/desktop/LocalConnectionsGuide")) : null;
 
-// The organization and billing portal is web only: the desktop app never shows
-// billing, so its build carries no /org route (org-portal/boundary.test.ts).
-const OrgPortal = IS_DESKTOP ? null : lazy(() => import("@/org-portal/OrgPortal"));
-/** `/org` and every path under it. */
-const ORG_PORTAL_ROUTE = /^\/org(?:\/.*)?$/;
+// The account portal is web only: the desktop app never shows
+// billing, so its build carries no /account route (account-portal/boundary.test.ts).
+const AccountPortal = IS_DESKTOP ? null : lazy(() => import("@/account-portal/AccountPortal"));
+// /sponsor/start is web only for the same reason (account-portal/boundary.test.ts).
+const SponsorStart = IS_DESKTOP ? null : lazy(() => import("@/sponsorship/SponsorStart"));
+/** `/account` and every path under it. */
+const ACCOUNT_PORTAL_ROUTE = /^\/account(?:\/.*)?$/;
 
 function SplashScreen() {
   return (
@@ -223,11 +226,21 @@ function AppRoutes() {
       <Route path={`${USER_PAGE_PREFIX}*`} component={UserPageHandoff} />
 
       {/* Outside BroadcastShell: the portal has its own slim layout and needs no engine. */}
-      {OrgPortal && (
-        <Route path={ORG_PORTAL_ROUTE}>
+      {AccountPortal && (
+        <Route path={ACCOUNT_PORTAL_ROUTE}>
           <AuthGuard>
             <PageBoundary resetKey={location}>
-              <OrgPortal />
+              <AccountPortal />
+            </PageBoundary>
+          </AuthGuard>
+        </Route>
+      )}
+
+      {SponsorStart && (
+        <Route path={SPONSOR_START_PATH}>
+          <AuthGuard>
+            <PageBoundary resetKey={location}>
+              <SponsorStart />
             </PageBoundary>
           </AuthGuard>
         </Route>

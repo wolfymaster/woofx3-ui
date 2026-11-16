@@ -119,16 +119,15 @@ describe("organizations.mine", () => {
     expect(organization.can.manageBilling).toBe(false);
   });
 
-  test("an admin sees and renames every engine, and no one is sent createEngine", async () => {
+  test("an admin sees and renames every engine, and only the owner may create one", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
     const adminId = await addMember(t, org, "admin", "admin");
     const organization = await mine(t, adminId);
     expect(organization.can.manageEngines).toBe(true);
     expect(organization.engines.map((e) => e.name).sort()).toEqual(["Hosted", "LAN Box"]);
-    // Creating is enforced by the server's engine paths, not offered by any screen.
-    expect(organization.can).not.toHaveProperty("createEngine");
-    expect((await mine(t, org.ownerId)).can).not.toHaveProperty("createEngine");
+    expect(organization.can.createEngine).toBe(false);
+    expect((await mine(t, org.ownerId)).can.createEngine).toBe(true);
   });
 
   test("a member sees no billing or seats, and only the engines they're on", async () => {
@@ -203,18 +202,21 @@ describe("organizations.members", () => {
 });
 
 describe("organizations.rename", () => {
-  test("an admin renames; a member and a blank name are refused", async () => {
+  test("the owner renames; an admin, a member and a blank name are refused", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
     const adminId = await addMember(t, org, "admin", "admin");
     const memberId = await addMember(t, org, "member", "member");
-    await as(t, adminId).mutation(api.organizations.rename, { accountId: org.accountId, name: "  Mod Squad " });
+    await as(t, org.ownerId).mutation(api.organizations.rename, { accountId: org.accountId, name: "  Mod Squad " });
+    expect((await mine(t, org.ownerId)).name).toBe("Mod Squad");
+    for (const callerId of [adminId, memberId]) {
+      await expect(
+        as(t, callerId).mutation(api.organizations.rename, { accountId: org.accountId, name: "Mine now" })
+      ).rejects.toThrow("doesn't allow this");
+    }
     expect((await mine(t, org.ownerId)).name).toBe("Mod Squad");
     await expect(
-      as(t, memberId).mutation(api.organizations.rename, { accountId: org.accountId, name: "Mine now" })
-    ).rejects.toThrow("doesn't allow this");
-    await expect(
-      as(t, adminId).mutation(api.organizations.rename, { accountId: org.accountId, name: "   " })
+      as(t, org.ownerId).mutation(api.organizations.rename, { accountId: org.accountId, name: "   " })
     ).rejects.toThrow("1 to 64 characters");
   });
 });

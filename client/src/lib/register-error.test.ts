@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ConvexError } from "convex/values";
 import { registerError } from "./register-error";
 
 describe("registerError", () => {
@@ -17,5 +18,14 @@ describe("registerError", () => {
     expect(result.kind).toBe("exists-or-unknown");
     expect(result.message).not.toContain("Server Error");
     expect(result.message).toContain("sign in");
+  });
+
+  test.each([
+    ["sign_up_challenge_failed", "complete the check"],
+    ["sign_up_challenge_unavailable", "try again in a moment"],
+  ])("explains a failed bot check (%s)", (code, says) => {
+    const result = registerError(new ConvexError({ code }));
+    expect(result.kind).toBe("challenge");
+    expect(result.message).toContain(says);
   });
 });

@@ -48,6 +48,11 @@ export const BILLING_REFUSAL_CODES = [
   "intent_already_paid",
   "intent_invalid",
   "listing_unavailable",
+  // A sponsorship: missing or another person's, one-time (nothing to change or cancel), or an amount outside the
+  // plane's terms.
+  "sponsorship_not_found",
+  "sponsorship_not_recurring",
+  "invalid_sponsorship_amount",
 ] as const;
 export type BillingRefusalCode = (typeof BILLING_REFUSAL_CODES)[number];
 
@@ -151,6 +156,66 @@ export interface CheckoutView {
   state: CheckoutState;
 }
 
+export const SPONSORSHIP_INTERVALS = ["month", "once"] as const;
+export type SponsorshipInterval = (typeof SPONSORSHIP_INTERVALS)[number];
+export const SPONSORSHIP_STATES = ["pending", "active", "past_due", "canceled", "complete"] as const;
+export type SponsorshipState = (typeof SPONSORSHIP_STATES)[number];
+
+const sponsorshipTermsSchema = z.object({ minCents: z.number(), maxCents: z.number(), currency: z.string() });
+export type SponsorshipTerms = z.infer<typeof sponsorshipTermsSchema>;
+
+const sponsorshipWireSchema = z.object({
+  id: z.string(),
+  interval: z.enum(SPONSORSHIP_INTERVALS),
+  amountCents: z.number(),
+  currency: z.string(),
+  state: z.enum(SPONSORSHIP_STATES),
+  cancelAtPeriodEnd: z.boolean(),
+  currentPeriodEnd: z.string().nullable(),
+  createdAt: z.string(),
+  payments: z.array(
+    z.object({
+      id: z.string(),
+      amountCents: z.number(),
+      status: z.string(),
+      paidAt: z.string(),
+      receiptUrl: z.string().nullable(),
+    })
+  ),
+});
+const sponsorshipsSchema = z.object({ sponsorships: z.array(sponsorshipWireSchema) });
+
+export interface SponsorshipPayment {
+  id: string;
+  amountCents: number;
+  status: string;
+  /** Epoch milliseconds. */
+  paidAt: number;
+  /** The provider's hosted receipt; null when there is none to open. */
+  receiptUrl: string | null;
+}
+
+export interface Sponsorship {
+  id: string;
+  interval: SponsorshipInterval;
+  amountCents: number;
+  currency: string;
+  state: SponsorshipState;
+  /** A monthly sponsorship that stops at the end of the paid period. */
+  cancelAtPeriodEnd: boolean;
+  /** Epoch milliseconds; null for a one-time sponsorship. */
+  currentPeriodEnd: number | null;
+  /** Epoch milliseconds. */
+  createdAt: number;
+  payments: SponsorshipPayment[];
+}
+
+/** A change answers with the changed row; the portal reloads its list rather than reading it. */
+const changedSchema = z.object({}).passthrough();
+
+const sponsorshipCheckoutViewSchema = z.object({ id: z.string(), state: z.enum(CHECKOUT_STATES) });
+export type SponsorshipCheckoutView = z.infer<typeof sponsorshipCheckoutViewSchema>;
+
 const checkoutOpenedSchema = z.object({ url: z.string(), checkoutId: z.string() });
 const urlSchema = z.object({ url: z.string() });
 const ensureSchema = z.object({ accountId: z.string(), version: z.number() });
@@ -174,6 +239,17 @@ export interface MarketplaceCheckoutRequest {
   idempotencyKey: string;
 }
 
+export interface SponsorshipCheckoutRequest {
+  /** The Convex user the sponsorship belongs to: always the signed-in viewer. */
+  userId: string;
+  amountCents: number;
+  interval: SponsorshipInterval;
+  /** Where the provider returns the sponsor; the plane adds the outcome to it. */
+  returnUrl: string;
+  /** Stable across retries of one user intent; see `sponsorshipCheckoutIdempotencyKey`. */
+  idempotencyKey: string;
+}
+
 export interface BillingClient {
   /** Starts the org's trial if it has no billing yet. Idempotent. */
   ensure(accountId: string): Promise<BillingResult<{ accountId: string; version: number }>>;
@@ -189,6 +265,25 @@ export interface BillingClient {
   lookupPromotionCode(code: string): Promise<BillingResult<AppliedDiscount | null>>;
   /** `accountId` is the org the caller acts for; another org's checkout answers `checkout_not_found`. */
   checkoutState(checkoutId: string, accountId: string): Promise<BillingResult<CheckoutView>>;
+  /** What a sponsorship may cost; the plane's own limits, never Convex's. */
+  sponsorshipTerms(): Promise<BillingResult<SponsorshipTerms>>;
+  startSponsorshipCheckout(
+    request: SponsorshipCheckoutRequest
+  ): Promise<BillingResult<{ url: string; checkoutId: string }>>;
+  /** The user's sponsorships, newest first. */
+  listSponsorships(userId: string): Promise<BillingResult<Sponsorship[]>>;
+  /** Monthly sponsorships only; a one-time one answers `sponsorship_not_recurring`. */
+  changeSponsorshipAmount(userId: string, sponsorshipId: string, amountCents: number): Promise<BillingResult<null>>;
+  /** Monthly sponsorships only. `atPeriodEnd` false stops it now. */
+  cancelSponsorship(userId: string, sponsorshipId: string, atPeriodEnd: boolean): Promise<BillingResult<null>>;
+  /** A provider page where the sponsor replaces the card; it returns to `returnUrl`. */
+  sponsorshipPaymentMethodSession(
+    userId: string,
+    sponsorshipId: string,
+    returnUrl: string
+  ): Promise<BillingResult<{ url: string }>>;
+  /** `userId` is the viewer; another person's checkout answers `checkout_not_found`. */
+  sponsorshipCheckoutState(checkoutId: string, userId: string): Promise<BillingResult<SponsorshipCheckoutView>>;
 }
 
 /** One `ensure` per org ever means one key per org. */
@@ -226,6 +321,23 @@ export async function marketplaceCheckoutIdempotencyKey(
       ? encodeURIComponent(request.intentId)
       : `sha256-${await sha256Hex(request.intentId)}`;
   return `marketplace-checkout:${request.accountId}:${intentPart}:${windowStart}`;
+}
+
+/** One key per person, terms and window, as for plans: a double click or a retry gets the one checkout. */
+export function sponsorshipCheckoutIdempotencyKey(
+  request: Pick<SponsorshipCheckoutRequest, "userId" | "amountCents" | "interval">,
+  nowMs: number
+): string {
+  const windowStart = Math.floor(nowMs / BILLING_CLIENT.checkoutKeyWindowMs) * BILLING_CLIENT.checkoutKeyWindowMs;
+  return `sponsorship-checkout:${request.userId}:${request.interval}:${request.amountCents}:${windowStart}`;
+}
+
+function userPath(userId: string): string {
+  return `/v1/billing/users/${encodeURIComponent(userId)}`;
+}
+
+function sponsorshipPath(userId: string, sponsorshipId: string): string {
+  return `${userPath(userId)}/sponsorships/${encodeURIComponent(sponsorshipId)}`;
 }
 
 /** Longest promotion code or intent id kept readable in a checkout key. */
@@ -274,7 +386,7 @@ function errorFrom(text: string, status: number): BillingError {
 }
 
 interface Call {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH";
   path: string;
   body?: unknown;
   idempotencyKey?: string;
@@ -357,6 +469,74 @@ export class HttpBillingClient implements BillingClient {
         path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?accountId=${encodeURIComponent(accountId)}`,
       },
       checkoutViewSchema
+    );
+  }
+
+  sponsorshipTerms() {
+    return this.send({ method: "GET", path: "/v1/billing/sponsorship-terms" }, sponsorshipTermsSchema);
+  }
+
+  startSponsorshipCheckout(request: SponsorshipCheckoutRequest) {
+    return this.send(
+      {
+        method: "POST",
+        path: `${userPath(request.userId)}/sponsorship-checkouts`,
+        idempotencyKey: request.idempotencyKey,
+        body: { amountCents: request.amountCents, interval: request.interval, returnUrl: request.returnUrl },
+      },
+      checkoutOpenedSchema
+    );
+  }
+
+  async listSponsorships(userId: string) {
+    const result = await this.send({ method: "GET", path: `${userPath(userId)}/sponsorships` }, sponsorshipsSchema);
+    if (!result.ok) {
+      return result;
+    }
+    return billingOk(
+      result.value.sponsorships.map((sponsorship) => ({
+        ...sponsorship,
+        currentPeriodEnd: sponsorship.currentPeriodEnd === null ? null : Date.parse(sponsorship.currentPeriodEnd),
+        createdAt: Date.parse(sponsorship.createdAt),
+        payments: sponsorship.payments.map((payment) => ({ ...payment, paidAt: Date.parse(payment.paidAt) })),
+      }))
+    );
+  }
+
+  async changeSponsorshipAmount(userId: string, sponsorshipId: string, amountCents: number) {
+    const result = await this.send(
+      { method: "PATCH", path: sponsorshipPath(userId, sponsorshipId), body: { amountCents } },
+      changedSchema
+    );
+    return result.ok ? billingOk(null) : result;
+  }
+
+  async cancelSponsorship(userId: string, sponsorshipId: string, atPeriodEnd: boolean) {
+    const result = await this.send(
+      { method: "POST", path: `${sponsorshipPath(userId, sponsorshipId)}/cancel`, body: { atPeriodEnd } },
+      changedSchema
+    );
+    return result.ok ? billingOk(null) : result;
+  }
+
+  sponsorshipPaymentMethodSession(userId: string, sponsorshipId: string, returnUrl: string) {
+    return this.send(
+      {
+        method: "POST",
+        path: `${sponsorshipPath(userId, sponsorshipId)}/payment-method-sessions`,
+        body: { returnUrl },
+      },
+      urlSchema
+    );
+  }
+
+  sponsorshipCheckoutState(checkoutId: string, userId: string) {
+    return this.send(
+      {
+        method: "GET",
+        path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?userId=${encodeURIComponent(userId)}`,
+      },
+      sponsorshipCheckoutViewSchema
     );
   }
 
