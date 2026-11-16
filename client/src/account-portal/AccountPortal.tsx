@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MyOrganization } from "@convex/organizations";
 import { useQuery } from "convex/react";
-import { ArrowLeft, Building2, Check, ChevronDown, Loader2 } from "lucide-react";
+import { Building2, Check, ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Link, Redirect, Route, Switch, useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import { useInstance } from "@/hooks/use-instance";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { cn } from "@/lib/utils";
+import { BackToDashboard } from "./back-to-dashboard";
 import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
 import EnginesPage from "./pages/engines";
@@ -80,6 +81,7 @@ function OrganizationSwitcher() {
 
 function PortalLayout({ children }: { children: React.ReactNode }) {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const { instance } = useInstance();
   const [location] = useLocation();
   return (
     <div className="min-h-screen bg-background">
@@ -95,12 +97,7 @@ function PortalLayout({ children }: { children: React.ReactNode }) {
               </>
             )}
           </div>
-          <Button variant="outline" size="sm" asChild data-testid="link-back-to-dashboard">
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to dashboard
-            </Link>
-          </Button>
+          <BackToDashboard hasEngine={Boolean(instance)} />
         </div>
         <nav className="px-4 pb-3" aria-label="Account portal">
           <div className="inline-flex items-center gap-1 rounded-lg bg-muted p-1">
