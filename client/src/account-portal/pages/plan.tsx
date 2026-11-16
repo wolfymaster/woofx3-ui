@@ -3,10 +3,12 @@ import type { AppliedDiscount } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
 import { useAction, useMutation } from "convex/react";
+import { Check } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "@/billing/format";
+import { PLAN_DETAILS } from "@/billing/plan-details";
 import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-redirect";
 import { StatusBanner } from "@/billing/status-banner";
 import { PageHeader } from "@/components/layout/page-header";
@@ -20,22 +22,18 @@ import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
 import { CHECKOUT_CANCELLED_TEXT, CHECKOUT_POLL_TEXT, parseCheckoutReturn } from "@/lib/checkout-return";
 import { useCheckoutPoll } from "@/lib/use-checkout-poll";
+import { cn } from "@/lib/utils";
 import { billingView, checkoutRefusalAction } from "../billing-view";
 import { useOptionalOrganization, useOrganization } from "../organization-context";
 import { RenameDialog } from "../rename-dialog";
 import { SponsorshipSection } from "../sponsorship-section";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
 
-const PLAN_CHOICES: Array<{ plan: PlanTier; interval: BillingInterval; note?: string }> = [
-  { plan: "starter", interval: "month" },
-  { plan: "starter", interval: "year", note: "2 months free" },
-  { plan: "pro", interval: "month" },
-  { plan: "pro", interval: "year", note: "2 months free" },
+const PLAN_TIERS: PlanTier[] = ["starter", "pro"];
+const INTERVALS: Array<{ interval: BillingInterval; label: string; note?: string }> = [
+  { interval: "month", label: "Monthly" },
+  { interval: "year", label: "Yearly", note: "2 months free" },
 ];
-
-function choiceKey(plan: PlanTier, interval: BillingInterval): string {
-  return `${plan}_${interval}`;
-}
 
 /** "Starter, monthly - $60/mo" while a provider subscription sets the interval; the plan name alone otherwise. */
 function planSummary(subscription: OrgSubscription): string {
@@ -50,11 +48,11 @@ function PlanChooser() {
   const startCheckout = useAction(api.billingCommands.startCheckout);
   const openPortal = useAction(api.billingCommands.openPortal);
   const previewPromotionCode = useAction(api.billingCommands.previewPromotionCode);
-  const [choice, setChoice] = useState(choiceKey("starter", "month"));
+  const [tier, setTier] = useState<PlanTier>("starter");
+  const [interval, setInterval] = useState<BillingInterval>("month");
   const [code, setCode] = useState("");
   const [preview, setPreview] = useState<{ code: string; discount: AppliedDiscount | null } | null>(null);
   const { busy, go } = useProviderRedirect();
-  const selected = PLAN_CHOICES.find((option) => choiceKey(option.plan, option.interval) === choice) ?? PLAN_CHOICES[0];
 
   async function applyCode() {
     try {
@@ -69,19 +67,58 @@ function PlanChooser() {
 
   return (
     <div className="space-y-6">
-      <RadioGroup value={choice} onValueChange={setChoice} className="grid gap-3 sm:grid-cols-2">
-        {PLAN_CHOICES.map(({ plan, interval, note }) => {
-          const key = choiceKey(plan, interval);
+      <fieldset className="inline-flex items-center gap-1 rounded-lg bg-muted p-1">
+        <legend className="sr-only">Billing period</legend>
+        {INTERVALS.map(({ interval: option, label, note }) => (
+          <Button
+            key={option}
+            type="button"
+            size="sm"
+            variant={interval === option ? "secondary" : "ghost"}
+            aria-pressed={interval === option}
+            onClick={() => setInterval(option)}
+            data-testid={`toggle-interval-${option}`}
+          >
+            {label}
+            {note ? <span className="ml-1.5 text-xs text-muted-foreground">{note}</span> : null}
+          </Button>
+        ))}
+      </fieldset>
+      <RadioGroup
+        value={tier}
+        onValueChange={(value) => setTier(value as PlanTier)}
+        className="grid gap-4 lg:grid-cols-2"
+      >
+        {PLAN_TIERS.map((plan) => {
+          const details = PLAN_DETAILS[plan];
           return (
             <Label
-              key={key}
-              htmlFor={`plan-${key}`}
-              className="flex items-center gap-3 rounded-md border p-3 cursor-pointer font-normal"
+              key={plan}
+              htmlFor={`plan-${plan}`}
+              className={cn(
+                "flex flex-col gap-4 rounded-lg border p-5 cursor-pointer font-normal",
+                tier === plan && "border-primary ring-1 ring-primary"
+              )}
             >
-              <RadioGroupItem id={`plan-${key}`} value={key} data-testid={`radio-plan-${key}`} />
-              <span className="font-medium">{PLAN_NAMES[plan]}</span>
-              <span>{formatPrice(plan, interval)}</span>
-              {note ? <span className="text-xs text-muted-foreground">({note})</span> : null}
+              <div className="flex items-start gap-3">
+                <RadioGroupItem id={`plan-${plan}`} value={plan} className="mt-1" data-testid={`radio-plan-${plan}`} />
+                <div className="space-y-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-lg font-semibold">{PLAN_NAMES[plan]}</span>
+                    <span className="text-lg">{formatPrice(plan, interval)}</span>
+                  </div>
+                  <p className="text-sm font-medium">{details.tagline}</p>
+                  <p className="text-sm text-muted-foreground">{details.audience}</p>
+                </div>
+              </div>
+              <ul className="space-y-2 text-sm">
+                {details.highlights.map((highlight) => (
+                  <li key={highlight} className="flex gap-2">
+                    <Check className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+                    <span>{highlight}</span>
+                  </li>
+                ))}
+              </ul>
             </Label>
           );
         })}
@@ -121,8 +158,8 @@ function PlanChooser() {
             try {
               return await startCheckout({
                 accountId: organization.accountId,
-                plan: selected.plan,
-                interval: selected.interval,
+                plan: tier,
+                interval,
                 promotionCode,
               });
             } catch (error) {
