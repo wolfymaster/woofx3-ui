@@ -40,6 +40,7 @@ export const BILLING_REFUSAL_CODES = [
   // An operator-exempt org has nothing to buy.
   "exempt",
   "invalid_return_path",
+  "invalid_return_url",
   // A module purchase: the marketplace's purchase intent is missing or another org's, redeemed or expired, too close
   // to expiring to pay (acquiring again gives a fresh one), already paid, or for an amount billing cannot charge.
   "intent_not_found",
@@ -52,6 +53,7 @@ export const BILLING_REFUSAL_CODES = [
   // plane's terms.
   "sponsorship_not_found",
   "sponsorship_not_recurring",
+  "sponsorship_canceled",
   "invalid_sponsorship_amount",
 ] as const;
 export type BillingRefusalCode = (typeof BILLING_REFUSAL_CODES)[number];
@@ -64,6 +66,8 @@ export type BillingRefusalCode = (typeof BILLING_REFUSAL_CODES)[number];
 export const BILLING_OUTAGE_CODES = [
   "payment_unavailable",
   "payment_refused",
+  // The provider rejected a request the plane built, so asking again cannot succeed.
+  "payment_request_invalid",
   "identity_unavailable",
   "subscription_not_found",
   "marketplace_unavailable",

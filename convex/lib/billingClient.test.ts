@@ -174,6 +174,9 @@ describe("error mapping", () => {
     [404, "subscription_not_found"],
     [503, "payment_unavailable"],
     [502, "payment_refused"],
+    [422, "invalid_return_url"],
+    [409, "sponsorship_canceled"],
+    [502, "payment_request_invalid"],
   ])("%d %s keeps the plane's code", async (status, code) => {
     plane(status, { error: { code, message: "m" } });
     expect(await client.openPortal("acc1")).toEqual({ ok: false, error: { code, message: "m" } });
