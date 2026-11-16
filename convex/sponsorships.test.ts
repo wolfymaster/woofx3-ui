@@ -116,8 +116,8 @@ const ACTIONS: Array<{
   },
   {
     name: "cancel",
-    args: { sponsorshipId: "sp1", atPeriodEnd: true },
-    call: (t, args) => t.action(api.sponsorships.cancel, args as { sponsorshipId: string; atPeriodEnd: boolean }),
+    args: { sponsorshipId: "sp1" },
+    call: (t, args) => t.action(api.sponsorships.cancel, args as { sponsorshipId: string }),
     answerAt: "/sponsorships/sp1/cancel",
     body: wireSponsorship,
   },
@@ -233,11 +233,24 @@ describe("changeAmount and cancel", () => {
     answers["/sponsorships/sp1"] = { status: 200, body: wireSponsorship };
     answers["/sponsorships/sp1/cancel"] = { status: 200, body: wireSponsorship };
     await as(t, viewerId).action(api.sponsorships.changeAmount, { sponsorshipId: "sp1", amountCents: 30_000 });
-    await as(t, viewerId).action(api.sponsorships.cancel, { sponsorshipId: "sp1", atPeriodEnd: true });
+    await as(t, viewerId).action(api.sponsorships.cancel, { sponsorshipId: "sp1" });
     expect(seen.map(({ method, path, body }) => [method, path, body])).toEqual([
       ["PATCH", `/v1/billing/users/${viewerId}/sponsorships/sp1`, { amountCents: 30_000 }],
       ["POST", `/v1/billing/users/${viewerId}/sponsorships/sp1/cancel`, { atPeriodEnd: true }],
     ]);
+  });
+
+  test("a client cannot ask for an immediate cancel", async () => {
+    const t = newBackend();
+    const { viewerId } = await seedUsers(t);
+    answers["/sponsorships/sp1/cancel"] = { status: 200, body: wireSponsorship };
+    const args = { sponsorshipId: "sp1", atPeriodEnd: false } as { sponsorshipId: string };
+    await as(t, viewerId)
+      .action(api.sponsorships.cancel, args)
+      .catch(() => null);
+    expect(seen.map(({ body }) => body).filter((body) => body !== undefined)).toEqual(
+      seen.length === 0 ? [] : [{ atPeriodEnd: true }]
+    );
   });
 
   test("a one-time sponsorship's refusal keeps its code", async () => {
@@ -247,8 +260,8 @@ describe("changeAmount and cancel", () => {
       status: 409,
       body: { error: { code: "sponsorship_not_recurring", message: "plane words" } },
     };
-    expect(
-      await errorData(as(t, viewerId).action(api.sponsorships.cancel, { sponsorshipId: "sp1", atPeriodEnd: true }))
-    ).toMatchObject({ code: "sponsorship_not_recurring" });
+    expect(await errorData(as(t, viewerId).action(api.sponsorships.cancel, { sponsorshipId: "sp1" }))).toMatchObject({
+      code: "sponsorship_not_recurring",
+    });
   });
 });

@@ -119,7 +119,7 @@ function SponsorshipCard({ sponsorship, onChanged }: { sponsorship: Sponsorship;
 
   async function confirmCancel() {
     try {
-      await cancel({ sponsorshipId: sponsorship.id, atPeriodEnd: true });
+      await cancel({ sponsorshipId: sponsorship.id });
       onChanged();
     } catch (error) {
       toast({ title: "Could not cancel", description: actionErrorMessage(error), variant: "destructive" });

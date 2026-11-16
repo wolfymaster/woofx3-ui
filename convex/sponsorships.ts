@@ -84,11 +84,12 @@ export const changeAmount = action({
   },
 });
 
+/** A sponsor's cancel always ends at the end of the paid period; stopping one sooner is an operator action. */
 export const cancel = action({
-  args: { sponsorshipId: v.string(), atPeriodEnd: v.boolean() },
-  handler: async (ctx, { sponsorshipId, atPeriodEnd }): Promise<null> => {
+  args: { sponsorshipId: v.string() },
+  handler: async (ctx, { sponsorshipId }): Promise<null> => {
     const userId = await requireUser(ctx);
-    return unwrap(await requireClient().cancelSponsorship(userId, sponsorshipId, atPeriodEnd));
+    return unwrap(await requireClient().cancelSponsorship(userId, sponsorshipId, true));
   },
 });
 
