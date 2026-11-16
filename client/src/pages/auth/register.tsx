@@ -1,7 +1,8 @@
 import { useAuthActions } from "@convex-dev/auth/react";
-import { Loader2, MonitorPlay } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
+import { AUTH_CARD_CLASS, AuthLayout } from "@/components/auth/auth-layout";
 import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,112 +75,103 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary text-primary-foreground">
-            <MonitorPlay className="h-5 w-5" />
-          </div>
-          <span className="font-bold text-2xl tracking-tight">woofx3</span>
-        </div>
+    <AuthLayout>
+      <Card className={AUTH_CARD_CLASS}>
+        <CardHeader>
+          <CardTitle>Create account</CardTitle>
+          <CardDescription>Sign up to start streaming with woofx3</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {DesktopTwitchSignIn ? (
+            <Suspense fallback={null}>
+              <DesktopTwitchSignIn nextPath={afterRegisterPath(window.location.search)} />
+            </Suspense>
+          ) : (
+            <Button className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>
+              <TwitchGlyph className="mr-2" />
+              Continue with Twitch
+            </Button>
+          )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Create account</CardTitle>
-            <CardDescription>Sign up to start streaming with woofx3</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {DesktopTwitchSignIn ? (
-              <Suspense fallback={null}>
-                <DesktopTwitchSignIn nextPath={afterRegisterPath(window.location.search)} />
-              </Suspense>
-            ) : (
-              <Button className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>
-                <TwitchGlyph className="mr-2" />
-                Continue with Twitch
-              </Button>
-            )}
+          {SIGN_UP_SITE_KEY === null ? (
+            <p className="text-sm text-muted-foreground text-center">
+              To sign up with email, create your account on the woofx3 website, then sign in here.
+            </p>
+          ) : (
+            <>
+              <div className="relative">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                  or
+                </span>
+              </div>
 
-            {SIGN_UP_SITE_KEY === null ? (
-              <p className="text-sm text-muted-foreground text-center">
-                To sign up with email, create your account on the woofx3 website, then sign in here.
-              </p>
-            ) : (
-              <>
-                <div className="relative">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                    or
-                  </span>
+              <form onSubmit={handleRegister} className="space-y-3">
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="mt-1"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="mt-1"
+                    required
+                    minLength={PASSWORD_MIN_LENGTH}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">At least {PASSWORD_MIN_LENGTH} characters.</p>
                 </div>
 
-                <form onSubmit={handleRegister} className="space-y-3">
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      autoComplete="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      className="mt-1"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      autoComplete="new-password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="mt-1"
-                      required
-                      minLength={PASSWORD_MIN_LENGTH}
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">At least {PASSWORD_MIN_LENGTH} characters.</p>
-                  </div>
+                <TurnstileChallenge
+                  key={challengeRound}
+                  siteKey={SIGN_UP_SITE_KEY}
+                  load={loadTurnstileScript}
+                  onToken={setTurnstileToken}
+                />
 
-                  <TurnstileChallenge
-                    key={challengeRound}
-                    siteKey={SIGN_UP_SITE_KEY}
-                    load={loadTurnstileScript}
-                    onToken={setTurnstileToken}
-                  />
+                {error && (
+                  <p className="text-sm text-destructive">
+                    {error.message}{" "}
+                    {error.kind === "exists-or-unknown" && (
+                      <Link href={withNext("/auth/login", nextPathFromLocation("") || null)} className="underline">
+                        Sign in
+                      </Link>
+                    )}
+                  </p>
+                )}
 
-                  {error && (
-                    <p className="text-sm text-destructive">
-                      {error.message}{" "}
-                      {error.kind === "exists-or-unknown" && (
-                        <Link href={withNext("/auth/login", nextPathFromLocation("") || null)} className="underline">
-                          Sign in
-                        </Link>
-                      )}
-                    </p>
-                  )}
-
-                  <Button type="submit" className="w-full" disabled={isLoading || turnstileToken === null}>
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
-                  </Button>
-                </form>
-              </>
-            )}
-          </CardContent>
-          <CardFooter className="justify-center">
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link
-                href={withNext("/auth/login", nextPathFromLocation("") || null)}
-                className="text-primary hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
-          </CardFooter>
-        </Card>
-      </div>
-    </div>
+                <Button type="submit" className="w-full" disabled={isLoading || turnstileToken === null}>
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
+                </Button>
+              </form>
+            </>
+          )}
+        </CardContent>
+        <CardFooter className="justify-center">
+          <p className="text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link
+              href={withNext("/auth/login", nextPathFromLocation("") || null)}
+              className="text-primary hover:underline"
+            >
+              Sign in
+            </Link>
+          </p>
+        </CardFooter>
+      </Card>
+    </AuthLayout>
   );
 }
