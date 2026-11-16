@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { Invoice, Sponsorship } from "@convex/lib/billingClient";
 import type { OrgMember } from "@convex/organizations";
 import { getFunctionName } from "convex/server";
+import { ConvexError } from "convex/values";
 import { createContext, type ReactNode, useContext } from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { Router } from "wouter";
@@ -350,6 +351,7 @@ describe("Plan page", () => {
     actionAnswers["sponsorships:mine"] = [{ ...SPONSORSHIP, cancelAtPeriodEnd: true }];
     const renderer = await render(null, <PlanPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Canceled. Your sponsorship ends on");
+    expect(text(renderer, "text-sponsorship-state")[0]).toMatch(/^Ending /);
     for (const id of MANAGE_BUTTONS) {
       expect(byTestId(renderer, id).length).toBe(0);
     }
@@ -387,6 +389,18 @@ describe("Plan page checkout return", () => {
     const renderer = await render(null, <PlanPage />);
     expect(text(renderer, "text-sponsorship-done")[0]).toContain("being confirmed");
     expect(askedActions).not.toContain("sponsorships:checkoutState");
+  });
+
+  test("a return from the card-update page confirms it", async () => {
+    search = "sponsorshipPaymentMethod=returned";
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+    const renderer = await render(null, <PlanPage />);
+    expect(text(renderer, "text-payment-method-updated")).toEqual(["Payment method updated."]);
+  });
+
+  test("with no card-update marker there is no confirmation", async () => {
+    const renderer = await render(null, <PlanPage />);
+    expect(byTestId(renderer, "text-payment-method-updated").length).toBe(0);
   });
 
   test("a cancelled checkout says nothing was charged", async () => {
@@ -451,6 +465,14 @@ describe("when a billing lookup fails", () => {
     }
   );
 
+  test("an owner with no billing yet has no invoices and sees no error", async () => {
+    actionAnswers["billingCommands:invoices"] = new ConvexError({ code: "subscription_not_found", message: "m" });
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+    const renderer = await render("owner", <PaymentsPage />);
+    expect(byTestId(renderer, "text-payments-failed").length).toBe(0);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Monthly sponsorship");
+  });
+
   test("an owner whose invoices fail but whose sponsorships load sees the error and the loaded rows", async () => {
     actionAnswers["billingCommands:invoices"] = failed;
     actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
@@ -480,6 +502,22 @@ describe("loading, empty and loaded states", () => {
       expect(byTestId(renderer, "text-payments-failed").length).toBe(0);
     }
   );
+
+  test("a slow invoice lookup does not hold back sponsor rows that arrived", async () => {
+    actionAnswers["billingCommands:invoices"] = NEVER;
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+    const renderer = await render("owner", <PaymentsPage />);
+    const shown = JSON.stringify(renderer.toJSON());
+    expect(shown).toContain("Monthly sponsorship");
+    expect(shown).toContain("Loading payments...");
+  });
+
+  test("an owner is not told there are no payments while the invoices are still loading", async () => {
+    actionAnswers["billingCommands:invoices"] = NEVER;
+    actionAnswers["sponsorships:mine"] = [];
+    const renderer = await render("owner", <PaymentsPage />);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("No payments yet.");
+  });
 
   test.each([["owner" as const], [null]])("%p's Plan while loading shows no pitch", async (role) => {
     actionAnswers["sponsorships:mine"] = NEVER;

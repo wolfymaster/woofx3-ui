@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { actionErrorMessage } from "@/lib/action-error";
 import { SPONSOR_START_PATH } from "@/sponsorship/sponsorship-text";
+import { billingErrorCode } from "../billing-view";
 import { useOptionalOrganization } from "../organization-context";
 import { filterRows, hasBothKinds, type PaymentFilter, paymentRows } from "../payment-rows";
 import { useSponsorships } from "../use-sponsorships";
@@ -43,9 +44,15 @@ function useInvoices(accountId: Id<"accounts"> | null): InvoiceList {
         }
       },
       (error: unknown) => {
-        if (current) {
-          setList({ state: "failed", message: actionErrorMessage(error) });
+        if (!current) {
+          return;
         }
+        // An organization with no billing yet, such as one with only self-hosted engines, has no invoices to list.
+        setList(
+          billingErrorCode(error) === "subscription_not_found"
+            ? { state: "ready", invoices: [] }
+            : { state: "failed", message: actionErrorMessage(error) }
+        );
       }
     );
     return () => {
@@ -69,6 +76,9 @@ export default function PaymentsPage() {
   // One failed lookup is one message, and an empty list is never shown for a lookup that did not answer.
   const failure =
     invoices.state === "failed" ? invoices.message : sponsorships.state === "failed" ? sponsorships.message : null;
+  // Rows show as each source answers, so a slow lookup holds back only its own rows. An empty list waits for every
+  // source: until then it would say "nothing" about a lookup that has not answered.
+  const showTable = rows.length > 0 || (!loading && failure === null);
   const both = hasBothKinds(rows);
   const shown = filterRows(rows, both ? filter : "all");
   const kind: PaymentFilter = both ? filter : (rows[0]?.kind ?? "all");
@@ -105,9 +115,7 @@ export default function PaymentsPage() {
             </p>
           )}
           {loading ? <p className="text-sm text-muted-foreground">Loading payments...</p> : null}
-          {loading || (failure !== null && rows.length === 0) ? null : (
-            <PaymentsTable rows={shown} empty="No payments yet." linkColumn={LINK_COLUMNS[kind]} />
-          )}
+          {showTable ? <PaymentsTable rows={shown} empty="No payments yet." linkColumn={LINK_COLUMNS[kind]} /> : null}
           {!loading && failure === null && rows.length === 0 ? (
             <Button asChild variant="outline">
               <Link href={SPONSOR_START_PATH} data-testid="link-become-sponsor">

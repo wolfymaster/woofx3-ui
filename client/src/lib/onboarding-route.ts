@@ -74,3 +74,17 @@ export function noEnginePath(facts: { ownsOrganization: boolean; hasAccountPorta
   }
   return ACCOUNT_PATH;
 }
+
+/**
+ * Where /setup goes when there is no engine to set up. `ownsOrganization` is null until the server has answered,
+ * and then nothing moves yet.
+ */
+export function setupWithoutEnginePath(facts: {
+  ownsOrganization: boolean | null;
+  hasAccountPortal: boolean;
+}): string | null {
+  if (facts.ownsOrganization === null) {
+    return null;
+  }
+  return noEnginePath({ ownsOrganization: facts.ownsOrganization, hasAccountPortal: facts.hasAccountPortal });
+}

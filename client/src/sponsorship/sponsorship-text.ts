@@ -5,13 +5,21 @@ export const SPONSOR_START_PATH = "/sponsor/start";
 
 export const INTERVAL_LABELS: Record<SponsorshipInterval, string> = { month: "Monthly", once: "One-time" };
 
-export const STATE_LABELS: Record<SponsorshipState, string> = {
+const STATE_LABELS: Record<SponsorshipState, string> = {
   pending: "Waiting for payment",
   active: "Active",
   past_due: "Payment failed",
   canceled: "Canceled",
   complete: "Paid",
 };
+
+/** The state as shown: a sponsorship set to end reads "Ending <date>", not "Active". */
+export function stateLabel(sponsorship: Sponsorship): string {
+  if (sponsorship.cancelAtPeriodEnd && sponsorship.currentPeriodEnd !== null && sponsorship.state !== "canceled") {
+    return `Ending ${formatDay(sponsorship.currentPeriodEnd)}`;
+  }
+  return STATE_LABELS[sponsorship.state];
+}
 
 /** "$250/mo" for a monthly sponsorship, "$250 once" for a one-time one. */
 export function amountSummary(sponsorship: Pick<Sponsorship, "amountCents" | "interval">): string {

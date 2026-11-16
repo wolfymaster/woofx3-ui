@@ -22,7 +22,10 @@ const intervalValidator = v.union(v.literal("month"), v.literal("once"));
  */
 const RETURN_PATH = "/account";
 
-function returnUrl(): string {
+/** Marks the card-update return; the Plan page reads it as `PAYMENT_METHOD_RETURN_KEY` in sponsorship-return.ts. */
+const PAYMENT_METHOD_RETURN_QUERY = "?sponsorshipPaymentMethod=returned";
+
+function returnUrl(query = ""): string {
   const siteUrl = process.env.SITE_URL;
   let origin: string;
   try {
@@ -30,7 +33,7 @@ function returnUrl(): string {
   } catch {
     throw billingConvexError({ code: "not_configured", message: "SITE_URL is not a valid origin." });
   }
-  return `${origin}${RETURN_PATH}`;
+  return `${origin}${RETURN_PATH}${query}`;
 }
 
 function assertAmount(amountCents: number): void {
@@ -98,7 +101,13 @@ export const paymentMethodSession = action({
   args: { sponsorshipId: v.string() },
   handler: async (ctx, { sponsorshipId }): Promise<{ url: string }> => {
     const userId = await requireUser(ctx);
-    return unwrap(await requireClient().sponsorshipPaymentMethodSession(userId, sponsorshipId, returnUrl()));
+    return unwrap(
+      await requireClient().sponsorshipPaymentMethodSession(
+        userId,
+        sponsorshipId,
+        returnUrl(PAYMENT_METHOD_RETURN_QUERY)
+      )
+    );
   },
 });
 

@@ -18,6 +18,8 @@ interface ConfirmDialogProps {
   title: string;
   description: string;
   confirmLabel: string;
+  /** The dismiss button's text; "Cancel" unless that word is the action itself. */
+  dismissLabel?: string;
   onConfirm: () => void | Promise<void>;
   /** Style the confirm action as destructive (removing a member, cancelling a sponsorship). */
   destructive?: boolean;
@@ -34,6 +36,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  dismissLabel = "Cancel",
   onConfirm,
   destructive = false,
   testId,
@@ -47,7 +50,7 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{dismissLabel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => void onConfirm()}
             data-testid={testId}

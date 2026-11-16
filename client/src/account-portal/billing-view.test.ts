@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
 import type { OrgEngine, OrgSubscription } from "@convex/organizations";
 import { ConvexError } from "convex/values";
-import { type BillingView, billingView, type CheckoutRefusalAction, checkoutRefusalAction } from "./billing-view";
+import {
+  type BillingView,
+  billingErrorCode,
+  billingView,
+  type CheckoutRefusalAction,
+  checkoutRefusalAction,
+} from "./billing-view";
 
 function engine(hosting: OrgEngine["hosting"]): OrgEngine {
   return { instanceId: "i" as Id<"instances">, name: hosting, hosting, status: null, canOpen: true };
@@ -72,4 +78,19 @@ describe("checkoutRefusalAction", () => {
       expect(checkoutRefusalAction(error)).toBe(expected);
     });
   }
+});
+
+describe("billingErrorCode", () => {
+  test("reads the code of a coded refusal", () => {
+    expect(billingErrorCode(new ConvexError({ code: "subscription_not_found", message: "m" }))).toBe(
+      "subscription_not_found"
+    );
+  });
+
+  test.each([[new Error("boom")], [new ConvexError("plain")], [new ConvexError({ message: "no code" })], [null]])(
+    "is null for %p",
+    (error) => {
+      expect(billingErrorCode(error)).toBeNull();
+    }
+  );
 });

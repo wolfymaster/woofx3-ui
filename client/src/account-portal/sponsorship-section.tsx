@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Sponsorship } from "@convex/lib/billingClient";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
 import { ConfirmDialog } from "@/billing/confirm-dialog";
 import { formatDay } from "@/billing/format";
@@ -25,18 +25,21 @@ import { useCheckoutPoll } from "@/lib/use-checkout-poll";
 import { amountProblem, dollarsText, parseDollars } from "@/sponsorship/amount";
 import { AmountField } from "@/sponsorship/amount-field";
 import {
+  PAYMENT_METHOD_UPDATED_TEXT,
   parseSponsorshipReturn,
+  paymentMethodReturned,
   SPONSORSHIP_CANCELLED_TEXT,
   SPONSORSHIP_POLL_TEXT,
   SPONSORSHIP_UNTRACKED_TEXT,
+  withoutPaymentMethodReturn,
 } from "@/sponsorship/sponsorship-return";
 import {
   amountSummary,
   INTERVAL_LABELS,
   isManageable,
   SPONSOR_START_PATH,
-  STATE_LABELS,
   sponsorshipNotice,
+  stateLabel,
 } from "@/sponsorship/sponsorship-text";
 import { useSponsorshipTerms } from "@/sponsorship/use-sponsorship-terms";
 import { type SponsorshipList, useSponsorships } from "./use-sponsorships";
@@ -110,7 +113,7 @@ function SponsorshipCard({ sponsorship, onChanged }: { sponsorship: Sponsorship;
   const items: BillingSummaryItem[] = [
     { label: "Amount", value: amountSummary(sponsorship), testId: "text-sponsorship-amount" },
     { label: "Type", value: INTERVAL_LABELS[sponsorship.interval] },
-    { label: "State", value: STATE_LABELS[sponsorship.state], testId: "text-sponsorship-state" },
+    { label: "State", value: stateLabel(sponsorship), testId: "text-sponsorship-state" },
     { label: "Since", value: formatDay(sponsorship.createdAt) },
   ];
   if (sponsorship.interval === "month" && sponsorship.currentPeriodEnd !== null && !sponsorship.cancelAtPeriodEnd) {
@@ -151,6 +154,7 @@ function SponsorshipCard({ sponsorship, onChanged }: { sponsorship: Sponsorship;
                 : `Your sponsorship stays active until ${formatDay(sponsorship.currentPeriodEnd)}, then stops. You can sponsor again any time.`
             }
             confirmLabel="Cancel sponsorship"
+            dismissLabel="Keep sponsorship"
             destructive
             onConfirm={confirmCancel}
             testId={`button-confirm-cancel-${sponsorship.id}`}
@@ -191,6 +195,23 @@ function ReturnNotice({ onConfirmed }: { onConfirmed: () => void }) {
   return null;
 }
 
+/** Confirms a return from the card-update page once, then drops the marker from the address. */
+function PaymentMethodNotice() {
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+  const [returned] = useState(() => paymentMethodReturned(search));
+  useEffect(() => {
+    if (paymentMethodReturned(search)) {
+      navigate(`${location}${withoutPaymentMethodReturn(search)}`, { replace: true });
+    }
+  }, [search, location, navigate]);
+  return returned ? (
+    <p className="text-sm text-muted-foreground" data-testid="text-payment-method-updated">
+      {PAYMENT_METHOD_UPDATED_TEXT}
+    </p>
+  ) : null;
+}
+
 function SponsorshipBody({ list }: { list: SponsorshipList }) {
   if (list.state === "loading") {
     return <p className="text-sm text-muted-foreground">Loading...</p>;
@@ -217,6 +238,7 @@ export function SponsorshipSection() {
       </CardHeader>
       <CardContent className="space-y-6">
         <ReturnNotice onConfirmed={reload} />
+        <PaymentMethodNotice />
         <SponsorshipBody list={list} />
         {sponsorships.map((sponsorship) => (
           <SponsorshipCard key={sponsorship.id} sponsorship={sponsorship} onChanged={reload} />

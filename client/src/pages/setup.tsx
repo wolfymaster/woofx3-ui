@@ -15,6 +15,8 @@ import { useEngineBuild } from "@/components/setup/use-engine-build";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
+import { IS_DESKTOP } from "@/lib/desktop";
+import { setupWithoutEnginePath } from "@/lib/onboarding-route";
 import {
   allowedSetupStep,
   isSetupStepId,
@@ -69,11 +71,20 @@ export default function Setup() {
   const requestedStep = isSetupStepId(params.step) ? params.step : null;
   const step = status && requestedStep ? allowedSetupStep(requestedStep, status) : null;
 
+  const noEngine = !instancesLoading && !instance;
+  const entry = useQuery(api.access.entry, noEngine ? { selectedInstanceId: null } : "skip");
   useEffect(() => {
-    if (!instancesLoading && !instance) {
-      navigate("/auth/onboarding", { replace: true });
+    if (!noEngine || entry === undefined || entry === null) {
+      return;
     }
-  }, [instancesLoading, instance, navigate]);
+    const path = setupWithoutEnginePath({
+      ownsOrganization: entry.kind === "createEngine" ? entry.accountId !== null : true,
+      hasAccountPortal: !IS_DESKTOP,
+    });
+    if (path !== null) {
+      navigate(path, { replace: true });
+    }
+  }, [noEngine, entry, navigate]);
 
   useEffect(() => {
     if (!status || markedSeen.current) {
