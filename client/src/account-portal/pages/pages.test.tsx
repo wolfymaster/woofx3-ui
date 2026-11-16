@@ -481,6 +481,22 @@ describe("loading, empty and loaded states", () => {
     }
   );
 
+  test("a slow invoice lookup does not hold back sponsor rows that arrived", async () => {
+    actionAnswers["billingCommands:invoices"] = NEVER;
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+    const renderer = await render("owner", <PaymentsPage />);
+    const shown = JSON.stringify(renderer.toJSON());
+    expect(shown).toContain("Monthly sponsorship");
+    expect(shown).toContain("Loading payments...");
+  });
+
+  test("an owner is not told there are no payments while the invoices are still loading", async () => {
+    actionAnswers["billingCommands:invoices"] = NEVER;
+    actionAnswers["sponsorships:mine"] = [];
+    const renderer = await render("owner", <PaymentsPage />);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("No payments yet.");
+  });
+
   test.each([["owner" as const], [null]])("%p's Plan while loading shows no pitch", async (role) => {
     actionAnswers["sponsorships:mine"] = NEVER;
     const renderer = await render(role, <PlanPage />);
