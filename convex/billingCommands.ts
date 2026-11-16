@@ -253,8 +253,8 @@ export async function ensureOrgBilling(client: BillingClient, accountId: Id<"acc
 
 /**
  * Starts the org's trial and never blocks what created the org. A failure is
- * retried here on the Convex scheduler, because the plane's reconciler may be
- * off. After the last attempt the org stays without billing, which hosts it
+ * retried here on the Convex scheduler, because the call can fail and nothing
+ * else creates the record. After the last attempt the org stays without billing, which hosts it
  * unbilled, so the exhaustion is logged at error level for operators to act on.
  */
 export const ensureBilling = internalAction({
