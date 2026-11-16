@@ -6,7 +6,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { useBillingUi } from "@/lib/feature-source";
 
-const BILLING_PATH = "/org/billing";
+const BILLING_PATH = "/account";
 
 function day(dateIso: string): string {
   return new Date(dateIso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });

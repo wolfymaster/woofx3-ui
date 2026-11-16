@@ -190,6 +190,11 @@ export const update = mutation({
 
     const { instanceId, ...updates } = args;
     if (updates.name !== undefined) {
+      const instance = await ctx.db.get(instanceId);
+      if (instance === null) {
+        throw new Error("Engine not found");
+      }
+      await requireOrgActionFor(ctx, instance.accountId, userId, "renameEngine");
       updates.name = updates.name.trim();
       if (!updates.name || updates.name.length > ENGINE_NAME_MAX_LENGTH) {
         throw new ConvexError({

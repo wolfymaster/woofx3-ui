@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
-// The desktop app never shows billing, so its build must carry no /org route.
+// The desktop app never shows billing, so its build must carry no /account route.
 // The web and desktop builds share App.tsx, which keeps the portal out of the
 // desktop build by importing it only behind the IS_DESKTOP build constant.
 // This test holds that: no other file reaches into the portal.
@@ -10,8 +10,9 @@ import { join, relative } from "node:path";
 const CLIENT_SRC = join(import.meta.dir, "..");
 const PORTAL_DIR = import.meta.dir;
 const APP = join(CLIENT_SRC, "App.tsx");
-const PORTAL_IMPORT = /["']@\/org-portal(?:\/[^"']*)?["']|["'](?:\.\.?\/)+org-portal(?:\/[^"']*)?["']/;
-const GATED_IMPORT = /IS_DESKTOP\s*\?\s*null\s*:\s*lazy\(\(\)\s*=>\s*import\(["']@\/org-portal\/OrgPortal["']\)\)/;
+const PORTAL_IMPORT = /["']@\/account-portal(?:\/[^"']*)?["']|["'](?:\.\.?\/)+account-portal(?:\/[^"']*)?["']/;
+const GATED_IMPORT =
+  /IS_DESKTOP\s*\?\s*null\s*:\s*lazy\(\(\)\s*=>\s*import\(["']@\/account-portal\/AccountPortal["']\)\)/;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -30,6 +31,16 @@ describe("org portal build boundary", () => {
       .filter((file) => PORTAL_IMPORT.test(readFileSync(file, "utf8")))
       .map((file) => relative(CLIENT_SRC, file));
     expect(importers).toEqual(["App.tsx"]);
+  });
+
+  test("the route matches /account and its subpaths only", () => {
+    const route = readFileSync(APP, "utf8").match(/const ACCOUNT_PORTAL_ROUTE = (\/.*\/);/);
+    expect(route).not.toBeNull();
+    const pattern = new RegExp(route?.[1].slice(1, -1) ?? "");
+    expect(pattern.test("/account")).toBe(true);
+    expect(pattern.test("/account/payments")).toBe(true);
+    expect(pattern.test("/org")).toBe(false);
+    expect(pattern.test("/accounts")).toBe(false);
   });
 
   test("App.tsx imports it only outside the desktop build, once", () => {

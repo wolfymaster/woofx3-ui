@@ -14,6 +14,11 @@ export function OrganizationProvider({ value, children }: { value: OrganizationS
   return <OrganizationContext.Provider value={value}>{children}</OrganizationContext.Provider>;
 }
 
+/** The organization the portal is showing, or null for a viewer who has none. */
+export function useOptionalOrganization(): OrganizationSelection | null {
+  return useContext(OrganizationContext);
+}
+
 /** The organization the portal is showing. Only pages inside the portal's layout call this. */
 export function useOrganization(): OrganizationSelection {
   const selection = useContext(OrganizationContext);

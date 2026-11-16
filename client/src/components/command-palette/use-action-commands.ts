@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
 import { formatDuration, parseDuration, validateTimeoutSeconds } from "@shared/moderation";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   Ban,
   BellOff,
@@ -133,6 +133,7 @@ export function useActionCommands(
   const unbanUser = useUnbanUserRequest();
   const updateChatSettings = useUpdateChatSettingsRequest();
   const renameInstance = useMutation(api.instances.update);
+  const engineAccess = useQuery(api.organizations.capabilitiesForInstance, instanceId ? { instanceId } : "skip");
   const { signOut } = useAuthActions();
   const { mode, modePreference, paletteId, setMode, toggleMode, selectPalette } = useTheme();
   const sidebarCollapsed = useStore($sidebarShownCollapsed);
@@ -558,8 +559,8 @@ export function useActionCommands(
 
     if (instance) {
       const current = instance;
-      result.push(
-        {
+      if (engineAccess?.renameEngine) {
+        result.push({
           id: "app:rename-instance",
           title: "Rename engine…",
           kind: "action",
@@ -577,23 +578,23 @@ export function useActionCommands(
               },
             },
           },
-        },
-        {
-          id: "app:copy-instance-id",
-          title: "Copy engine ID",
-          kind: "action",
-          group: APP_GROUP,
-          keywords: ["clipboard", "debug", "support"],
-          icon: Copy,
-          action: {
-            type: "run",
-            run: async () => {
-              await navigator.clipboard.writeText(current._id);
-              return "Engine ID copied";
-            },
+        });
+      }
+      result.push({
+        id: "app:copy-instance-id",
+        title: "Copy engine ID",
+        kind: "action",
+        group: APP_GROUP,
+        keywords: ["clipboard", "debug", "support"],
+        icon: Copy,
+        action: {
+          type: "run",
+          run: async () => {
+            await navigator.clipboard.writeText(current._id);
+            return "Engine ID copied";
           },
-        }
-      );
+        },
+      });
     }
 
     if (instances.length > 1) {

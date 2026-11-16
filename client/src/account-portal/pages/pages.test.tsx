@@ -20,10 +20,14 @@ interface ConvexAnswers {
   meId: string;
 }
 const ConvexAnswersContext = createContext<ConvexAnswers>({ members: null, meId: "owner-user" });
+// One function for every render: the pages list invoices in an effect keyed on the action.
+const noSearch = () => "";
+const answerNothing = async () => [];
 const convexReact = await import("convex/react");
 mock.module("convex/react", () => ({
   ...convexReact,
   useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
+  useAction: () => answerNothing,
   useMutation: () => async () => null,
   useQuery: (query: Parameters<typeof getFunctionName>[0]) => {
     const answers = useContext(ConvexAnswersContext);
@@ -47,8 +51,22 @@ mock.module("@/components/ui/avatar", () => ({
   AvatarFallback: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
 
+// Radix's radio and collapsible read the DOM, which the test renderer lacks; the plan chooser only needs the markup.
+mock.module("@/components/ui/radio-group", () => ({
+  RadioGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  RadioGroupItem: () => null,
+}));
+
+mock.module("@/components/ui/collapsible", () => ({
+  Collapsible: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CollapsibleTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  CollapsibleContent: () => null,
+}));
+
 const { default: EnginesPage } = await import("./engines");
 const { default: PeoplePage } = await import("./people");
+const { default: PaymentsPage } = await import("./payments");
+const { default: PlanPage } = await import("./plan");
 
 const ACCOUNT_ID = "account-1" as Id<"accounts">;
 
@@ -60,10 +78,11 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
     role,
     can: {
       viewOrganization: true,
-      renameOrganization: true,
+      renameOrganization: owner,
       manageMembers: true,
       viewMemberEmails: owner,
       manageEngines: true,
+      renameEngine: owner,
       viewBilling: true,
       manageBilling: owner,
     },
@@ -94,16 +113,17 @@ function member(userId: string, role: OrgMember["role"], email?: string | null):
 }
 
 async function render(
-  role: "owner" | "admin",
+  role: "owner" | "admin" | null,
   page: ReactNode,
   answers: ConvexAnswers = { members: null, meId: "owner-user" }
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
+  const memory = memoryLocation({ path: "/account" });
   await act(async () => {
     renderer = create(
-      <Router hook={memoryLocation({ path: "/org" }).hook}>
+      <Router hook={memory.hook} searchHook={noSearch}>
         <ConvexAnswersContext.Provider value={answers}>
-          <OrganizationProvider value={selection(role)}>{page}</OrganizationProvider>
+          {role === null ? page : <OrganizationProvider value={selection(role)}>{page}</OrganizationProvider>}
         </ConvexAnswersContext.Provider>
       </Router>,
       {
@@ -173,5 +193,46 @@ describe("People page", () => {
     expect(textOf(row)).not.toContain("—");
     expect(byTestId(renderer, "button-toggle-emails").length).toBe(0);
     expect(byTestId(renderer, "text-member-email").length).toBe(0);
+  });
+});
+
+describe("Engines page rename", () => {
+  test("only the owner sees the rename control", async () => {
+    expect(byTestId(await render("owner", <EnginesPage />), "button-rename-engine-instance-1").length).toBe(1);
+    expect(byTestId(await render("admin", <EnginesPage />), "button-rename-engine-instance-1").length).toBe(0);
+  });
+});
+
+describe("Plan page", () => {
+  test("the owner sees the organization's subscription and the sponsorship slot", async () => {
+    const renderer = await render("owner", <PlanPage />);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Subscription");
+    expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
+  });
+
+  test("only the owner's header has the rename control", async () => {
+    expect(byTestId(await render("owner", <PlanPage />), "button-rename-organization").length).toBe(1);
+    expect(byTestId(await render("admin", <PlanPage />), "button-rename-organization").length).toBe(0);
+  });
+
+  test.each([["admin" as const], [null]])("%p sees the sponsorship slot alone", async (role) => {
+    const renderer = await render(role, <PlanPage />);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("Subscription");
+    expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
+    expect(byTestId(renderer, "link-become-sponsor")[0].props.href).toBe("/sponsor/start");
+  });
+});
+
+describe("Payments page", () => {
+  test("the owner sees the organization's payment history and the sponsor slot", async () => {
+    const renderer = await render("owner", <PaymentsPage />);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Payment history");
+    expect(byTestId(renderer, "card-sponsor-payments").length).toBe(1);
+  });
+
+  test.each([["admin" as const], [null]])("%p sees sponsor rows alone", async (role) => {
+    const renderer = await render(role, <PaymentsPage />);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("Payment history");
+    expect(byTestId(renderer, "card-sponsor-payments").length).toBe(1);
   });
 });

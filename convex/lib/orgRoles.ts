@@ -10,6 +10,7 @@ export type OrgAction =
   | "manageMembers"
   | "viewMemberEmails"
   | "manageEngines"
+  | "renameEngine"
   | "createEngine"
   | "viewBilling"
   | "manageBilling";
@@ -17,13 +18,14 @@ export type OrgAction =
 /** Which org roles may take each action. Admin is Owner minus billing. */
 const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   viewOrganization: ["owner", "admin", "member"],
-  renameOrganization: ["owner", "admin"],
+  renameOrganization: ["owner"],
   manageMembers: ["owner", "admin"],
   // Members are mostly invited by their platform name, so their addresses are
   // private: only the owner, who holds the account, sees them.
   viewMemberEmails: ["owner"],
-  // See every engine of the org and rename them.
+  // See every engine of the org.
   manageEngines: ["owner", "admin"],
+  renameEngine: ["owner"],
   // A new engine starts or extends what the org is billed for, so it is the
   // billing holder's call.
   createEngine: ["owner"],
@@ -40,6 +42,7 @@ export const orgActionValidator = v.union(
   v.literal("manageMembers"),
   v.literal("viewMemberEmails"),
   v.literal("manageEngines"),
+  v.literal("renameEngine"),
   v.literal("createEngine"),
   v.literal("viewBilling"),
   v.literal("manageBilling")

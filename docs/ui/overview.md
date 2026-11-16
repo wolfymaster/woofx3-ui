@@ -76,6 +76,6 @@ When you touch a screen, check imports: engine data comes through `@/engine/hook
 - [Media](./assets.md)
 - [Scenes](./scenes.md)
 - [Admin & team](./admin-team.md)
-- [Organization portal](./org-portal.md)
+- [Account portal](./account-portal.md)
 - [Auth & onboarding](./auth-onboarding.md)
 - [Convex & HTTP surface](./convex-surface.md)

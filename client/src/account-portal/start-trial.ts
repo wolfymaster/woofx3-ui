@@ -4,7 +4,7 @@ import type { MyOrganization } from "@convex/organizations";
 export const START_TRIAL_PATH = "/auth/onboarding";
 
 /**
- * Whether `/org/?start=trial` should go straight to onboarding: only while the
+ * Whether `/account?start=trial` should go straight to onboarding: only while the
  * caller is on no engine at all, owned or invited to. Onboarding picks up any
  * engine the caller is on, so a member of someone else's organization would be
  * dropped into that organization's engine setup; anyone with an engine just
