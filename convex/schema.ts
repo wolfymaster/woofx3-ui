@@ -1524,17 +1524,6 @@ export default defineSchema({
     .index("by_key", ["write", "accountId", "key"])
     .index("by_claimed_at", ["claimedAt"]),
 
-  // licenses: written by account creation before plans existed, always
-  // free with no features, and read by nothing. Emptied by
-  // migrations/dropLegacyLicenses; the table goes once that has run.
-  licenses: defineTable({
-    accountId: v.id("accounts"),
-    tier: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
-    features: v.array(v.string()),
-    expiresAt: v.optional(v.number()),
-    createdAt: v.number(),
-  }).index("by_account", ["accountId"]),
-
   // plans: what each tier includes, edited by operators. Features and limit
   // keys must be listed in lib/entitlements.ts.
   plans: defineTable({
