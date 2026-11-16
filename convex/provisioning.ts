@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, query } from "./_generated/server";
 import { ENGINE_NAME_MAX_LENGTH } from "./instances";
 import { slugCandidates } from "./lib/firstRun";
+import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import {
   createEngine,
   currentRelease,
@@ -426,6 +427,7 @@ export const retry = action({
 export const deleteManagedEngine = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ deprovisioning: boolean }> => {
+    await requireOrgActionOnInstanceInAction(ctx, instanceId, "deleteEngine");
     const { row } = await requireManagedRow(ctx, instanceId);
     return deleteManagedEngineRow(ctx, row);
   },

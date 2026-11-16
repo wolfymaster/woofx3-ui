@@ -348,6 +348,7 @@ function EngineSettings() {
 }
 function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances">; managed?: boolean }) {
   const deleteInstanceAction = useAction(api.instances.deleteInstance);
+  const access = useQuery(api.organizations.capabilitiesForInstance, { instanceId });
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -367,6 +368,10 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       setDialogOpen(false);
     }
   };
+
+  if (!access?.deleteEngine) {
+    return null;
+  }
 
   return (
     <>
