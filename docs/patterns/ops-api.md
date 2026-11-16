@@ -39,7 +39,6 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
 | `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply), and `isLive`, whether its stream is live now. |
 | `GET /api/ops/instances/:id/health` | Live state, sync state, recent alerts and failing workflows. |
 | `GET /api/ops/audit?actor=&target=&cursor=` | The audit log, newest first, for one operator or one target. |
-| `GET /api/ops/plans` | Every plan with how many accounts are on it, resolved as entitlements are: an active assignment's plan, else the default. Walks every account and assignment a page per query, so it is not a single snapshot; the backoffice prices it for expected revenue. |
 
 List routes are cursor-paginated: pass back `cursor` until it is `null`.
 

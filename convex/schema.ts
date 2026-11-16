@@ -162,8 +162,7 @@ export default defineSchema({
     // New invitations always say "member"; access comes from the engine grant.
     role: v.union(v.literal("admin"), v.literal("member")),
     // The one engine the invitation grants, at engineRole. Absent only on
-    // invitations from before engine-scoped invites, until
-    // migrations/invitations backfills them.
+    // invitations from before engine-scoped invites; deleteInvitationsWithoutEngine removes them.
     instanceId: v.optional(v.id("instances")),
     engineRole: v.optional(v.union(v.literal("admin"), v.literal("member"))),
     token: v.string(),
@@ -1537,9 +1536,8 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_account", ["accountId"]),
 
-  // plans: what each plan includes, edited by operators. Features and limit
-  // keys must be listed in lib/entitlements.ts. Exactly one plan may be the
-  // default, which applies to every account without an active assignment.
+  // plans: what each tier includes, edited by operators. Features and limit
+  // keys must be listed in lib/entitlements.ts.
   plans: defineTable({
     key: v.string(),
     name: v.string(),
@@ -1549,29 +1547,12 @@ export default defineSchema({
     // Whether new accounts may choose or be sold it. An account already on a
     // plan keeps it when it stops being offered.
     offered: v.boolean(),
-    isDefault: v.boolean(),
+    // Rows written before tiers replaced the default plan still carry it until unsetPlanIsDefault runs.
+    isDefault: v.optional(v.boolean()),
     updatedAt: v.number(),
     // Who last changed it: an operator's email, or "cli".
     updatedBy: v.string(),
-  })
-    .index("by_key", ["key"])
-    .index("by_default", ["isDefault"]),
-
-  // accountPlans: an account's plan, at most one row per account. No row, or
-  // an expired one, means the default plan with no overrides.
-  accountPlans: defineTable({
-    accountId: v.id("accounts"),
-    // Absent: the default plan, with this row's overrides.
-    planId: v.optional(v.id("plans")),
-    addFeatures: v.array(v.string()),
-    removeFeatures: v.array(v.string()),
-    limits: limitValuesValidator,
-    expiresAt: v.optional(v.number()),
-    updatedAt: v.number(),
-    updatedBy: v.string(),
-  })
-    .index("by_account", ["accountId"])
-    .index("by_plan", ["planId"]),
+  }).index("by_key", ["key"]),
 
   // hostedStorageReservations: bytes promised to an upload grant on hosted
   // storage, held while the grant is issued so concurrent uploads cannot each

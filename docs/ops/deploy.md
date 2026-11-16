@@ -104,21 +104,20 @@ These bring existing data to the organization model. Each one runs to `success` 
 |---|---|---|
 | M1 | `migrations/organizations:orgOwnerRows` | Gives each org its owner row and the owner its engines. M2 relies on the owner being known so it never makes the owner an admin. |
 | M2 | `migrations/organizations:orgMembershipFromEngines` | Puts every engine member in the engine's org; engine owners who do not own the org become org admins. |
-| M4 | `migrations/invitations:invitationEngineTarget` | Points pending invitations at an engine. Only needs M1 and M2 to have settled who is in each org. |
 | M5 | `migrations/organizations:checkOrgInvariantsAll` | Read-only report, run directly: `bunx convex run migrations/organizations:checkOrgInvariantsAll`. |
 
 M1 and M2 converge in either order. The chain below is still the one to use.
 
-Billing is not migrated here. The management plane owns subscriptions, trials and exemptions, and pushes each org's billing projection to Convex. An org's billing record is created by `ensure`, which Convex calls when the org gets its first managed engine. An org with no projection yet is gated as an org with no subscription is: its entitlements are its operator plan assignment or the default plan, and nothing is refused.
+Billing is not migrated here. The management plane owns subscriptions, trials and exemptions, and pushes each org's billing projection to Convex. An org's billing record is created by `ensure`, which Convex calls when the org gets its first managed engine. An org with no projection yet is gated as an org with no subscription is: its entitlements are the code defaults with no plan, and nothing is refused.
 
 ### Starting the chain
 
 Start it as soon as the "Deploy Convex" job goes green, while the UI image is still building. The migrations do not depend on each other, so they run in one chain (each starts when the previous one finishes):
 
 ```bash
-bunx convex run migrations/index:run '{"fn":"migrations/organizations:orgOwnerRows","next":["migrations/organizations:orgMembershipFromEngines","migrations/invitations:invitationEngineTarget"]}'
+bunx convex run migrations/index:run '{"fn":"migrations/organizations:orgOwnerRows","next":["migrations/organizations:orgMembershipFromEngines"]}'
 ```
 
-Then watch the last one (`migrations/invitations:invitationEngineTarget`) with `lib:getStatus` until it reports `success`, and run M5 (`bunx convex run migrations/organizations:checkOrgInvariantsAll`). If one in the chain fails, the chain stops there: fix the cause and run the same command again; finished migrations are skipped.
+Then watch the last one (`migrations/organizations:orgMembershipFromEngines`) with `lib:getStatus` until it reports `success`, and run M5 (`bunx convex run migrations/organizations:checkOrgInvariantsAll`). If one in the chain fails, the chain stops there: fix the cause and run the same command again; finished migrations are skipped.
 
 M5 returns `total` and a list of `violations`, each with an `invariant`, the `accountId` and, where it applies, the `userId` or `instanceId`. `total` must be `0` before the old plan-assignment shapes are removed. `overSeatLimit` lists orgs with more members than their plan's seats; that is on purpose (M2 keeps everyone who already had access) and is not a violation: those orgs keep their members and only stop taking new ones. What each violation means and how to resolve it is in [Organization migration runbook](./org-migrations.md).

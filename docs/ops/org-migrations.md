@@ -62,7 +62,7 @@ The `instances` row points at an org that no longer exists. Nobody can reach the
 { "invariant": "billing", "accountId": "...", "detail": "managed_engine_without_projection" }
 ```
 
-The org has a managed engine that is not deleted, but the management plane has not pushed it a billing projection (no `orgBilling` row). Until it does, the org is gated as one with no subscription: nothing is refused and its entitlements are its plan assignment or the default plan.
+The org has a managed engine that is not deleted, but the management plane has not pushed it a billing projection (no `orgBilling` row). Until it does, the org is gated as one with no subscription: nothing is refused and its entitlements are the code defaults with no plan.
 
 - Nothing else creates the billing record: it comes only from `ensure`. Convex calls it (`billingCommands.ensureBilling`) when the org gets its first managed engine, and there is no operator endpoint for it. If that call gave up, run the internal action `billingCommands:ensureBilling` for the org from the Convex dashboard (`{ "accountId": "..." }`), which is idempotent, then run M5 again.
 - If the plane has the org but no projection arrives, check the plane's projection outbox for a failed push to `POST /api/ops/accounts/:id/billing-projection` (see [Ops API](../patterns/ops-api.md)).

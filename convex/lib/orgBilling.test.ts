@@ -5,7 +5,7 @@ import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
 import { accountEntitlements, orgSeatLimit, requireUsableSubscription } from "./entitlementAccess";
 import { billingFor } from "./orgBilling";
-import { setAccountPlan, upsertPlan } from "./plans";
+import { upsertPlan } from "./plans";
 
 type Backend = ReturnType<typeof newBackend>;
 type Standing = Doc<"orgBilling">["standing"];
@@ -208,42 +208,6 @@ describe("overrides and add-ons layer over the tier's plan", () => {
       overrides: { addFeatures: ["userPages"], removeFeatures: [], limits: [] },
     });
     expect((await entitlements(t, accountId)).features).toEqual(["userPages"]);
-  });
-
-  test("a projection ignores the account's accountPlans overrides", async () => {
-    const t = newBackend();
-    const accountId = await seedOrg(t);
-    await t.run((ctx) =>
-      ctx.db.insert("accountPlans", {
-        accountId,
-        addFeatures: ["userPages"],
-        removeFeatures: [],
-        limits: [],
-        updatedAt: NOW,
-        updatedBy: "test",
-      })
-    );
-    await giveProjection(t, accountId);
-    expect((await entitlements(t, accountId)).features).not.toContain("userPages");
-  });
-});
-
-describe("operator plan overrides", () => {
-  const override = { planKey: null, addFeatures: ["userPages"], removeFeatures: [], limits: [] };
-
-  test("setAccountPlan is refused for an org with a projection and writes nothing", async () => {
-    const t = newBackend();
-    const accountId = await seedOrg(t);
-    await giveProjection(t, accountId);
-    await expect(t.run((ctx) => setAccountPlan(ctx, accountId, override, "test"))).rejects.toThrow("management plane");
-    expect(await t.run((ctx) => ctx.db.query("accountPlans").collect())).toEqual([]);
-  });
-
-  test("setAccountPlan still works for an org without one", async () => {
-    const t = newBackend();
-    const accountId = await seedOrg(t);
-    await t.run((ctx) => setAccountPlan(ctx, accountId, override, "test"));
-    expect((await entitlements(t, accountId)).features).toContain("userPages");
   });
 });
 
