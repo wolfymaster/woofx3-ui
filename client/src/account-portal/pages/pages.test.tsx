@@ -351,6 +351,7 @@ describe("Plan page", () => {
     actionAnswers["sponsorships:mine"] = [{ ...SPONSORSHIP, cancelAtPeriodEnd: true }];
     const renderer = await render(null, <PlanPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Canceled. Your sponsorship ends on");
+    expect(text(renderer, "text-sponsorship-state")[0]).toMatch(/^Ending /);
     for (const id of MANAGE_BUTTONS) {
       expect(byTestId(renderer, id).length).toBe(0);
     }

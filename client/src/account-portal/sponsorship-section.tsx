@@ -35,8 +35,8 @@ import {
   INTERVAL_LABELS,
   isManageable,
   SPONSOR_START_PATH,
-  STATE_LABELS,
   sponsorshipNotice,
+  stateLabel,
 } from "@/sponsorship/sponsorship-text";
 import { useSponsorshipTerms } from "@/sponsorship/use-sponsorship-terms";
 import { type SponsorshipList, useSponsorships } from "./use-sponsorships";
@@ -110,7 +110,7 @@ function SponsorshipCard({ sponsorship, onChanged }: { sponsorship: Sponsorship;
   const items: BillingSummaryItem[] = [
     { label: "Amount", value: amountSummary(sponsorship), testId: "text-sponsorship-amount" },
     { label: "Type", value: INTERVAL_LABELS[sponsorship.interval] },
-    { label: "State", value: STATE_LABELS[sponsorship.state], testId: "text-sponsorship-state" },
+    { label: "State", value: stateLabel(sponsorship), testId: "text-sponsorship-state" },
     { label: "Since", value: formatDay(sponsorship.createdAt) },
   ];
   if (sponsorship.interval === "month" && sponsorship.currentPeriodEnd !== null && !sponsorship.cancelAtPeriodEnd) {
