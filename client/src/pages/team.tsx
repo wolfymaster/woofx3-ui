@@ -40,7 +40,7 @@ const roleIcons: Record<string, React.ReactNode> = {
   member: <Users className="h-3 w-3 mr-1" />,
 };
 
-const ORG_PORTAL_PATH = "/org";
+const ACCOUNT_PORTAL_PATH = "/org";
 
 /** Engine roles follow the org role for its owner and admins, so only a plain org member's can change here. */
 function engineRoleIsChangeable(member: TeamMemberDto): boolean {
@@ -106,7 +106,7 @@ export default function Team() {
   const manageOrganization =
     hostedWebApp && teamData?.canManageOrganization ? (
       <Button variant="outline" asChild data-testid="link-manage-organization">
-        <Link href={ORG_PORTAL_PATH}>
+        <Link href={ACCOUNT_PORTAL_PATH}>
           Manage organization
           <ArrowUpRight className="h-4 w-4 ml-2" />
         </Link>

@@ -10,8 +10,8 @@ import { join, relative } from "node:path";
 const CLIENT_SRC = join(import.meta.dir, "..");
 const PORTAL_DIR = import.meta.dir;
 const APP = join(CLIENT_SRC, "App.tsx");
-const PORTAL_IMPORT = /["']@\/org-portal(?:\/[^"']*)?["']|["'](?:\.\.?\/)+org-portal(?:\/[^"']*)?["']/;
-const GATED_IMPORT = /IS_DESKTOP\s*\?\s*null\s*:\s*lazy\(\(\)\s*=>\s*import\(["']@\/org-portal\/OrgPortal["']\)\)/;
+const PORTAL_IMPORT = /["']@\/account-portal(?:\/[^"']*)?["']|["'](?:\.\.?\/)+account-portal(?:\/[^"']*)?["']/;
+const GATED_IMPORT = /IS_DESKTOP\s*\?\s*null\s*:\s*lazy\(\(\)\s*=>\s*import\(["']@\/account-portal\/AccountPortal["']\)\)/;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

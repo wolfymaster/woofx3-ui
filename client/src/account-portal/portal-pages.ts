@@ -1,6 +1,6 @@
 import type { OrgCapabilities } from "@convex/organizations";
 
-export const ORG_PORTAL_PATH = "/org";
+export const ACCOUNT_PORTAL_PATH = "/org";
 
 export type PortalPageId = "plan" | "payments" | "people" | "engines";
 
@@ -13,10 +13,10 @@ export interface PortalPage {
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [
-  { id: "plan", label: "Plan", path: ORG_PORTAL_PATH, visibleWith: "viewBilling" },
-  { id: "payments", label: "Payments", path: `${ORG_PORTAL_PATH}/payments`, visibleWith: "manageBilling" },
-  { id: "people", label: "People", path: `${ORG_PORTAL_PATH}/people`, visibleWith: "manageMembers" },
-  { id: "engines", label: "Engines", path: `${ORG_PORTAL_PATH}/engines`, visibleWith: "viewOrganization" },
+  { id: "plan", label: "Plan", path: ACCOUNT_PORTAL_PATH, visibleWith: "viewBilling" },
+  { id: "payments", label: "Payments", path: `${ACCOUNT_PORTAL_PATH}/payments`, visibleWith: "manageBilling" },
+  { id: "people", label: "People", path: `${ACCOUNT_PORTAL_PATH}/people`, visibleWith: "manageMembers" },
+  { id: "engines", label: "Engines", path: `${ACCOUNT_PORTAL_PATH}/engines`, visibleWith: "viewOrganization" },
 ];
 
 /** The pages a role sees in the portal's nav. */
@@ -34,8 +34,8 @@ export function portalPage(id: PortalPageId): PortalPage {
 
 /** Whether a portal tab is the current one; the index matches only exactly, so `/org` is not active on `/org/payments`. */
 export function isActivePage(location: string, path: string): boolean {
-  if (path === ORG_PORTAL_PATH) {
-    return location === ORG_PORTAL_PATH;
+  if (path === ACCOUNT_PORTAL_PATH) {
+    return location === ACCOUNT_PORTAL_PATH;
   }
   return location === path || location.startsWith(`${path}/`);
 }

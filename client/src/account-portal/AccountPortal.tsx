@@ -22,7 +22,7 @@ import PeoplePage from "./pages/people";
 import PlanPage from "./pages/plan";
 import {
   isActivePage,
-  ORG_PORTAL_PATH,
+  ACCOUNT_PORTAL_PATH,
   PORTAL_PAGES,
   type PortalPageId,
   portalPage,
@@ -156,7 +156,7 @@ function NoOrganization() {
  * outside the dashboard shell, on the dashboard's origin so it shares the
  * session. The web build only; App.tsx never registers it in the desktop app.
  */
-export default function OrgPortal() {
+export default function AccountPortal() {
   const now = useMinuteClock();
   const organizations = useQuery(api.organizations.mine, { now });
   const { instance } = useInstance();
@@ -183,7 +183,7 @@ export default function OrgPortal() {
 
   // The index is the Plan tab, which a member can't see; send them to their first tab instead.
   const firstPage = visiblePages(organization.can)[0];
-  if (location === ORG_PORTAL_PATH && firstPage !== undefined && firstPage.path !== ORG_PORTAL_PATH) {
+  if (location === ACCOUNT_PORTAL_PATH && firstPage !== undefined && firstPage.path !== ACCOUNT_PORTAL_PATH) {
     return <Redirect to={firstPage.path} replace />;
   }
 
@@ -192,14 +192,14 @@ export default function OrgPortal() {
       <PortalLayout>
         <Switch>
           {/* Old paths, kept working for billing banners, emails and bookmarks. */}
-          <Route path={`${ORG_PORTAL_PATH}/billing`}>
-            <Redirect to={ORG_PORTAL_PATH} replace />
+          <Route path={`${ACCOUNT_PORTAL_PATH}/billing`}>
+            <Redirect to={ACCOUNT_PORTAL_PATH} replace />
           </Route>
-          <Route path={`${ORG_PORTAL_PATH}/invoices`}>
-            <Redirect to={`${ORG_PORTAL_PATH}/payments`} replace />
+          <Route path={`${ACCOUNT_PORTAL_PATH}/invoices`}>
+            <Redirect to={`${ACCOUNT_PORTAL_PATH}/payments`} replace />
           </Route>
-          <Route path={`${ORG_PORTAL_PATH}/members`}>
-            <Redirect to={`${ORG_PORTAL_PATH}/people`} replace />
+          <Route path={`${ACCOUNT_PORTAL_PATH}/members`}>
+            <Redirect to={`${ACCOUNT_PORTAL_PATH}/people`} replace />
           </Route>
           {PORTAL_PAGES.map((page) => (
             <Route key={page.id} path={page.path}>
