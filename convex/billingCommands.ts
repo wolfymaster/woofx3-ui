@@ -59,6 +59,9 @@ const FRIENDLY_MESSAGES: Partial<Record<BillingError["code"], string>> = {
   payment_refused: "We could not start your payment. Please contact support if this continues.",
   identity_unavailable: RETRY_MESSAGE,
   unreachable: RETRY_MESSAGE,
+  sponsorship_not_found: "We could not find that sponsorship.",
+  sponsorship_not_recurring: "A one-time sponsorship has nothing to change or cancel.",
+  invalid_sponsorship_amount: "That amount isn't one we can accept for a sponsorship.",
 };
 
 const NOT_CONFIGURED: BillingError = {
@@ -71,7 +74,7 @@ export function billingConvexError(error: BillingError): ConvexError<BillingErro
   return new ConvexError<BillingError>({ code: error.code, message: FRIENDLY_MESSAGES[error.code] ?? GENERIC_MESSAGE });
 }
 
-function unwrap<T>(result: BillingResult<T>): T {
+export function unwrap<T>(result: BillingResult<T>): T {
   if (!result.ok) {
     throw billingConvexError(result.error);
   }
@@ -96,7 +99,7 @@ export const mayManageBilling = internalQuery({
   },
 });
 
-async function requireUser(ctx: ActionCtx): Promise<Id<"users">> {
+export async function requireUser(ctx: ActionCtx): Promise<Id<"users">> {
   const userId = await getAuthUserId(ctx);
   if (userId === null) {
     throw new ConvexError({ code: "not_authenticated", message: "Not authenticated" });
@@ -110,7 +113,7 @@ async function requireManagerClient(ctx: ActionCtx, accountId: Id<"accounts">): 
 }
 
 // stylegate:ignore ANY-LAY-004 reason="A Convex action handler is the composition root: no process outlives one call to inject a shared client from"
-function requireClient(): BillingClient {
+export function requireClient(): BillingClient {
   const client = billingClientFromEnv();
   if (client === null) {
     throw billingConvexError(NOT_CONFIGURED);
