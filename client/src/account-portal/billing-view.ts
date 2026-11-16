@@ -46,7 +46,8 @@ const REFUSAL_ACTIONS: Partial<Record<BillingRefusalCode, CheckoutRefusalAction>
   suspended_by_operator: "contact_support",
 };
 
-export function checkoutRefusalAction(error: unknown): CheckoutRefusalAction | null {
+/** The code a billing action refused with, or null for any other failure. */
+export function billingErrorCode(error: unknown): string | null {
   if (!(error instanceof ConvexError)) {
     return null;
   }
@@ -54,5 +55,10 @@ export function checkoutRefusalAction(error: unknown): CheckoutRefusalAction | n
   if (typeof data !== "object" || data === null || !("code" in data) || typeof data.code !== "string") {
     return null;
   }
-  return REFUSAL_ACTIONS[data.code as BillingRefusalCode] ?? null;
+  return data.code;
+}
+
+export function checkoutRefusalAction(error: unknown): CheckoutRefusalAction | null {
+  const code = billingErrorCode(error);
+  return code === null ? null : (REFUSAL_ACTIONS[code as BillingRefusalCode] ?? null);
 }

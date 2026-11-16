@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { actionErrorMessage } from "@/lib/action-error";
 import { SPONSOR_START_PATH } from "@/sponsorship/sponsorship-text";
+import { billingErrorCode } from "../billing-view";
 import { useOptionalOrganization } from "../organization-context";
 import { filterRows, hasBothKinds, type PaymentFilter, paymentRows } from "../payment-rows";
 import { useSponsorships } from "../use-sponsorships";
@@ -43,9 +44,15 @@ function useInvoices(accountId: Id<"accounts"> | null): InvoiceList {
         }
       },
       (error: unknown) => {
-        if (current) {
-          setList({ state: "failed", message: actionErrorMessage(error) });
+        if (!current) {
+          return;
         }
+        // An organization with no billing yet, such as one with only self-hosted engines, has no invoices to list.
+        setList(
+          billingErrorCode(error) === "subscription_not_found"
+            ? { state: "ready", invoices: [] }
+            : { state: "failed", message: actionErrorMessage(error) }
+        );
       }
     );
     return () => {

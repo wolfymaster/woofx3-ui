@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { Invoice, Sponsorship } from "@convex/lib/billingClient";
 import type { OrgMember } from "@convex/organizations";
 import { getFunctionName } from "convex/server";
+import { ConvexError } from "convex/values";
 import { createContext, type ReactNode, useContext } from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { Router } from "wouter";
@@ -450,6 +451,14 @@ describe("when a billing lookup fails", () => {
       expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
     }
   );
+
+  test("an owner with no billing yet has no invoices and sees no error", async () => {
+    actionAnswers["billingCommands:invoices"] = new ConvexError({ code: "subscription_not_found", message: "m" });
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+    const renderer = await render("owner", <PaymentsPage />);
+    expect(byTestId(renderer, "text-payments-failed").length).toBe(0);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Monthly sponsorship");
+  });
 
   test("an owner whose invoices fail but whose sponsorships load sees the error and the loaded rows", async () => {
     actionAnswers["billingCommands:invoices"] = failed;
