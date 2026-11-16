@@ -312,6 +312,17 @@ describe("Plan page", () => {
     expect(byTestId(renderer, "link-become-sponsor")[0].props.href).toBe("/sponsor/start");
   });
 
+  test("a viewer with no organization is offered a streaming engine", async () => {
+    actionAnswers["sponsorships:mine"] = [];
+    const renderer = await render(null, <PlanPage />);
+    expect(byTestId(renderer, "link-set-up-engine")[0].props.href).toBe("/auth/onboarding");
+  });
+
+  test.each([["owner" as const], ["admin" as const]])("%p, in an organization, is not offered one", async (role) => {
+    actionAnswers["sponsorships:mine"] = [];
+    expect(byTestId(await render(role, <PlanPage />), "card-set-up-engine").length).toBe(0);
+  });
+
   test.each([["owner" as const], ["admin" as const], [null]])(
     "%p sees their monthly sponsorship and can manage it",
     async (role) => {

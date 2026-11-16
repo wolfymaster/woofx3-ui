@@ -4,14 +4,14 @@ import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
 import { useAction, useMutation } from "convex/react";
 import { useCallback, useState } from "react";
-import { useSearch } from "wouter";
+import { Link, useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "@/billing/format";
 import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-redirect";
 import { StatusBanner } from "@/billing/status-banner";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -220,6 +220,28 @@ function OrganizationPlan() {
   );
 }
 
+/** For a viewer with no organization, such as a sponsor: the way to a streaming engine of their own. */
+function SetUpEngineCard() {
+  return (
+    <Card data-testid="card-set-up-engine">
+      <CardHeader>
+        <CardTitle>Stream with woofx3</CardTitle>
+        <CardDescription>
+          Want alerts, overlays and chat commands on your own stream? Set up a streaming engine and we&apos;ll walk you
+          through it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button asChild variant="outline">
+          <Link href="/auth/onboarding" data-testid="link-set-up-engine">
+            Set up a streaming engine
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PlanPage() {
   const selection = useOptionalOrganization();
   const organization = selection?.organization ?? null;
@@ -243,6 +265,7 @@ export default function PlanPage() {
       <div className="space-y-6">
         {organization?.can.manageBilling ? <OrganizationPlan /> : null}
         <SponsorshipSection />
+        {selection === null ? <SetUpEngineCard /> : null}
       </div>
     </>
   );

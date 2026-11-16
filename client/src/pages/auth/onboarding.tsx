@@ -3,13 +3,20 @@ import { PLACEHOLDER_NAME } from "@convex/lib/firstRun";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Loader2, MonitorPlay, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { IS_DESKTOP } from "@/lib/desktop";
 import { useLogger } from "@/lib/logger-context";
-import { enginesForOnboarding, NEW_ENGINE_PARAM, type OnboardingRoute, onboardingRoute } from "@/lib/onboarding-route";
+import {
+  ACCOUNT_PATH,
+  enginesForOnboarding,
+  NEW_ENGINE_PARAM,
+  type OnboardingRoute,
+  onboardingRoute,
+} from "@/lib/onboarding-route";
 import { $currentInstanceId } from "@/lib/stores";
 
 /**
@@ -247,6 +254,15 @@ export default function Onboarding() {
               </form>
             </CardContent>
           </Card>
+        )}
+
+        {!IS_DESKTOP && (
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Not setting up an engine today?{" "}
+            <Link href={ACCOUNT_PATH} className="underline" data-testid="link-go-to-account">
+              Go to my account
+            </Link>
+          </p>
         )}
       </div>
     </div>
