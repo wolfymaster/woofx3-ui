@@ -1,12 +1,37 @@
 import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { Password } from "@convex-dev/auth/providers/Password";
-import { convexAuth, createAccount } from "@convex-dev/auth/server";
+import { type ConvexCredentialsConfig, convexAuth, createAccount } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { requireSignUpChallenge } from "./lib/signUpChallenge";
+
+/**
+ * `Password`, with a Turnstile check before a sign-up creates the user. Its
+ * `profile` hook is synchronous, so the check wraps the provider's own
+ * `authorize` instead. `ConvexCredentials` keeps a provider's callbacks under
+ * `options`, which Convex Auth merges over the provider as it loads it; the
+ * throw below stops the deployment from loading if that ever changes. Sign-in
+ * and the Twitch provider are not checked.
+ */
+function passwordWithSignUpChallenge(): ConvexCredentialsConfig {
+  const password = (Password() as ConvexCredentialsConfig & { options?: ConvexCredentialsConfig }).options;
+  if (password === undefined) {
+    throw new Error("Convex Auth's Password provider no longer keeps its callbacks under options");
+  }
+  return ConvexCredentials({
+    ...password,
+    authorize: async (params, ctx) => {
+      if (params.flow === "signUp") {
+        await requireSignUpChallenge(params.turnstileToken);
+      }
+      return password.authorize(params, ctx);
+    },
+  });
+}
 
 export const { auth, signIn, signOut, store } = convexAuth({
   providers: [
-    Password,
+    passwordWithSignUpChallenge(),
     ConvexCredentials({
       id: "twitch",
       authorize: async (credentials, ctx) => {
