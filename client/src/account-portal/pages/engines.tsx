@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { $currentInstanceId } from "@/lib/stores";
+import { NewEngineDialog } from "../new-engine-dialog";
 import { useOrganization } from "../organization-context";
 import { RenameDialog } from "../rename-dialog";
 
@@ -53,6 +54,7 @@ export default function EnginesPage() {
             ? "Every engine in this organization."
             : "The engines in this organization you can open."
         }
+        actions={organization.can.createEngine ? <NewEngineDialog accountId={organization.accountId} /> : null}
       />
       <Card>
         <CardContent>
