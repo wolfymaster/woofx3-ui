@@ -66,6 +66,9 @@ export default function PaymentsPage() {
     invoices.state === "ready" ? invoices.invoices : [],
     sponsorships.state === "ready" ? sponsorships.sponsorships : []
   );
+  // One failed lookup is one message, and an empty list is never shown for a lookup that did not answer.
+  const failure =
+    invoices.state === "failed" ? invoices.message : sponsorships.state === "failed" ? sponsorships.message : null;
   const both = hasBothKinds(rows);
   const shown = filterRows(rows, both ? filter : "all");
   const kind: PaymentFilter = both ? filter : (rows[0]?.kind ?? "all");
@@ -96,11 +99,16 @@ export default function PaymentsPage() {
               ))}
             </ToggleGroup>
           ) : null}
-          {invoices.state === "failed" ? <p className="text-sm text-destructive">{invoices.message}</p> : null}
-          {sponsorships.state === "failed" ? <p className="text-sm text-destructive">{sponsorships.message}</p> : null}
+          {failure === null ? null : (
+            <p className="text-sm text-destructive" data-testid="text-payments-failed">
+              {failure}
+            </p>
+          )}
           {loading ? <p className="text-sm text-muted-foreground">Loading payments...</p> : null}
-          {loading ? null : <PaymentsTable rows={shown} empty="No payments yet." linkColumn={LINK_COLUMNS[kind]} />}
-          {!loading && rows.length === 0 ? (
+          {loading || (failure !== null && rows.length === 0) ? null : (
+            <PaymentsTable rows={shown} empty="No payments yet." linkColumn={LINK_COLUMNS[kind]} />
+          )}
+          {!loading && failure === null && rows.length === 0 ? (
             <Button asChild variant="outline">
               <Link href={SPONSOR_START_PATH} data-testid="link-become-sponsor">
                 Become a sponsor
