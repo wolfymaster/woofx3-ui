@@ -12,6 +12,7 @@ export type OrgAction =
   | "manageEngines"
   | "renameEngine"
   | "createEngine"
+  | "changeEngineUrl"
   | "viewBilling"
   | "manageBilling";
 
@@ -29,6 +30,8 @@ const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   // A new engine starts or extends what the org is billed for, so it is the
   // billing holder's call.
   createEngine: ["owner"],
+  // Every engine call sends the engine's credentials to its address, so pointing it elsewhere hands them over.
+  changeEngineUrl: ["owner"],
   // The plan and its state, read-only; acting on them is manageBilling.
   viewBilling: ["owner", "admin"],
   manageBilling: ["owner"],
@@ -44,6 +47,7 @@ export const orgActionValidator = v.union(
   v.literal("manageEngines"),
   v.literal("renameEngine"),
   v.literal("createEngine"),
+  v.literal("changeEngineUrl"),
   v.literal("viewBilling"),
   v.literal("manageBilling")
 );

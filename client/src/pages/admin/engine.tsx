@@ -107,6 +107,8 @@ function EngineSettings() {
   const testConnectionAction = useEngineConnectionTest();
   const registerInstance = useAction(api.registration.registerInstance);
   const updateInstance = useConvexMutation(api.instances.update);
+  const access = useQuery(api.organizations.capabilitiesForInstance, instance ? { instanceId: instance._id } : "skip");
+  const canChangeUrl = access?.changeEngineUrl === true;
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -141,7 +143,7 @@ function EngineSettings() {
       await updateInstance({ instanceId: instance._id, url: trimmed });
       $engineUrl.set(trimmed);
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e));
+      setSaveError(actionErrorMessage(e));
     } finally {
       setSavingUrl(false);
     }
@@ -257,19 +259,20 @@ function EngineSettings() {
             <div className="flex flex-wrap gap-2">
               <Input
                 id="engine-url"
-                placeholder="localhost:8080 or https://api.example.com"
+                placeholder="https://api.example.com"
                 value={urlDraft}
                 onChange={(e) => setUrlDraft(e.target.value)}
                 onBlur={() => {
                   void persistEngineUrl();
                 }}
                 className="flex-1 min-w-[200px]"
+                readOnly={!canChangeUrl}
                 data-testid="input-engine-url"
               />
               <Button
                 type="button"
                 variant="secondary"
-                disabled={savingUrl || !effectiveUrl}
+                disabled={savingUrl || !effectiveUrl || !canChangeUrl}
                 onClick={() => {
                   void persistEngineUrl();
                 }}
