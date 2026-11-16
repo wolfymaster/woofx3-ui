@@ -77,13 +77,15 @@ async function invite(t: Backend, inviterId: Id<"users">, instanceId: Id<"instan
   });
 }
 
-async function legacyInvite(t: Backend, org: Org, email: string, role: "admin" | "member", expiresAt?: number) {
+async function seedInvite(t: Backend, org: Org, email: string, role: "admin" | "member", expiresAt?: number) {
   return t.run((ctx) =>
     ctx.db.insert("invitations", {
       accountId: org.accountId,
       email,
       role,
-      token: `legacy-${email}`,
+      instanceId: org.instanceId,
+      engineRole: role,
+      token: `seeded-${email}`,
       invitedByUserId: org.ownerId,
       status: "pending",
       expiresAt: expiresAt ?? Date.now() + DAY_MS,
@@ -212,7 +214,6 @@ describe("invitations.listForEngine", () => {
     const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
     await invite(t, org.ownerId, org.instanceId, "here@example.com");
     await invite(t, org.ownerId, secondId, "there@example.com");
-    await legacyInvite(t, org, "orgwide@example.com", "member");
     expect(await listedEmails(t, adminId, org.instanceId)).toEqual(["here@example.com"]);
   });
 
@@ -222,15 +223,6 @@ describe("invitations.listForEngine", () => {
     const memberId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
     await invite(t, org.ownerId, org.instanceId, "here@example.com");
     expect(await listedEmails(t, memberId, org.instanceId)).toBeNull();
-  });
-
-  test("manageMembers also sees the org-wide invitations, but not expired ones", async () => {
-    const t = newBackend();
-    const org = await seedOrg(t);
-    await invite(t, org.ownerId, org.instanceId, "here@example.com");
-    await legacyInvite(t, org, "orgwide@example.com", "member");
-    await legacyInvite(t, org, "stale@example.com", "member", 1);
-    expect(await listedEmails(t, org.ownerId, org.instanceId)).toEqual(["here@example.com", "orgwide@example.com"]);
   });
 });
 
@@ -271,9 +263,9 @@ describe("invitations.accept", () => {
   test("an expired invitation is reported, and grants nothing", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
-    await legacyInvite(t, org, "late@example.com", "member", Date.now() - 1);
+    await seedInvite(t, org, "late@example.com", "member", Date.now() - 1);
     const userId = await addUser(t, "late@example.com");
-    const result = await as(t, userId).mutation(api.invitations.accept, { token: "legacy-late@example.com" });
+    const result = await as(t, userId).mutation(api.invitations.accept, { token: "seeded-late@example.com" });
     expect(result).toEqual({ status: "expired" });
     expect((await roles(t, org, userId, org.instanceId)).org).toBeNull();
   });
@@ -325,12 +317,12 @@ describe("invitations.accept", () => {
     expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({ status: "already_accepted" });
   });
 
-  test("an org-wide admin invitation makes an org admin with engine admin", async () => {
+  test("an admin invitation makes an org admin with engine admin", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
-    await legacyInvite(t, org, "boss@example.com", "admin");
+    await seedInvite(t, org, "boss@example.com", "admin");
     const userId = await addUser(t, "boss@example.com");
-    await as(t, userId).mutation(api.invitations.accept, { token: "legacy-boss@example.com" });
+    await as(t, userId).mutation(api.invitations.accept, { token: "seeded-boss@example.com" });
     expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: "admin", engine: "admin" });
   });
 
@@ -380,23 +372,5 @@ describe("invitations.accept", () => {
     const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
     const preview = await t.query(api.invitations.previewByToken, { token });
     expect(preview).toMatchObject({ accountName: "Org", engineName: "Main" });
-  });
-});
-
-describe("migration deleteInvitationsWithoutEngine", () => {
-  test("deletes invitations that name no engine, keeps the rest, and is idempotent", async () => {
-    const t = newBackend();
-    const org = await seedOrg(t);
-    const legacyId = await legacyInvite(t, org, "a@example.com", "admin");
-    await invite(t, org.ownerId, org.instanceId, "b@example.com");
-    const snapshot = () => t.run((ctx) => ctx.db.query("invitations").collect());
-
-    await runMigration(t, internal.migrations.invitations.deleteInvitationsWithoutEngine);
-    const first = await snapshot();
-    expect(first.map((r) => r.email)).toEqual(["b@example.com"]);
-    expect(await t.run((ctx) => ctx.db.get(legacyId))).toBeNull();
-
-    await runMigration(t, internal.migrations.invitations.deleteInvitationsWithoutEngine);
-    expect(await snapshot()).toEqual(first);
   });
 });

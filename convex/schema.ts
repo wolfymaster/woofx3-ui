@@ -161,10 +161,9 @@ export default defineSchema({
     // The org role the invitee gets on accept when not already in the org.
     // New invitations always say "member"; access comes from the engine grant.
     role: v.union(v.literal("admin"), v.literal("member")),
-    // The one engine the invitation grants, at engineRole. Absent only on
-    // invitations from before engine-scoped invites; deleteInvitationsWithoutEngine removes them.
-    instanceId: v.optional(v.id("instances")),
-    engineRole: v.optional(v.union(v.literal("admin"), v.literal("member"))),
+    // The one engine the invitation grants, at engineRole.
+    instanceId: v.id("instances"),
+    engineRole: v.union(v.literal("admin"), v.literal("member")),
     token: v.string(),
     invitedByUserId: v.id("users"),
     status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("revoked"), v.literal("expired")),
@@ -1547,8 +1546,6 @@ export default defineSchema({
     // Whether new accounts may choose or be sold it. An account already on a
     // plan keeps it when it stops being offered.
     offered: v.boolean(),
-    // Rows written before tiers replaced the default plan still carry it until unsetPlanIsDefault runs.
-    isDefault: v.optional(v.boolean()),
     updatedAt: v.number(),
     // Who last changed it: an operator's email, or "cli".
     updatedBy: v.string(),

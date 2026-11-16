@@ -180,7 +180,7 @@ export default function Team() {
                       <PendingInviteIdentity invite={inv} />
                     </TableCell>
                     <TableCell>
-                      <RoleBadge role={inv.engineRole ?? inv.role} />
+                      <RoleBadge role={inv.engineRole} />
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="capitalize">
