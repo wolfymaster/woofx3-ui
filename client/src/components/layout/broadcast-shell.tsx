@@ -214,9 +214,16 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
             <DropdownMenuItem asChild>
               <Link href="/team">Team Settings</Link>
             </DropdownMenuItem>
+            {!IS_DESKTOP && (
+              <DropdownMenuItem asChild>
+                <Link href="/account" data-testid="menu-account">
+                  Account
+                </Link>
+              </DropdownMenuItem>
+            )}
             {canManageOrganization && (
               <DropdownMenuItem asChild>
-                <Link href="/org" data-testid="menu-manage-organization">
+                <Link href="/account" data-testid="menu-manage-organization">
                   Manage organization
                   <ArrowUpRight className="h-4 w-4 ml-auto" />
                 </Link>

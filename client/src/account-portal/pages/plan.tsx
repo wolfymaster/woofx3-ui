@@ -12,7 +12,7 @@ import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-
 import { StatusBanner } from "@/billing/status-banner";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,8 +30,9 @@ import {
   parseCheckoutReturn,
 } from "@/lib/checkout-return";
 import { billingView, checkoutRefusalAction } from "../billing-view";
-import { useOrganization } from "../organization-context";
+import { useOptionalOrganization, useOrganization } from "../organization-context";
 import { RenameDialog } from "../rename-dialog";
+import { SponsorshipSlot } from "../sponsorship-slot";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
 
 const PLAN_CHOICES: Array<{ plan: PlanTier; interval: BillingInterval; note?: string }> = [
@@ -200,9 +201,8 @@ function useCheckoutPoll(
   return checkoutId === null ? null : poll;
 }
 
-export default function PlanPage() {
+function OrganizationPlan() {
   const { organization } = useOrganization();
-  const rename = useMutation(api.organizations.rename);
   const openPortal = useAction(api.billingCommands.openPortal);
   const checkoutReturn = parseCheckoutReturn(useSearch());
   const view = billingView(organization);
@@ -211,14 +211,12 @@ export default function PlanPage() {
     checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null,
     view.kind === "provider_managed"
   );
-  const isOwner = organization.can.manageBilling;
   const subscription =
     view.kind === "exempt" || view.kind === "provider_managed" || view.kind === "choose_plan"
       ? view.subscription
       : null;
   const notice = subscription === null ? null : subscriptionNotice(subscription);
-  // The owner is the only one the query gives a discount to.
-  const discount = isOwner ? (organization.subscription?.discount ?? null) : null;
+  const discount = organization.subscription?.discount ?? null;
 
   const items: BillingSummaryItem[] = [];
   if (subscription !== null) {
@@ -230,12 +228,53 @@ export default function PlanPage() {
   }
 
   return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Subscription</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {checkoutReturn.kind === "cancelled" ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-checkout-cancelled">
+            {CHECKOUT_CANCELLED_TEXT}
+          </p>
+        ) : null}
+        {checkoutReturn.kind === "done" && view.kind !== "no_subscription_needed" ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-checkout-done">
+            {poll === null
+              ? "Thanks! Your payment is being confirmed, and your plan updates here in a moment."
+              : CHECKOUT_POLL_TEXT[poll.phase]}
+          </p>
+        ) : null}
+        {view.kind === "no_subscription_needed" ? (
+          <p data-testid="text-no-subscription-needed">No subscription needed for self-hosted engines.</p>
+        ) : null}
+        {view.kind === "no_plan" ? <p>Your hosted engine has no plan yet.</p> : null}
+        {items.length > 0 ? <BillingSummary items={items} /> : null}
+        {notice ? <StatusBanner tone="warning">{notice}</StatusBanner> : null}
+        {view.kind === "provider_managed" ? (
+          <ProviderRedirectButton
+            label="Manage billing"
+            testId="button-manage-billing"
+            open={() => openPortal({ accountId: organization.accountId })}
+          />
+        ) : null}
+        {view.kind === "choose_plan" || view.kind === "no_plan" ? <PlanChooser /> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function PlanPage() {
+  const selection = useOptionalOrganization();
+  const organization = selection?.organization ?? null;
+  const rename = useMutation(api.organizations.rename);
+  return (
     <>
       <PageHeader
         title="Plan"
-        description="The plan this organization is on and what it pays."
+        description="What you pay for on woofx3."
         actions={
-          organization.can.renameOrganization ? (
+          organization?.can.renameOrganization ? (
             <RenameDialog
               title="Rename organization"
               current={organization.name}
@@ -245,40 +284,14 @@ export default function PlanPage() {
           ) : null
         }
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Subscription</CardTitle>
-          {isOwner ? null : <CardDescription>Only the organization&apos;s owner changes the plan.</CardDescription>}
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {checkoutReturn.kind === "cancelled" ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-checkout-cancelled">
-              {CHECKOUT_CANCELLED_TEXT}
-            </p>
-          ) : null}
-          {checkoutReturn.kind === "done" && view.kind !== "no_subscription_needed" ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-checkout-done">
-              {poll === null
-                ? "Thanks! Your payment is being confirmed, and your plan updates here in a moment."
-                : CHECKOUT_POLL_TEXT[poll.phase]}
-            </p>
-          ) : null}
-          {view.kind === "no_subscription_needed" ? (
-            <p data-testid="text-no-subscription-needed">No subscription needed for self-hosted engines.</p>
-          ) : null}
-          {view.kind === "no_plan" ? <p>Your hosted engine has no plan yet.</p> : null}
-          {items.length > 0 ? <BillingSummary items={items} /> : null}
-          {notice ? <StatusBanner tone="warning">{notice}</StatusBanner> : null}
-          {view.kind === "provider_managed" && isOwner ? (
-            <ProviderRedirectButton
-              label="Manage billing"
-              testId="button-manage-billing"
-              open={() => openPortal({ accountId: organization.accountId })}
-            />
-          ) : null}
-          {(view.kind === "choose_plan" || view.kind === "no_plan") && isOwner ? <PlanChooser /> : null}
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {organization?.can.manageBilling ? <OrganizationPlan /> : null}
+        <SponsorshipSlot
+          title="Your sponsorship"
+          description="You aren't sponsoring woofx3 yet. A sponsorship supports the project, and it shows up here."
+          testId="card-sponsorship"
+        />
+      </div>
     </>
   );
 }

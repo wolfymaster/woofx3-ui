@@ -2,7 +2,7 @@ import { CreditCard, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 
-const BILLING_PATH = "/org/billing";
+const BILLING_PATH = "/account";
 
 function day(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });

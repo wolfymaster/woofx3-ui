@@ -5,7 +5,7 @@ import { IS_DESKTOP } from "@/lib/desktop";
 import { useFeature } from "@/lib/feature-source";
 
 /** The org portal's billing screen. */
-const BILLING_PATH = "/org/billing";
+const BILLING_PATH = "/account";
 
 interface PaidFeatureProps {
   feature: EntitlementFeatureKey;

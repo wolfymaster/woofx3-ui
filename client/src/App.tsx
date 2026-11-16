@@ -94,11 +94,11 @@ const DesktopRelayWatch = IS_DESKTOP ? lazy(() => import("@/desktop/RelayWatch")
 const DesktopUpdateBanner = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateBanner")) : null;
 const DesktopLocalConnectionsGuide = IS_DESKTOP ? lazy(() => import("@/desktop/LocalConnectionsGuide")) : null;
 
-// The organization and billing portal is web only: the desktop app never shows
-// billing, so its build carries no /org route (account-portal/boundary.test.ts).
+// The account portal is web only: the desktop app never shows
+// billing, so its build carries no /account route (account-portal/boundary.test.ts).
 const AccountPortal = IS_DESKTOP ? null : lazy(() => import("@/account-portal/AccountPortal"));
-/** `/org` and every path under it. */
-const ACCOUNT_PORTAL_ROUTE = /^\/org(?:\/.*)?$/;
+/** `/account` and every path under it. */
+const ACCOUNT_PORTAL_ROUTE = /^\/account(?:\/.*)?$/;
 
 function SplashScreen() {
   return (

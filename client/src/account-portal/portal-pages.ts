@@ -1,6 +1,6 @@
 import type { OrgCapabilities } from "@convex/organizations";
 
-export const ACCOUNT_PORTAL_PATH = "/org";
+export const ACCOUNT_PORTAL_PATH = "/account";
 
 export type PortalPageId = "plan" | "payments" | "people" | "engines";
 
@@ -8,20 +8,20 @@ export interface PortalPage {
   id: PortalPageId;
   label: string;
   path: string;
-  /** The org action a role needs to see the page; its query answers null to everyone else. */
-  visibleWith: keyof OrgCapabilities;
+  /** The org action a role needs to see the page; null means every signed-in user sees it. */
+  visibleWith: keyof OrgCapabilities | null;
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [
-  { id: "plan", label: "Plan", path: ACCOUNT_PORTAL_PATH, visibleWith: "viewBilling" },
-  { id: "payments", label: "Payments", path: `${ACCOUNT_PORTAL_PATH}/payments`, visibleWith: "manageBilling" },
+  { id: "plan", label: "Plan", path: ACCOUNT_PORTAL_PATH, visibleWith: null },
+  { id: "payments", label: "Payments", path: `${ACCOUNT_PORTAL_PATH}/payments`, visibleWith: null },
   { id: "people", label: "People", path: `${ACCOUNT_PORTAL_PATH}/people`, visibleWith: "manageMembers" },
   { id: "engines", label: "Engines", path: `${ACCOUNT_PORTAL_PATH}/engines`, visibleWith: "viewOrganization" },
 ];
 
-/** The pages a role sees in the portal's nav. */
-export function visiblePages(can: OrgCapabilities): PortalPage[] {
-  return PORTAL_PAGES.filter((page) => can[page.visibleWith]);
+/** The pages a viewer sees in the portal's nav; `can` is null for a viewer with no organization. */
+export function visiblePages(can: OrgCapabilities | null): PortalPage[] {
+  return PORTAL_PAGES.filter((page) => page.visibleWith === null || can?.[page.visibleWith] === true);
 }
 
 export function portalPage(id: PortalPageId): PortalPage {
@@ -32,7 +32,7 @@ export function portalPage(id: PortalPageId): PortalPage {
   return page;
 }
 
-/** Whether a portal tab is the current one; the index matches only exactly, so `/org` is not active on `/org/payments`. */
+/** Whether a portal tab is the current one; the index matches only exactly, so `/account` is not active on `/account/payments`. */
 export function isActivePage(location: string, path: string): boolean {
   if (path === ACCOUNT_PORTAL_PATH) {
     return location === ACCOUNT_PORTAL_PATH;
