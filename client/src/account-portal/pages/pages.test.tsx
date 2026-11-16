@@ -127,6 +127,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
       manageEngines: true,
       renameEngine: owner,
       createEngine: owner,
+      deleteEngine: owner,
       viewBilling: true,
       manageBilling: owner,
     },
