@@ -16,6 +16,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { cn } from "@/lib/utils";
 import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
+import { organizationLabels } from "./organization-labels";
 import EnginesPage from "./pages/engines";
 import PaymentsPage from "./pages/payments";
 import PeoplePage from "./pages/people";
@@ -48,6 +49,8 @@ function defaultOrganization(organizations: MyOrganization[], engineAccountId: I
 
 function OrganizationSwitcher() {
   const { organization, organizations, select } = useOrganization();
+  const labels = organizationLabels(organizations);
+  const labelOf = (org: MyOrganization) => labels.get(org.accountId) ?? org.name;
   if (organizations.length < 2) {
     return <span className="font-medium truncate">{organization.name}</span>;
   }
@@ -55,7 +58,7 @@ function OrganizationSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-1 font-medium" data-testid="button-switch-organization">
-          <span className="truncate">{organization.name}</span>
+          <span className="truncate">{labelOf(organization)}</span>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
@@ -66,7 +69,7 @@ function OrganizationSwitcher() {
             onClick={() => select(org.accountId)}
             className="flex items-center justify-between"
           >
-            <span className="truncate">{org.name}</span>
+            <span className="truncate">{labelOf(org)}</span>
             {org.accountId === organization.accountId && <Check className="h-4 w-4 text-primary" />}
           </DropdownMenuItem>
         ))}

@@ -25,6 +25,8 @@ const ConvexAnswersContext = createContext<ConvexAnswers>({ members: null, meId:
 let search = "";
 const useTestSearch = () => search;
 // Answers per action, by function name; an action with no answer returns an empty list. `askedActions` records each ask.
+// An answer that never arrives, to hold a page in its loading state.
+const NEVER = Symbol("never");
 let actionAnswers: Record<string, unknown> = {};
 let askedActions: string[] = [];
 const actionFns = new Map<string, () => Promise<unknown>>();
@@ -33,7 +35,14 @@ function actionFor(name: string) {
   if (fn === undefined) {
     fn = async () => {
       askedActions.push(name);
-      return name in actionAnswers ? actionAnswers[name] : [];
+      const answer = name in actionAnswers ? actionAnswers[name] : [];
+      if (answer === NEVER) {
+        return new Promise(() => undefined);
+      }
+      if (answer instanceof Error) {
+        throw answer;
+      }
+      return answer;
     };
     actionFns.set(name, fn);
   }
@@ -413,5 +422,81 @@ describe("Payments page", () => {
     const renderer = await render(null, <PaymentsPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("No payments yet.");
     expect(byTestId(renderer, "link-become-sponsor")[0].props.href).toBe("/sponsor/start");
+  });
+});
+
+describe("when a billing lookup fails", () => {
+  const failed = new Error("Billing hit a problem.");
+
+  test.each([["owner" as const], ["admin" as const], [null]])(
+    "%p's Payments shows one error and no empty state",
+    async (role) => {
+      actionAnswers["sponsorships:mine"] = failed;
+      actionAnswers["billingCommands:invoices"] = failed;
+      const renderer = await render(role, <PaymentsPage />);
+      expect(byTestId(renderer, "text-payments-failed").length).toBe(1);
+      expect(JSON.stringify(renderer.toJSON())).not.toContain("No payments yet.");
+      expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
+    }
+  );
+
+  test("an owner whose invoices fail but whose sponsorships load sees the error and the loaded rows", async () => {
+    actionAnswers["billingCommands:invoices"] = failed;
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+    const renderer = await render("owner", <PaymentsPage />);
+    expect(byTestId(renderer, "text-payments-failed").length).toBe(1);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Monthly sponsorship");
+  });
+
+  test.each([["owner" as const], [null]])("%p's Plan shows the error or the pitch, never both", async (role) => {
+    actionAnswers["sponsorships:mine"] = failed;
+    const renderer = await render(role, <PlanPage />);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Billing hit a problem.");
+    expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("aren't sponsoring");
+  });
+});
+
+describe("loading, empty and loaded states", () => {
+  test.each([["owner" as const], [null]])(
+    "%p's Payments while loading shows neither rows, empty state nor error",
+    async (role) => {
+      actionAnswers["sponsorships:mine"] = NEVER;
+      actionAnswers["billingCommands:invoices"] = NEVER;
+      const renderer = await render(role, <PaymentsPage />);
+      expect(JSON.stringify(renderer.toJSON())).toContain("Loading payments...");
+      expect(JSON.stringify(renderer.toJSON())).not.toContain("No payments yet.");
+      expect(byTestId(renderer, "text-payments-failed").length).toBe(0);
+    }
+  );
+
+  test.each([["owner" as const], [null]])("%p's Plan while loading shows no pitch", async (role) => {
+    actionAnswers["sponsorships:mine"] = NEVER;
+    const renderer = await render(role, <PlanPage />);
+    expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
+  });
+
+  test.each([["owner" as const], [null]])("%p's empty Payments says so once", async (role) => {
+    actionAnswers["billingCommands:invoices"] = [];
+    const renderer = await render(role, <PaymentsPage />);
+    expect(JSON.stringify(renderer.toJSON()).split("No payments yet.").length - 1).toBe(1);
+    expect(byTestId(renderer, "text-payments-failed").length).toBe(0);
+  });
+});
+
+describe("narrow widths", () => {
+  test("engine rows stack their actions instead of clipping them in a table", async () => {
+    const renderer = await render("owner", <EnginesPage />);
+    const [row] = byTestId(renderer, "row-engine-instance-1");
+    expect(row.props.className).toContain("flex-col");
+    expect(renderer.root.findAll((node) => node.type === "table").length).toBe(0);
+  });
+
+  test("member rows stack their controls instead of clipping them in a table", async () => {
+    const answers = { members: [member("owner-user", "owner")], meId: "owner-user" };
+    const renderer = await render("owner", <PeoplePage />, answers);
+    const [row] = byTestId(renderer, "row-org-member-owner-user");
+    expect(row.props.className).toContain("flex-col");
+    expect(renderer.root.findAll((node) => node.type === "table").length).toBe(0);
   });
 });

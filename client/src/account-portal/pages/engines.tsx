@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { $currentInstanceId } from "@/lib/stores";
 import { NewEngineDialog } from "../new-engine-dialog";
 import { useOrganization } from "../organization-context";
@@ -61,36 +60,36 @@ export default function EnginesPage() {
           {organization.engines.length === 0 ? (
             <p className="text-sm text-muted-foreground">No engines yet.</p>
           ) : (
-            <Table>
-              <TableBody>
-                {organization.engines.map((engine) => (
-                  <TableRow key={engine.instanceId} data-testid={`row-engine-${engine.instanceId}`}>
-                    <TableCell className="font-medium">{engine.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{engine.hosting === "managed" ? "Hosted" : "Self-hosted"}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{engineStatus(engine)}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        {engine.canOpen ? (
-                          <Button size="sm" onClick={() => openDashboard(engine.instanceId)}>
-                            Open dashboard
-                          </Button>
-                        ) : null}
-                        {organization.can.renameEngine && engine.canOpen ? (
-                          <RenameDialog
-                            title="Rename engine"
-                            current={engine.name}
-                            onRename={(name) => renameEngine({ instanceId: engine.instanceId, name })}
-                            testId={`button-rename-engine-${engine.instanceId}`}
-                          />
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ul className="divide-y">
+              {organization.engines.map((engine) => (
+                <li
+                  key={engine.instanceId}
+                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  data-testid={`row-engine-${engine.instanceId}`}
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                    <span className="font-medium truncate">{engine.name}</span>
+                    <Badge variant="outline">{engine.hosting === "managed" ? "Hosted" : "Self-hosted"}</Badge>
+                    <span className="text-sm text-muted-foreground">{engineStatus(engine)}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {engine.canOpen ? (
+                      <Button size="sm" onClick={() => openDashboard(engine.instanceId)}>
+                        Open dashboard
+                      </Button>
+                    ) : null}
+                    {organization.can.renameEngine && engine.canOpen ? (
+                      <RenameDialog
+                        title="Rename engine"
+                        current={engine.name}
+                        onRename={(name) => renameEngine({ instanceId: engine.instanceId, name })}
+                        testId={`button-rename-engine-${engine.instanceId}`}
+                      />
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>

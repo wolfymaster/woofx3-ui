@@ -52,7 +52,12 @@ export default function Register() {
     setError(null);
     setIsLoading(true);
     try {
-      await signIn("password", { email, password, flow: "signUp" });
+      const { signingIn } = await signIn("password", { email, password, flow: "signUp" });
+      if (!signingIn) {
+        setError(registerError(new Error("sign-up returned no session")));
+        setIsLoading(false);
+        return;
+      }
       navigateAfterSignIn(afterRegisterPath());
     } catch (err) {
       setError(registerError(err));

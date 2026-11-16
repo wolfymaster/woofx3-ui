@@ -221,7 +221,7 @@ export function SponsorshipSection() {
         {sponsorships.map((sponsorship) => (
           <SponsorshipCard key={sponsorship.id} sponsorship={sponsorship} onChanged={reload} />
         ))}
-        {list.state !== "loading" && sponsorships.length === 0 ? (
+        {list.state === "ready" && sponsorships.length === 0 ? (
           <Button asChild variant="outline">
             <Link href={SPONSOR_START_PATH} data-testid="link-become-sponsor">
               Become a sponsor
