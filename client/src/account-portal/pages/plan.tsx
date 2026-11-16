@@ -23,7 +23,7 @@ import { useCheckoutPoll } from "@/lib/use-checkout-poll";
 import { billingView, checkoutRefusalAction } from "../billing-view";
 import { useOptionalOrganization, useOrganization } from "../organization-context";
 import { RenameDialog } from "../rename-dialog";
-import { SponsorshipSlot } from "../sponsorship-slot";
+import { SponsorshipSection } from "../sponsorship-section";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
 
 const PLAN_CHOICES: Array<{ plan: PlanTier; interval: BillingInterval; note?: string }> = [
@@ -242,11 +242,7 @@ export default function PlanPage() {
       />
       <div className="space-y-6">
         {organization?.can.manageBilling ? <OrganizationPlan /> : null}
-        <SponsorshipSlot
-          title="Your sponsorship"
-          description="You aren't sponsoring woofx3 yet. A sponsorship supports the project, and it shows up here."
-          testId="card-sponsorship"
-        />
+        <SponsorshipSection />
       </div>
     </>
   );
