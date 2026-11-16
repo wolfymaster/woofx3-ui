@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ENGINE_NAME_MAX_LENGTH } from "@convex/instances";
 import { useStore } from "@nanostores/react";
-import { useAction, useMutation as useConvexMutation } from "convex/react";
+import { useAction, useMutation as useConvexMutation, useQuery } from "convex/react";
 import { AlertTriangle, CheckCircle2, Loader2, Server, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CompanionCard } from "@/components/engine/companion-card";
@@ -36,6 +36,7 @@ type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
 function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; name: string }) {
   const updateInstance = useConvexMutation(api.instances.update);
+  const access = useQuery(api.organizations.capabilitiesForInstance, { instanceId });
   const { toast } = useToast();
   const [draft, setDraft] = useState(name);
   const [saving, setSaving] = useState(false);
@@ -59,6 +60,10 @@ function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; nam
       setSaving(false);
     }
   };
+
+  if (!access?.renameEngine) {
+    return null;
+  }
 
   return (
     <Card>

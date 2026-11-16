@@ -75,7 +75,7 @@ export default function EnginesPage() {
                             Open dashboard
                           </Button>
                         ) : null}
-                        {organization.can.manageEngines && engine.canOpen ? (
+                        {organization.can.renameEngine && engine.canOpen ? (
                           <RenameDialog
                             title="Rename engine"
                             current={engine.name}

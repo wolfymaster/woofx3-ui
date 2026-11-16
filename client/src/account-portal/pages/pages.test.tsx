@@ -82,6 +82,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
       manageMembers: true,
       viewMemberEmails: owner,
       manageEngines: true,
+      renameEngine: owner,
       viewBilling: true,
       manageBilling: owner,
     },
@@ -192,6 +193,13 @@ describe("People page", () => {
     expect(textOf(row)).not.toContain("—");
     expect(byTestId(renderer, "button-toggle-emails").length).toBe(0);
     expect(byTestId(renderer, "text-member-email").length).toBe(0);
+  });
+});
+
+describe("Engines page rename", () => {
+  test("only the owner sees the rename control", async () => {
+    expect(byTestId(await render("owner", <EnginesPage />), "button-rename-engine-instance-1").length).toBe(1);
+    expect(byTestId(await render("admin", <EnginesPage />), "button-rename-engine-instance-1").length).toBe(0);
   });
 });
 

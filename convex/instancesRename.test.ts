@@ -8,6 +8,7 @@ async function fixture() {
   const ids = await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", { name: "Owner" });
     const memberId = await ctx.db.insert("users", { name: "Member" });
+    const adminId = await ctx.db.insert("users", { name: "Admin" });
     const accountId = await ctx.db.insert("accounts", { name: "Acct", ownerId, createdAt: 1 });
     const instanceId = await ctx.db.insert("instances", {
       accountId,
@@ -18,10 +19,12 @@ async function fixture() {
     });
     await ctx.db.insert("instanceMembers", { instanceId, userId: ownerId, role: "owner" });
     await ctx.db.insert("instanceMembers", { instanceId, userId: memberId, role: "member" });
-    return { ownerId, memberId, instanceId };
+    await ctx.db.insert("accountMembers", { accountId, userId: adminId, role: "admin", createdAt: 1 });
+    await ctx.db.insert("instanceMembers", { instanceId, userId: adminId, role: "admin" });
+    return { ownerId, memberId, adminId, instanceId };
   });
   const as = (userId: typeof ids.ownerId) => t.withIdentity({ subject: `${userId}|session` });
-  return { t, instanceId: ids.instanceId, owner: as(ids.ownerId), member: as(ids.memberId) };
+  return { t, instanceId: ids.instanceId, owner: as(ids.ownerId), member: as(ids.memberId), admin: as(ids.adminId) };
 }
 
 describe("instances.update name", () => {
@@ -57,5 +60,16 @@ describe("instances.update name", () => {
     await expect(f.member.mutation(api.instances.update, { instanceId: f.instanceId, name: "X" })).rejects.toThrow(
       "Not authorized"
     );
+  });
+
+  test("an organization admin cannot rename, but still changes the address", async () => {
+    const f = await fixture();
+    await expect(f.admin.mutation(api.instances.update, { instanceId: f.instanceId, name: "X" })).rejects.toThrow(
+      "doesn't allow this"
+    );
+    await f.admin.mutation(api.instances.update, { instanceId: f.instanceId, url: "https://other.example" });
+    const row = await f.t.run((ctx) => ctx.db.get(f.instanceId));
+    expect(row?.name).toBe("Main");
+    expect(row?.url).toBe("https://other.example");
   });
 });
