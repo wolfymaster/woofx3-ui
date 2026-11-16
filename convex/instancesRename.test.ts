@@ -62,14 +62,12 @@ describe("instances.update name", () => {
     );
   });
 
-  test("an organization admin cannot rename, but still changes the address", async () => {
+  test("an organization admin cannot rename", async () => {
     const f = await fixture();
     await expect(f.admin.mutation(api.instances.update, { instanceId: f.instanceId, name: "X" })).rejects.toThrow(
       "doesn't allow this"
     );
-    await f.admin.mutation(api.instances.update, { instanceId: f.instanceId, url: "https://other.example" });
     const row = await f.t.run((ctx) => ctx.db.get(f.instanceId));
     expect(row?.name).toBe("Main");
-    expect(row?.url).toBe("https://other.example");
   });
 });

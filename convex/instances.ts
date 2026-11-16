@@ -7,6 +7,7 @@ import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { deleteCompanion } from "./lib/companionRecords";
 import { engineActivityPatch } from "./lib/engineSync/activity";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
+import { validateExternalEngineUrl } from "./lib/externalEngineUrl";
 import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
@@ -190,11 +191,11 @@ export const update = mutation({
     }
 
     const { instanceId, ...updates } = args;
+    const instance = await ctx.db.get(instanceId);
+    if (instance === null) {
+      throw new Error("Engine not found");
+    }
     if (updates.name !== undefined) {
-      const instance = await ctx.db.get(instanceId);
-      if (instance === null) {
-        throw new Error("Engine not found");
-      }
       await requireOrgActionFor(ctx, instance.accountId, userId, "renameEngine");
       updates.name = updates.name.trim();
       if (!updates.name || updates.name.length > ENGINE_NAME_MAX_LENGTH) {
@@ -204,7 +205,24 @@ export const update = mutation({
         });
       }
     }
-    await ctx.db.patch(instanceId, updates);
+    if (updates.url === undefined) {
+      await ctx.db.patch(instanceId, updates);
+      return;
+    }
+
+    // Every Convex call to the engine sends its stored credentials to this address.
+    if (instance.hosting === "managed") {
+      throw new ConvexError({
+        code: "managed_engine_url",
+        message: "A hosted engine's address is set by woofx3 and can't be changed",
+      });
+    }
+    await requireOrgActionFor(ctx, instance.accountId, userId, "changeEngineUrl");
+    const url = validateExternalEngineUrl(updates.url);
+    // The old credentials belong to the engine at the old address; registering again issues new ones.
+    const credentialsReset =
+      url === instance.url ? {} : { clientId: undefined, clientSecret: undefined, webhookSecret: undefined };
+    await ctx.db.patch(instanceId, { ...updates, url, ...credentialsReset });
   },
 });
 
