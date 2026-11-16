@@ -5,6 +5,7 @@ import {
   type OnboardingFacts,
   type OnboardingRoute,
   onboardingRoute,
+  setupWithoutEnginePath,
 } from "./onboarding-route";
 
 const none: OnboardingFacts = {
@@ -102,5 +103,16 @@ describe("noEnginePath", () => {
     { name: "the desktop app, with no account portal, onboards", owns: false, portal: false, path: "/auth/onboarding" },
   ])("$name", ({ owns, portal, path }) => {
     expect(noEnginePath({ ownsOrganization: owns, hasAccountPortal: portal })).toBe(path);
+  });
+});
+
+describe("setupWithoutEnginePath", () => {
+  test.each([
+    { name: "waits for the answer", owns: null, portal: true, path: null },
+    { name: "a plain user goes to their account", owns: false, portal: true, path: "/account" },
+    { name: "an owner without an engine onboards", owns: true, portal: true, path: "/auth/onboarding" },
+    { name: "the desktop app onboards", owns: false, portal: false, path: "/auth/onboarding" },
+  ])("$name", ({ owns, portal, path }) => {
+    expect(setupWithoutEnginePath({ ownsOrganization: owns, hasAccountPortal: portal })).toBe(path);
   });
 });
