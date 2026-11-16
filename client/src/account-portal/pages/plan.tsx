@@ -1,10 +1,9 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { AppliedDiscount } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
 import { useAction, useMutation } from "convex/react";
-import { useEffect, useReducer, useState } from "react";
+import { useCallback, useState } from "react";
 import { useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
 import { describeDiscount, formatPrice, PLAN_NAMES } from "@/billing/format";
@@ -19,20 +18,12 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
-import {
-  CHECKOUT_CANCELLED_TEXT,
-  CHECKOUT_POLL,
-  CHECKOUT_POLL_TEXT,
-  type CheckoutPoll,
-  type CheckoutPollEvent,
-  INITIAL_CHECKOUT_POLL,
-  nextCheckoutPoll,
-  parseCheckoutReturn,
-} from "@/lib/checkout-return";
+import { CHECKOUT_CANCELLED_TEXT, CHECKOUT_POLL_TEXT, parseCheckoutReturn } from "@/lib/checkout-return";
+import { useCheckoutPoll } from "@/lib/use-checkout-poll";
 import { billingView, checkoutRefusalAction } from "../billing-view";
 import { useOptionalOrganization, useOrganization } from "../organization-context";
 import { RenameDialog } from "../rename-dialog";
-import { SponsorshipSlot } from "../sponsorship-slot";
+import { SponsorshipSection } from "../sponsorship-section";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
 
 const PLAN_CHOICES: Array<{ plan: PlanTier; interval: BillingInterval; note?: string }> = [
@@ -160,54 +151,19 @@ function PlanChooser() {
   );
 }
 
-/** Asks the plane how the checkout the customer just paid for stands until it settles or the bound is reached. */
-function useCheckoutPoll(
-  accountId: Id<"accounts">,
-  checkoutId: string | null,
-  reflected: boolean
-): CheckoutPoll | null {
-  const checkoutState = useAction(api.billingCommands.checkoutState);
-  const [poll, dispatch] = useReducer(
-    (current: CheckoutPoll, event: CheckoutPollEvent) => nextCheckoutPoll(current, event, CHECKOUT_POLL.maxAttempts),
-    INITIAL_CHECKOUT_POLL
-  );
-  const settled = poll.phase !== "polling";
-  const attempts = poll.phase === "polling" ? poll.attempts : -1;
-  useEffect(() => {
-    if (checkoutId === null || settled) {
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(
-      async () => {
-        let event: CheckoutPollEvent;
-        try {
-          event = { type: "answered", state: (await checkoutState({ accountId, checkoutId })).state, reflected };
-        } catch {
-          // A failed ask is one spent attempt; the bound ends the polling.
-          event = { type: "failed" };
-        }
-        if (!cancelled) {
-          dispatch(event);
-        }
-      },
-      attempts === 0 ? 0 : CHECKOUT_POLL.intervalMs
-    );
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [accountId, checkoutId, checkoutState, settled, attempts, reflected]);
-  return checkoutId === null ? null : poll;
-}
-
 function OrganizationPlan() {
   const { organization } = useOrganization();
   const openPortal = useAction(api.billingCommands.openPortal);
+  const checkoutState = useAction(api.billingCommands.checkoutState);
+  const { accountId } = organization;
+  const askCheckoutState = useCallback(
+    async (checkoutId: string) => (await checkoutState({ accountId, checkoutId })).state,
+    [checkoutState, accountId]
+  );
   const checkoutReturn = parseCheckoutReturn(useSearch());
   const view = billingView(organization);
   const poll = useCheckoutPoll(
-    organization.accountId,
+    askCheckoutState,
     checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null,
     view.kind === "provider_managed"
   );
@@ -286,11 +242,7 @@ export default function PlanPage() {
       />
       <div className="space-y-6">
         {organization?.can.manageBilling ? <OrganizationPlan /> : null}
-        <SponsorshipSlot
-          title="Your sponsorship"
-          description="You aren't sponsoring woofx3 yet. A sponsorship supports the project, and it shows up here."
-          testId="card-sponsorship"
-        />
+        <SponsorshipSection />
       </div>
     </>
   );

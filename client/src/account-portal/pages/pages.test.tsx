@@ -1,5 +1,6 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
+import type { Invoice, Sponsorship } from "@convex/lib/billingClient";
 import type { OrgMember } from "@convex/organizations";
 import { getFunctionName } from "convex/server";
 import { createContext, type ReactNode, useContext } from "react";
@@ -21,13 +22,28 @@ interface ConvexAnswers {
 }
 const ConvexAnswersContext = createContext<ConvexAnswers>({ members: null, meId: "owner-user" });
 // One function for every render: the pages list invoices in an effect keyed on the action.
-const noSearch = () => "";
-const answerNothing = async () => [];
+let search = "";
+const useTestSearch = () => search;
+// Answers per action, by function name; an action with no answer returns an empty list. `askedActions` records each ask.
+let actionAnswers: Record<string, unknown> = {};
+let askedActions: string[] = [];
+const actionFns = new Map<string, () => Promise<unknown>>();
+function actionFor(name: string) {
+  let fn = actionFns.get(name);
+  if (fn === undefined) {
+    fn = async () => {
+      askedActions.push(name);
+      return name in actionAnswers ? actionAnswers[name] : [];
+    };
+    actionFns.set(name, fn);
+  }
+  return fn;
+}
 const convexReact = await import("convex/react");
 mock.module("convex/react", () => ({
   ...convexReact,
   useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
-  useAction: () => answerNothing,
+  useAction: (action: Parameters<typeof getFunctionName>[0]) => actionFor(getFunctionName(action)),
   useMutation: () => async () => null,
   useQuery: (query: Parameters<typeof getFunctionName>[0]) => {
     const answers = useContext(ConvexAnswersContext);
@@ -66,12 +82,26 @@ mock.module("@/components/ui/collapsible", () => ({
   CollapsibleContent: () => null,
 }));
 
+// Radix's toggle group reads the DOM for roving focus; the filter only needs its markup here.
+mock.module("@/components/ui/toggle-group", () => ({
+  ToggleGroup: ({ children, "data-testid": testId }: { children: ReactNode; "data-testid"?: string }) => (
+    <div data-testid={testId}>{children}</div>
+  ),
+  ToggleGroupItem: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
+}));
+
 const { default: EnginesPage } = await import("./engines");
 const { default: PeoplePage } = await import("./people");
 const { default: PaymentsPage } = await import("./payments");
 const { default: PlanPage } = await import("./plan");
 
 const ACCOUNT_ID = "account-1" as Id<"accounts">;
+
+beforeEach(() => {
+  search = "";
+  actionAnswers = {};
+  askedActions = [];
+});
 
 function selection(role: "owner" | "admin"): OrganizationSelection {
   const owner = role === "owner";
@@ -125,7 +155,7 @@ async function render(
   const memory = memoryLocation({ path: "/account" });
   await act(async () => {
     renderer = create(
-      <Router hook={memory.hook} searchHook={noSearch}>
+      <Router hook={memory.hook} searchHook={useTestSearch}>
         <ConvexAnswersContext.Provider value={answers}>
           {role === null ? page : <OrganizationProvider value={selection(role)}>{page}</OrganizationProvider>}
         </ConvexAnswersContext.Provider>
@@ -139,6 +169,13 @@ async function render(
     throw new Error("render: the renderer was not created");
   }
   return renderer;
+}
+
+/** Lets the poll's first timer and the answers it triggers run. */
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
 }
 
 function byTestId(renderer: ReactTestRenderer, id: string) {
@@ -212,8 +249,42 @@ describe("Engines page rename", () => {
   });
 });
 
+const SPONSORSHIP: Sponsorship = {
+  id: "sp1",
+  interval: "month",
+  amountCents: 25_000,
+  currency: "usd",
+  state: "active",
+  cancelAtPeriodEnd: false,
+  currentPeriodEnd: Date.parse("2026-12-01T12:00:00Z"),
+  createdAt: Date.parse("2026-11-01T12:00:00Z"),
+  payments: [
+    { id: "pay1", amountCents: 25_000, status: "paid", paidAt: Date.parse("2026-11-01T12:00:00Z"), receiptUrl: null },
+  ],
+};
+const ONE_TIME: Sponsorship = {
+  ...SPONSORSHIP,
+  id: "sp2",
+  interval: "once",
+  state: "complete",
+  currentPeriodEnd: null,
+};
+const INVOICE: Invoice = {
+  id: "in1",
+  periodStart: Date.parse("2026-10-01T12:00:00Z"),
+  amountCents: 6_000,
+  status: "paid",
+  hostedUrl: null,
+};
+
+const MANAGE_BUTTONS = [
+  "button-change-amount-sp1",
+  "button-update-payment-method-sp1",
+  "button-cancel-sponsorship-sp1",
+];
+
 describe("Plan page", () => {
-  test("the owner sees the organization's subscription and the sponsorship slot", async () => {
+  test("the owner sees the organization's subscription and the sponsorship card", async () => {
     const renderer = await render("owner", <PlanPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Subscription");
     expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
@@ -224,24 +295,123 @@ describe("Plan page", () => {
     expect(byTestId(await render("admin", <PlanPage />), "button-rename-organization").length).toBe(0);
   });
 
-  test.each([["admin" as const], [null]])("%p sees the sponsorship slot alone", async (role) => {
+  test.each([["admin" as const], [null]])("%p with no sponsorship sees the pitch alone", async (role) => {
+    actionAnswers["sponsorships:mine"] = [];
     const renderer = await render(role, <PlanPage />);
     expect(JSON.stringify(renderer.toJSON())).not.toContain("Subscription");
     expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
     expect(byTestId(renderer, "link-become-sponsor")[0].props.href).toBe("/sponsor/start");
   });
+
+  test.each([["owner" as const], ["admin" as const], [null]])(
+    "%p sees their monthly sponsorship and can manage it",
+    async (role) => {
+      actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+      const renderer = await render(role, <PlanPage />);
+      expect(text(renderer, "text-sponsorship-amount")).toEqual(["$250/mo"]);
+      expect(text(renderer, "text-sponsorship-state")).toEqual(["Active"]);
+      expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
+      for (const id of MANAGE_BUTTONS) {
+        expect(byTestId(renderer, id).length).toBe(1);
+      }
+    }
+  );
+
+  test("a one-time sponsorship has nothing to manage", async () => {
+    actionAnswers["sponsorships:mine"] = [{ ...ONE_TIME, id: "sp1" }];
+    const renderer = await render(null, <PlanPage />);
+    expect(text(renderer, "text-sponsorship-amount")).toEqual(["$250 once"]);
+    for (const id of MANAGE_BUTTONS) {
+      expect(byTestId(renderer, id).length).toBe(0);
+    }
+  });
+
+  test("a sponsorship set to end offers no changes", async () => {
+    actionAnswers["sponsorships:mine"] = [{ ...SPONSORSHIP, cancelAtPeriodEnd: true }];
+    const renderer = await render(null, <PlanPage />);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Canceled. Your sponsorship ends on");
+    for (const id of MANAGE_BUTTONS) {
+      expect(byTestId(renderer, id).length).toBe(0);
+    }
+  });
+
+  test("a failed payment says so and still offers the card update", async () => {
+    actionAnswers["sponsorships:mine"] = [{ ...SPONSORSHIP, state: "past_due" }];
+    const renderer = await render(null, <PlanPage />);
+    expect(JSON.stringify(renderer.toJSON())).toContain("didn't go through");
+    expect(byTestId(renderer, "button-update-payment-method-sp1").length).toBe(1);
+  });
+});
+
+describe("Plan page checkout return", () => {
+  test("stays pending while the plane has not completed the checkout", async () => {
+    search = "sponsorship=done&sponsorshipCheckout=c1";
+    actionAnswers["sponsorships:checkoutState"] = { state: "awaiting_payment" };
+    const renderer = await render(null, <PlanPage />);
+    await settle();
+    expect(text(renderer, "text-sponsorship-done")).toEqual(["Finalizing your payment..."]);
+    expect(askedActions).toContain("sponsorships:checkoutState");
+  });
+
+  test("confirms only once the plane says complete, then reloads the sponsorships", async () => {
+    search = "sponsorship=done&sponsorshipCheckout=c1";
+    actionAnswers["sponsorships:checkoutState"] = { state: "complete" };
+    const renderer = await render(null, <PlanPage />);
+    await settle();
+    expect(text(renderer, "text-sponsorship-done")[0]).toContain("Your payment is confirmed");
+    expect(askedActions.filter((name) => name === "sponsorships:mine").length).toBeGreaterThan(1);
+  });
+
+  test("a return with no checkout id is pending without asking", async () => {
+    search = "sponsorship=done";
+    const renderer = await render(null, <PlanPage />);
+    expect(text(renderer, "text-sponsorship-done")[0]).toContain("being confirmed");
+    expect(askedActions).not.toContain("sponsorships:checkoutState");
+  });
+
+  test("a cancelled checkout says nothing was charged", async () => {
+    search = "sponsorship=cancelled";
+    const renderer = await render(null, <PlanPage />);
+    expect(text(renderer, "text-sponsorship-cancelled")).toEqual(["Checkout cancelled. Nothing was charged."]);
+  });
+
+  test("the organization's checkout keys do not start a sponsorship return", async () => {
+    search = "checkout=done&checkoutId=c1";
+    const renderer = await render(null, <PlanPage />);
+    expect(byTestId(renderer, "text-sponsorship-done").length).toBe(0);
+    expect(askedActions).not.toContain("sponsorships:checkoutState");
+  });
 });
 
 describe("Payments page", () => {
-  test("the owner sees the organization's payment history and the sponsor slot", async () => {
+  test("the owner with both kinds sees one history and the filter", async () => {
+    actionAnswers["billingCommands:invoices"] = [INVOICE];
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
     const renderer = await render("owner", <PaymentsPage />);
-    expect(JSON.stringify(renderer.toJSON())).toContain("Payment history");
-    expect(byTestId(renderer, "card-sponsor-payments").length).toBe(1);
+    expect(byTestId(renderer, "filter-payments").length).toBeGreaterThan(0);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Monthly sponsorship");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Plan");
   });
 
-  test.each([["admin" as const], [null]])("%p sees sponsor rows alone", async (role) => {
+  test("the owner with invoices alone gets no filter", async () => {
+    actionAnswers["billingCommands:invoices"] = [INVOICE];
+    actionAnswers["sponsorships:mine"] = [];
+    const renderer = await render("owner", <PaymentsPage />);
+    expect(byTestId(renderer, "filter-payments").length).toBe(0);
+  });
+
+  test.each([["admin" as const], [null]])("%p sees sponsor rows alone and never asks for invoices", async (role) => {
+    actionAnswers["billingCommands:invoices"] = [INVOICE];
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
     const renderer = await render(role, <PaymentsPage />);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Payment history");
-    expect(byTestId(renderer, "card-sponsor-payments").length).toBe(1);
+    expect(askedActions).not.toContain("billingCommands:invoices");
+    expect(byTestId(renderer, "filter-payments").length).toBe(0);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Monthly sponsorship");
+  });
+
+  test("with no payments of either kind, offers to sponsor", async () => {
+    const renderer = await render(null, <PaymentsPage />);
+    expect(JSON.stringify(renderer.toJSON())).toContain("No payments yet.");
+    expect(byTestId(renderer, "link-become-sponsor")[0].props.href).toBe("/sponsor/start");
   });
 });

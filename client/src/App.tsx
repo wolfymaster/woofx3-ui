@@ -41,6 +41,7 @@ import {
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
+import { SPONSOR_START_PATH } from "@/sponsorship/sponsorship-text";
 import { convexClient as convex } from "./lib/convexClient";
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
@@ -97,6 +98,8 @@ const DesktopLocalConnectionsGuide = IS_DESKTOP ? lazy(() => import("@/desktop/L
 // The account portal is web only: the desktop app never shows
 // billing, so its build carries no /account route (account-portal/boundary.test.ts).
 const AccountPortal = IS_DESKTOP ? null : lazy(() => import("@/account-portal/AccountPortal"));
+// /sponsor/start is web only for the same reason (account-portal/boundary.test.ts).
+const SponsorStart = IS_DESKTOP ? null : lazy(() => import("@/sponsorship/SponsorStart"));
 /** `/account` and every path under it. */
 const ACCOUNT_PORTAL_ROUTE = /^\/account(?:\/.*)?$/;
 
@@ -228,6 +231,16 @@ function AppRoutes() {
           <AuthGuard>
             <PageBoundary resetKey={location}>
               <AccountPortal />
+            </PageBoundary>
+          </AuthGuard>
+        </Route>
+      )}
+
+      {SponsorStart && (
+        <Route path={SPONSOR_START_PATH}>
+          <AuthGuard>
+            <PageBoundary resetKey={location}>
+              <SponsorStart />
             </PageBoundary>
           </AuthGuard>
         </Route>
