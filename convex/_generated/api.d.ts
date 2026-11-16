@@ -291,6 +291,7 @@ import type * as setupImports from "../setupImports.js";
 import type * as setupPlatforms from "../setupPlatforms.js";
 import type * as setupPlatformsActions from "../setupPlatformsActions.js";
 import type * as shoutouts from "../shoutouts.js";
+import type * as sponsorships from "../sponsorships.js";
 import type * as starterPacks from "../starterPacks.js";
 import type * as storage from "../storage.js";
 import type * as streamInfo from "../streamInfo.js";
@@ -616,6 +617,7 @@ declare const fullApi: ApiFromModules<{
   setupPlatforms: typeof setupPlatforms;
   setupPlatformsActions: typeof setupPlatformsActions;
   shoutouts: typeof shoutouts;
+  sponsorships: typeof sponsorships;
   starterPacks: typeof starterPacks;
   storage: typeof storage;
   streamInfo: typeof streamInfo;
