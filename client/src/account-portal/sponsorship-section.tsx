@@ -151,6 +151,7 @@ function SponsorshipCard({ sponsorship, onChanged }: { sponsorship: Sponsorship;
                 : `Your sponsorship stays active until ${formatDay(sponsorship.currentPeriodEnd)}, then stops. You can sponsor again any time.`
             }
             confirmLabel="Cancel sponsorship"
+            dismissLabel="Keep sponsorship"
             destructive
             onConfirm={confirmCancel}
             testId={`button-confirm-cancel-${sponsorship.id}`}
