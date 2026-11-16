@@ -383,35 +383,20 @@ describe("invitations.accept", () => {
   });
 });
 
-describe("migration invitationEngineTarget (M4)", () => {
-  test("targets the registered engine, expires invites of orgs without one, and is idempotent", async () => {
+describe("migration deleteInvitationsWithoutEngine", () => {
+  test("deletes invitations that name no engine, keeps the rest, and is idempotent", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
-    await addEngine(t, org, "unregistered");
     const legacyId = await legacyInvite(t, org, "a@example.com", "admin");
-    const empty = await t.run(async (ctx) => {
-      const ownerId = await ctx.db.insert("users", { name: "Lonely" });
-      const accountId = await ctx.db.insert("accounts", { name: "Empty", ownerId, createdAt: 1 });
-      return ctx.db.insert("invitations", {
-        accountId,
-        email: "b@example.com",
-        role: "member",
-        token: "empty",
-        invitedByUserId: ownerId,
-        status: "pending",
-        expiresAt: Date.now() + DAY_MS,
-        createdAt: 1,
-      });
-    });
-    const snapshot = () =>
-      t.run(async (ctx) => ({ legacy: await ctx.db.get(legacyId), empty: await ctx.db.get(empty) }));
+    await invite(t, org.ownerId, org.instanceId, "b@example.com");
+    const snapshot = () => t.run((ctx) => ctx.db.query("invitations").collect());
 
-    await runMigration(t, internal.migrations.invitations.invitationEngineTarget);
+    await runMigration(t, internal.migrations.invitations.deleteInvitationsWithoutEngine);
     const first = await snapshot();
-    expect(first.legacy).toMatchObject({ instanceId: org.instanceId, engineRole: "admin", status: "pending" });
-    expect(first.empty?.status).toBe("expired");
+    expect(first.map((r) => r.email)).toEqual(["b@example.com"]);
+    expect(await t.run((ctx) => ctx.db.get(legacyId))).toBeNull();
 
-    await runMigration(t, internal.migrations.invitations.invitationEngineTarget);
+    await runMigration(t, internal.migrations.invitations.deleteInvitationsWithoutEngine);
     expect(await snapshot()).toEqual(first);
   });
 });

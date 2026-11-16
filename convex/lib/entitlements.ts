@@ -140,9 +140,8 @@ export interface PlanRow {
   limits: readonly LimitValue[];
 }
 
-/** An account's assignment: its plan, if not the default, and changes to it for this account alone. */
+/** Changes to a plan for one account alone, as the billing projection carries them. */
 export interface AccountPlanRow {
-  planId?: unknown;
   addFeatures: readonly string[];
   removeFeatures: readonly string[];
   limits: readonly LimitValue[];

@@ -6,21 +6,12 @@ import {
   ENTITLEMENT_CATALOG,
   type EntitlementFeatureKey,
   type Entitlements,
-  isAssignmentActive,
   isUsable,
   resolveEntitlements,
   type SubscriptionSummary,
 } from "./entitlements";
 import type { LifecycleReason } from "./organization";
 import { billingFor } from "./orgBilling";
-
-/** The plan for accounts without an active assignment, or null when operators have marked none. */
-export async function defaultPlan(ctx: QueryCtx): Promise<Doc<"plans"> | null> {
-  return ctx.db
-    .query("plans")
-    .withIndex("by_default", (q) => q.eq("isDefault", true))
-    .unique();
-}
 
 /** The plan row for a tier. A tier with no row is an operator setup error, so it throws. */
 async function tierPlan(ctx: QueryCtx, key: string): Promise<Doc<"plans">> {
@@ -38,8 +29,7 @@ async function tierPlan(ctx: QueryCtx, key: string): Promise<Doc<"plans">> {
  * The org's entitlements at `nowMs`. With a billing projection from the
  * management plane, its tier's plan applies in a usable standing and none
  * applies while suspended, with the overrides the projection carries. An org
- * without one keeps the operator assignment (`accountPlans`) or default plan
- * it had before billing existed.
+ * without one has no plan: the code defaults for limits, and no paid features.
  */
 export async function accountEntitlements(
   ctx: QueryCtx,
@@ -55,25 +45,7 @@ export async function accountEntitlements(
       grantedFeatures: addOnFeatures(summary, billing.addOns),
     });
   }
-  const assignment = await accountPlanFor(ctx, accountId);
-  let plan: Doc<"plans"> | null;
-  if (isAssignmentActive(assignment, nowMs) && assignment.planId !== undefined) {
-    plan = await ctx.db.get(assignment.planId);
-    if (plan === null) {
-      // deletePlan refuses a plan any account is on.
-      throw new Error(`Account ${accountId} is on plan ${assignment.planId}, which does not exist`);
-    }
-  } else {
-    plan = await defaultPlan(ctx);
-  }
-  return resolveEntitlements(plan, assignment, nowMs);
-}
-
-async function accountPlanFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise<Doc<"accountPlans"> | null> {
-  return ctx.db
-    .query("accountPlans")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .unique();
+  return resolveEntitlements(null, null, nowMs);
 }
 
 /**

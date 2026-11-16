@@ -20,7 +20,6 @@ import {
   userDto,
   userRefDto,
 } from "../lib/ops/dto";
-import type { AssignmentRow, PlanRow } from "../lib/ops/planCounts";
 import { type HostedStorageLimitsDto, hostedStorageLimitsDto } from "./storageLimits";
 
 /**
@@ -460,48 +459,6 @@ async function toAccountSummary(ctx: QueryCtx, account: Doc<"accounts">, now: nu
     engines.filter((engine) => engine.status !== "deleted").length
   );
 }
-
-/**
- * Plan counts read every account and assignment, so they come a page at a time: ops/http.ts walks the pages, and
- * each query stays inside Convex's per-query read limit however many accounts there are.
- */
-const COUNT_PAGE_SIZE = 4000;
-
-export const plansForCount = internalQuery({
-  args: {},
-  handler: async (ctx): Promise<PlanRow[]> => {
-    const plans = await ctx.db.query("plans").collect();
-    return plans.map((plan) => ({
-      id: plan._id,
-      key: plan.key,
-      name: plan.name,
-      offered: plan.offered,
-      isDefault: plan.isDefault,
-    }));
-  },
-});
-
-export const accountCountPage = internalQuery({
-  args: { cursor: cursorArg },
-  handler: async (ctx, { cursor }): Promise<{ count: number; cursor: string | null }> => {
-    const result = await ctx.db.query("accounts").paginate({ numItems: COUNT_PAGE_SIZE, cursor });
-    return { count: result.page.length, cursor: result.isDone ? null : result.continueCursor };
-  },
-});
-
-export const assignmentPage = internalQuery({
-  args: { cursor: cursorArg },
-  handler: async (ctx, { cursor }): Promise<{ assignments: AssignmentRow[]; cursor: string | null }> => {
-    const result = await ctx.db.query("accountPlans").paginate({ numItems: COUNT_PAGE_SIZE, cursor });
-    return {
-      assignments: result.page.map((row) => ({
-        ...(row.planId === undefined ? {} : { planId: row.planId }),
-        ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
-      })),
-      cursor: result.isDone ? null : result.continueCursor,
-    };
-  },
-});
 
 /** Which route a registered engine posts its events to; the gate for retiring the webhook route's events. */
 export interface EngineEventPathDto {

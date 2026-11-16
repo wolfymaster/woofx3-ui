@@ -67,14 +67,31 @@ export async function fixture({
       });
     }
     await ctx.db.insert("plans", {
-      key: "free",
-      name: "Free",
+      key: "starter",
+      name: "Starter",
       features: entitled ? ["userPages"] : [],
       limits: [],
       offered: true,
-      isDefault: true,
       updatedAt: 1,
       updatedBy: "test",
+    });
+    await ctx.db.insert("orgBilling", {
+      accountId,
+      version: 1,
+      tier: "starter",
+      addOns: [],
+      standing: "active",
+      reason: null,
+      trialEndsAt: null,
+      graceEndsAt: null,
+      periodEnd: null,
+      interval: null,
+      exemptUntil: null,
+      spinDownAt: null,
+      hasProviderSubscription: false,
+      discount: null,
+      overrides: { addFeatures: [], removeFeatures: [], limits: [] },
+      updatedAt: 1,
     });
     const moduleId = await ctx.db.insert("moduleRepository", {
       instanceId,

@@ -32,7 +32,7 @@ describe("matchOpsRoute", () => {
       instanceId: "i1",
     });
     expect(matchOpsRoute("GET", "/api/ops/audit")).toEqual({ method: "GET", name: "audit.list" });
-    expect(matchOpsRoute("GET", "/api/ops/plans")).toEqual({ method: "GET", name: "plans.list" });
+    expect(matchOpsRoute("GET", "/api/ops/plans")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/notifications")).toEqual({ method: "GET", name: "notifications.list" });
     expect(matchOpsRoute("GET", "/api/ops/payments/strays")).toBeNull();
   });

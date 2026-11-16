@@ -59,7 +59,6 @@ describe("billingBanner.forViewer", () => {
         features: [],
         limits: [],
         offered: true,
-        isDefault: false,
         updatedAt: 1,
         updatedBy: "test",
       });
