@@ -17,7 +17,7 @@ import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import { orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
+import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import {
   applyOrgRoleToEngines,
   getAccountMembership,
@@ -49,9 +49,11 @@ type PendingInvitation = Pick<
   | "platformDisplayName"
   | "platformProfileImageUrl"
   | "role"
+  | "instanceId"
+  | "engineRole"
   | "createdAt"
   | "expiresAt"
-> & { instanceId: Id<"instances"> | null; engineRole: "admin" | "member" | null };
+>;
 
 function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
   return {
@@ -62,8 +64,8 @@ function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
     platformDisplayName: r.platformDisplayName,
     platformProfileImageUrl: r.platformProfileImageUrl,
     role: r.role,
-    instanceId: r.instanceId ?? null,
-    engineRole: r.engineRole ?? null,
+    instanceId: r.instanceId,
+    engineRole: r.engineRole,
     createdAt: r.createdAt,
     expiresAt: r.expiresAt,
   };
@@ -84,26 +86,15 @@ export const listForEngine = query({
     if (userId === null) {
       return null;
     }
-    const instance = await ctx.db.get(instanceId);
     const membership = await getInstanceMembership(ctx, instanceId, userId);
-    if (instance === null || !roleSatisfies(membership?.role, "admin")) {
+    if (!roleSatisfies(membership?.role, "admin")) {
       return null;
     }
-    const engineRows = await ctx.db
+    const rows = await ctx.db
       .query("invitations")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId).eq("status", "pending"))
       .collect();
-    const account = await ctx.db.get(instance.accountId);
-    const orgWideRows =
-      account !== null && orgCan(await orgRoleOf(ctx, account, userId), "manageMembers")
-        ? (
-            await ctx.db
-              .query("invitations")
-              .withIndex("by_account", (q) => q.eq("accountId", instance.accountId))
-              .collect()
-          ).filter((r) => r.instanceId === undefined && r.status === "pending")
-        : [];
-    const invitations = [...engineRows, ...orgWideRows].filter((r) => r.expiresAt > now).map(toPendingInvitation);
+    const invitations = rows.filter((r) => r.expiresAt > now).map(toPendingInvitation);
     return { invitations };
   },
 });
@@ -208,13 +199,9 @@ async function twitchInviteRefusal(
   return null;
 }
 
-/** A live invitation to this engine. An org-wide one from before engine invites counts for every engine. */
+/** A live invitation to this engine. */
 function isPendingFor(invitation: Doc<"invitations">, instanceId: Id<"instances">, now: number): boolean {
-  return (
-    invitation.status === "pending" &&
-    invitation.expiresAt > now &&
-    (invitation.instanceId === undefined || invitation.instanceId === instanceId)
-  );
+  return invitation.status === "pending" && invitation.expiresAt > now && invitation.instanceId === instanceId;
 }
 
 /** Why the Twitch user cannot be invited to the engine, or null when they can. */
@@ -532,12 +519,7 @@ export const revoke = mutation({
     const inv = await ctx.db.get(args.invitationId);
     if (!inv) throw new Error("Invitation not found");
 
-    // An engine's admins manage its invitations; an org-wide one is the org's.
-    if (inv.instanceId === undefined) {
-      await requireOrgAction(ctx, inv.accountId, "manageMembers");
-    } else {
-      await requireInstanceRole(ctx, inv.instanceId, "admin");
-    }
+    await requireInstanceRole(ctx, inv.instanceId, "admin");
 
     if (inv.status !== "pending") {
       throw new Error("Invitation is no longer pending");
