@@ -17,7 +17,7 @@ export type OrgAction =
 /** Which org roles may take each action. Admin is Owner minus billing. */
 const ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   viewOrganization: ["owner", "admin", "member"],
-  renameOrganization: ["owner", "admin"],
+  renameOrganization: ["owner"],
   manageMembers: ["owner", "admin"],
   // Members are mostly invited by their platform name, so their addresses are
   // private: only the owner, who holds the account, sees them.

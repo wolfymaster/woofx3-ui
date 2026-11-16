@@ -78,7 +78,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
     role,
     can: {
       viewOrganization: true,
-      renameOrganization: true,
+      renameOrganization: owner,
       manageMembers: true,
       viewMemberEmails: owner,
       manageEngines: true,
@@ -200,6 +200,11 @@ describe("Plan page", () => {
     const renderer = await render("owner", <PlanPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Subscription");
     expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
+  });
+
+  test("only the owner's header has the rename control", async () => {
+    expect(byTestId(await render("owner", <PlanPage />), "button-rename-organization").length).toBe(1);
+    expect(byTestId(await render("admin", <PlanPage />), "button-rename-organization").length).toBe(0);
   });
 
   test.each([["admin" as const], [null]])("%p sees the sponsorship slot alone", async (role) => {

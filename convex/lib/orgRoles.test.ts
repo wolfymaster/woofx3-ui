@@ -12,7 +12,7 @@ const CASES: Array<[OrgRole | null, OrgAction, boolean]> = [
   ["owner", "viewBilling", true],
   ["owner", "manageBilling", true],
   ["admin", "viewOrganization", true],
-  ["admin", "renameOrganization", true],
+  ["admin", "renameOrganization", false],
   ["admin", "manageMembers", true],
   ["admin", "viewMemberEmails", false],
   ["admin", "manageEngines", true],
