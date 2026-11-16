@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { enginesForOnboarding, type OnboardingFacts, type OnboardingRoute, onboardingRoute } from "./onboarding-route";
+import {
+  enginesForOnboarding,
+  noEnginePath,
+  type OnboardingFacts,
+  type OnboardingRoute,
+  onboardingRoute,
+} from "./onboarding-route";
 
 const none: OnboardingFacts = {
   instances: [],
@@ -86,5 +92,15 @@ describe("enginesForOnboarding", () => {
     const facts = { ...none, instances: enginesForOnboarding([invited], true) };
     expect(onboardingRoute(facts)).toBe("choose");
     expect(onboardingRoute({ ...none, instances: enginesForOnboarding([invited], false) })).toBe("setup");
+  });
+});
+
+describe("noEnginePath", () => {
+  test.each([
+    { name: "a plain user goes to their account", owns: false, portal: true, path: "/account" },
+    { name: "an owner whose engine is gone sets up another", owns: true, portal: true, path: "/auth/onboarding" },
+    { name: "the desktop app, with no account portal, onboards", owns: false, portal: false, path: "/auth/onboarding" },
+  ])("$name", ({ owns, portal, path }) => {
+    expect(noEnginePath({ ownsOrganization: owns, hasAccountPortal: portal })).toBe(path);
   });
 });

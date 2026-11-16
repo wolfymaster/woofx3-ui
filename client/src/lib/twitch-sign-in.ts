@@ -22,8 +22,13 @@ export const TWITCH_SIGN_IN_STORAGE_ERROR =
 export function startTwitchSignIn(redirectTo: string): void {
   const nonce = generateOpaqueToken();
   window.sessionStorage.setItem(NONCE_KEY, nonce);
+  window.location.href = twitchSignInStartUrl(convexSiteUrl(), redirectTo, nonce);
+}
+
+/** The Convex route that starts a Twitch sign-in, carrying where to land afterwards. */
+export function twitchSignInStartUrl(siteUrl: string, redirectTo: string, nonce: string): string {
   const params = new URLSearchParams({ redirect_to: redirectTo, nonce });
-  window.location.href = `${convexSiteUrl()}/api/auth/twitch/start?${params}`;
+  return `${siteUrl}/api/auth/twitch/start?${params}`;
 }
 
 /** The nonce this tab started a sign-in with, or null. Removed as it is read: it is good for one sign-in. */

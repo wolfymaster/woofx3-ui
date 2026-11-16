@@ -28,6 +28,16 @@ export function nextPathFromLocation(fallback: string): string {
   return safeNextPath(new URLSearchParams(window.location.search).get("next"), fallback);
 }
 
+/**
+ * Where a new account goes after sign-up, by password or Twitch: onboarding,
+ * unless it was created on the way somewhere else. An invitee goes back to
+ * accept the invitation and a sponsor on to their sponsorship, neither through
+ * onboarding to set up an engine of their own.
+ */
+export function afterRegisterPath(search: string): string {
+  return safeNextPath(new URLSearchParams(search).get("next"), "/auth/onboarding");
+}
+
 /** A link to another auth page that carries this page's `?next=` along. */
 export function withNext(path: string, next: string | null): string {
   return next ? `${path}?next=${encodeURIComponent(next)}` : path;

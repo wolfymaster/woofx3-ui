@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
-import { nextPathFromLocation, withNext } from "@/lib/auth-next-path";
+import { afterRegisterPath, nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { PASSWORD_MIN_LENGTH, type RegisterError, registerError } from "@/lib/register-error";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
@@ -18,15 +18,6 @@ import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-si
 // window cannot follow. IS_DESKTOP is a build constant, so the web build
 // carries none of it.
 const DesktopTwitchSignIn = IS_DESKTOP ? lazy(() => import("@/desktop/TwitchSignIn")) : null;
-
-/**
- * Where a new account goes next: onboarding, unless it was created on the way
- * somewhere else. An invitee comes here from the invitation and goes back to
- * accept it, rather than through onboarding to set up an engine of their own.
- */
-function afterRegisterPath(): string {
-  return nextPathFromLocation("/auth/onboarding");
-}
 
 export default function Register() {
   const navigateAfterSignIn = useNavigateAfterSignIn();
@@ -40,7 +31,7 @@ export default function Register() {
     setError(null);
     setIsLoading(true);
     try {
-      startTwitchSignIn(afterRegisterPath());
+      startTwitchSignIn(afterRegisterPath(window.location.search));
     } catch {
       setError({ kind: "exists-or-unknown", message: TWITCH_SIGN_IN_STORAGE_ERROR });
       setIsLoading(false);
@@ -58,7 +49,7 @@ export default function Register() {
         setIsLoading(false);
         return;
       }
-      navigateAfterSignIn(afterRegisterPath());
+      navigateAfterSignIn(afterRegisterPath(window.location.search));
     } catch (err) {
       setError(registerError(err));
       setIsLoading(false);
@@ -83,7 +74,7 @@ export default function Register() {
           <CardContent className="space-y-4">
             {DesktopTwitchSignIn ? (
               <Suspense fallback={null}>
-                <DesktopTwitchSignIn nextPath={afterRegisterPath()} />
+                <DesktopTwitchSignIn nextPath={afterRegisterPath(window.location.search)} />
               </Suspense>
             ) : (
               <Button className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>

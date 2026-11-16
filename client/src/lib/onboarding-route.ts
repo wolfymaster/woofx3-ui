@@ -58,3 +58,19 @@ export function enginesForOnboarding<T extends { ownedByMe: boolean }>(
 ): T[] {
   return wantsNewEngine ? instances.filter((instance) => instance.ownedByMe) : [...instances];
 }
+
+/** The account portal. It is only in the web build, so this is spelled out rather than imported from it. */
+export const ACCOUNT_PATH = "/account";
+
+/**
+ * Where the dashboard sends a signed-in user it has no engine to open for. An
+ * organization owner whose engine is gone sets up another. A plain user, such
+ * as a sponsor, is not pushed into making one: they go to their account, which
+ * offers it. The desktop app has no account portal, so it always onboards.
+ */
+export function noEnginePath(facts: { ownsOrganization: boolean; hasAccountPortal: boolean }): string {
+  if (facts.ownsOrganization || !facts.hasAccountPortal) {
+    return "/auth/onboarding";
+  }
+  return ACCOUNT_PATH;
+}

@@ -10,6 +10,8 @@ import { SuspendedEngine } from "@/components/layout/suspended-engine";
 import { AskAdminToConnectTwitch } from "@/components/setup/twitch-step";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
+import { IS_DESKTOP } from "@/lib/desktop";
+import { noEnginePath } from "@/lib/onboarding-route";
 import { firstIncompleteStep, overlayPageRedirects, setupStepPath } from "@/lib/setup-steps";
 import { $dashboardLayoutHint } from "@/lib/stores";
 
@@ -44,10 +46,11 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  *
  * The dashboard needs an engine: where to go is the server's answer
  * (`access.entry`). A user with no registered engine, their own or one they
- * were invited to, is sent to onboarding, which passes them on to wherever
- * setup is: connecting, or the overlay page while the engine is built. That
- * holds across a refresh or a return days later, and for someone removed from
- * their only engine. A selected engine that isn't usable is swapped for the
+ * were invited to, is sent on by `noEnginePath`: an organization owner to
+ * onboarding, which passes them on to wherever setup is (connecting, or the
+ * overlay page while the engine is built), and a user with no organization of
+ * their own, such as a sponsor, to their account. That holds across a refresh
+ * or a return days later, and for someone removed from their only engine. A selected engine that isn't usable is swapped for the
  * one the server chose. A hosted engine whose organization is suspended shows
  * the suspended page instead of its content. A managed engine still being
  * built is entered too, but its pages wait behind `StartingDashboard` until it
@@ -82,7 +85,7 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
   const [onDashboard] = useRoute("/");
   const switching = entry?.kind === "engine" && !enteredEngine;
   const isChecking = entry === undefined || entry === null || switching || (enteredEngine && setup === undefined);
-  const needsOnboarding = entry?.kind === "createEngine";
+  const needsEngine = entry?.kind === "createEngine";
   const needsTwitch =
     enteredEngine && setup !== undefined && setup !== null && setup.twitchRequired && setup.twitchUsername === null;
 
@@ -96,8 +99,8 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     if (!isAuthenticated || isChecking || entry?.kind === "suspended") {
       return;
     }
-    if (needsOnboarding) {
-      navigate("/auth/onboarding");
+    if (entry?.kind === "createEngine") {
+      navigate(noEnginePath({ ownsOrganization: entry.accountId !== null, hasAccountPortal: !IS_DESKTOP }));
       return;
     }
     if (!setup?.canManageSetup) {
@@ -114,12 +117,12 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     if (overlayPageRedirects(setup.overlayPending, location)) {
       navigate(setupStepPath("overlay"));
     }
-  }, [isAuthenticated, isChecking, entry, needsOnboarding, needsTwitch, setup, location, navigate]);
+  }, [isAuthenticated, isChecking, entry, needsTwitch, setup, location, navigate]);
 
   let content: ReactNode = children;
   if (isChecking) {
     content = <ContentPlaceholder onDashboard={onDashboard} />;
-  } else if (needsOnboarding) {
+  } else if (needsEngine) {
     content = null;
   } else if (entry?.kind === "suspended") {
     content = <SuspendedEngine entry={entry} />;
