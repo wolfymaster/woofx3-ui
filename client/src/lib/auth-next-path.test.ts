@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { safeNextPath, withNext } from "./auth-next-path";
+import { afterRegisterPath, safeNextPath, withNext } from "./auth-next-path";
 
 describe("safeNextPath", () => {
   test("keeps a path on this site", () => {
@@ -50,5 +50,21 @@ describe("withNext", () => {
 
   test("leaves the link alone without one", () => {
     expect(withNext("/auth/register", null)).toBe("/auth/register");
+  });
+});
+
+describe("afterRegisterPath", () => {
+  const sponsor = "/sponsor/start?amountCents=25000&interval=month";
+
+  test("a sign-up with no next lands on onboarding", () => {
+    expect(afterRegisterPath("")).toBe("/auth/onboarding");
+  });
+
+  test("a sign-up carrying a safe next goes there and skips onboarding", () => {
+    expect(afterRegisterPath(`?next=${encodeURIComponent(sponsor)}`)).toBe(sponsor);
+  });
+
+  test("a next naming another site falls back to onboarding", () => {
+    expect(afterRegisterPath("?next=%2F%2Fevil.example")).toBe("/auth/onboarding");
   });
 });

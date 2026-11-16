@@ -48,10 +48,12 @@ COPY . .
 # value would ship a client pointing at "undefined", so refuse to build.
 ARG VITE_CONVEX_URL
 ARG VITE_CONVEX_SITE_URL
-# Optional: without it, forms on user pages are closed to anonymous visitors.
+# The Turnstile site key of password sign-up and user page forms: without it the
+# sign-up page fails to load.
 ARG VITE_TURNSTILE_SITE_KEY
 RUN test -n "$VITE_CONVEX_URL" || { echo "VITE_CONVEX_URL build arg is required" >&2; exit 1; }; \
-    test -n "$VITE_CONVEX_SITE_URL" || { echo "VITE_CONVEX_SITE_URL build arg is required" >&2; exit 1; }
+    test -n "$VITE_CONVEX_SITE_URL" || { echo "VITE_CONVEX_SITE_URL build arg is required" >&2; exit 1; }; \
+    test -n "$VITE_TURNSTILE_SITE_KEY" || { echo "VITE_TURNSTILE_SITE_KEY build arg is required" >&2; exit 1; }
 RUN bun run build
 
 FROM caddy:2-alpine

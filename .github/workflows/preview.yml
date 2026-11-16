@@ -236,6 +236,10 @@ jobs:
             BUN_VERSION=${{ env.BUN_VERSION }}
             VITE_CONVEX_URL=${{ steps.convex.outputs.convex_url }}
             VITE_CONVEX_SITE_URL=${{ steps.convex.outputs.convex_site_url }}
+            # Cloudflare's always-pass test site key (client/src/lib/sign-up-challenge.ts):
+            # the cloud browsers that test previews cannot solve a real challenge, and
+            # a preview's Convex checks sign-ups with the matching test secret.
+            VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ steps.preview.outputs.image_tag }}
           cache-from: type=gha

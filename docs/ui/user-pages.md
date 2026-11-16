@@ -164,8 +164,8 @@ A path would read an id of only digits as an array index, so the page checks ref
 
 | Where | Name | Value |
 |-------|------|-------|
-| Cloudflare | Turnstile widget | Create one for the user-pages host name, managed mode |
-| Convex | `TURNSTILE_SECRET_KEY` | The widget's secret. Read when used: without it, anonymous submits are refused and forms show as closed to anonymous visitors. Signed-in viewers aren't affected |
+| Cloudflare | Turnstile widget | Create one for the user-pages host name and the dashboard's, managed mode |
+| Convex | `TURNSTILE_SECRET_KEY` | The widget's secret. Read when used: without it, anonymous submits are refused and forms show as closed to anonymous visitors. Signed-in viewers aren't affected. Dashboard password sign-up checks with it too ([Sign-up challenge](auth-onboarding.md#sign-up-challenge)) |
 | GitHub `production` environment | `VITE_TURNSTILE_SITE_KEY` | The widget's site key, baked into the page at build time. Without it the page closes forms to anonymous visitors |
 | Edge Worker + Convex | `VIEWER_SIGN_IN_EDGE_SECRET` | Already set for [viewer sign-in](./viewer-sign-in.md#configuration), and shared with this route, rotation included |
 

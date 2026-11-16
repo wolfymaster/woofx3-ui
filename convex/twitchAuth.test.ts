@@ -236,3 +236,17 @@ describe("sign-in state expiry", () => {
     expect(await states(t)).toEqual([]);
   });
 });
+
+describe("where a Twitch sign-in lands", () => {
+  test("a sponsor's next survives the round trip through the OAuth state", async () => {
+    const t = newBackend();
+    const redirectTo = "/sponsor/start?amountCents=25000&interval=month";
+    const state = generateOpaqueToken();
+    const nonceHash = await hashOpaqueToken(generateOpaqueToken());
+    await t.mutation(internal.twitchAuth.storeState, { state, redirectTo, nonceHash, signInClient: "web" });
+
+    const consumed = await t.mutation(internal.twitchAuth.validateAndConsumeState, { state });
+
+    expect(consumed?.redirectTo).toBe(redirectTo);
+  });
+});
