@@ -211,6 +211,16 @@ describe("start", () => {
   });
 });
 
+describe("paymentMethodSession", () => {
+  test("returns the sponsor to their account with the card-update marker", async () => {
+    const t = newBackend();
+    const { viewerId } = await seedUsers(t);
+    answers["/payment-method-sessions"] = { status: 200, body: { url: "https://pay.example/pm" } };
+    await as(t, viewerId).action(api.sponsorships.paymentMethodSession, { sponsorshipId: "sp1" });
+    expect(seen[0]?.body).toEqual({ returnUrl: "https://app.test/account?sponsorshipPaymentMethod=returned" });
+  });
+});
+
 describe("mine", () => {
   test("lists the viewer's sponsorships with dates as epoch milliseconds", async () => {
     const t = newBackend();

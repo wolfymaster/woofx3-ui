@@ -29,3 +29,20 @@ export const SPONSORSHIP_POLL_TEXT: Record<CheckoutPoll["phase"], string> = {
 export const SPONSORSHIP_UNTRACKED_TEXT = "Thanks! Your payment is being confirmed, and it shows here in a moment.";
 
 export const SPONSORSHIP_CANCELLED_TEXT = "Checkout cancelled. Nothing was charged.";
+
+/** Added to the return address of the card-update page; must match `PAYMENT_METHOD_RETURN_QUERY` in convex/sponsorships.ts. */
+export const PAYMENT_METHOD_RETURN_KEY = "sponsorshipPaymentMethod";
+
+export const PAYMENT_METHOD_UPDATED_TEXT = "Payment method updated.";
+
+export function paymentMethodReturned(search: string): boolean {
+  return new URLSearchParams(search).get(PAYMENT_METHOD_RETURN_KEY) === "returned";
+}
+
+/** `search` without the card-update marker, so a reload does not confirm it again. Empty, or `?...`. */
+export function withoutPaymentMethodReturn(search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete(PAYMENT_METHOD_RETURN_KEY);
+  const rest = params.toString();
+  return rest === "" ? "" : `?${rest}`;
+}

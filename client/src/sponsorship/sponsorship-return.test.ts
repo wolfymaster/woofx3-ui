@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseCheckoutReturn } from "@/lib/checkout-return";
-import { parseSponsorshipReturn } from "./sponsorship-return";
+import { parseSponsorshipReturn, paymentMethodReturned, withoutPaymentMethodReturn } from "./sponsorship-return";
 
 describe("parseSponsorshipReturn", () => {
   test.each([
@@ -17,5 +17,25 @@ describe("parseSponsorshipReturn", () => {
 
   test("the organization checkout return ignores a sponsorship return", () => {
     expect(parseCheckoutReturn("?sponsorship=done&sponsorshipCheckout=c1")).toEqual({ kind: "none" });
+  });
+});
+
+describe("the card-update return", () => {
+  test.each([
+    ["?sponsorshipPaymentMethod=returned", true],
+    ["sponsorshipPaymentMethod=returned&x=1", true],
+    ["?sponsorshipPaymentMethod=other", false],
+    ["", false],
+  ])("%p is %p", (search, expected) => {
+    expect(paymentMethodReturned(search)).toBe(expected);
+  });
+
+  test.each([
+    ["?sponsorshipPaymentMethod=returned", ""],
+    ["?sponsorshipPaymentMethod=returned&x=1", "?x=1"],
+    ["?x=1", "?x=1"],
+    ["", ""],
+  ])("%p loses only its marker", (search, expected) => {
+    expect(withoutPaymentMethodReturn(search)).toBe(expected);
   });
 });

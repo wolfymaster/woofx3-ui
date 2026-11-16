@@ -391,6 +391,18 @@ describe("Plan page checkout return", () => {
     expect(askedActions).not.toContain("sponsorships:checkoutState");
   });
 
+  test("a return from the card-update page confirms it", async () => {
+    search = "sponsorshipPaymentMethod=returned";
+    actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
+    const renderer = await render(null, <PlanPage />);
+    expect(text(renderer, "text-payment-method-updated")).toEqual(["Payment method updated."]);
+  });
+
+  test("with no card-update marker there is no confirmation", async () => {
+    const renderer = await render(null, <PlanPage />);
+    expect(byTestId(renderer, "text-payment-method-updated").length).toBe(0);
+  });
+
   test("a cancelled checkout says nothing was charged", async () => {
     search = "sponsorship=cancelled";
     const renderer = await render(null, <PlanPage />);

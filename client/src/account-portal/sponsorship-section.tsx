@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Sponsorship } from "@convex/lib/billingClient";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
 import { ConfirmDialog } from "@/billing/confirm-dialog";
 import { formatDay } from "@/billing/format";
@@ -25,10 +25,13 @@ import { useCheckoutPoll } from "@/lib/use-checkout-poll";
 import { amountProblem, dollarsText, parseDollars } from "@/sponsorship/amount";
 import { AmountField } from "@/sponsorship/amount-field";
 import {
+  PAYMENT_METHOD_UPDATED_TEXT,
   parseSponsorshipReturn,
+  paymentMethodReturned,
   SPONSORSHIP_CANCELLED_TEXT,
   SPONSORSHIP_POLL_TEXT,
   SPONSORSHIP_UNTRACKED_TEXT,
+  withoutPaymentMethodReturn,
 } from "@/sponsorship/sponsorship-return";
 import {
   amountSummary,
@@ -192,6 +195,23 @@ function ReturnNotice({ onConfirmed }: { onConfirmed: () => void }) {
   return null;
 }
 
+/** Confirms a return from the card-update page once, then drops the marker from the address. */
+function PaymentMethodNotice() {
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+  const [returned] = useState(() => paymentMethodReturned(search));
+  useEffect(() => {
+    if (paymentMethodReturned(search)) {
+      navigate(`${location}${withoutPaymentMethodReturn(search)}`, { replace: true });
+    }
+  }, [search, location, navigate]);
+  return returned ? (
+    <p className="text-sm text-muted-foreground" data-testid="text-payment-method-updated">
+      {PAYMENT_METHOD_UPDATED_TEXT}
+    </p>
+  ) : null;
+}
+
 function SponsorshipBody({ list }: { list: SponsorshipList }) {
   if (list.state === "loading") {
     return <p className="text-sm text-muted-foreground">Loading...</p>;
@@ -218,6 +238,7 @@ export function SponsorshipSection() {
       </CardHeader>
       <CardContent className="space-y-6">
         <ReturnNotice onConfirmed={reload} />
+        <PaymentMethodNotice />
         <SponsorshipBody list={list} />
         {sponsorships.map((sponsorship) => (
           <SponsorshipCard key={sponsorship.id} sponsorship={sponsorship} onChanged={reload} />
