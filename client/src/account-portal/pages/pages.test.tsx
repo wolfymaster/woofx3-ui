@@ -483,3 +483,20 @@ describe("loading, empty and loaded states", () => {
     expect(byTestId(renderer, "text-payments-failed").length).toBe(0);
   });
 });
+
+describe("narrow widths", () => {
+  test("engine rows stack their actions instead of clipping them in a table", async () => {
+    const renderer = await render("owner", <EnginesPage />);
+    const [row] = byTestId(renderer, "row-engine-instance-1");
+    expect(row.props.className).toContain("flex-col");
+    expect(renderer.root.findAll((node) => node.type === "table").length).toBe(0);
+  });
+
+  test("member rows stack their controls instead of clipping them in a table", async () => {
+    const answers = { members: [member("owner-user", "owner")], meId: "owner-user" };
+    const renderer = await render("owner", <PeoplePage />, answers);
+    const [row] = byTestId(renderer, "row-org-member-owner-user");
+    expect(row.props.className).toContain("flex-col");
+    expect(renderer.root.findAll((node) => node.type === "table").length).toBe(0);
+  });
+});
