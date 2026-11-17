@@ -379,3 +379,40 @@
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * The signed-out screens (sign in, register, accept invite) wear the marketing site's
+ * palette whatever theme the person chose; their theme takes effect once the dashboard
+ * loads. Declared on a wrapper, so it outranks the palette variables set on <html>.
+ * Keep the values in step with woofx3-marketing `client/src/index.css`.
+ */
+.auth-brand {
+  --background: 0 0% 0%;
+  --foreground: 240 100% 98%;
+  --border: 240 17% 18%;
+  --card: 240 20% 8%;
+  --card-foreground: 240 100% 98%;
+  --card-border: 240 17% 18%;
+  --popover: 240 22% 6%;
+  --popover-foreground: 240 100% 98%;
+  --primary: 6 79% 64%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 240 17% 14%;
+  --secondary-foreground: 240 100% 98%;
+  --muted: 240 17% 12%;
+  --muted-foreground: 240 14% 70%;
+  --accent: 264 40% 16%;
+  --accent-foreground: 240 100% 98%;
+  --destructive: 0 75% 35%;
+  --destructive-foreground: 0 5% 98%;
+  --input: 240 13% 41%;
+  --ring: 264 100% 64%;
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  color-scheme: dark;
+  background:
+    radial-gradient(60% 90% at 12% 0%, rgba(145, 70, 255, 0.2), rgba(145, 70, 255, 0) 70%),
+    radial-gradient(45% 70% at 92% 15%, rgba(236, 103, 88, 0.14), rgba(236, 103, 88, 0) 70%), #000;
+}

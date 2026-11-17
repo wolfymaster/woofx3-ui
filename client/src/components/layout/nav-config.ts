@@ -54,6 +54,8 @@ export interface NavItem {
    * always show beneath it, so the menu keeps one shape on every page.
    */
   children?: NavItem[];
+  /** Marked only on its own path, for an index entry whose siblings live below it. */
+  exact?: boolean;
 }
 
 /** How the selected instance's engine is run; absent until an instance is known. */
@@ -158,6 +160,9 @@ export function isSectionActive(section: NavSection, location: string): boolean 
 }
 
 export function isNavItemActive(item: NavItem, location: string): boolean {
+  if (item.exact) {
+    return location === item.href;
+  }
   return [item.href, ...(item.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
 }
 

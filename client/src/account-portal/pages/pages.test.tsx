@@ -316,7 +316,7 @@ describe("Plan page", () => {
   test("the plan chooser shows the plane's prices and plan names", async () => {
     const page = JSON.stringify((await render("owner", <PlanPage />)).toJSON());
     expect(page).toContain("$75/mo");
-    expect(page).toContain("$1,500/yr");
+    expect(page).toContain("$150/mo");
     expect(page).not.toContain("price unavailable");
   });
 

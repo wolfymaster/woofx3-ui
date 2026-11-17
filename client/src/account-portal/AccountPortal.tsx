@@ -2,19 +2,26 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MyOrganization } from "@convex/organizations";
 import { useQuery } from "convex/react";
-import { Building2, Check, ChevronDown, Loader2 } from "lucide-react";
+import { Building2, Check, ChevronDown, Loader2, Receipt, Server, Sparkles, Users } from "lucide-react";
 import { useState } from "react";
-import { Link, Redirect, Route, Switch, useLocation, useSearch } from "wouter";
+import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
+import type { NavItem } from "@/components/layout/nav-config";
+import { SectionMenu } from "@/components/layout/section-menu";
+import { SectionSidebar } from "@/components/layout/section-sidebar";
+import { ThemeMenuSub } from "@/components/layout/theme-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
-import { cn } from "@/lib/utils";
 import { BackToDashboard } from "./back-to-dashboard";
 import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
@@ -22,14 +29,7 @@ import EnginesPage from "./pages/engines";
 import PaymentsPage from "./pages/payments";
 import PeoplePage from "./pages/people";
 import PlanPage from "./pages/plan";
-import {
-  ACCOUNT_PORTAL_PATH,
-  isActivePage,
-  PORTAL_PAGES,
-  type PortalPageId,
-  portalPage,
-  visiblePages,
-} from "./portal-pages";
+import { ACCOUNT_PORTAL_PATH, PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
 import { START_TRIAL_PATH, startsTrial } from "./start-trial";
 
 const PAGES: Record<PortalPageId, () => React.ReactElement> = {
@@ -79,53 +79,92 @@ function OrganizationSwitcher() {
   );
 }
 
-function PortalLayout({ children }: { children: React.ReactNode }) {
+const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
+  plan: Sparkles,
+  payments: Receipt,
+  people: Users,
+  engines: Server,
+};
+
+function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
   const organization = useOptionalOrganization()?.organization ?? null;
   const { instance } = useInstance();
-  const [location] = useLocation();
+  const { user } = useConvexUser();
+  const { signOut } = useAuthActions();
+  const displayName = user?.name || "User";
+  const initials = displayName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-xl">
-        <div className="flex h-14 items-center gap-3 px-4">
-          <span className="font-semibold tracking-tight">woofx3</span>
-          <div className="flex items-center gap-1 text-sm min-w-0 flex-1">
-            {organization === null ? null : (
-              <>
-                <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-muted-foreground shrink-0">Organization:</span>
-                <OrganizationSwitcher />
-              </>
-            )}
+    <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
+      <SectionMenu title="Account" items={nav} location={location} />
+      <span className="font-semibold tracking-tight">woofx3</span>
+      <div className="flex items-center gap-1 text-sm min-w-0 flex-1">
+        {organization === null ? null : (
+          <>
+            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground shrink-0">Organization:</span>
+            <OrganizationSwitcher />
+          </>
+        )}
+      </div>
+      <BackToDashboard hasEngine={Boolean(instance)} />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-9 w-9 rounded-full p-0" data-testid="button-user-menu">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={user?.image} />
+              <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">{initials}</AvatarFallback>
+            </Avatar>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="font-normal">
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium">{displayName}</p>
+              <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <ThemeMenuSub />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => signOut()} className="text-destructive focus:text-destructive">
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </header>
+  );
+}
+
+/** The dashboard's frame (header, section rail, scrolling content) with the portal's pages as the section. */
+function PortalLayout({ children }: { children: React.ReactNode }) {
+  const organization = useOptionalOrganization()?.organization ?? null;
+  const [location] = useLocation();
+  const nav: NavItem[] = visiblePages(organization?.can ?? null).map((page) => ({
+    id: `account-${page.id}`,
+    label: page.label,
+    icon: PAGE_ICONS[page.id],
+    href: page.path,
+    exact: page.path === ACCOUNT_PORTAL_PATH,
+  }));
+  return (
+    <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+      <PortalHeader nav={nav} location={location} />
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        <SectionSidebar title="Account" items={nav} location={location} />
+        <main className="flex-1 overflow-auto">
+          <div
+            key={location}
+            className="p-6 lg:p-8 max-w-[1100px] mx-auto animate-in fade-in duration-200 motion-reduce:animate-none"
+          >
+            {children}
           </div>
-          <BackToDashboard hasEngine={Boolean(instance)} />
-        </div>
-        <nav className="px-4 pb-3" aria-label="Account portal">
-          <div className="inline-flex items-center gap-1 rounded-lg bg-muted p-1">
-            {visiblePages(organization?.can ?? null).map((page) => {
-              const active = isActivePage(location, page.path);
-              return (
-                <Link
-                  key={page.id}
-                  href={page.path}
-                  className={cn(
-                    "inline-flex h-8 items-center rounded-md px-3 text-sm font-medium transition-colors",
-                    active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  )}
-                  data-testid={`nav-account-${page.id}`}
-                >
-                  {page.label}
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-      </header>
-      <main
-        key={location}
-        className="p-6 lg:p-8 max-w-[1100px] mx-auto animate-in fade-in duration-200 motion-reduce:animate-none"
-      >
-        {children}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
