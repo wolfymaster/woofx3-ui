@@ -6,10 +6,10 @@ import {
   Building2,
   Check,
   ChevronDown,
+  Heart,
+  LayoutDashboard,
   Loader2,
   Receipt,
-  Server,
-  Sparkles,
   UserCog,
   Users,
   UsersRound,
@@ -36,21 +36,21 @@ import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { BackToDashboard } from "./back-to-dashboard";
 import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
-import EnginesPage from "./pages/engines";
+import OverviewPage from "./pages/overview";
 import PaymentsPage from "./pages/payments";
 import PeoplePage from "./pages/people";
-import PlanPage from "./pages/plan";
 import SettingsPage from "./pages/settings";
+import SponsorshipPage from "./pages/sponsorship";
 import TeamPage from "./pages/team";
 import TeamInvitePage, { TEAM_INVITE_PATH } from "./pages/team-invite";
 import { ACCOUNT_PORTAL_PATH, PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
 import { resumesOnboarding, START_TRIAL_PATH, startsTrial } from "./start-trial";
 
 const PAGES: Record<PortalPageId, () => React.ReactElement> = {
-  plan: PlanPage,
+  overview: OverviewPage,
+  sponsorship: SponsorshipPage,
   payments: PaymentsPage,
   people: PeoplePage,
-  engines: EnginesPage,
   settings: SettingsPage,
   team: TeamPage,
 };
@@ -96,10 +96,10 @@ function OrganizationSwitcher() {
 }
 
 const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
-  plan: Sparkles,
+  overview: LayoutDashboard,
+  sponsorship: Heart,
   payments: Receipt,
   people: Users,
-  engines: Server,
   settings: UserCog,
   team: UsersRound,
 };

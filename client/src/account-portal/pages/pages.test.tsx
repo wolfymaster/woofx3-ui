@@ -111,10 +111,10 @@ mock.module("@/components/ui/toggle-group", () => ({
   ToggleGroupItem: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
 }));
 
-const { default: EnginesPage } = await import("./engines");
 const { default: PeoplePage } = await import("./people");
 const { default: PaymentsPage } = await import("./payments");
-const { default: PlanPage } = await import("./plan");
+const { default: OverviewPage } = await import("./overview");
+const { default: SponsorshipPage } = await import("./sponsorship");
 
 const ACCOUNT_ID = "account-1" as Id<"accounts">;
 
@@ -213,15 +213,15 @@ function text(renderer: ReactTestRenderer, id: string): string[] {
   return byTestId(renderer, id).map((node) => node.children.join(""));
 }
 
-describe("Engines page", () => {
+describe("Overview engines", () => {
   test("offers the owner a way to create another engine", async () => {
-    const renderer = await render("owner", <EnginesPage />);
+    const renderer = await render("owner", <OverviewPage />);
     expect(byTestId(renderer, "row-engine-instance-1").length).toBe(1);
     expect(byTestId(renderer, "button-create-engine").map(textOf)).toEqual(["Create another engine"]);
   });
 
   test("offers an admin no way to create one", async () => {
-    const renderer = await render("admin", <EnginesPage />);
+    const renderer = await render("admin", <OverviewPage />);
     expect(byTestId(renderer, "row-engine-instance-1").length).toBe(1);
     expect(byTestId(renderer, "button-create-engine").length).toBe(0);
   });
@@ -265,10 +265,10 @@ describe("People page", () => {
   });
 });
 
-describe("Engines page rename", () => {
+describe("Overview engines rename", () => {
   test("only the owner sees the rename control", async () => {
-    expect(byTestId(await render("owner", <EnginesPage />), "button-rename-engine-instance-1").length).toBe(1);
-    expect(byTestId(await render("admin", <EnginesPage />), "button-rename-engine-instance-1").length).toBe(0);
+    expect(byTestId(await render("owner", <OverviewPage />), "button-rename-engine-instance-1").length).toBe(1);
+    expect(byTestId(await render("admin", <OverviewPage />), "button-rename-engine-instance-1").length).toBe(0);
   });
 });
 
@@ -306,15 +306,21 @@ const MANAGE_BUTTONS = [
   "button-cancel-sponsorship-sp1",
 ];
 
-describe("Plan page", () => {
-  test("the owner sees the organization's subscription and the sponsorship card", async () => {
-    const renderer = await render("owner", <PlanPage />);
+describe("Overview and Sponsorship pages", () => {
+  test("the owner sees the organization's subscription, its engine and a way to launch it", async () => {
+    const renderer = await render("owner", <OverviewPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Subscription");
-    expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
+    expect(byTestId(renderer, "button-launch-instance-1").length).toBe(1);
+  });
+
+  test("an admin sees the engines but no subscription", async () => {
+    const renderer = await render("admin", <OverviewPage />);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("Subscription");
+    expect(byTestId(renderer, "button-launch-instance-1").length).toBe(1);
   });
 
   test("the plan chooser shows the plane's prices and plan names", async () => {
-    const page = JSON.stringify((await render("owner", <PlanPage />)).toJSON());
+    const page = JSON.stringify((await render("owner", <OverviewPage />)).toJSON());
     expect(page).toContain("$75/mo");
     expect(page).toContain("$150/mo");
     expect(page).not.toContain("price unavailable");
@@ -322,40 +328,39 @@ describe("Plan page", () => {
 
   test("the plan chooser says price unavailable when the plane has no price to give", async () => {
     actionAnswers["prices:list"] = { state: "unavailable", names: { starter: "Starter", pro: "Pro" } };
-    const page = JSON.stringify((await render("owner", <PlanPage />)).toJSON());
+    const page = JSON.stringify((await render("owner", <OverviewPage />)).toJSON());
     expect(page).toContain("price unavailable");
     expect(page).not.toContain("/mo");
   });
 
   test("only the owner's header has the rename control", async () => {
-    expect(byTestId(await render("owner", <PlanPage />), "button-rename-organization").length).toBe(1);
-    expect(byTestId(await render("admin", <PlanPage />), "button-rename-organization").length).toBe(0);
+    expect(byTestId(await render("owner", <OverviewPage />), "button-rename-organization").length).toBe(1);
+    expect(byTestId(await render("admin", <OverviewPage />), "button-rename-organization").length).toBe(0);
   });
 
   test.each([["admin" as const], [null]])("%p with no sponsorship sees the pitch alone", async (role) => {
     actionAnswers["sponsorships:mine"] = [];
-    const renderer = await render(role, <PlanPage />);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Subscription");
+    const renderer = await render(role, <SponsorshipPage />);
     expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
     expect(byTestId(renderer, "link-become-sponsor")[0].props.href).toBe("/sponsor/start");
   });
 
   test("a viewer with no organization is offered a streaming engine", async () => {
     actionAnswers["sponsorships:mine"] = [];
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <OverviewPage />);
     expect(byTestId(renderer, "link-set-up-engine")[0].props.href).toBe("/auth/onboarding");
   });
 
   test.each([["owner" as const], ["admin" as const]])("%p, in an organization, is not offered one", async (role) => {
     actionAnswers["sponsorships:mine"] = [];
-    expect(byTestId(await render(role, <PlanPage />), "card-set-up-engine").length).toBe(0);
+    expect(byTestId(await render(role, <OverviewPage />), "card-create-engine").length).toBe(0);
   });
 
   test.each([["owner" as const], ["admin" as const], [null]])(
     "%p sees their monthly sponsorship and can manage it",
     async (role) => {
       actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
-      const renderer = await render(role, <PlanPage />);
+      const renderer = await render(role, <SponsorshipPage />);
       expect(text(renderer, "text-sponsorship-amount")).toEqual(["$250/mo"]);
       expect(text(renderer, "text-sponsorship-state")).toEqual(["Active"]);
       expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
@@ -367,7 +372,7 @@ describe("Plan page", () => {
 
   test("a one-time sponsorship has nothing to manage", async () => {
     actionAnswers["sponsorships:mine"] = [{ ...ONE_TIME, id: "sp1" }];
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(text(renderer, "text-sponsorship-amount")).toEqual(["$250 once"]);
     for (const id of MANAGE_BUTTONS) {
       expect(byTestId(renderer, id).length).toBe(0);
@@ -376,7 +381,7 @@ describe("Plan page", () => {
 
   test("a sponsorship set to end offers no changes", async () => {
     actionAnswers["sponsorships:mine"] = [{ ...SPONSORSHIP, cancelAtPeriodEnd: true }];
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Canceled. Your sponsorship ends on");
     expect(text(renderer, "text-sponsorship-state")[0]).toMatch(/^Ending /);
     for (const id of MANAGE_BUTTONS) {
@@ -386,17 +391,17 @@ describe("Plan page", () => {
 
   test("a failed payment says so and still offers the card update", async () => {
     actionAnswers["sponsorships:mine"] = [{ ...SPONSORSHIP, state: "past_due" }];
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("didn't go through");
     expect(byTestId(renderer, "button-update-payment-method-sp1").length).toBe(1);
   });
 });
 
-describe("Plan page checkout return", () => {
+describe("Sponsorship page checkout return", () => {
   test("stays pending while the plane has not completed the checkout", async () => {
     search = "sponsorship=done&sponsorshipCheckout=c1";
     actionAnswers["sponsorships:checkoutState"] = { state: "awaiting_payment" };
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     await settle();
     expect(text(renderer, "text-sponsorship-done")).toEqual(["Finalizing your payment..."]);
     expect(askedActions).toContain("sponsorships:checkoutState");
@@ -405,7 +410,7 @@ describe("Plan page checkout return", () => {
   test("confirms only once the plane says complete, then reloads the sponsorships", async () => {
     search = "sponsorship=done&sponsorshipCheckout=c1";
     actionAnswers["sponsorships:checkoutState"] = { state: "complete" };
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     await settle();
     expect(text(renderer, "text-sponsorship-done")[0]).toContain("Your payment is confirmed");
     expect(askedActions.filter((name) => name === "sponsorships:mine").length).toBeGreaterThan(1);
@@ -413,7 +418,7 @@ describe("Plan page checkout return", () => {
 
   test("a return with no checkout id is pending without asking", async () => {
     search = "sponsorship=done";
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(text(renderer, "text-sponsorship-done")[0]).toContain("being confirmed");
     expect(askedActions).not.toContain("sponsorships:checkoutState");
   });
@@ -421,24 +426,24 @@ describe("Plan page checkout return", () => {
   test("a return from the card-update page confirms it", async () => {
     search = "sponsorshipPaymentMethod=returned";
     actionAnswers["sponsorships:mine"] = [SPONSORSHIP];
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(text(renderer, "text-payment-method-updated")).toEqual(["Payment method updated."]);
   });
 
   test("with no card-update marker there is no confirmation", async () => {
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(byTestId(renderer, "text-payment-method-updated").length).toBe(0);
   });
 
   test("a cancelled checkout says nothing was charged", async () => {
     search = "sponsorship=cancelled";
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(text(renderer, "text-sponsorship-cancelled")).toEqual(["Checkout cancelled. Nothing was charged."]);
   });
 
   test("the organization's checkout keys do not start a sponsorship return", async () => {
     search = "checkout=done&checkoutId=c1";
-    const renderer = await render(null, <PlanPage />);
+    const renderer = await render(null, <SponsorshipPage />);
     expect(byTestId(renderer, "text-sponsorship-done").length).toBe(0);
     expect(askedActions).not.toContain("sponsorships:checkoutState");
   });
@@ -510,7 +515,7 @@ describe("when a billing lookup fails", () => {
 
   test.each([["owner" as const], [null]])("%p's Plan shows the error or the pitch, never both", async (role) => {
     actionAnswers["sponsorships:mine"] = failed;
-    const renderer = await render(role, <PlanPage />);
+    const renderer = await render(role, <SponsorshipPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Billing hit a problem.");
     expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
     expect(JSON.stringify(renderer.toJSON())).not.toContain("aren't sponsoring");
@@ -548,7 +553,7 @@ describe("loading, empty and loaded states", () => {
 
   test.each([["owner" as const], [null]])("%p's Plan while loading shows no pitch", async (role) => {
     actionAnswers["sponsorships:mine"] = NEVER;
-    const renderer = await render(role, <PlanPage />);
+    const renderer = await render(role, <SponsorshipPage />);
     expect(byTestId(renderer, "link-become-sponsor").length).toBe(0);
   });
 
@@ -561,10 +566,8 @@ describe("loading, empty and loaded states", () => {
 });
 
 describe("narrow widths", () => {
-  test("engine rows stack their actions instead of clipping them in a table", async () => {
-    const renderer = await render("owner", <EnginesPage />);
-    const [row] = byTestId(renderer, "row-engine-instance-1");
-    expect(row.props.className).toContain("flex-col");
+  test("engines are cards, not a table", async () => {
+    const renderer = await render("owner", <OverviewPage />);
     expect(renderer.root.findAll((node) => node.type === "table").length).toBe(0);
   });
 

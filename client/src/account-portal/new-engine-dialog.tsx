@@ -28,7 +28,15 @@ type Hosting = "managed" | "external";
  * Either way the new engine becomes the selected one and setup takes over,
  * showing a hosted engine's build as it does the first engine's.
  */
-export function NewEngineDialog({ accountId }: { accountId: Id<"accounts"> }) {
+export function NewEngineDialog({
+  accountId,
+  label = "Create another engine",
+  size = "sm",
+}: {
+  accountId: Id<"accounts">;
+  label?: string;
+  size?: "sm" | "lg";
+}) {
   const [, navigate] = useLocation();
   const managedEngines = useQuery(api.provisioning.isAvailable);
   const startNewEngine = useAction(api.provisioning.startNewEngine);
@@ -104,14 +112,14 @@ export function NewEngineDialog({ accountId }: { accountId: Id<"accounts"> }) {
   return (
     <>
       <Button
-        size="sm"
+        size={size}
         onClick={() => {
           reset();
           setOpen(true);
         }}
         data-testid="button-create-engine"
       >
-        Create another engine
+        {label}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

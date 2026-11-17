@@ -1,6 +1,6 @@
 # Account portal
 
-**Routes:** `/account` (Plan), `/account/payments`, `/account/people`, `/account/engines`, and `/sponsor/start` (outside the portal)
+**Routes:** `/account` (Overview), `/account/sponsorship`, `/account/payments`, `/account/people`, and `/sponsor/start` (outside the portal)
 **Primary files:** `client/src/account-portal/`, `client/src/billing/`, `client/src/sponsorship/`, `convex/organizations.ts`, `convex/billingCommands.ts`, `convex/sponsorships.ts`
 
 The portal belongs to the signed-in person. Every signed-in user on the web build has an account page; the organization's content appears only for someone with a role in an organization. It is a route group inside the dashboard app, not a separate app. The shared components in `client/src/billing/` render both the organization's subscription and payments and, for a person's own sponsorship.
@@ -9,7 +9,7 @@ The portal belongs to the signed-in person. Every signed-in user on the web buil
 
 - On the dashboard origin, so it shares the dashboard's Convex Auth session (kept in `localStorage`, per origin). `woofx3.tv/account/*` is routed there by the edge.
 - Outside `BroadcastShell` and `OnboardingGuard`, with its own slim layout (`AccountPortal.tsx`): it needs no engine, only a signed-in user. Someone signed out goes through sign-in and back to the same `/account/…` path (`AuthGuard`'s `?next=`, clamped by `safeNextPath`).
-- The marketing site's "Start free trial" link opens `/account?start=trial`. Someone who owns no organization with an engine is sent straight on to onboarding, where choosing a hosted engine starts the trial (`start-trial.ts`); an owner who already has an engine sees the Plan tab.
+- The marketing site's "Start free trial" link opens `/account?start=trial`. Someone who owns no organization with an engine is sent straight on to onboarding, where choosing a hosted engine starts the trial (`start-trial.ts`); an owner who already has an engine sees the Overview.
 - **Web build only.** `App.tsx` imports it behind `IS_DESKTOP`, so the desktop build carries no `/account` route, and the same holds for `/sponsor/start`; `account-portal/boundary.test.ts` holds both.
 - The routes are `ACCOUNT_PORTAL_ROUTE` in `App.tsx`. Nothing redirects from other paths; a link must name `/account` or one of the tabs.
 
@@ -29,23 +29,23 @@ The portal belongs to the signed-in person. Every signed-in user on the web buil
 
 | Viewer | Tabs |
 |---|---|
-| Org owner | Plan, Payments, People, Engines |
-| Org admin | Plan, Payments, People, Engines |
-| Org member | Plan, Payments, Engines |
-| Signed in, no organization | Plan, Payments |
+| Org owner | Overview, Sponsorship, Payments, People |
+| Org admin | Overview, Sponsorship, Payments, People |
+| Org member | Overview, Sponsorship, Payments |
+| Signed in, no organization | Overview, Sponsorship, Payments |
 
 What a tab shows of the organization is gated by role, not by the tab being visible:
 
 | Tab | Path | Organization part (owner only, `manageBilling`) | Everyone |
 |---|---|---|---|
-| Plan | `/account` | plan, state, discount; choose a plan and check out; manage billing | the "Your sponsorship" section |
+| Overview | `/account` | the Subscription card: plan, state, discount; choose a plan and check out; manage billing | the organization's engines (each with "Launch dashboard"; the owner renames, `renameEngine`, and creates, `createEngine`), or a large call to action to create one; a switcher when the viewer is in several organizations |
+| Sponsorship | `/account/sponsorship` | | the viewer's own sponsorships |
 | Payments | `/account/payments` | the organization's invoices | the viewer's own sponsor payments, in the same history |
 | People | `/account/people` | (`manageMembers`) change roles, remove | |
-| Engines | `/account/engines` | (`viewOrganization`) open; the owner renames (`renameEngine`), creates (`createEngine`) and deletes (`deleteEngine`); members open the ones they're on | |
 
-The portal does not use `viewBilling`: an admin sees no organization billing. The Plan header offers renaming the organization to the owner only (`renameOrganization`). The pages work with no organization at all: `organizations.mine` answers an empty list, the layout drops the organization switcher, and no organization query runs.
+The portal does not use `viewBilling`: an admin sees no organization billing. The Overview header offers renaming the organization to the owner only (`renameOrganization`). The pages work with no organization at all: `organizations.mine` answers an empty list, the layout drops the organization switcher, and no organization query runs.
 
-The Engines page lists the organization's engines, each with how it is hosted and where its build stands. An organization's first engine comes from onboarding; the owner (`createEngine`) adds more with "Create another engine" (`new-engine-dialog.tsx`):
+The Overview lists the organization's engines as cards, each with how it is hosted, where its build stands and a "Launch dashboard" button; members see the ones they can open. With no engine it shows a large call to action: the owner creates one here, a viewer with no organization goes to onboarding, and anyone else is told to ask an owner. An organization's first engine comes from onboarding; the owner (`createEngine`) adds more with "Create another engine" (`new-engine-dialog.tsx`):
 
 - **Hosted by woofx3**: a name and an address (the slug, suggested from the name and checked as it is typed with `provisioning.checkSlug`). `provisioning.startNewEngine` makes the instance in the organization through `provisioningInternal.prepareNewEngine`, which gives the owner and the org's admins their engine roles (`grantNewEngineMembers`) and marks it a first run so setup seeds it, then asks the maintenance API for the engine the way the first engine is asked for (`requestEngine`): the same trial `ensure`, the same refusal while the organization is suspended, and the same idempotency key until the outcome is known. Asking again while the engine is being built returns the same engine. Unlike the first engine, it gets no Twitch channel up front; its own setup connects one. A taken address answers `slug_refused`, and the next attempt reuses the same instance. Only one engine of an organization is built at a time.
 - **I run it myself**: a name and a server address, created with `instances.create` and registered with `registration.registerInstance`, as onboarding's own-engine form does. It asks for no subscription.
@@ -59,10 +59,10 @@ Plan picks its content in `billing-view.ts`: an organization with only self-host
 A sponsorship belongs to a person, not an organization. The management plane owns it and its payments; Convex stores nothing and asks the plane for each read. `convex/sponsorships.ts` has the actions: `terms`, `mine`, `start`, `changeAmount`, `cancel`, `paymentMethodSession` and `checkoutState`. Each requires a signed-in viewer and passes the viewer's own user id to the plane; no action takes a user id as an argument. They use the typed commands in `convex/lib/billingClient.ts` and the same error mapping and credential as the billing actions. `start` builds its return address from `SITE_URL` and an `Idempotency-Key` from the viewer, amount, interval and a 30-minute window; the client supplies neither.
 
 - **`/sponsor/start`** (`client/src/sponsorship/SponsorStart.tsx`) sits outside the broadcast shell, behind `AuthGuard`, so a signed-out visitor signs in or registers and returns with the query intact. `amountCents` and `interval` in the address only prefill the form (`prefillFromSearch`); a missing or malformed value falls back to $250 monthly, and the amount is validated against `sponsorships.terms` before "Continue to payment" calls `sponsorships.start` and redirects to the returned `url`.
-- **Plan** (`sponsorship-section.tsx`) lists the viewer's sponsorships, newest first, with a summary and a notice for a failed payment or a scheduled end. A monthly sponsorship that is active or past due offers "Change amount", "Update payment method" (a provider redirect, `ProviderRedirectButton`) and "Cancel sponsorship" (`ConfirmDialog`); a cancel always ends at the end of the paid period, and the action takes no way to ask otherwise. A one-time sponsorship, or one already set to end, offers none of them. With no sponsorship the section is a short pitch and a "Become a sponsor" link.
-- **Plan**, for a viewer with no organization, also shows a "Stream with woofx3" card linking to `/auth/onboarding`. The dashboard sends such a viewer here rather than to onboarding when they have no engine (see [Auth and onboarding](/ui/auth-onboarding#setup)).
+- **Sponsorship** (`sponsorship-section.tsx`) lists the viewer's sponsorships, newest first, with a summary and a notice for a failed payment or a scheduled end. A monthly sponsorship that is active or past due offers "Change amount", "Update payment method" (a provider redirect, `ProviderRedirectButton`) and "Cancel sponsorship" (`ConfirmDialog`); a cancel always ends at the end of the paid period, and the action takes no way to ask otherwise. A one-time sponsorship, or one already set to end, offers none of them. With no sponsorship the section is a short pitch and a "Become a sponsor" link.
+- **Overview**, for a viewer with no organization, shows the create-engine call to action linking to `/auth/onboarding`. The dashboard sends such a viewer here rather than to onboarding when they have no engine (see [Auth and onboarding](/ui/auth-onboarding#setup)).
 - **Payments** merges plan invoices (owner only, `manageBilling`) and sponsor payments into one history, newest first (`payment-rows.ts`). The Plan / Sponsorship filter shows only when both kinds are present. A viewer without `manageBilling` never asks for invoices. Rows show as each lookup answers, and an empty history shows only once every lookup has; one failed lookup is one message. An organization with no billing yet (the plane answers `subscription_not_found`) has no invoices, not an error. The list stacks each payment below `sm`, and its link column exists only while some payment has a link.
-- **Checkout return.** The provider returns to `/account?sponsorship=done&sponsorshipCheckout=<id>` or `/account?sponsorship=cancelled`; the keys are not the organization checkout's `checkout` / `checkoutId`, so the two never read each other's. On `done` the section polls `sponsorships.checkoutState` with `useCheckoutPoll` and the `CHECKOUT_POLL` bounds, shows "Finalizing your payment..." until the plane reports `complete` (the provider's webhook is what completes it), then reloads the list. The page never claims success on its own, and on timeout it says the payment is still processing. Returning from the card-update page (`?sponsorshipPaymentMethod=returned`) shows "Payment method updated." once and removes the key from the address. A sponsorship set to end shows "Ending" followed by the end date as its state.
+- **Checkout return.** The provider returns to `/account/sponsorship?sponsorship=done&sponsorshipCheckout=<id>` or `/account/sponsorship?sponsorship=cancelled`; the keys are not the organization checkout's `checkout` / `checkoutId`, so the two never read each other's. On `done` the section polls `sponsorships.checkoutState` with `useCheckoutPoll` and the `CHECKOUT_POLL` bounds, shows "Finalizing your payment..." until the plane reports `complete` (the provider's webhook is what completes it), then reloads the list. The page never claims success on its own, and on timeout it says the payment is still processing. Returning from the card-update page (`?sponsorshipPaymentMethod=returned`) shows "Payment method updated." once and removes the key from the address. A sponsorship set to end shows "Ending" followed by the end date as its state.
 - Sponsorship wording (states, amounts, notices) lives in `client/src/sponsorship/`, not in `client/src/billing/`.
 
 ## Entry points
