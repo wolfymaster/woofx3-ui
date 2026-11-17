@@ -4,6 +4,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { type ActionCtx, internalQuery, type QueryCtx } from "../_generated/server";
 import type { EngineRole, OrgRole } from "../lib/organization";
+import { ENGINE_ACTIONS_REFUSED_WHILE_SUSPENDED, requireEngineUsable } from "./billing";
 
 // Who may do what, for the organization and for each of its engines. Public
 // functions decide through `requireAction` (or `can`, for queries that answer
@@ -236,6 +237,9 @@ export async function requireActionFor<A extends Action>(
         : "Your organization role doesn't allow this",
     });
   }
+  if ("engine" in subject && isEngineAction(action) && ENGINE_ACTIONS_REFUSED_WHILE_SUSPENDED.has(action)) {
+    await requireEngineUsable(ctx, subject.engine);
+  }
   return { userId, account, roles };
 }
 
@@ -247,7 +251,11 @@ async function requireSignedIn(ctx: QueryCtx | ActionCtx): Promise<Id<"users">> 
   return userId;
 }
 
-/** The signed-in caller, when they may take `action` on `subject`. Throws a `ConvexError<Refusal>` otherwise. */
+/**
+ * The signed-in caller, when they may take `action` on `subject`. Throws a
+ * `ConvexError<Refusal>` otherwise, or a `SuspendedRefusal` for an engine
+ * action billing refuses (see org/billing.ts).
+ */
 export async function requireAction<A extends Action>(
   ctx: QueryCtx,
   subject: SubjectFor<A>,
