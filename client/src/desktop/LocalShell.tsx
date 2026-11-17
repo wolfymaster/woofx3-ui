@@ -106,6 +106,7 @@ export function LocalShell({ children }: { children: ReactNode }) {
   return (
     <StatusBarSlotProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+        <UpdateBanner />
         <LocalHeader location={location} activeSection={activeSection} />
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {activeSection?.children && (
@@ -114,7 +115,6 @@ export function LocalShell({ children }: { children: ReactNode }) {
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
         <LocalStatusBar />
-        <UpdateBanner />
       </div>
     </StatusBarSlotProvider>
   );
