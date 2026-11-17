@@ -17,7 +17,6 @@ export interface PlanSeed {
   name: string;
   features: string[];
   limits: LimitValue[];
-  offered: boolean;
 }
 
 export const PLAN_SEEDS: readonly PlanSeed[] = [
@@ -31,7 +30,6 @@ export const PLAN_SEEDS: readonly PlanSeed[] = [
       { key: "storage.hostedAssetBytes", value: 100 * GiB },
       { key: "analytics.retentionDays", value: 30 },
     ],
-    offered: true,
   },
   {
     key: "pro",
@@ -43,7 +41,6 @@ export const PLAN_SEEDS: readonly PlanSeed[] = [
       { key: "storage.hostedAssetBytes", value: 500 * GiB },
       { key: "analytics.retentionDays", value: 90 },
     ],
-    offered: true,
   },
 ];
 

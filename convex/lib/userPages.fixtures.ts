@@ -71,7 +71,6 @@ export async function fixture({
       name: "Starter",
       features: entitled ? ["userPages"] : [],
       limits: [],
-      offered: true,
       updatedAt: 1,
       updatedBy: "test",
     });

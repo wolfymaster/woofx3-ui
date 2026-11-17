@@ -1546,12 +1546,12 @@ export default defineSchema({
   plans: defineTable({
     key: v.string(),
     name: v.string(),
+    // description and offered are no longer written or read; rows stored by
+    // earlier code still carry them, so the schema keeps accepting them.
     description: v.optional(v.string()),
     features: v.array(v.string()),
     limits: limitValuesValidator,
-    // Whether new accounts may choose or be sold it. An account already on a
-    // plan keeps it when it stops being offered.
-    offered: v.boolean(),
+    offered: v.optional(v.boolean()),
     updatedAt: v.number(),
     // Who last changed it: an operator's email, or "cli".
     updatedBy: v.string(),
