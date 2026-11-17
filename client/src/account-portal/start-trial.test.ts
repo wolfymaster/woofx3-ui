@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { MyOrganization } from "@convex/organizations";
-import { startsTrial } from "./start-trial";
+import { resumesOnboarding, startsTrial } from "./start-trial";
 
 type Org = Pick<MyOrganization, "engines">;
 
@@ -24,5 +24,17 @@ describe("startsTrial", () => {
     ["another start value", "?start=pro", [], false],
   ])("%s", (_case, search, organizations, expected) => {
     expect(startsTrial(search, organizations)).toBe(expected);
+  });
+});
+
+describe("resumesOnboarding", () => {
+  test.each<[string, string, Org[], boolean]>([
+    ["paid with no engine yet", "?checkout=done&checkoutId=c1", [WITHOUT_ENGINE], true],
+    ["paid before any organization row is listed", "?checkout=done", [], true],
+    ["paid with an engine already", "?checkout=done&checkoutId=c1", [WITH_ENGINE], false],
+    ["left checkout without paying", "?checkout=cancelled", [WITHOUT_ENGINE], false],
+    ["no checkout at all", "", [WITHOUT_ENGINE], false],
+  ])("%s", (_case, search, organizations, expected) => {
+    expect(resumesOnboarding(search, organizations)).toBe(expected);
   });
 });

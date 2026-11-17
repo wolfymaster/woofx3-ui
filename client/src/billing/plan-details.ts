@@ -1,5 +1,8 @@
 import type { PlanTier } from "@convex/lib/organization";
 
+/** Length of the Starter trial; the management plane owns the real value, this is the wording. */
+export const TRIAL_DAYS = 30;
+
 export interface PlanDetails {
   tagline: string;
   audience: string;

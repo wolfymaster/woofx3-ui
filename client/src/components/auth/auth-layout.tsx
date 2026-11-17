@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { marketingUrl } from "@/lib/marketing-url";
+import { cn } from "@/lib/utils";
 
 const NAV: Array<{ path: string; label: string }> = [
   { path: "/features", label: "Features" },
@@ -22,7 +23,7 @@ function Wordmark() {
  * The frame for the signed-out screens: the marketing site's header and background around a centred
  * form. `auth-brand` pins the marketing palette, so the person's chosen theme only shows from the dashboard on.
  */
-export function AuthLayout({ children }: { children: ReactNode }) {
+export function AuthLayout({ children, width = "narrow" }: { children: ReactNode; width?: "narrow" | "wide" }) {
   const site = marketingUrl();
   return (
     <div className="auth-brand dark min-h-screen text-foreground flex flex-col">
@@ -45,7 +46,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="flex flex-1 items-center justify-center p-4">
-        <div className="w-full max-w-md py-8">{children}</div>
+        <div className={cn("w-full py-8", width === "wide" ? "max-w-4xl" : "max-w-md")}>{children}</div>
       </main>
     </div>
   );
@@ -53,3 +54,6 @@ export function AuthLayout({ children }: { children: ReactNode }) {
 
 /** The card the forms sit in, in the marketing site's surface style. */
 export const AUTH_CARD_CLASS = "rounded-xl border-[#262636] bg-[#111119]";
+
+/** A card on the marketing background, frosted so its glow shows through. */
+export const AUTH_GLASS_CLASS = "rounded-xl border-white/10 bg-white/[0.04] backdrop-blur-xl";
