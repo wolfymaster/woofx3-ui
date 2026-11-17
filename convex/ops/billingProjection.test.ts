@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { newBackend } from "../lib/convexTest.testing";
-import { OPS_SECRET_ENV } from "../lib/ops/auth";
 import { MAX_PROJECTION_VERSION, parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
+import { callerSecretEnv } from "../lib/ops/callers";
 
 type Backend = ReturnType<typeof newBackend>;
 
 const SECRET = "s".repeat(64);
+const OPS_SECRET_ENV = callerSecretEnv("billing");
+const BACKOFFICE_SECRET_ENV = callerSecretEnv("backoffice");
 
 const wire = (accountId: string, version: number, overrides: object = {}) => ({
   accountId,
@@ -40,7 +42,7 @@ function parsed(body: object) {
   if (!result.ok) {
     throw new Error(result.message);
   }
-  return { ...result.value, actor: "billing-plane", auditReason: "projection push" };
+  return { ...result.value, caller: "billing", actor: "billing-plane", auditReason: "projection push" };
 }
 
 const rows = (t: Backend) => t.run((ctx) => ctx.db.query("orgBilling").collect());
@@ -318,6 +320,7 @@ describe("resetBillingProjection", () => {
   const reset = (t: Backend, accountId: string) =>
     t.mutation(internal.ops.billingProjection.resetBillingProjection, {
       accountId,
+      caller: "backoffice",
       actor: "ops@woofx3.tv",
       auditReason: "plane counter rebuilt",
     });
@@ -369,14 +372,14 @@ describe("resetBillingProjection", () => {
 describe("POST /api/ops/accounts/:id/billing-projection-reset", () => {
   let previous: string | undefined;
   beforeEach(() => {
-    previous = process.env[OPS_SECRET_ENV];
-    process.env[OPS_SECRET_ENV] = SECRET;
+    previous = process.env[BACKOFFICE_SECRET_ENV];
+    process.env[BACKOFFICE_SECRET_ENV] = SECRET;
   });
   afterEach(() => {
     if (previous === undefined) {
-      delete process.env[OPS_SECRET_ENV];
+      delete process.env[BACKOFFICE_SECRET_ENV];
     } else {
-      process.env[OPS_SECRET_ENV] = previous;
+      process.env[BACKOFFICE_SECRET_ENV] = previous;
     }
   });
 

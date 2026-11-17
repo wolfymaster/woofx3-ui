@@ -1,5 +1,5 @@
 import openapiTS, { astToString } from "openapi-typescript";
-import spec from "./openapi.billing.json";
+import spec from "../../convex/lib/billing/openapi.billing.json";
 
 export const BILLING_TYPES_SCRIPT = "bun run billing:types";
 

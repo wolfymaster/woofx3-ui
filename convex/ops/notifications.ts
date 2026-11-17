@@ -29,6 +29,7 @@ export const list = internalQuery({
  */
 export const create = internalMutation({
   args: {
+    caller: v.string(),
     actor: v.string(),
     reason: v.string(),
     requestId: v.string(),
@@ -78,6 +79,7 @@ export const create = internalMutation({
       requestId: args.requestId,
     });
     await recordOpsAudit(ctx, {
+      caller: args.caller,
       actor: args.actor,
       action: "notifications.create",
       target: notificationId,
@@ -100,8 +102,8 @@ export const create = internalMutation({
 });
 
 export const remove = internalMutation({
-  args: { actor: v.string(), reason: v.string(), notificationId: v.string() },
-  handler: async (ctx, { actor, reason, notificationId }): Promise<NotificationWriteResult<{ id: string }>> => {
+  args: { caller: v.string(), actor: v.string(), reason: v.string(), notificationId: v.string() },
+  handler: async (ctx, { caller, actor, reason, notificationId }): Promise<NotificationWriteResult<{ id: string }>> => {
     const id: Id<"notifications"> | null = ctx.db.normalizeId("notifications", notificationId);
     const notification = id === null ? null : await ctx.db.get(id);
     if (id === null || notification === null) {
@@ -109,6 +111,7 @@ export const remove = internalMutation({
     }
     await retractNotification(ctx, id);
     await recordOpsAudit(ctx, {
+      caller,
       actor,
       action: "notifications.delete",
       target: id,

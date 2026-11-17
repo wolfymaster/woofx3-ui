@@ -24,10 +24,10 @@ export function projectionIdempotencyKey(accountId: string, version: number): st
  * with the operator, in the same mutation; a replay or a stale push is not.
  */
 export const applyBillingProjection = internalMutation({
-  args: { accountId: v.string(), actor: v.string(), auditReason: v.string(), ...orgBillingFields },
+  args: { accountId: v.string(), caller: v.string(), actor: v.string(), auditReason: v.string(), ...orgBillingFields },
   handler: async (
     ctx,
-    { accountId: rawAccountId, actor, auditReason, ...projection }
+    { accountId: rawAccountId, caller, actor, auditReason, ...projection }
   ): Promise<ProjectionWriteResult> => {
     const accountId = ctx.db.normalizeId("accounts", rawAccountId);
     if (accountId === null || (await ctx.db.get(accountId)) === null) {
@@ -60,6 +60,7 @@ export const applyBillingProjection = internalMutation({
       }
       result = { applied: true, version: projection.version };
       await recordOpsAudit(ctx, {
+        caller,
         actor,
         action: "accounts.billingProjection",
         target: rawAccountId,
@@ -82,10 +83,10 @@ export const applyBillingProjection = internalMutation({
  * being applied. Audited with the operator and reason.
  */
 export const resetBillingProjection = internalMutation({
-  args: { accountId: v.string(), actor: v.string(), auditReason: v.string() },
+  args: { accountId: v.string(), caller: v.string(), actor: v.string(), auditReason: v.string() },
   handler: async (
     ctx,
-    { accountId: rawAccountId, actor, auditReason }
+    { accountId: rawAccountId, caller, actor, auditReason }
   ): Promise<
     | { ok: true; result: { previousVersion: number; version: 0 } }
     | { ok: false; status: 404; code: string; message: string }
@@ -107,6 +108,7 @@ export const resetBillingProjection = internalMutation({
       await ctx.db.delete(claim._id);
     }
     await recordOpsAudit(ctx, {
+      caller,
       actor,
       action: "accounts.billingProjectionReset",
       target: rawAccountId,

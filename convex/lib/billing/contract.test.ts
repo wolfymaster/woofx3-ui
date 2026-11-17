@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { BILLING_TYPES_SCRIPT, generateBillingTypes } from "./generate";
+import { BILLING_TYPES_SCRIPT, generateBillingTypes } from "../../../scripts/billing/generate";
 
 const read = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 
