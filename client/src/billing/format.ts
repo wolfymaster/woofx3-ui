@@ -1,18 +1,6 @@
-import type { AppliedDiscount, DiscountDuration } from "@convex/lib/billingClient";
+import type { AppliedDiscount, DiscountDuration, PlanPrice } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { MyOrganization } from "@convex/organizations";
-
-export const PLAN_NAMES: Record<PlanTier, string> = { starter: "Starter", pro: "Pro" };
-
-/**
- * List prices in cents, for choosing a plan. Stripe holds the prices that are
- * charged; these must match its `woofx3_<tier>_<interval>` prices and the
- * marketing pricing page (woofx3-marketing `client/src/content/pricing.ts`).
- */
-export const PLAN_PRICE_CENTS: Record<PlanTier, Record<BillingInterval, number>> = {
-  starter: { month: 6000, year: 60000 },
-  pro: { month: 12000, year: 120000 },
-};
 
 const INTERVAL_SUFFIX: Record<BillingInterval, string> = { month: "/mo", year: "/yr" };
 
@@ -24,9 +12,20 @@ export function formatCents(cents: number): string {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
-export function formatPrice(plan: PlanTier, interval: BillingInterval): string {
-  const cents = PLAN_PRICE_CENTS[plan][interval];
-  return `${formatCents(cents).replace(/\.00$/, "")}${INTERVAL_SUFFIX[interval]}`;
+export const PRICE_UNAVAILABLE_TEXT = "price unavailable";
+
+/** The plane's price for the plan and interval, as "$60/mo"; `prices` is null while the plane has not answered. */
+export function formatPrice(prices: readonly PlanPrice[] | null, plan: PlanTier, interval: BillingInterval): string {
+  const price = prices?.find((candidate) => candidate.plan === plan && candidate.interval === interval);
+  if (price === undefined) {
+    return PRICE_UNAVAILABLE_TEXT;
+  }
+  return `${formatCents(price.amountCents).replace(/\.00$/, "")}${INTERVAL_SUFFIX[interval]}`;
+}
+
+/** A plan's display name from the plan rows, or its key while they have not loaded. */
+export function planName(names: Readonly<Record<string, string>>, plan: PlanTier): string {
+  return names[plan] ?? plan;
 }
 
 function durationText(duration: DiscountDuration): string {
