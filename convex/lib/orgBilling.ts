@@ -1,7 +1,7 @@
 import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { type AccountPlanRow, limitValuesValidator, type SubscriptionSummary } from "./entitlements";
+import { type EntitlementOverrides, limitValuesValidator, type SubscriptionSummary } from "./entitlements";
 import {
   billingIntervalValidator,
   lifecycleReasonValidator,
@@ -57,7 +57,7 @@ export interface BillingView {
   spinDownAt: number | null;
   hasProviderSubscription: boolean;
   discount: ProjectedDiscount | null;
-  overrides: AccountPlanRow;
+  overrides: EntitlementOverrides;
 }
 
 /**

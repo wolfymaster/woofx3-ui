@@ -142,7 +142,7 @@ export interface PlanRow {
 }
 
 /** Changes to a plan for one account alone, as the billing projection carries them. */
-export interface AccountPlanRow {
+export interface EntitlementOverrides {
   addFeatures: readonly string[];
   removeFeatures: readonly string[];
   limits: readonly LimitValue[];
@@ -206,30 +206,30 @@ const NO_BILLING: BillingGrant = { subscription: null, grantedFeatures: [] };
 
 /**
  * Resolves what an account may use. `plan` is the plan that applies and
- * `assignment` holds the account's overrides of it. Keys code no longer knows
+ * `overrides` holds the account's changes to it. Keys code no longer knows
  * are dropped. A limit is the account's override, else the plan's, else the
  * code default.
  */
 export function resolveEntitlements(
   plan: PlanRow | null,
-  assignment: AccountPlanRow | null,
+  overrides: EntitlementOverrides | null,
   catalog: EntitlementCatalog = ENTITLEMENT_CATALOG,
   billing: BillingGrant = NO_BILLING
 ): Entitlements {
   const { subscription, grantedFeatures } = billing;
   const known = (key: string) => hasKey(catalog.features, key);
   const features = new Set([...(plan?.features ?? []), ...grantedFeatures].filter(known));
-  for (const feature of assignment?.addFeatures ?? []) {
+  for (const feature of overrides?.addFeatures ?? []) {
     if (known(feature)) {
       features.add(feature);
     }
   }
-  for (const feature of assignment?.removeFeatures ?? []) {
+  for (const feature of overrides?.removeFeatures ?? []) {
     features.delete(feature);
   }
 
   const planLimits = new Map((plan?.limits ?? []).map((limit) => [limit.key, limit.value]));
-  const accountLimits = new Map((assignment?.limits ?? []).map((limit) => [limit.key, limit.value]));
+  const accountLimits = new Map((overrides?.limits ?? []).map((limit) => [limit.key, limit.value]));
   const limits: Record<string, number | null> = {};
   for (const [key, definition] of Object.entries(catalog.limits)) {
     if (accountLimits.has(key)) {

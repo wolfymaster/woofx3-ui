@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
-  type AccountPlanRow,
   type EntitlementCatalog,
+  type EntitlementOverrides,
   isWithinLimit,
   type PlanRow,
   resolveEntitlements,
@@ -29,7 +29,7 @@ const pro: PlanRow = {
   limits: [{ key: "storage.assetBytes", value: 50_000 }],
 };
 
-function assignment(overrides: Partial<AccountPlanRow> = {}): AccountPlanRow {
+function overridesOf(overrides: Partial<EntitlementOverrides> = {}): EntitlementOverrides {
   return { addFeatures: [], removeFeatures: [], limits: [], ...overrides };
 }
 
@@ -53,7 +53,7 @@ describe("resolveEntitlements", () => {
   it("applies the account's overrides over the plan", () => {
     const resolved = resolveEntitlements(
       pro,
-      assignment({
+      overridesOf({
         addFeatures: ["tools.clips"],
         removeFeatures: ["reports.advanced"],
         limits: [
