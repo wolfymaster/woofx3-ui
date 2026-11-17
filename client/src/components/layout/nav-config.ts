@@ -8,7 +8,6 @@ import {
   HardDrive,
   History,
   Key,
-  Layers,
   LayoutDashboard,
   MessageSquare,
   MessageSquarePlus,
@@ -20,6 +19,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Store,
+  ToggleRight,
   Users,
 } from "lucide-react";
 import { ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
@@ -180,7 +180,7 @@ export const STREAM_ITEMS: NavItem[] = [
 export const ALERT_GROUPS_ITEM: NavItem = {
   id: "alert-groups",
   label: "Alert Groups",
-  icon: Layers,
+  icon: ToggleRight,
   href: ALERT_GROUPS_PATH,
   group: STREAM_GROUPS.react,
 };
