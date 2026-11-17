@@ -196,7 +196,12 @@ export function WidgetPalette<T extends PaletteWidget>({
                 </button>
                 <div id={contentId} hidden={!open} className={cn("grid-cols-2 gap-2 pt-1", open && "grid")}>
                   {group.widgets.map((widget) => (
-                    <WidgetPreviewTile key={widget.widgetId} widget={widget} onAdd={addWidget} />
+                    <WidgetPreviewTile
+                      key={widget.widgetId}
+                      widget={widget}
+                      onAdd={addWidget}
+                      testIdPrefix={group.key === RECENT_SECTION_KEY ? "add-widget-recent" : undefined}
+                    />
                   ))}
                 </div>
               </div>
@@ -220,7 +225,16 @@ const PREVIEW_STYLE: Record<WidgetPreviewKind, string> = {
 };
 
 /** One tile in the library: a sample of what it puts on screen, then its full name. */
-function WidgetPreviewTile<T extends PaletteWidget>({ widget, onAdd }: { widget: T; onAdd: (widget: T) => void }) {
+function WidgetPreviewTile<T extends PaletteWidget>({
+  widget,
+  onAdd,
+  testIdPrefix = "add-widget",
+}: {
+  widget: T;
+  onAdd: (widget: T) => void;
+  /** Recent repeats a widget also listed in its taxonomy section; keep its id unique. */
+  testIdPrefix?: string;
+}) {
   const preview = widgetPreviewFor(widget);
   return (
     <button
@@ -232,7 +246,7 @@ function WidgetPreviewTile<T extends PaletteWidget>({ widget, onAdd }: { widget:
         "hover:border-foreground/30 hover:bg-accent",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
-      data-testid={`add-widget-${widget.widgetId}`}
+      data-testid={`${testIdPrefix}-${widget.widgetId}`}
     >
       <span
         aria-hidden="true"

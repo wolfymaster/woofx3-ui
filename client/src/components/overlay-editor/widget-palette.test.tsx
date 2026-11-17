@@ -12,8 +12,12 @@ const recentStorage: Storage = {
   setItem: () => undefined,
 };
 
+function setWindow(value: Partial<Window> | undefined): void {
+  Object.defineProperty(globalThis, "window", { value, configurable: true, writable: true });
+}
+
 afterEach(() => {
-  (globalThis as { window?: Partial<Window> }).window = realWindow;
+  setWindow(realWindow);
 });
 
 const widgets = [
@@ -82,12 +86,17 @@ describe("WidgetPalette", () => {
   });
 
   test("shows a Recent section above the taxonomy sections once a widget has been added", () => {
-    (globalThis as { window?: Partial<Window> }).window = { localStorage: recentStorage };
+    setWindow({ localStorage: recentStorage });
     const html = render();
     expect(html).toContain('data-testid="widget-section-recent"');
     expect(html).toContain('id="widget-section-content-recent"');
     const recentIndex = html.indexOf('data-testid="widget-section-recent"');
     expect(recentIndex).toBeLessThan(html.indexOf('data-testid="widget-section-content"'));
+    // A repeated widget must keep one canonical add id, so a strict locator still finds one tile.
+    for (const widgetId of ["text", "record"]) {
+      expect(html).toContain(`data-testid="add-widget-recent-${widgetId}"`);
+      expect(html.split(`data-testid="add-widget-${widgetId}"`)).toHaveLength(2);
+    }
   });
 
   test("keeps the alert editor's horizontal strip as icon tiles", () => {
