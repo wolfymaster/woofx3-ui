@@ -7,7 +7,7 @@ import { deletePlan, upsertPlan } from "./lib/plans";
  * Operator commands for the tier plan rows, run from the CLI. `actor` defaults to "cli".
  *
  *   bunx convex run plans:list
- *   bunx convex run plans:upsert '{"key": "pro", "name": "Pro", "features": [], "limits": [], "offered": true}'
+ *   bunx convex run plans:upsert '{"key": "pro", "name": "Pro", "features": [], "limits": []}'
  */
 
 const CLI = "cli";
@@ -25,10 +25,8 @@ export const upsert = internalMutation({
   args: {
     key: v.string(),
     name: v.string(),
-    description: v.optional(v.string()),
     features: v.array(v.string()),
     limits: limitValuesValidator,
-    offered: v.boolean(),
     actor: v.optional(v.string()),
   },
   handler: async (ctx, { actor, ...input }) => {

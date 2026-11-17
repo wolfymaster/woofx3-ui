@@ -7,10 +7,8 @@ import { type LimitValue, validateEntitlementInput, validatePlanKey } from "./en
 export interface PlanInput {
   key: string;
   name: string;
-  description?: string;
   features: string[];
   limits: LimitValue[];
-  offered: boolean;
 }
 
 /** Creates a plan, or replaces the plan with that key. */
@@ -23,10 +21,8 @@ export async function upsertPlan(ctx: MutationCtx, input: PlanInput, actor: stri
   const fields = {
     key: input.key,
     name: input.name.trim(),
-    description: input.description,
     features: [...new Set(input.features)].sort(),
     limits: input.limits,
-    offered: input.offered,
     updatedAt: Date.now(),
     updatedBy: actor,
   };
