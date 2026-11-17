@@ -18,6 +18,7 @@ import {
   setupNeedsTwitch,
 } from "./lib/setupPlatforms";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
+import { orgCan, orgRoleOf } from "./org/policy";
 import { findOrCreateManagedInstance, markFirstRun, startTrialIfNew } from "./provisioningInternal";
 
 // Bounds for reads of tables that hold a handful of rows per key.
@@ -263,11 +264,18 @@ async function seedDashboard(ctx: MutationCtx, instanceId: Id<"instances">, user
 
 /**
  * Asks for the instance's first engine, when it is a managed one with none
- * requested. Registered and external instances have what they need.
+ * requested and the user may create engines. Registered and external
+ * instances have what they need. Someone who may not leaves the build to the
+ * owner (their setup or Try again), since a scheduled request would only be
+ * refused where nobody sees it.
  */
-async function scheduleFirstEngine(ctx: MutationCtx, instanceId: Id<"instances">) {
+async function scheduleFirstEngine(ctx: MutationCtx, instanceId: Id<"instances">, userId: Id<"users">) {
   const instance = await ctx.db.get(instanceId);
   if (!instance || instance.clientId || instance.hosting !== "managed") {
+    return;
+  }
+  const account = await ctx.db.get(instance.accountId);
+  if (account === null || !orgCan(await orgRoleOf(ctx, account, userId), "createEngine")) {
     return;
   }
   const provisioning = await ctx.db
@@ -275,7 +283,7 @@ async function scheduleFirstEngine(ctx: MutationCtx, instanceId: Id<"instances">
     .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
     .first();
   if (!provisioning) {
-    await ctx.scheduler.runAfter(0, internal.provisioning.startFirstEngine, { instanceId });
+    await ctx.scheduler.runAfter(0, internal.provisioning.startFirstEngine, { instanceId, userId });
   }
 }
 
@@ -288,7 +296,7 @@ async function scheduleFirstEngine(ctx: MutationCtx, instanceId: Id<"instances">
  */
 export async function finishFirstRun(ctx: MutationCtx, row: Doc<"instanceSetup">, userId: Id<"users">) {
   const { instanceId } = row;
-  await scheduleFirstEngine(ctx, instanceId);
+  await scheduleFirstEngine(ctx, instanceId, userId);
   if (row.completedAt) {
     return;
   }

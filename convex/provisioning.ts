@@ -270,11 +270,10 @@ function isSlugRefused(error: unknown): boolean {
  * A request whose outcome is unknown goes first and skips the check, since the
  * engine it may have created is what would make its slug read as taken.
  */
-async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
-  const { accountId, ownerId, login, unsettledSlug } = await ctx.runQuery(
-    internal.provisioningInternal.firstEngineFacts,
-    { instanceId }
-  );
+async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">, userId: Id<"users">): Promise<void> {
+  const { accountId, login, unsettledSlug } = await ctx.runQuery(internal.provisioningInternal.firstEngineFacts, {
+    instanceId,
+  });
   const derived = slugCandidates(login).filter((slug) => slug !== unsettledSlug);
   for (const slug of unsettledSlug === null ? derived : [unsettledSlug, ...derived]) {
     const available =
@@ -288,7 +287,7 @@ async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): 
       continue;
     }
     try {
-      await requestEngine(ctx, { accountId, userId: ownerId, slug, twitchChannel: login });
+      await requestEngine(ctx, { accountId, userId, slug, twitchChannel: login });
       return;
     } catch (error) {
       if (!isSlugRefused(error)) {
@@ -299,11 +298,15 @@ async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): 
   await ctx.runMutation(internal.provisioningInternal.markUsernameNeeded, { instanceId });
 }
 
-/** Scheduled when setup finishes on a managed instance with no engine yet (`setup.finishFirstRun`). */
+/**
+ * Scheduled when setup finishes on a managed instance with no engine yet
+ * (`setup.finishFirstRun`), for the user who finished it: the build is asked
+ * for in their name, so `createEngine` decides for them.
+ */
 export const startFirstEngine = internalAction({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
-    await startDerivedEngine(ctx, instanceId);
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }) => {
+    await startDerivedEngine(ctx, instanceId, userId);
   },
 });
 
@@ -389,7 +392,7 @@ export const startNewEngine = action({
 export const retry = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ retried: RetryKind }> => {
-    await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
+    const { userId } = await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
     const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
     if (row?.maintenanceEngineId) {
       return retryManagedEngineRow(ctx, row);
@@ -408,7 +411,8 @@ export const retry = action({
       }
       return { retried: "registration" };
     }
-    await startDerivedEngine(ctx, instanceId);
+    // A new build is what the org pays for, so it is asked for as the caller, never as the owner.
+    await startDerivedEngine(ctx, instanceId, userId);
     return { retried: "provisioning" };
   },
 });
