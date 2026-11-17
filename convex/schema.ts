@@ -10,7 +10,7 @@ import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
 import { opsRequestKindValidator } from "./lib/ops/idempotency";
-import { engineRoleValidator, orgRoleValidator } from "./lib/organization";
+import { billingIntervalValidator, engineRoleValidator, orgRoleValidator, planTierValidator } from "./lib/organization";
 import { orgBillingFields } from "./lib/orgBilling";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
 import { subscriberTierValidator, viewerPlatformValidator } from "./lib/viewerAuth";
@@ -1523,6 +1523,21 @@ export default defineSchema({
   })
     .index("by_key", ["write", "accountId", "key"])
     .index("by_claimed_at", ["claimedAt"]),
+
+  // planPriceCache: the last list prices the billing plane answered, kept so a
+  // plane outage still shows the last price it gave. One row, replaced on each
+  // successful answer; it is never seeded or edited by hand.
+  planPriceCache: defineTable({
+    prices: v.array(
+      v.object({
+        plan: planTierValidator,
+        interval: billingIntervalValidator,
+        amountCents: v.number(),
+        currency: v.literal("usd"),
+      })
+    ),
+    fetchedAt: v.number(),
+  }),
 
   // plans: what each tier includes, edited by operators. Features and limit
   // keys must be listed in lib/entitlements.ts.
