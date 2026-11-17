@@ -357,19 +357,49 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/** Whose billing a call acts for; the plane refuses a key bound to the other owner, so each owner has its own key. */
+export type RouteOwner = "org" | "user" | "public";
+
 export interface BillingClientConfig {
   baseUrl: string;
-  apiKey: string;
+  orgKey: string;
+  userKey: string;
 }
 
-/** The deployment's plane credential, or null on a deployment without the service. */
+/** Set once the unbound-key fallback has been announced, so a busy deployment logs it a single time per isolate. */
+let legacyKeyAnnounced = false;
+
+/**
+ * The deployment's plane credentials, or null on a deployment without the service. Throws when the URL is set and
+ * exactly one of the two owner keys is, since half a configuration would fail on the other owner's first call.
+ * While neither owner key is set, MAINTENANCE_API_KEY serves both owners.
+ */
 export function billingConfigFromEnv(env: Record<string, string | undefined>): BillingClientConfig | null {
   const baseUrl = env.MAINTENANCE_API_URL;
-  const apiKey = env.MAINTENANCE_API_KEY;
-  if (!baseUrl || !apiKey) {
+  if (!baseUrl) {
     return null;
   }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+  const orgKey = env.MAINTENANCE_BILLING_ORG_KEY || undefined;
+  const userKey = env.MAINTENANCE_BILLING_USER_KEY || undefined;
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  if (orgKey !== undefined && userKey !== undefined) {
+    return { baseUrl: cleanBase, orgKey, userKey };
+  }
+  if (orgKey !== undefined || userKey !== undefined) {
+    const missing = orgKey === undefined ? "MAINTENANCE_BILLING_ORG_KEY" : "MAINTENANCE_BILLING_USER_KEY";
+    throw new Error(`Billing is half configured: ${missing} is not set. Set both owner keys or neither.`);
+  }
+  const legacyKey = env.MAINTENANCE_API_KEY || undefined;
+  if (legacyKey === undefined) {
+    return null;
+  }
+  if (!legacyKeyAnnounced) {
+    legacyKeyAnnounced = true;
+    console.warn(
+      "billing uses MAINTENANCE_API_KEY for both owners; set MAINTENANCE_BILLING_ORG_KEY and MAINTENANCE_BILLING_USER_KEY instead"
+    );
+  }
+  return { baseUrl: cleanBase, orgKey: legacyKey, userKey: legacyKey };
 }
 
 function errorFrom(text: string, status: number): BillingError {
@@ -395,6 +425,7 @@ function errorFrom(text: string, status: number): BillingError {
 }
 
 interface Call {
+  owner: RouteOwner;
   method: "GET" | "POST" | "PATCH";
   path: string;
   body?: unknown;
@@ -408,6 +439,7 @@ export class HttpBillingClient implements BillingClient {
   ensure(accountId: string) {
     return this.send(
       {
+        owner: "org",
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/ensure`,
         idempotencyKey: ensureIdempotencyKey(accountId),
@@ -419,6 +451,7 @@ export class HttpBillingClient implements BillingClient {
   startCheckout(request: CheckoutRequest) {
     return this.sendForUrl(
       {
+        owner: "org",
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(request.accountId)}/checkouts`,
         idempotencyKey: request.idempotencyKey,
@@ -435,6 +468,7 @@ export class HttpBillingClient implements BillingClient {
   startMarketplaceCheckout(request: MarketplaceCheckoutRequest) {
     return this.sendForUrl(
       {
+        owner: "org",
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(request.accountId)}/marketplace-checkouts`,
         idempotencyKey: request.idempotencyKey,
@@ -446,14 +480,14 @@ export class HttpBillingClient implements BillingClient {
 
   openPortal(accountId: string) {
     return this.sendForUrl(
-      { method: "POST", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/portal-sessions` },
+      { owner: "org", method: "POST", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/portal-sessions` },
       urlSchema
     );
   }
 
   async listInvoices(accountId: string) {
     const result = await this.send(
-      { method: "GET", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/invoices` },
+      { owner: "org", method: "GET", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/invoices` },
       invoicesSchema
     );
     if (!result.ok) {
@@ -466,7 +500,7 @@ export class HttpBillingClient implements BillingClient {
 
   async lookupPromotionCode(code: string) {
     const result = await this.send(
-      { method: "GET", path: `/v1/billing/promotion-codes/${encodeURIComponent(code.trim())}` },
+      { owner: "org", method: "GET", path: `/v1/billing/promotion-codes/${encodeURIComponent(code.trim())}` },
       appliedDiscountSchema
     );
     if (!result.ok && result.error.code === "promotion_code_not_found") {
@@ -478,6 +512,7 @@ export class HttpBillingClient implements BillingClient {
   checkoutState(checkoutId: string, accountId: string) {
     return this.send(
       {
+        owner: "org",
         method: "GET",
         path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?accountId=${encodeURIComponent(accountId)}`,
       },
@@ -486,17 +521,18 @@ export class HttpBillingClient implements BillingClient {
   }
 
   async planPrices() {
-    const result = await this.send({ method: "GET", path: "/v1/billing/prices" }, planPricesSchema);
+    const result = await this.send({ owner: "public", method: "GET", path: "/v1/billing/prices" }, planPricesSchema);
     return result.ok ? billingOk(result.value.prices) : result;
   }
 
   sponsorshipTerms() {
-    return this.send({ method: "GET", path: "/v1/billing/sponsorship-terms" }, sponsorshipTermsSchema);
+    return this.send({ owner: "user", method: "GET", path: "/v1/billing/sponsorship-terms" }, sponsorshipTermsSchema);
   }
 
   startSponsorshipCheckout(request: SponsorshipCheckoutRequest) {
     return this.sendForUrl(
       {
+        owner: "user",
         method: "POST",
         path: `${userPath(request.userId)}/sponsorship-checkouts`,
         idempotencyKey: request.idempotencyKey,
@@ -511,7 +547,10 @@ export class HttpBillingClient implements BillingClient {
   }
 
   async listSponsorships(userId: string) {
-    const result = await this.send({ method: "GET", path: `${userPath(userId)}/sponsorships` }, sponsorshipsSchema);
+    const result = await this.send(
+      { owner: "user", method: "GET", path: `${userPath(userId)}/sponsorships` },
+      sponsorshipsSchema
+    );
     if (!result.ok) {
       return result;
     }
@@ -528,6 +567,7 @@ export class HttpBillingClient implements BillingClient {
   async changeSponsorshipAmount(userId: string, sponsorshipId: string, amountCents: number) {
     const result = await this.send(
       {
+        owner: "user",
         method: "PATCH",
         path: sponsorshipPath(userId, sponsorshipId),
         body: { amountCents } satisfies Schemas["BillingSponsorshipAmountBody"],
@@ -540,6 +580,7 @@ export class HttpBillingClient implements BillingClient {
   async cancelSponsorship(userId: string, sponsorshipId: string, atPeriodEnd: boolean) {
     const result = await this.send(
       {
+        owner: "user",
         method: "POST",
         path: `${sponsorshipPath(userId, sponsorshipId)}/cancel`,
         body: { atPeriodEnd } satisfies Schemas["BillingSponsorshipCancelBody"],
@@ -552,6 +593,7 @@ export class HttpBillingClient implements BillingClient {
   sponsorshipPaymentMethodSession(userId: string, sponsorshipId: string, returnUrl: string) {
     return this.sendForUrl(
       {
+        owner: "user",
         method: "POST",
         path: `${sponsorshipPath(userId, sponsorshipId)}/payment-method-sessions`,
         body: { returnUrl } satisfies Schemas["BillingReturnUrlBody"],
@@ -563,6 +605,7 @@ export class HttpBillingClient implements BillingClient {
   sponsorshipCheckoutState(checkoutId: string, userId: string) {
     return this.send(
       {
+        owner: "user",
         method: "GET",
         path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?userId=${encodeURIComponent(userId)}`,
       },
@@ -588,7 +631,10 @@ export class HttpBillingClient implements BillingClient {
   }
 
   private async send<S extends z.ZodType>(call: Call, schema: S): Promise<BillingResult<z.infer<S>>> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${this.config.apiKey}` };
+    const headers: Record<string, string> = {};
+    if (call.owner !== "public") {
+      headers.Authorization = `Bearer ${call.owner === "org" ? this.config.orgKey : this.config.userKey}`;
+    }
     if (call.body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
