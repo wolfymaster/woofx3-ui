@@ -113,7 +113,7 @@ describe("organizations.mine", () => {
       hasProviderSubscription: true,
       discount: { label: "50% off for 3 months" },
     });
-    const [organization] = await as(t, ownerId).query(api.organizations.mine, { now: NOW });
+    const [organization] = await as(t, ownerId).query(api.organizations.mine, {});
     expect(organization?.subscription).toMatchObject({
       plan: "starter",
       interval: "year",
@@ -129,7 +129,7 @@ describe("organizations.mine", () => {
     const t = newBackend();
     const { ownerId, accountId } = await seed(t);
     await project(t, accountId, { tier: null, standing: "trialing", trialEndsAt: TRIAL_END });
-    const [organization] = await as(t, ownerId).query(api.organizations.mine, { now: NOW });
+    const [organization] = await as(t, ownerId).query(api.organizations.mine, {});
     expect(organization?.subscription).toMatchObject({ plan: null, state: "trialing", nextBillingAt: TRIAL_END });
   });
 });

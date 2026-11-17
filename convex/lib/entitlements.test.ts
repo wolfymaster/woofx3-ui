@@ -29,15 +29,13 @@ const pro: PlanRow = {
   limits: [{ key: "storage.assetBytes", value: 50_000 }],
 };
 
-const now = 1_700_000_000_000;
-
 function assignment(overrides: Partial<AccountPlanRow> = {}): AccountPlanRow {
   return { addFeatures: [], removeFeatures: [], limits: [], ...overrides };
 }
 
 describe("resolveEntitlements", () => {
   it("is nothing but code defaults when no plan applies", () => {
-    expect(resolveEntitlements(null, null, now, catalog)).toEqual({
+    expect(resolveEntitlements(null, null, catalog)).toEqual({
       plan: null,
       subscription: null,
       features: [],
@@ -46,7 +44,7 @@ describe("resolveEntitlements", () => {
   });
 
   it("takes the plan's features and limits, dropping keys code no longer knows", () => {
-    const resolved = resolveEntitlements(pro, null, now, catalog);
+    const resolved = resolveEntitlements(pro, null, catalog);
     expect(resolved.plan).toEqual({ key: "pro", name: "Pro" });
     expect(resolved.features).toEqual(["reports.advanced"]);
     expect(resolved.limits).toEqual({ "storage.assetBytes": 50_000, "api.requestsPerDay": null });
@@ -62,25 +60,11 @@ describe("resolveEntitlements", () => {
           { key: "storage.assetBytes", value: null },
           { key: "api.requestsPerDay", value: 1_000 },
         ],
-        expiresAt: now + 1,
       }),
-      now,
       catalog
     );
     expect(resolved.features).toEqual(["tools.clips"]);
     expect(resolved.limits).toEqual({ "storage.assetBytes": null, "api.requestsPerDay": 1_000 });
-    expect(resolved.expiresAt).toBe(now + 1);
-  });
-
-  it("ignores an expired assignment's overrides", () => {
-    const resolved = resolveEntitlements(
-      pro,
-      assignment({ addFeatures: ["tools.clips"], expiresAt: now }),
-      now,
-      catalog
-    );
-    expect(resolved.features).toEqual(["reports.advanced"]);
-    expect(resolved.expiresAt).toBeUndefined();
   });
 });
 
@@ -88,14 +72,14 @@ describe("isWithinLimit", () => {
   const key = "storage.assetBytes" as never;
 
   it("admits usage up to the limit, and any usage when unlimited", () => {
-    const resolved = resolveEntitlements(pro, null, now, catalog);
+    const resolved = resolveEntitlements(pro, null, catalog);
     expect(isWithinLimit(resolved, key, 50_000)).toBe(true);
     expect(isWithinLimit(resolved, key, 50_001)).toBe(false);
     expect(isWithinLimit(resolved, "api.requestsPerDay" as never, Number.MAX_SAFE_INTEGER)).toBe(true);
   });
 
   it("throws for a limit that was not resolved", () => {
-    const resolved = resolveEntitlements(pro, null, now, catalog);
+    const resolved = resolveEntitlements(pro, null, catalog);
     expect(() => isWithinLimit(resolved, "seats" as never, 1)).toThrow('Limit "seats" was not resolved');
   });
 });
