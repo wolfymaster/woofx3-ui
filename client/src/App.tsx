@@ -32,12 +32,15 @@ import { hostedFeatureSource } from "@/lib/hosted-feature-source";
 import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import {
+  LEGACY_INSTALLED_MODULE_ROUTE,
+  LEGACY_INSTALLED_PATH,
+  LEGACY_MODULES_PATH,
+  LEGACY_MODULES_ROUTE,
   legacyModulesRedirect,
   MARKETPLACE_BROWSE_ROUTE,
-  MARKETPLACE_INSTALLED_MODULE_ROUTE,
-  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_UPLOAD_PATH,
-  modulesIndexRedirect,
+  MODULES_MODULE_ROUTE,
+  MODULES_PATH,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
@@ -75,6 +78,7 @@ const Logs = lazy(() => import("@/pages/logs"));
 const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
 const Modules = lazy(() => import("@/pages/modules"));
+const ModulesSettings = lazy(() => import("@/pages/modules-settings"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Scenes = lazy(() => import("@/pages/scenes"));
 const Setup = lazy(() => import("@/pages/setup"));
@@ -189,13 +193,8 @@ function Redirect({ to }: { to: string }) {
   return null;
 }
 
-/** Bare `/modules`, forwarded with its query string (see `modulesIndexRedirect`). */
-function ModulesIndexRedirect() {
-  return <Redirect to={modulesIndexRedirect(useSearch())} />;
-}
-
-/** An old `/modules/…` path, forwarded into the Marketplace tab (see `legacyModulesRedirect`). */
-function LegacyModulesRedirect({ params }: { params: { rest: string } }) {
+/** An old `/modules` or `/marketplace/installed` path, forwarded into the Modules group (see `legacyModulesRedirect`). */
+function LegacyModulesRedirect({ params }: { params: { rest?: string } }) {
   return <Redirect to={legacyModulesRedirect(params.rest, useSearch())} />;
 }
 
@@ -297,16 +296,17 @@ function AppRoutes() {
                     <Route path="/stream/workflows/:id/edit" component={Workflows} />
                     <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
+                    {/* Modules group of the Stream tab */}
+                    <Route path={MODULES_PATH} component={ModulesSettings} />
+                    <Route path={MODULES_MODULE_ROUTE} component={Modules} />
+                    <Route path={LEGACY_MODULES_PATH} component={LegacyModulesRedirect} />
+                    <Route path={LEGACY_MODULES_ROUTE} component={LegacyModulesRedirect} />
+
                     {/* Marketplace section */}
-
                     <Route path={MARKETPLACE_UPLOAD_PATH} component={ModuleInstall} />
-                    <Route path={MARKETPLACE_INSTALLED_PATH} component={Modules} />
-                    <Route path={MARKETPLACE_INSTALLED_MODULE_ROUTE} component={Modules} />
+                    <Route path={LEGACY_INSTALLED_PATH} component={LegacyModulesRedirect} />
+                    <Route path={LEGACY_INSTALLED_MODULE_ROUTE} component={LegacyModulesRedirect} />
                     <Route path={MARKETPLACE_BROWSE_ROUTE} component={MarketplaceSection} />
-
-                    {/* Where installed modules used to live; old links forward into the Marketplace tab. */}
-                    <Route path="/modules/:rest" component={LegacyModulesRedirect} />
-                    <Route path="/modules" component={ModulesIndexRedirect} />
 
                     {/* Help section */}
                     <Route path="/help">

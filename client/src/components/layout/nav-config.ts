@@ -17,6 +17,7 @@ import {
   Server,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Store,
   Users,
 } from "lucide-react";
@@ -24,7 +25,7 @@ import { ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import { FEEDBACK_PATH } from "@/lib/feedback";
-import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
+import { MARKETPLACE_PATH, MODULES_PATH } from "@/lib/marketplace-route";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
@@ -58,6 +59,8 @@ export interface NavItem {
    * other; the sidebar prints the heading where the group starts.
    */
   group?: string;
+  /** A short label at the row's right edge, such as where a module came from. */
+  badge?: string;
 }
 
 /** How the selected instance's engine is run; absent until an instance is known. */
@@ -93,6 +96,7 @@ export const STREAM_GROUPS = {
   react: "React",
   build: "Build",
   data: "Data",
+  modules: "Modules",
   community: "Community",
 } as const;
 
@@ -151,6 +155,14 @@ export const STREAM_ITEMS: NavItem[] = [
     group: STREAM_GROUPS.data,
   },
   {
+    id: "modules-settings",
+    label: "Settings",
+    icon: SlidersHorizontal,
+    href: MODULES_PATH,
+    exact: true,
+    group: STREAM_GROUPS.modules,
+  },
+  {
     id: "supporters",
     label: "Supporters",
     icon: HandHeart,
@@ -180,9 +192,7 @@ export const MAIN_NAV_SECTIONS: NavSection[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/" },
   // Lands on Alerts, like the /stream redirect in App.tsx.
   { id: "stream", label: "Stream", icon: Radio, href: "/stream/alerts", children: STREAM_ITEMS },
-  // The storefront is /marketplace; /modules is still the install surface and
-  // is reached from a listing, so the section owns both paths.
-  { id: "marketplace", label: "Marketplace", icon: Store, href: MARKETPLACE_PATH, owns: ["/modules"] },
+  { id: "marketplace", label: "Marketplace", icon: Store, href: MARKETPLACE_PATH },
   { id: "help", label: "Help", icon: CircleHelp, href: HELP_ITEMS[0].href, children: HELP_ITEMS },
 ];
 
@@ -216,17 +226,29 @@ export function isNavItemActive(item: NavItem, location: string): boolean {
 }
 
 /**
- * `items` with `extra` added at the end of the Data group: the resource kinds installed
- * modules declare, beside the built-in counters, timers, queues and databases.
- * `items` comes back unchanged when `extra` is empty or the menu has no Data group.
+ * `items` with `extra` added at the end of `group`, taking on its heading. `items` comes
+ * back unchanged when `extra` is empty or the menu has no such group (Help, Admin).
  */
-export function withResourceKindItems(items: NavItem[], extra: NavItem[]): NavItem[] {
-  const lastData = items.map((item) => item.group).lastIndexOf(STREAM_GROUPS.data);
-  if (extra.length === 0 || lastData === -1) {
+function withGroupItems(items: NavItem[], group: string, extra: NavItem[]): NavItem[] {
+  const last = items.map((item) => item.group).lastIndexOf(group);
+  if (extra.length === 0 || last === -1) {
     return items;
   }
-  const grouped = extra.map((item) => ({ ...item, group: STREAM_GROUPS.data }));
-  return [...items.slice(0, lastData + 1), ...grouped, ...items.slice(lastData + 1)];
+  const grouped = extra.map((item) => ({ ...item, group }));
+  return [...items.slice(0, last + 1), ...grouped, ...items.slice(last + 1)];
+}
+
+/**
+ * `items` with `extra` at the end of the Data group: the resource kinds installed
+ * modules declare, beside the built-in counters, timers, queues and databases.
+ */
+export function withResourceKindItems(items: NavItem[], extra: NavItem[]): NavItem[] {
+  return withGroupItems(items, STREAM_GROUPS.data, extra);
+}
+
+/** `items` with `extra` after Settings in the Modules group: one entry per installed module. */
+export function withInstalledModuleItems(items: NavItem[], extra: NavItem[]): NavItem[] {
+  return withGroupItems(items, STREAM_GROUPS.modules, extra);
 }
 
 export function findActiveSection(location: string): NavSection | null {

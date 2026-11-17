@@ -12,9 +12,9 @@ import {
 } from "@/lib/command-editor-route";
 import {
   MARKETPLACE_BROWSE_ROUTE,
-  MARKETPLACE_INSTALLED_MODULE_ROUTE,
-  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_PATH,
+  MODULES_MODULE_ROUTE,
+  MODULES_PATH,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
@@ -44,6 +44,7 @@ const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
 const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const Modules = lazy(() => import("@/pages/modules"));
+const ModulesSettings = lazy(() => import("@/pages/modules-settings"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Scenes = lazy(() => import("@/pages/scenes"));
@@ -95,8 +96,8 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/workflows/:id", render: () => <Workflows /> },
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
-  { path: MARKETPLACE_INSTALLED_PATH, render: () => <Modules /> },
-  { path: MARKETPLACE_INSTALLED_MODULE_ROUTE, render: () => <Modules /> },
+  { path: MODULES_PATH, render: () => <ModulesSettings /> },
+  { path: MODULES_MODULE_ROUTE, render: () => <Modules /> },
   { path: MARKETPLACE_BROWSE_ROUTE, render: () => <MarketplaceSection /> },
   { path: "/help/learning", render: () => <Learning /> },
   { path: "/help/logs", render: () => <Logs /> },

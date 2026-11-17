@@ -102,9 +102,7 @@ describe("gettingStartedItems", () => {
       )
     ).platforms;
     expect(item.status).toBe("problem");
-    expect(item.fixes).toEqual([
-      { kind: "route", label: "Review Twitch", href: "/marketplace/installed/woofx3_twitch" },
-    ]);
+    expect(item.fixes).toEqual([{ kind: "route", label: "Review Twitch", href: "/stream/modules/woofx3_twitch" }]);
   });
 
   test("sends Twitch back to the connect page when it is not linked", () => {
@@ -161,9 +159,7 @@ describe("gettingStartedItems", () => {
     const setup = { platforms: [twitch, spotify], platformsNeedingSettings: ["woofx3_spotify"] };
     const todo = byId(facts({}, setup))["platform-settings:woofx3_spotify"];
     expect(todo.status).toBe("todo");
-    expect(todo.fixes).toEqual([
-      { kind: "route", label: "Open Spotify", href: "/marketplace/installed/woofx3_spotify" },
-    ]);
+    expect(todo.fixes).toEqual([{ kind: "route", label: "Open Spotify", href: "/stream/modules/woofx3_spotify" }]);
     expect(todo.actions).toEqual([
       { kind: "mark-platform-settings-done", label: "Done", marketplaceModuleId: "woofx3_spotify" },
     ]);
@@ -218,7 +214,7 @@ describe("gettingStartedItems", () => {
     )["platform-settings:woofx3_obs"];
     expect(refused.status).toBe("problem");
     expect(refused.actions).toEqual([]);
-    expect(refused.fixes).toEqual([{ kind: "route", label: "Open OBS", href: "/marketplace/installed/woofx3_obs" }]);
+    expect(refused.fixes).toEqual([{ kind: "route", label: "Open OBS", href: "/stream/modules/woofx3_obs" }]);
   });
 
   test("keeps the Done button for OBS when the engine cannot report its connection", () => {

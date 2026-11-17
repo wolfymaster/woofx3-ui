@@ -1,26 +1,31 @@
 import { LISTING_TYPES, type ListingType } from "@shared/marketplace-catalog";
 
 /**
- * Marketplace paths.
+ * Marketplace and module paths.
  *
- * The Marketplace tab is both the storefront and the place to see and manage
- * what is installed: `/marketplace/installed` lists the installed modules,
- * `/marketplace/installed/:moduleId` opens one, and `/marketplace/upload`
- * installs a module from a zip. The `/modules` paths that came before them
- * still answer and redirect here, since bookmarks, getting-started links and
- * a module's OAuth return still use them.
+ * The Marketplace tab is the storefront, and `/marketplace/upload` installs a
+ * module from a zip. What is installed lives in the Stream tab's Modules group:
+ * `/stream/modules` is every installed module's settings on one page, and
+ * `/stream/modules/:moduleId` opens one module. The `/marketplace/installed`
+ * and `/modules` paths that held them before still answer and redirect there,
+ * as does a module's OAuth return (`/modules?integration=...`, which lands on
+ * the settings page).
  */
 
 export const MARKETPLACE_PATH = "/marketplace";
 export const MARKETPLACE_LISTING_ROUTE = "/marketplace/listing/:listingId";
 export const MARKETPLACE_AUTHOR_ROUTE = "/marketplace/author/:slug";
-export const MARKETPLACE_INSTALLED_PATH = "/marketplace/installed";
-export const MARKETPLACE_INSTALLED_MODULE_ROUTE = "/marketplace/installed/:moduleId";
 export const MARKETPLACE_UPLOAD_PATH = "/marketplace/upload";
+export const MODULES_PATH = "/stream/modules";
+export const MODULES_MODULE_ROUTE = "/stream/modules/:moduleId";
+export const LEGACY_MODULES_PATH = "/modules";
+export const LEGACY_MODULES_ROUTE = "/modules/:rest";
+export const LEGACY_INSTALLED_PATH = "/marketplace/installed";
+export const LEGACY_INSTALLED_MODULE_ROUTE = "/marketplace/installed/:rest";
 /**
  * Everything that browses the catalog: the storefront, a listing and an author.
  * One route, so moving between them keeps the catalog rail mounted. It also
- * matches the installed and upload paths, so it has to be listed after them.
+ * matches the upload path, so it has to be listed after it.
  */
 export const MARKETPLACE_BROWSE_ROUTE = "/marketplace/*?";
 
@@ -81,7 +86,7 @@ export function marketplaceAuthorPath(slug: string): string {
 
 /** An installed module's page, by its module id (its bare module key) or its marketplace id. */
 export function installedModulePath(moduleId: string): string {
-  return `${MARKETPLACE_INSTALLED_PATH}/${encodeURIComponent(moduleId)}`;
+  return `${MODULES_PATH}/${encodeURIComponent(moduleId)}`;
 }
 
 /** `path` with `search` (with or without its `?`) appended when there is one. */
@@ -91,26 +96,16 @@ function withSearch(path: string, search: string): string {
 }
 
 /**
- * Where bare `/modules?…` goes, keeping the query string.
- *
- * An integration's OAuth callback returns to `/modules?integration=…` with a
- * one-time code or an error, and only the installed modules page can redeem or
- * show it, so that return goes there. Anything else is an old storefront link,
- * and goes to the marketplace with its filters.
+ * Where a path under `/modules` or `/marketplace/installed` goes, keeping the query string:
+ * the settings page for the bare path, the upload page for `/modules/install`, and a
+ * module's page for anything else.
  */
-export function modulesIndexRedirect(search: string): string {
-  const query = search.startsWith("?") ? search.slice(1) : search;
-  const target = new URLSearchParams(query).has("integration") ? MARKETPLACE_INSTALLED_PATH : MARKETPLACE_PATH;
-  return withSearch(target, query);
-}
-
-/** Where an old `/modules/…` path goes, keeping the query string. */
-export function legacyModulesRedirect(rest: string, search: string): string {
+export function legacyModulesRedirect(rest: string | undefined, search: string): string {
+  if (rest === undefined || rest === "installed") {
+    return withSearch(MODULES_PATH, search);
+  }
   if (rest === "install") {
     return withSearch(MARKETPLACE_UPLOAD_PATH, search);
-  }
-  if (rest === "installed") {
-    return withSearch(MARKETPLACE_INSTALLED_PATH, search);
   }
   return withSearch(installedModulePath(decodeURIComponent(rest)), search);
 }

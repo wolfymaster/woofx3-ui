@@ -8,6 +8,7 @@ import {
   navItemsServed,
   STREAM_GROUPS,
   STREAM_ITEMS,
+  withInstalledModuleItems,
   withResourceKindItems,
 } from "@/components/layout/nav-config";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
@@ -41,6 +42,31 @@ describe("isNavItemActive", () => {
 
   test("a path its own only prefixes does not mark it", () => {
     expect(isNavItemActive(alerts, "/stream/alerts-elsewhere")).toBe(false);
+  });
+});
+
+describe("Modules group", () => {
+  const settings = STREAM_ITEMS.find((item) => item.id === "modules-settings");
+  if (!settings) {
+    throw new Error("the Settings entry is missing from STREAM_ITEMS");
+  }
+  const obs = { id: "module:obs", label: "OBS", icon: alerts.icon, href: "/stream/modules/woofx3_obs" };
+
+  test("Settings is marked on its own page only, not on a module's page", () => {
+    expect(isNavItemActive(settings, "/stream/modules")).toBe(true);
+    expect(isNavItemActive(settings, "/stream/modules/woofx3_obs")).toBe(false);
+  });
+
+  test("installed modules follow Settings under the group's heading", () => {
+    const merged = withInstalledModuleItems(STREAM_ITEMS, [obs]);
+    const at = merged.findIndex((item) => item.id === obs.id);
+    expect(merged[at - 1].id).toBe("modules-settings");
+    expect(merged[at].group).toBe(STREAM_GROUPS.modules);
+  });
+
+  test("leaves a menu without the group as it is", () => {
+    const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
+    expect(withInstalledModuleItems(helpOnly, [obs])).toEqual(helpOnly);
   });
 });
 
@@ -102,7 +128,7 @@ describe("withResourceKindItems", () => {
     const at = merged.findIndex((item) => item.id === wheels.id);
     expect(merged[at - 1].id).toBe("databases");
     expect(merged[at].group).toBe(STREAM_GROUPS.data);
-    expect(merged[at + 1].group).toBe(STREAM_GROUPS.community);
+    expect(merged[at + 1].group).toBe(STREAM_GROUPS.modules);
   });
 
   test("leaves a menu without a Data group as it is", () => {

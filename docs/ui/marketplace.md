@@ -78,7 +78,7 @@ it. Under the header it has tabs (`ListingModuleTabs`, with the tab in
 - **Files**: the module's file browser.
 - **Settings** and **Resources**, once it is installed: the same settings,
   webhook endpoints, local endpoint routing and resource instances as
-  an installed module's page (`/marketplace/installed/:id`).
+  an installed module's page (`/stream/modules/:id`).
 
 These come from `moduleDetail.getModuleDetail` for the listing, the action
 an installed module's page uses, and the tabs reuse that page's components

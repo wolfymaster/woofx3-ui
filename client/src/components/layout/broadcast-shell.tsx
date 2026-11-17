@@ -23,6 +23,7 @@ import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useDefaultEngineOnSignIn } from "@/hooks/use-default-engine";
 import { useEngineStarting } from "@/hooks/use-engine-starting";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
+import { useInstalledModuleNavItems } from "@/hooks/use-installed-module-nav-items";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
@@ -47,6 +48,7 @@ import {
   navItemsFor,
   sectionsFor,
   UTILITY_SECTIONS,
+  withInstalledModuleItems,
   withResourceKindItems,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
@@ -249,6 +251,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const activeSection = findActiveSection(location);
   const { instance } = useInstance();
   const resourceKindItems = useResourceKindNavItems();
+  const installedModuleItems = useInstalledModuleNavItems();
   useDefaultEngineOnSignIn();
   useLiveConnection();
   useReconnectAfterUpgrade();
