@@ -6,9 +6,10 @@ import { useAction, useMutation } from "convex/react";
 import { useCallback, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
-import { describeDiscount, formatPrice, PLAN_NAMES } from "@/billing/format";
+import { describeDiscount, formatPrice, planName } from "@/billing/format";
 import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-redirect";
 import { StatusBanner } from "@/billing/status-banner";
+import { type PlanPrices, usePlanPrices } from "@/billing/use-plan-prices";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,14 +39,14 @@ function choiceKey(plan: PlanTier, interval: BillingInterval): string {
 }
 
 /** "Starter, monthly - $60/mo" while a provider subscription sets the interval; the plan name alone otherwise. */
-function planSummary(subscription: OrgSubscription): string {
+function planSummary(subscription: OrgSubscription, { prices, names }: PlanPrices): string {
   if (subscription.plan === null || subscription.interval === null) {
-    return planLabel(subscription);
+    return planLabel(subscription, names);
   }
-  return `${planLabel(subscription)} - ${formatPrice(subscription.plan, subscription.interval)}`;
+  return `${planLabel(subscription, names)} - ${formatPrice(prices, subscription.plan, subscription.interval)}`;
 }
 
-function PlanChooser() {
+function PlanChooser({ prices, names }: PlanPrices) {
   const { organization } = useOrganization();
   const startCheckout = useAction(api.billingCommands.startCheckout);
   const openPortal = useAction(api.billingCommands.openPortal);
@@ -79,8 +80,8 @@ function PlanChooser() {
               className="flex items-center gap-3 rounded-md border p-3 cursor-pointer font-normal"
             >
               <RadioGroupItem id={`plan-${key}`} value={key} data-testid={`radio-plan-${key}`} />
-              <span className="font-medium">{PLAN_NAMES[plan]}</span>
-              <span>{formatPrice(plan, interval)}</span>
+              <span className="font-medium">{planName(names, plan)}</span>
+              <span>{formatPrice(prices, plan, interval)}</span>
               {note ? <span className="text-xs text-muted-foreground">({note})</span> : null}
             </Label>
           );
@@ -156,6 +157,7 @@ function OrganizationPlan() {
   const openPortal = useAction(api.billingCommands.openPortal);
   const checkoutState = useAction(api.billingCommands.checkoutState);
   const { accountId } = organization;
+  const planPrices = usePlanPrices();
   const askCheckoutState = useCallback(
     async (checkoutId: string) => (await checkoutState({ accountId, checkoutId })).state,
     [checkoutState, accountId]
@@ -176,7 +178,7 @@ function OrganizationPlan() {
 
   const items: BillingSummaryItem[] = [];
   if (subscription !== null) {
-    items.push({ label: "Current plan", value: planSummary(subscription), testId: "text-billing-plan" });
+    items.push({ label: "Current plan", value: planSummary(subscription, planPrices), testId: "text-billing-plan" });
     items.push({ label: "State", value: stateLabel(subscription), testId: "text-billing-state" });
   }
   if (discount !== null) {
@@ -214,7 +216,7 @@ function OrganizationPlan() {
             open={() => openPortal({ accountId: organization.accountId })}
           />
         ) : null}
-        {view.kind === "choose_plan" || view.kind === "no_plan" ? <PlanChooser /> : null}
+        {view.kind === "choose_plan" || view.kind === "no_plan" ? <PlanChooser {...planPrices} /> : null}
       </CardContent>
     </Card>
   );

@@ -7,6 +7,7 @@ import {
   type CheckoutView,
   type Invoice,
   type MarketplaceCheckoutRequest,
+  type PlanPrice,
   type Sponsorship,
   type SponsorshipCheckoutRequest,
   type SponsorshipCheckoutView,
@@ -25,6 +26,7 @@ export interface BillingCall {
     | "listInvoices"
     | "lookupPromotionCode"
     | "checkoutState"
+    | "planPrices"
     | "sponsorshipTerms"
     | "startSponsorshipCheckout"
     | "listSponsorships"
@@ -47,6 +49,12 @@ export class FakeBillingClient implements BillingClient {
   invoicesAnswer: BillingResult<Invoice[]> = billingOk([]);
   promotionAnswer: BillingResult<AppliedDiscount | null> = billingOk(null);
   checkoutStateAnswer: BillingResult<CheckoutView> | null = null;
+  pricesAnswer: BillingResult<PlanPrice[]> = billingOk([
+    { plan: "starter", interval: "month", amountCents: 1_000, currency: "usd" },
+    { plan: "starter", interval: "year", amountCents: 10_000, currency: "usd" },
+    { plan: "pro", interval: "month", amountCents: 2_000, currency: "usd" },
+    { plan: "pro", interval: "year", amountCents: 20_000, currency: "usd" },
+  ]);
   termsAnswer: BillingResult<SponsorshipTerms> = billingOk({
     minCents: 10_000,
     maxCents: 100_000_000,
@@ -89,6 +97,11 @@ export class FakeBillingClient implements BillingClient {
   async checkoutState(checkoutId: string, accountId: string) {
     this.calls.push({ command: "checkoutState", args: [checkoutId, accountId] });
     return this.checkoutStateAnswer ?? billingOk({ id: checkoutId, accountId, state: "open" as const });
+  }
+
+  async planPrices() {
+    this.calls.push({ command: "planPrices", args: [] });
+    return this.pricesAnswer;
   }
 
   async sponsorshipTerms() {

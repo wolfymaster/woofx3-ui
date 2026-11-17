@@ -638,6 +638,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/billing/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What each plan sells for now
+         * @description Public, unauthenticated and cacheable: the price in effect today for every plan and interval, in whole cents. Every client shows these and none keeps a copy.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The prices in effect */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingPlanPrices"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/promotion-codes/{code}": {
         parameters: {
             query?: never;
@@ -1375,6 +1414,18 @@ export interface components {
         };
         BillingMarketplaceCheckoutBody: {
             intentId: string;
+        };
+        BillingPlanPrice: {
+            amountCents: number;
+            /** @enum {string} */
+            currency: "usd";
+            /** @enum {string} */
+            interval: "month" | "year";
+            /** @enum {string} */
+            plan: "starter" | "pro";
+        };
+        BillingPlanPrices: {
+            prices: components["schemas"]["BillingPlanPrice"][];
         };
         BillingPortalBody: {
             returnPath?: string;
