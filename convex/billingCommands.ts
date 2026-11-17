@@ -44,7 +44,6 @@ const FRIENDLY_MESSAGES: Partial<Record<BillingError["code"], string>> = {
   not_configured: "Billing is not configured on this deployment.",
   unknown_discount: "That promotion code can't be used.",
   promotion_code_not_found: "That promotion code doesn't exist or is no longer active.",
-  invalid_return_path: "That page can't be used to return from billing.",
   invalid_return_url: "That page can't be used to return from billing.",
   intent_not_found: "We could not find that purchase for this organization. Click Buy again to start over.",
   intent_not_payable: "That price has ended. Click Buy again for a fresh one.",
