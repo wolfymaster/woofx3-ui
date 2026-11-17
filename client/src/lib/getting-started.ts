@@ -18,7 +18,6 @@ export type GettingStartedItemId =
   | "test-alert"
   | "alerts"
   | "import"
-  | "starter-packs"
   | "optional-platforms"
   | "your-page"
   | `platform-settings:${string}`;
@@ -67,8 +66,6 @@ export interface GettingStartedFacts {
   overlaySeeded: boolean;
   /** Whether the instance has run an import. */
   hasImport: boolean;
-  /** Whether any starter pack item is installed. */
-  hasStarterPack: boolean;
   /** Ids of the modules installed on the engine. */
   installedModuleIds: readonly string[];
   /** Whether the instance's public page is live. */
@@ -80,7 +77,6 @@ const OPTIONAL_PLATFORM_MODULE_IDS: readonly string[] = [OBS_MODULE_ID, "woofx3_
 
 export const OVERLAY_PAGE_PATH = "/setup/overlay";
 const ALERTS_PATH = "/stream/alerts";
-const STARTER_PACKS_PATH = "/stream/starter-packs";
 const IMPORT_PATH = "/admin/backup";
 const YOUR_PAGE_PATH = "/stream/page";
 
@@ -240,17 +236,6 @@ function importItem(done: boolean): GettingStartedItem {
   });
 }
 
-function starterPacksItem(done: boolean): GettingStartedItem {
-  const title = "Add chat commands and thank-yous";
-  if (done) {
-    return item("starter-packs", title, "done", "You've added ready-made commands");
-  }
-  return item("starter-packs", title, "todo", "Pick ready-made commands and thank-yous to start with", {
-    fixes: [{ kind: "route", label: "Browse starter packs", href: STARTER_PACKS_PATH }],
-    actions: [dismissAction("starter-packs")],
-  });
-}
-
 function optionalPlatformsItem(done: boolean): GettingStartedItem {
   const title = "Using OBS scenes or Spotify? Connect them";
   if (done) {
@@ -295,7 +280,6 @@ export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedI
     ...platformSettingsItems(facts.setup, done, facts.obsStatus),
     alertsItem(done.has("alerts")),
     importItem(facts.hasImport),
-    starterPacksItem(facts.hasStarterPack),
     optionalPlatformsItem(facts.installedModuleIds.some((id) => OPTIONAL_PLATFORM_MODULE_IDS.includes(id))),
     yourPageItem(facts.pagePublished),
   ].filter((entry) => entry.status === "done" || !dismissed(entry.id));

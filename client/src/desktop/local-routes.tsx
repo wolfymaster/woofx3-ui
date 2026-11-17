@@ -47,7 +47,6 @@ const Modules = lazy(() => import("@/pages/modules"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Scenes = lazy(() => import("@/pages/scenes"));
-const StarterPacks = lazy(() => import("@/pages/starter-packs"));
 const StreamRecap = lazy(() => import("@/pages/stream-recap"));
 const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
@@ -96,7 +95,6 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/workflows/:id", render: () => <Workflows /> },
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
-  { path: "/stream/starter-packs", render: () => <StarterPacks /> },
   { path: MARKETPLACE_INSTALLED_PATH, render: () => <Modules /> },
   { path: MARKETPLACE_INSTALLED_MODULE_ROUTE, render: () => <Modules /> },
   { path: MARKETPLACE_BROWSE_ROUTE, render: () => <MarketplaceSection /> },
