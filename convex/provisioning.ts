@@ -5,7 +5,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, query } from "./_generated/server";
 import { ENGINE_NAME_MAX_LENGTH } from "./instances";
 import { slugCandidates } from "./lib/firstRun";
-import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import {
   createEngine,
   currentRelease,
@@ -28,8 +27,8 @@ import {
   userFacingError,
 } from "./lib/managedEngineActions";
 import { isUpgrade } from "./lib/releaseVersion";
-import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { can, requireActionInAction, viewerRoles } from "./org/policy";
 import { performRegistration } from "./registration";
 
 /**
@@ -83,12 +82,8 @@ export const isAvailable = query({
 export const forInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return null;
-    }
-    const membership = await getInstanceMembership(ctx, instanceId, userId);
-    if (!membership) {
+    const viewer = await viewerRoles(ctx, { engine: instanceId });
+    if (viewer === null || !can(viewer.roles, "viewEngine")) {
       return null;
     }
     const row = await ctx.db
@@ -104,7 +99,7 @@ export const forInstance = query({
     return {
       ...rest,
       upgrade: upgrade ? withoutRequester(upgrade) : undefined,
-      canRename: membership.role === "owner" && row.status === "registered",
+      canRename: can(viewer.roles, "renameEngine") && row.status === "registered",
     };
   },
 });
@@ -394,7 +389,7 @@ export const startNewEngine = action({
 export const retry = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ retried: RetryKind }> => {
-    await requireEngineManager(ctx, instanceId);
+    await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
     const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
     if (row?.maintenanceEngineId) {
       return retryManagedEngineRow(ctx, row);
@@ -427,7 +422,7 @@ export const retry = action({
 export const deleteManagedEngine = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ deprovisioning: boolean }> => {
-    await requireOrgActionOnInstanceInAction(ctx, instanceId, "deleteEngine");
+    await requireActionInAction(ctx, { engine: instanceId }, "deleteEngine");
     const { row } = await requireManagedRow(ctx, instanceId);
     return deleteManagedEngineRow(ctx, row);
   },
@@ -456,11 +451,8 @@ const RENAME_REFUSALS: Readonly<Record<string, string>> = {
 export const renameManagedEngine = action({
   args: { instanceId: v.id("instances"), slug: v.string() },
   handler: async (ctx, { instanceId, slug }): Promise<RenameResult> => {
-    const { row, userId } = await requireManagedRow(ctx, instanceId);
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
-    if (membership?.role !== "owner") {
-      throw new Error("Not authorized");
-    }
+    await requireActionInAction(ctx, { engine: instanceId }, "renameEngine");
+    const { row } = await requireManagedRow(ctx, instanceId);
     if (!row.maintenanceEngineId || row.status !== "registered") {
       return { ok: false, reason: "Your engine has to be up and running before you can change its name." };
     }
@@ -484,24 +476,12 @@ function withoutRequester<T extends { requestedBy?: unknown }>(upgrade: T): Omit
   return shown;
 }
 
-async function requireEngineManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new Error("Not authenticated");
-  }
-  const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
-  if (!membership || membership.role === "member") {
-    throw new Error("Not authorized");
-  }
-  return userId;
-}
-
-/** Owner or admin of the instance, and a provisioning row to act on. */
+/** A caller who operates the engine, and a provisioning row to act on. */
 async function requireManagedRow(
   ctx: ActionCtx,
   instanceId: Id<"instances">
 ): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
-  const userId = await requireEngineManager(ctx, instanceId);
+  const { userId } = await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
   const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
   if (!row) {
     throw new Error("This workspace has no managed engine");

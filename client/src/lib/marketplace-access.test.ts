@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OrgRole } from "@convex/lib/organization";
-import { orgCan } from "@convex/lib/orgRoles";
+import { orgCan } from "@convex/org/policy";
 import type { OrganizationAccess } from "@/engine/types";
 import { canSeeLicenseKey, canStartPayment } from "./marketplace-access";
 

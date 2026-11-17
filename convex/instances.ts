@@ -8,13 +8,12 @@ import { deleteCompanion } from "./lib/companionRecords";
 import { engineActivityPatch } from "./lib/engineSync/activity";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import { validateExternalEngineUrl } from "./lib/externalEngineUrl";
-import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
-import { orgActionValidator, requireOrgAction, requireOrgActionFor } from "./lib/orgRoles";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
+import { can, requireAction, requireActionFor, requireActionInAction, viewerRoles } from "./org/policy";
 import { markFirstRun } from "./provisioningInternal";
 
 /**
@@ -61,16 +60,10 @@ export const listForCurrentUser = query({
 export const get = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
-
-    // Verify user has access
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
-      .first();
-
-    if (!membership) return null;
+    const viewer = await viewerRoles(ctx, { engine: args.instanceId });
+    if (viewer === null || !can(viewer.roles, "viewEngine")) {
+      return null;
+    }
     const instance = await ctx.db.get(args.instanceId);
     return instance ? withoutWebhookSecret(instance) : null;
   },
@@ -119,7 +112,7 @@ export const create = mutation({
     url: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireOrgAction(ctx, args.accountId, "createEngine");
+    await requireAction(ctx, { org: args.accountId }, "createEngine");
 
     // An account has one engine, and a registration that failed leaves an
     // instance behind with no credentials. Retrying onboarding with a
@@ -178,25 +171,14 @@ export const update = mutation({
     url: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
-      .first();
-
-    if (!membership || membership.role === "member") {
-      throw new Error("Not authorized");
-    }
-
     const { instanceId, ...updates } = args;
+    const { userId } = await requireAction(ctx, { engine: instanceId }, "operateEngine");
     const instance = await ctx.db.get(instanceId);
     if (instance === null) {
       throw new Error("Engine not found");
     }
     if (updates.name !== undefined) {
-      await requireOrgActionFor(ctx, instance.accountId, userId, "renameEngine");
+      await requireActionFor(ctx, userId, { engine: instanceId }, "renameEngine");
       updates.name = updates.name.trim();
       if (!updates.name || updates.name.length > ENGINE_NAME_MAX_LENGTH) {
         throw new ConvexError({
@@ -217,7 +199,7 @@ export const update = mutation({
         message: "A hosted engine's address is set by woofx3 and can't be changed",
       });
     }
-    await requireOrgActionFor(ctx, instance.accountId, userId, "changeEngineUrl");
+    await requireActionFor(ctx, userId, { engine: instanceId }, "changeEngineUrl");
     const url = validateExternalEngineUrl(updates.url);
     // The old credentials belong to the engine at the old address; registering again issues new ones.
     const credentialsReset =
@@ -229,7 +211,7 @@ export const update = mutation({
 export const deleteInstance = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args) => {
-    await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "deleteEngine");
+    await requireActionInAction(ctx, { engine: args.instanceId }, "deleteEngine");
 
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
     if (!instance) throw new Error("Instance not found");
@@ -245,22 +227,6 @@ export const getMembership = internalQuery({
       .query("instanceMembers")
       .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
       .first();
-  },
-});
-
-/**
- * The instance's organization when `userId` may take `action` in it; throws
- * the `OrgRefusal` otherwise. For actions that act for an instance's
- * organization, such as paying for or reading what it holds in the marketplace.
- */
-export const requireOrgActionOnInstance = internalQuery({
-  args: { instanceId: v.id("instances"), userId: v.id("users"), action: orgActionValidator },
-  handler: async (ctx, { instanceId, userId, action }): Promise<Id<"accounts">> => {
-    const instance = await ctx.db.get(instanceId);
-    if (instance === null) {
-      throw new ConvexError("Engine not found");
-    }
-    return (await requireOrgActionFor(ctx, instance.accountId, userId, action)).account._id;
   },
 });
 
@@ -349,17 +315,13 @@ export const deleteInstanceData = internalMutation({
 export const getPlatformLinks = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
-
-    // Same membership gate as `get` above: an instance id is not a secret, so
-    // without this any signed-in user could enumerate another tenant's linked
-    // channel, its platform user id, and which scopes it granted.
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
-      .first();
-    if (!membership) return [];
+    // Same gate as `get` above: an instance id is not a secret, so without
+    // this any signed-in user could enumerate another tenant's linked channel,
+    // its platform user id, and which scopes it granted.
+    const viewer = await viewerRoles(ctx, { engine: args.instanceId });
+    if (viewer === null || !can(viewer.roles, "viewEngine")) {
+      return [];
+    }
 
     const links = await ctx.db
       .query("platformLinks")
@@ -367,10 +329,10 @@ export const getPlatformLinks = query({
       .collect();
 
     // Relinking replaces the channel every member's automation runs against,
-    // so only an owner or admin is offered it. Carried on each link rather
+    // so only someone who operates the engine is offered it. Carried on each link rather
     // than as a separate query so the shell's reconnect banner stays on this
     // one subscription.
-    const viewerCanRelink = membership.role === "owner" || membership.role === "admin";
+    const viewerCanRelink = can(viewer.roles, "operateEngine");
 
     return links.map((link) => ({
       _id: link._id,

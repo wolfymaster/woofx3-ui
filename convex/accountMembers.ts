@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
-import { requireOrgAction } from "./lib/orgRoles";
 import { applyOrgRoleToEngines } from "./lib/teamAccess";
+import { requireAction } from "./org/policy";
 
 export const removeMember = mutation({
   args: {
@@ -10,7 +10,7 @@ export const removeMember = mutation({
     targetUserId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const { account } = await requireOrgAction(ctx, args.accountId, "manageMembers");
+    const { account } = await requireAction(ctx, { org: args.accountId }, "manageMembers");
     if (args.targetUserId === account.ownerId) {
       throw new Error("Cannot remove the account owner");
     }
@@ -50,7 +50,7 @@ export const updateMemberRole = mutation({
     role: v.union(v.literal("admin"), v.literal("member")),
   },
   handler: async (ctx, args) => {
-    const { account } = await requireOrgAction(ctx, args.accountId, "manageMembers");
+    const { account } = await requireAction(ctx, { org: args.accountId }, "manageMembers");
     if (args.targetUserId === account.ownerId) {
       throw new Error("Cannot change the account owner's role");
     }

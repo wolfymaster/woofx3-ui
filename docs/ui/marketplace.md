@@ -306,7 +306,7 @@ nothing itself. The browser runs the install as a state machine
 Any member may acquire and install. Only the organization's owner
 (`manageBilling`) may pay, and only its owner and admins (`viewBilling`) may
 read a key. Both are checked on the organization that owns the engine
-(`requireOrgActionOnInstanceInAction`), and the browser reads the same answer
+(`requireAction` with the engine as subject), and the browser reads the same answer
 from `organizations.capabilitiesForInstance` through the session gateway's
 `useOrganizationAccess`.
 

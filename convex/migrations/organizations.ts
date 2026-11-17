@@ -4,13 +4,13 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { orgSeatLimit } from "../lib/entitlementAccess";
 import { orgBillingFor } from "../lib/orgBilling";
-import { orgRoleOf } from "../lib/orgRoles";
 import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
 import { logger } from "../logger";
+import { orgRoleOf } from "../org/policy";
 import { migrations } from "./index";
 
 // Brings existing data to the organization model's invariants (I1-I4 in
-// lib/teamAccess.ts and lib/orgRoles.ts). The run order with the invitation
+// lib/teamAccess.ts and org/policy.ts). The run order with the invitation
 // migrations, and what to do with each violation checkOrgInvariantsAll
 // reports, are in docs/ops/deploy.md and
 // docs/ops/org-migrations.md.

@@ -13,9 +13,9 @@ import {
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
 import { billingFor } from "./lib/orgBilling";
-import { requireOrgActionFor } from "./lib/orgRoles";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { requireActionFor } from "./org/policy";
 import { performRegistration } from "./registration";
 
 /**
@@ -97,7 +97,7 @@ export const reserveManagedInstance = internalMutation({
     newCreateRequestId: v.string(),
   },
   handler: async (ctx, { accountId, userId, slug, newRegistrationToken, newCreateRequestId }) => {
-    const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
+    const { account } = await requireActionFor(ctx, userId, { org: accountId }, "createEngine");
 
     const { instanceId } = await findOrCreateManagedInstance(ctx, account);
     await startTrialIfNew(ctx, accountId);
@@ -190,7 +190,7 @@ function buildInFlight(row: Doc<"engineProvisioning">, now: number): boolean {
 export const prepareNewEngine = internalMutation({
   args: { accountId: v.id("accounts"), userId: v.id("users"), name: v.string() },
   handler: async (ctx, { accountId, userId, name }): Promise<{ instanceId: Id<"instances">; building: boolean }> => {
-    const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
+    const { account } = await requireActionFor(ctx, userId, { org: accountId }, "createEngine");
     if ((await billingFor(ctx, accountId)) !== null) {
       await requireUsableSubscription(ctx, accountId);
     }

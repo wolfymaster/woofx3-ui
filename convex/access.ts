@@ -6,8 +6,8 @@ import { isUsable } from "./lib/entitlements";
 import { engineBuildStalled } from "./lib/firstRun";
 import type { LifecycleReason } from "./lib/organization";
 import { billingFor } from "./lib/orgBilling";
-import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { orgCan, orgRoleOf } from "./org/policy";
 
 // Bounds the read of a user's engine memberships; a user is on a handful.
 const MAX_MEMBERSHIPS = 100;

@@ -1,10 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { orgRoleOf } from "../org/policy";
 import { orgSeatsFull, SEATS_FULL } from "./entitlementAccess";
 import { roleSatisfies } from "./instanceRoles";
 import type { EngineRole, OrgRole } from "./organization";
-import { orgRoleOf } from "./orgRoles";
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();

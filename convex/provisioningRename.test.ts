@@ -155,7 +155,7 @@ describe("renaming a managed engine", () => {
     const f = await fixture();
     await expect(
       f.member.action(api.provisioning.renameManagedEngine, { instanceId: f.instanceId, slug: "new-name" })
-    ).rejects.toThrow("Not authorized");
+    ).rejects.toMatchObject({ data: { code: "not_authorized", action: "renameEngine" } });
     expect(requests).toEqual([]);
     expect((await f.owner.query(api.provisioning.forInstance, { instanceId: f.instanceId }))?.canRename).toBe(true);
     expect((await f.member.query(api.provisioning.forInstance, { instanceId: f.instanceId }))?.canRename).toBe(false);

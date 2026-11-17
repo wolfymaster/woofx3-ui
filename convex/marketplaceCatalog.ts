@@ -18,7 +18,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { requireInstanceRoleInAction, requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import {
   type AcquireBody,
   MarketplaceError,
@@ -49,6 +49,7 @@ import {
   heldLicenseKey,
   licensedFromAcquire,
 } from "./lib/marketplaceLicense";
+import { requireActionInAction } from "./org/policy";
 
 // The marketplace storefront, across every listing type.
 //
@@ -295,7 +296,7 @@ export const licenseKey = action({
     withClientErrors(async () => {
       // The key downloads the module and is what the organization paid for,
       // so it is shown to those who see the organization's billing.
-      await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "viewBilling");
+      await requireActionInAction(ctx, { engine: args.instanceId }, "viewBilling");
       const buyerRef = await buyerRefFor(ctx, args.instanceId);
       return heldLicenseKey(
         await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET"),
