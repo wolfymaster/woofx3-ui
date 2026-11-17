@@ -164,31 +164,45 @@ export async function engineRoleOf(
   return row?.role ?? null;
 }
 
-async function subjectAccount(ctx: QueryCtx, subject: Subject): Promise<Doc<"accounts">> {
+/** The subject's org, or null when the org or engine does not exist. */
+async function subjectAccount(ctx: QueryCtx, subject: Subject): Promise<Doc<"accounts"> | null> {
   if ("org" in subject) {
-    const account = await ctx.db.get(subject.org);
-    if (account === null) {
-      throw new ConvexError<Refusal>({
-        code: "organization_not_found",
-        accountId: subject.org,
-        message: "Organization not found",
-      });
-    }
-    return account;
+    return ctx.db.get(subject.org);
   }
   const instance = await ctx.db.get(subject.engine);
   if (instance === null) {
-    throw new ConvexError<Refusal>({
-      code: "engine_not_found",
-      instanceId: subject.engine,
-      message: "Engine not found",
-    });
+    return null;
   }
   const account = await ctx.db.get(instance.accountId);
   if (account === null) {
     throw new Error(`Engine ${instance._id} belongs to missing org ${instance.accountId}`);
   }
   return account;
+}
+
+async function rolesIn(ctx: QueryCtx, account: Doc<"accounts">, userId: Id<"users">, subject: Subject): Promise<Roles> {
+  return {
+    org: await orgRoleOf(ctx, account, userId),
+    engine: "engine" in subject ? await engineRoleOf(ctx, subject.engine, userId) : null,
+  };
+}
+
+/**
+ * The signed-in caller's roles for the subject, or null when signed out or the
+ * subject does not exist. For queries, which answer a refusal with nothing:
+ * a live subscription that throws shows as a crashed panel, as it would
+ * between mount and auth resolving, or after an engine is deleted.
+ */
+export async function viewerRoles(ctx: QueryCtx, subject: Subject): Promise<Actor | null> {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) {
+    return null;
+  }
+  const account = await subjectAccount(ctx, subject);
+  if (account === null) {
+    return null;
+  }
+  return { userId, account, roles: await rolesIn(ctx, account, userId, subject) };
 }
 
 /** `requireAction` for a known user, as internal functions called on someone's behalf need. */
@@ -199,10 +213,14 @@ export async function requireActionFor<A extends Action>(
   action: A
 ): Promise<Actor> {
   const account = await subjectAccount(ctx, subject);
-  const roles: Roles = {
-    org: await orgRoleOf(ctx, account, userId),
-    engine: "engine" in subject ? await engineRoleOf(ctx, subject.engine, userId) : null,
-  };
+  if (account === null) {
+    throw new ConvexError<Refusal>(
+      "org" in subject
+        ? { code: "organization_not_found", accountId: subject.org, message: "Organization not found" }
+        : { code: "engine_not_found", instanceId: subject.engine, message: "Engine not found" }
+    );
+  }
+  const roles = await rolesIn(ctx, account, userId, subject);
   if (!can(roles, action)) {
     throw new ConvexError<Refusal>({
       code: "not_authorized",

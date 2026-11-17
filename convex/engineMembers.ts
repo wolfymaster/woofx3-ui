@@ -1,10 +1,7 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
-import { requireInstanceRole } from "./lib/instanceAccess";
-import { roleSatisfies } from "./lib/instanceRoles";
 import {
   getInstanceMembership,
   grantEngineRole,
@@ -13,7 +10,7 @@ import {
   type TeamMemberDto,
   toTeamMemberDto,
 } from "./lib/teamAccess";
-import { orgCan, orgRoleOf } from "./org/policy";
+import { can, orgRoleOf, requireAction, viewerRoles } from "./org/policy";
 
 // An engine's team: who can open this engine and with which engine role. The
 // org role only sets floors (lib/teamAccess.ts grantEngineRole), so the owner
@@ -26,21 +23,12 @@ export const listForEngine = query({
     ctx,
     { instanceId }
   ): Promise<{ members: TeamMemberDto[]; canManage: boolean; canManageOrganization: boolean } | null> => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const viewer = await viewerRoles(ctx, { engine: instanceId });
+    if (viewer === null || !can(viewer.roles, "viewEngine")) {
       return null;
     }
-    const own = await getInstanceMembership(ctx, instanceId, userId);
-    const instance = await ctx.db.get(instanceId);
-    if (own === null || instance === null) {
-      return null;
-    }
-    const account = await ctx.db.get(instance.accountId);
-    if (account === null) {
-      return null;
-    }
-    const callerOrgRole = await orgRoleOf(ctx, account, userId);
-    const showEmails = orgCan(callerOrgRole, "viewMemberEmails");
+    const { account } = viewer;
+    const showEmails = can(viewer.roles, "viewMemberEmails");
     const platformNames = await linkedPlatformNames(ctx, [instanceId]);
     const rows = await ctx.db
       .query("instanceMembers")
@@ -56,8 +44,8 @@ export const listForEngine = query({
     }
     return {
       members,
-      canManage: roleSatisfies(own.role, "admin"),
-      canManageOrganization: orgCan(callerOrgRole, "manageMembers"),
+      canManage: can(viewer.roles, "manageEngineMembers"),
+      canManageOrganization: can(viewer.roles, "manageMembers"),
     };
   },
 });
@@ -98,7 +86,7 @@ export const setRole = mutation({
     role: v.union(v.literal("admin"), v.literal("member")),
   },
   handler: async (ctx, { instanceId, targetUserId, role }) => {
-    await requireInstanceRole(ctx, instanceId, "admin");
+    await requireAction(ctx, { engine: instanceId }, "manageEngineMembers");
     const { account } = await changeableTarget(ctx, instanceId, targetUserId);
     if (role === "member" && (await orgRoleOf(ctx, account, targetUserId)) === "admin") {
       throw new ConvexError({
@@ -116,7 +104,7 @@ export const setRole = mutation({
 export const remove = mutation({
   args: { instanceId: v.id("instances"), targetUserId: v.id("users") },
   handler: async (ctx, { instanceId, targetUserId }) => {
-    await requireInstanceRole(ctx, instanceId, "admin");
+    await requireAction(ctx, { engine: instanceId }, "manageEngineMembers");
     const { account, membership } = await changeableTarget(ctx, instanceId, targetUserId);
     if ((await orgRoleOf(ctx, account, targetUserId)) === "admin") {
       throw new ConvexError({

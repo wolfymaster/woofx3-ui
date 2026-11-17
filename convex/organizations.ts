@@ -7,7 +7,7 @@ import type { Entitlements, SubscriptionSummary } from "./lib/entitlements";
 import type { EngineRole, OrgRole } from "./lib/organization";
 import { billingFor, type ProjectedDiscount } from "./lib/orgBilling";
 import { linkedPlatformNames, memberDisplayName, memberEmailField } from "./lib/teamAccess";
-import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireAction } from "./org/policy";
+import { can, ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireAction, viewerRoles } from "./org/policy";
 
 // The org portal's reads. Storage calls an organization an account; these
 // answer in the portal's terms. What each role sees follows orgCan: a page a
@@ -127,16 +127,16 @@ async function myOrganization(
   if (role === null) {
     return null;
   }
-  const can = capabilities(role);
+  const allowed = capabilities(role);
   const entitlements = await accountEntitlements(ctx, account._id, now);
   return {
     accountId: account._id,
     name: account.name,
     role,
-    can,
-    engines: await orgEngines(ctx, account, userId, can.manageEngines),
-    subscription: can.viewBilling ? await orgSubscription(ctx, account._id, role, entitlements) : null,
-    seats: can.manageMembers ? await orgSeats(ctx, account._id, now) : null,
+    can: allowed,
+    engines: await orgEngines(ctx, account, userId, allowed.manageEngines),
+    subscription: allowed.viewBilling ? await orgSubscription(ctx, account._id, role, entitlements) : null,
+    seats: allowed.manageMembers ? await orgSeats(ctx, account._id, now) : null,
   };
 }
 
@@ -148,14 +148,11 @@ async function myOrganization(
 export const capabilitiesForInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<OrgCapabilities | null> => {
-    const userId = await getAuthUserId(ctx);
-    const instance = await ctx.db.get(instanceId);
-    const account = instance === null ? null : await ctx.db.get(instance.accountId);
-    if (userId === null || account === null) {
+    const viewer = await viewerRoles(ctx, { engine: instanceId });
+    if (viewer === null || viewer.roles.org === null) {
       return null;
     }
-    const role = await orgRoleOf(ctx, account, userId);
-    return role === null ? null : capabilities(role);
+    return capabilities(viewer.roles.org);
   },
 });
 
@@ -202,16 +199,12 @@ export interface OrgMember {
 export const members = query({
   args: { accountId: v.id("accounts") },
   handler: async (ctx, { accountId }): Promise<OrgMember[] | null> => {
-    const userId = await getAuthUserId(ctx);
-    const account = await ctx.db.get(accountId);
-    if (userId === null || account === null) {
+    const viewer = await viewerRoles(ctx, { org: accountId });
+    if (viewer === null || !can(viewer.roles, "manageMembers")) {
       return null;
     }
-    const callerRole = await orgRoleOf(ctx, account, userId);
-    if (!orgCan(callerRole, "manageMembers")) {
-      return null;
-    }
-    const showEmails = orgCan(callerRole, "viewMemberEmails");
+    const { account } = viewer;
+    const showEmails = can(viewer.roles, "viewMemberEmails");
     const instances = await ctx.db
       .query("instances")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))

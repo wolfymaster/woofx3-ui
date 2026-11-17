@@ -139,7 +139,9 @@ describe("invitations.create", () => {
     const t = newBackend();
     const org = await seedOrg(t);
     const memberId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
-    await expect(invite(t, memberId, org.instanceId, "new@example.com")).rejects.toThrow("Not authorized");
+    await expect(invite(t, memberId, org.instanceId, "new@example.com")).rejects.toMatchObject({
+      data: { code: "not_authorized", action: "manageEngineMembers" },
+    });
   });
 
   test("refuses someone already on the engine, but not an org member who isn't", async () => {
