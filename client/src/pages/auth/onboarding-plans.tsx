@@ -9,6 +9,7 @@ import { formatPrice, planName } from "@/billing/format";
 import { PLAN_DETAILS, TRIAL_DAYS } from "@/billing/plan-details";
 import { useProviderRedirect } from "@/billing/provider-redirect";
 import { usePlanPrices } from "@/billing/use-plan-prices";
+import { AUTH_GLASS_CLASS } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
@@ -59,7 +60,7 @@ export function OnboardingPlans({ onStartTrial }: OnboardingPlansProps) {
           Your engine runs your alerts, overlays and chat commands. Pick the plan to run it on.
         </p>
       </div>
-      <fieldset className="flex items-center justify-center gap-1 rounded-lg bg-muted p-1 w-fit mx-auto">
+      <fieldset className="flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-1 w-fit mx-auto backdrop-blur-xl">
         <legend className="sr-only">Billing period for Pro</legend>
         {INTERVALS.map(({ interval: option, label, note }) => (
           <Button
