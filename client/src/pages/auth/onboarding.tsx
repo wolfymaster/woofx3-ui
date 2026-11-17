@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
+import { parseCheckoutReturn } from "@/lib/checkout-return";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { useLogger } from "@/lib/logger-context";
 import {
@@ -18,6 +20,8 @@ import {
   onboardingRoute,
 } from "@/lib/onboarding-route";
 import { $currentInstanceId } from "@/lib/stores";
+import { cn } from "@/lib/utils";
+import { WebPlanStep } from "./onboarding-plans";
 
 /**
  * Where a user sets up an engine, on the way to setup. The page asks one
@@ -36,6 +40,7 @@ export default function Onboarding() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const { isAuthenticated } = useConvexAuth();
+  const now = useMinuteClock();
 
   const ensureFirstRun = useMutation(api.setup.ensureFirstRun);
   const ensureMyAccount = useMutation(api.accounts.ensureMyAccount);
@@ -44,6 +49,9 @@ export default function Onboarding() {
   const managedEngines = useQuery(api.provisioning.isAvailable);
   const previewEngine = useQuery(api.previewEngine.get);
   const memberInstances = useQuery(api.instances.listForCurrentUser);
+  const organizations = useQuery(api.organizations.mine, { now });
+  const checkoutReturn = parseCheckoutReturn(search);
+  const confirmingCheckoutId = checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null;
   const wantsNewEngine = new URLSearchParams(search).has(NEW_ENGINE_PARAM);
   const instances = useMemo(
     () => memberInstances && enginesForOnboarding(memberInstances, wantsNewEngine),
@@ -63,7 +71,7 @@ export default function Onboarding() {
       ? null
       : onboardingRoute({
           instances,
-          wantsOwnEngine: new URLSearchParams(search).has("external"),
+          wantsOwnEngine: IS_DESKTOP && new URLSearchParams(search).has("external"),
           choseManaged,
           chosePairedEngine,
           hasPreviewEngine: previewEngine !== null,
@@ -124,6 +132,14 @@ export default function Onboarding() {
       });
   }, [route, instances, previewEngine, ensureFirstRun, navigate, logger]);
 
+  // On the web the plan comes first; an organization that already has one (a trial or a payment) goes on to the engine.
+  const hasPlan = organizations?.some((org) => org.subscription !== null) ?? false;
+  useEffect(() => {
+    if (!IS_DESKTOP && route === "choose" && hasPlan && confirmingCheckoutId === null) {
+      setChoseManaged(true);
+    }
+  }, [route, hasPlan, confirmingCheckoutId]);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     await connectEngine(instanceUrl);
@@ -139,11 +155,12 @@ export default function Onboarding() {
     return null;
   }
 
+  const wide = route === "choose" && !IS_DESKTOP;
   const showForm = route === "own-engine-form" || (route === "paired-engine" && pairingFailed);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
+      <div className={cn("w-full", wide ? "max-w-4xl" : "max-w-lg")}>
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary text-primary-foreground">
             <MonitorPlay className="h-5 w-5" />
@@ -151,7 +168,19 @@ export default function Onboarding() {
           <span className="font-bold text-2xl tracking-tight">woofx3</span>
         </div>
 
-        {route === "choose" && !error && (
+        {route === "choose" && !error && !IS_DESKTOP && (
+          <WebPlanStep
+            confirmingCheckoutId={confirmingCheckoutId}
+            organizations={organizations}
+            onStartTrial={() => setChoseManaged(true)}
+            onPaid={() => setChoseManaged(true)}
+            onGiveUp={() => navigate("/auth/onboarding", { replace: true })}
+            hasPreviewEngine={previewEngine !== null && previewEngine !== undefined}
+            onUsePreviewEngine={() => setChosePairedEngine(true)}
+          />
+        )}
+
+        {route === "choose" && !error && IS_DESKTOP && (
           <Card>
             <CardHeader>
               <CardTitle>Set up your streaming engine</CardTitle>

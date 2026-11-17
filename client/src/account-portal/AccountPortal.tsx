@@ -47,7 +47,7 @@ import SettingsPage from "./pages/settings";
 import TeamPage from "./pages/team";
 import TeamInvitePage, { TEAM_INVITE_PATH } from "./pages/team-invite";
 import { ACCOUNT_PORTAL_PATH, PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
-import { START_TRIAL_PATH, startsTrial } from "./start-trial";
+import { resumesOnboarding, START_TRIAL_PATH, startsTrial } from "./start-trial";
 
 const PAGES: Record<PortalPageId, () => React.ReactElement> = {
   plan: PlanPage,
@@ -233,6 +233,9 @@ export default function AccountPortal() {
   }
   if (startsTrial(search, organizations)) {
     return <Redirect to={START_TRIAL_PATH} replace />;
+  }
+  if (resumesOnboarding(search, organizations)) {
+    return <Redirect to={`${START_TRIAL_PATH}?${new URLSearchParams(search)}`} replace />;
   }
   const organization =
     organizations.find((org) => org.accountId === selectedId) ??
