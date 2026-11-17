@@ -13,7 +13,6 @@ import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { useBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import { useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useLatestSetupImport } from "@/engine/hooks/use-setup-imports";
-import { useStarterPackStatus } from "@/engine/hooks/use-starter-packs";
 import { useToast } from "@/hooks/use-toast";
 import {
   type CheckFix,
@@ -102,7 +101,6 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
   const dismissMutation = useMutation(api.gettingStarted.dismiss);
   const retryApply = useMutation(api.setup.retryApply);
   const latestImport = useLatestSetupImport();
-  const starterPacks = useStarterPackStatus();
   const installedModules = useInstalledModules();
   const page = useQuery(api.userPages.forEditing, instanceId ? { instanceId } : "skip");
   const { toast } = useToast();
@@ -118,7 +116,6 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
     !state ||
     state.dismissed ||
     latestImport === undefined ||
-    !starterPacks ||
     !installedModules ||
     page === undefined
   ) {
@@ -134,7 +131,6 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
     doneItemIds: state.doneItemIds,
     obsStatus,
     hasImport: latestImport !== null,
-    hasStarterPack: Object.values(starterPacks).includes("installed"),
     installedModuleIds: installedModules.map((module) => module.id),
     pagePublished: page !== null && page.published !== null,
   });
