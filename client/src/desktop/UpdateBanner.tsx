@@ -19,9 +19,8 @@ export default function UpdateBanner() {
   }
 
   return (
-    <div
+    <output
       className="flex h-9 shrink-0 items-center gap-3 bg-primary px-4 text-sm text-primary-foreground"
-      role="status"
       aria-live="polite"
       data-testid="update-banner"
     >
@@ -48,6 +47,6 @@ export default function UpdateBanner() {
       >
         <X className="h-4 w-4" />
       </Button>
-    </div>
+    </output>
   );
 }
