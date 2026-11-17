@@ -1955,8 +1955,8 @@ export type ChatModerationRead = { kind: "unsupported" } | { kind: "ready"; conf
  * not the instance role.
  */
 export interface OrganizationAccess {
-  /** See the organization's billing, and the license keys it holds. */
-  viewBilling: boolean;
+  /** See the license keys the organization holds. */
+  viewLicenseKeys: boolean;
   /** Pay for the organization. */
   manageBilling: boolean;
 }

@@ -6,7 +6,7 @@ import type { OrganizationAccess } from "@/engine/types";
 
 let access: OrganizationAccess | null | undefined;
 const accessOf = (role: OrgRole): OrganizationAccess => ({
-  viewBilling: orgCan(role, "viewBilling"),
+  viewLicenseKeys: orgCan(role, "viewLicenseKeys"),
   manageBilling: orgCan(role, "manageBilling"),
 });
 const lookups: string[] = [];

@@ -6,7 +6,7 @@ import { canSeeLicenseKey, canStartPayment } from "./marketplace-access";
 
 /** The access the server answers for each organization role. */
 function accessOf(role: OrgRole): OrganizationAccess {
-  return { viewBilling: orgCan(role, "viewBilling"), manageBilling: orgCan(role, "manageBilling") };
+  return { viewLicenseKeys: orgCan(role, "viewLicenseKeys"), manageBilling: orgCan(role, "manageBilling") };
 }
 
 describe("canStartPayment", () => {
