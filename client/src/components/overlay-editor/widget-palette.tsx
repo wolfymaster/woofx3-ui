@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { widgetIconFor } from "@/components/overlay-editor/widget-icon";
+import { type WidgetPreviewKind, widgetPreviewFor } from "@/components/overlay-editor/widget-preview";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { groupWidgetsIntoSections } from "@/lib/widget-groups";
@@ -33,21 +34,25 @@ function readCollapsed(): ReadonlySet<string> {
     const stored: unknown = JSON.parse(window.localStorage.getItem(COLLAPSED_KEY) ?? "[]");
     return Array.isArray(stored) ? new Set(stored.filter((key): key is string => typeof key === "string")) : new Set();
   } catch {
+    // Collapse state is a view-only preference; a blocked or malformed value
+    // must not keep the palette from rendering.
     return new Set();
   }
 }
 
 /**
- * The widgets that can be added, as rows grouped by what their content is.
+ * The widgets that can be added, as a shelf of preview tiles grouped by purpose.
  *
  * One palette for both editors so the alert and scene canvases read as one
- * surface. Rows carry the catalog's own name and description instead of an icon:
- * a Database value draws text much like Text does, and only the description says
- * that its values come from a source and keep changing. Sections are plain
- * disclosures, not animated collapsibles: in a scrolling rail a closed section
- * should simply take no room. The phone strip scrolls sideways as one row, so it
- * drops the headings — a heading per section would cost more width than the
- * tiles it labels.
+ * surface. Each tile shows a sample of the widget's content — `Aa`, `{value}`,
+ * `00:42`, a wordmark — rather than a category icon: a Database value draws text
+ * much like Text does, and only the sample says its values come from a source.
+ * The full name sits under the sample; the catalog description stays in the
+ * tooltip, where a long sentence does not turn the rail into a settings list.
+ * Sections are plain disclosures, not animated collapsibles: in a scrolling rail
+ * a closed section should simply take no room. The phone strip keeps icon tiles
+ * and drops the headings — the strip is narrow and scrolls, so a heading per
+ * section would cost more width than the tiles it labels.
  */
 export function WidgetPalette<T extends PaletteWidget>({
   widgets,
@@ -159,9 +164,9 @@ export function WidgetPalette<T extends PaletteWidget>({
                   <span className="truncate">{group.label}</span>
                   <span className="ml-auto text-[11px] font-normal">{group.widgets.length}</span>
                 </button>
-                <div id={contentId} hidden={!open} className={cn("flex-col gap-0.5 pt-0.5", open && "flex")}>
+                <div id={contentId} hidden={!open} className={cn("grid-cols-2 gap-2 pt-1", open && "grid")}>
                   {group.widgets.map((widget) => (
-                    <WidgetRow key={widget.widgetId} widget={widget} onAdd={onAdd} />
+                    <WidgetPreviewTile key={widget.widgetId} widget={widget} onAdd={onAdd} />
                   ))}
                 </div>
               </div>
@@ -177,25 +182,46 @@ function PaletteHeading({ children }: { children: React.ReactNode }) {
   return <h2 className="text-xs font-semibold text-muted-foreground">{children}</h2>;
 }
 
-/** One catalog row: what it is, then why its content is different. No icon to learn. */
-function WidgetRow<T extends PaletteWidget>({ widget, onAdd }: { widget: T; onAdd: (widget: T) => void }) {
+const PREVIEW_STYLE: Record<WidgetPreviewKind, string> = {
+  glyph: "font-serif text-2xl leading-none text-foreground/85",
+  data: "font-mono text-xs tabular-nums leading-none text-foreground/85",
+  wordmark: "break-words text-[10px] font-bold uppercase leading-tight tracking-widest text-foreground/70",
+  swatch: "",
+};
+
+/** One tile in the library: a sample of what it puts on screen, then its full name. */
+function WidgetPreviewTile<T extends PaletteWidget>({ widget, onAdd }: { widget: T; onAdd: (widget: T) => void }) {
+  const preview = widgetPreviewFor(widget);
   return (
     <button
       type="button"
       onClick={() => onAdd(widget)}
       title={widget.description ?? widget.name}
       className={cn(
-        "w-full rounded-lg px-2 py-1.5 text-left",
-        "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        "flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card text-left",
+        "hover:border-foreground/30 hover:bg-accent",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
       data-testid={`add-widget-${widget.widgetId}`}
     >
-      <span className="block text-[13px] font-medium leading-snug text-foreground">{widget.name}</span>
-      {widget.description && (
-        <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground line-clamp-2">
-          {widget.description}
-        </span>
-      )}
+      <span
+        aria-hidden="true"
+        className="relative flex h-14 w-full items-center justify-center overflow-hidden bg-muted/50 px-1.5"
+      >
+        {preview.kind === "swatch" ? (
+          <span className="h-8 w-11 rounded-[3px] border border-foreground/10 bg-gradient-to-br from-primary/50 via-primary/20 to-muted-foreground/20" />
+        ) : (
+          <span className={cn("max-w-full text-center", PREVIEW_STYLE[preview.kind])}>{preview.sample}</span>
+        )}
+        {preview.live && (
+          <span className="absolute right-1 top-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+            live
+          </span>
+        )}
+      </span>
+      <span className="min-h-[2.25rem] w-full break-words px-2 py-1.5 text-[11px] font-medium leading-tight text-foreground">
+        {widget.name}
+      </span>
     </button>
   );
 }

@@ -16,6 +16,12 @@ const widgets = [
     taxonomy: ["data.database"],
   },
   {
+    widgetId: "image",
+    name: "Image",
+    description: "A picture you upload.",
+    taxonomy: ["media.image"],
+  },
+  {
     widgetId: "wheel",
     name: "Wheel Spin",
     description: "A wheel that spins on the overlay.",
@@ -30,15 +36,30 @@ function render() {
 }
 
 describe("WidgetPalette", () => {
-  test("lists collapsible purpose sections with every widget's name and description", () => {
+  test("shows a two-column shelf of preview tiles in each purpose section", () => {
     const html = render();
     for (const label of ["Content", "Data &amp; sources", "Overlays"]) {
       expect(html).toContain(label);
     }
+    expect(html).toContain("grid-cols-2");
+    for (const [sample, name] of [
+      ["Aa", "Text"],
+      ["{value}", "Database value"],
+      ["WHEEL SPIN", "Wheel Spin"],
+    ]) {
+      expect(html).toContain(sample);
+      expect(html).toContain(name);
+    }
     for (const widget of widgets) {
       expect(html).toContain(`data-testid="add-widget-${widget.widgetId}"`);
-      expect(html).toContain(widget.name);
-      expect(html).toContain(widget.description);
+    }
+  });
+
+  test("keeps each description in the tooltip instead of as a text row", () => {
+    const html = render();
+    for (const widget of widgets) {
+      expect(html).toContain(`title="${widget.description}"`);
+      expect(html.split(widget.description)).toHaveLength(2);
     }
   });
 
