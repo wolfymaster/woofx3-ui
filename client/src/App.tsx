@@ -352,8 +352,12 @@ function AppRoutes() {
                       </AdminOnly>
                     </Route>
 
-                    <Route path="/team" component={Team} />
-                    <Route path="/team/invite" component={TeamInvite} />
+                    <Route path="/team">
+                      <Team />
+                    </Route>
+                    <Route path="/team/invite">
+                      <TeamInvite />
+                    </Route>
                     <Route path="/settings/profile" component={ProfileSettings} />
 
                     {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}

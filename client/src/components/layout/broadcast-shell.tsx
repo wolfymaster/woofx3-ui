@@ -204,24 +204,27 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
             <DropdownMenuSeparator />
             <ThemeMenuSub />
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/settings/profile" data-testid="menu-your-settings">
-                Your settings
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/team">Team Settings</Link>
-            </DropdownMenuItem>
-            {!IS_DESKTOP && (
+            {IS_DESKTOP ? (
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings/profile" data-testid="menu-your-settings">
+                    Your settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/team">Team Settings</Link>
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin">Admin</Link>
+                  </DropdownMenuItem>
+                )}
+              </>
+            ) : (
               <DropdownMenuItem asChild>
                 <Link href="/account" data-testid="menu-account">
                   Account
                 </Link>
-              </DropdownMenuItem>
-            )}
-            {isAdmin && (
-              <DropdownMenuItem asChild>
-                <Link href="/admin">Admin</Link>
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />

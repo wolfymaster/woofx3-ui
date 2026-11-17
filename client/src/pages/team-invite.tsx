@@ -27,8 +27,6 @@ type TwitchLookup =
   | { state: "failed"; message: string }
   | { state: "found"; candidate: TwitchInviteCandidate };
 
-const TEAM_PATH = "/team";
-
 function inviteUrl(token: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   return `${origin}/auth/accept-invite?token=${encodeURIComponent(token)}`;
@@ -39,7 +37,7 @@ function inviteUrl(token: string): string {
  * A Twitch invite is only created after the inviter has seen who the name
  * belongs to, so a typo cannot hand access to a stranger.
  */
-export default function TeamInvite() {
+export default function TeamInvite({ basePath = "/team" }: { basePath?: string }) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
 
@@ -108,7 +106,7 @@ export default function TeamInvite() {
 
   const backLink = (
     <Button variant="ghost" size="sm" asChild>
-      <Link href={TEAM_PATH}>
+      <Link href={basePath}>
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back to team
       </Link>
@@ -171,7 +169,7 @@ export default function TeamInvite() {
                 Invite someone else
               </Button>
               <Button asChild>
-                <Link href={TEAM_PATH}>Done</Link>
+                <Link href={basePath}>Done</Link>
               </Button>
             </div>
           </CardContent>

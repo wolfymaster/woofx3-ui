@@ -2,10 +2,22 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MyOrganization } from "@convex/organizations";
 import { useQuery } from "convex/react";
-import { Building2, Check, ChevronDown, Loader2, Receipt, Server, Sparkles, Users } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronDown,
+  Loader2,
+  Receipt,
+  Server,
+  Settings,
+  Sparkles,
+  UserCog,
+  Users,
+  UsersRound,
+} from "lucide-react";
 import { useState } from "react";
 import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
-import type { NavItem } from "@/components/layout/nav-config";
+import { ADMIN_ITEMS, type NavItem, navItemsFor } from "@/components/layout/nav-config";
 import { SectionMenu } from "@/components/layout/section-menu";
 import { SectionSidebar } from "@/components/layout/section-sidebar";
 import { ThemeMenuSub } from "@/components/layout/theme-menu";
@@ -21,14 +33,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
+import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { BackToDashboard } from "./back-to-dashboard";
 import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
+import AdminPage, { AdminSectionPage, adminHref } from "./pages/admin";
 import EnginesPage from "./pages/engines";
 import PaymentsPage from "./pages/payments";
 import PeoplePage from "./pages/people";
 import PlanPage from "./pages/plan";
+import SettingsPage from "./pages/settings";
+import TeamPage from "./pages/team";
+import TeamInvitePage, { TEAM_INVITE_PATH } from "./pages/team-invite";
 import { ACCOUNT_PORTAL_PATH, PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
 import { START_TRIAL_PATH, startsTrial } from "./start-trial";
 
@@ -37,6 +54,9 @@ const PAGES: Record<PortalPageId, () => React.ReactElement> = {
   payments: PaymentsPage,
   people: PeoplePage,
   engines: EnginesPage,
+  settings: SettingsPage,
+  team: TeamPage,
+  admin: AdminPage,
 };
 
 /** The org the selected engine belongs to, else the one the caller owns, else the first. */
@@ -84,6 +104,9 @@ const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
   payments: Receipt,
   people: Users,
   engines: Server,
+  settings: UserCog,
+  team: UsersRound,
+  admin: Settings,
 };
 
 function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
@@ -144,12 +167,21 @@ function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
 function PortalLayout({ children }: { children: React.ReactNode }) {
   const organization = useOptionalOrganization()?.organization ?? null;
   const [location] = useLocation();
-  const nav: NavItem[] = visiblePages(organization?.can ?? null).map((page) => ({
+  const { instance } = useInstance();
+  const isInstanceAdmin = useIsInstanceAdmin() ?? false;
+  const nav: NavItem[] = visiblePages(organization?.can ?? null, isInstanceAdmin).map((page) => ({
     id: `account-${page.id}`,
     label: page.label,
     icon: PAGE_ICONS[page.id],
     href: page.path,
     exact: page.path === ACCOUNT_PORTAL_PATH,
+    children:
+      page.id === "admin"
+        ? navItemsFor(
+            ADMIN_ITEMS.map((item) => ({ ...item, href: adminHref(item.id) })),
+            instance?.hosting
+          )
+        : undefined,
   }));
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
@@ -173,7 +205,7 @@ function PortalLayout({ children }: { children: React.ReactNode }) {
 function PortalPageRoute({ id }: { id: PortalPageId }) {
   const organization = useOptionalOrganization()?.organization ?? null;
   const page = portalPage(id);
-  if (!visiblePages(organization?.can ?? null).includes(page)) {
+  if (!visiblePages(organization?.can ?? null, true).includes(page)) {
     return <Redirect to={ACCOUNT_PORTAL_PATH} replace />;
   }
   const Page = PAGES[id];
@@ -214,6 +246,8 @@ export default function AccountPortal() {
             <PortalPageRoute id={page.id} />
           </Route>
         ))}
+        <Route path={TEAM_INVITE_PATH} component={TeamInvitePage} />
+        <Route path={adminHref(":section")} component={AdminSectionPage} />
         <Route>
           <p className="text-muted-foreground">There&apos;s no such page in the account portal.</p>
         </Route>
