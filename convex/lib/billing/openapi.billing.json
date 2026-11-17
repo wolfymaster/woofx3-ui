@@ -236,16 +236,6 @@
         ],
         "type": "object"
       },
-      "BillingPortalBody": {
-        "additionalProperties": false,
-        "properties": {
-          "returnPath": {
-            "maxLength": 500,
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "BillingRefusalCode": {
         "enum": [
           "subscription_not_found",
@@ -259,7 +249,6 @@
           "unknown_discount",
           "promotion_code_not_found",
           "checkout_not_found",
-          "invalid_return_path",
           "intent_not_found",
           "intent_not_payable",
           "intent_expiring",
@@ -635,7 +624,7 @@
     },
     "securitySchemes": {
       "bearer": {
-        "description": "wx3m_<id>_<secret>",
+        "description": "wx3m_<id>_<secret>. A key may be bound to org (the /v1/billing/accounts routes and promotion codes) or user (the /v1/billing/users routes and sponsorship terms); a bound key calling the other kind gets 403 forbidden_billing_owner.",
         "scheme": "bearer",
         "type": "http"
       }
@@ -725,7 +714,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -864,7 +853,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "409": {
             "content": {
@@ -930,7 +919,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -1049,7 +1038,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -1112,7 +1101,7 @@
     },
     "/v1/billing/accounts/{id}/portal-sessions": {
       "post": {
-        "description": "Not idempotent: each call opens a new short-lived session. The optional `returnPath` is where the portal sends the customer back, a path on the billing site (default the site itself).",
+        "description": "Not idempotent: each call opens a new short-lived session that returns the customer to the billing site.",
         "parameters": [
           {
             "description": "The UI's id for the organization.",
@@ -1127,16 +1116,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BillingPortalBody"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "200": {
             "content": {
@@ -1176,7 +1155,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -1197,16 +1176,6 @@
               }
             },
             "description": "Refused or in conflict with the current state"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BillingRefusalError"
-                }
-              }
-            },
-            "description": "Refused: something the request names is not valid"
           },
           "502": {
             "content": {
@@ -1313,7 +1282,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -1588,7 +1557,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -1661,7 +1630,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           }
         },
         "security": [
@@ -1749,7 +1718,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "409": {
             "content": {
@@ -1844,7 +1813,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           }
         },
         "security": [
@@ -1929,7 +1898,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -2064,7 +2033,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {
@@ -2189,7 +2158,7 @@
                 }
               }
             },
-            "description": "Scope or owner not allowed"
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
           },
           "404": {
             "content": {

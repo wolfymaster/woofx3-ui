@@ -63,7 +63,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -189,7 +189,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -253,7 +253,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -358,7 +358,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -431,7 +431,7 @@ export interface paths {
         put?: never;
         /**
          * Open the provider's customer portal
-         * @description Not idempotent: each call opens a new short-lived session. The optional `returnPath` is where the portal sends the customer back, a path on the billing site (default the site itself).
+         * @description Not idempotent: each call opens a new short-lived session that returns the customer to the billing site.
          */
         post: {
             parameters: {
@@ -443,11 +443,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["BillingPortalBody"];
-                };
-            };
+            requestBody?: never;
             responses: {
                 /** @description The portal */
                 200: {
@@ -476,7 +472,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -501,15 +497,6 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["BillingConflictError"];
-                    };
-                };
-                /** @description Refused: something the request names is not valid */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["BillingRefusalError"];
                     };
                 };
                 /** @description A dependency refused the request */
@@ -592,7 +579,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -750,7 +737,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -834,7 +821,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -912,7 +899,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1003,7 +990,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1083,7 +1070,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1198,7 +1185,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1308,7 +1295,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Scope or owner not allowed */
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1427,11 +1414,8 @@ export interface components {
         BillingPlanPrices: {
             prices: components["schemas"]["BillingPlanPrice"][];
         };
-        BillingPortalBody: {
-            returnPath?: string;
-        };
         /** @enum {string} */
-        BillingRefusalCode: "subscription_not_found" | "account_not_found" | "already_subscribed" | "subscription_exists" | "suspended_by_operator" | "exempt" | "checkout_in_progress" | "no_customer" | "unknown_discount" | "promotion_code_not_found" | "checkout_not_found" | "invalid_return_path" | "intent_not_found" | "intent_not_payable" | "intent_expiring" | "intent_already_paid" | "intent_invalid" | "listing_unavailable" | "invalid_sponsorship_amount" | "invalid_return_url" | "sponsorship_not_found" | "sponsorship_not_recurring" | "sponsorship_canceled";
+        BillingRefusalCode: "subscription_not_found" | "account_not_found" | "already_subscribed" | "subscription_exists" | "suspended_by_operator" | "exempt" | "checkout_in_progress" | "no_customer" | "unknown_discount" | "promotion_code_not_found" | "checkout_not_found" | "intent_not_found" | "intent_not_payable" | "intent_expiring" | "intent_already_paid" | "intent_invalid" | "listing_unavailable" | "invalid_sponsorship_amount" | "invalid_return_url" | "sponsorship_not_found" | "sponsorship_not_recurring" | "sponsorship_canceled";
         BillingRefusalError: {
             error: {
                 code: components["schemas"]["BillingRefusalCode"];
