@@ -223,9 +223,8 @@ export function isSectionActive(section: NavSection, location: string): boolean 
   if (root === "/") {
     return location === "/";
   }
-  // `owns` counts here as well as on a sidebar entry: Marketplace owns
-  // /modules, which is where a listing's install flow lives, and the section
-  // should stay marked while the streamer is in it.
+  // `owns` counts here as well as on a sidebar entry: a section stays marked
+  // on paths that sit beside its root rather than below it.
   return [root, ...(section.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
 }
 
@@ -269,6 +268,21 @@ export function withResourceKindItems(items: NavItem[], extra: NavItem[]): NavIt
 /** `items` with `extra` after Settings in the Modules group: one entry per installed module. */
 export function withInstalledModuleItems(items: NavItem[], extra: NavItem[]): NavItem[] {
   return withGroupItems(items, STREAM_GROUPS.modules, extra);
+}
+
+/** Entries the engine and the installed modules add to a menu, merged by `withDynamicItems`. */
+export interface DynamicNavItems {
+  alertGroups: NavItem[];
+  resourceKinds: NavItem[];
+  installedModules: NavItem[];
+}
+
+/** `items` with every dynamic entry in its place: what a shell shows for a menu section. */
+export function withDynamicItems(items: NavItem[], dynamic: DynamicNavItems): NavItem[] {
+  return withInstalledModuleItems(
+    withResourceKindItems(withAlertGroupsItems(items, dynamic.alertGroups), dynamic.resourceKinds),
+    dynamic.installedModules
+  );
 }
 
 export function findActiveSection(location: string): NavSection | null {

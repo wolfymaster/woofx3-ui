@@ -10,6 +10,7 @@ import {
   STREAM_GROUPS,
   STREAM_ITEMS,
   withAlertGroupsItems,
+  withDynamicItems,
   withInstalledModuleItems,
   withResourceKindItems,
 } from "@/components/layout/nav-config";
@@ -87,6 +88,33 @@ describe("withAlertGroupsItems", () => {
     const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
     expect(withAlertGroupsItems(helpOnly, [ALERT_GROUPS_ITEM])).toEqual(helpOnly);
     expect(withAlertGroupsItems(STREAM_ITEMS, [])).toBe(STREAM_ITEMS);
+  });
+});
+
+describe("withDynamicItems", () => {
+  const dynamic = (id: string) => ({ id, label: id, icon: alerts.icon, href: `/x/${id}` });
+
+  test("puts each kind of dynamic entry in its own place in the Stream menu", () => {
+    const merged = withDynamicItems(STREAM_ITEMS, {
+      alertGroups: [ALERT_GROUPS_ITEM],
+      resourceKinds: [dynamic("wheel")],
+      installedModules: [dynamic("module:obs")],
+    });
+    const ids = merged.map((item) => item.id);
+    expect(ids[ids.indexOf("alerts") + 1]).toBe("alert-groups");
+    expect(ids[ids.indexOf("databases") + 1]).toBe("wheel");
+    expect(ids[ids.indexOf("modules-settings") + 1]).toBe("module:obs");
+  });
+
+  test("leaves a menu without those places as it is", () => {
+    const helpOnly = [dynamic("learning")];
+    expect(
+      withDynamicItems(helpOnly, {
+        alertGroups: [ALERT_GROUPS_ITEM],
+        resourceKinds: [dynamic("wheel")],
+        installedModules: [dynamic("module:obs")],
+      })
+    ).toEqual(helpOnly);
   });
 });
 

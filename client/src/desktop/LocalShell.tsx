@@ -2,13 +2,7 @@ import { Activity } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Uptime } from "@/components/common/uptime";
-import {
-  isSectionActive,
-  type NavItem,
-  type NavSection,
-  withAlertGroupsItems,
-  withInstalledModuleItems,
-} from "@/components/layout/nav-config";
+import { isSectionActive, type NavItem, type NavSection, withDynamicItems } from "@/components/layout/nav-config";
 import { SectionMenu } from "@/components/layout/section-menu";
 import { SectionSidebar } from "@/components/layout/section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "@/components/layout/status-bar-slot";
@@ -121,7 +115,11 @@ export function LocalShell({ children }: { children: ReactNode }) {
     isSectionActive(section, location)
   );
   const sectionItems = activeSection?.children
-    ? withInstalledModuleItems(withAlertGroupsItems(activeSection.children, alertGroupsItems), installedModuleItems)
+    ? withDynamicItems(activeSection.children, {
+        alertGroups: alertGroupsItems,
+        resourceKinds: [],
+        installedModules: installedModuleItems,
+      })
     : null;
 
   return (

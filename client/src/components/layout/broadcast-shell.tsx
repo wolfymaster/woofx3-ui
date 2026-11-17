@@ -49,9 +49,7 @@ import {
   navItemsFor,
   sectionsFor,
   UTILITY_SECTIONS,
-  withAlertGroupsItems,
-  withInstalledModuleItems,
-  withResourceKindItems,
+  withDynamicItems,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
 import { SectionMenu } from "./section-menu";
@@ -262,7 +260,14 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const sectionNav: SectionNav | null = activeSection?.children
     ? {
         title: activeSection.label,
-        items: navItemsFor(withResourceKindItems(activeSection.children, resourceKindItems), instance?.hosting),
+        items: navItemsFor(
+          withDynamicItems(activeSection.children, {
+            alertGroups: alertGroupsItems,
+            resourceKinds: resourceKindItems,
+            installedModules: installedModuleItems,
+          }),
+          instance?.hosting
+        ),
       }
     : null;
 
