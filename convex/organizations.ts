@@ -6,8 +6,8 @@ import { accountEntitlements, orgSeatLimit } from "./lib/entitlementAccess";
 import type { Entitlements, SubscriptionSummary } from "./lib/entitlements";
 import type { EngineRole, OrgRole } from "./lib/organization";
 import { billingFor, type ProjectedDiscount } from "./lib/orgBilling";
-import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
 import { linkedPlatformNames, memberDisplayName, memberEmailField } from "./lib/teamAccess";
+import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireAction } from "./org/policy";
 
 // The org portal's reads. Storage calls an organization an account; these
 // answer in the portal's terms. What each role sees follows orgCan: a page a
@@ -257,7 +257,7 @@ export const members = query({
 export const rename = mutation({
   args: { accountId: v.id("accounts"), name: v.string() },
   handler: async (ctx, { accountId, name }) => {
-    await requireOrgAction(ctx, accountId, "renameOrganization");
+    await requireAction(ctx, { org: accountId }, "renameOrganization");
     const trimmed = name.trim();
     if (trimmed === "" || trimmed.length > MAX_ORGANIZATION_NAME_LENGTH) {
       throw new ConvexError({

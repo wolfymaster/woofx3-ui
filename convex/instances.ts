@@ -8,13 +8,12 @@ import { deleteCompanion } from "./lib/companionRecords";
 import { engineActivityPatch } from "./lib/engineSync/activity";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import { validateExternalEngineUrl } from "./lib/externalEngineUrl";
-import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
-import { orgActionValidator, requireOrgAction, requireOrgActionFor } from "./lib/orgRoles";
 import { grantNewEngineMembers } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
+import { requireAction, requireActionFor, requireActionInAction } from "./org/policy";
 import { markFirstRun } from "./provisioningInternal";
 
 /**
@@ -119,7 +118,7 @@ export const create = mutation({
     url: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireOrgAction(ctx, args.accountId, "createEngine");
+    await requireAction(ctx, { org: args.accountId }, "createEngine");
 
     // An account has one engine, and a registration that failed leaves an
     // instance behind with no credentials. Retrying onboarding with a
@@ -196,7 +195,7 @@ export const update = mutation({
       throw new Error("Engine not found");
     }
     if (updates.name !== undefined) {
-      await requireOrgActionFor(ctx, instance.accountId, userId, "renameEngine");
+      await requireActionFor(ctx, userId, { org: instance.accountId }, "renameEngine");
       updates.name = updates.name.trim();
       if (!updates.name || updates.name.length > ENGINE_NAME_MAX_LENGTH) {
         throw new ConvexError({
@@ -217,7 +216,7 @@ export const update = mutation({
         message: "A hosted engine's address is set by woofx3 and can't be changed",
       });
     }
-    await requireOrgActionFor(ctx, instance.accountId, userId, "changeEngineUrl");
+    await requireActionFor(ctx, userId, { org: instance.accountId }, "changeEngineUrl");
     const url = validateExternalEngineUrl(updates.url);
     // The old credentials belong to the engine at the old address; registering again issues new ones.
     const credentialsReset =
@@ -229,7 +228,7 @@ export const update = mutation({
 export const deleteInstance = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args) => {
-    await requireOrgActionOnInstanceInAction(ctx, args.instanceId, "deleteEngine");
+    await requireActionInAction(ctx, { engine: args.instanceId }, "deleteEngine");
 
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
     if (!instance) throw new Error("Instance not found");
@@ -245,22 +244,6 @@ export const getMembership = internalQuery({
       .query("instanceMembers")
       .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
       .first();
-  },
-});
-
-/**
- * The instance's organization when `userId` may take `action` in it; throws
- * the `OrgRefusal` otherwise. For actions that act for an instance's
- * organization, such as paying for or reading what it holds in the marketplace.
- */
-export const requireOrgActionOnInstance = internalQuery({
-  args: { instanceId: v.id("instances"), userId: v.id("users"), action: orgActionValidator },
-  handler: async (ctx, { instanceId, userId, action }): Promise<Id<"accounts">> => {
-    const instance = await ctx.db.get(instanceId);
-    if (instance === null) {
-      throw new ConvexError("Engine not found");
-    }
-    return (await requireOrgActionFor(ctx, instance.accountId, userId, action)).account._id;
   },
 });
 
