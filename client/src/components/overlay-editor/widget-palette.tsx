@@ -1,6 +1,14 @@
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { widgetIconFor } from "@/components/overlay-editor/widget-icon";
+import {
+  pushRecentWidget,
+  RECENT_SECTION_KEY,
+  RECENT_SECTION_LABEL,
+  readRecentIds,
+  recentWidgetsOf,
+  writeRecentIds,
+} from "@/components/overlay-editor/widget-palette-recent";
 import { type WidgetPreviewKind, widgetPreviewFor } from "@/components/overlay-editor/widget-preview";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -49,11 +57,14 @@ function readCollapsed(): ReadonlySet<string> {
  * much like Text does, and only the sample says its values come from a source.
  * The full name sits under the sample; the catalog description stays in the
  * tooltip, where a long sentence does not turn the rail into a settings list.
+ * The last few additions get a Recent section above the taxonomy sections, so
+ * a second pass through the library starts where the first one left off.
  * Sections are plain disclosures, not animated collapsibles: in a scrolling rail
  * a closed section should simply take no room. The phone strip keeps icon tiles
  * and drops the headings — the strip is narrow and scrolls, so a heading per
  * section would cost more width than the tiles it labels.
  */
+// stylegate:ignore TS-NAM-001 reason="Repo convention names component files in kebab-case; renaming this shared palette would break every import for no gain."
 export function WidgetPalette<T extends PaletteWidget>({
   widgets,
   onAdd,
@@ -62,6 +73,7 @@ export function WidgetPalette<T extends PaletteWidget>({
 }: WidgetPaletteProps<T>) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(readCollapsed);
+  const [recentIds, setRecentIds] = useState<string[]>(readRecentIds);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -74,6 +86,14 @@ export function WidgetPalette<T extends PaletteWidget>({
     }
   }, [collapsed]);
 
+  useEffect(() => writeRecentIds(recentIds), [recentIds]);
+
+  const addWidget = (widget: T) => {
+    setRecentIds((current) => pushRecentWidget(current, widget.widgetId));
+    onAdd(widget);
+  };
+
+  const recentWidgets = useMemo(() => recentWidgetsOf(recentIds, widgets), [recentIds, widgets]);
   const needle = query.trim().toLowerCase();
   const visible = useMemo(() => {
     if (needle === "") {
@@ -84,7 +104,15 @@ export function WidgetPalette<T extends PaletteWidget>({
         widget.name.toLowerCase().includes(needle) || (widget.description?.toLowerCase().includes(needle) ?? false)
     );
   }, [widgets, needle]);
-  const groups = useMemo(() => groupWidgetsIntoSections(visible), [visible]);
+  const groups = useMemo(() => {
+    const sections = groupWidgetsIntoSections(visible);
+    // A search already shows each match in its own section; repeating it under
+    // Recent would make the filtered rail look twice as long as it is.
+    if (needle !== "" || recentWidgets.length === 0) {
+      return sections;
+    }
+    return [{ key: RECENT_SECTION_KEY, label: RECENT_SECTION_LABEL, widgets: recentWidgets }, ...sections];
+  }, [visible, needle, recentWidgets]);
 
   const setSectionOpen = (key: string, open: boolean) => {
     setCollapsed((current) => {
@@ -112,13 +140,15 @@ export function WidgetPalette<T extends PaletteWidget>({
       <section className="flex min-w-0 flex-col gap-3">
         <PaletteHeading>Add widget</PaletteHeading>
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-          {groups.flatMap((group) =>
-            group.widgets.map((widget) => (
-              <div key={widget.widgetId} className="w-[64px] shrink-0">
-                <WidgetTile widget={widget} onAdd={onAdd} />
-              </div>
-            ))
-          )}
+          {groups
+            .filter((group) => group.key !== RECENT_SECTION_KEY)
+            .flatMap((group) =>
+              group.widgets.map((widget) => (
+                <div key={widget.widgetId} className="w-[64px] shrink-0">
+                  <WidgetTile widget={widget} onAdd={addWidget} />
+                </div>
+              ))
+            )}
         </div>
       </section>
     );
@@ -166,7 +196,7 @@ export function WidgetPalette<T extends PaletteWidget>({
                 </button>
                 <div id={contentId} hidden={!open} className={cn("grid-cols-2 gap-2 pt-1", open && "grid")}>
                   {group.widgets.map((widget) => (
-                    <WidgetPreviewTile key={widget.widgetId} widget={widget} onAdd={onAdd} />
+                    <WidgetPreviewTile key={widget.widgetId} widget={widget} onAdd={addWidget} />
                   ))}
                 </div>
               </div>
@@ -219,7 +249,7 @@ function WidgetPreviewTile<T extends PaletteWidget>({ widget, onAdd }: { widget:
           </span>
         )}
       </span>
-      <span className="min-h-[2.25rem] w-full break-words px-2 py-1.5 text-[11px] font-medium leading-tight text-foreground">
+      <span className="min-h-[2.25rem] w-full break-words px-2 py-1.5 text-center text-[11px] font-medium leading-tight text-foreground">
         {widget.name}
       </span>
     </button>

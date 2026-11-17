@@ -1,6 +1,20 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WidgetPalette } from "./widget-palette";
+
+const realWindow = globalThis.window;
+const recentStorage: Storage = {
+  length: 1,
+  clear: () => undefined,
+  getItem: (key) => (key === "woofx3:widget-palette:recent" ? JSON.stringify(["text", "record"]) : null),
+  key: () => "woofx3:widget-palette:recent",
+  removeItem: () => undefined,
+  setItem: () => undefined,
+};
+
+afterEach(() => {
+  (globalThis as { window?: Partial<Window> }).window = realWindow;
+});
 
 const widgets = [
   {
@@ -61,6 +75,19 @@ describe("WidgetPalette", () => {
       expect(html).toContain(`title="${widget.description}"`);
       expect(html.split(widget.description)).toHaveLength(2);
     }
+  });
+
+  test("centers each preview tile's name under its sample", () => {
+    expect(render()).toContain("text-center text-[11px] font-medium leading-tight text-foreground");
+  });
+
+  test("shows a Recent section above the taxonomy sections once a widget has been added", () => {
+    (globalThis as { window?: Partial<Window> }).window = { localStorage: recentStorage };
+    const html = render();
+    expect(html).toContain('data-testid="widget-section-recent"');
+    expect(html).toContain('id="widget-section-content-recent"');
+    const recentIndex = html.indexOf('data-testid="widget-section-recent"');
+    expect(recentIndex).toBeLessThan(html.indexOf('data-testid="widget-section-content"'));
   });
 
   test("keeps the alert editor's horizontal strip as icon tiles", () => {
