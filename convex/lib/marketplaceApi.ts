@@ -7,9 +7,10 @@
  *
  * - `MARKETPLACE_DEV_TOKEN` is read-only and reveals dev-tier listings. It is
  *   attached only for instances an operator flagged (see marketplaceAccess.ts).
- * - `MARKETPLACE_API_TOKEN` is the write token. It authorises checkout and the
- *   entitlement reads, which are credential-gated because purchase history is
- *   not anonymous-safe. It must never reach the browser.
+ * - `MARKETPLACE_CONVEX_TOKEN` is this deployment's service token (the
+ *   marketplace's `CONVEX_TOKEN`). It authorises checkout and the entitlement
+ *   reads, which are credential-gated because purchase history is not
+ *   anonymous-safe. It must never reach the browser.
  *
  * Reads with no credential are the normal case: the catalog is public.
  */
@@ -18,6 +19,26 @@ import { ConvexError } from "convex/values";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./marketplaceAccess";
 
 const MARKETPLACE_TIMEOUT_MS = 10_000;
+
+/** Set once the shared-token fallback has been announced, so it is logged a single time per isolate. */
+let sharedTokenAnnounced = false;
+
+/**
+ * The service token this deployment presents, or undefined when there is none.
+ * While MARKETPLACE_CONVEX_TOKEN is unset, the older shared MARKETPLACE_API_TOKEN is used instead.
+ */
+export function marketplaceServiceToken(env: Record<string, string | undefined> = process.env): string | undefined {
+  const own = env.MARKETPLACE_CONVEX_TOKEN?.trim();
+  if (own) {
+    return own;
+  }
+  const shared = env.MARKETPLACE_API_TOKEN?.trim();
+  if (shared && !sharedTokenAnnounced) {
+    sharedTokenAnnounced = true;
+    console.warn("marketplace calls use MARKETPLACE_API_TOKEN; set MARKETPLACE_CONVEX_TOKEN instead");
+  }
+  return shared || undefined;
+}
 
 /** The marketplace API's origin, without a trailing slash. */
 export function marketplaceBaseUrl(): string {
@@ -133,9 +154,9 @@ export async function marketplaceGet(path: string, access: MarketplaceAccess): P
  * refund gone wrong.
  */
 export async function marketplaceAuthed(path: string, method: string, body?: unknown): Promise<unknown> {
-  const token = process.env.MARKETPLACE_API_TOKEN?.trim();
+  const token = marketplaceServiceToken();
   if (!token) {
-    throw new Error("Marketplace commerce requires MARKETPLACE_API_TOKEN to be set");
+    throw new Error("Marketplace commerce requires MARKETPLACE_CONVEX_TOKEN to be set");
   }
   const headers: Record<string, string> = {
     Accept: "application/json",

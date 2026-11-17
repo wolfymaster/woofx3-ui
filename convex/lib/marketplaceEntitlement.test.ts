@@ -68,7 +68,7 @@ describe("contentRefusal", () => {
 
   test("content refused for want of a token says so", () => {
     expect(contentRefusal(new MarketplaceError(401, "unauthorized", "x"), "Cozy Alerts")).toContain(
-      "MARKETPLACE_API_TOKEN"
+      "MARKETPLACE_CONVEX_TOKEN"
     );
   });
 
