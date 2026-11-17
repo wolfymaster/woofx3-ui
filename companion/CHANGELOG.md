@@ -1,5 +1,13 @@
 # woofx3 desktop changelog
 
+## [0.12.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.11.0...woofx3-v0.12.0) (2026-11-17)
+
+### Features
+
+* **account:** use the dashboard frame and tier cards for choosing a plan ([d849a84](https://github.com/wolfymaster/woofx3-ui/commit/d849a843912b52fa869371703ac5cc3b457cb637))
+* **auth:** dress the signed-out screens like the marketing site ([e97bc79](https://github.com/wolfymaster/woofx3-ui/commit/e97bc791bb208efc805e95f3ef577418a523c2ac))
+* **auth:** publish a signed-in hint for the marketing site ([04db768](https://github.com/wolfymaster/woofx3-ui/commit/04db768325f778cc0bae0aa47bfdd73a5b9250de))
+
 ## [0.11.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.10.0...woofx3-v0.11.0) (2026-11-16)
 
 ### Features
