@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { api } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { assertNotSuspended } from "../org/billing";
 import { startTrialIfNew } from "../provisioningInternal";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
-import { requireUsableSubscription } from "./entitlementAccess";
 import { upsertPlan } from "./plans";
 
 // Each call site that reads billing through billingFor, driven by a projection.
@@ -143,7 +143,7 @@ describe("startTrialIfNew", () => {
       await project(t, accountId, { tier, standing: "trialing", trialEndsAt: TRIAL_END });
       await t.run((ctx) => startTrialIfNew(ctx, accountId));
       expect(await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).toEqual([]);
-      await t.run((ctx) => requireUsableSubscription(ctx, accountId));
+      await t.run((ctx) => assertNotSuspended(ctx, accountId));
     }
   );
 

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { assertNotSuspended, billingFor } from "../org/billing";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
-import { accountEntitlements, orgSeatLimit, requireUsableSubscription } from "./entitlementAccess";
-import { billingFor } from "./orgBilling";
+import { accountEntitlements, orgSeatLimit } from "./entitlementAccess";
 import { upsertPlan } from "./plans";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -50,7 +50,7 @@ async function giveProjection(t: Backend, accountId: Id<"accounts">, projection:
 const entitlements = (t: Backend, accountId: Id<"accounts">) => t.run((ctx) => accountEntitlements(ctx, accountId));
 const refusal = (t: Backend, accountId: Id<"accounts">) =>
   t
-    .run((ctx) => requireUsableSubscription(ctx, accountId))
+    .run((ctx) => assertNotSuspended(ctx, accountId))
     .then(
       () => null,
       (error: { data: { code: string } }) => error.data.code
@@ -68,7 +68,7 @@ describe("standing drives the gates", () => {
     const t = newBackend();
     const accountId = await seedOrg(t);
     await giveProjection(t, accountId, { tier: "pro", standing, reason });
-    expect(await refusal(t, accountId)).toBe(usable ? null : "subscription_suspended");
+    expect(await refusal(t, accountId)).toBe(usable ? null : "org_suspended");
     const resolved = await entitlements(t, accountId);
     expect(resolved.plan?.key ?? null).toBe(usable ? "pro" : null);
     expect(resolved.features.includes("business")).toBe(usable);
@@ -94,7 +94,7 @@ describe("a projection with no tier keeps its standing", () => {
       trialEndsAt: standing === "trialing" ? 111 : null,
       addOns: ["userPages"],
     });
-    expect(await refusal(t, accountId)).toBe(usable ? null : "subscription_suspended");
+    expect(await refusal(t, accountId)).toBe(usable ? null : "org_suspended");
     const resolved = await entitlements(t, accountId);
     expect(resolved.plan).toBeNull();
     expect(resolved.features).toEqual([]);
