@@ -56,7 +56,7 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-export default function Team() {
+export default function Team({ basePath = "/team" }: { basePath?: string }) {
   const { instance } = useInstance();
   const { user } = useConvexUser();
   const { visible: hostedWebApp } = useBillingUi();
@@ -133,7 +133,7 @@ export default function Team() {
             </div>
             {canManage ? (
               <Button asChild data-testid="button-invite-member">
-                <Link href="/team/invite">
+                <Link href={`${basePath}/invite`}>
                   <UserPlus className="h-4 w-4 mr-2" />
                   Invite Member
                 </Link>
