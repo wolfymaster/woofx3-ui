@@ -28,7 +28,7 @@ export interface OrgEngine {
   canOpen: boolean;
 }
 
-/** The subscription as the portal shows it. The discount is billing detail, so only the owner gets it. */
+/** The subscription as the portal shows it, to the role that manages billing. */
 export interface OrgSubscription extends SubscriptionSummary {
   spinDownAt: number | null;
   /** A provider subscription exists, so plan changes go through the provider's portal. */
@@ -45,7 +45,7 @@ export interface MyOrganization {
   can: OrgCapabilities;
   /** Every engine of the org for owners and admins; the ones they're on for members. */
   engines: OrgEngine[];
-  /** Null for a role that can't see billing. */
+  /** Null for a role that can't manage billing: only the owner sees it. */
   subscription: OrgSubscription | null;
   /**
    * Null for a role that can't manage members. `limit` is null when no seat
@@ -94,7 +94,7 @@ function orgSubscription(org: OrgContext): OrgSubscription | null {
     ...org.billing.summary,
     spinDownAt: org.billing.spinDownAt,
     hasProviderSubscription: org.billing.hasProviderSubscription,
-    discount: orgCan(org.role, "manageBilling") ? org.billing.discount : null,
+    discount: org.billing.discount,
   };
 }
 
@@ -114,7 +114,7 @@ async function myOrganization(
     role: org.role,
     can: allowed,
     engines: await orgEngines(ctx, org, userId, allowed.manageEngines),
-    subscription: allowed.viewBilling ? orgSubscription(org) : null,
+    subscription: allowed.manageBilling ? orgSubscription(org) : null,
     seats: allowed.manageMembers ? org.seats : null,
   };
 }
