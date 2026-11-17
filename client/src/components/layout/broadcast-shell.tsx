@@ -59,6 +59,7 @@ import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
 import { UtilityNav } from "./utility-nav";
 
 // IS_DESKTOP is a build constant, so the web build carries none of it.
+const DesktopUpdateBanner = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateBanner")) : null;
 const DesktopUpdateIndicator = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateIndicator")) : null;
 
 function StatusBar() {
@@ -204,24 +205,27 @@ function AppHeader({ sectionNav }: { sectionNav: SectionNav | null }) {
             <DropdownMenuSeparator />
             <ThemeMenuSub />
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/settings/profile" data-testid="menu-your-settings">
-                Your settings
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/team">Team Settings</Link>
-            </DropdownMenuItem>
-            {!IS_DESKTOP && (
+            {IS_DESKTOP ? (
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings/profile" data-testid="menu-your-settings">
+                    Your settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/team">Team Settings</Link>
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin">Admin</Link>
+                  </DropdownMenuItem>
+                )}
+              </>
+            ) : (
               <DropdownMenuItem asChild>
                 <Link href="/account" data-testid="menu-account">
                   Account
                 </Link>
-              </DropdownMenuItem>
-            )}
-            {isAdmin && (
-              <DropdownMenuItem asChild>
-                <Link href="/admin">Admin</Link>
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
@@ -271,6 +275,11 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   return (
     <StatusBarSlotProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+        {DesktopUpdateBanner && (
+          <Suspense fallback={null}>
+            <DesktopUpdateBanner />
+          </Suspense>
+        )}
         <AppHeader sectionNav={sectionNav} />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />

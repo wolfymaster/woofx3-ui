@@ -93,7 +93,6 @@ const Workflows = lazy(() => import("@/pages/workflows"));
 // IS_DESKTOP is a build constant, so the web build carries none of it.
 const DesktopAppLink = IS_DESKTOP ? lazy(() => import("@/desktop/AppLink")) : null;
 const DesktopRelayWatch = IS_DESKTOP ? lazy(() => import("@/desktop/RelayWatch")) : null;
-const DesktopUpdateBanner = IS_DESKTOP ? lazy(() => import("@/desktop/UpdateBanner")) : null;
 const DesktopLocalConnectionsGuide = IS_DESKTOP ? lazy(() => import("@/desktop/LocalConnectionsGuide")) : null;
 
 // The account portal is web only: the desktop app never shows
@@ -352,8 +351,12 @@ function AppRoutes() {
                       </AdminOnly>
                     </Route>
 
-                    <Route path="/team" component={Team} />
-                    <Route path="/team/invite" component={TeamInvite} />
+                    <Route path="/team">
+                      <Team />
+                    </Route>
+                    <Route path="/team/invite">
+                      <TeamInvite />
+                    </Route>
                     <Route path="/settings/profile" component={ProfileSettings} />
 
                     {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
@@ -436,11 +439,6 @@ function App() {
                   {DesktopRelayWatch && (
                     <Suspense fallback={null}>
                       <DesktopRelayWatch />
-                    </Suspense>
-                  )}
-                  {DesktopUpdateBanner && (
-                    <Suspense fallback={null}>
-                      <DesktopUpdateBanner />
                     </Suspense>
                   )}
                   {DesktopLocalConnectionsGuide && (
