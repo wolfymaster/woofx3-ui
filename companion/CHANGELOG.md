@@ -1,5 +1,15 @@
 # woofx3 desktop changelog
 
+## [0.15.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.14.0...woofx3-v0.15.0) (2026-11-17)
+
+### Features
+
+* **desktop:** show updates in a thin full-width bar above the header ([cb69682](https://github.com/wolfymaster/woofx3-ui/commit/cb696820bb74b6d8c8324a1c80a1e612e56b6e70))
+
+### Bug Fixes
+
+* **desktop:** use output for the update bar's live region ([3d5d333](https://github.com/wolfymaster/woofx3-ui/commit/3d5d3334891494cb11e8e3a6a7dca6e65865da0b))
+
 ## [0.14.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.13.0...woofx3-v0.14.0) (2026-11-17)
 
 ### Features
