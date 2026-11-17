@@ -102,6 +102,8 @@ describe("parseBillingProjectionRequest", () => {
     ["a missing overrides", { ...valid, overrides: undefined }],
     ["an extra field", { ...valid, price: 1 }],
     ["a string time", { ...valid, periodEnd: "soon" }],
+    ["past_due with no grace end", { ...valid, standing: "past_due", graceEndsAt: null }],
+    ["an unknown add-on", { ...valid, addOns: ["nope"] }],
     ["trialing with no trial end", { ...valid, standing: "trialing", trialEndsAt: null }],
     ["an unknown interval", { ...valid, interval: "week" }],
     ["a non-boolean hasProviderSubscription", { ...valid, hasProviderSubscription: "yes" }],
