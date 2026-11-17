@@ -1,7 +1,7 @@
 import type { CheckoutPoll } from "@/lib/checkout-return";
 
 /**
- * What the Plan page's address says about a sponsorship checkout the person just left. The keys differ from the
+ * What the Sponsorship page's address says about a sponsorship checkout the person just left. The keys differ from the
  * organization checkout's (`checkout`, `checkoutId`) so the two returns never read each other's parameters.
  */
 export type SponsorshipReturn = { kind: "none" } | { kind: "cancelled" } | { kind: "done"; checkoutId: string | null };
