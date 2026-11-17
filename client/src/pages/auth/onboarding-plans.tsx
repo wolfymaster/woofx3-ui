@@ -9,7 +9,6 @@ import { formatPrice, planName } from "@/billing/format";
 import { PLAN_DETAILS, TRIAL_DAYS } from "@/billing/plan-details";
 import { useProviderRedirect } from "@/billing/provider-redirect";
 import { usePlanPrices } from "@/billing/use-plan-prices";
-import { AUTH_GLASS_CLASS } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
