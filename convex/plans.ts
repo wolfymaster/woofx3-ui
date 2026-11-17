@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { ENTITLEMENT_CATALOG, limitValuesValidator } from "./lib/entitlements";
+import { planTierValidator } from "./lib/organization";
 import { deletePlan, upsertPlan } from "./lib/plans";
 
 /**
@@ -23,7 +24,7 @@ export const list = internalQuery({
 
 export const upsert = internalMutation({
   args: {
-    key: v.string(),
+    key: planTierValidator,
     name: v.string(),
     features: v.array(v.string()),
     limits: limitValuesValidator,

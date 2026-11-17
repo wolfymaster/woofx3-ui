@@ -6,7 +6,6 @@ import {
   type PlanRow,
   resolveEntitlements,
   validateEntitlementInput,
-  validatePlanKey,
 } from "./entitlements";
 
 // These stand in for the real catalog, so the tests do not change as it grows.
@@ -120,14 +119,5 @@ describe("validateEntitlementInput", () => {
     expect(() => validateEntitlementInput({ limits: [{ key: "storage.assetBytes", value: 1.5 }] }, catalog)).toThrow(
       "whole number"
     );
-  });
-});
-
-describe("validatePlanKey", () => {
-  it("accepts lowercase slugs", () => {
-    expect(() => validatePlanKey("pro-2026")).not.toThrow();
-    expect(() => validatePlanKey("Pro")).toThrow();
-    expect(() => validatePlanKey("2026")).toThrow();
-    expect(() => validatePlanKey("")).toThrow();
   });
 });

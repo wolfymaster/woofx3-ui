@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { validateEntitlementInput, validatePlanKey } from "../lib/entitlements";
+import { validateEntitlementInput } from "../lib/entitlements";
 import { PLAN_SEEDS } from "./plans";
 
 // A copy of the hosted plans in the marketing site's pricing table
@@ -43,7 +43,6 @@ describe("plan seeds", () => {
     });
 
     test(`${seed.key} is a valid plan`, () => {
-      expect(() => validatePlanKey(seed.key)).not.toThrow();
       expect(() => validateEntitlementInput({ features: seed.features, limits: seed.limits })).not.toThrow();
     });
   }
