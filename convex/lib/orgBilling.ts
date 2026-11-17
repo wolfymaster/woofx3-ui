@@ -84,7 +84,7 @@ export function projectionSummary(row: Doc<"orgBilling">): SubscriptionSummary {
  * then authoritative. An org with no projection row yet returns null and
  * behaves as an org with no subscription did before billing existed: its
  * gates stay open (callers check for null before requiring a usable standing)
- * and its entitlements come from its operator assignment or the default plan.
+ * and its entitlements are the code defaults with no plan.
  */
 export async function billingFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise<BillingView | null> {
   const projection = await orgBillingFor(ctx, accountId);
