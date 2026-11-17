@@ -21,6 +21,7 @@ import {
   getAccountMembership,
   getInstanceMembership,
   grantEngineRole,
+  maskedEmail,
   normalizeEmail,
 } from "./lib/teamAccess";
 import {
@@ -63,10 +64,10 @@ type PendingInvitation = Pick<
   | "expiresAt"
 >;
 
-function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
+function toPendingInvitation(r: Doc<"invitations">, showEmail: boolean): PendingInvitation {
   return {
     _id: r._id,
-    email: r.email,
+    email: r.email === undefined || showEmail ? r.email : maskedEmail(r.email),
     platform: r.platform,
     platformLogin: r.platformLogin,
     platformDisplayName: r.platformDisplayName,
@@ -81,11 +82,11 @@ function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
 
 /**
  * Pending invitations the caller may manage on this engine's team page, or
- * null when they may manage none. Invitee emails are personal data, so the
- * list follows `revoke`: an engine's admins see its invitations, and only an
- * org role with `manageMembers` also sees the org-wide ones that predate
- * engine-scoped invites. `now` (ms) decides which have expired; a query
- * can't read the clock without losing its cache.
+ * null when they may manage none: an engine's admins see its invitations, as
+ * `revoke` allows. Invitee emails are personal data, so like members' they
+ * are shown whole only to a viewer with `viewMemberEmails` and masked for
+ * everyone else. `now` (ms) decides which have expired; a query can't read
+ * the clock without losing its cache.
  */
 export const listForEngine = query({
   args: { instanceId: v.id("instances"), now: v.number() },
@@ -98,7 +99,8 @@ export const listForEngine = query({
       .query("invitations")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId).eq("status", "pending"))
       .collect();
-    const invitations = rows.filter((r) => r.expiresAt > now).map(toPendingInvitation);
+    const showEmails = can(viewer.roles, "viewMemberEmails");
+    const invitations = rows.filter((r) => r.expiresAt > now).map((r) => toPendingInvitation(r, showEmails));
     return { invitations };
   },
 });

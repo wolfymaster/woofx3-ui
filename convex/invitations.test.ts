@@ -216,7 +216,19 @@ describe("invitations.listForEngine", () => {
     const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
     await invite(t, org.ownerId, org.instanceId, "here@example.com");
     await invite(t, org.ownerId, secondId, "there@example.com");
-    expect(await listedEmails(t, adminId, org.instanceId)).toEqual(["here@example.com"]);
+    expect(await listedEmails(t, adminId, org.instanceId)).toEqual(["h***@example.com"]);
+  });
+
+  test.each<[string, OrgRole, string]>([
+    ["the owner", "owner", "here@example.com"],
+    ["an org admin", "admin", "h***@example.com"],
+  ])("%s sees an invitee's email as %s", async (_name, orgRole, shown) => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const viewerId =
+      orgRole === "owner" ? org.ownerId : await addUser(t, "admin@example.com", { org, orgRole, engineRole: "admin" });
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    expect(await listedEmails(t, viewerId, org.instanceId)).toEqual([shown]);
   });
 
   test("an engine member sees no invitations", async () => {

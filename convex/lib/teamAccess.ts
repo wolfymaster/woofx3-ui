@@ -193,6 +193,19 @@ export function memberEmailField(user: Doc<"users">, showEmail: boolean): { emai
   return showEmail ? { email: user.email ?? null } : {};
 }
 
+/**
+ * An address with all but the first character of its local part hidden
+ * (`w***@example.com`), so someone who may not read members' addresses can
+ * still tell invitations apart.
+ */
+export function maskedEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 1) {
+    return "***";
+  }
+  return `${email[0]}***${email.slice(at)}`;
+}
+
 export function toTeamMemberDto(
   user: Doc<"users">,
   membership: Doc<"instanceMembers">,
