@@ -51,7 +51,6 @@ export interface PlanSummaryDto {
   plan: { key: string; name: string } | null;
   features: string[];
   limits: Record<string, number | null>;
-  expiresAt: number | null;
 }
 
 export function planSummaryDto(entitlements: Entitlements): PlanSummaryDto {
@@ -59,7 +58,6 @@ export function planSummaryDto(entitlements: Entitlements): PlanSummaryDto {
     plan: entitlements.plan ? { key: entitlements.plan.key, name: entitlements.plan.name } : null,
     features: [...entitlements.features],
     limits: { ...entitlements.limits },
-    expiresAt: entitlements.expiresAt ?? null,
   };
 }
 

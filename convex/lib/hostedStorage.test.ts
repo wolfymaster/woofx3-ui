@@ -37,7 +37,7 @@ describe("isOnHostedStorage", () => {
 
 describe("hostedStorageLimits", () => {
   it("defaults to 50 MB in total, 10 MB a file and 500 MB of module storage", () => {
-    expect(hostedStorageLimits(resolveEntitlements(null, null, 0, ENTITLEMENT_CATALOG))).toEqual({
+    expect(hostedStorageLimits(resolveEntitlements(null, null, ENTITLEMENT_CATALOG))).toEqual({
       totalBytes: 50 * MiB,
       fileBytes: 10 * MiB,
       moduleStorageBytes: 500 * MiB,
@@ -55,7 +55,7 @@ describe("hostedStorageLimits", () => {
         { key: "storage.moduleStorageBytes", value: GiB },
       ],
     };
-    expect(hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG))).toEqual({
+    expect(hostedStorageLimits(resolveEntitlements(plan, null, ENTITLEMENT_CATALOG))).toEqual({
       totalBytes: 50 * GiB,
       fileBytes: null,
       moduleStorageBytes: GiB,
@@ -73,16 +73,16 @@ describe("hostedStorageLimits with an engine override", () => {
 
   it("takes the engine's value where it sets one and the account's elsewhere", () => {
     expect(
-      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), { totalBytes: 200 * MiB })
+      hostedStorageLimits(resolveEntitlements(plan, null, ENTITLEMENT_CATALOG), { totalBytes: 200 * MiB })
     ).toEqual({ totalBytes: 200 * MiB, fileBytes: 10 * MiB, moduleStorageBytes: 500 * MiB });
     expect(
-      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), { moduleStorageBytes: 2 * GiB })
+      hostedStorageLimits(resolveEntitlements(plan, null, ENTITLEMENT_CATALOG), { moduleStorageBytes: 2 * GiB })
     ).toEqual({ totalBytes: GiB, fileBytes: 10 * MiB, moduleStorageBytes: 2 * GiB });
   });
 
   it("can make a limit unlimited, or lower it to nothing", () => {
     expect(
-      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), {
+      hostedStorageLimits(resolveEntitlements(plan, null, ENTITLEMENT_CATALOG), {
         totalBytes: null,
         fileBytes: 0,
         moduleStorageBytes: null,

@@ -61,6 +61,6 @@ export async function requireFeatureFlag(
 }
 
 async function engineFeatures(ctx: QueryCtx, instanceId: Id<"instances">): Promise<string[]> {
-  const availability = await engineAvailability(ctx, instanceId, Date.now());
+  const availability = await engineAvailability(ctx, instanceId);
   return availability.availability === "hosted" ? availability.entitlements.features : [];
 }

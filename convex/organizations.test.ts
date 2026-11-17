@@ -63,7 +63,7 @@ function as(t: Backend, userId: Id<"users">) {
 }
 
 async function mine(t: Backend, userId: Id<"users">) {
-  const [organization] = await as(t, userId).query(api.organizations.mine, { now: NOW });
+  const [organization] = await as(t, userId).query(api.organizations.mine, {});
   return organization;
 }
 

@@ -47,8 +47,7 @@ async function giveProjection(t: Backend, accountId: Id<"accounts">, projection:
   );
 }
 
-const entitlements = (t: Backend, accountId: Id<"accounts">) =>
-  t.run((ctx) => accountEntitlements(ctx, accountId, NOW));
+const entitlements = (t: Backend, accountId: Id<"accounts">) => t.run((ctx) => accountEntitlements(ctx, accountId));
 const refusal = (t: Backend, accountId: Id<"accounts">) =>
   t
     .run((ctx) => requireUsableSubscription(ctx, accountId))
@@ -115,7 +114,7 @@ describe("a projection with no tier keeps its standing", () => {
       })
     );
     await giveProjection(t, accountId, { tier: null, standing: "trialing", trialEndsAt: 111 });
-    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).toBeNull();
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId))).toBeNull();
   });
 
   test("a managed engine seats a no-tier org", async () => {
@@ -125,7 +124,7 @@ describe("a projection with no tier keeps its standing", () => {
       ctx.db.insert("instances", { accountId, name: "Box", url: "https://b.example", hosting: "managed", createdAt: 1 })
     );
     await giveProjection(t, accountId, { tier: null, standing: "trialing", trialEndsAt: 111 });
-    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).not.toBeNull();
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId))).not.toBeNull();
   });
 });
 
@@ -135,7 +134,7 @@ describe("with and without a projection", () => {
     const accountId = await seedOrg(t);
     expect(await t.run((ctx) => billingFor(ctx, accountId))).toBeNull();
     expect((await entitlements(t, accountId)).subscription).toBeNull();
-    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).toBeNull();
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId))).toBeNull();
   });
 
   test("no projection row leaves a managed engine's gates open, as an org with no subscription had", async () => {
@@ -152,7 +151,7 @@ describe("with and without a projection", () => {
     const t = newBackend();
     const accountId = await seedOrg(t);
     await giveProjection(t, accountId, { tier: "starter" });
-    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).toBe(5);
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId))).toBe(5);
   });
 
   test("trialing reports the trial end as the next billing date, active the period end", async () => {

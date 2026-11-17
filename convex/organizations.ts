@@ -109,26 +109,25 @@ async function orgSubscription(
   };
 }
 
-async function orgSeats(ctx: QueryCtx, accountId: Id<"accounts">, now: number) {
+async function orgSeats(ctx: QueryCtx, accountId: Id<"accounts">) {
   const members = await ctx.db
     .query("accountMembers")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
-  return { used: members.length, limit: await orgSeatLimit(ctx, accountId, now) };
+  return { used: members.length, limit: await orgSeatLimit(ctx, accountId) };
 }
 
 async function myOrganization(
   ctx: QueryCtx,
   account: Doc<"accounts">,
-  userId: Id<"users">,
-  now: number
+  userId: Id<"users">
 ): Promise<MyOrganization | null> {
   const role = await orgRoleOf(ctx, account, userId);
   if (role === null) {
     return null;
   }
   const can = capabilities(role);
-  const entitlements = await accountEntitlements(ctx, account._id, now);
+  const entitlements = await accountEntitlements(ctx, account._id);
   return {
     accountId: account._id,
     name: account.name,
@@ -136,7 +135,7 @@ async function myOrganization(
     can,
     engines: await orgEngines(ctx, account, userId, can.manageEngines),
     subscription: can.viewBilling ? await orgSubscription(ctx, account._id, role, entitlements) : null,
-    seats: can.manageMembers ? await orgSeats(ctx, account._id, now) : null,
+    seats: can.manageMembers ? await orgSeats(ctx, account._id) : null,
   };
 }
 
@@ -159,10 +158,10 @@ export const capabilitiesForInstance = query({
   },
 });
 
-/** The organizations the caller belongs to, each as their role may see it. `now` (ms) resolves the plan. */
+/** The organizations the caller belongs to, each as their role may see it. */
 export const mine = query({
-  args: { now: v.number() },
-  handler: async (ctx, { now }): Promise<MyOrganization[]> => {
+  args: {},
+  handler: async (ctx): Promise<MyOrganization[]> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       return [];
@@ -179,7 +178,7 @@ export const mine = query({
     const organizations: MyOrganization[] = [];
     for (const accountId of accountIds) {
       const account = await ctx.db.get(accountId);
-      const organization = account === null ? null : await myOrganization(ctx, account, userId, now);
+      const organization = account === null ? null : await myOrganization(ctx, account, userId);
       if (organization !== null) {
         organizations.push(organization);
       }

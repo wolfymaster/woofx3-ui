@@ -26,26 +26,22 @@ async function tierPlan(ctx: QueryCtx, key: string): Promise<Doc<"plans">> {
 }
 
 /**
- * The org's entitlements at `nowMs`. With a billing projection from the
+ * The org's entitlements. With a billing projection from the
  * management plane, its tier's plan applies in a usable standing and none
  * applies while suspended, with the overrides the projection carries. An org
  * without one has no plan: the code defaults for limits, and no paid features.
  */
-export async function accountEntitlements(
-  ctx: QueryCtx,
-  accountId: Id<"accounts">,
-  nowMs: number
-): Promise<Entitlements> {
+export async function accountEntitlements(ctx: QueryCtx, accountId: Id<"accounts">): Promise<Entitlements> {
   const billing = await billingFor(ctx, accountId);
   if (billing !== null) {
     const { summary } = billing;
     const plan = summary.plan !== null && isUsable(summary) ? await tierPlan(ctx, summary.plan) : null;
-    return resolveEntitlements(plan, billing.overrides, nowMs, ENTITLEMENT_CATALOG, {
+    return resolveEntitlements(plan, billing.overrides, ENTITLEMENT_CATALOG, {
       subscription: summary,
       grantedFeatures: addOnFeatures(summary, billing.addOns),
     });
   }
-  return resolveEntitlements(null, null, nowMs);
+  return resolveEntitlements(null, null);
 }
 
 /**
@@ -57,11 +53,7 @@ export type EngineAvailability =
   | { availability: "hosted"; entitlements: Entitlements }
   | { availability: "self_hosted" };
 
-export async function engineAvailability(
-  ctx: QueryCtx,
-  instanceId: Id<"instances">,
-  nowMs: number
-): Promise<EngineAvailability> {
+export async function engineAvailability(ctx: QueryCtx, instanceId: Id<"instances">): Promise<EngineAvailability> {
   const instance = await ctx.db.get(instanceId);
   if (instance === null) {
     throw new Error(`engineAvailability: instance ${instanceId} does not exist`);
@@ -69,7 +61,7 @@ export async function engineAvailability(
   if (instance.hosting !== "managed") {
     return { availability: "self_hosted" };
   }
-  return { availability: "hosted", entitlements: await accountEntitlements(ctx, instance.accountId, nowMs) };
+  return { availability: "hosted", entitlements: await accountEntitlements(ctx, instance.accountId) };
 }
 
 /** Whether a paid feature is on. Never on a self-hosted engine, whatever its org pays for. */
@@ -107,7 +99,7 @@ export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove so
  * whichever engine a person joins through. An org with only self-hosted
  * engines has none, nor does a plan without one.
  */
-export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<number | null> {
+export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">): Promise<number | null> {
   const instances = await ctx.db
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
@@ -118,7 +110,7 @@ export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, now
   if (!seated) {
     return null;
   }
-  const limit = (await accountEntitlements(ctx, accountId, nowMs)).limits["org.members"];
+  const limit = (await accountEntitlements(ctx, accountId)).limits["org.members"];
   if (limit === undefined) {
     throw new Error('Limit "org.members" was not resolved');
   }
@@ -126,8 +118,8 @@ export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, now
 }
 
 /** Whether the org has no seat left for one more person (see orgSeatLimit). */
-export async function orgSeatsFull(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<boolean> {
-  const limit = await orgSeatLimit(ctx, accountId, nowMs);
+export async function orgSeatsFull(ctx: QueryCtx, accountId: Id<"accounts">): Promise<boolean> {
+  const limit = await orgSeatLimit(ctx, accountId);
   if (limit === null) {
     return false;
   }
