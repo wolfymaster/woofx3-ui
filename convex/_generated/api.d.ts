@@ -160,7 +160,6 @@ import type * as lib_ops_notificationRequest from "../lib/ops/notificationReques
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
 import type * as lib_orgBilling from "../lib/orgBilling.js";
-import type * as lib_orgRoles from "../lib/orgRoles.js";
 import type * as lib_organization from "../lib/organization.js";
 import type * as lib_outboundTimeouts from "../lib/outboundTimeouts.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
@@ -268,6 +267,8 @@ import type * as ops_notifications from "../ops/notifications.js";
 import type * as ops_reads from "../ops/reads.js";
 import type * as ops_requests from "../ops/requests.js";
 import type * as ops_storageLimits from "../ops/storageLimits.js";
+import type * as org_billing from "../org/billing.js";
+import type * as org_context from "../org/context.js";
 import type * as org_policy from "../org/policy.js";
 import type * as organizations from "../organizations.js";
 import type * as pageIntros from "../pageIntros.js";
@@ -489,7 +490,6 @@ declare const fullApi: ApiFromModules<{
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
   "lib/orgBilling": typeof lib_orgBilling;
-  "lib/orgRoles": typeof lib_orgRoles;
   "lib/organization": typeof lib_organization;
   "lib/outboundTimeouts": typeof lib_outboundTimeouts;
   "lib/pinStrategy": typeof lib_pinStrategy;
@@ -597,6 +597,8 @@ declare const fullApi: ApiFromModules<{
   "ops/reads": typeof ops_reads;
   "ops/requests": typeof ops_requests;
   "ops/storageLimits": typeof ops_storageLimits;
+  "org/billing": typeof org_billing;
+  "org/context": typeof org_context;
   "org/policy": typeof org_policy;
   organizations: typeof organizations;
   pageIntros: typeof pageIntros;
