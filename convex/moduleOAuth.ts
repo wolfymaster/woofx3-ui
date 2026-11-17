@@ -19,6 +19,7 @@ import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { claimHandoff } from "./oauthConnectHandoff";
+import { requireEngineUsable } from "./org/billing";
 
 /**
  * `completeModuleOAuth`, declared here because the engine checkout this repo
@@ -100,8 +101,8 @@ export const start = action({
     if (!userId) {
       throw new ConvexError("Sign in to connect.");
     }
-    const role = await ctx.runQuery(internal.instances.memberRole, { instanceId, userId });
-    if (role === null) {
+    const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
+    if (membership === null) {
       throw new ConvexError("You are not a member of this engine.");
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
@@ -162,6 +163,7 @@ export const claim = internalMutation({
     if ((await readMemberRole(ctx, instanceId, userId)) === null) {
       return { ok: false as const, error: "not_permitted" as const };
     }
+    await requireEngineUsable(ctx, instanceId);
     return { ok: true as const, instanceId, moduleId, redirectTo, moduleOAuth };
   },
 });
