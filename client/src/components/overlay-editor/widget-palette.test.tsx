@@ -63,6 +63,18 @@ describe("WidgetPalette", () => {
     }
   });
 
+  test("keeps the alert editor's horizontal strip as icon tiles", () => {
+    const html = renderToStaticMarkup(
+      <WidgetPalette widgets={widgets} onAdd={() => undefined} layout="row" emptyMessage="No widgets are installed." />
+    );
+    expect(html).not.toContain("grid-cols-2");
+    expect(html).toContain("lucide");
+    expect(html).toContain('title="Text"');
+    for (const widget of widgets) {
+      expect(html).toContain(`data-testid="add-widget-${widget.widgetId}"`);
+    }
+  });
+
   test("offers a search field for finding a widget by what it does", () => {
     expect(render()).toContain('placeholder="Search widgets"');
   });
