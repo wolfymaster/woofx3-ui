@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { ConvexError } from "convex/values";
 import { billingConvexError } from "../billingCommands";
@@ -37,7 +37,7 @@ function plane(status: number, body: unknown): Seen[] {
   return seen;
 }
 
-const client = new HttpBillingClient({ baseUrl: "https://plane.test", apiKey: "key" });
+const client = new HttpBillingClient({ baseUrl: "https://plane.test", orgKey: "org-key", userKey: "user-key" });
 const TERMS = { accountId: "acc1", tier: "pro", interval: "year", promotionCode: "SAVE" } as const;
 
 describe("idempotency keys", () => {
@@ -79,12 +79,103 @@ describe("long promotion codes", () => {
 });
 
 describe("config", () => {
-  test("needs both variables and trims trailing slashes", () => {
-    expect(billingConfigFromEnv({ MAINTENANCE_API_URL: "https://p.test//" })).toBeNull();
-    expect(billingConfigFromEnv({ MAINTENANCE_API_URL: "https://p.test//", MAINTENANCE_API_KEY: "k" })).toEqual({
-      baseUrl: "https://p.test",
-      apiKey: "k",
-    });
+  const URL = "https://p.test//";
+
+  test("needs a URL and trims trailing slashes", () => {
+    expect(billingConfigFromEnv({ MAINTENANCE_BILLING_ORG_KEY: "o", MAINTENANCE_BILLING_USER_KEY: "u" })).toBeNull();
+    expect(
+      billingConfigFromEnv({
+        MAINTENANCE_API_URL: URL,
+        MAINTENANCE_BILLING_ORG_KEY: "o",
+        MAINTENANCE_BILLING_USER_KEY: "u",
+      })
+    ).toEqual({ baseUrl: "https://p.test", orgKey: "o", userKey: "u" });
+  });
+
+  test("is unconfigured with no key at all", () => {
+    expect(billingConfigFromEnv({ MAINTENANCE_API_URL: URL })).toBeNull();
+  });
+
+  test.each([
+    ["the user key", { MAINTENANCE_BILLING_ORG_KEY: "o" }, "MAINTENANCE_BILLING_USER_KEY"],
+    ["the org key", { MAINTENANCE_BILLING_USER_KEY: "u" }, "MAINTENANCE_BILLING_ORG_KEY"],
+    [
+      "the org key beside the old key",
+      { MAINTENANCE_BILLING_USER_KEY: "u", MAINTENANCE_API_KEY: "k" },
+      "MAINTENANCE_BILLING_ORG_KEY",
+    ],
+  ])("fails fast when only one owner key is set: missing %s", (_name, keys, missing) => {
+    expect(() => billingConfigFromEnv({ MAINTENANCE_API_URL: URL, ...keys })).toThrow(missing);
+  });
+
+  test("the old key serves both owners while the owner keys are unset, and says so once", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const env = { MAINTENANCE_API_URL: URL, MAINTENANCE_API_KEY: "k" };
+      const expected = { baseUrl: "https://p.test", orgKey: "k", userKey: "k" };
+      expect(billingConfigFromEnv(env)).toEqual(expected);
+      expect(billingConfigFromEnv(env)).toEqual(expected);
+      expect(warn.mock.calls.length).toBeLessThanOrEqual(1);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('"k"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("owner keys win over the old key", () => {
+    expect(
+      billingConfigFromEnv({
+        MAINTENANCE_API_URL: URL,
+        MAINTENANCE_API_KEY: "old",
+        MAINTENANCE_BILLING_ORG_KEY: "o",
+        MAINTENANCE_BILLING_USER_KEY: "u",
+      })
+    ).toEqual({ baseUrl: "https://p.test", orgKey: "o", userKey: "u" });
+  });
+});
+
+describe("which key a call carries", () => {
+  const calls: [string, () => Promise<unknown>, string | undefined][] = [
+    ["ensure", () => client.ensure("acc1"), "Bearer org-key"],
+    ["startCheckout", () => client.startCheckout({ ...TERMS, idempotencyKey: "k" }), "Bearer org-key"],
+    [
+      "startMarketplaceCheckout",
+      () => client.startMarketplaceCheckout({ accountId: "acc1", intentId: "i", idempotencyKey: "k" }),
+      "Bearer org-key",
+    ],
+    ["openPortal", () => client.openPortal("acc1"), "Bearer org-key"],
+    ["listInvoices", () => client.listInvoices("acc1"), "Bearer org-key"],
+    ["lookupPromotionCode", () => client.lookupPromotionCode("SAVE"), "Bearer org-key"],
+    ["checkoutState", () => client.checkoutState("c1", "acc1"), "Bearer org-key"],
+    ["planPrices", () => client.planPrices(), undefined],
+    ["sponsorshipTerms", () => client.sponsorshipTerms(), "Bearer user-key"],
+    [
+      "startSponsorshipCheckout",
+      () =>
+        client.startSponsorshipCheckout({
+          userId: "u1",
+          amountCents: 500,
+          interval: "month",
+          returnUrl: "https://x.test",
+          idempotencyKey: "k",
+        }),
+      "Bearer user-key",
+    ],
+    ["listSponsorships", () => client.listSponsorships("u1"), "Bearer user-key"],
+    ["changeSponsorshipAmount", () => client.changeSponsorshipAmount("u1", "s1", 700), "Bearer user-key"],
+    ["cancelSponsorship", () => client.cancelSponsorship("u1", "s1", true), "Bearer user-key"],
+    [
+      "sponsorshipPaymentMethodSession",
+      () => client.sponsorshipPaymentMethodSession("u1", "s1", "https://x.test"),
+      "Bearer user-key",
+    ],
+    ["sponsorshipCheckoutState", () => client.sponsorshipCheckoutState("c1", "u1"), "Bearer user-key"],
+  ];
+
+  test.each(calls)("%s", async (_name, call, authorization) => {
+    const seen = plane(200, {});
+    await call();
+    expect(seen[0]?.headers.authorization).toBe(authorization);
   });
 });
 
@@ -96,7 +187,7 @@ describe("requests", () => {
     expect(seen[0]).toMatchObject({
       url: "https://plane.test/v1/billing/accounts/acc1/checkouts",
       method: "POST",
-      headers: { authorization: "Bearer key", "idempotency-key": "k1" },
+      headers: { authorization: "Bearer org-key", "idempotency-key": "k1" },
       body: { plan: "pro", interval: "year", promotionCode: "SAVE" },
     });
   });
