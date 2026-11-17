@@ -18,6 +18,7 @@ import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
 import {
+  type AcquireBody,
   MarketplaceError,
   marketplaceAuthed,
   marketplaceGet,
@@ -153,7 +154,7 @@ export async function acquireListing(
 
   const buyerRef = await buyerRefFor(ctx, instanceId);
   try {
-    await marketplaceAuthed(`${path}/acquire`, "POST", { buyerRef });
+    await marketplaceAuthed(`${path}/acquire`, "POST", { buyerRef } satisfies AcquireBody);
   } catch (err) {
     const message = acquireRefusal(err, listingName);
     if (message !== null) {

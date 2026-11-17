@@ -16,7 +16,13 @@
  */
 
 import { ConvexError } from "convex/values";
+import type { paths } from "./marketplace/schema.generated";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./marketplaceAccess";
+
+/** The body of `POST /catalog/{id}/acquire`, from the pinned marketplace spec. */
+export type AcquireBody = NonNullable<
+  paths["/catalog/{id}/acquire"]["post"]["requestBody"]
+>["content"]["application/json"];
 
 const MARKETPLACE_TIMEOUT_MS = 10_000;
 
