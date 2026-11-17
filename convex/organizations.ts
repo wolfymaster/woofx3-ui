@@ -7,6 +7,7 @@ import type { EngineRole, OrgRole } from "./lib/organization";
 import type { ProjectedDiscount } from "./lib/orgBilling";
 import { linkedPlatformNames, memberDisplayName, memberEmailField } from "./lib/teamAccess";
 import { loadOrgContext, type OrgContext } from "./org/context";
+import { membershipsOf, orgMembers } from "./org/membership";
 import { can, ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireAction, viewerRoles } from "./org/policy";
 
 // The org portal's reads. Storage calls an organization an account; these
@@ -147,10 +148,7 @@ export const mine = query({
       .query("accounts")
       .withIndex("by_owner", (q) => q.eq("ownerId", userId))
       .collect();
-    const rows = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    const rows = await membershipsOf(ctx, userId);
     const accountIds = new Set<Id<"accounts">>([...owned.map((a) => a._id), ...rows.map((r) => r.accountId)]);
     const organizations: MyOrganization[] = [];
     for (const accountId of accountIds) {
@@ -191,10 +189,7 @@ export const members = query({
       ctx,
       instances.map((instance) => instance._id)
     );
-    const rows = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_account", (q) => q.eq("accountId", accountId))
-      .collect();
+    const rows = await orgMembers(ctx, accountId);
     const result: OrgMember[] = [];
     for (const row of rows) {
       const user = await ctx.db.get(row.userId);

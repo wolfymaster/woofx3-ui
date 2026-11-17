@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { Id } from "../_generated/dataModel";
+import { grantEngineRole } from "../org/membership";
 import { orgRoleOf, requireActionFor } from "../org/policy";
 import { newBackend } from "./convexTest.testing";
 import type { OrgRole } from "./organization";
-import { grantEngineRole, maskedEmail } from "./teamAccess";
+import { maskedEmail } from "./teamAccess";
 
 type Backend = ReturnType<typeof newBackend>;
 

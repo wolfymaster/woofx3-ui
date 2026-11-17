@@ -11,8 +11,8 @@ import { validateExternalEngineUrl } from "./lib/externalEngineUrl";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
-import { grantNewEngineMembers } from "./lib/teamAccess";
 import { deleteUserPage } from "./lib/userPages";
+import { grantNewEngineMembers } from "./org/membership";
 import { can, requireAction, requireActionFor, requireActionInAction, viewerRoles } from "./org/policy";
 import { markFirstRun } from "./provisioningInternal";
 

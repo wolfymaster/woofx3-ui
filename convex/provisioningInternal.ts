@@ -11,9 +11,9 @@ import {
   type RedeployEvent,
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
-import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { assertNotSuspended, orgBillingRow } from "./org/billing";
+import { grantNewEngineMembers } from "./org/membership";
 import { requireActionFor } from "./org/policy";
 import { performRegistration } from "./registration";
 

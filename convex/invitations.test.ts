@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend, runMigration } from "./lib/convexTest.testing";
-import { accountEntitlements, SEATS_FULL } from "./lib/entitlementAccess";
+import { accountEntitlements } from "./lib/entitlementAccess";
 import type { EngineRole, OrgRole } from "./lib/organization";
 import { insertProjection } from "./lib/orgBilling.testing";
+import { SEATS_FULL } from "./org/membership";
 import { seedMissingTierPlans } from "./seeds/plans";
 
 type Backend = ReturnType<typeof newBackend>;

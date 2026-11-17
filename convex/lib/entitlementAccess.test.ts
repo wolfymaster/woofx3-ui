@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { orgBillingRow } from "../org/billing";
+import { grantEngineRole, orgSeatsFull } from "../org/membership";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
-import { accountEntitlements, engineAvailability, hasFeature, orgSeatLimit, orgSeatsFull } from "./entitlementAccess";
+import { accountEntitlements, engineAvailability, hasFeature, orgSeatLimit } from "./entitlementAccess";
 import {
   addOnFeatures,
   ENTITLEMENT_FEATURES,
@@ -13,7 +14,6 @@ import {
 } from "./entitlements";
 import type { SubscriptionState } from "./organization";
 import { upsertPlan } from "./plans";
-import { grantEngineRole } from "./teamAccess";
 
 type Backend = ReturnType<typeof newBackend>;
 
