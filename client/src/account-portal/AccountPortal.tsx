@@ -34,7 +34,6 @@ import {
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
-import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { BackToDashboard } from "./back-to-dashboard";
 import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
@@ -218,8 +217,7 @@ function PortalPageRoute({ id }: { id: PortalPageId }) {
  * session. The web build only; App.tsx never registers it in the desktop app.
  */
 export default function AccountPortal() {
-  const now = useMinuteClock();
-  const organizations = useQuery(api.organizations.mine, { now });
+  const organizations = useQuery(api.organizations.mine, {});
   const { instance } = useInstance();
   const search = useSearch();
   const [selectedId, setSelectedId] = useState<Id<"accounts"> | null>(null);

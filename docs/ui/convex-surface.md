@@ -24,6 +24,8 @@ An engine id is not a secret, so every public query, mutation and action that ta
 - **member:** read everything on the engine and change its content (modules, module settings, resources, scenes, workflows, dashboards).
 - **admin or owner:** also change what the engine is bound to (engine registration, deletion, the linked Twitch channel, pairing a companion app).
 
+Organizations are the `convex/org/` module's: `org/policy.ts` decides who may do what, `org/membership.ts` holds every read and write of org membership (`accountMembers`) and the engine grants it implies, `org/billing.ts` is the one reader of the billing projection (`orgBilling`), and `org/context.ts` loads an org's role, billing, entitlements and seats once per request. Nothing else touches those two tables; `org/orgModuleBoundary.test.ts` holds that, with a short allowlist (the organization migration, the ops read model, the projection's writer).
+
 Functions the companion app calls (`companions.self`, `heartbeat`, `unpair`) have no user session. They authenticate with the companion's device token instead of engine membership: only the token's SHA-256 hash is stored, the `companions` row is the credential, and a token with no row, or whose approver is no longer an admin, fails closed. See [Companion app](/ui/companion#tokens-and-revocation).
 
 Secret values stay off the client. Module `secret` settings and storage credentials are masked by the engine before they reach Convex. Platform tokens and the engine's `webhookSecret` are stripped from public queries. The engine `clientSecret` is the one exception: the browser's live engine WebSocket authenticates with it.

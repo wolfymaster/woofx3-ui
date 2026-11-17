@@ -14,10 +14,9 @@ import {
   type Invoice,
   marketplaceCheckoutIdempotencyKey,
 } from "./lib/billingClient";
-import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import { billingIntervalValidator, planTierValidator } from "./lib/organization";
-import { orgCan, orgRoleOf, requireOrgActionFor } from "./lib/orgRoles";
 import { logger } from "./logger";
+import { orgCan, orgRoleOf, requireActionFor, requireActionInAction } from "./org/policy";
 
 // The billing commands a person triggers in the org portal. Each checks that
 // the caller manages the org's billing, then asks the management plane to do
@@ -86,7 +85,7 @@ export function unwrap<T>(result: BillingResult<T>): T {
 export const assertBillingManager = internalQuery({
   args: { accountId: v.id("accounts"), userId: v.id("users") },
   handler: async (ctx, { accountId, userId }): Promise<null> => {
-    await requireOrgActionFor(ctx, accountId, userId, "manageBilling");
+    await requireActionFor(ctx, userId, { org: accountId }, "manageBilling");
     return null;
   },
 });
@@ -202,7 +201,7 @@ export const checkoutState = action({
 export const startMarketplaceCheckout = action({
   args: { instanceId: v.id("instances"), intentId: v.string() },
   handler: async (ctx, { instanceId, intentId }): Promise<{ url: string; checkoutId: string }> => {
-    const { accountId } = await requireOrgActionOnInstanceInAction(ctx, instanceId, "manageBilling");
+    const accountId = (await requireActionInAction(ctx, { engine: instanceId }, "manageBilling")).account._id;
     const client = requireClient();
     const request = { accountId, intentId: intentId.trim() };
     if (request.intentId === "") {
@@ -221,7 +220,7 @@ export const startMarketplaceCheckout = action({
 export const marketplaceCheckoutState = action({
   args: { instanceId: v.id("instances"), checkoutId: v.string() },
   handler: async (ctx, { instanceId, checkoutId }): Promise<{ state: CheckoutState }> => {
-    const { accountId } = await requireOrgActionOnInstanceInAction(ctx, instanceId, "manageBilling");
+    const accountId = (await requireActionInAction(ctx, { engine: instanceId }, "manageBilling")).account._id;
     return { state: await orgCheckoutState(requireClient(), checkoutId, accountId) };
   },
 });

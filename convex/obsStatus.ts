@@ -16,8 +16,8 @@ export const get = action({
     if (!userId) {
       throw new ConvexError("Not authenticated");
     }
-    const isMember: boolean = await ctx.runQuery(internal.platformRealtime.checkMembership, { instanceId, userId });
-    if (!isMember) {
+    const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
+    if (!membership) {
       throw new ConvexError("You are not a member of this engine");
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });

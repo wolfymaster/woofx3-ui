@@ -15,6 +15,7 @@ import {
 } from "./lib/configBundle";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { requireEngineUsable } from "./org/billing";
 
 // Actions here run in Convex's default runtime on purpose: it accepts arguments
 // up to 16 MiB, where a "use node" action stops at 5 MiB in total, which a
@@ -47,6 +48,7 @@ export const engineContextForUser = internalQuery({
     if (!instance) {
       return null;
     }
+    await requireEngineUsable(ctx, instanceId);
     return {
       access: configBackupAccess(membership.role),
       url: instance.url,

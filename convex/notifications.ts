@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, mutation, query } from "./_generated/server";
 import type { NotificationAudience, NotificationContent } from "./lib/notifications";
+import { orgMembersPage } from "./org/membership";
 
 // In-app notifications. A notification's content is stored once in
 // `notifications`; each recipient gets a `userNotifications` row holding only
@@ -89,10 +90,7 @@ async function recipientPage(
       return { userIds: result.page.map((user) => user._id), nextCursor: result.isDone ? null : result.continueCursor };
     }
     case "account": {
-      const result = await ctx.db
-        .query("accountMembers")
-        .withIndex("by_account", (index) => index.eq("accountId", audience.accountId))
-        .paginate({ numItems: BATCH, cursor });
+      const result = await orgMembersPage(ctx, audience.accountId, { numItems: BATCH, cursor });
       return {
         userIds: result.page.map((member) => member.userId),
         nextCursor: result.isDone ? null : result.continueCursor,

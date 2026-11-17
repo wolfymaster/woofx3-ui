@@ -11,8 +11,9 @@ import type { BillingInterval, LifecycleReason, PlanTier, SubscriptionState } fr
  * resources maintenance provisions. An engine never enforces a plan.
  *
  * Which features and limits exist is code, because a feature means nothing
- * until code checks it. Which plans include them, and which plan each
- * account is on, is data operators edit (`plans`, `accountPlans`).
+ * until code checks it. Which plans include them is data (`plans`); which
+ * plan an org is on, and its overrides, come from its billing projection
+ * (lib/orgBilling.ts).
  */
 export interface EntitlementFeatureDefinition {
   description: string;
@@ -141,11 +142,10 @@ export interface PlanRow {
 }
 
 /** Changes to a plan for one account alone, as the billing projection carries them. */
-export interface AccountPlanRow {
+export interface EntitlementOverrides {
   addFeatures: readonly string[];
   removeFeatures: readonly string[];
   limits: readonly LimitValue[];
-  expiresAt?: number;
 }
 
 /**
@@ -194,12 +194,6 @@ export interface Entitlements {
   features: string[];
   /** Every limit code knows, null meaning unlimited. */
   limits: Record<string, number | null>;
-  /** When the assignment lapses to the default plan, if it does. */
-  expiresAt?: number;
-}
-
-export function isAssignmentActive(assignment: AccountPlanRow | null, nowMs: number): assignment is AccountPlanRow {
-  return assignment !== null && (assignment.expiresAt === undefined || assignment.expiresAt > nowMs);
 }
 
 /** What the subscription adds to a resolution: itself, for reporting, and the features its add-ons grant. */
@@ -211,35 +205,31 @@ export interface BillingGrant {
 const NO_BILLING: BillingGrant = { subscription: null, grantedFeatures: [] };
 
 /**
- * Resolves what an account may use. `plan` is the plan that applies (the
- * assigned one while the assignment is active, otherwise the default) and
- * `assignment` is ignored once expired, so a lapsed deal falls back to the
- * default plan with none of its overrides. Keys code no longer knows are
- * dropped. A limit is the account's override, else the plan's, else the
+ * Resolves what an account may use. `plan` is the plan that applies and
+ * `overrides` holds the account's changes to it. Keys code no longer knows
+ * are dropped. A limit is the account's override, else the plan's, else the
  * code default.
  */
 export function resolveEntitlements(
   plan: PlanRow | null,
-  assignment: AccountPlanRow | null,
-  nowMs: number,
+  overrides: EntitlementOverrides | null,
   catalog: EntitlementCatalog = ENTITLEMENT_CATALOG,
   billing: BillingGrant = NO_BILLING
 ): Entitlements {
   const { subscription, grantedFeatures } = billing;
-  const active = isAssignmentActive(assignment, nowMs) ? assignment : null;
   const known = (key: string) => hasKey(catalog.features, key);
   const features = new Set([...(plan?.features ?? []), ...grantedFeatures].filter(known));
-  for (const feature of active?.addFeatures ?? []) {
+  for (const feature of overrides?.addFeatures ?? []) {
     if (known(feature)) {
       features.add(feature);
     }
   }
-  for (const feature of active?.removeFeatures ?? []) {
+  for (const feature of overrides?.removeFeatures ?? []) {
     features.delete(feature);
   }
 
   const planLimits = new Map((plan?.limits ?? []).map((limit) => [limit.key, limit.value]));
-  const accountLimits = new Map((active?.limits ?? []).map((limit) => [limit.key, limit.value]));
+  const accountLimits = new Map((overrides?.limits ?? []).map((limit) => [limit.key, limit.value]));
   const limits: Record<string, number | null> = {};
   for (const [key, definition] of Object.entries(catalog.limits)) {
     if (accountLimits.has(key)) {
@@ -256,7 +246,6 @@ export function resolveEntitlements(
     subscription,
     features: [...features].sort(),
     limits,
-    ...(active?.expiresAt !== undefined ? { expiresAt: active.expiresAt } : {}),
   };
 }
 

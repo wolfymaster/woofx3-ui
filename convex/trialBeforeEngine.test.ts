@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
-import { orgBillingFor } from "./lib/orgBilling";
 import { insertProjection } from "./lib/orgBilling.testing";
+import { orgBillingRow } from "./org/billing";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -80,7 +80,7 @@ describe("the trial starts before the engine is built", () => {
         throw new Error("ensureFirstRun made no account");
       }
       await Bun.sleep(100);
-      expect(await t.run((ctx) => orgBillingFor(ctx, account._id))).toBeNull();
+      expect(await t.run((ctx) => orgBillingRow(ctx, account._id))).toBeNull();
       expect(asked.length).toBeGreaterThan(0);
       for (const call of asked) {
         expect(call).toEqual({ path: `/v1/billing/accounts/${account._id}/ensure`, key: `ensure:${account._id}` });
@@ -96,7 +96,7 @@ describe("the trial starts before the engine is built", () => {
     const user = as(t, userId);
     const accountId = await user.mutation(api.accounts.ensureMyAccount, {});
     const instanceId = await user.mutation(api.instances.create, { accountId, name: "Box", url: "localhost:8080" });
-    expect(await t.run((ctx) => orgBillingFor(ctx, accountId))).toBeNull();
+    expect(await t.run((ctx) => orgBillingRow(ctx, accountId))).toBeNull();
     expect(await user.query(api.access.planPrompt, { instanceId })).toBeNull();
   });
 });
@@ -129,7 +129,7 @@ describe("provisioning while suspended", () => {
         newRegistrationToken: "token-1",
         newCreateRequestId: "request-1",
       })
-    ).rejects.toThrow("subscription_suspended");
+    ).rejects.toThrow("org_suspended");
     const rows = await t.run((ctx) => ctx.db.query("engineProvisioning").collect());
     expect(rows.map((row) => row.status)).toEqual(["deleted"]);
   });
@@ -173,9 +173,7 @@ describe("resuming a managed engine while suspended", () => {
       })
     );
     await suspend(t, accountId);
-    await expect(as(t, ownerId).action(api.provisioning.retry, { instanceId })).rejects.toThrow(
-      "subscription_suspended"
-    );
+    await expect(as(t, ownerId).action(api.provisioning.retry, { instanceId })).rejects.toThrow("org_suspended");
     expect(calls).toBe(0);
   });
 
@@ -205,7 +203,7 @@ describe("access.planPrompt", () => {
     );
     expect(await admin.query(api.access.planPrompt, { instanceId })).toBeNull();
     await t.run(async (ctx) => {
-      const row = await orgBillingFor(ctx, accountId);
+      const row = await orgBillingRow(ctx, accountId);
       if (row !== null) {
         await ctx.db.delete(row._id);
       }

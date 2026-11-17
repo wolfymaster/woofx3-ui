@@ -11,12 +11,11 @@ export function canStartPayment(access: OrganizationAccess | null | undefined): 
 }
 
 /**
- * A license key downloads the module, so only those who see the
- * organization's billing (its owner and admins) may see or copy it. Anyone
- * else is never sent it.
+ * A license key downloads the module, so only the organization's owner and
+ * admins may see or copy it. Anyone else is never sent it.
  */
 export function canSeeLicenseKey(access: OrganizationAccess | null | undefined): boolean {
-  return access?.viewBilling === true;
+  return access?.viewLicenseKeys === true;
 }
 
 export const OWNER_MUST_PURCHASE_MESSAGE = "Only the organization's owner can buy this. Ask them to purchase it.";

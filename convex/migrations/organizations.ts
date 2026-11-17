@@ -3,14 +3,14 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { orgSeatLimit } from "../lib/entitlementAccess";
-import { orgBillingFor } from "../lib/orgBilling";
-import { orgRoleOf } from "../lib/orgRoles";
-import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
 import { logger } from "../logger";
+import { orgBillingRow } from "../org/billing";
+import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../org/membership";
+import { orgRoleOf } from "../org/policy";
 import { migrations } from "./index";
 
 // Brings existing data to the organization model's invariants (I1-I4 in
-// lib/teamAccess.ts and lib/orgRoles.ts). The run order with the invitation
+// lib/teamAccess.ts and org/policy.ts). The run order with the invitation
 // migrations, and what to do with each violation checkOrgInvariantsAll
 // reports, are in docs/ops/deploy.md and
 // docs/ops/org-migrations.md.
@@ -235,7 +235,7 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
     .query("engineProvisioning")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .take(50);
-  if (provisioning.some((row) => row.status !== "deleted") && (await orgBillingFor(ctx, accountId)) === null) {
+  if (provisioning.some((row) => row.status !== "deleted") && (await orgBillingRow(ctx, accountId)) === null) {
     violations.push({ invariant: "billing", accountId, detail: "managed_engine_without_projection" });
   }
 
@@ -294,8 +294,8 @@ export interface OverSeatLimit {
   limit: number;
 }
 
-async function overSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<OverSeatLimit | null> {
-  const limit = await orgSeatLimit(ctx, accountId, nowMs);
+async function overSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">): Promise<OverSeatLimit | null> {
+  const limit = await orgSeatLimit(ctx, accountId);
   if (limit === null) {
     return null;
   }
@@ -322,10 +322,9 @@ export const checkOrgInvariants = internalQuery({
     const page = await ctx.db.query("accounts").paginate({ cursor, numItems: CHECK_PAGE_SIZE });
     const violations: InvariantViolation[] = [];
     const overLimit: OverSeatLimit[] = [];
-    const now = Date.now();
     for (const account of page.page) {
       violations.push(...(await orgViolations(ctx, account)));
-      const over = await overSeatLimit(ctx, account._id, now);
+      const over = await overSeatLimit(ctx, account._id);
       if (over !== null) {
         overLimit.push(over);
       }

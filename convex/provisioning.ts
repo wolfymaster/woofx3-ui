@@ -5,7 +5,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, query } from "./_generated/server";
 import { ENGINE_NAME_MAX_LENGTH } from "./instances";
 import { slugCandidates } from "./lib/firstRun";
-import { requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import {
   createEngine,
   currentRelease,
@@ -28,8 +27,8 @@ import {
   userFacingError,
 } from "./lib/managedEngineActions";
 import { isUpgrade } from "./lib/releaseVersion";
-import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { can, requireActionInAction, viewerRoles } from "./org/policy";
 import { performRegistration } from "./registration";
 
 /**
@@ -83,12 +82,8 @@ export const isAvailable = query({
 export const forInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return null;
-    }
-    const membership = await getInstanceMembership(ctx, instanceId, userId);
-    if (!membership) {
+    const viewer = await viewerRoles(ctx, { engine: instanceId });
+    if (viewer === null || !can(viewer.roles, "viewEngine")) {
       return null;
     }
     const row = await ctx.db
@@ -104,7 +99,7 @@ export const forInstance = query({
     return {
       ...rest,
       upgrade: upgrade ? withoutRequester(upgrade) : undefined,
-      canRename: membership.role === "owner" && row.status === "registered",
+      canRename: can(viewer.roles, "renameEngine") && row.status === "registered",
     };
   },
 });
@@ -275,11 +270,10 @@ function isSlugRefused(error: unknown): boolean {
  * A request whose outcome is unknown goes first and skips the check, since the
  * engine it may have created is what would make its slug read as taken.
  */
-async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
-  const { accountId, ownerId, login, unsettledSlug } = await ctx.runQuery(
-    internal.provisioningInternal.firstEngineFacts,
-    { instanceId }
-  );
+async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">, userId: Id<"users">): Promise<void> {
+  const { accountId, login, unsettledSlug } = await ctx.runQuery(internal.provisioningInternal.firstEngineFacts, {
+    instanceId,
+  });
   const derived = slugCandidates(login).filter((slug) => slug !== unsettledSlug);
   for (const slug of unsettledSlug === null ? derived : [unsettledSlug, ...derived]) {
     const available =
@@ -293,7 +287,7 @@ async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): 
       continue;
     }
     try {
-      await requestEngine(ctx, { accountId, userId: ownerId, slug, twitchChannel: login });
+      await requestEngine(ctx, { accountId, userId, slug, twitchChannel: login });
       return;
     } catch (error) {
       if (!isSlugRefused(error)) {
@@ -304,11 +298,15 @@ async function startDerivedEngine(ctx: ActionCtx, instanceId: Id<"instances">): 
   await ctx.runMutation(internal.provisioningInternal.markUsernameNeeded, { instanceId });
 }
 
-/** Scheduled when setup finishes on a managed instance with no engine yet (`setup.finishFirstRun`). */
+/**
+ * Scheduled when setup finishes on a managed instance with no engine yet
+ * (`setup.finishFirstRun`), for the user who finished it: the build is asked
+ * for in their name, so `createEngine` decides for them.
+ */
 export const startFirstEngine = internalAction({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
-    await startDerivedEngine(ctx, instanceId);
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }) => {
+    await startDerivedEngine(ctx, instanceId, userId);
   },
 });
 
@@ -394,7 +392,7 @@ export const startNewEngine = action({
 export const retry = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ retried: RetryKind }> => {
-    await requireEngineManager(ctx, instanceId);
+    const { userId } = await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
     const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
     if (row?.maintenanceEngineId) {
       return retryManagedEngineRow(ctx, row);
@@ -413,7 +411,8 @@ export const retry = action({
       }
       return { retried: "registration" };
     }
-    await startDerivedEngine(ctx, instanceId);
+    // A new build is what the org pays for, so it is asked for as the caller, never as the owner.
+    await startDerivedEngine(ctx, instanceId, userId);
     return { retried: "provisioning" };
   },
 });
@@ -427,9 +426,9 @@ export const retry = action({
 export const deleteManagedEngine = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ deprovisioning: boolean }> => {
-    await requireOrgActionOnInstanceInAction(ctx, instanceId, "deleteEngine");
-    const { row } = await requireManagedRow(ctx, instanceId);
-    return deleteManagedEngineRow(ctx, row);
+    await requireActionInAction(ctx, { engine: instanceId }, "deleteEngine");
+    // Not requireManagedRow: deleting stays open to the owner while the org is suspended, operating does not.
+    return deleteManagedEngineRow(ctx, await managedRow(ctx, instanceId));
   },
 });
 
@@ -456,11 +455,8 @@ const RENAME_REFUSALS: Readonly<Record<string, string>> = {
 export const renameManagedEngine = action({
   args: { instanceId: v.id("instances"), slug: v.string() },
   handler: async (ctx, { instanceId, slug }): Promise<RenameResult> => {
-    const { row, userId } = await requireManagedRow(ctx, instanceId);
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
-    if (membership?.role !== "owner") {
-      throw new Error("Not authorized");
-    }
+    await requireActionInAction(ctx, { engine: instanceId }, "renameEngine");
+    const { row } = await requireManagedRow(ctx, instanceId);
     if (!row.maintenanceEngineId || row.status !== "registered") {
       return { ok: false, reason: "Your engine has to be up and running before you can change its name." };
     }
@@ -484,27 +480,19 @@ function withoutRequester<T extends { requestedBy?: unknown }>(upgrade: T): Omit
   return shown;
 }
 
-async function requireEngineManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new Error("Not authenticated");
-  }
-  const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
-  if (!membership || membership.role === "member") {
-    throw new Error("Not authorized");
-  }
-  return userId;
-}
-
-/** Owner or admin of the instance, and a provisioning row to act on. */
+/** A caller who operates the engine, and a provisioning row to act on. */
 async function requireManagedRow(
   ctx: ActionCtx,
   instanceId: Id<"instances">
 ): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
-  const userId = await requireEngineManager(ctx, instanceId);
+  const { userId } = await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
+  return { row: await managedRow(ctx, instanceId), userId };
+}
+
+async function managedRow(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Doc<"engineProvisioning">> {
   const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
   if (!row) {
     throw new Error("This workspace has no managed engine");
   }
-  return { row, userId };
+  return row;
 }
