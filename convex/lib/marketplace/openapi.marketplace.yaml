@@ -1,0 +1,1028 @@
+openapi: 3.1.0
+info:
+  title: woofx3 marketplace API
+  version: 1.0.0
+  description: |
+    The buyer-facing and service-to-service routes of the marketplace: the
+    catalog, acquiring and entitlements, the billing module's purchase-intent
+    routes, and the operator's entitlement routes.
+
+    Hand-written, and kept honest by a router test (internal/httpapi/openapi_test.go):
+    every registered route is either documented here or on that test's
+    allowlist of undocumented routes, and every path here is served. The
+    allowlist is the list of what is not yet specified: the publishing routes,
+    the light-listing authoring routes and the rest of /admin.
+
+    Every error answers the same envelope (Error) with a code from ErrorCode.
+    Reads are open unless an operation lists a credential under `security`.
+servers:
+  - url: https://marketplace.woofx3.tv
+    description: Production. Local and preview deployments use their own origin.
+tags:
+  - name: catalog
+  - name: commerce
+  - name: billing
+  - name: modules
+  - name: admin
+
+security:
+  - {}
+
+paths:
+  /catalog:
+    get:
+      tags: [catalog]
+      operationId: searchCatalog
+      summary: Search the catalog across every listing type
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: author, in: query, description: An author username., schema: { type: string } }
+        - name: type
+          in: query
+          description: Listing types to include. Repeatable and comma separated. An unknown type is a 400.
+          schema: { type: array, items: { $ref: "#/components/schemas/ListingType" } }
+          style: form
+          explode: true
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [relevance, newest, name, popular, trending]
+            default: relevance
+        - { name: featured, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: One page of listings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listings, total, limit, offset]
+                properties:
+                  listings: { type: array, items: { $ref: "#/components/schemas/CatalogItem" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /catalog/counts:
+    get:
+      tags: [catalog]
+      operationId: catalogCounts
+      summary: How many listings of each type the catalog holds
+      responses:
+        "200":
+          description: Every type is present, including one with nothing in it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counts, total]
+                properties:
+                  counts:
+                    type: object
+                    required: [module, theme, emote, overlay, alert]
+                    properties:
+                      module: { type: integer }
+                      theme: { type: integer }
+                      emote: { type: integer }
+                      overlay: { type: integer }
+                      alert: { type: integer }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /catalog/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+    get:
+      tags: [catalog]
+      operationId: getCatalogEntry
+      summary: One listing with everything its storefront page shows
+      description: |
+        A dev-tier or unpublished listing answers 404 unless the caller carries
+        a credential that reveals them.
+      responses:
+        "200":
+          description: The listing.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listing]
+                properties:
+                  listing: { $ref: "#/components/schemas/CatalogDetail" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /catalog/{id}/bundle:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+    get:
+      tags: [catalog]
+      operationId: getCatalogBundle
+      summary: The scene or alert composition an overlay or alert listing installs
+      description: |
+        Open for a listing priced free. A paid or unpriced listing is served
+        only to a control-plane caller or a buyer token, for an account that
+        holds it; a control-plane caller names the account in `buyerRef`.
+      security:
+        - {}
+        - serviceBearer: []
+        - buyerBearer: []
+      parameters:
+        - { $ref: "#/components/parameters/BuyerRef" }
+      responses:
+        "200":
+          description: The bundle and the modules its widgets come from.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bundle, requires]
+                properties:
+                  bundle: { type: object, additionalProperties: true }
+                  requires: { type: array, items: { type: string } }
+        "400":
+          description: The listing is not an overlay or an alert (listing_type_mismatch), or buyerRef is missing (invalid_request).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403":
+          description: The account does not hold the listing (not_entitled) or the buyerRef is another account's (buyer_mismatch).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /catalog/{id}/acquire:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+    post:
+      tags: [commerce]
+      operationId: acquireListing
+      summary: Settle what an account must do to hold a listing
+      description: |
+        A listing that costs nothing for this account is claimed: the
+        entitlement is recorded and its license is returned (201 for a new
+        claim, 200 for one already held). A paid quote answers 402 with the
+        purchase intent the billing module charges against. A caller with no
+        credential may claim a free listing only, rate limited per client
+        address.
+
+        With a service token the body must name the account in `buyerRef`;
+        with a buyer token the account is the token's, and a different
+        `buyerRef` is refused with 403 buyer_mismatch.
+      security:
+        - {}
+        - serviceBearer: []
+        - buyerBearer: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                buyerRef: { $ref: "#/components/schemas/BuyerRef" }
+      responses:
+        "200":
+          description: The account already held the listing.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Acquired" } } }
+        "201":
+          description: A free listing, or a free upgrade, was claimed.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Acquired" } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401":
+          description: A bad credential (unauthorized), or a paid listing asked for with no account (account_required).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "402":
+          description: The listing costs money for this account. Pay the intent.
+          content: { application/json: { schema: { $ref: "#/components/schemas/PaymentRequired" } } }
+        "403":
+          description: The buyerRef is another account's (buyer_mismatch), or the account's access was revoked (entitlement_revoked).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: The listing cannot be acquired now (listing_unavailable).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "410":
+          description: Downloads of the module are blocked (downloads_blocked).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "429":
+          description: Too many anonymous claims from this address (rate_limited). Retry-After says when to ask again.
+          headers:
+            Retry-After: { schema: { type: integer }, description: Seconds. }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500": { $ref: "#/components/responses/Error" }
+  /catalog/{id}/entitlement:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+    get:
+      tags: [commerce]
+      operationId: getEntitlement
+      summary: Whether an account holds a listing
+      security:
+        - serviceBearer: []
+        - buyerBearer: []
+      parameters:
+        - { $ref: "#/components/parameters/BuyerRef" }
+      responses:
+        "200":
+          description: Held or not. `source` and `grantedAt` are present only when entitled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entitled]
+                properties:
+                  entitled: { type: boolean }
+                  source: { $ref: "#/components/schemas/EntitlementSource" }
+                  grantedAt: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /catalog/{id}/quote:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+    get:
+      tags: [commerce]
+      operationId: getQuote
+      summary: What an account must do to hold a listing
+      security:
+        - serviceBearer: []
+        - buyerBearer: []
+      parameters:
+        - { $ref: "#/components/parameters/BuyerRef" }
+      responses:
+        "200":
+          description: The quote.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [quote]
+                properties:
+                  quote: { $ref: "#/components/schemas/Quote" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /entitlements:
+    get:
+      tags: [commerce]
+      operationId: listEntitlements
+      summary: Every listing an account holds, with its license keys
+      security:
+        - serviceBearer: []
+        - buyerBearer: []
+      parameters:
+        - { $ref: "#/components/parameters/BuyerRef" }
+      responses:
+        "200":
+          description: The held listing ids, and a key for each entitlement whose key could be read.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listingIds, licenses]
+                properties:
+                  listingIds: { type: array, items: { type: string } }
+                  licenses:
+                    type: array
+                    items:
+                      type: object
+                      required: [listingId, source, key]
+                      properties:
+                        listingId: { type: string }
+                        source: { $ref: "#/components/schemas/EntitlementSource" }
+                        key: { type: string, description: The license key. Secret. }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /authors/{slug}:
+    get:
+      tags: [catalog]
+      operationId: getAuthor
+      summary: An author's page header and one page of their listings
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: The author, claimed or not, and their listings, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [author, listings, total, limit, offset]
+                properties:
+                  author: { $ref: "#/components/schemas/Author" }
+                  listings: { type: array, items: { $ref: "#/components/schemas/CatalogItem" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+
+  /modules:
+    get:
+      tags: [modules]
+      operationId: listModules
+      summary: Every ready module and theme
+      responses:
+        "200":
+          description: The modules, with counts of what each carries instead of the full arrays.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [modules]
+                properties:
+                  modules: { type: array, items: { $ref: "#/components/schemas/ModuleListItem" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /modules/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+    get:
+      tags: [modules]
+      operationId: getModule
+      summary: One module or theme with its manifest contents
+      responses:
+        "200":
+          description: The module.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModuleDetail" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /modules/{id}/download:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+    get:
+      tags: [modules]
+      operationId: downloadModule
+      summary: A short-lived signed URL for a module's archive
+      description: |
+        A module priced free downloads with no credential. Otherwise the caller
+        presents either an `X-License-Key` (with `X-Install-Id`; a key from a
+        purchase, upgrade or grant also needs the account's buyer token or a
+        service token naming it in `buyerRef`), or a service or buyer token for
+        an account that holds the listing.
+      security:
+        - {}
+        - serviceBearer: []
+        - buyerBearer: []
+      parameters:
+        - { $ref: "#/components/parameters/BuyerRef" }
+        - name: X-License-Key
+          in: header
+          schema: { type: string }
+        - name: X-Install-Id
+          in: header
+          description: Required with X-License-Key; at most 128 characters.
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: The signed URL. `sha256` and `sizeBytes` are absent for a module published before they were recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expiresAt]
+                properties:
+                  url: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+                  sha256: { type: string }
+                  sizeBytes: { type: integer, format: int64 }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: The module is not ready (module_not_ready), or the license key is used on as many installs as it allows (activation_limit).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "410": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+
+  /intents/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [billing]
+      operationId: getIntent
+      summary: A purchase intent, read by the billing module for the amount it must charge
+      security:
+        - billingBearer: []
+      responses:
+        "200":
+          description: The intent. Status is as of now, so one past its expiry reads expired.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [intent]
+                properties:
+                  intent: { $ref: "#/components/schemas/Intent" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /intents/{id}/redeem:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [billing]
+      operationId: redeemIntent
+      summary: Report a completed payment and record the entitlement
+      description: |
+        A replay of the same payment answers the same way. A buyer who already
+        held the listing keeps that entitlement and the answer is 200 with
+        `alreadyHeld` true, so billing refunds the payment.
+      security:
+        - billingBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkoutSessionRef, amountPaidCents, currency]
+              properties:
+                checkoutSessionRef: { type: string }
+                amountPaidCents: { type: integer, format: int64, exclusiveMinimum: 0 }
+                currency: { type: string }
+                purchaserEmail: { type: [string, "null"], maxLength: 320 }
+                paidAt:
+                  type: [string, "null"]
+                  format: date-time
+                  description: When the payment completed. Omitted means now. A time before the intent was created, or more than two minutes ahead, is refused.
+      responses:
+        "200":
+          description: The entitlement the redeem settled on. It carries no license key.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Entitlement"
+                  - type: object
+                    required: [alreadyHeld]
+                    properties:
+                      alreadyHeld: { type: boolean }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: The intent was already redeemed by another payment (intent_settled).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "410":
+          description: The intent expired before it was paid (intent_expired).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "422":
+          description: The payment is not for the amount or currency the intent owes (intent_mismatch).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /entitlements/{id}/revoke:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [billing]
+      operationId: revokeEntitlement
+      summary: End an entitlement for a refund or dispute
+      description: |
+        The billing module revokes for a payment: `reason` is refund or
+        dispute and `checkoutSessionRef` names the payment, and only an
+        entitlement that payment wrote is revoked. A refund of a payment that
+        wrote nothing answers 200 with `revoked` false. Repeating a revoke
+        changes nothing. Operators revoke through
+        /admin/entitlements/{id}/revoke, which is audited.
+      security:
+        - billingBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, checkoutSessionRef]
+              properties:
+                reason: { type: string, enum: [refund, dispute] }
+                checkoutSessionRef: { type: string }
+      responses:
+        "200":
+          description: The entitlement as it stands.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: "#/components/schemas/Entitlement"
+                      - type: object
+                        required: [revoked]
+                        properties:
+                          revoked: { type: boolean, const: true }
+                  - type: object
+                    required: [entitlementId, revoked]
+                    properties:
+                      entitlementId: { type: string }
+                      revoked: { type: boolean, const: false }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403":
+          description: The billing token asked for an operator's revoke, reason operator (reason_not_allowed).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+
+  /admin/entitlements:
+    get:
+      tags: [admin]
+      operationId: adminListEntitlements
+      summary: Page the entitlements of one buyer, one listing or both, revoked ones included
+      security:
+        - adminBearer: []
+      parameters:
+        - { name: buyerRef, in: query, schema: { $ref: "#/components/schemas/BuyerRef" } }
+        - { name: listingId, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Newest grant first. At least one of buyerRef and listingId is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entitlements, total, limit, offset]
+                properties:
+                  entitlements: { type: array, items: { $ref: "#/components/schemas/AdminEntitlement" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [admin]
+      operationId: adminGrantEntitlement
+      summary: Give a buyer a listing without a payment, audited
+      security:
+        - adminBearer: []
+      parameters:
+        - { $ref: "#/components/parameters/AdminActor" }
+        - { $ref: "#/components/parameters/AdminReason" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listingId, buyerRef]
+              properties:
+                listingId: { type: string }
+                buyerRef: { $ref: "#/components/schemas/BuyerRef" }
+      responses:
+        "200":
+          description: |
+            granted wrote a new entitlement, reinstated brought back a revoked
+            one (keeping its id and key), already_held changed nothing.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outcome, entitlement]
+                properties:
+                  outcome: { type: string, enum: [granted, reinstated, already_held] }
+                  entitlement: { $ref: "#/components/schemas/AdminEntitlement" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: The listing cannot be acquired by anyone now (listing_unavailable).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /admin/entitlements/{id}/revoke:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [admin]
+      operationId: adminRevokeEntitlement
+      summary: Revoke an entitlement as an operator, audited
+      description: Revokes whatever paid for the entitlement, with reason operator; takes no body.
+      security:
+        - adminBearer: []
+      parameters:
+        - { $ref: "#/components/parameters/AdminActor" }
+        - { $ref: "#/components/parameters/AdminReason" }
+      responses:
+        "200":
+          description: The revoked entitlement.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Entitlement"
+                  - type: object
+                    required: [revoked]
+                    properties:
+                      revoked: { type: boolean, const: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    serviceBearer:
+      type: http
+      scheme: bearer
+      description: |
+        A service token held by the control plane or the publishing CLI. It
+        names an account in `buyerRef` on the routes that act for one. Each
+        named caller may call only its own routes: a valid token on any other
+        route answers 403 forbidden.
+    buyerBearer:
+      type: http
+      scheme: bearer
+      description: An Ed25519-signed buyer token minted by the control plane. It acts for its own account only.
+    billingBearer:
+      type: http
+      scheme: bearer
+      description: The billing module's token. It opens the purchase-intent routes and the refund and dispute revoke, and nothing else.
+    adminBearer:
+      type: http
+      scheme: bearer
+      description: The operator's token. Every change needs the actor and reason headers.
+
+  parameters:
+    ListingId:
+      name: id
+      in: path
+      required: true
+      description: A listing id, which is a slug and never needs escaping.
+      schema: { type: string }
+    BuyerRef:
+      name: buyerRef
+      in: query
+      description: The account a service token acts for, such as `account:<id>`. Required with a service token. Omitted or equal to the account with a buyer token.
+      schema: { $ref: "#/components/schemas/BuyerRef" }
+    Limit:
+      name: limit
+      in: query
+      description: Page size. The server clamps it to what a response can hold.
+      schema: { type: integer, minimum: 1 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0 }
+    AdminActor:
+      name: X-Woofx3-Actor
+      in: header
+      description: Who is making the change. At most 200 bytes. Required on every admin write.
+      schema: { type: string, maxLength: 200 }
+    AdminReason:
+      name: X-Woofx3-Reason
+      in: header
+      description: Why, percent-encoded. At most 2000 bytes. Required on every admin write.
+      schema: { type: string, maxLength: 2000 }
+
+  responses:
+    Error:
+      description: An error. The status says the class and `error.code` the cause.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/Error" }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { $ref: "#/components/schemas/ErrorCode" }
+        message: { type: string }
+    ErrorCode:
+      type: string
+      description: Every code the service answers. Checked against the Go constants by a test.
+      enum:
+        - account_required
+        - activation_limit
+        - admin_not_configured
+        - archive_changed
+        - archive_gone
+        - author_not_found
+        - billing_not_configured
+        - buyer_mismatch
+        - checkout_failed
+        - downloads_blocked
+        - edition_conflict
+        - edition_mismatch
+        - entitlement_not_found
+        - entitlement_revoked
+        - forbidden
+        - id_mismatch
+        - image_not_found
+        - install_id_required
+        - intent_expired
+        - intent_mismatch
+        - intent_not_found
+        - intent_settled
+        - internal_error
+        - invalid_image
+        - invalid_manifest
+        - invalid_pack
+        - invalid_request
+        - invalid_signature
+        - listing_conflict
+        - listing_not_found
+        - listing_type_mismatch
+        - listing_unavailable
+        - module_conflict
+        - module_not_found
+        - module_not_ready
+        - no_payment_needed
+        - not_entitled
+        - not_sellable
+        - payment_required
+        - publisher_conflict
+        - publisher_not_found
+        - rate_limited
+        - reason_not_allowed
+        - submission_not_found
+        - submission_not_pending
+        - tier_downgrade
+        - unauthorized
+        - upload_not_found
+        - wrong_publisher
+
+    BuyerRef:
+      type: string
+      description: An opaque account reference, `account:<id>` for an organization.
+    ListingType:
+      type: string
+      enum: [module, theme, emote, overlay, alert]
+    EntitlementSource:
+      type: string
+      enum: [purchase, upgrade, free, grant]
+    ImageSet:
+      type: object
+      description: Rendition URLs by size name, per image slot.
+      properties:
+        icon: { type: object, additionalProperties: { type: string } }
+        banner: { type: object, additionalProperties: { type: string } }
+    Pricing:
+      type: object
+      required: [mode, currency]
+      properties:
+        mode: { type: string, enum: [free, paid] }
+        currency: { type: string }
+        amountCents: { type: integer, format: int64, description: Present on a paid listing. }
+        upgrade:
+          type: object
+          description: What an account holding an earlier edition pays. Present on a paid listing.
+          required: [mode]
+          properties:
+            mode: { type: string, enum: [full, discount, free] }
+            amountCents: { type: integer, format: int64 }
+    Credit:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        role: { type: string }
+        url: { type: string }
+        avatarUrl: { type: string }
+        note: { type: string }
+    Preview:
+      type: object
+      required: [kind, url]
+      properties:
+        kind: { type: string }
+        url: { type: string }
+        caption: { type: string }
+    Emote:
+      type: object
+      required: [id, name, animated, sizes, original]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        animated: { type: boolean }
+        sizes: { type: object, additionalProperties: { type: string } }
+        original: { type: string }
+    CatalogItem:
+      type: object
+      required: [id, type, name, tags, images, tier, edition, pricing, credits, installCount, weeklyInstallCount, rating, ratingCount, updatedAt]
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/ListingType" }
+        name: { type: string }
+        description: { type: string }
+        version: { type: string }
+        author: { type: string }
+        authorSlug: { type: string }
+        category: { type: string }
+        tags: { type: array, items: { type: string } }
+        iconUrl: { type: string }
+        images: { $ref: "#/components/schemas/ImageSet" }
+        featuredRank: { type: integer }
+        tier: { type: string, enum: [public, dev] }
+        baseModuleId: { type: string, description: The module a theme needs installed first. }
+        moduleKey: { type: string, description: Present for a module or theme. }
+        edition: { type: integer }
+        supersededBy: { type: string, description: The newer edition that replaced this one. }
+        pricing:
+          oneOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
+          description: Null for a listing nobody has priced, which no one can install or buy.
+        credits: { type: array, items: { $ref: "#/components/schemas/Credit" } }
+        installCount: { type: integer }
+        weeklyInstallCount: { type: integer }
+        rating: { type: ["number", "null"], description: Always null; nothing rates a listing yet. }
+        ratingCount: { type: integer }
+        authorAvatarUrl: { type: string }
+        updatedAt: { type: string, format: date-time }
+    CatalogDetail:
+      allOf:
+        - $ref: "#/components/schemas/CatalogItem"
+        - type: object
+          required: [previews]
+          properties:
+            previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
+            emotes: { type: array, items: { $ref: "#/components/schemas/Emote" }, description: Present for an emote pack. }
+            license: { type: string, description: An emote pack's licence as its author declared it. }
+            requires: { type: array, items: { type: string }, description: The modules an overlay or alert bundle's widgets come from. }
+            module:
+              $ref: "#/components/schemas/ModuleDetail"
+    Author:
+      type: object
+      required: [slug, displayName, links, claimed]
+      properties:
+        slug: { type: string }
+        displayName: { type: string }
+        bio: { type: string }
+        avatarUrl: { type: string }
+        links: { type: array, items: { type: object, additionalProperties: true } }
+        claimed: { type: boolean, description: False when the page is built only from the author string on listings. }
+    ModuleListItem:
+      type: object
+      required: [id, moduleKey, edition, name, tags, images, tier, listingType, counts, updatedAt]
+      properties:
+        id: { type: string }
+        moduleKey: { type: string }
+        edition: { type: integer }
+        supersededBy: { type: string }
+        name: { type: string }
+        description: { type: string }
+        version: { type: string }
+        author: { type: string }
+        authorSlug: { type: string }
+        category: { type: string }
+        tags: { type: array, items: { type: string } }
+        iconUrl: { type: string }
+        images: { $ref: "#/components/schemas/ImageSet" }
+        featuredRank: { type: integer }
+        tier: { type: string, enum: [public, dev] }
+        listingType: { type: string, enum: [module, theme] }
+        baseModuleId: { type: string }
+        counts:
+          type: object
+          required: [triggers, actions, functions, widgets, workflows, commands]
+          properties:
+            triggers: { type: integer }
+            actions: { type: integer }
+            functions: { type: integer }
+            widgets: { type: integer }
+            workflows: { type: integer }
+            commands: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    ModuleDetail:
+      type: object
+      description: |
+        A module or theme. The arrays that mirror the manifest (themes,
+        triggers and so on) are documented as open objects: their shape is the
+        engine's manifest schema, not this service's.
+      required: [id, moduleKey, edition, name, tags, images, tier, listingType, themes, themeable, requires, triggers, actions, functions, widgets, workflows, commands, permissions, localEndpoints, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        moduleKey: { type: string }
+        edition: { type: integer }
+        supersededBy: { type: string }
+        name: { type: string }
+        description: { type: string }
+        version: { type: string }
+        author: { type: string }
+        authorSlug: { type: string }
+        category: { type: string }
+        tags: { type: array, items: { type: string } }
+        iconUrl: { type: string }
+        images: { $ref: "#/components/schemas/ImageSet" }
+        featuredRank: { type: integer }
+        tier: { type: string, enum: [public, dev] }
+        listingType: { type: string, enum: [module, theme] }
+        baseModuleId: { type: string }
+        themes: { type: array, items: { type: object, additionalProperties: true } }
+        themeable: { type: array, items: { type: object, additionalProperties: true } }
+        requires: { type: object, additionalProperties: { type: string }, description: Module id to semver range. }
+        readme: { type: string }
+        triggers: { type: array, items: { type: object, additionalProperties: true } }
+        actions: { type: array, items: { type: object, additionalProperties: true } }
+        functions: { type: array, items: { type: object, additionalProperties: true } }
+        widgets: { type: array, items: { type: object, additionalProperties: true } }
+        workflows: { type: array, items: { type: object, additionalProperties: true } }
+        commands: { type: array, items: { type: object, additionalProperties: true } }
+        permissions: { type: array, items: { type: string } }
+        localEndpoints: { type: array, items: { type: object, additionalProperties: true } }
+        status: { type: string, enum: [pending, ready] }
+        publishedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Quote:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [owned, free, upgrade_free, upgrade, full, unavailable] }
+        amountCents: { type: integer, format: int64, description: Present when the quote costs money. }
+        currency: { type: string }
+        upgradeFrom: { type: string, description: The earlier edition an upgrade is from. }
+        reason:
+          type: string
+          enum: [not_ready, unpriced, superseded, delisted]
+          description: Present when kind is unavailable.
+    License:
+      type: object
+      required: [key, listingId, edition]
+      properties:
+        key: { type: string, description: The license key. Secret. }
+        listingId: { type: string }
+        edition: { type: integer }
+    Acquired:
+      type: object
+      required: [entitled, source]
+      properties:
+        entitled: { type: boolean, const: true }
+        source: { $ref: "#/components/schemas/EntitlementSource" }
+        license:
+          $ref: "#/components/schemas/License"
+          description: Absent only for a held entitlement whose stored key cannot be opened.
+    Intent:
+      type: object
+      required: [id, kind, amountCents, currency, expiresAt]
+      properties:
+        id: { type: string }
+        listingId: { type: string, description: Present when billing reads the intent. }
+        buyerRef: { type: string, description: Present when billing reads the intent. }
+        kind: { type: string, enum: [full, upgrade] }
+        upgradeFrom: { type: string }
+        amountCents: { type: integer, format: int64 }
+        currency: { type: string }
+        status: { type: string, enum: [open, redeemed, expired], description: Present when billing reads the intent. }
+        expiresAt: { type: string, format: date-time }
+    PaymentRequired:
+      type: object
+      required: [error, intent]
+      properties:
+        error: { $ref: "#/components/schemas/Error" }
+        intent: { $ref: "#/components/schemas/Intent" }
+    Entitlement:
+      type: object
+      description: An entitlement as billing and operators see it. It never carries the license key.
+      required: [entitlementId, listingId, buyerRef, source]
+      properties:
+        entitlementId: { type: string }
+        listingId: { type: string }
+        buyerRef: { $ref: "#/components/schemas/BuyerRef" }
+        source: { $ref: "#/components/schemas/EntitlementSource" }
+        revokedAt: { type: string, format: date-time }
+        revokedReason: { type: string, enum: [refund, dispute, operator] }
+    AdminEntitlement:
+      type: object
+      required: [id, listingId, buyerRef, source, grantedAt, revokedAt, revokedReason, paymentAttached, activationCount]
+      properties:
+        id: { type: string }
+        listingId: { type: string }
+        buyerRef: { $ref: "#/components/schemas/BuyerRef" }
+        source: { $ref: "#/components/schemas/EntitlementSource" }
+        grantedAt: { type: string, format: date-time }
+        revokedAt: { type: ["string", "null"], format: date-time }
+        revokedReason: { type: ["string", "null"], enum: [refund, dispute, operator, null] }
+        paymentAttached: { type: boolean }
+        activationCount: { type: integer }
