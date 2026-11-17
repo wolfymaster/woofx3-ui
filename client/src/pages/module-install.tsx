@@ -283,6 +283,9 @@ function toSnakeCase(str: string): string {
     .toLowerCase();
 }
 
+/** How long the success message stays up before the page moves on to the installed modules. */
+const SUCCESS_REDIRECT_DELAY_MS = 1500;
+
 export default function ModuleInstall() {
   return (
     <div className="h-full min-w-0 flex-1 overflow-auto">
@@ -386,7 +389,7 @@ function ModuleUpload() {
       return;
     }
     if (installEvent.status === "success") {
-      const timer = setTimeout(() => navigate(MODULES_PATH), 1500);
+      const timer = setTimeout(() => navigate(MODULES_PATH), SUCCESS_REDIRECT_DELAY_MS);
       return () => clearTimeout(timer);
     }
     if (installEvent.status === "error") {
