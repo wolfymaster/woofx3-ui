@@ -361,7 +361,7 @@ export const insertInvitation = internalMutation({
     const hidesMembers = args.target.kind === "email" && !can(inviter.roles, "viewMemberEmails");
 
     const now = Date.now();
-    if (await orgSeatsFull(ctx, instance.accountId, now)) {
+    if (await orgSeatsFull(ctx, instance.accountId)) {
       if (hidesMembers) {
         throw new ConvexError({ code: "invite_refused", message: INVITE_REFUSED });
       }
@@ -575,7 +575,7 @@ export const accept = mutation({
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
-    if (!existingMember && (await orgSeatsFull(ctx, inv.accountId, now))) {
+    if (!existingMember && (await orgSeatsFull(ctx, inv.accountId))) {
       return { status: "seats_full" };
     }
     if (account.ownerId !== userId) {

@@ -57,7 +57,7 @@ describe("engineAvailability", () => {
   test("a self-hosted engine offers no feature, even for a Pro org", async () => {
     const t = newBackend();
     const { externalId } = await seedOrg(t, "pro", "active");
-    const availability = await t.run((ctx) => engineAvailability(ctx, externalId, NOW));
+    const availability = await t.run((ctx) => engineAvailability(ctx, externalId));
     expect(availability).toEqual({ availability: "self_hosted" });
     for (const feature of ALL_FEATURES) {
       expect(hasFeature(availability, feature)).toBe(false);
@@ -67,14 +67,14 @@ describe("engineAvailability", () => {
   test("a hosted engine of a Pro org has the plan's features", async () => {
     const t = newBackend();
     const { managedId } = await seedOrg(t, "pro", "active");
-    const availability = await t.run((ctx) => engineAvailability(ctx, managedId, NOW));
+    const availability = await t.run((ctx) => engineAvailability(ctx, managedId));
     expect(hasFeature(availability, "business")).toBe(true);
   });
 
   test("a hosted Starter engine lacks a Pro feature", async () => {
     const t = newBackend();
     const { managedId } = await seedOrg(t, "starter", "trialing");
-    const availability = await t.run((ctx) => engineAvailability(ctx, managedId, NOW));
+    const availability = await t.run((ctx) => engineAvailability(ctx, managedId));
     expect(hasFeature(availability, "business")).toBe(false);
   });
 });
@@ -83,7 +83,7 @@ describe("accountEntitlements", () => {
   test("a suspended org gets no plan features and the code-default limits", async () => {
     const t = newBackend();
     const { accountId } = await seedOrg(t, "pro", "suspended");
-    const entitlements = await t.run((ctx) => accountEntitlements(ctx, accountId, NOW));
+    const entitlements = await t.run((ctx) => accountEntitlements(ctx, accountId));
     expect(entitlements.plan).toBeNull();
     expect(entitlements.features).toEqual([]);
     expect(entitlements.limits["org.members"]).toBe(5);
@@ -94,7 +94,7 @@ describe("accountEntitlements", () => {
     for (const state of ["past_due", "exempt"] as const) {
       const t = newBackend();
       const { accountId } = await seedOrg(t, "pro", state);
-      const entitlements = await t.run((ctx) => accountEntitlements(ctx, accountId, NOW));
+      const entitlements = await t.run((ctx) => accountEntitlements(ctx, accountId));
       expect(entitlements.plan?.key).toBe("pro");
       expect(entitlements.limits["org.members"]).toBeNull();
     }
@@ -108,9 +108,7 @@ describe("accountEntitlements", () => {
         await ctx.db.delete(plan._id);
       }
     });
-    await expect(t.run((ctx) => accountEntitlements(ctx, accountId, NOW))).rejects.toThrow(
-      'No plan row for tier "pro"'
-    );
+    await expect(t.run((ctx) => accountEntitlements(ctx, accountId))).rejects.toThrow('No plan row for tier "pro"');
   });
 });
 
@@ -243,8 +241,8 @@ describe("seat limit", () => {
       return accountId;
     });
     expect(await t.run((ctx) => orgBillingFor(ctx, accountId))).toBeNull();
-    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId, NOW))).toBeNull();
-    expect(await t.run((ctx) => orgSeatsFull(ctx, accountId, NOW))).toBe(false);
+    expect(await t.run((ctx) => orgSeatLimit(ctx, accountId))).toBeNull();
+    expect(await t.run((ctx) => orgSeatsFull(ctx, accountId))).toBe(false);
   });
 
   test("a full Starter org refuses the invite and the accept", async () => {

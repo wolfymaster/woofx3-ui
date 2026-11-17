@@ -77,7 +77,7 @@ export async function grantEngineRole(
   const now = Date.now();
   let orgRole = await orgRoleOf(ctx, account, userId);
   if (orgRole === null) {
-    if (await orgSeatsFull(ctx, account._id, now)) {
+    if (await orgSeatsFull(ctx, account._id)) {
       throw new Error(SEATS_FULL);
     }
     await ctx.db.insert("accountMembers", { accountId: account._id, userId, role: "member", createdAt: now });

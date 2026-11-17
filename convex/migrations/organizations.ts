@@ -294,8 +294,8 @@ export interface OverSeatLimit {
   limit: number;
 }
 
-async function overSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">, nowMs: number): Promise<OverSeatLimit | null> {
-  const limit = await orgSeatLimit(ctx, accountId, nowMs);
+async function overSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">): Promise<OverSeatLimit | null> {
+  const limit = await orgSeatLimit(ctx, accountId);
   if (limit === null) {
     return null;
   }
@@ -322,10 +322,9 @@ export const checkOrgInvariants = internalQuery({
     const page = await ctx.db.query("accounts").paginate({ cursor, numItems: CHECK_PAGE_SIZE });
     const violations: InvariantViolation[] = [];
     const overLimit: OverSeatLimit[] = [];
-    const now = Date.now();
     for (const account of page.page) {
       violations.push(...(await orgViolations(ctx, account)));
-      const over = await overSeatLimit(ctx, account._id, now);
+      const over = await overSeatLimit(ctx, account._id);
       if (over !== null) {
         overLimit.push(over);
       }

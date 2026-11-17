@@ -18,7 +18,7 @@ export const forViewer = query({
     if (userId === null || instance === null || (await getInstanceMembership(ctx, instanceId, userId)) === null) {
       return null;
     }
-    const availability = await engineAvailability(ctx, instanceId, now);
+    const availability = await engineAvailability(ctx, instanceId);
     if (availability.availability !== "hosted") {
       return null;
     }

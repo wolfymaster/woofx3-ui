@@ -115,7 +115,7 @@ async function fillSeats(t: Backend, org: Org): Promise<void> {
     await ctx.db.patch(org.instanceId, { hosting: "managed" });
     await insertProjection(ctx, org.accountId, { standing: "trialing", trialEndsAt: Date.now() + 30 * DAY_MS });
   });
-  const { limits } = await t.run((ctx) => accountEntitlements(ctx, org.accountId, Date.now()));
+  const { limits } = await t.run((ctx) => accountEntitlements(ctx, org.accountId));
   const limit = limits["org.members"];
   if (typeof limit !== "number") {
     throw new Error("the Starter plan has no seat limit");
