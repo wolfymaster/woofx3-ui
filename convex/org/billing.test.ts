@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConvexError } from "convex/values";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { hashCompanionToken } from "../lib/companionCodes";
 import { newBackend } from "../lib/convexTest.testing";
 import { insertProjection } from "../lib/orgBilling.testing";
 import { upsertPlan } from "../lib/plans";
@@ -107,6 +108,32 @@ function outcome(call: Promise<unknown>): Promise<string | null> {
 
 type Call = (t: Backend, seeded: Seeded) => Promise<unknown>;
 
+const COMPANION_TOKEN = `wfxc_${"a".repeat(43)}`;
+
+function seedScene(t: Backend, s: Seeded): Promise<Id<"scenes">> {
+  return t.run((ctx) =>
+    ctx.db.insert("scenes", { instanceId: s.instanceId, name: "Scene", createdAt: 1, updatedAt: 1 })
+  );
+}
+
+/** A confirmed companion whose approver is the engine's admin; returns its token. */
+async function pairCompanion(t: Backend, s: Seeded): Promise<string> {
+  const tokenHash = await hashCompanionToken(COMPANION_TOKEN);
+  await t.run((ctx) =>
+    ctx.db.insert("companions", {
+      instanceId: s.instanceId,
+      installationId: "install-1",
+      tokenHash,
+      deviceName: "PC",
+      companionVersion: "1.0.0",
+      pairedBy: s.adminId,
+      pairedAt: 1,
+      confirmedAt: 2,
+    })
+  );
+  return COMPANION_TOKEN;
+}
+
 const REFUSED: Array<[string, Call]> = [
   [
     "a member's engine proxy action (sceneActions.createScene)",
@@ -144,8 +171,74 @@ const REFUSED: Array<[string, Call]> = [
       }),
   ],
   [
-    "accepting an invitation (invitations.accept)",
-    (t, s) => as(t, s.inviteeId).mutation(api.invitations.accept, { token: "invite-token" }),
+    "a member's stream recap read (streamRecap.loadEngineDetail)",
+    (t, s) =>
+      as(t, s.memberId).action(api.streamRecap.loadEngineDetail, { instanceId: s.instanceId, sessionId: "session-1" }),
+  ],
+  [
+    "a member's stream recap markers (streamRecap.loadMarkers)",
+    (t, s) =>
+      as(t, s.memberId).action(api.streamRecap.loadMarkers, { instanceId: s.instanceId, sessionId: "session-1" }),
+  ],
+  [
+    "an admin's moderation call (moderation.listBlockedTerms)",
+    (t, s) => as(t, s.adminId).action(api.moderation.listBlockedTerms, { instanceId: s.instanceId }),
+  ],
+  [
+    "a member reading chat settings (moderation.getChatSettings)",
+    (t, s) => as(t, s.memberId).action(api.moderation.getChatSettings, { instanceId: s.instanceId }),
+  ],
+  [
+    "a member reading the OBS status (obsStatus.get)",
+    (t, s) => as(t, s.memberId).action(api.obsStatus.get, { instanceId: s.instanceId }),
+  ],
+  [
+    "a member starting a module connection (moduleOAuth.start)",
+    (t, s) =>
+      as(t, s.memberId).action(api.moduleOAuth.start, {
+        instanceId: s.instanceId,
+        moduleId: "module-1",
+        integration: "twitch",
+        redirectTo: "/",
+      }),
+  ],
+  [
+    "an admin connecting Twitch (twitchIntegration.startConnect)",
+    (t, s) =>
+      as(t, s.adminId).action(api.twitchIntegration.startConnect, { instanceId: s.instanceId, redirectTo: "/" }),
+  ],
+  [
+    "an admin disconnecting Twitch (twitchIntegration.disconnect)",
+    (t, s) =>
+      as(t, s.adminId).action(api.twitchIntegration.disconnect, { instanceId: s.instanceId, platform: "twitch" }),
+  ],
+  [
+    "a member minting a browser source key (browserSource.getOrCreateBrowserSourceKey)",
+    async (t, s) =>
+      as(t, s.memberId).action(api.browserSource.getOrCreateBrowserSourceKey, { sceneId: await seedScene(t, s) }),
+  ],
+  [
+    "a member revoking browser source keys (browserSource.revokeBrowserSourceKeys)",
+    async (t, s) =>
+      as(t, s.memberId).action(api.browserSource.revokeBrowserSourceKeys, { sceneId: await seedScene(t, s) }),
+  ],
+  [
+    "a member's preview URL (browserSource.getOrCreatePreviewUrl)",
+    async (t, s) =>
+      as(t, s.memberId).action(api.browserSource.getOrCreatePreviewUrl, { sceneId: await seedScene(t, s) }),
+  ],
+  [
+    "a companion reporting what it found (companionIntegrations.reportTarget)",
+    async (t, s) =>
+      t.query(internal.companionIntegrations.reportTarget, {
+        token: await pairCompanion(t, s),
+        moduleId: "module-1",
+        endpointId: "obs",
+      }),
+  ],
+  [
+    "a companion asking for a relay credential (companionRelay.credentialSubject)",
+    async (t, s) => t.query(internal.companionRelay.credentialSubject, { token: await pairCompanion(t, s) }),
   ],
   [
     "the owner retrying the engine build (provisioning.retry)",
@@ -212,6 +305,22 @@ describe.each(ORGS)("%s org", (org) => {
   });
 });
 
+describe.each(ORGS)("%s org accepting an invitation", (org) => {
+  test(org === "suspended" ? "is told the org is suspended" : "joins the engine", async () => {
+    const t = newBackend();
+    const seeded = await seed(t, org);
+    const result = await as(t, seeded.inviteeId).mutation(api.invitations.accept, { token: "invite-token" });
+    expect(result.status).toBe(org === "suspended" ? "org_suspended" : "accepted");
+    const joined = await t.run((ctx) =>
+      ctx.db
+        .query("instanceMembers")
+        .withIndex("by_instance_user", (q) => q.eq("instanceId", seeded.instanceId).eq("userId", seeded.inviteeId))
+        .first()
+    );
+    expect(joined !== null).toBe(org !== "suspended");
+  });
+});
+
 describe("a suspended org", () => {
   async function suspended(t: Backend) {
     return seed(t, "suspended");
@@ -229,6 +338,12 @@ describe("a suspended org", () => {
     const { ownerId, instanceId } = await suspended(t);
     await as(t, ownerId).action(api.instances.deleteInstance, { instanceId });
     expect(await t.run((ctx) => ctx.db.get(instanceId))).toBeNull();
+  });
+
+  test("hands the engine no relay target", async () => {
+    const t = newBackend();
+    const { instanceId } = await suspended(t);
+    expect(await t.query(internal.companionRelay.relayTarget, { instanceId })).toBeNull();
   });
 
   test("never refuses a self-hosted engine", async () => {

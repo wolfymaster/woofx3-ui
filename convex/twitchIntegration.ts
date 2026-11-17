@@ -23,6 +23,7 @@ import { safeRelativePath } from "./lib/safeRedirect";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { type TwitchTokenRequestedResponse, twitchTokenForEngine, twitchTokenGrant } from "./lib/twitchTokenGrant";
 import { claimHandoff } from "./oauthConnectHandoff";
+import { requireEngineUsable } from "./org/billing";
 import { freshTwitchToken } from "./platformRealtime";
 import { finishFirstRun, recordLinkConsent, scheduleApplyIfRegistered } from "./setup";
 
@@ -32,8 +33,8 @@ async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instance
   if (!userId) {
     throw new Error("Not authenticated");
   }
-  const role = await ctx.runQuery(internal.instances.memberRole, { instanceId, userId });
-  if (!canManageTwitchLink(role)) {
+  const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
+  if (!canManageTwitchLink(membership?.role ?? null)) {
     throw new Error("Only an owner or admin of this instance can connect or disconnect Twitch");
   }
   return userId;
@@ -123,6 +124,7 @@ export const completeConnect = internalMutation({
     if (!canManageTwitchLink(await readMemberRole(ctx, instanceId, userId))) {
       return { ok: false, error: "not_permitted" };
     }
+    await requireEngineUsable(ctx, instanceId);
 
     const existing = await ctx.db
       .query("platformLinks")

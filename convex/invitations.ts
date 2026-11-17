@@ -22,7 +22,7 @@ import {
   fetchTwitchUser,
   type HelixCredentials,
 } from "./lib/twitchUsers";
-import { requireEngineUsable } from "./org/billing";
+import { suspensionOf } from "./org/billing";
 import {
   applyOrgRoleToEngines,
   getAccountMembership,
@@ -538,7 +538,8 @@ export type AcceptOutcome =
   | { status: "wrong_account"; message: string }
   | { status: "engine_gone" }
   | { status: "seats_full" }
-  | { status: "not_in_organization" };
+  | { status: "not_in_organization" }
+  | { status: "org_suspended" };
 
 export const accept = mutation({
   args: { token: v.string() },
@@ -594,7 +595,10 @@ export const accept = mutation({
     if (engine === null) {
       return { status: "engine_gone" };
     }
-    await requireEngineUsable(ctx, engine.instanceId);
+    const instance = await ctx.db.get(engine.instanceId);
+    if (instance !== null && (await suspensionOf(ctx, instance)) !== null) {
+      return { status: "org_suspended" };
+    }
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;

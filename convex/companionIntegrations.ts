@@ -16,6 +16,7 @@ import {
 } from "./lib/companionEndpoints";
 import { companionMayProvideSecret } from "./lib/knownDiscoverers";
 import { isInstanceMember } from "./lib/teamAccess";
+import { requireEngineUsable } from "./org/billing";
 
 /**
  * What the instance's companion does for the local endpoints of installed
@@ -326,6 +327,7 @@ export const reportTarget = internalQuery({
     if (!companion) {
       return null;
     }
+    await requireEngineUsable(ctx, companion.instanceId);
     const endpoint = await installedLocalEndpoint(ctx, companion.instanceId, moduleId, endpointId);
     if (!endpoint) {
       return null;
