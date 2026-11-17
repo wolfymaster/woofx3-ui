@@ -298,7 +298,7 @@ export async function markFirstRun(ctx: MutationCtx, instanceId: Id<"instances">
   await ctx.db.insert("instanceSetup", { instanceId, platforms: [], firstRunAt: now, updatedAt: now });
 }
 
-/** What a first engine is derived from: whose it is, and the Twitch login that names it. */
+/** What a first engine is derived from: its org, and the Twitch login that names it. */
 export const firstEngineFacts = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
@@ -317,7 +317,7 @@ export const firstEngineFacts = internalQuery({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .first();
     const unsettledSlug = provisioning && requestStillOpen(provisioning) ? provisioning.slug : null;
-    return { accountId: account._id, ownerId: account.ownerId, login, unsettledSlug };
+    return { accountId: account._id, login, unsettledSlug };
   },
 });
 
