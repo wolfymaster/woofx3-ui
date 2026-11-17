@@ -1,5 +1,11 @@
 # woofx3 desktop changelog
 
+## [0.14.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.13.0...woofx3-v0.14.0) (2026-11-17)
+
+### Features
+
+* **account:** move settings, team and admin into the account portal ([336ecf3](https://github.com/wolfymaster/woofx3-ui/commit/336ecf3c8671132ed355be43f82f0b872226f4d3))
+
 ## [0.13.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.12.0...woofx3-v0.13.0) (2026-11-17)
 
 ### Features
