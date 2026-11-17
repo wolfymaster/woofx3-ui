@@ -16,6 +16,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { hostedEngineGateway, InstanceEngineScope } from "@/engine/boot/hosted";
 import { EngineGatewayProvider } from "@/engine/context";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
+import { ALERT_GROUPS_PATH, LEGACY_ALERT_GROUPS_PATH, legacyAlertGroupsRedirect } from "@/lib/alert-groups-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import {
@@ -55,6 +56,7 @@ const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
 const AdminStorage = lazy(() => import("@/pages/admin/storage"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
+const AlertGroups = lazy(() => import("@/pages/alert-groups"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const Assets = lazy(() => import("@/pages/assets"));
 const AcceptInvite = lazy(() => import("@/pages/auth/accept-invite"));
@@ -198,6 +200,12 @@ function LegacyModulesRedirect({ params }: { params: { rest?: string } }) {
   return <Redirect to={legacyModulesRedirect(params.rest, useSearch())} />;
 }
 
+/** An old `/stream/alerts/groups` path, forwarded to the Alert Groups pages (see `legacyAlertGroupsRedirect`). */
+function LegacyAlertGroupsRedirect() {
+  const [location] = useLocation();
+  return <Redirect to={legacyAlertGroupsRedirect(location)} />;
+}
+
 function AppRoutes() {
   const [location] = useLocation();
 
@@ -258,6 +266,10 @@ function AppRoutes() {
                     <Route path="/stream">
                       <Redirect to="/stream/alerts" />
                     </Route>
+                    <Route path={ALERT_GROUPS_PATH} component={AlertGroups} />
+                    <Route path={`${ALERT_GROUPS_PATH}/*`} component={AlertGroups} />
+                    <Route path={LEGACY_ALERT_GROUPS_PATH} component={LegacyAlertGroupsRedirect} />
+                    <Route path={`${LEGACY_ALERT_GROUPS_PATH}/*`} component={LegacyAlertGroupsRedirect} />
                     <Route path="/stream/alerts" component={Alerts} />
                     <Route path="/stream/alerts/*" component={Alerts} />
                     <Route path={ALERT_LIBRARY_EDITOR_ROUTE} component={LibraryAlertEditor} />

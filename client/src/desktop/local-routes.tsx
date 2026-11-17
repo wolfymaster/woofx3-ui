@@ -1,6 +1,7 @@
 import { lazy, type ReactNode } from "react";
 import { MAIN_NAV_SECTIONS, type NavSection, navItemsServed, UTILITY_SECTIONS } from "@/components/layout/nav-config";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
+import { ALERT_GROUPS_PATH } from "@/lib/alert-groups-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import {
   COMMAND_EDITOR_ROUTE,
@@ -33,6 +34,7 @@ export interface LocalRoute {
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
 const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
+const AlertGroups = lazy(() => import("@/pages/alert-groups"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
 const Assets = lazy(() => import("@/pages/assets"));
@@ -74,6 +76,8 @@ function resourceKindRoutes(): LocalRoute[] {
 /** In the hosted app's order: fixed segments before the parameters that would otherwise match them. */
 export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/", render: () => <Dashboard /> },
+  { path: ALERT_GROUPS_PATH, render: () => <AlertGroups /> },
+  { path: `${ALERT_GROUPS_PATH}/*`, render: () => <AlertGroups /> },
   { path: "/stream/alerts", render: () => <Alerts /> },
   { path: "/stream/alerts/*", render: () => <Alerts /> },
   { path: ALERT_LIBRARY_EDITOR_ROUTE, render: () => <LibraryAlertEditor /> },

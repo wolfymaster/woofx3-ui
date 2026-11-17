@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   ADMIN_ITEMS,
+  ALERT_GROUPS_ITEM,
   flattenNavItems,
   isNavItemActive,
   type NavItem,
@@ -8,6 +9,7 @@ import {
   navItemsServed,
   STREAM_GROUPS,
   STREAM_ITEMS,
+  withAlertGroupsItems,
   withInstalledModuleItems,
   withResourceKindItems,
 } from "@/components/layout/nav-config";
@@ -67,6 +69,24 @@ describe("Modules group", () => {
   test("leaves a menu without the group as it is", () => {
     const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
     expect(withInstalledModuleItems(helpOnly, [obs])).toEqual(helpOnly);
+  });
+});
+
+describe("withAlertGroupsItems", () => {
+  test("puts Alert Groups right after Alerts", () => {
+    const merged = withAlertGroupsItems(STREAM_ITEMS, [ALERT_GROUPS_ITEM]);
+    expect(merged.map((item) => item.id).slice(0, 3)).toEqual(["alerts", "alert-groups", "commands"]);
+  });
+
+  test("Alerts is not marked on the Alert Groups pages", () => {
+    expect(isNavItemActive(alerts, ALERT_GROUPS_ITEM.href)).toBe(false);
+    expect(isNavItemActive(ALERT_GROUPS_ITEM, `${ALERT_GROUPS_ITEM.href}/new`)).toBe(true);
+  });
+
+  test("leaves a menu without Alerts, or with nothing to add, as it is", () => {
+    const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
+    expect(withAlertGroupsItems(helpOnly, [ALERT_GROUPS_ITEM])).toEqual(helpOnly);
+    expect(withAlertGroupsItems(STREAM_ITEMS, [])).toBe(STREAM_ITEMS);
   });
 });
 

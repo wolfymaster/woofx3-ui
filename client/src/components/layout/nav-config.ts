@@ -8,6 +8,7 @@ import {
   HardDrive,
   History,
   Key,
+  Layers,
   LayoutDashboard,
   MessageSquare,
   MessageSquarePlus,
@@ -22,6 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import { ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
+import { ALERT_GROUPS_PATH } from "@/lib/alert-groups-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import { FEEDBACK_PATH } from "@/lib/feedback";
@@ -174,6 +176,15 @@ export const STREAM_ITEMS: NavItem[] = [
   { id: "user-page", label: "Your page", icon: Globe, href: USER_PAGE_PATH, group: STREAM_GROUPS.community },
 ];
 
+/** Offered only on an engine that has alert groups (see `useAlertGroupsNavItems`); it sits right after Alerts. */
+export const ALERT_GROUPS_ITEM: NavItem = {
+  id: "alert-groups",
+  label: "Alert Groups",
+  icon: Layers,
+  href: ALERT_GROUPS_PATH,
+  group: STREAM_GROUPS.react,
+};
+
 export const HELP_ITEMS: NavItem[] = [
   { id: "learning", label: "Learning", icon: GraduationCap, href: "/help/learning" },
   { id: "logs", label: "Logs", icon: ScrollText, href: "/help/logs" },
@@ -223,6 +234,15 @@ export function isNavItemActive(item: NavItem, location: string): boolean {
     return location === item.href;
   }
   return [item.href, ...(item.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
+}
+
+/** `items` with `extra` right after Alerts, unchanged when the menu has no Alerts entry. */
+export function withAlertGroupsItems(items: NavItem[], extra: NavItem[]): NavItem[] {
+  const alerts = items.findIndex((item) => item.id === "alerts");
+  if (extra.length === 0 || alerts === -1) {
+    return items;
+  }
+  return [...items.slice(0, alerts + 1), ...extra, ...items.slice(alerts + 1)];
 }
 
 /**

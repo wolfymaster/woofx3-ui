@@ -6,6 +6,7 @@ import {
   isSectionActive,
   type NavItem,
   type NavSection,
+  withAlertGroupsItems,
   withInstalledModuleItems,
 } from "@/components/layout/nav-config";
 import { SectionMenu } from "@/components/layout/section-menu";
@@ -17,6 +18,7 @@ import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
+import { useAlertGroupsNavItems } from "@/hooks/use-alert-groups-nav-items";
 import { useInstalledModuleNavItems } from "@/hooks/use-installed-module-nav-items";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { cn } from "@/lib/utils";
@@ -114,11 +116,12 @@ export function LocalShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   useLiveConnection();
   const installedModuleItems = useInstalledModuleNavItems();
+  const alertGroupsItems = useAlertGroupsNavItems();
   const activeSection = [...LOCAL_NAV_SECTIONS, ...LOCAL_UTILITY_SECTIONS].find((section) =>
     isSectionActive(section, location)
   );
   const sectionItems = activeSection?.children
-    ? withInstalledModuleItems(activeSection.children, installedModuleItems)
+    ? withInstalledModuleItems(withAlertGroupsItems(activeSection.children, alertGroupsItems), installedModuleItems)
     : null;
 
   return (
