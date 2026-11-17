@@ -1,6 +1,7 @@
 import { z } from "zod";
 import spec from "./billing/openapi.billing.json";
 import type { components, paths } from "./billing/schema.generated";
+import { parseHttpsUrl } from "./httpsUrl";
 
 /**
  * Typed facade over the management plane's billing API. Convex asks the plane
@@ -401,7 +402,7 @@ export class HttpBillingClient implements BillingClient {
   }
 
   startCheckout(request: CheckoutRequest) {
-    return this.send(
+    return this.sendForUrl(
       {
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(request.accountId)}/checkouts`,
@@ -417,7 +418,7 @@ export class HttpBillingClient implements BillingClient {
   }
 
   startMarketplaceCheckout(request: MarketplaceCheckoutRequest) {
-    return this.send(
+    return this.sendForUrl(
       {
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(request.accountId)}/marketplace-checkouts`,
@@ -429,7 +430,7 @@ export class HttpBillingClient implements BillingClient {
   }
 
   openPortal(accountId: string) {
-    return this.send(
+    return this.sendForUrl(
       { method: "POST", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/portal-sessions` },
       urlSchema
     );
@@ -474,7 +475,7 @@ export class HttpBillingClient implements BillingClient {
   }
 
   startSponsorshipCheckout(request: SponsorshipCheckoutRequest) {
-    return this.send(
+    return this.sendForUrl(
       {
         method: "POST",
         path: `${userPath(request.userId)}/sponsorship-checkouts`,
@@ -529,7 +530,7 @@ export class HttpBillingClient implements BillingClient {
   }
 
   sponsorshipPaymentMethodSession(userId: string, sponsorshipId: string, returnUrl: string) {
-    return this.send(
+    return this.sendForUrl(
       {
         method: "POST",
         path: `${sponsorshipPath(userId, sponsorshipId)}/payment-method-sessions`,
@@ -547,6 +548,23 @@ export class HttpBillingClient implements BillingClient {
       },
       sponsorshipCheckoutViewSchema
     );
+  }
+
+  /** Hands a caller a provider URL only if it is one the browser may be sent to. */
+  private async sendForUrl<S extends z.ZodType<{ url: string }>>(
+    call: Call,
+    schema: S
+  ): Promise<BillingResult<z.infer<S>>> {
+    const result = await this.send(call, schema);
+    if (!result.ok) {
+      return result;
+    }
+    const checked = parseHttpsUrl(result.value.url);
+    if (!checked.ok) {
+      console.error("billing plane returned an unusable URL", { path: call.path, reason: checked.reason });
+      return billingErr("unexpected_response", "The billing service answered with a link that cannot be opened.");
+    }
+    return result;
   }
 
   private async send<S extends z.ZodType>(call: Call, schema: S): Promise<BillingResult<z.infer<S>>> {
