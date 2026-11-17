@@ -187,7 +187,7 @@ export function addOnFeatures(
 }
 
 export interface Entitlements {
-  /** The plan the account is on; null when no plan applies, not even a default. */
+  /** The plan the account is on; null when no plan applies. */
   plan: { key: string; name: string } | null;
   /** The org's subscription; null when it has none. */
   subscription: SubscriptionSummary | null;
@@ -258,8 +258,6 @@ export function isWithinLimit(entitlements: Entitlements, key: EntitlementLimitK
   return limit === null || usage <= limit;
 }
 
-const PLAN_KEY = /^[a-z][a-z0-9-]{0,39}$/;
-
 /**
  * Rejects a plan or an override an operator could not have meant, before it
  * is saved: unknown keys, a feature both added and removed, a limit set
@@ -292,11 +290,5 @@ export function validateEntitlementInput(
     if (value !== null && !(Number.isSafeInteger(value) && value >= 0)) {
       throw new Error(`Limit "${key}" must be a whole number of at least 0, or null for unlimited; got ${value}`);
     }
-  }
-}
-
-export function validatePlanKey(key: string): void {
-  if (!PLAN_KEY.test(key)) {
-    throw new Error(`Plan key "${key}" must be lowercase letters, digits and dashes, starting with a letter`);
   }
 }

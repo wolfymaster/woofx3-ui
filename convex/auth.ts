@@ -4,6 +4,7 @@ import { type ConvexCredentialsConfig, convexAuth, createAccount } from "@convex
 import { internal } from "./_generated/api";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { requireSignUpChallenge } from "./lib/signUpChallenge";
+import { logger } from "./logger";
 
 /**
  * `Password`, with a Turnstile check before a sign-up creates the user. Its
@@ -38,7 +39,7 @@ export const { auth, signIn, signOut, store } = convexAuth({
         const token = credentials.token;
         const nonce = credentials.nonce;
         if (typeof token !== "string" || token.length === 0 || !isOpaqueToken(nonce)) {
-          console.log("twitch sign-in refused: missing token or nonce");
+          logger.warn("twitch sign-in refused: missing token or nonce");
           return null;
         }
 
@@ -47,11 +48,9 @@ export const { auth, signIn, signOut, store } = convexAuth({
           nonceHash: await hashOpaqueToken(nonce),
         });
         if (!profile) {
-          console.log("twitch sign-in refused: pending sign-in not found, expired, or started elsewhere");
+          logger.warn("twitch sign-in refused: pending sign-in not found, expired, or started elsewhere");
           return null;
         }
-
-        console.log("creating account");
 
         let result: Awaited<ReturnType<typeof createAccount>>;
         try {
@@ -65,14 +64,14 @@ export const { auth, signIn, signOut, store } = convexAuth({
             },
           });
         } catch (err) {
-          console.error("createAccount threw:", String(err));
+          logger.error("createAccount threw", { error: String(err) });
           return null;
         }
 
         if (!result.user) {
           // Orphaned authAccounts record from a previous failed run — the linked
           // user document was never committed or was deleted. Remove it and retry.
-          console.log("orphaned account detected, repairing...");
+          logger.warn("orphaned account detected, repairing");
           await ctx.runMutation(internal.twitchAuth.deleteOrphanedAuthAccount, {
             providerAccountId: profile.twitchId,
           });
@@ -88,17 +87,15 @@ export const { auth, signIn, signOut, store } = convexAuth({
               },
             });
           } catch (err) {
-            console.error("createAccount retry threw:", String(err));
+            logger.error("createAccount retry threw", { error: String(err) });
             return null;
           }
 
           if (!result.user) {
-            console.error("createAccount still returned null user after repair");
+            logger.error("createAccount still returned null user after repair");
             return null;
           }
         }
-
-        console.log("account created, userId:", result.user._id);
 
         return { userId: result.user._id };
       },
