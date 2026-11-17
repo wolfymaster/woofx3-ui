@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { parseCheckoutReturn } from "@/lib/checkout-return";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { useLogger } from "@/lib/logger-context";
@@ -40,7 +39,6 @@ export default function Onboarding() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const { isAuthenticated } = useConvexAuth();
-  const now = useMinuteClock();
 
   const ensureFirstRun = useMutation(api.setup.ensureFirstRun);
   const ensureMyAccount = useMutation(api.accounts.ensureMyAccount);
@@ -49,7 +47,7 @@ export default function Onboarding() {
   const managedEngines = useQuery(api.provisioning.isAvailable);
   const previewEngine = useQuery(api.previewEngine.get);
   const memberInstances = useQuery(api.instances.listForCurrentUser);
-  const organizations = useQuery(api.organizations.mine, { now });
+  const organizations = useQuery(api.organizations.mine, {});
   const checkoutReturn = parseCheckoutReturn(search);
   const confirmingCheckoutId = checkoutReturn.kind === "done" ? checkoutReturn.checkoutId : null;
   const wantsNewEngine = new URLSearchParams(search).has(NEW_ENGINE_PARAM);

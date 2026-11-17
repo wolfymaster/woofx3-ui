@@ -18,6 +18,8 @@ describe("acceptRefusalMessage", () => {
     ["not_found", "could not find"],
     ["engine_gone", "deleted"],
     ["seats_full", "no free seats"],
+    ["not_in_organization", "owner or an admin"],
+    ["org_suspended", "subscription isn't active"],
   ] as const)("%s says so in plain words", (status, words) => {
     expect(acceptRefusalMessage({ status })).toContain(words);
   });

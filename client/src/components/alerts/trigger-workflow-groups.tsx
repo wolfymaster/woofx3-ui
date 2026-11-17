@@ -1,7 +1,6 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
-import { ALERT_GROUPS_PATH, NEW_ALERT_GROUP_SEGMENT } from "@/components/alerts/workflow-group-pages";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,6 +16,7 @@ import {
 } from "@/engine/hooks/use-workflow-groups";
 import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { ALERT_GROUPS_PATH, NEW_ALERT_GROUP_SEGMENT } from "@/lib/alert-groups-route";
 import { commonGroupIds } from "@/lib/workflow-groups";
 
 /**

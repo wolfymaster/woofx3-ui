@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { confirmedCompanionByToken } from "./lib/companionAuth";
 import { activeInstanceCompanion, bridgedEndpoints } from "./lib/companionEndpoints";
+import { requireEngineUsable, suspensionOf } from "./org/billing";
 
 /**
  * The database half of the companion relay: who may get a relay credential,
@@ -41,6 +42,7 @@ export const credentialSubject = internalQuery({
     if (!companion) {
       return null;
     }
+    await requireEngineUsable(ctx, companion.instanceId);
     if ((await bridgedEndpoints(ctx, companion)).length === 0) {
       return null;
     }
@@ -86,7 +88,7 @@ export const relayTarget = internalQuery({
   ),
   handler: async (ctx, { instanceId }) => {
     const instance = await ctx.db.get(instanceId);
-    if (!instance) {
+    if (!instance || (await suspensionOf(ctx, instance)) !== null) {
       return null;
     }
     const companion = await activeInstanceCompanion(ctx, instanceId);

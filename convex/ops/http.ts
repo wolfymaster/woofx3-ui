@@ -64,11 +64,10 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(user);
     }
     case "accounts.list":
-      return ok(await ctx.runQuery(internal.ops.reads.searchAccounts, { q, cursor, now: Date.now() }));
+      return ok(await ctx.runQuery(internal.ops.reads.searchAccounts, { q, cursor }));
     case "accounts.get": {
       const account = await ctx.runQuery(internal.ops.reads.getAccount, {
         accountId: route.accountId,
-        now: Date.now(),
       });
       if (account === null) {
         return error(404, "not_found", "No such account");
@@ -90,7 +89,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(await ctx.runQuery(internal.ops.reads.listEngines, { status, cursor }));
     }
     case "engines.moduleStorageLimits": {
-      return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor, now: Date.now() }));
+      return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor }));
     }
     case "engines.eventPath": {
       return ok(await ctx.runQuery(internal.ops.reads.engineEventPaths, { cursor }));
@@ -98,7 +97,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
     case "engines.byMaintenanceId": {
       const engine = await ctx.runQuery(internal.ops.reads.engineByMaintenanceId, {
         engineId: route.engineId,
-        now: Date.now(),
       });
       return engine === null ? error(404, "not_found", "No such engine") : ok(engine);
     }

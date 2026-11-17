@@ -1,6 +1,7 @@
 import { lazy, type ReactNode } from "react";
 import { MAIN_NAV_SECTIONS, type NavSection, navItemsServed, UTILITY_SECTIONS } from "@/components/layout/nav-config";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
+import { ALERT_GROUPS_PATH } from "@/lib/alert-groups-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import {
   COMMAND_EDITOR_ROUTE,
@@ -12,9 +13,9 @@ import {
 } from "@/lib/command-editor-route";
 import {
   MARKETPLACE_BROWSE_ROUTE,
-  MARKETPLACE_INSTALLED_MODULE_ROUTE,
-  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_PATH,
+  MODULES_MODULE_ROUTE,
+  MODULES_PATH,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
@@ -33,6 +34,7 @@ export interface LocalRoute {
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
 const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
+const AlertGroups = lazy(() => import("@/pages/alert-groups"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
 const Assets = lazy(() => import("@/pages/assets"));
@@ -44,10 +46,10 @@ const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
 const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const Modules = lazy(() => import("@/pages/modules"));
+const ModulesSettings = lazy(() => import("@/pages/modules-settings"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Scenes = lazy(() => import("@/pages/scenes"));
-const StarterPacks = lazy(() => import("@/pages/starter-packs"));
 const StreamRecap = lazy(() => import("@/pages/stream-recap"));
 const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
@@ -74,6 +76,8 @@ function resourceKindRoutes(): LocalRoute[] {
 /** In the hosted app's order: fixed segments before the parameters that would otherwise match them. */
 export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/", render: () => <Dashboard /> },
+  { path: ALERT_GROUPS_PATH, render: () => <AlertGroups /> },
+  { path: `${ALERT_GROUPS_PATH}/*`, render: () => <AlertGroups /> },
   { path: "/stream/alerts", render: () => <Alerts /> },
   { path: "/stream/alerts/*", render: () => <Alerts /> },
   { path: ALERT_LIBRARY_EDITOR_ROUTE, render: () => <LibraryAlertEditor /> },
@@ -96,9 +100,8 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/workflows/:id", render: () => <Workflows /> },
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
-  { path: "/stream/starter-packs", render: () => <StarterPacks /> },
-  { path: MARKETPLACE_INSTALLED_PATH, render: () => <Modules /> },
-  { path: MARKETPLACE_INSTALLED_MODULE_ROUTE, render: () => <Modules /> },
+  { path: MODULES_PATH, render: () => <ModulesSettings /> },
+  { path: MODULES_MODULE_ROUTE, render: () => <Modules /> },
   { path: MARKETPLACE_BROWSE_ROUTE, render: () => <MarketplaceSection /> },
   { path: "/help/learning", render: () => <Learning /> },
   { path: "/help/logs", render: () => <Logs /> },

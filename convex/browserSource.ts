@@ -7,6 +7,7 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import { roleSatisfies } from "./lib/instanceRoles";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { requireEngineUsable } from "./org/billing";
 
 const MAX_SOURCE_KEYS_READ = 500;
 
@@ -60,6 +61,7 @@ export const resolveSceneForAction = internalQuery({
     if (!membership) {
       return { status: "unauthorized" };
     }
+    await requireEngineUsable(ctx, scene.instanceId);
     return { status: "ok", scene };
   },
 });

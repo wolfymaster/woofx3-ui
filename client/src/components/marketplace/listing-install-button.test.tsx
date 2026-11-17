@@ -65,7 +65,7 @@ describe("ListingInstallButton", () => {
   beforeEach(() => {
     purchases.length = 0;
     bundleInstalls.length = 0;
-    access = { manageBilling: true, viewBilling: true };
+    access = { manageBilling: true, viewLicenseKeys: true };
   });
 
   test("a paid bundle buys through the install flow, not the bundle install", async () => {
@@ -95,7 +95,7 @@ describe("ListingInstallButton", () => {
   });
 
   test("an organization's member may not buy", async () => {
-    access = { manageBilling: false, viewBilling: false };
+    access = { manageBilling: false, viewLicenseKeys: false };
     const tree = await render(PURCHASABLE, "overlay", { onPurchase: () => purchases.push("bought") });
     expect(button(tree, /Buy for/).props.disabled).toBe(true);
     expect(JSON.stringify(tree.toJSON())).toContain("Only the organization's owner can buy this");

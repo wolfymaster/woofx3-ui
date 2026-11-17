@@ -62,7 +62,7 @@ describe("the caller's organization access", () => {
     const { runtime } = await connected();
     const reader = renderDirect(() => directSessionGateway(runtime).useOrganizationAccess());
     expect(await reader.until((value) => value !== undefined, "the access")).toEqual({
-      viewBilling: true,
+      viewLicenseKeys: true,
       manageBilling: true,
     });
     reader.unmount();

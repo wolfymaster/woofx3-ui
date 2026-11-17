@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalQuery, type QueryCtx } from "./_generated/server";
+import { requireEngineUsable } from "./org/billing";
 
 async function assertInstanceMember(ctx: QueryCtx, userId: Id<"users">, instanceId: Id<"instances">) {
   const membership = await ctx.db
@@ -85,13 +86,22 @@ async function loadInstanceCatalogBundle(ctx: QueryCtx, instanceId: Id<"instance
   };
 }
 
+/**
+ * The engine's credentials and catalog for a member's action, or null for a
+ * non-member. Refused while a managed engine's org is suspended, since every
+ * caller goes on to call the engine.
+ */
 export const catalogContextForUser = internalQuery({
   args: {
     instanceId: v.id("instances"),
     userId: v.id("users"),
   },
   handler: async (ctx, { instanceId, userId }) => {
-    return loadCatalogBundle(ctx, userId, instanceId);
+    const bundle = await loadCatalogBundle(ctx, userId, instanceId);
+    if (bundle !== null) {
+      await requireEngineUsable(ctx, instanceId);
+    }
+    return bundle;
   },
 });
 

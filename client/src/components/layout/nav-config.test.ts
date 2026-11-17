@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
   ADMIN_ITEMS,
+  ALERT_GROUPS_ITEM,
   flattenNavItems,
   isNavItemActive,
   type NavItem,
   navItemsFor,
   navItemsServed,
+  STREAM_GROUPS,
   STREAM_ITEMS,
-  withAlertsChildren,
+  withAlertGroupsItems,
+  withDynamicItems,
+  withInstalledModuleItems,
+  withResourceKindItems,
 } from "@/components/layout/nav-config";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
 import { alertRunPath } from "@/lib/alert-run-route";
@@ -43,6 +48,76 @@ describe("isNavItemActive", () => {
   });
 });
 
+describe("Modules group", () => {
+  const settings = STREAM_ITEMS.find((item) => item.id === "modules-settings");
+  if (!settings) {
+    throw new Error("the Settings entry is missing from STREAM_ITEMS");
+  }
+  const obs = { id: "module:obs", label: "OBS", icon: alerts.icon, href: "/stream/modules/woofx3_obs" };
+
+  test("Settings is marked on its own page only, not on a module's page", () => {
+    expect(isNavItemActive(settings, "/stream/modules")).toBe(true);
+    expect(isNavItemActive(settings, "/stream/modules/woofx3_obs")).toBe(false);
+  });
+
+  test("installed modules follow Settings under the group's heading", () => {
+    const merged = withInstalledModuleItems(STREAM_ITEMS, [obs]);
+    const at = merged.findIndex((item) => item.id === obs.id);
+    expect(merged[at - 1].id).toBe("modules-settings");
+    expect(merged[at].group).toBe(STREAM_GROUPS.modules);
+  });
+
+  test("leaves a menu without the group as it is", () => {
+    const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
+    expect(withInstalledModuleItems(helpOnly, [obs])).toEqual(helpOnly);
+  });
+});
+
+describe("withAlertGroupsItems", () => {
+  test("puts Alert Groups right after Alerts", () => {
+    const merged = withAlertGroupsItems(STREAM_ITEMS, [ALERT_GROUPS_ITEM]);
+    expect(merged.map((item) => item.id).slice(0, 3)).toEqual(["alerts", "alert-groups", "commands"]);
+  });
+
+  test("Alerts is not marked on the Alert Groups pages", () => {
+    expect(isNavItemActive(alerts, ALERT_GROUPS_ITEM.href)).toBe(false);
+    expect(isNavItemActive(ALERT_GROUPS_ITEM, `${ALERT_GROUPS_ITEM.href}/new`)).toBe(true);
+  });
+
+  test("leaves a menu without Alerts, or with nothing to add, as it is", () => {
+    const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
+    expect(withAlertGroupsItems(helpOnly, [ALERT_GROUPS_ITEM])).toEqual(helpOnly);
+    expect(withAlertGroupsItems(STREAM_ITEMS, [])).toBe(STREAM_ITEMS);
+  });
+});
+
+describe("withDynamicItems", () => {
+  const dynamic = (id: string) => ({ id, label: id, icon: alerts.icon, href: `/x/${id}` });
+
+  test("puts each kind of dynamic entry in its own place in the Stream menu", () => {
+    const merged = withDynamicItems(STREAM_ITEMS, {
+      alertGroups: [ALERT_GROUPS_ITEM],
+      resourceKinds: [dynamic("wheel")],
+      installedModules: [dynamic("module:obs")],
+    });
+    const ids = merged.map((item) => item.id);
+    expect(ids[ids.indexOf("alerts") + 1]).toBe("alert-groups");
+    expect(ids[ids.indexOf("databases") + 1]).toBe("wheel");
+    expect(ids[ids.indexOf("modules-settings") + 1]).toBe("module:obs");
+  });
+
+  test("leaves a menu without those places as it is", () => {
+    const helpOnly = [dynamic("learning")];
+    expect(
+      withDynamicItems(helpOnly, {
+        alertGroups: [ALERT_GROUPS_ITEM],
+        resourceKinds: [dynamic("wheel")],
+        installedModules: [dynamic("module:obs")],
+      })
+    ).toEqual(helpOnly);
+  });
+});
+
 describe("navItemsFor", () => {
   function ids(hosting: Parameters<typeof navItemsFor>[1]): string[] {
     return navItemsFor(ADMIN_ITEMS, hosting).map((item) => item.id);
@@ -62,23 +137,33 @@ describe("navItemsFor", () => {
   });
 });
 
+describe("STREAM_ITEMS", () => {
+  test("every entry is in a group, and each group is one run", () => {
+    const groups = STREAM_ITEMS.map((item) => item.group);
+    expect(groups.every((group) => group !== undefined)).toBe(true);
+    const runs = groups.filter((group, i) => group !== groups[i - 1]);
+    expect(runs).toEqual(Object.values(STREAM_GROUPS));
+  });
+
+  test("Workflows and Starter Packs are not in the menu", () => {
+    const ids = flattenNavItems(STREAM_ITEMS).map((item) => item.id);
+    expect(ids).not.toContain("workflows");
+    expect(ids).not.toContain("starter-packs");
+  });
+});
+
 describe("flattenNavItems", () => {
   test("nested entries follow their parent", () => {
-    const ids = flattenNavItems(STREAM_ITEMS).map((item) => item.id);
-    expect(ids.slice(ids.indexOf("alerts"), ids.indexOf("alerts") + 8)).toEqual([
+    const parent = { ...alerts, children: [{ ...alerts, id: "child" }] };
+    expect(flattenNavItems([parent, { ...alerts, id: "next" }]).map((item) => item.id)).toEqual([
       "alerts",
-      "counters",
-      "timers",
-      "queues",
-      "schedules",
-      "forms",
-      "databases",
-      "workflows",
+      "child",
+      "next",
     ]);
   });
 });
 
-describe("withAlertsChildren", () => {
+describe("withResourceKindItems", () => {
   const wheels = {
     id: "resource-kind:wheel_spin:wheel",
     label: "Wheels",
@@ -86,24 +171,17 @@ describe("withAlertsChildren", () => {
     href: "/stream/resources/wheel_spin/wheel",
   };
 
-  test("nests the extra entries under Alerts, ahead of Workflows", () => {
-    const merged = withAlertsChildren(STREAM_ITEMS, [wheels]);
-    const ids = merged.find((item) => item.id === "alerts")?.children?.map((child) => child.id);
-    expect(ids).toEqual([
-      "counters",
-      "timers",
-      "queues",
-      "schedules",
-      "forms",
-      "databases",
-      "resource-kind:wheel_spin:wheel",
-      "workflows",
-    ]);
+  test("adds the extra entries at the end of the Data group", () => {
+    const merged = withResourceKindItems(STREAM_ITEMS, [wheels]);
+    const at = merged.findIndex((item) => item.id === wheels.id);
+    expect(merged[at - 1].id).toBe("databases");
+    expect(merged[at].group).toBe(STREAM_GROUPS.data);
+    expect(merged[at + 1].group).toBe(STREAM_GROUPS.modules);
   });
 
-  test("leaves a menu without Alerts as it is", () => {
+  test("leaves a menu without a Data group as it is", () => {
     const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
-    expect(withAlertsChildren(helpOnly, [wheels])).toEqual(helpOnly);
+    expect(withResourceKindItems(helpOnly, [wheels])).toEqual(helpOnly);
   });
 });
 

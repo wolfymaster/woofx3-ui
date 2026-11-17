@@ -20,7 +20,6 @@ import { useMemo, useRef, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageIntro } from "@/components/common/page-intro";
-import { STARTER_PACKS_PATH } from "@/components/layout/nav-config";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
@@ -268,15 +267,10 @@ function WorkflowListScreen() {
             title={allWorkflows.length === 0 ? "No workflows yet" : "No workflows found"}
             description={
               allWorkflows.length === 0
-                ? "Start from a starter pack that thanks followers, welcomes raiders and hypes subs, or build your own."
+                ? "Build one that thanks followers, welcomes raiders or hypes subs."
                 : "Try adjusting your search or filter."
             }
             action={
-              allWorkflows.length === 0
-                ? { label: "Browse Starter Packs", onClick: () => navigate(STARTER_PACKS_PATH) }
-                : undefined
-            }
-            secondaryAction={
               allWorkflows.length === 0 ? { label: "Create Workflow", onClick: () => navigate(CREATE_PATH) } : undefined
             }
           />

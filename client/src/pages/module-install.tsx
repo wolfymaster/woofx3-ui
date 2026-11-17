@@ -14,14 +14,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { ListDetail } from "@/components/layout/list-detail";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   ApproveModulePermissionsDialog,
   ModuleLocalEndpointsSection,
   ModulePermissionsSection,
 } from "@/components/modules/module-permissions";
-import { ModuleSidebar } from "@/components/modules/module-sidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,7 +29,7 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useInstalledModules, useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useTheme } from "@/hooks/use-theme";
 import { useLogger } from "@/lib/logger-context";
-import { MARKETPLACE_INSTALLED_PATH } from "@/lib/marketplace-route";
+import { MODULES_PATH } from "@/lib/marketplace-route";
 import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } from "@/lib/module-archive";
 import { getLanguageFromPath } from "@/lib/module-files";
 import { bareModuleKey } from "@/lib/module-key";
@@ -285,20 +283,14 @@ function toSnakeCase(str: string): string {
     .toLowerCase();
 }
 
+/** How long the success message stays up before the page moves on to the installed modules. */
+const SUCCESS_REDIRECT_DELAY_MS = 1500;
+
 export default function ModuleInstall() {
-  // An upload installs onto the engine rather than into the catalog, so this
-  // page sits beside what is installed, not beside the storefront's rail.
   return (
-    <ListDetail
-      hasSelection
-      back={{ href: MARKETPLACE_INSTALLED_PATH, label: "installed modules" }}
-      list={<ModuleSidebar selectedId={null} />}
-      detail={
-        <div className="h-full min-w-0 flex-1 overflow-auto">
-          <ModuleUpload />
-        </div>
-      }
-    />
+    <div className="h-full min-w-0 flex-1 overflow-auto">
+      <ModuleUpload />
+    </div>
   );
 }
 
@@ -397,7 +389,7 @@ function ModuleUpload() {
       return;
     }
     if (installEvent.status === "success") {
-      const timer = setTimeout(() => navigate(MARKETPLACE_INSTALLED_PATH), 1500);
+      const timer = setTimeout(() => navigate(MODULES_PATH), SUCCESS_REDIRECT_DELAY_MS);
       return () => clearTimeout(timer);
     }
     if (installEvent.status === "error") {

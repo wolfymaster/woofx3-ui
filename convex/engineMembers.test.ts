@@ -150,7 +150,7 @@ describe("engineMembers.setRole", () => {
         targetUserId: targetId,
         role: "admin",
       })
-    ).rejects.toThrow("Not authorized");
+    ).rejects.toMatchObject({ data: { code: "not_authorized", action: "manageEngineMembers" } });
   });
 
   test("refuses to lower an org admin or touch the owner", async () => {

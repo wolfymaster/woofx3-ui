@@ -7,12 +7,10 @@ import { LIST_RAIL } from "@/components/layout/sidebar-rail";
 import { getCategoryColor } from "@/components/modules/module-category";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useInstalledModules } from "@/engine/hooks/use-modules";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import {
   ALL_CATEGORIES,
-  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_PATH,
   MARKETPLACE_UPLOAD_PATH,
   marketplaceFilterPath,
@@ -59,7 +57,6 @@ export function MarketplaceSidebar({ typeCounts, categories, total, selection }:
   const selectedCategory = selection?.category ?? ALL_CATEGORIES;
   const nothingSelected = selection !== null && selectedType === null && selectedCategory === ALL_CATEGORIES;
   const { uploads } = useMarketplaceMode();
-  const installedCount = (useInstalledModules() ?? []).filter((module) => module.status === "installed").length;
 
   return (
     <div className={LIST_RAIL}>
@@ -88,15 +85,6 @@ export function MarketplaceSidebar({ typeCounts, categories, total, selection }:
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          <RailButton
-            label="Installed"
-            count={installedCount}
-            selected={false}
-            icon={<PackageCheck className="h-3 w-3" />}
-            title="Modules installed on your engine, from the marketplace or uploaded"
-            onClick={() => navigate(MARKETPLACE_INSTALLED_PATH)}
-          />
-          <div className="h-px bg-border my-3 mx-1" />
           <div className="flex items-center justify-between px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             Browse
             <HelpTip term="module" />

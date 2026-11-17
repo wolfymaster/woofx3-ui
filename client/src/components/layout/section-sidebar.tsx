@@ -21,7 +21,7 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
   return (
     <nav className={cn(SIDEBAR_RAIL, "hidden md:flex", collapsed && "w-14")} aria-label={`${title} navigation`}>
       <div className="flex-1 overflow-y-auto">
-        {!collapsed && (
+        {!collapsed && !items.some((item) => item.group) && (
           <div className="px-4 py-3 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             {title}
           </div>
@@ -61,12 +61,19 @@ interface SectionNavListProps {
   className?: string;
 }
 
-/** A section's entries, with each entry's children indented under it and the current page marked. */
+/**
+ * A section's entries, with each entry's children indented under it and the current page
+ * marked. Where a group of entries starts, a heading names it, or a divider does when the
+ * rail is collapsed to icons.
+ */
 export function SectionNavList({ items, location, collapsed, onNavigate, className }: SectionNavListProps) {
   return (
     <div className={cn("px-2 pb-2 space-y-0.5", className)}>
-      {items.map((item) => (
+      {items.map((item, index) => (
         <div key={item.id} className="space-y-0.5">
+          {item.group && item.group !== items[index - 1]?.group && (
+            <GroupHeading label={item.group} collapsed={collapsed} first={index === 0} />
+          )}
           <NavRow item={item} location={location} collapsed={collapsed} nested={false} onNavigate={onNavigate} />
           {item.children && (
             <div className="space-y-0.5" data-testid={`subnav-group-${item.id}`}>
@@ -84,6 +91,23 @@ export function SectionNavList({ items, location, collapsed, onNavigate, classNa
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function GroupHeading({ label, collapsed, first }: { label: string; collapsed: boolean; first: boolean }) {
+  if (collapsed) {
+    return first ? null : <div className="mx-2 my-2 border-t border-border" aria-hidden="true" />;
+  }
+  return (
+    <div
+      className={cn(
+        "px-2.5 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold",
+        first ? "pt-3" : "pt-4"
+      )}
+      data-testid={`subnav-heading-${label.toLowerCase()}`}
+    >
+      {label}
     </div>
   );
 }
@@ -116,6 +140,9 @@ function NavRow({
     >
       <item.icon className={cn("shrink-0 text-muted-foreground", nested ? "h-4 w-4" : "h-5 w-5")} />
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && item.badge && (
+        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{item.badge}</span>
+      )}
     </span>
   );
 

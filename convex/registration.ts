@@ -1,4 +1,3 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import type { RegisterClientOptions } from "@woofx3/api/rpc";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -9,6 +8,7 @@ import { createEngineGatewaySession } from "./lib/engineInstanceUrl";
 import { previewEngineRegistrationToken } from "./lib/previewEngine";
 import { registrationFailureMessage } from "./lib/registrationError";
 import { logger } from "./logger";
+import { requireActionInAction } from "./org/policy";
 
 /**
  * Generate a cryptographically random hex string for use as a webhook callback token.
@@ -108,16 +108,9 @@ export async function performRegistration(
 export const registerInstance = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<RegisterResult> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
     // An instance id is not a secret, so without this any signed-in user could
     // register someone else's instance and receive its engine credentials.
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
-    if (!membership || membership.role === "member") {
-      throw new Error("Not authorized");
-    }
+    await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
 
     return await performRegistration(ctx, { instanceId });
   },

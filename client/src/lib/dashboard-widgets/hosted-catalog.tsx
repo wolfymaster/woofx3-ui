@@ -1,6 +1,5 @@
 import { ListChecks, Pin } from "lucide-react";
 import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
-import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { HostedMacroPadWidget } from "@/components/dashboard/widgets/hosted-macro-pad";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { useInstance } from "@/hooks/use-instance";
@@ -77,5 +76,5 @@ export const hostedDashboardCatalog: DashboardCatalog = {
     hostedMacroPadWidget,
   ],
   usePinnedRailItem: useGettingStartedRailItem,
-  Notice: StarterPacksNudge,
+  Notice: null,
 };

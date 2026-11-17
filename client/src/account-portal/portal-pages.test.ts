@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OrgRole } from "@convex/lib/organization";
-import { ORG_ACTIONS, orgCan } from "@convex/lib/orgRoles";
+import { ORG_ACTIONS, orgCan } from "@convex/org/policy";
 import type { OrgCapabilities } from "@convex/organizations";
 import { ACCOUNT_PORTAL_PATH, isActivePage, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
 

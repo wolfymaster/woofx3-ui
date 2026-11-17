@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { Id } from "../_generated/dataModel";
+import { grantEngineRole } from "../org/membership";
+import { orgRoleOf, requireActionFor } from "../org/policy";
 import { newBackend } from "./convexTest.testing";
 import type { OrgRole } from "./organization";
-import { orgRoleOf, requireOrgActionFor } from "./orgRoles";
-import { grantEngineRole } from "./teamAccess";
+import { maskedEmail } from "./teamAccess";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -126,9 +127,9 @@ describe("org role resolution", () => {
       return orgRoleOf(ctx, account, userId);
     });
     expect(role).toBe("admin");
-    await expect(t.run((ctx) => requireOrgActionFor(ctx, org.accountId, userId, "manageBilling"))).rejects.toThrow(
-      "Your organization role doesn't allow this"
-    );
+    await expect(
+      t.run((ctx) => requireActionFor(ctx, userId, { org: org.accountId }, "manageBilling"))
+    ).rejects.toThrow("Your organization role doesn't allow this");
   });
 
   test("a user with two membership rows resolves to a role instead of throwing", async () => {
@@ -138,8 +139,8 @@ describe("org role resolution", () => {
     await t.run((ctx) =>
       ctx.db.insert("accountMembers", { accountId: org.accountId, userId, role: "member", createdAt: 2 })
     );
-    const actor = await t.run((ctx) => requireOrgActionFor(ctx, org.accountId, userId, "viewOrganization"));
-    expect(actor.role).toBe("member");
+    const actor = await t.run((ctx) => requireActionFor(ctx, userId, { org: org.accountId }, "viewOrganization"));
+    expect(actor.roles.org).toBe("member");
   });
 
   test("the owner is the owner even before their membership row exists", async () => {
@@ -154,7 +155,19 @@ describe("org role resolution", () => {
         await ctx.db.delete(row._id);
       }
     });
-    const actor = await t.run((ctx) => requireOrgActionFor(ctx, org.accountId, org.ownerId, "manageBilling"));
-    expect(actor.role).toBe("owner");
+    const actor = await t.run((ctx) => requireActionFor(ctx, org.ownerId, { org: org.accountId }, "manageBilling"));
+    expect(actor.roles.org).toBe("owner");
+  });
+});
+
+describe("maskedEmail", () => {
+  test.each([
+    ["wolfy@example.com", "w***@example.com"],
+    ["w@example.com", "w***@example.com"],
+    ["a@b@example.com", "a***@example.com"],
+    ["@example.com", "***"],
+    ["not-an-address", "***"],
+  ])("%s shows as %s", (email, masked) => {
+    expect(maskedEmail(email)).toBe(masked);
   });
 });

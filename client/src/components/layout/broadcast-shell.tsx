@@ -19,10 +19,12 @@ import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
+import { useAlertGroupsNavItems } from "@/hooks/use-alert-groups-nav-items";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useDefaultEngineOnSignIn } from "@/hooks/use-default-engine";
 import { useEngineStarting } from "@/hooks/use-engine-starting";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
+import { useInstalledModuleNavItems } from "@/hooks/use-installed-module-nav-items";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
@@ -47,7 +49,7 @@ import {
   navItemsFor,
   sectionsFor,
   UTILITY_SECTIONS,
-  withAlertsChildren,
+  withDynamicItems,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
 import { SectionMenu } from "./section-menu";
@@ -249,6 +251,8 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const activeSection = findActiveSection(location);
   const { instance } = useInstance();
   const resourceKindItems = useResourceKindNavItems();
+  const installedModuleItems = useInstalledModuleNavItems();
+  const alertGroupsItems = useAlertGroupsNavItems();
   useDefaultEngineOnSignIn();
   useLiveConnection();
   useReconnectAfterUpgrade();
@@ -256,7 +260,14 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const sectionNav: SectionNav | null = activeSection?.children
     ? {
         title: activeSection.label,
-        items: navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting),
+        items: navItemsFor(
+          withDynamicItems(activeSection.children, {
+            alertGroups: alertGroupsItems,
+            resourceKinds: resourceKindItems,
+            installedModules: installedModuleItems,
+          }),
+          instance?.hosting
+        ),
       }
     : null;
 

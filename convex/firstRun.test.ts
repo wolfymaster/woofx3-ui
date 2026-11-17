@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
 import { PLACEHOLDER_NAME, REQUEST_IN_FLIGHT_MS, slugCandidates } from "./lib/firstRun";
 import { hashOpaqueToken } from "./lib/oauthHandoff";
+import { finishFirstRun } from "./setup";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -493,6 +494,55 @@ describe("first run", () => {
       expect(row?.status).toBe("provisioning");
       expect(creates.map((create) => create.slug)).toEqual(["wolfy-master"]);
     });
+
+    async function addEngineAdmin(t: Backend, instanceId: Id<"instances">, orgRole: "admin" | "member") {
+      return t.run(async (ctx) => {
+        const instance = await ctx.db.get(instanceId);
+        if (instance === null) {
+          throw new Error("the seeded instance is missing");
+        }
+        const userId = await ctx.db.insert("users", { email: `${orgRole}@example.com` });
+        await ctx.db.insert("accountMembers", { accountId: instance.accountId, userId, role: orgRole, createdAt: 1 });
+        await ctx.db.insert("instanceMembers", { instanceId, userId, role: "admin" });
+        return userId;
+      });
+    }
+
+    for (const orgRole of ["admin", "member"] as const) {
+      test(`an engine admin who is an org ${orgRole} cannot start the build with Try again`, async () => {
+        const t = newBackend();
+        const { instanceId } = await ownerWithInstance(t);
+        const adminId = await addEngineAdmin(t, instanceId, orgRole);
+
+        await expect(
+          t.withIdentity({ subject: `${adminId}|session` }).action(api.provisioning.retry, { instanceId })
+        ).rejects.toMatchObject({ data: { code: "not_authorized", action: "createEngine" } });
+
+        expect(creates).toEqual([]);
+        expect(await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId })).toBeNull();
+      });
+
+      test(`an engine admin who is an org ${orgRole} finishing setup leaves the build to the owner`, async () => {
+        const t = newBackend();
+        const { instanceId } = await ownerWithInstance(t);
+        const adminId = await addEngineAdmin(t, instanceId, orgRole);
+
+        await t.run(async (ctx) => {
+          const row = await ctx.db
+            .query("instanceSetup")
+            .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+            .first();
+          if (row === null) {
+            throw new Error("ensureFirstRun should make the setup row");
+          }
+          await finishFirstRun(ctx, row, adminId);
+        });
+        await settleScheduled(t);
+
+        expect(creates).toEqual([]);
+        expect(await t.query(internal.provisioningInternal.forInstanceInternal, { instanceId })).toBeNull();
+      });
+    }
 
     test("with a stale requested row, Try again takes it over; a fresh one is still in flight", async () => {
       const t = newBackend();

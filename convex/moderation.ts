@@ -31,6 +31,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, query } from "./_generated/server";
 import type { EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
@@ -87,7 +88,7 @@ async function authorizeModeration(
   if (!userId) {
     throw new ConvexError("Not authenticated");
   }
-  const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+  const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
   if (!membership) {
     throw new ConvexError("Not a member of this engine");
   }
@@ -358,6 +359,7 @@ export const unbanUser = action({
 export const getChatSettings = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<ChatSettings> => {
+    await readable(requireInstanceRoleInAction(ctx, args.instanceId));
     const auth = await readable(authorizeTwitch(ctx, args.instanceId, MODERATION_SCOPES.readChatSettings));
     const route = await twitchHelixRoute(ctx, args.instanceId);
     const body = await helix(auth, route, moderationRequests.readSettings(auth));

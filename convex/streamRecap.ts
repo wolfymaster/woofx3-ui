@@ -19,6 +19,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { OUTBOUND_FETCH_TIMEOUT_MS } from "./lib/outboundTimeouts";
 import {
   type ClipWindow,
@@ -66,7 +67,7 @@ export const loadEngineDetail = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
     if (!membership) {
       throw new Error("Not authorized");
     }
@@ -114,7 +115,7 @@ export const loadTimelineEvents = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
     if (!membership) {
       throw new Error("Not authorized");
     }
@@ -213,7 +214,7 @@ export const refreshOpenSession = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
     if (!membership) {
       throw new Error("Not authorized");
     }
@@ -309,7 +310,7 @@ export const loadClips = action({
     if (!userId) {
       throw new ConvexError("Not authenticated");
     }
-    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
     if (!membership) {
       throw new ConvexError("Not authorized");
     }
@@ -417,6 +418,7 @@ export const loadMarkers = action({
     if (!isMember) {
       throw new ConvexError("Not authorized");
     }
+    await requireInstanceRoleInAction(ctx, instanceId);
     const row = await ctx.runQuery(internal.streamSessionSummaries.getInternal, { instanceId, sessionId });
     if (!row) {
       throw new ConvexError("There's no recap for this stream.");
