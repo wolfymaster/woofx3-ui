@@ -27,13 +27,13 @@ bun run docs:build    # Static build output under docs/.vitepress/dist
 ### Multi-Tenant Model
 
 ```
-User  ──(member of 1+)──▶  Account  ──(has)──▶  Instance
-                           (tenant)             (1 engine
-                                                 deployment)
+User  ──(member of 1+)──▶  Account  ──(has 1+)──▶  Instance
+                           (tenant)               (1 engine
+                                                   deployment)
 ```
 
 - **User**: a person with login credentials. Can be a member of one or more Accounts (via account sharing).
-- **Account** (tenant): the top-level billing/ownership unit. Has one woofx3 Instance. Multiple users can be granted access to the same Account — all of them see the same Instance and its data.
+- **Account** (tenant): the top-level billing/ownership unit. Has one or more woofx3 Instances. Multiple users can be granted access to an Account; what each sees on an Instance depends on their engine role.
 - **Instance**: represents a single woofx3 engine deployment at a URL. The Convex `_id` of the instance record **is** the `instanceId` — assigned by the UI and sent to the engine during the registration handshake.
 - **Platform Link**: Twitch OAuth tokens (and future platforms), scoped to an Instance.
 

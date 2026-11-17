@@ -43,12 +43,6 @@
       "skillPath": "skills/convex-backup/SKILL.md",
       "computedHash": "b7a5e9356e9aac9bb2be7a23b4d919caeb5ec1018854d2adc3e3b72aef98f355"
     },
-    "convex-billing": {
-      "source": "convex/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/convex-billing/SKILL.md",
-      "computedHash": "8292546146e211978ab9dd931bc0f5d5ee0e53346f1b1863bc104e96a981605c"
-    },
     "convex-cost": {
       "source": "convex/agent-skills",
       "sourceType": "github",
