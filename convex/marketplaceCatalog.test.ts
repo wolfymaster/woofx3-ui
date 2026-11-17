@@ -90,7 +90,7 @@ describe("licenseKey", () => {
     const { users, instanceId } = await seed(t);
     expect(
       await refusal(as(t, users.member).action(api.marketplaceCatalog.licenseKey, { instanceId, listingId: "cozy" }))
-    ).toMatchObject({ code: "not_authorized", action: "viewBilling" });
+    ).toMatchObject({ code: "not_authorized", action: "viewLicenseKeys" });
     expect(marketplaceCalls).toEqual([]);
   });
 
@@ -106,9 +106,9 @@ describe("licenseKey", () => {
 
 describe("organizations.capabilitiesForInstance", () => {
   test.each([
-    ["owner", { viewBilling: true, manageBilling: true }],
-    ["admin", { viewBilling: true, manageBilling: false }],
-    ["member", { viewBilling: false, manageBilling: false }],
+    ["owner", { viewLicenseKeys: true, manageBilling: true }],
+    ["admin", { viewLicenseKeys: true, manageBilling: false }],
+    ["member", { viewLicenseKeys: false, manageBilling: false }],
   ] as const)("an organization %s gets its billing capabilities", async (role, expected) => {
     const t = newBackend();
     const { users, instanceId } = await seed(t);

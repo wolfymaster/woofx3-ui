@@ -43,7 +43,7 @@ What a tab shows of the organization is gated by role, not by the tab being visi
 | People | `/account/people` | (`manageMembers`) change roles, remove | |
 | Engines | `/account/engines` | (`viewOrganization`) open; the owner renames (`renameEngine`), creates (`createEngine`) and deletes (`deleteEngine`); members open the ones they're on | |
 
-The portal does not use `viewBilling`: an admin sees no organization billing. The Plan header offers renaming the organization to the owner only (`renameOrganization`). The pages work with no organization at all: `organizations.mine` answers an empty list, the layout drops the organization switcher, and no organization query runs.
+An admin sees no organization billing: `organizations.mine` sends the subscription only to a role with `manageBilling`, the owner. The Plan header offers renaming the organization to the owner only (`renameOrganization`). The pages work with no organization at all: `organizations.mine` answers an empty list, the layout drops the organization switcher, and no organization query runs.
 
 The Engines page lists the organization's engines, each with how it is hosted and where its build stands. An organization's first engine comes from onboarding; the owner (`createEngine`) adds more with "Create another engine" (`new-engine-dialog.tsx`):
 

@@ -3,7 +3,7 @@ import type { Id } from "../_generated/dataModel";
 import { orgRoleOf, requireActionFor } from "../org/policy";
 import { newBackend } from "./convexTest.testing";
 import type { OrgRole } from "./organization";
-import { grantEngineRole } from "./teamAccess";
+import { grantEngineRole, maskedEmail } from "./teamAccess";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -156,5 +156,17 @@ describe("org role resolution", () => {
     });
     const actor = await t.run((ctx) => requireActionFor(ctx, org.ownerId, { org: org.accountId }, "manageBilling"));
     expect(actor.roles.org).toBe("owner");
+  });
+});
+
+describe("maskedEmail", () => {
+  test.each([
+    ["wolfy@example.com", "w***@example.com"],
+    ["w@example.com", "w***@example.com"],
+    ["a@b@example.com", "a***@example.com"],
+    ["@example.com", "***"],
+    ["not-an-address", "***"],
+  ])("%s shows as %s", (email, masked) => {
+    expect(maskedEmail(email)).toBe(masked);
   });
 });

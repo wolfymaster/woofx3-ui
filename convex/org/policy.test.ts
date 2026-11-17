@@ -35,7 +35,7 @@ const EXPECTED: Record<Action, Record<Persona, boolean>> = {
   createEngine: { owner: true, admin: false, member: false, engineAdminOnly: false, none: false },
   changeEngineUrl: { owner: true, admin: false, member: false, engineAdminOnly: false, none: false },
   deleteEngine: { owner: true, admin: false, member: false, engineAdminOnly: false, none: false },
-  viewBilling: { owner: true, admin: true, member: false, engineAdminOnly: false, none: false },
+  viewLicenseKeys: { owner: true, admin: true, member: false, engineAdminOnly: false, none: false },
   manageBilling: { owner: true, admin: false, member: false, engineAdminOnly: false, none: false },
   viewEngine: { owner: true, admin: true, member: true, engineAdminOnly: true, none: false },
   operateEngine: { owner: true, admin: true, member: false, engineAdminOnly: true, none: false },

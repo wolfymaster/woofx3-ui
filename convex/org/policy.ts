@@ -21,7 +21,7 @@ export type OrgAction =
   | "createEngine"
   | "changeEngineUrl"
   | "deleteEngine"
-  | "viewBilling"
+  | "viewLicenseKeys"
   | "manageBilling";
 
 /** Which org roles may take each action. Admin is Owner minus billing. */
@@ -46,8 +46,9 @@ const ORG_ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   changeEngineUrl: ["owner"],
   // Engine admin operates an engine; whether it exists, and what the owner pays for, is the owner's call.
   deleteEngine: ["owner"],
-  // The plan and its state, read-only; acting on them is manageBilling.
-  viewBilling: ["owner", "admin"],
+  // A license key downloads the module the org paid for, so the people who
+  // run the org may read it. The org's billing itself is manageBilling only.
+  viewLicenseKeys: ["owner", "admin"],
   manageBilling: ["owner"],
 };
 
@@ -82,7 +83,7 @@ export const orgActionValidator = v.union(
   v.literal("createEngine"),
   v.literal("changeEngineUrl"),
   v.literal("deleteEngine"),
-  v.literal("viewBilling"),
+  v.literal("viewLicenseKeys"),
   v.literal("manageBilling")
 );
 
