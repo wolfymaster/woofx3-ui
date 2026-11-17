@@ -2,7 +2,7 @@ import type { OrgCapabilities } from "@convex/organizations";
 
 export const ACCOUNT_PORTAL_PATH = "/account";
 
-export type PortalPageId = "plan" | "payments" | "people" | "engines" | "settings" | "team" | "admin";
+export type PortalPageId = "plan" | "payments" | "people" | "engines" | "settings" | "team";
 
 export interface PortalPage {
   id: PortalPageId;
@@ -10,8 +10,6 @@ export interface PortalPage {
   path: string;
   /** The org action a role needs to see the page; null means every signed-in user sees it. */
   visibleWith: keyof OrgCapabilities | null;
-  /** Instance settings, listed only for the selected engine's owners and admins. */
-  instanceAdminOnly?: boolean;
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [
@@ -21,18 +19,11 @@ export const PORTAL_PAGES: readonly PortalPage[] = [
   { id: "engines", label: "Engines", path: `${ACCOUNT_PORTAL_PATH}/engines`, visibleWith: "viewOrganization" },
   { id: "settings", label: "Your settings", path: `${ACCOUNT_PORTAL_PATH}/settings`, visibleWith: null },
   { id: "team", label: "Team", path: `${ACCOUNT_PORTAL_PATH}/team`, visibleWith: null },
-  { id: "admin", label: "Admin", path: `${ACCOUNT_PORTAL_PATH}/admin`, visibleWith: null, instanceAdminOnly: true },
 ];
 
-/**
- * The pages a viewer sees in the portal's nav; `can` is null for a viewer with no organization.
- * The Admin route is guarded by AdminOnly, which waits for the role to load, so a route check passes `true`.
- */
-export function visiblePages(can: OrgCapabilities | null, isInstanceAdmin: boolean): PortalPage[] {
-  return PORTAL_PAGES.filter(
-    (page) =>
-      (page.visibleWith === null || can?.[page.visibleWith] === true) && (!page.instanceAdminOnly || isInstanceAdmin)
-  );
+/** The pages a viewer sees in the portal's nav; `can` is null for a viewer with no organization. */
+export function visiblePages(can: OrgCapabilities | null): PortalPage[] {
+  return PORTAL_PAGES.filter((page) => page.visibleWith === null || can?.[page.visibleWith] === true);
 }
 
 export function portalPage(id: PortalPageId): PortalPage {

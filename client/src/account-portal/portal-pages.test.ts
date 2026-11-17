@@ -18,21 +18,14 @@ const NAV: Array<[OrgRole, PortalPageId[]]> = [
 describe("visiblePages", () => {
   for (const [role, pages] of NAV) {
     test(`${role} sees ${pages.join(", ")}`, () => {
-      expect(visiblePages(can(role), false).map((page) => page.id)).toEqual(pages);
+      expect(visiblePages(can(role)).map((page) => page.id)).toEqual(pages);
     });
   }
 });
 
 describe("visiblePages without an organization", () => {
   test("shows the personal pages only", () => {
-    expect(visiblePages(null, false).map((page) => page.id)).toEqual(["plan", "payments", "settings", "team"]);
-  });
-});
-
-describe("visiblePages for an instance admin", () => {
-  test("adds Admin, with or without an organization", () => {
-    expect(visiblePages(null, true).map((page) => page.id)).toEqual(["plan", "payments", "settings", "team", "admin"]);
-    expect(visiblePages(can("member"), true).map((page) => page.id)).toContain("admin");
+    expect(visiblePages(null).map((page) => page.id)).toEqual(["plan", "payments", "settings", "team"]);
   });
 });
 
