@@ -13,6 +13,7 @@ export type OrgAction =
   | "viewOrganization"
   | "renameOrganization"
   | "manageMembers"
+  | "spendSeat"
   | "viewMemberEmails"
   | "manageEngines"
   | "renameEngine"
@@ -27,6 +28,10 @@ const ORG_ALLOWED: Record<OrgAction, readonly OrgRole[]> = {
   viewOrganization: ["owner", "admin", "member"],
   renameOrganization: ["owner"],
   manageMembers: ["owner", "admin"],
+  // Bringing someone new into the org takes a paid seat. An engine role is
+  // granted per engine by its admins, so engine admins who lack this may only
+  // grant engine roles to people already in the org.
+  spendSeat: ["owner", "admin"],
   // Members are mostly invited by their platform name, so their addresses are
   // private: only the owner, who holds the account, sees them.
   viewMemberEmails: ["owner"],
@@ -69,6 +74,7 @@ export const orgActionValidator = v.union(
   v.literal("viewOrganization"),
   v.literal("renameOrganization"),
   v.literal("manageMembers"),
+  v.literal("spendSeat"),
   v.literal("viewMemberEmails"),
   v.literal("manageEngines"),
   v.literal("renameEngine"),

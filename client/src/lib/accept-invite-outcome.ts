@@ -14,6 +14,8 @@ export const ACCEPT_REFUSAL_MESSAGES: Record<
     "The engine this invitation was for has been deleted. Ask the person who invited you for a new invitation.",
   seats_full:
     "This organization has no free seats right now. Ask the person who invited you to free one up or upgrade their plan, then open this link again.",
+  not_in_organization:
+    "This invitation can't add you to the organization. Ask the organization's owner or an admin to invite you.",
 };
 
 /** The message for a refused outcome, or null when the outcome puts the user on the engine. */
