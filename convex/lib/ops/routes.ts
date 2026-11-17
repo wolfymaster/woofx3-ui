@@ -14,10 +14,14 @@ export type OpsRoute =
   | { method: "GET"; name: "instances.health"; instanceId: string }
   | { method: "GET"; name: "audit.list" }
   | { method: "GET"; name: "notifications.list" }
+  | { method: "GET"; name: "featureFlags.list" }
   | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
   | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
   | { method: "POST"; name: "notifications.create" }
   | { method: "POST"; name: "notifications.delete"; notificationId: string }
+  | { method: "POST"; name: "featureFlags.create" }
+  | { method: "POST"; name: "featureFlags.remove" }
+  | { method: "PUT"; name: "featureFlags.update" }
   | { method: "POST"; name: "accounts.billingProjection"; accountId: string }
   | { method: "POST"; name: "accounts.billingProjectionReset"; accountId: string };
 
@@ -54,8 +58,20 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     if (segments.length === 1 && first === "notifications") {
       return { method, name: "notifications.create" };
     }
+    if (segments.length === 1 && first === "feature-flags") {
+      return { method, name: "featureFlags.create" };
+    }
+    if (segments.length === 2 && first === "feature-flags" && second === "delete") {
+      return { method, name: "featureFlags.remove" };
+    }
     if (segments.length === 3 && first === "notifications" && second && third === "delete") {
       return { method, name: "notifications.delete", notificationId: second };
+    }
+    return null;
+  }
+  if (method === "PUT") {
+    if (segments.length === 1 && first === "feature-flags") {
+      return { method, name: "featureFlags.update" };
     }
     return null;
   }
@@ -78,6 +94,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
       }
       if (first === "notifications") {
         return { method, name: "notifications.list" };
+      }
+      if (first === "feature-flags") {
+        return { method, name: "featureFlags.list" };
       }
       return null;
     case 2:

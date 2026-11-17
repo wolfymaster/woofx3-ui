@@ -4,6 +4,7 @@ import { httpAction } from "../_generated/server";
 import { authenticateOps } from "../lib/ops/auth";
 import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
 import { callerMayUse, nextSecretEnv, OPS_CALLERS } from "../lib/ops/callers";
+import { parseFeatureFlagKeyRequest, parseFeatureFlagRequest } from "../lib/ops/featureFlagRequest";
 import { parseIdempotencyKey } from "../lib/ops/idempotency";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { matchOpsRoute } from "../lib/ops/routes";
@@ -153,6 +154,50 @@ export const opsHandler = httpAction(async (ctx, request) => {
     case "notifications.delete": {
       const outcome = await ctx.runMutation(internal.ops.notifications.remove, {
         notificationId: route.notificationId,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "featureFlags.list":
+      return ok(await ctx.runQuery(internal.ops.featureFlags.list, { today: new Date().toISOString().slice(0, 10) }));
+    case "featureFlags.create": {
+      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.create, {
+        flag: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "featureFlags.update": {
+      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.update, {
+        flag: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "featureFlags.remove": {
+      const parsed = parseFeatureFlagKeyRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.remove, {
+        key: parsed.value,
         caller: auth.caller.name,
         actor: auth.actor,
         reason: auth.reason ?? "",

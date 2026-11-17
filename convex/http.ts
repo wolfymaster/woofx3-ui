@@ -872,6 +872,7 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
 // The backoffice's ops API; see ops/http.ts.
 http.route({ pathPrefix: OPS_PATH_PREFIX, method: "GET", handler: opsHandler });
 http.route({ pathPrefix: OPS_PATH_PREFIX, method: "POST", handler: opsHandler });
+http.route({ pathPrefix: OPS_PATH_PREFIX, method: "PUT", handler: opsHandler });
 
 http.route({ pathPrefix: "/api/webhooks/", method: "POST", handler: inboundWebhookHandler });
 http.route({ pathPrefix: "/api/webhooks/", method: "GET", handler: inboundWebhookHandler });
