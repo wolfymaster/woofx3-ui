@@ -20,9 +20,9 @@ const intervalValidator = v.union(v.literal("month"), v.literal("once"));
  * Built from the deployment's own origin, so a caller cannot choose where the
  * sponsor lands.
  */
-const RETURN_PATH = "/account";
+const RETURN_PATH = "/account/sponsorship";
 
-/** Marks the card-update return; the Plan page reads it as `PAYMENT_METHOD_RETURN_KEY` in sponsorship-return.ts. */
+/** Marks the card-update return; the Sponsorship page reads it as `PAYMENT_METHOD_RETURN_KEY` in sponsorship-return.ts. */
 const PAYMENT_METHOD_RETURN_QUERY = "?sponsorshipPaymentMethod=returned";
 
 function returnUrl(query = ""): string {

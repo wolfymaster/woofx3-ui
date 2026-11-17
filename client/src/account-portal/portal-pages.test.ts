@@ -10,9 +10,9 @@ function can(role: OrgRole): OrgCapabilities {
 
 // The "Who sees what" table: a page a role can't see isn't in its nav.
 const NAV: Array<[OrgRole, PortalPageId[]]> = [
-  ["owner", ["plan", "payments", "people", "engines", "settings", "team"]],
-  ["admin", ["plan", "payments", "people", "engines", "settings", "team"]],
-  ["member", ["plan", "payments", "engines", "settings", "team"]],
+  ["owner", ["overview", "sponsorship", "payments", "people", "settings", "team"]],
+  ["admin", ["overview", "sponsorship", "payments", "people", "settings", "team"]],
+  ["member", ["overview", "sponsorship", "payments", "settings", "team"]],
 ];
 
 describe("visiblePages", () => {
@@ -25,14 +25,20 @@ describe("visiblePages", () => {
 
 describe("visiblePages without an organization", () => {
   test("shows the personal pages only", () => {
-    expect(visiblePages(null).map((page) => page.id)).toEqual(["plan", "payments", "settings", "team"]);
+    expect(visiblePages(null).map((page) => page.id)).toEqual([
+      "overview",
+      "sponsorship",
+      "payments",
+      "settings",
+      "team",
+    ]);
   });
 });
 
 describe("portalPage", () => {
-  test("the Plan tab is the index, the rest are nested", () => {
+  test("the Overview tab is the index, the rest are nested", () => {
     expect(ACCOUNT_PORTAL_PATH).toBe("/account");
-    expect(portalPage("plan").path).toBe(ACCOUNT_PORTAL_PATH);
+    expect(portalPage("overview").path).toBe(ACCOUNT_PORTAL_PATH);
     expect(portalPage("payments").path).toBe(`${ACCOUNT_PORTAL_PATH}/payments`);
   });
 });

@@ -2,19 +2,18 @@ import { api } from "@convex/_generated/api";
 import type { AppliedDiscount } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
-import { useAction, useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { Check } from "lucide-react";
 import { useCallback, useState } from "react";
-import { Link, useSearch } from "wouter";
+import { useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
 import { describeDiscount, formatPrice, planName } from "@/billing/format";
 import { PLAN_DETAILS } from "@/billing/plan-details";
 import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-redirect";
 import { StatusBanner } from "@/billing/status-banner";
 import { type PlanPrices, usePlanPrices } from "@/billing/use-plan-prices";
-import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,9 +24,7 @@ import { CHECKOUT_CANCELLED_TEXT, CHECKOUT_POLL_TEXT, parseCheckoutReturn } from
 import { useCheckoutPoll } from "@/lib/use-checkout-poll";
 import { cn } from "@/lib/utils";
 import { billingView, checkoutRefusalAction } from "../billing-view";
-import { useOptionalOrganization, useOrganization } from "../organization-context";
-import { RenameDialog } from "../rename-dialog";
-import { SponsorshipSection } from "../sponsorship-section";
+import { useOrganization } from "../organization-context";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
 
 const PLAN_TIERS: PlanTier[] = ["starter", "pro"];
@@ -189,7 +186,7 @@ function PlanChooser({ prices, names }: PlanPrices) {
   );
 }
 
-function OrganizationPlan() {
+export function OrganizationPlan() {
   const { organization } = useOrganization();
   const openPortal = useAction(api.billingCommands.openPortal);
   const checkoutState = useAction(api.billingCommands.checkoutState);
@@ -256,56 +253,5 @@ function OrganizationPlan() {
         {view.kind === "choose_plan" || view.kind === "no_plan" ? <PlanChooser {...planPrices} /> : null}
       </CardContent>
     </Card>
-  );
-}
-
-/** For a viewer with no organization, such as a sponsor: the way to a streaming engine of their own. */
-function SetUpEngineCard() {
-  return (
-    <Card data-testid="card-set-up-engine">
-      <CardHeader>
-        <CardTitle>Stream with woofx3</CardTitle>
-        <CardDescription>
-          Want alerts, overlays and chat commands on your own stream? Set up a streaming engine and we&apos;ll walk you
-          through it.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button asChild variant="outline">
-          <Link href="/auth/onboarding" data-testid="link-set-up-engine">
-            Set up a streaming engine
-          </Link>
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function PlanPage() {
-  const selection = useOptionalOrganization();
-  const organization = selection?.organization ?? null;
-  const rename = useMutation(api.organizations.rename);
-  return (
-    <>
-      <PageHeader
-        title="Plan"
-        description="What you pay for on woofx3."
-        actions={
-          organization?.can.renameOrganization ? (
-            <RenameDialog
-              title="Rename organization"
-              current={organization.name}
-              onRename={(name) => rename({ accountId: organization.accountId, name })}
-              testId="button-rename-organization"
-            />
-          ) : null
-        }
-      />
-      <div className="space-y-6">
-        {organization?.can.manageBilling ? <OrganizationPlan /> : null}
-        <SponsorshipSection />
-        {selection === null ? <SetUpEngineCard /> : null}
-      </div>
-    </>
   );
 }
