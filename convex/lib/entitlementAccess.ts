@@ -1,6 +1,6 @@
-import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { billingFor, type OrgBilling } from "../org/billing";
 import {
   addOnFeatures,
   ENTITLEMENT_CATALOG,
@@ -8,10 +8,7 @@ import {
   type Entitlements,
   isUsable,
   resolveEntitlements,
-  type SubscriptionSummary,
 } from "./entitlements";
-import type { LifecycleReason } from "./organization";
-import { billingFor } from "./orgBilling";
 
 /** The plan row for a tier. A tier with no row is an operator setup error, so it throws. */
 async function tierPlan(ctx: QueryCtx, key: string): Promise<Doc<"plans">> {
@@ -26,22 +23,26 @@ async function tierPlan(ctx: QueryCtx, key: string): Promise<Doc<"plans">> {
 }
 
 /**
- * The org's entitlements. With a billing projection from the
+ * The entitlements `billing` grants. With a billing projection from the
  * management plane, its tier's plan applies in a usable standing and none
  * applies while suspended, with the overrides the projection carries. An org
  * without one has no plan: the code defaults for limits, and no paid features.
  */
-export async function accountEntitlements(ctx: QueryCtx, accountId: Id<"accounts">): Promise<Entitlements> {
-  const billing = await billingFor(ctx, accountId);
-  if (billing !== null) {
-    const { summary } = billing;
-    const plan = summary.plan !== null && isUsable(summary) ? await tierPlan(ctx, summary.plan) : null;
-    return resolveEntitlements(plan, billing.overrides, ENTITLEMENT_CATALOG, {
-      subscription: summary,
-      grantedFeatures: addOnFeatures(summary, billing.addOns),
-    });
+export async function entitlementsFor(ctx: QueryCtx, billing: OrgBilling | null): Promise<Entitlements> {
+  if (billing === null) {
+    return resolveEntitlements(null, null);
   }
-  return resolveEntitlements(null, null);
+  const { summary } = billing;
+  const plan = summary.plan !== null && isUsable(summary) ? await tierPlan(ctx, summary.plan) : null;
+  return resolveEntitlements(plan, billing.overrides, ENTITLEMENT_CATALOG, {
+    subscription: summary,
+    grantedFeatures: addOnFeatures(summary, billing.addOns),
+  });
+}
+
+/** The org's entitlements (see entitlementsFor). */
+export async function accountEntitlements(ctx: QueryCtx, accountId: Id<"accounts">): Promise<Entitlements> {
+  return entitlementsFor(ctx, await billingFor(ctx, accountId));
 }
 
 /**
@@ -69,52 +70,40 @@ export function hasFeature(availability: EngineAvailability, feature: Entitlemen
   return availability.availability === "hosted" && availability.entitlements.features.includes(feature);
 }
 
-export type EntitlementRefusal = { code: "subscription_suspended"; reason: LifecycleReason | null; message: string };
-
-/**
- * The org's billing summary when it is usable; throws while it is suspended or
- * missing. For managed-engine paths only: self-hosted engines need none.
- */
-export async function requireUsableSubscription(
-  ctx: QueryCtx,
-  accountId: Id<"accounts">
-): Promise<SubscriptionSummary> {
-  const subscription = (await billingFor(ctx, accountId))?.summary ?? null;
-  if (subscription === null || !isUsable(subscription)) {
-    throw new ConvexError<EntitlementRefusal>({
-      code: "subscription_suspended",
-      reason: subscription?.stateReason ?? null,
-      message: "This organization's subscription isn't active. The owner can reactivate it in Billing.",
-    });
-  }
-  return subscription;
-}
-
 export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove someone to invite more people";
 
 /**
- * The org's `org.members` limit (every org member, owner included), or null
- * when no seat limit applies. Seats belong to the org, not to an engine: the
- * limit applies once the org has a plan (a projection tier) or any managed engine,
- * whichever engine a person joins through. An org with only self-hosted
- * engines has none, nor does a plan without one.
+ * Whether a seat limit applies to the org. Seats belong to the org, not to an
+ * engine: the limit applies once the org has a plan (a projection tier) or any
+ * managed engine, whichever engine a person joins through. An org with only
+ * self-hosted engines has none.
  */
+export function isSeated(billing: OrgBilling | null, instances: readonly Doc<"instances">[]): boolean {
+  return (
+    (billing !== null && billing.summary.plan !== null) || instances.some((instance) => instance.hosting === "managed")
+  );
+}
+
+/** The `org.members` limit (every org member, owner included) the entitlements grant; null is unlimited. */
+export function seatLimitOf(entitlements: Entitlements): number | null {
+  const limit = entitlements.limits["org.members"];
+  if (limit === undefined) {
+    throw new Error('Limit "org.members" was not resolved');
+  }
+  return limit;
+}
+
+/** The org's `org.members` limit, or null when none applies (see isSeated), nor for a plan without one. */
 export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">): Promise<number | null> {
   const instances = await ctx.db
     .query("instances")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
   const billing = await billingFor(ctx, accountId);
-  const seated =
-    (billing !== null && billing.summary.plan !== null) || instances.some((instance) => instance.hosting === "managed");
-  if (!seated) {
+  if (!isSeated(billing, instances)) {
     return null;
   }
-  const limit = (await accountEntitlements(ctx, accountId)).limits["org.members"];
-  if (limit === undefined) {
-    throw new Error('Limit "org.members" was not resolved');
-  }
-  return limit;
+  return seatLimitOf(await entitlementsFor(ctx, billing));
 }
 
 /** Whether the org has no seat left for one more person (see orgSeatLimit). */

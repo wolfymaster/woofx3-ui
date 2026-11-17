@@ -427,8 +427,8 @@ export const deleteManagedEngine = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ deprovisioning: boolean }> => {
     await requireActionInAction(ctx, { engine: instanceId }, "deleteEngine");
-    const { row } = await requireManagedRow(ctx, instanceId);
-    return deleteManagedEngineRow(ctx, row);
+    // Not requireManagedRow: deleting stays open to the owner while the org is suspended, operating does not.
+    return deleteManagedEngineRow(ctx, await managedRow(ctx, instanceId));
   },
 });
 
@@ -486,9 +486,13 @@ async function requireManagedRow(
   instanceId: Id<"instances">
 ): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
   const { userId } = await requireActionInAction(ctx, { engine: instanceId }, "operateEngine");
+  return { row: await managedRow(ctx, instanceId), userId };
+}
+
+async function managedRow(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Doc<"engineProvisioning">> {
   const row = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, { instanceId });
   if (!row) {
     throw new Error("This workspace has no managed engine");
   }
-  return { row, userId };
+  return row;
 }

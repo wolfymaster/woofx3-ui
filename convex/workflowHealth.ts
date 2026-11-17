@@ -19,6 +19,7 @@ import { action, internalMutation, internalQuery, type MutationCtx, query } from
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { requireEngineUsable } from "./org/billing";
 
 /**
  * Upper bound on stored error rows read per instance, so neither a replace-all
@@ -219,6 +220,7 @@ export const engineContextForMember = internalQuery({
     if (!instance?.clientId || !instance.clientSecret) {
       return null;
     }
+    await requireEngineUsable(ctx, instanceId);
     return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
   },
 });

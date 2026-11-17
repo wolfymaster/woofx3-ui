@@ -1,7 +1,5 @@
 import { type Infer, v } from "convex/values";
-import type { Doc, Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
-import { type EntitlementOverrides, limitValuesValidator, type SubscriptionSummary } from "./entitlements";
+import { limitValuesValidator } from "./entitlements";
 import {
   billingIntervalValidator,
   lifecycleReasonValidator,
@@ -9,9 +7,8 @@ import {
   subscriptionStateValidator,
 } from "./organization";
 
-// The management plane owns billing; Convex keeps the last projection it was
-// pushed (`orgBilling`) and enforces from it. Nothing here calls the plane, so
-// entitlements keep working while it is down.
+// The billing projection as the management plane pushes it. The app reads it
+// only through `convex/org/billing.ts`.
 
 /** What the portal shows of a projected discount; the plane owns the discount, so Convex keeps only its label. */
 export const projectedDiscountValidator = v.object({ label: v.string() });
@@ -42,61 +39,3 @@ export const orgBillingFields = {
     limits: limitValuesValidator,
   }),
 };
-
-export async function orgBillingFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise<Doc<"orgBilling"> | null> {
-  return ctx.db
-    .query("orgBilling")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .unique();
-}
-
-/** What the gates read about an org's billing, whichever record holds it. */
-export interface BillingView {
-  summary: SubscriptionSummary;
-  addOns: readonly string[];
-  spinDownAt: number | null;
-  hasProviderSubscription: boolean;
-  discount: ProjectedDiscount | null;
-  overrides: EntitlementOverrides;
-}
-
-/**
- * A projection with no tier keeps its standing, reason and dates, so a
- * suspended one still locks the dashboard and a trialing one still prompts.
- * `plan` is null: usability follows the standing alone, but no plan or add-on
- * feature is granted and the org gets no seat limit unless it has a managed
- * engine (see orgSeatLimit).
- */
-export function projectionSummary(row: Doc<"orgBilling">): SubscriptionSummary {
-  return {
-    plan: row.tier,
-    interval: row.interval,
-    state: row.standing,
-    stateReason: row.reason,
-    nextBillingAt: row.standing === "trialing" ? row.trialEndsAt : row.periodEnd,
-    graceEndsAt: row.graceEndsAt,
-    exemptUntil: row.exemptUntil,
-  };
-}
-
-/**
- * The org's billing: its projection once the plane has pushed one, which is
- * then authoritative. An org with no projection row yet returns null and
- * behaves as an org with no subscription did before billing existed: its
- * gates stay open (callers check for null before requiring a usable standing)
- * and its entitlements are the code defaults with no plan.
- */
-export async function billingFor(ctx: QueryCtx, accountId: Id<"accounts">): Promise<BillingView | null> {
-  const projection = await orgBillingFor(ctx, accountId);
-  if (projection === null) {
-    return null;
-  }
-  return {
-    summary: projectionSummary(projection),
-    addOns: projection.addOns,
-    spinDownAt: projection.spinDownAt,
-    hasProviderSubscription: projection.hasProviderSubscription,
-    discount: projection.discount,
-    overrides: projection.overrides,
-  };
-}

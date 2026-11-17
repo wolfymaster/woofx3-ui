@@ -3,9 +3,9 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { orgSeatLimit } from "../lib/entitlementAccess";
-import { orgBillingFor } from "../lib/orgBilling";
 import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
 import { logger } from "../logger";
+import { orgBillingRow } from "../org/billing";
 import { orgRoleOf } from "../org/policy";
 import { migrations } from "./index";
 
@@ -235,7 +235,7 @@ async function orgViolations(ctx: QueryCtx, account: Doc<"accounts">): Promise<I
     .query("engineProvisioning")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .take(50);
-  if (provisioning.some((row) => row.status !== "deleted") && (await orgBillingFor(ctx, accountId)) === null) {
+  if (provisioning.some((row) => row.status !== "deleted") && (await orgBillingRow(ctx, accountId)) === null) {
     violations.push({ invariant: "billing", accountId, detail: "managed_engine_without_projection" });
   }
 

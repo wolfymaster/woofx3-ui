@@ -26,6 +26,7 @@ import { type ActionCtx, action, internalQuery, query } from "./_generated/serve
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
 import { fetchTwitchAppCredentials, fetchTwitchUser } from "./lib/twitchUsers";
+import { requireEngineUsable } from "./org/billing";
 import { SHOUTOUT_SCOPE } from "./shoutouts";
 
 // Every function here reads per-viewer figures from the engine and hands them
@@ -59,6 +60,7 @@ export const instanceAccessFor = internalQuery({
     if (!instance.clientId || !instance.clientSecret) {
       return { status: "unregistered" };
     }
+    await requireEngineUsable(ctx, instanceId);
     return {
       status: "ready",
       engine: { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret },

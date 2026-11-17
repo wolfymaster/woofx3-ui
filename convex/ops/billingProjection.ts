@@ -2,7 +2,8 @@ import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import { recordOpsAudit } from "../lib/ops/audit";
 import { claimOpsRequest, type OpsRequestId, requestFingerprint, settleOpsRequest } from "../lib/ops/idempotency";
-import { orgBillingFields, orgBillingFor } from "../lib/orgBilling";
+import { orgBillingFields } from "../lib/orgBilling";
+import { orgBillingRow } from "../org/billing";
 
 // The management plane's billing projection push. The projection is a read
 // model: Convex stores the newest version it was sent and enforces from it.
@@ -47,7 +48,7 @@ export const applyBillingProjection = internalMutation({
     if (claim.kind === "answered") {
       return claim.outcome;
     }
-    const stored = await orgBillingFor(ctx, accountId);
+    const stored = await orgBillingRow(ctx, accountId);
     let result: { applied: boolean; version: number };
     if (stored !== null && stored.version >= projection.version) {
       result = { applied: false, version: stored.version };
@@ -95,7 +96,7 @@ export const resetBillingProjection = internalMutation({
     if (accountId === null || (await ctx.db.get(accountId)) === null) {
       return { ok: false, status: 404, code: "not_found", message: "No such account" };
     }
-    const stored = await orgBillingFor(ctx, accountId);
+    const stored = await orgBillingRow(ctx, accountId);
     if (stored === null) {
       return { ok: false, status: 404, code: "no_projection", message: "The account has no stored projection" };
     }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import { orgBillingRow } from "../org/billing";
 import { PLAN_SEEDS } from "../seeds/plans";
 import { newBackend } from "./convexTest.testing";
 import { accountEntitlements, engineAvailability, hasFeature, orgSeatLimit, orgSeatsFull } from "./entitlementAccess";
@@ -11,7 +12,6 @@ import {
   type SubscriptionSummary,
 } from "./entitlements";
 import type { SubscriptionState } from "./organization";
-import { orgBillingFor } from "./orgBilling";
 import { upsertPlan } from "./plans";
 import { grantEngineRole } from "./teamAccess";
 
@@ -240,7 +240,7 @@ describe("seat limit", () => {
       }
       return accountId;
     });
-    expect(await t.run((ctx) => orgBillingFor(ctx, accountId))).toBeNull();
+    expect(await t.run((ctx) => orgBillingRow(ctx, accountId))).toBeNull();
     expect(await t.run((ctx) => orgSeatLimit(ctx, accountId))).toBeNull();
     expect(await t.run((ctx) => orgSeatsFull(ctx, accountId))).toBe(false);
   });

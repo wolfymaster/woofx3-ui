@@ -5,8 +5,8 @@ import { type QueryCtx, query } from "./_generated/server";
 import { isUsable } from "./lib/entitlements";
 import { engineBuildStalled } from "./lib/firstRun";
 import type { LifecycleReason } from "./lib/organization";
-import { billingFor } from "./lib/orgBilling";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { billingFor, suspensionOf } from "./org/billing";
 import { orgCan, orgRoleOf } from "./org/policy";
 
 // Bounds the read of a user's engine memberships; a user is on a handful.
@@ -104,22 +104,21 @@ async function enterableEnginesOf(ctx: QueryCtx, userId: Id<"users">, now: numbe
 }
 
 /**
- * Locked while the org's billing projection is suspended. Only hosted engines are billed, and an org with no billing yet
- * keeps its engine.
+ * Locked while the org's billing projection is suspended, by the rule every
+ * managed-engine action is refused by (`requireEngineUsable`). Only hosted
+ * engines are billed, and an org with no billing yet keeps its engine.
  */
 async function suspendedEntry(
   ctx: QueryCtx,
   engine: Doc<"instances">,
   userId: Id<"users">
 ): Promise<DashboardEntry | null> {
-  if (engine.hosting !== "managed") {
+  const suspension = await suspensionOf(ctx, engine);
+  if (suspension === null) {
     return null;
   }
-  const subscription = (await billingFor(ctx, engine.accountId))?.summary ?? null;
-  if (subscription === null || subscription.state !== "suspended") {
-    return null;
-  }
-  if (subscription.stateReason === null) {
+  const reason = suspension.summary.stateReason;
+  if (reason === null) {
     throw new Error(`org ${engine.accountId} is suspended with no reason`);
   }
   const account = await ctx.db.get(engine.accountId);
@@ -130,7 +129,7 @@ async function suspendedEntry(
   return {
     kind: "suspended",
     instanceId: engine._id,
-    reason: subscription.stateReason,
+    reason,
     canManageBilling: orgCan(await orgRoleOf(ctx, account, userId), "manageBilling"),
     ownerName: owner?.name ?? null,
   };

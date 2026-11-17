@@ -192,7 +192,7 @@ describe("creating another managed engine", () => {
         name: "Second",
         slug: "second",
       })
-    ).rejects.toThrow("subscription_suspended");
+    ).rejects.toThrow("org_suspended");
     expect(created).toEqual([]);
     expect((await instancesOf(t, org.accountId)).length).toBe(1);
   });

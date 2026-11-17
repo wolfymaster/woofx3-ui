@@ -29,6 +29,7 @@ import {
   fetchTwitchUser,
   type HelixCredentials,
 } from "./lib/twitchUsers";
+import { requireEngineUsable } from "./org/billing";
 import {
   can,
   orgCan,
@@ -592,6 +593,7 @@ export const accept = mutation({
     if (engine === null) {
       return { status: "engine_gone" };
     }
+    await requireEngineUsable(ctx, engine.instanceId);
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
