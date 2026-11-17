@@ -1,3 +1,4 @@
+import { parseHttpsUrl } from "@convex/lib/httpsUrl";
 import { ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,17 @@ export function useProviderRedirect() {
         setBusy(false);
         return;
       }
-      window.location.assign(target.url);
+      const checked = parseHttpsUrl(target.url);
+      if (!checked.ok) {
+        toast({
+          title: "Billing is unavailable",
+          description: "The payment page link was not valid, so it was not opened.",
+          variant: "destructive",
+        });
+        setBusy(false);
+        return;
+      }
+      window.location.assign(checked.url);
     } catch (error) {
       toast({ title: "Billing is unavailable", description: actionErrorMessage(error), variant: "destructive" });
       setBusy(false);

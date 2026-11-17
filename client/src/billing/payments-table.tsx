@@ -1,3 +1,4 @@
+import { parseHttpsUrl } from "@convex/lib/httpsUrl";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatCents, formatDay } from "./format";
@@ -68,7 +69,7 @@ export function PaymentsTable({ rows, empty = "Nothing here yet.", linkColumn = 
             </span>
             {hasLink ? (
               <span className={COLUMN.link}>
-                {row.url ? (
+                {row.url && parseHttpsUrl(row.url).ok ? (
                   <a
                     href={row.url}
                     target="_blank"

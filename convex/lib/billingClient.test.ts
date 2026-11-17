@@ -248,3 +248,36 @@ describe("boundary", () => {
     }
   });
 });
+
+describe("provider URLs", () => {
+  const calls: [string, () => Promise<unknown>][] = [
+    ["startCheckout", () => client.startCheckout({ ...TERMS, idempotencyKey: "k" })],
+    [
+      "startMarketplaceCheckout",
+      () => client.startMarketplaceCheckout({ accountId: "acc1", intentId: "i", idempotencyKey: "k" }),
+    ],
+    ["openPortal", () => client.openPortal("acc1")],
+    [
+      "startSponsorshipCheckout",
+      () =>
+        client.startSponsorshipCheckout({
+          userId: "u",
+          kind: "one_time",
+          amountCents: 500,
+          returnUrl: "https://x.test/r",
+          idempotencyKey: "k",
+        } as never),
+    ],
+    ["sponsorshipPaymentMethodSession", () => client.sponsorshipPaymentMethodSession("u", "s", "https://x.test/r")],
+  ];
+
+  test.each(calls)("%s passes an https URL through", async (_name, call) => {
+    plane(200, { url: "https://checkout.stripe.com/c/1", checkoutId: "c1" });
+    expect(await call()).toMatchObject({ ok: true, value: { url: "https://checkout.stripe.com/c/1" } });
+  });
+
+  test.each(calls)("%s refuses a script URL as unexpected_response", async (_name, call) => {
+    plane(200, { url: "javascript:alert(1)", checkoutId: "c1" });
+    expect(await call()).toMatchObject({ ok: false, error: { code: "unexpected_response" } });
+  });
+});
