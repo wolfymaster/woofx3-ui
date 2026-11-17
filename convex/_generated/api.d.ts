@@ -269,6 +269,7 @@ import type * as ops_requests from "../ops/requests.js";
 import type * as ops_storageLimits from "../ops/storageLimits.js";
 import type * as org_billing from "../org/billing.js";
 import type * as org_context from "../org/context.js";
+import type * as org_membership from "../org/membership.js";
 import type * as org_policy from "../org/policy.js";
 import type * as organizations from "../organizations.js";
 import type * as pageIntros from "../pageIntros.js";
@@ -599,6 +600,7 @@ declare const fullApi: ApiFromModules<{
   "ops/storageLimits": typeof ops_storageLimits;
   "org/billing": typeof org_billing;
   "org/context": typeof org_context;
+  "org/membership": typeof org_membership;
   "org/policy": typeof org_policy;
   organizations: typeof organizations;
   pageIntros: typeof pageIntros;
