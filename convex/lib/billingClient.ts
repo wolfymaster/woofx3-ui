@@ -141,6 +141,19 @@ const checkoutStateSchema = specEnumSchema<CheckoutState>("BillingCheckout", "st
 /** `accountId` is the Convex organization id the checkout was opened for. */
 export type CheckoutView = Pick<Schemas["BillingCheckout"], "id" | "state"> & { accountId: string };
 
+/** One plan's list price for one interval, in whole cents. */
+export type PlanPrice = Schemas["BillingPlanPrice"];
+const planPricesSchema = z.object({
+  prices: z.array(
+    z.object({
+      plan: specEnumSchema<BillingTier>("BillingPlanPrice", "plan"),
+      interval: specEnumSchema<BillingInterval>("BillingPlanPrice", "interval"),
+      amountCents: z.number(),
+      currency: z.literal("usd"),
+    })
+  ),
+});
+
 export type SponsorshipInterval = Schemas["BillingSponsorship"]["interval"];
 export type SponsorshipState = Schemas["BillingSponsorship"]["state"];
 
@@ -259,6 +272,8 @@ export interface BillingClient {
   lookupPromotionCode(code: string): Promise<BillingResult<AppliedDiscount | null>>;
   /** `accountId` is the org the caller acts for; another org's checkout answers `checkout_not_found`. */
   checkoutState(checkoutId: string, accountId: string): Promise<BillingResult<CheckoutView>>;
+  /** What each plan sells for now; the plane is the only source of prices. */
+  planPrices(): Promise<BillingResult<PlanPrice[]>>;
   /** What a sponsorship may cost; the plane's own limits, never Convex's. */
   sponsorshipTerms(): Promise<BillingResult<SponsorshipTerms>>;
   startSponsorshipCheckout(
@@ -468,6 +483,11 @@ export class HttpBillingClient implements BillingClient {
       },
       checkoutViewSchema
     );
+  }
+
+  async planPrices() {
+    const result = await this.send({ method: "GET", path: "/v1/billing/prices" }, planPricesSchema);
+    return result.ok ? billingOk(result.value.prices) : result;
   }
 
   sponsorshipTerms() {
