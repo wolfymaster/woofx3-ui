@@ -3,7 +3,7 @@ import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { billingConvexError, ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
-import { billingErr } from "./lib/billingClient";
+import { billingErr, PLANE_CODES } from "./lib/billingClient";
 import { FakeBillingClient } from "./lib/billingClient.fakes";
 import { newBackend } from "./lib/convexTest.testing";
 
@@ -363,5 +363,13 @@ describe("billingConvexError", () => {
     ["payment_request_invalid", "We could not start your payment. Please contact support."],
   ] as const)("%s has its own message", (code, message) => {
     expect(billingConvexError({ code, message: "plane words" }).data).toEqual({ code, message });
+  });
+});
+
+describe("every code the plane's spec lists", () => {
+  const generic = billingConvexError({ code: "unexpected_response", message: "x" }).data.message;
+
+  test.each(PLANE_CODES)("%s has its own message", (code) => {
+    expect(billingConvexError({ code, message: "plane words" }).data.message).not.toBe(generic);
   });
 });
