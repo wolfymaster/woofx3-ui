@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { newBackend } from "../lib/convexTest.testing";
-import { OPS_SECRET_ENV } from "../lib/ops/auth";
-import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
+import { MAX_PROJECTION_VERSION, parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
+import { callerSecretEnv } from "../lib/ops/callers";
 
 type Backend = ReturnType<typeof newBackend>;
 
 const SECRET = "s".repeat(64);
+const OPS_SECRET_ENV = callerSecretEnv("billing");
+const BACKOFFICE_SECRET_ENV = callerSecretEnv("backoffice");
 
 const wire = (accountId: string, version: number, overrides: object = {}) => ({
   accountId,
@@ -40,7 +42,7 @@ function parsed(body: object) {
   if (!result.ok) {
     throw new Error(result.message);
   }
-  return { ...result.value, actor: "billing-plane", auditReason: "projection push" };
+  return { ...result.value, caller: "billing", actor: "billing-plane", auditReason: "projection push" };
 }
 
 const rows = (t: Backend) => t.run((ctx) => ctx.db.query("orgBilling").collect());
@@ -94,6 +96,7 @@ describe("parseBillingProjectionRequest", () => {
   test.each<[string, object]>([
     ["version zero", { ...valid, version: 0 }],
     ["a fractional version", { ...valid, version: 1.5 }],
+    ["a version above the plane's counter", { ...valid, version: MAX_PROJECTION_VERSION + 1 }],
     ["an unknown tier", { ...valid, tier: "gold" }],
     ["an unknown standing", { ...valid, standing: "paused" }],
     ["suspended with no reason", { ...valid, standing: "suspended" }],
@@ -116,6 +119,10 @@ describe("parseBillingProjectionRequest", () => {
     ],
   ])("rejects %s", (_name, body) => {
     expect(parseBillingProjectionRequest(body).ok).toBe(false);
+  });
+
+  test("accepts the largest version the plane can hold", () => {
+    expect(parseBillingProjectionRequest({ ...valid, version: MAX_PROJECTION_VERSION }).ok).toBe(true);
   });
 
   test("accepts the portal fields, a trialing standing with its end, and null (unlimited) limits", () => {
@@ -304,5 +311,118 @@ describe("POST /api/ops/accounts/:id/billing-projection", () => {
     const accountId = await org(t);
     expect((await post(t, accountId, wire(accountId, 1), headers)).status).toBe(status);
     expect(await rows(t)).toEqual([]);
+  });
+});
+
+describe("resetBillingProjection", () => {
+  const push = (t: Backend, accountId: Id<"accounts">, version: number, overrides: object = {}) =>
+    t.mutation(internal.ops.billingProjection.applyBillingProjection, parsed(wire(accountId, version, overrides)));
+  const reset = (t: Backend, accountId: string) =>
+    t.mutation(internal.ops.billingProjection.resetBillingProjection, {
+      accountId,
+      caller: "backoffice",
+      actor: "ops@woofx3.tv",
+      auditReason: "plane counter rebuilt",
+    });
+
+  test("a poisoned version blocks later pushes until the reset, and not after", async () => {
+    const t = newBackend();
+    const accountId = await org(t);
+    await push(t, accountId, MAX_PROJECTION_VERSION);
+    expect(await push(t, accountId, 1, { tier: "starter" })).toEqual({
+      ok: true,
+      result: { applied: false, version: MAX_PROJECTION_VERSION },
+    });
+
+    expect(await reset(t, accountId)).toEqual({
+      ok: true,
+      result: { previousVersion: MAX_PROJECTION_VERSION, version: 0 },
+    });
+    expect(await push(t, accountId, 1, { tier: "starter" })).toEqual({
+      ok: true,
+      result: { applied: true, version: 1 },
+    });
+    expect((await rows(t)).map((row) => [row.version, row.tier])).toEqual([[1, "starter"]]);
+  });
+
+  test("changes no entitlement field by itself and is audited with the operator and reason", async () => {
+    const t = newBackend();
+    const accountId = await org(t);
+    await push(t, accountId, 5);
+    const [before] = await rows(t);
+    await reset(t, accountId);
+    const [after] = await rows(t);
+    expect(after).toEqual({ ...before, version: 0 });
+    const audit = await t.run((ctx) => ctx.db.query("opsAuditLog").collect());
+    expect(audit.filter((entry) => entry.action === "accounts.billingProjectionReset")).toMatchObject([
+      { actor: "ops@woofx3.tv", target: accountId, reason: "plane counter rebuilt", result: "ok" },
+    ]);
+  });
+
+  test("an account with no projection, or an unknown one, is a 404 and writes nothing", async () => {
+    const t = newBackend();
+    const accountId = await org(t);
+    expect(await reset(t, accountId)).toMatchObject({ ok: false, status: 404, code: "no_projection" });
+    await t.run((ctx) => ctx.db.delete(accountId));
+    expect(await reset(t, accountId)).toMatchObject({ ok: false, status: 404, code: "not_found" });
+    expect(await t.run((ctx) => ctx.db.query("opsAuditLog").collect())).toEqual([]);
+  });
+});
+
+describe("POST /api/ops/accounts/:id/billing-projection-reset", () => {
+  let previous: string | undefined;
+  beforeEach(() => {
+    previous = process.env[BACKOFFICE_SECRET_ENV];
+    process.env[BACKOFFICE_SECRET_ENV] = SECRET;
+  });
+  afterEach(() => {
+    if (previous === undefined) {
+      delete process.env[BACKOFFICE_SECRET_ENV];
+    } else {
+      process.env[BACKOFFICE_SECRET_ENV] = previous;
+    }
+  });
+
+  const reset = (t: Backend, accountId: string, headers: Record<string, string> = {}) =>
+    t.fetch(`/api/ops/accounts/${accountId}/billing-projection-reset`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SECRET}`,
+        "X-Woofx3-Actor": "ops@woofx3.tv",
+        "X-Woofx3-Reason": encodeURIComponent("plane counter rebuilt"),
+        ...headers,
+      },
+    });
+
+  test("resets the stored version so the same version is applied again", async () => {
+    const t = newBackend();
+    const accountId = await org(t);
+    await t.mutation(internal.ops.billingProjection.applyBillingProjection, parsed(wire(accountId, 7)));
+    const response = await reset(t, accountId);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ data: { previousVersion: 7, version: 0 } });
+    expect(await t.mutation(internal.ops.billingProjection.applyBillingProjection, parsed(wire(accountId, 7)))).toEqual(
+      { ok: true, result: { applied: true, version: 7 } }
+    );
+  });
+
+  test("an unknown org is the standard not-found", async () => {
+    const t = newBackend();
+    const accountId = await org(t);
+    await t.run((ctx) => ctx.db.delete(accountId));
+    const response = await reset(t, accountId);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
+  });
+
+  test.each<[string, Record<string, string>, number]>([
+    ["a wrong secret", { Authorization: `Bearer ${"x".repeat(64)}` }, 401],
+    ["no reason", { "X-Woofx3-Reason": "" }, 400],
+  ])("%s is refused and nothing changes", async (_name, headers, status) => {
+    const t = newBackend();
+    const accountId = await org(t);
+    await t.mutation(internal.ops.billingProjection.applyBillingProjection, parsed(wire(accountId, 3)));
+    expect((await reset(t, accountId, headers)).status).toBe(status);
+    expect((await rows(t))[0]?.version).toBe(3);
   });
 });

@@ -37,3 +37,11 @@ describe("PaymentsTable", () => {
     );
   });
 });
+
+describe("PaymentsTable links", () => {
+  test("renders no link for a URL that is not https", () => {
+    const shown = render([row("a", "https://r.example/1"), row("b", "javascript:alert(1)")], "Receipt");
+    expect(shown).toContain("https://r.example/1");
+    expect(shown).not.toContain("javascript:");
+  });
+});

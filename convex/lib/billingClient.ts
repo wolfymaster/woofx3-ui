@@ -1,4 +1,7 @@
 import { z } from "zod";
+import spec from "./billing/openapi.billing.json";
+import type { components, paths } from "./billing/schema.generated";
+import { parseHttpsUrl } from "./httpsUrl";
 
 /**
  * Typed facade over the management plane's billing API. Convex asks the plane
@@ -11,6 +14,10 @@ import { z } from "zod";
  * Uses the same deployment credential as the engine client
  * (`MAINTENANCE_API_URL` / `MAINTENANCE_API_KEY`); the key needs the
  * `billing:read` and `billing:write` scopes.
+ *
+ * Request, response and error-code types come from the plane's OpenAPI
+ * document (`./billing/schema.generated.ts`); only the epoch-millisecond
+ * conversion of timestamps and the client-only transport codes are defined here.
  */
 
 export const BILLING_CLIENT = {
@@ -20,57 +27,44 @@ export const BILLING_CLIENT = {
   checkoutKeyWindowMs: 30 * 60_000,
 } as const;
 
-export const PLAN_TIERS = ["starter", "pro"] as const;
-export type BillingTier = (typeof PLAN_TIERS)[number];
-export const BILLING_INTERVALS = ["month", "year"] as const;
-export type BillingInterval = (typeof BILLING_INTERVALS)[number];
+type Schemas = components["schemas"];
+type JsonResponse<
+  Path extends keyof paths,
+  Method extends "get" | "post",
+  Status extends number,
+> = paths[Path][Method] extends { responses: Record<Status, { content: { "application/json": infer Body } }> }
+  ? Body
+  : never;
+
+interface SpecSchema {
+  enum?: string[];
+  properties?: Record<string, { enum?: string[] }>;
+}
+
+/** The values the spec lists for a schema, or for one of its properties; the generated types carry none at runtime. */
+function specEnum(schemaName: string, property?: string): [string, ...string[]] {
+  const schema = (spec.components.schemas as unknown as Record<string, SpecSchema>)[schemaName];
+  const values = property === undefined ? schema?.enum : schema?.properties?.[property]?.enum;
+  if (values === undefined || values.length === 0) {
+    throw new Error(
+      `openapi.billing.json lists no enum for ${schemaName}${property === undefined ? "" : `.${property}`}`
+    );
+  }
+  return values as [string, ...string[]];
+}
+
+function specEnumSchema<T extends string>(schemaName: string, property?: string): z.ZodType<T> {
+  return z.enum(specEnum(schemaName, property)) as unknown as z.ZodType<T>;
+}
+
+export type BillingTier = Schemas["BillingCheckoutBody"]["plan"];
+export type BillingInterval = Schemas["BillingCheckoutBody"]["interval"];
 
 /** Decided by the plane for this request and state: asking again gets the same answer. */
-export const BILLING_REFUSAL_CODES = [
-  "account_not_found",
-  "already_subscribed",
-  // A failing subscription is mended in the customer portal, which the caller should open.
-  "subscription_exists",
-  "suspended_by_operator",
-  "checkout_in_progress",
-  "no_customer",
-  "unknown_discount",
-  "promotion_code_not_found",
-  "checkout_not_found",
-  // An operator-exempt org has nothing to buy.
-  "exempt",
-  "invalid_return_path",
-  // A module purchase: the marketplace's purchase intent is missing or another org's, redeemed or expired, too close
-  // to expiring to pay (acquiring again gives a fresh one), already paid, or for an amount billing cannot charge.
-  "intent_not_found",
-  "intent_not_payable",
-  "intent_expiring",
-  "intent_already_paid",
-  "intent_invalid",
-  "listing_unavailable",
-  // A sponsorship: missing or another person's, one-time (nothing to change or cancel), or an amount outside the
-  // plane's terms.
-  "sponsorship_not_found",
-  "sponsorship_not_recurring",
-  "invalid_sponsorship_amount",
-] as const;
-export type BillingRefusalCode = (typeof BILLING_REFUSAL_CODES)[number];
+export type BillingRefusalCode = Schemas["BillingRefusalCode"];
 
-/**
- * A dependency of the plane failed; nothing was decided and a retry may succeed.
- * `subscription_not_found` is here because the plane creates the row moments after an org's first
- * managed engine, so asking again soon works.
- */
-export const BILLING_OUTAGE_CODES = [
-  "payment_unavailable",
-  "payment_refused",
-  "identity_unavailable",
-  "subscription_not_found",
-  "marketplace_unavailable",
-  "marketplace_refused",
-  // Module purchases are not set up on the plane.
-  "marketplace_not_configured",
-] as const;
+/** A dependency of the plane failed; nothing was decided and a retry may succeed. */
+export type BillingUnavailableCode = Schemas["BillingUnavailableCode"];
 
 /** Failures between Convex and the plane that the plane did not decide. */
 export const BILLING_TRANSPORT_CODES = [
@@ -82,10 +76,7 @@ export const BILLING_TRANSPORT_CODES = [
   "unexpected_response",
 ] as const;
 
-export type BillingErrorCode =
-  | BillingRefusalCode
-  | (typeof BILLING_OUTAGE_CODES)[number]
-  | (typeof BILLING_TRANSPORT_CODES)[number];
+export type BillingErrorCode = BillingRefusalCode | BillingUnavailableCode | (typeof BILLING_TRANSPORT_CODES)[number];
 
 export type BillingError = { code: BillingErrorCode; message: string };
 
@@ -99,16 +90,23 @@ export function billingErr<T>(code: BillingErrorCode, message: string): BillingR
   return { ok: false, error: { code, message } };
 }
 
-const KNOWN_CODES: ReadonlySet<string> = new Set<string>([...BILLING_REFUSAL_CODES, ...BILLING_OUTAGE_CODES]);
+/** Every code the plane can answer, as the spec lists them. */
+export const PLANE_CODES: readonly BillingErrorCode[] = [
+  ...(specEnum("BillingRefusalCode") as BillingRefusalCode[]),
+  ...(specEnum("BillingUnavailableCode") as BillingUnavailableCode[]),
+];
+const KNOWN_CODES: ReadonlySet<string> = new Set(PLANE_CODES);
+
+export type AppliedDiscount = JsonResponse<"/v1/billing/promotion-codes/{code}", "get", 200>;
+export type DiscountDuration = AppliedDiscount["spec"]["duration"];
 
 const durationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("once") }),
   z.object({ kind: z.literal("months"), months: z.number() }),
   z.object({ kind: z.literal("forever") }),
 ]);
-export type DiscountDuration = z.infer<typeof durationSchema>;
 
-const appliedDiscountSchema = z.object({
+const appliedDiscountSchema: z.ZodType<AppliedDiscount> = z.object({
   spec: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("percent_off"), percent: z.number(), duration: durationSchema }),
     z.object({
@@ -122,54 +120,62 @@ const appliedDiscountSchema = z.object({
   /** Epoch milliseconds. */
   endsAt: z.number().nullable(),
 });
-export type AppliedDiscount = z.infer<typeof appliedDiscountSchema>;
 
-export const INVOICE_STATUSES = ["draft", "open", "paid", "uncollectible", "void"] as const;
-export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+export type InvoiceStatus = Schemas["BillingInvoice"]["status"];
 
-const invoiceWireSchema = z.object({
+const invoiceWireSchema: z.ZodType<Schemas["BillingInvoice"]> = z.object({
   id: z.string(),
   periodStart: z.string(),
   amountCents: z.number(),
-  status: z.enum(INVOICE_STATUSES),
+  status: specEnumSchema<InvoiceStatus>("BillingInvoice", "status"),
   hostedUrl: z.string().nullable(),
 });
 
-export interface Invoice {
-  id: string;
-  /** Epoch milliseconds. */
-  periodStart: number;
-  amountCents: number;
-  status: InvoiceStatus;
-  /** The payment page for the invoice; null while it is a draft. */
-  hostedUrl: string | null;
-}
+/** `periodStart` is epoch milliseconds; `hostedUrl` is null while the invoice is a draft. */
+export type Invoice = Omit<Schemas["BillingInvoice"], "periodStart"> & { periodStart: number };
 
 /** `needs_review` is a module purchase that was paid but could not be granted; support settles it. */
-export const CHECKOUT_STATES = ["open", "awaiting_payment", "complete", "expired", "needs_review"] as const;
-export type CheckoutState = (typeof CHECKOUT_STATES)[number];
+export type CheckoutState = Schemas["BillingCheckout"]["state"];
+const checkoutStateSchema = specEnumSchema<CheckoutState>("BillingCheckout", "state");
 
-export interface CheckoutView {
-  id: string;
-  /** The Convex organization id the checkout was opened for. */
-  accountId: string;
-  state: CheckoutState;
-}
+/** `accountId` is the Convex organization id the checkout was opened for. */
+export type CheckoutView = Pick<Schemas["BillingCheckout"], "id" | "state"> & { accountId: string };
 
-export const SPONSORSHIP_INTERVALS = ["month", "once"] as const;
-export type SponsorshipInterval = (typeof SPONSORSHIP_INTERVALS)[number];
-export const SPONSORSHIP_STATES = ["pending", "active", "past_due", "canceled", "complete"] as const;
-export type SponsorshipState = (typeof SPONSORSHIP_STATES)[number];
+/** One plan's list price for one interval, in whole cents. */
+export type PlanPrice = Schemas["BillingPlanPrice"];
+const planPricesSchema = z.object({
+  prices: z.array(
+    z.object({
+      plan: specEnumSchema<BillingTier>("BillingPlanPrice", "plan"),
+      interval: specEnumSchema<BillingInterval>("BillingPlanPrice", "interval"),
+      amountCents: z.number(),
+      currency: z.literal("usd"),
+    })
+  ),
+});
 
-const sponsorshipTermsSchema = z.object({ minCents: z.number(), maxCents: z.number(), currency: z.string() });
-export type SponsorshipTerms = z.infer<typeof sponsorshipTermsSchema>;
+export type SponsorshipInterval = Schemas["BillingSponsorship"]["interval"];
+export type SponsorshipState = Schemas["BillingSponsorship"]["state"];
 
-const sponsorshipWireSchema = z.object({
+export type SponsorshipTerms = Schemas["BillingSponsorshipTerms"];
+const sponsorshipTermsSchema: z.ZodType<SponsorshipTerms> = z.object({
+  minCents: z.number(),
+  maxCents: z.number(),
+  currency: z.literal("usd"),
+});
+
+type SponsorshipPaymentWire = Pick<
+  Schemas["BillingSponsorship"]["payments"][number],
+  "id" | "amountCents" | "status" | "paidAt" | "receiptUrl"
+>;
+type SponsorshipWire = Omit<Schemas["BillingSponsorship"], "payments"> & { payments: SponsorshipPaymentWire[] };
+
+const sponsorshipWireSchema: z.ZodType<SponsorshipWire> = z.object({
   id: z.string(),
-  interval: z.enum(SPONSORSHIP_INTERVALS),
+  interval: specEnumSchema<SponsorshipInterval>("BillingSponsorship", "interval"),
   amountCents: z.number(),
   currency: z.string(),
-  state: z.enum(SPONSORSHIP_STATES),
+  state: specEnumSchema<SponsorshipState>("BillingSponsorship", "state"),
   cancelAtPeriodEnd: z.boolean(),
   currentPeriodEnd: z.string().nullable(),
   createdAt: z.string(),
@@ -177,7 +183,7 @@ const sponsorshipWireSchema = z.object({
     z.object({
       id: z.string(),
       amountCents: z.number(),
-      status: z.string(),
+      status: z.enum(["paid", "partially_refunded", "refunded"]),
       paidAt: z.string(),
       receiptUrl: z.string().nullable(),
     })
@@ -185,42 +191,43 @@ const sponsorshipWireSchema = z.object({
 });
 const sponsorshipsSchema = z.object({ sponsorships: z.array(sponsorshipWireSchema) });
 
-export interface SponsorshipPayment {
-  id: string;
-  amountCents: number;
-  status: string;
-  /** Epoch milliseconds. */
-  paidAt: number;
-  /** The provider's hosted receipt; null when there is none to open. */
-  receiptUrl: string | null;
-}
+/** `paidAt` is epoch milliseconds; `receiptUrl` is the provider's hosted receipt, null when there is none to open. */
+export type SponsorshipPayment = Omit<SponsorshipPaymentWire, "paidAt"> & { paidAt: number };
 
-export interface Sponsorship {
-  id: string;
-  interval: SponsorshipInterval;
-  amountCents: number;
-  currency: string;
-  state: SponsorshipState;
-  /** A monthly sponsorship that stops at the end of the paid period. */
-  cancelAtPeriodEnd: boolean;
-  /** Epoch milliseconds; null for a one-time sponsorship. */
+/**
+ * Times are epoch milliseconds. `cancelAtPeriodEnd` is a monthly sponsorship that stops at the end of the paid
+ * period; `currentPeriodEnd` is null for a one-time sponsorship.
+ */
+export type Sponsorship = Omit<SponsorshipWire, "currentPeriodEnd" | "createdAt" | "payments"> & {
   currentPeriodEnd: number | null;
-  /** Epoch milliseconds. */
   createdAt: number;
   payments: SponsorshipPayment[];
-}
+};
 
 /** A change answers with the changed row; the portal reloads its list rather than reading it. */
 const changedSchema = z.object({}).passthrough();
 
-const sponsorshipCheckoutViewSchema = z.object({ id: z.string(), state: z.enum(CHECKOUT_STATES) });
-export type SponsorshipCheckoutView = z.infer<typeof sponsorshipCheckoutViewSchema>;
+export type SponsorshipCheckoutView = Pick<Schemas["BillingCheckout"], "id" | "state">;
+const sponsorshipCheckoutViewSchema: z.ZodType<SponsorshipCheckoutView> = z.object({
+  id: z.string(),
+  state: checkoutStateSchema,
+});
 
-const checkoutOpenedSchema = z.object({ url: z.string(), checkoutId: z.string() });
-const urlSchema = z.object({ url: z.string() });
-const ensureSchema = z.object({ accountId: z.string(), version: z.number() });
+const checkoutOpenedSchema: z.ZodType<Schemas["BillingCheckoutOpened"]> = z.object({
+  url: z.string(),
+  checkoutId: z.string(),
+});
+const urlSchema: z.ZodType<Schemas["BillingUrl"]> = z.object({ url: z.string() });
+const ensureSchema: z.ZodType<Pick<Schemas["BillingSubscription"], "accountId" | "version">> = z.object({
+  accountId: z.string(),
+  version: z.number(),
+});
 const invoicesSchema = z.object({ invoices: z.array(invoiceWireSchema) });
-const checkoutViewSchema = z.object({ id: z.string(), accountId: z.string(), state: z.enum(CHECKOUT_STATES) });
+const checkoutViewSchema: z.ZodType<CheckoutView> = z.object({
+  id: z.string(),
+  accountId: z.string(),
+  state: checkoutStateSchema,
+});
 
 export interface CheckoutRequest {
   accountId: string;
@@ -265,6 +272,8 @@ export interface BillingClient {
   lookupPromotionCode(code: string): Promise<BillingResult<AppliedDiscount | null>>;
   /** `accountId` is the org the caller acts for; another org's checkout answers `checkout_not_found`. */
   checkoutState(checkoutId: string, accountId: string): Promise<BillingResult<CheckoutView>>;
+  /** What each plan sells for now; the plane is the only source of prices. */
+  planPrices(): Promise<BillingResult<PlanPrice[]>>;
   /** What a sponsorship may cost; the plane's own limits, never Convex's. */
   sponsorshipTerms(): Promise<BillingResult<SponsorshipTerms>>;
   startSponsorshipCheckout(
@@ -348,19 +357,49 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/** Whose billing a call acts for; the plane refuses a key bound to the other owner, so each owner has its own key. */
+export type RouteOwner = "org" | "user" | "public";
+
 export interface BillingClientConfig {
   baseUrl: string;
-  apiKey: string;
+  orgKey: string;
+  userKey: string;
 }
 
-/** The deployment's plane credential, or null on a deployment without the service. */
+/** Set once the unbound-key fallback has been announced, so a busy deployment logs it a single time per isolate. */
+let legacyKeyAnnounced = false;
+
+/**
+ * The deployment's plane credentials, or null on a deployment without the service. Throws when the URL is set and
+ * exactly one of the two owner keys is, since half a configuration would fail on the other owner's first call.
+ * While neither owner key is set, MAINTENANCE_API_KEY serves both owners.
+ */
 export function billingConfigFromEnv(env: Record<string, string | undefined>): BillingClientConfig | null {
   const baseUrl = env.MAINTENANCE_API_URL;
-  const apiKey = env.MAINTENANCE_API_KEY;
-  if (!baseUrl || !apiKey) {
+  if (!baseUrl) {
     return null;
   }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+  const orgKey = env.MAINTENANCE_BILLING_ORG_KEY || undefined;
+  const userKey = env.MAINTENANCE_BILLING_USER_KEY || undefined;
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  if (orgKey !== undefined && userKey !== undefined) {
+    return { baseUrl: cleanBase, orgKey, userKey };
+  }
+  if (orgKey !== undefined || userKey !== undefined) {
+    const missing = orgKey === undefined ? "MAINTENANCE_BILLING_ORG_KEY" : "MAINTENANCE_BILLING_USER_KEY";
+    throw new Error(`Billing is half configured: ${missing} is not set. Set both owner keys or neither.`);
+  }
+  const legacyKey = env.MAINTENANCE_API_KEY || undefined;
+  if (legacyKey === undefined) {
+    return null;
+  }
+  if (!legacyKeyAnnounced) {
+    legacyKeyAnnounced = true;
+    console.warn(
+      "billing uses MAINTENANCE_API_KEY for both owners; set MAINTENANCE_BILLING_ORG_KEY and MAINTENANCE_BILLING_USER_KEY instead"
+    );
+  }
+  return { baseUrl: cleanBase, orgKey: legacyKey, userKey: legacyKey };
 }
 
 function errorFrom(text: string, status: number): BillingError {
@@ -386,6 +425,7 @@ function errorFrom(text: string, status: number): BillingError {
 }
 
 interface Call {
+  owner: RouteOwner;
   method: "GET" | "POST" | "PATCH";
   path: string;
   body?: unknown;
@@ -399,6 +439,7 @@ export class HttpBillingClient implements BillingClient {
   ensure(accountId: string) {
     return this.send(
       {
+        owner: "org",
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/ensure`,
         idempotencyKey: ensureIdempotencyKey(accountId),
@@ -408,39 +449,45 @@ export class HttpBillingClient implements BillingClient {
   }
 
   startCheckout(request: CheckoutRequest) {
-    return this.send(
+    return this.sendForUrl(
       {
+        owner: "org",
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(request.accountId)}/checkouts`,
         idempotencyKey: request.idempotencyKey,
-        body: { plan: request.tier, interval: request.interval, promotionCode: request.promotionCode ?? null },
+        body: {
+          plan: request.tier,
+          interval: request.interval,
+          promotionCode: request.promotionCode ?? null,
+        } satisfies Schemas["BillingCheckoutBody"],
       },
       checkoutOpenedSchema
     );
   }
 
   startMarketplaceCheckout(request: MarketplaceCheckoutRequest) {
-    return this.send(
+    return this.sendForUrl(
       {
+        owner: "org",
         method: "POST",
         path: `/v1/billing/accounts/${encodeURIComponent(request.accountId)}/marketplace-checkouts`,
         idempotencyKey: request.idempotencyKey,
-        body: { intentId: request.intentId },
+        body: { intentId: request.intentId } satisfies Schemas["BillingMarketplaceCheckoutBody"],
       },
       checkoutOpenedSchema
     );
   }
 
   openPortal(accountId: string) {
-    return this.send(
-      { method: "POST", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/portal-sessions` },
+    return this.sendForUrl(
+      { owner: "org", method: "POST", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/portal-sessions` },
       urlSchema
     );
   }
 
   async listInvoices(accountId: string) {
     const result = await this.send(
-      { method: "GET", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/invoices` },
+      { owner: "org", method: "GET", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/invoices` },
       invoicesSchema
     );
     if (!result.ok) {
@@ -453,7 +500,7 @@ export class HttpBillingClient implements BillingClient {
 
   async lookupPromotionCode(code: string) {
     const result = await this.send(
-      { method: "GET", path: `/v1/billing/promotion-codes/${encodeURIComponent(code.trim())}` },
+      { owner: "org", method: "GET", path: `/v1/billing/promotion-codes/${encodeURIComponent(code.trim())}` },
       appliedDiscountSchema
     );
     if (!result.ok && result.error.code === "promotion_code_not_found") {
@@ -465,6 +512,7 @@ export class HttpBillingClient implements BillingClient {
   checkoutState(checkoutId: string, accountId: string) {
     return this.send(
       {
+        owner: "org",
         method: "GET",
         path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?accountId=${encodeURIComponent(accountId)}`,
       },
@@ -472,24 +520,37 @@ export class HttpBillingClient implements BillingClient {
     );
   }
 
+  async planPrices() {
+    const result = await this.send({ owner: "public", method: "GET", path: "/v1/billing/prices" }, planPricesSchema);
+    return result.ok ? billingOk(result.value.prices) : result;
+  }
+
   sponsorshipTerms() {
-    return this.send({ method: "GET", path: "/v1/billing/sponsorship-terms" }, sponsorshipTermsSchema);
+    return this.send({ owner: "user", method: "GET", path: "/v1/billing/sponsorship-terms" }, sponsorshipTermsSchema);
   }
 
   startSponsorshipCheckout(request: SponsorshipCheckoutRequest) {
-    return this.send(
+    return this.sendForUrl(
       {
+        owner: "user",
         method: "POST",
         path: `${userPath(request.userId)}/sponsorship-checkouts`,
         idempotencyKey: request.idempotencyKey,
-        body: { amountCents: request.amountCents, interval: request.interval, returnUrl: request.returnUrl },
+        body: {
+          amountCents: request.amountCents,
+          interval: request.interval,
+          returnUrl: request.returnUrl,
+        } satisfies Schemas["BillingSponsorshipCheckoutBody"],
       },
       checkoutOpenedSchema
     );
   }
 
   async listSponsorships(userId: string) {
-    const result = await this.send({ method: "GET", path: `${userPath(userId)}/sponsorships` }, sponsorshipsSchema);
+    const result = await this.send(
+      { owner: "user", method: "GET", path: `${userPath(userId)}/sponsorships` },
+      sponsorshipsSchema
+    );
     if (!result.ok) {
       return result;
     }
@@ -505,7 +566,12 @@ export class HttpBillingClient implements BillingClient {
 
   async changeSponsorshipAmount(userId: string, sponsorshipId: string, amountCents: number) {
     const result = await this.send(
-      { method: "PATCH", path: sponsorshipPath(userId, sponsorshipId), body: { amountCents } },
+      {
+        owner: "user",
+        method: "PATCH",
+        path: sponsorshipPath(userId, sponsorshipId),
+        body: { amountCents } satisfies Schemas["BillingSponsorshipAmountBody"],
+      },
       changedSchema
     );
     return result.ok ? billingOk(null) : result;
@@ -513,18 +579,24 @@ export class HttpBillingClient implements BillingClient {
 
   async cancelSponsorship(userId: string, sponsorshipId: string, atPeriodEnd: boolean) {
     const result = await this.send(
-      { method: "POST", path: `${sponsorshipPath(userId, sponsorshipId)}/cancel`, body: { atPeriodEnd } },
+      {
+        owner: "user",
+        method: "POST",
+        path: `${sponsorshipPath(userId, sponsorshipId)}/cancel`,
+        body: { atPeriodEnd } satisfies Schemas["BillingSponsorshipCancelBody"],
+      },
       changedSchema
     );
     return result.ok ? billingOk(null) : result;
   }
 
   sponsorshipPaymentMethodSession(userId: string, sponsorshipId: string, returnUrl: string) {
-    return this.send(
+    return this.sendForUrl(
       {
+        owner: "user",
         method: "POST",
         path: `${sponsorshipPath(userId, sponsorshipId)}/payment-method-sessions`,
-        body: { returnUrl },
+        body: { returnUrl } satisfies Schemas["BillingReturnUrlBody"],
       },
       urlSchema
     );
@@ -533,6 +605,7 @@ export class HttpBillingClient implements BillingClient {
   sponsorshipCheckoutState(checkoutId: string, userId: string) {
     return this.send(
       {
+        owner: "user",
         method: "GET",
         path: `/v1/billing/checkouts/${encodeURIComponent(checkoutId)}?userId=${encodeURIComponent(userId)}`,
       },
@@ -540,8 +613,28 @@ export class HttpBillingClient implements BillingClient {
     );
   }
 
+  /** Hands a caller a provider URL only if it is one the browser may be sent to. */
+  private async sendForUrl<S extends z.ZodType<{ url: string }>>(
+    call: Call,
+    schema: S
+  ): Promise<BillingResult<z.infer<S>>> {
+    const result = await this.send(call, schema);
+    if (!result.ok) {
+      return result;
+    }
+    const checked = parseHttpsUrl(result.value.url);
+    if (!checked.ok) {
+      console.error("billing plane returned an unusable URL", { path: call.path, reason: checked.reason });
+      return billingErr("unexpected_response", "The billing service answered with a link that cannot be opened.");
+    }
+    return result;
+  }
+
   private async send<S extends z.ZodType>(call: Call, schema: S): Promise<BillingResult<z.infer<S>>> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${this.config.apiKey}` };
+    const headers: Record<string, string> = {};
+    if (call.owner !== "public") {
+      headers.Authorization = `Bearer ${call.owner === "org" ? this.config.orgKey : this.config.userKey}`;
+    }
     if (call.body !== undefined) {
       headers["Content-Type"] = "application/json";
     }

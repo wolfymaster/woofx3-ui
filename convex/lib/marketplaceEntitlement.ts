@@ -17,7 +17,14 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
-import { MarketplaceError, marketplaceAuthed, marketplaceGet, queryString } from "./marketplaceApi";
+import {
+  type AcquireBody,
+  MarketplaceError,
+  marketplaceAuthed,
+  marketplaceGet,
+  marketplaceServiceToken,
+  queryString,
+} from "./marketplaceApi";
 import { buyerSigningKeyFromEnv, mintBuyerToken } from "./marketplaceBuyerToken";
 
 /**
@@ -73,7 +80,7 @@ export async function marketplaceAccessForInstanceId(
 
 /** Whether this deployment holds the marketplace's write token. */
 export function commerceConfigured(): boolean {
-  return Boolean(process.env.MARKETPLACE_API_TOKEN?.trim());
+  return Boolean(marketplaceServiceToken());
 }
 
 /**
@@ -141,13 +148,13 @@ export async function acquireListing(
       return;
     }
     throw new ConvexError(
-      `${listingName} is not free, and purchases cannot be checked on this deployment (MARKETPLACE_API_TOKEN is not set).`
+      `${listingName} is not free, and purchases cannot be checked on this deployment (MARKETPLACE_CONVEX_TOKEN is not set).`
     );
   }
 
   const buyerRef = await buyerRefFor(ctx, instanceId);
   try {
-    await marketplaceAuthed(`${path}/acquire`, "POST", { buyerRef });
+    await marketplaceAuthed(`${path}/acquire`, "POST", { buyerRef } satisfies AcquireBody);
   } catch (err) {
     const message = acquireRefusal(err, listingName);
     if (message !== null) {
@@ -197,7 +204,7 @@ export function contentRefusal(err: unknown, listingName: string): string | null
     return notBoughtMessage(listingName);
   }
   if (err.status === 401) {
-    return `${listingName} is not free, and purchases cannot be checked on this deployment (MARKETPLACE_API_TOKEN is not set).`;
+    return `${listingName} is not free, and purchases cannot be checked on this deployment (MARKETPLACE_CONVEX_TOKEN is not set).`;
   }
   return null;
 }

@@ -10,12 +10,20 @@ The internal backoffice (woofx3-maintenance `backoffice/`) shows operators manag
 
 ## Decision
 
-A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only the backoffice server calls.
+A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the backoffice server and the maintenance billing process call, each with its own secret and route scope.
 
 - **Authentication:**
-    - The caller sends `Authorization: Bearer <OPS_API_SECRET>`, compared in constant time.
-    - `OPS_API_SECRET_NEXT` is also accepted, so the secret can rotate.
-    - A secret shorter than 32 bytes counts as unset. With no secret configured, as on preview deployments, every route answers `401`; the API never fails open.
+    - The caller sends `Authorization: Bearer <secret>`, compared in constant time against every configured secret. The secret that matches names the caller, and the caller is recorded in `opsAuditLog.caller`.
+    - Callers are the table in `convex/lib/ops/callers.ts`. Each has `OPS_API_SECRET_<NAME>` and a `_NEXT` slot for rotation:
+
+      | Caller | Env | Routes |
+      | --- | --- | --- |
+      | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.billingProjection`, `notifications.create` |
+      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `accounts.billingProjectionReset` |
+      | `legacy` | `OPS_API_SECRET` | every route; logged as deprecated on each request |
+
+    - A route outside the caller's scope answers `403 forbidden_route`.
+    - A secret shorter than 43 characters counts as unset. With no secret configured, as on preview deployments, every route answers `401`; the API never fails open.
     - Routes authenticate before anything else, so an unauthenticated caller cannot tell which routes exist.
 - **Who is acting:**
     - Every request names the operator in `X-Woofx3-Actor`, or gets `400`.
@@ -55,7 +63,8 @@ Operators also set what only an operator may:
 | Route | Does |
 |---|---|
 | `POST /api/ops/instances/:instanceId/storage-limits` | Replaces a managed engine's hosted storage override, `{ totalBytes?, fileBytes?, moduleStorageBytes? }` in bytes. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears the override. An engine someone else hosts answers `409 not_managed`. |
-| `POST /api/ops/accounts/:id/billing-projection` | The management plane's billing projection: tier (or `null`), add-ons, standing and its dates, `interval`, `exemptUntil`, `spinDownAt`, `hasProviderSubscription`, `discount` (`{ label }` or `null`) and entitlement overrides (`limits` values may be `null` for unlimited). `Idempotency-Key` must be `{accountId}:{version}`. Stored in `orgBilling` unless an equal or newer version is already held (`{ applied: false, version }`). Unknown fields, unknown override keys, a feature both added and removed, and a `trialing` standing with no `trialEndsAt` answer `400 invalid_billing_projection`, so Convex must learn a field before the plane sends it. Once an org has a projection it drives its entitlements; an org without one is gated as one with no subscription was before billing existed. An applied push is audited with the actor and reason. |
+| `POST /api/ops/accounts/:id/billing-projection` | The management plane's billing projection: tier (or `null`), add-ons, standing and its dates, `interval`, `exemptUntil`, `spinDownAt`, `hasProviderSubscription`, `discount` (`{ label }` or `null`) and entitlement overrides (`limits` values may be `null` for unlimited). `Idempotency-Key` must be `{accountId}:{version}`. Stored in `orgBilling` unless an equal or newer version is already held (`{ applied: false, version }`). Unknown fields, unknown override keys, a feature both added and removed, and a `trialing` standing with no `trialEndsAt` answer `400 invalid_billing_projection`, so Convex must learn a field before the plane sends it. Once an org has a projection it drives its entitlements; an org without one is gated as one with no subscription was before billing existed. An applied push is audited with the actor and reason. A `version` above 2^31 - 1 (the plane's counter is a Postgres `integer`) answers `400 invalid_billing_projection`. |
+| `POST /api/ops/accounts/:id/billing-projection-reset` | Operator-only. Sets the org's stored projection version back to 0 so the plane's next push is applied, for a stuck version or a rebuilt plane counter; answers `{ previousVersion, version: 0 }`. Every other stored field stays, so entitlements do not change until a push arrives. Forgets the org's remembered `Idempotency-Key`s so a re-sent version is applied, not replayed. `404 no_projection` when none is stored. Audited with the actor and the required reason. |
 
 - **Idempotency keys:** the billing projection push runs once per key, so the management plane can retry after a timeout or a `5xx`.
     - It takes an `Idempotency-Key` header, `{accountId}:{version}`. Missing or malformed, it answers `400 invalid_idempotency_key`.
@@ -78,5 +87,5 @@ Operators also set what only an operator may:
 - Email addresses and Twitch identities are returned in full to every backoffice role.
 
 ```bash
-bunx convex env set OPS_API_SECRET "$(openssl rand 32 | basenc --base64url | tr -d =)"
+bunx convex env set OPS_API_SECRET_BACKOFFICE "$(openssl rand 32 | basenc --base64url | tr -d =)"
 ```

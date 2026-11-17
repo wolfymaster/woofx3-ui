@@ -84,7 +84,7 @@ These live in the `preview` GitHub Environment (**Settings → Environments → 
 | `PREVIEW_BASE_DOMAIN` | variable | `woofx3.com`; must match the maintenance API's `PREVIEW_BASE_DOMAIN` |
 | `ENGINE_VERSION` | variable | Optional. The engine release previews get when their description names none (`latest` when unset) |
 | `STAGING_MAINTENANCE_API_URL` | variable | The staging maintenance API (fake engine providers, Stripe test keys). Set on the preview's Convex deployment as `MAINTENANCE_API_URL` |
-| `STAGING_MAINTENANCE_API_KEY` | secret | Staging API key with `billing:read`, `billing:write`, `engines:read`, `engines:write`, `email:send` and `engine-events:write`. Set on the Convex deployment as `MAINTENANCE_API_KEY` |
+| `STAGING_MAINTENANCE_API_KEY` | secret | Staging API key with `billing:read`, `billing:write`, `engines:read`, `engines:write`, `email:send` and `engine-events:write`. Set on the Convex deployment as `MAINTENANCE_API_KEY`, which billing uses for both owners until `MAINTENANCE_BILLING_ORG_KEY` and `MAINTENANCE_BILLING_USER_KEY` are set |
 | `STAGING_OPS_API_SECRET` | secret | The secret the staging API presents to a preview's ops API. Set on the Convex deployment as `OPS_API_SECRET` |
 
 Other Convex environment variables a preview needs (`AUTH_TWITCH_*`, JWT keys, storage configuration, and the two OAuth variables below) come from the Convex project's default environment variables for preview deployments, set in the Convex dashboard.

@@ -20,6 +20,7 @@ import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction, requireOrgActionOnInstanceInAction } from "./lib/instanceAccess";
 import {
+  type AcquireBody,
   MarketplaceError,
   marketplaceAuthed,
   marketplaceGet,
@@ -269,7 +270,9 @@ export const acquireForInstall = action({
       const buyerRef = await buyerRefFor(ctx, args.instanceId);
       try {
         return licensedFromAcquire(
-          await marketplaceAuthed(`/catalog/${encodeURIComponent(args.listingId)}/acquire`, "POST", { buyerRef })
+          await marketplaceAuthed(`/catalog/${encodeURIComponent(args.listingId)}/acquire`, "POST", {
+            buyerRef,
+          } satisfies AcquireBody)
         );
       } catch (err) {
         const outcome = acquireOutcomeOfError(err);

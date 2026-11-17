@@ -22,6 +22,17 @@ interface ConvexAnswers {
   meId: string;
 }
 const ConvexAnswersContext = createContext<ConvexAnswers>({ members: null, meId: "owner-user" });
+const PRICES_READY = {
+  state: "ready",
+  names: { starter: "Starter", pro: "Pro" },
+  prices: [
+    { plan: "starter", interval: "month", amountCents: 7_500, currency: "usd" },
+    { plan: "starter", interval: "year", amountCents: 75_000, currency: "usd" },
+    { plan: "pro", interval: "month", amountCents: 15_000, currency: "usd" },
+    { plan: "pro", interval: "year", amountCents: 150_000, currency: "usd" },
+  ],
+};
+
 // One function for every render: the pages list invoices in an effect keyed on the action.
 let search = "";
 const useTestSearch = () => search;
@@ -109,7 +120,7 @@ const ACCOUNT_ID = "account-1" as Id<"accounts">;
 
 beforeEach(() => {
   search = "";
-  actionAnswers = {};
+  actionAnswers = { "prices:list": PRICES_READY };
   askedActions = [];
 });
 
@@ -127,6 +138,8 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
       manageEngines: true,
       renameEngine: owner,
       createEngine: owner,
+      changeEngineUrl: owner,
+      deleteEngine: owner,
       viewBilling: true,
       manageBilling: owner,
     },
@@ -298,6 +311,20 @@ describe("Plan page", () => {
     const renderer = await render("owner", <PlanPage />);
     expect(JSON.stringify(renderer.toJSON())).toContain("Subscription");
     expect(byTestId(renderer, "card-sponsorship").length).toBe(1);
+  });
+
+  test("the plan chooser shows the plane's prices and plan names", async () => {
+    const page = JSON.stringify((await render("owner", <PlanPage />)).toJSON());
+    expect(page).toContain("$75/mo");
+    expect(page).toContain("$150/mo");
+    expect(page).not.toContain("price unavailable");
+  });
+
+  test("the plan chooser says price unavailable when the plane has no price to give", async () => {
+    actionAnswers["prices:list"] = { state: "unavailable", names: { starter: "Starter", pro: "Pro" } };
+    const page = JSON.stringify((await render("owner", <PlanPage />)).toJSON());
+    expect(page).toContain("price unavailable");
+    expect(page).not.toContain("/mo");
   });
 
   test("only the owner's header has the rename control", async () => {

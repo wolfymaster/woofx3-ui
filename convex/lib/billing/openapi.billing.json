@@ -1,0 +1,2224 @@
+{
+  "components": {
+    "parameters": {},
+    "schemas": {
+      "BillingCheckout": {
+        "properties": {
+          "accountId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "purposeKind": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "awaiting_payment",
+              "complete",
+              "expired",
+              "needs_review"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "userId",
+          "purposeKind",
+          "state"
+        ],
+        "type": "object"
+      },
+      "BillingCheckoutBody": {
+        "additionalProperties": false,
+        "properties": {
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          },
+          "promotionCode": {
+            "maxLength": 100,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "plan",
+          "interval"
+        ],
+        "type": "object"
+      },
+      "BillingCheckoutOpened": {
+        "properties": {
+          "checkoutId": {
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "checkoutId"
+        ],
+        "type": "object"
+      },
+      "BillingConflictError": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BillingRefusalCode"
+                  },
+                  {
+                    "enum": [
+                      "idempotency_key_reused"
+                    ],
+                    "type": "string"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "BillingInvoice": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "hostedUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "periodStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "open",
+              "paid",
+              "uncollectible",
+              "void"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "periodStart",
+          "amountCents",
+          "status",
+          "hostedUrl"
+        ],
+        "type": "object"
+      },
+      "BillingInvoices": {
+        "properties": {
+          "invoices": {
+            "items": {
+              "$ref": "#/components/schemas/BillingInvoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "invoices"
+        ],
+        "type": "object"
+      },
+      "BillingMarketplaceCheckoutBody": {
+        "additionalProperties": false,
+        "properties": {
+          "intentId": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "intentId"
+        ],
+        "type": "object"
+      },
+      "BillingPlanPrice": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "enum": [
+              "usd"
+            ],
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "interval",
+          "amountCents",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "BillingPlanPrices": {
+        "properties": {
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/BillingPlanPrice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "prices"
+        ],
+        "type": "object"
+      },
+      "BillingRefusalCode": {
+        "enum": [
+          "subscription_not_found",
+          "account_not_found",
+          "already_subscribed",
+          "subscription_exists",
+          "suspended_by_operator",
+          "exempt",
+          "checkout_in_progress",
+          "no_customer",
+          "unknown_discount",
+          "promotion_code_not_found",
+          "checkout_not_found",
+          "intent_not_found",
+          "intent_not_payable",
+          "intent_expiring",
+          "intent_already_paid",
+          "intent_invalid",
+          "listing_unavailable",
+          "invalid_sponsorship_amount",
+          "invalid_return_url",
+          "sponsorship_not_found",
+          "sponsorship_not_recurring",
+          "sponsorship_canceled"
+        ],
+        "type": "string"
+      },
+      "BillingRefusalError": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/BillingRefusalCode"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "BillingReturnUrlBody": {
+        "additionalProperties": false,
+        "properties": {
+          "returnUrl": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "returnUrl"
+        ],
+        "type": "object"
+      },
+      "BillingSponsorship": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "currentPeriodEnd": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "once"
+            ],
+            "type": "string"
+          },
+          "payments": {
+            "items": {
+              "properties": {
+                "amountCents": {
+                  "type": "integer"
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "paidAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "receiptUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "refundedCents": {
+                  "type": "integer"
+                },
+                "status": {
+                  "enum": [
+                    "paid",
+                    "partially_refunded",
+                    "refunded"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "amountCents",
+                "refundedCents",
+                "currency",
+                "status",
+                "paidAt",
+                "receiptUrl"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "past_due",
+              "canceled",
+              "complete"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "interval",
+          "amountCents",
+          "currency",
+          "state",
+          "cancelAtPeriodEnd",
+          "currentPeriodEnd",
+          "createdAt",
+          "payments"
+        ],
+        "type": "object"
+      },
+      "BillingSponsorshipAmountBody": {
+        "additionalProperties": false,
+        "properties": {
+          "amountCents": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "amountCents"
+        ],
+        "type": "object"
+      },
+      "BillingSponsorshipCancelBody": {
+        "additionalProperties": false,
+        "properties": {
+          "atPeriodEnd": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "BillingSponsorshipCheckoutBody": {
+        "additionalProperties": false,
+        "properties": {
+          "amountCents": {
+            "type": "number"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "once"
+            ],
+            "type": "string"
+          },
+          "returnUrl": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "amountCents",
+          "interval",
+          "returnUrl"
+        ],
+        "type": "object"
+      },
+      "BillingSponsorshipTerms": {
+        "properties": {
+          "currency": {
+            "enum": [
+              "usd"
+            ],
+            "type": "string"
+          },
+          "maxCents": {
+            "type": "integer"
+          },
+          "minCents": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "minCents",
+          "maxCents",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "BillingSponsorships": {
+        "properties": {
+          "sponsorships": {
+            "items": {
+              "$ref": "#/components/schemas/BillingSponsorship"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sponsorships"
+        ],
+        "type": "object"
+      },
+      "BillingSubscription": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "nextBillingAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "enum": [
+              "signup"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "trialing",
+              "active",
+              "past_due",
+              "suspended",
+              "exempt"
+            ],
+            "type": "string"
+          },
+          "stateReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trialStartedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accountId",
+          "version",
+          "plan",
+          "state",
+          "stateReason",
+          "origin",
+          "trialStartedAt",
+          "nextBillingAt"
+        ],
+        "type": "object"
+      },
+      "BillingUnavailableCode": {
+        "enum": [
+          "payment_unavailable",
+          "payment_refused",
+          "payment_request_invalid",
+          "identity_unavailable",
+          "marketplace_unavailable",
+          "marketplace_refused",
+          "marketplace_not_configured"
+        ],
+        "type": "string"
+      },
+      "BillingUnavailableError": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/BillingUnavailableCode"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "BillingUrl": {
+        "properties": {
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "Error": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "example": "slug_taken",
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "description": "wx3m_<id>_<secret>. A key may be bound to org (the /v1/billing/accounts routes and promotion codes) or user (the /v1/billing/users routes and sponsorship terms); a bound key calling the other kind gets 403 forbidden_billing_owner.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "woofx3 maintenance billing API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/billing/accounts/{id}/checkouts": {
+      "post": {
+        "description": "Requests with one Idempotency-Key get one answer. The same terms within a half hour reuse the open provider session; other terms replace it, so an organization has one payable checkout. Refused while the organization pays, while a failing payment is mended in the portal (`subscription_exists`), and under an operator suspension.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingCheckoutBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCheckoutOpened"
+                }
+              }
+            },
+            "description": "The checkout"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: something the request names is not valid"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Open a checkout for a plan"
+      }
+    },
+    "/v1/billing/accounts/{id}/ensure": {
+      "post": {
+        "description": "Idempotent: 201 when this call created the subscription (a 30-day Starter trial), 200 with the existing one otherwise.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "description": "A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSubscription"
+                }
+              }
+            },
+            "description": "The organization already had billing"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSubscription"
+                }
+              }
+            },
+            "description": "The trial was started"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start the organization's trial if it has no billing yet"
+      }
+    },
+    "/v1/billing/accounts/{id}/invoices": {
+      "get": {
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingInvoices"
+                }
+              }
+            },
+            "description": "Newest first"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The organization's newest invoices, read from the provider"
+      }
+    },
+    "/v1/billing/accounts/{id}/marketplace-checkouts": {
+      "post": {
+        "description": "Charges the marketplace's purchase intent `intentId`, which must be open, unexpired and this organization's; the amount is the intent's, never the caller's. Requests with one Idempotency-Key get one answer, and retries within a half hour reuse the open provider session, so an intent has one payable checkout. Once its payment is confirmed the marketplace grants the module; `GET /v1/billing/checkouts/{id}` follows it. 503 `marketplace_not_configured` while paid module purchases are not set up.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingMarketplaceCheckoutBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCheckoutOpened"
+                }
+              }
+            },
+            "description": "The checkout"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: something the request names is not valid"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Open a checkout for a module purchase"
+      }
+    },
+    "/v1/billing/accounts/{id}/portal-sessions": {
+      "post": {
+        "description": "Not idempotent: each call opens a new short-lived session that returns the customer to the billing site.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUrl"
+                }
+              }
+            },
+            "description": "The portal"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Open the provider's customer portal"
+      }
+    },
+    "/v1/billing/checkouts/{id}": {
+      "get": {
+        "description": "`needs_review` is a module purchase that was paid but could not be granted; support settles it. Name exactly one owner: `accountId` for an organization's checkout, `userId` for a sponsorship's. A checkout of another owner answers 404, as a missing one does.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The organization the caller acts for.",
+            "in": "query",
+            "name": "accountId",
+            "required": false,
+            "schema": {
+              "description": "The organization the caller acts for.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The person the caller acts for, for a sponsorship's checkout.",
+            "in": "query",
+            "name": "userId",
+            "required": false,
+            "schema": {
+              "description": "The person the caller acts for, for a sponsorship's checkout.",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCheckout"
+                }
+              }
+            },
+            "description": "The checkout"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Where a checkout stands, for the success page"
+      }
+    },
+    "/v1/billing/prices": {
+      "get": {
+        "description": "Public, unauthenticated and cacheable: the price in effect today for every plan and interval, in whole cents. Every client shows these and none keeps a copy.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPlanPrices"
+                }
+              }
+            },
+            "description": "The prices in effect"
+          }
+        },
+        "summary": "What each plan sells for now"
+      }
+    },
+    "/v1/billing/promotion-codes/{code}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "endsAt": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "spec": {
+                      "oneOf": [
+                        {
+                          "properties": {
+                            "duration": {
+                              "oneOf": [
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "once"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "months"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "months": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "months"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "forever"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "enum": [
+                                "percent_off"
+                              ],
+                              "type": "string"
+                            },
+                            "percent": {
+                              "exclusiveMinimum": 0,
+                              "maximum": 100,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "percent",
+                            "duration"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "amountCents": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "currency": {
+                              "enum": [
+                                "usd"
+                              ],
+                              "type": "string"
+                            },
+                            "duration": {
+                              "oneOf": [
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "once"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "months"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "months": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "months"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "forever"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "enum": [
+                                "amount_off"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "amountCents",
+                            "currency",
+                            "duration"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "spec",
+                    "code",
+                    "endsAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The discount"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "What a promotion code would take off, before checkout"
+      }
+    },
+    "/v1/billing/sponsorship-terms": {
+      "get": {
+        "description": "The amount rule every client shows: whole cents from `minCents` to `maxCents`, in `currency`.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSponsorshipTerms"
+                }
+              }
+            },
+            "description": "The terms"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "What a sponsorship may charge"
+      }
+    },
+    "/v1/billing/users/{userId}/sponsorship-checkouts": {
+      "post": {
+        "description": "Monthly (`month`) or one-time (`once`), for `amountCents` within the sponsorship terms (422 `invalid_sponsorship_amount` otherwise). `returnUrl` must be on an allowed origin (422 `invalid_return_url`); the provider sends the sponsor back to it with `sponsorship=done&sponsorshipCheckout=<checkoutId>` once paid, or `sponsorship=cancelled`. Requests with one Idempotency-Key get one answer, and retries of the same terms within a half hour reuse the open provider session. Only the webhook confirms the payment; `GET /v1/billing/checkouts/{id}?userId=` follows it.",
+        "parameters": [
+          {
+            "description": "The UI's id for the person; every row read or changed is theirs.",
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the person; every row read or changed is theirs.",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingSponsorshipCheckoutBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCheckoutOpened"
+                }
+              }
+            },
+            "description": "The checkout"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: something the request names is not valid"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Open a checkout for a sponsorship"
+      }
+    },
+    "/v1/billing/users/{userId}/sponsorships": {
+      "get": {
+        "parameters": [
+          {
+            "description": "The UI's id for the person; every row read or changed is theirs.",
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the person; every row read or changed is theirs.",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSponsorships"
+                }
+              }
+            },
+            "description": "Newest first"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The person's sponsorships, newest first, with their payments"
+      }
+    },
+    "/v1/billing/users/{userId}/sponsorships/{id}": {
+      "patch": {
+        "description": "From the next period on, with no proration. 409 `sponsorship_not_recurring` for a one-time sponsorship and `sponsorship_canceled` for one that ended; another person's sponsorship is 404 `sponsorship_not_found`.",
+        "parameters": [
+          {
+            "description": "The UI's id for the person; every row read or changed is theirs.",
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the person; every row read or changed is theirs.",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingSponsorshipAmountBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSponsorship"
+                }
+              }
+            },
+            "description": "The sponsorship"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: something the request names is not valid"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change what a monthly sponsorship charges"
+      }
+    },
+    "/v1/billing/users/{userId}/sponsorships/{id}/cancel": {
+      "post": {
+        "description": "At the end of the current period unless `atPeriodEnd` is false, which ends it now without a refund. Canceling one that ended answers it unchanged. 409 `sponsorship_not_recurring` for a one-time sponsorship.",
+        "parameters": [
+          {
+            "description": "The UI's id for the person; every row read or changed is theirs.",
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the person; every row read or changed is theirs.",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingSponsorshipCancelBody"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSponsorship"
+                }
+              }
+            },
+            "description": "The sponsorship"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a monthly sponsorship"
+      }
+    },
+    "/v1/billing/users/{userId}/sponsorships/{id}/payment-method-sessions": {
+      "post": {
+        "description": "Not idempotent: each call opens a new session. The provider sends the sponsor back to `returnUrl` (an allowed origin) with `sponsorshipPaymentMethod=returned`, whether or not they finished.",
+        "parameters": [
+          {
+            "description": "The UI's id for the person; every row read or changed is theirs.",
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the person; every row read or changed is theirs.",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingReturnUrlBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUrl"
+                }
+              }
+            },
+            "description": "The form"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: something the request names is not valid"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Open the provider's form for a new card on a monthly sponsorship"
+      }
+    }
+  },
+  "webhooks": {}
+}

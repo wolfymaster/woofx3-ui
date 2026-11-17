@@ -1,8 +1,9 @@
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { httpAction } from "../_generated/server";
-import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops/auth";
+import { authenticateOps } from "../lib/ops/auth";
 import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
+import { callerMayUse, nextSecretEnv, OPS_CALLERS } from "../lib/ops/callers";
 import { parseIdempotencyKey } from "../lib/ops/idempotency";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { matchOpsRoute } from "../lib/ops/routes";
@@ -12,15 +13,19 @@ import { projectionIdempotencyKey } from "./billingProjection";
 
 /**
  * The ops API: what the internal backoffice reads about users, accounts and
- * engines. Only the backoffice server calls it, with a secret no browser
- * holds; see lib/ops/auth.ts. It sends no CORS headers, so no page can call
+ * engines, and what the maintenance billing process pushes. Servers call it
+ * with a per-caller secret no browser holds, and each caller may use only the
+ * routes in its scope; see lib/ops/callers.ts and lib/ops/auth.ts. It sends no CORS headers, so no page can call
  * it from a browser. Every route authenticates before anything else, so an
  * unauthenticated caller cannot even tell which routes exist.
  */
 export const opsHandler = httpAction(async (ctx, request) => {
-  const configured = [process.env[OPS_SECRET_ENV], process.env[OPS_SECRET_NEXT_ENV]];
-  if (!configured.some((secret) => secret)) {
-    logger.warn(`ops api: ${OPS_SECRET_ENV} is not configured; refusing`);
+  const configured = OPS_CALLERS.map((caller) => ({
+    caller,
+    secrets: [process.env[caller.envPrefix], process.env[nextSecretEnv(caller.envPrefix)]],
+  }));
+  if (!configured.some((entry) => entry.secrets.some((secret) => secret))) {
+    logger.warn("ops api: no caller secret is configured; refusing");
   }
   const auth = await authenticateOps(request.headers, configured, { requireReason: request.method !== "GET" });
   if (!auth.ok) {
@@ -31,6 +36,12 @@ export const opsHandler = httpAction(async (ctx, request) => {
   const route = matchOpsRoute(request.method, url.pathname);
   if (route === null) {
     return error(404, "not_found", "No such ops route");
+  }
+  if (!callerMayUse(auth.caller, route.name)) {
+    return error(403, "forbidden_route", `Caller "${auth.caller.name}" may not use ${route.name}`);
+  }
+  if (auth.caller.deprecated) {
+    logger.warn(`ops api: deprecated caller "${auth.caller.name}" used ${route.name}; give it its own secret`);
   }
   const cursor = url.searchParams.get("cursor");
   const q = url.searchParams.get("q") ?? undefined;
@@ -44,6 +55,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
         return error(404, "not_found", "No such user");
       }
       await ctx.runMutation(internal.ops.audit.recordRead, {
+        caller: auth.caller.name,
         actor: auth.actor,
         action: "users.get",
         target: route.userId,
@@ -62,6 +74,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
         return error(404, "not_found", "No such account");
       }
       await ctx.runMutation(internal.ops.audit.recordRead, {
+        caller: auth.caller.name,
         actor: auth.actor,
         action: "accounts.get",
         target: route.accountId,
@@ -98,6 +111,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       const outcome = await ctx.runAction(internal.ops.engines.act, {
         instanceId: route.instanceId,
         action: route.action,
+        caller: auth.caller.name,
         actor: auth.actor,
         reason: auth.reason ?? "",
       });
@@ -113,6 +127,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       const outcome = await ctx.runMutation(internal.ops.storageLimits.set, {
         instanceId: route.instanceId,
         limits: parsed.value,
+        caller: auth.caller.name,
         actor: auth.actor,
         reason: auth.reason ?? "",
       });
@@ -129,6 +144,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       // authenticateOps required a reason for this write.
       const outcome = await ctx.runMutation(internal.ops.notifications.create, {
         ...parsed.value,
+        caller: auth.caller.name,
         actor: auth.actor,
         reason: auth.reason ?? "",
       });
@@ -137,6 +153,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
     case "notifications.delete": {
       const outcome = await ctx.runMutation(internal.ops.notifications.remove, {
         notificationId: route.notificationId,
+        caller: auth.caller.name,
         actor: auth.actor,
         reason: auth.reason ?? "",
       });
@@ -159,6 +176,17 @@ export const opsHandler = httpAction(async (ctx, request) => {
       }
       const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, {
         ...parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        // authenticateOps required a reason for this write.
+        auditReason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "accounts.billingProjectionReset": {
+      const outcome = await ctx.runMutation(internal.ops.billingProjection.resetBillingProjection, {
+        accountId: route.accountId,
+        caller: auth.caller.name,
         actor: auth.actor,
         // authenticateOps required a reason for this write.
         auditReason: auth.reason ?? "",

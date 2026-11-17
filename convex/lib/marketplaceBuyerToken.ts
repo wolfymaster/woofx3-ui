@@ -4,7 +4,7 @@ import { base64UrlEncode } from "./oauthHandoff";
 /**
  * Marketplace buyer tokens: short-lived proof that a request acts for one
  * account, so an engine can acquire and download what that account holds
- * without ever holding `MARKETPLACE_API_TOKEN`. Convex is the only minter; the
+ * without ever holding `MARKETPLACE_CONVEX_TOKEN`. Convex is the only minter; the
  * private key is a Convex env var and never leaves this deployment.
  *
  * Format: a compact JWS, every segment unpadded base64url, the signature

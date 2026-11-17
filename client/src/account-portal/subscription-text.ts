@@ -1,6 +1,6 @@
 import type { BillingInterval, SubscriptionState } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
-import { formatDay, PLAN_NAMES } from "@/billing/format";
+import { formatDay, planName } from "@/billing/format";
 
 const STATE_LABELS: Record<SubscriptionState, string> = {
   trialing: "Trial",
@@ -13,11 +13,11 @@ const STATE_LABELS: Record<SubscriptionState, string> = {
 const INTERVAL_LABELS: Record<BillingInterval, string> = { month: "monthly", year: "yearly" };
 
 /** "Starter, monthly"; just the plan before a provider subscription sets the interval; "No plan" when none applies. */
-export function planLabel(subscription: OrgSubscription): string {
+export function planLabel(subscription: OrgSubscription, names: Readonly<Record<string, string>>): string {
   if (subscription.plan === null) {
     return "No plan";
   }
-  const name = PLAN_NAMES[subscription.plan];
+  const name = planName(names, subscription.plan);
   return subscription.interval === null ? name : `${name}, ${INTERVAL_LABELS[subscription.interval]}`;
 }
 

@@ -1,48 +1,61 @@
 /**
- * Authentication for the ops API, which only the backoffice server calls.
- * The backoffice authenticates its operators itself (Cloudflare Access and
- * its own roles), so this checks only that the caller holds the shared
- * secret and names the operator it acts for.
+ * Authentication for the ops API. Each caller (see callers.ts) holds its own
+ * secret and may use only its own routes. The caller authenticates its
+ * operators itself (the backoffice with Cloudflare Access and its roles), so
+ * this checks that a secret matches, names the caller it belongs to, and
+ * reads the operator the caller acts for.
  */
 
 import { secretsEqual } from "../secretCompare";
+import type { OpsCaller } from "./callers";
 
-export const OPS_SECRET_ENV = "OPS_API_SECRET";
-/** A second accepted secret, so the secret can rotate without downtime. */
-export const OPS_SECRET_NEXT_ENV = "OPS_API_SECRET_NEXT";
 export const ACTOR_HEADER = "X-Woofx3-Actor";
 export const REASON_HEADER = "X-Woofx3-Reason";
 
-/** 32 random bytes, base64url, is 43 characters. */
-const MIN_SECRET_LENGTH = 43;
+/**
+ * 32 random bytes, base64url, is 43 characters. Must match MIN_OPS_SECRET_LENGTH
+ * in woofx3-maintenance (src/billing/config.ts), which the maintenance tests pin.
+ */
+export const MIN_OPS_SECRET_LENGTH = 43;
 const MAX_HEADER_LENGTH = 320;
 const MAX_REASON_LENGTH = 500;
 
 export type OpsAuthResult =
-  | { ok: true; actor: string; reason: string | null }
+  | { ok: true; caller: OpsCaller; actor: string; reason: string | null }
   | { ok: false; status: 400 | 401; code: string; message: string };
 
+/** A caller with the secrets configured for it (current and next); a missing or short one counts as unset. */
+export interface ConfiguredCaller {
+  caller: OpsCaller;
+  secrets: readonly (string | undefined)[];
+}
+
 /**
- * Checks the bearer secret against the configured ones in constant time,
- * then reads the operator and reason headers. A secret shorter than 32
- * bytes counts as unset: the API never fails open, including on preview
- * deployments where nobody configured it.
+ * Checks the bearer secret against every configured secret in constant time
+ * and answers with the caller that holds it (the first in list order when
+ * two callers share a value), then reads the operator and reason headers.
+ * A secret shorter than MIN_OPS_SECRET_LENGTH counts as unset: the API never
+ * fails open, including on preview deployments where nobody configured it.
  */
 export async function authenticateOps(
   headers: Headers,
-  configured: readonly (string | undefined)[],
+  configured: readonly ConfiguredCaller[],
   options: { requireReason: boolean }
 ): Promise<OpsAuthResult> {
-  const secrets = configured.filter((secret): secret is string => (secret?.length ?? 0) >= MIN_SECRET_LENGTH);
   const presented = bearerToken(headers.get("Authorization"));
-  let matched = false;
-  for (const secret of secrets) {
-    // Every configured secret is compared, so timing does not say which one matched.
-    if (presented !== null && (await secretsEqual(presented, secret))) {
-      matched = true;
+  let caller: OpsCaller | null = null;
+  for (const entry of configured) {
+    for (const secret of entry.secrets) {
+      if (secret === undefined || secret.length < MIN_OPS_SECRET_LENGTH) {
+        continue;
+      }
+      // Every configured secret is compared, so timing does not say which one matched.
+      if (presented !== null && (await secretsEqual(presented, secret)) && caller === null) {
+        caller = entry.caller;
+      }
     }
   }
-  if (!matched) {
+  if (caller === null) {
     return { ok: false, status: 401, code: "unauthorized", message: "Unauthorized" };
   }
 
@@ -69,7 +82,7 @@ export async function authenticateOps(
   if (options.requireReason && reason === "") {
     return { ok: false, status: 400, code: "reason_required", message: `${REASON_HEADER} must say why` };
   }
-  return { ok: true, actor, reason: reason === "" ? null : reason };
+  return { ok: true, caller, actor, reason: reason === "" ? null : reason };
 }
 
 function bearerToken(header: string | null): string | null {

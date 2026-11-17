@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
-import { billingErr } from "./lib/billingClient";
+import { billingConvexError, ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
+import { billingErr, PLANE_CODES } from "./lib/billingClient";
 import { FakeBillingClient } from "./lib/billingClient.fakes";
 import { newBackend } from "./lib/convexTest.testing";
 
@@ -353,5 +353,23 @@ describe("ensure", () => {
     await Bun.sleep(100);
     expect(seen).toEqual([]);
     expect(await t.run((ctx) => ctx.db.get(accountId))).not.toBeNull();
+  });
+});
+
+describe("billingConvexError", () => {
+  test.each([
+    ["invalid_return_url", "That page can't be used to return from billing."],
+    ["sponsorship_canceled", "This sponsorship has ended. Start a new one instead."],
+    ["payment_request_invalid", "We could not start your payment. Please contact support."],
+  ] as const)("%s has its own message", (code, message) => {
+    expect(billingConvexError({ code, message: "plane words" }).data).toEqual({ code, message });
+  });
+});
+
+describe("every code the plane's spec lists", () => {
+  const generic = billingConvexError({ code: "unexpected_response", message: "x" }).data.message;
+
+  test.each(PLANE_CODES)("%s has its own message", (code) => {
+    expect(billingConvexError({ code, message: "plane words" }).data.message).not.toBe(generic);
   });
 });

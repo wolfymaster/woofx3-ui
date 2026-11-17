@@ -21,6 +21,13 @@ export type BillingProjectionRequest = { accountId: string } & ProjectionFields;
 
 const REASONS: readonly string[] = lifecycleReasonValidator.members.map((member) => member.value);
 
+/**
+ * The largest version a push may carry: the plane keeps versions in a Postgres
+ * `integer` (billing_projection_state.pushed_version), so none can exceed
+ * 2^31 - 1. A larger one is a bug, and storing it would refuse every later push.
+ */
+export const MAX_PROJECTION_VERSION = 2 ** 31 - 1;
+
 const fail = (message: string) => ({ ok: false as const, message });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -48,8 +55,13 @@ export function parseBillingProjectionRequest(body: unknown): ParseResult<Billin
   if (typeof accountId !== "string" || accountId === "") {
     return fail("accountId must be a non-empty string");
   }
-  if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 1) {
-    return fail("version must be a whole number of at least 1");
+  if (
+    typeof version !== "number" ||
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    version > MAX_PROJECTION_VERSION
+  ) {
+    return fail(`version must be a whole number from 1 to ${MAX_PROJECTION_VERSION}`);
   }
   if (tier !== null && !PLAN_TIERS.includes(tier as PlanTier)) {
     return fail(`tier must be null or one of ${PLAN_TIERS.join(", ")}`);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AppliedDiscount } from "@convex/lib/billingClient";
-import { describeDiscount, formatPrice, formatSeats } from "./format";
+import type { AppliedDiscount, PlanPrice } from "@convex/lib/billingClient";
+import { describeDiscount, formatPrice, formatSeats, PRICE_UNAVAILABLE_TEXT, planName } from "./format";
 
 describe("describeDiscount", () => {
   const cases: Array<[AppliedDiscount["spec"], string]> = [
@@ -17,9 +17,31 @@ describe("describeDiscount", () => {
 });
 
 describe("formatPrice", () => {
-  test("drops whole cents and names the interval", () => {
-    expect(formatPrice("starter", "month")).toContain("/mo");
-    expect(formatPrice("pro", "year")).toContain("/yr");
+  const prices: PlanPrice[] = [
+    { plan: "starter", interval: "month", amountCents: 7_500, currency: "usd" },
+    { plan: "pro", interval: "year", amountCents: 129_900, currency: "usd" },
+  ];
+
+  test("shows the plane's price, drops whole cents and names the interval", () => {
+    expect(formatPrice(prices, "starter", "month")).toBe("$75/mo");
+    expect(formatPrice(prices, "pro", "year")).toBe("$1,299/yr");
+  });
+
+  test("keeps cents that are not whole", () => {
+    const odd: PlanPrice[] = [{ plan: "pro", interval: "month", amountCents: 1_250, currency: "usd" }];
+    expect(formatPrice(odd, "pro", "month")).toBe("$12.50/mo");
+  });
+
+  test("says unavailable when the plane has not answered or lacks that price", () => {
+    expect(formatPrice(null, "starter", "month")).toBe(PRICE_UNAVAILABLE_TEXT);
+    expect(formatPrice(prices, "pro", "month")).toBe(PRICE_UNAVAILABLE_TEXT);
+  });
+});
+
+describe("planName", () => {
+  test("is the plan row's name, or the key before the rows load", () => {
+    expect(planName({ starter: "Starter Plus" }, "starter")).toBe("Starter Plus");
+    expect(planName({}, "pro")).toBe("pro");
   });
 });
 
