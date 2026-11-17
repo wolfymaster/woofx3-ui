@@ -1,6 +1,8 @@
 import type { MutationCtx } from "../../_generated/server";
 
 export interface OpsAuditEntry {
+  /** The ops caller that authenticated the request, e.g. "billing" or "backoffice". */
+  caller: string;
   actor: string;
   action: string;
   /** The user, account, instance or maintenance engine id acted on. */
@@ -15,6 +17,7 @@ export interface OpsAuditEntry {
 /** Records an ops action. A write calls this in the same mutation as its change, so neither lands without the other. */
 export async function recordOpsAudit(ctx: MutationCtx, entry: OpsAuditEntry): Promise<void> {
   await ctx.db.insert("opsAuditLog", {
+    caller: entry.caller,
     actor: entry.actor,
     action: entry.action,
     target: entry.target,

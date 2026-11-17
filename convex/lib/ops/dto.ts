@@ -203,6 +203,7 @@ export function provisioningDto(row: Doc<"engineProvisioning">): ProvisioningDto
 
 export interface AuditEntryDto {
   id: string;
+  caller: string | null;
   actor: string;
   action: string;
   target: string;
@@ -215,6 +216,7 @@ export interface AuditEntryDto {
 export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
   return {
     id: entry._id,
+    caller: entry.caller ?? null,
     actor: entry.actor,
     action: entry.action,
     target: entry.target,
