@@ -12,6 +12,8 @@
       "!convex/_generated",
       "!convex/lib/billing/schema.generated.ts",
       "!convex/lib/billing/openapi.billing.json",
+      "!convex/lib/marketplace/schema.generated.ts",
+      "!convex/lib/marketplace/openapi.marketplace.yaml",
       "!client/src/desktop/generated",
       "!.stylegate/eval"
     ]

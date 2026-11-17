@@ -213,7 +213,7 @@ same purchase.
 asked to install anything — for a module, after the streamer approves its
 permissions, so backing out acquires nothing.
 
-- With `MARKETPLACE_API_TOKEN` set, it is the marketplace's
+- With `MARKETPLACE_CONVEX_TOKEN` set, it is the marketplace's
   `POST /catalog/{id}/acquire`: it claims a free listing or a free upgrade,
   confirms one already held, and refuses one that costs money (402) or that
   nobody can acquire (409, with the marketplace's reason). A free claim is
@@ -433,11 +433,11 @@ parts only work as a set, and a second copy would have drifted from the first.
 |---|---|
 | `MARKETPLACE_API_URL` | Everything. The marketplace API's origin. |
 | `MARKETPLACE_DEV_TOKEN` | Revealing dev-tier listings to flagged engines. |
-| `MARKETPLACE_API_TOKEN` | Acquire, quotes and ownership reads. The marketplace gates those on its write token. Never reaches the browser. |
+| `MARKETPLACE_CONVEX_TOKEN` | Acquire, quotes and ownership reads, presented as the marketplace's `CONVEX_TOKEN` service caller. Never reaches the browser. While it is unset the older shared `MARKETPLACE_API_TOKEN` is used instead, with a warning logged once. |
 | `MARKETPLACE_BUYER_SIGNING_KEY` | Minting buyer tokens (`buyerTokenFor`). The Ed25519 private key as JWK JSON. A secret. |
 | `MARKETPLACE_BUYER_SIGNING_KEY_ID` | Minting buyer tokens. The `kid` the marketplace knows the public key by. |
 
-Without `MARKETPLACE_API_TOKEN`, the catalog browses
+Without either token, the catalog browses
 normally and paid listings cannot be bought or installed.
 
 A buyer token is a five-minute Ed25519 JWS that lets an engine act for one

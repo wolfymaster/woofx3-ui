@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "check": "tsc",
     "billing:types": "bun run scripts/generate-billing-types.ts",
+    "marketplace:types": "bun run scripts/generate-marketplace-types.ts",
     "check:convex": "tsc -p convex/tsconfig.json",
     "test": "bun test",
     "lint": "biome check .",
