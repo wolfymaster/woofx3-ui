@@ -140,6 +140,9 @@ function NavRow({
     >
       <item.icon className={cn("shrink-0 text-muted-foreground", nested ? "h-4 w-4" : "h-5 w-5")} />
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && item.badge && (
+        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{item.badge}</span>
+      )}
     </span>
   );
 

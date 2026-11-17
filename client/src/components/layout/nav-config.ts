@@ -17,14 +17,17 @@ import {
   Server,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Store,
+  ToggleRight,
   Users,
 } from "lucide-react";
 import { ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
+import { ALERT_GROUPS_PATH } from "@/lib/alert-groups-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import { FEEDBACK_PATH } from "@/lib/feedback";
-import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
+import { MARKETPLACE_PATH, MODULES_PATH } from "@/lib/marketplace-route";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
@@ -58,6 +61,8 @@ export interface NavItem {
    * other; the sidebar prints the heading where the group starts.
    */
   group?: string;
+  /** A short label at the row's right edge, such as where a module came from. */
+  badge?: string;
 }
 
 /** How the selected instance's engine is run; absent until an instance is known. */
@@ -93,6 +98,7 @@ export const STREAM_GROUPS = {
   react: "React",
   build: "Build",
   data: "Data",
+  modules: "Modules",
   community: "Community",
 } as const;
 
@@ -151,6 +157,14 @@ export const STREAM_ITEMS: NavItem[] = [
     group: STREAM_GROUPS.data,
   },
   {
+    id: "modules-settings",
+    label: "Settings",
+    icon: SlidersHorizontal,
+    href: MODULES_PATH,
+    exact: true,
+    group: STREAM_GROUPS.modules,
+  },
+  {
     id: "supporters",
     label: "Supporters",
     icon: HandHeart,
@@ -161,6 +175,15 @@ export const STREAM_ITEMS: NavItem[] = [
   { id: "moderation", label: "Moderation", icon: ShieldCheck, href: MODERATION_PATH, group: STREAM_GROUPS.community },
   { id: "user-page", label: "Your page", icon: Globe, href: USER_PAGE_PATH, group: STREAM_GROUPS.community },
 ];
+
+/** Offered only on an engine that has alert groups (see `useAlertGroupsNavItems`); it sits right after Alerts. */
+export const ALERT_GROUPS_ITEM: NavItem = {
+  id: "alert-groups",
+  label: "Alert Groups",
+  icon: ToggleRight,
+  href: ALERT_GROUPS_PATH,
+  group: STREAM_GROUPS.react,
+};
 
 export const HELP_ITEMS: NavItem[] = [
   { id: "learning", label: "Learning", icon: GraduationCap, href: "/help/learning" },
@@ -180,9 +203,7 @@ export const MAIN_NAV_SECTIONS: NavSection[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/" },
   // Lands on Alerts, like the /stream redirect in App.tsx.
   { id: "stream", label: "Stream", icon: Radio, href: "/stream/alerts", children: STREAM_ITEMS },
-  // The storefront is /marketplace; /modules is still the install surface and
-  // is reached from a listing, so the section owns both paths.
-  { id: "marketplace", label: "Marketplace", icon: Store, href: MARKETPLACE_PATH, owns: ["/modules"] },
+  { id: "marketplace", label: "Marketplace", icon: Store, href: MARKETPLACE_PATH },
   { id: "help", label: "Help", icon: CircleHelp, href: HELP_ITEMS[0].href, children: HELP_ITEMS },
 ];
 
@@ -202,9 +223,8 @@ export function isSectionActive(section: NavSection, location: string): boolean 
   if (root === "/") {
     return location === "/";
   }
-  // `owns` counts here as well as on a sidebar entry: Marketplace owns
-  // /modules, which is where a listing's install flow lives, and the section
-  // should stay marked while the streamer is in it.
+  // `owns` counts here as well as on a sidebar entry: a section stays marked
+  // on paths that sit beside its root rather than below it.
   return [root, ...(section.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
 }
 
@@ -215,18 +235,54 @@ export function isNavItemActive(item: NavItem, location: string): boolean {
   return [item.href, ...(item.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
 }
 
-/**
- * `items` with `extra` added at the end of the Data group: the resource kinds installed
- * modules declare, beside the built-in counters, timers, queues and databases.
- * `items` comes back unchanged when `extra` is empty or the menu has no Data group.
- */
-export function withResourceKindItems(items: NavItem[], extra: NavItem[]): NavItem[] {
-  const lastData = items.map((item) => item.group).lastIndexOf(STREAM_GROUPS.data);
-  if (extra.length === 0 || lastData === -1) {
+/** `items` with `extra` right after Alerts, unchanged when the menu has no Alerts entry. */
+export function withAlertGroupsItems(items: NavItem[], extra: NavItem[]): NavItem[] {
+  const alerts = items.findIndex((item) => item.id === "alerts");
+  if (extra.length === 0 || alerts === -1) {
     return items;
   }
-  const grouped = extra.map((item) => ({ ...item, group: STREAM_GROUPS.data }));
-  return [...items.slice(0, lastData + 1), ...grouped, ...items.slice(lastData + 1)];
+  return [...items.slice(0, alerts + 1), ...extra, ...items.slice(alerts + 1)];
+}
+
+/**
+ * `items` with `extra` added at the end of `group`, taking on its heading. `items` comes
+ * back unchanged when `extra` is empty or the menu has no such group (Help, Admin).
+ */
+function withGroupItems(items: NavItem[], group: string, extra: NavItem[]): NavItem[] {
+  const last = items.map((item) => item.group).lastIndexOf(group);
+  if (extra.length === 0 || last === -1) {
+    return items;
+  }
+  const grouped = extra.map((item) => ({ ...item, group }));
+  return [...items.slice(0, last + 1), ...grouped, ...items.slice(last + 1)];
+}
+
+/**
+ * `items` with `extra` at the end of the Data group: the resource kinds installed
+ * modules declare, beside the built-in counters, timers, queues and databases.
+ */
+export function withResourceKindItems(items: NavItem[], extra: NavItem[]): NavItem[] {
+  return withGroupItems(items, STREAM_GROUPS.data, extra);
+}
+
+/** `items` with `extra` after Settings in the Modules group: one entry per installed module. */
+export function withInstalledModuleItems(items: NavItem[], extra: NavItem[]): NavItem[] {
+  return withGroupItems(items, STREAM_GROUPS.modules, extra);
+}
+
+/** Entries the engine and the installed modules add to a menu, merged by `withDynamicItems`. */
+export interface DynamicNavItems {
+  alertGroups: NavItem[];
+  resourceKinds: NavItem[];
+  installedModules: NavItem[];
+}
+
+/** `items` with every dynamic entry in its place: what a shell shows for a menu section. */
+export function withDynamicItems(items: NavItem[], dynamic: DynamicNavItems): NavItem[] {
+  return withInstalledModuleItems(
+    withResourceKindItems(withAlertGroupsItems(items, dynamic.alertGroups), dynamic.resourceKinds),
+    dynamic.installedModules
+  );
 }
 
 export function findActiveSection(location: string): NavSection | null {
