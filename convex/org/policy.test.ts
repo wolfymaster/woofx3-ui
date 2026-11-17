@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { OrgRole } from "./organization";
-import { type OrgAction, orgCan } from "./orgRoles";
+import type { OrgRole } from "../lib/organization";
+import { type OrgAction, orgCan } from "./policy";
 
 const CASES: Array<[OrgRole | null, OrgAction, boolean]> = [
   ["owner", "viewOrganization", true],
