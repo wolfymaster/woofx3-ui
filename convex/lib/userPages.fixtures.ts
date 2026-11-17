@@ -1,9 +1,10 @@
 import { defaultPageContent, type PageContent } from "@shared/user-pages";
 import type { Id } from "../_generated/dataModel";
 import { newBackend } from "./convexTest.testing";
+import { insertProjection } from "./orgBilling.testing";
 
 // An instance with an owner, a member and a stranger, one counter resource and
-// a default plan, for tests of the user page functions.
+// a starter plan, for tests of the user page functions.
 
 export const COUNTER = "woofx3:counter:deaths";
 
@@ -23,7 +24,7 @@ export interface Fixture {
 
 export interface FixtureOptions {
   hosting?: "managed" | "external";
-  /** Whether the default plan includes the userPages feature. */
+  /** Whether the starter plan includes the userPages feature. */
   entitled?: boolean;
   /**
    * Whether the engine holds a slug. Only managed engines get one today; an
@@ -74,24 +75,7 @@ export async function fixture({
       updatedAt: 1,
       updatedBy: "test",
     });
-    await ctx.db.insert("orgBilling", {
-      accountId,
-      version: 1,
-      tier: "starter",
-      addOns: [],
-      standing: "active",
-      reason: null,
-      trialEndsAt: null,
-      graceEndsAt: null,
-      periodEnd: null,
-      interval: null,
-      exemptUntil: null,
-      spinDownAt: null,
-      hasProviderSubscription: false,
-      discount: null,
-      overrides: { addFeatures: [], removeFeatures: [], limits: [] },
-      updatedAt: 1,
-    });
+    await insertProjection(ctx, accountId);
     const moduleId = await ctx.db.insert("moduleRepository", {
       instanceId,
       name: "woofx3",
