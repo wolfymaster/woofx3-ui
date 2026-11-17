@@ -51,6 +51,16 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/accounts/k1/plan")).toBeNull();
   });
 
+  it("names the billing projection reset, as a POST only", () => {
+    expect(matchOpsRoute("POST", "/api/ops/accounts/k1/billing-projection-reset")).toEqual({
+      method: "POST",
+      name: "accounts.billingProjectionReset",
+      accountId: "k1",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/accounts/k1/billing-projection-reset")).toBeNull();
+    expect(matchOpsRoute("POST", "/api/ops/accounts/k1/billing-projection-reset/x")).toBeNull();
+  });
+
   it("names each notification write", () => {
     expect(matchOpsRoute("POST", "/api/ops/notifications")).toEqual({ method: "POST", name: "notifications.create" });
     expect(matchOpsRoute("POST", "/api/ops/notifications/n1/delete")).toEqual({

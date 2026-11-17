@@ -165,6 +165,15 @@ export const opsHandler = httpAction(async (ctx, request) => {
       });
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
+    case "accounts.billingProjectionReset": {
+      const outcome = await ctx.runMutation(internal.ops.billingProjection.resetBillingProjection, {
+        accountId: route.accountId,
+        actor: auth.actor,
+        // authenticateOps required a reason for this write.
+        auditReason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
     case "audit.list": {
       const actor = url.searchParams.get("actor") ?? undefined;
       const target = url.searchParams.get("target") ?? undefined;

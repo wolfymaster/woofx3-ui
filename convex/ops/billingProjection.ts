@@ -72,3 +72,48 @@ export const applyBillingProjection = internalMutation({
     return { ok: true, result };
   },
 });
+
+/**
+ * Sets an org's stored projection version back to 0 so the plane's next push
+ * is applied, for a plane whose counter was rebuilt or an org whose stored
+ * version is out of step. Every other field stays as it was, so entitlements
+ * do not change until a push arrives. The org's remembered push keys are
+ * forgotten too, or a re-sent version would replay its old answer instead of
+ * being applied. Audited with the operator and reason.
+ */
+export const resetBillingProjection = internalMutation({
+  args: { accountId: v.string(), actor: v.string(), auditReason: v.string() },
+  handler: async (
+    ctx,
+    { accountId: rawAccountId, actor, auditReason }
+  ): Promise<
+    | { ok: true; result: { previousVersion: number; version: 0 } }
+    | { ok: false; status: 404; code: string; message: string }
+  > => {
+    const accountId = ctx.db.normalizeId("accounts", rawAccountId);
+    if (accountId === null || (await ctx.db.get(accountId)) === null) {
+      return { ok: false, status: 404, code: "not_found", message: "No such account" };
+    }
+    const stored = await orgBillingFor(ctx, accountId);
+    if (stored === null) {
+      return { ok: false, status: 404, code: "no_projection", message: "The account has no stored projection" };
+    }
+    await ctx.db.patch(stored._id, { version: 0 });
+    const claims = await ctx.db
+      .query("opsRequests")
+      .withIndex("by_key", (q) => q.eq("write", "projection").eq("accountId", rawAccountId))
+      .collect();
+    for (const claim of claims) {
+      await ctx.db.delete(claim._id);
+    }
+    await recordOpsAudit(ctx, {
+      actor,
+      action: "accounts.billingProjectionReset",
+      target: rawAccountId,
+      reason: auditReason,
+      request: { previousVersion: stored.version },
+      result: "ok",
+    });
+    return { ok: true, result: { previousVersion: stored.version, version: 0 } };
+  },
+});
