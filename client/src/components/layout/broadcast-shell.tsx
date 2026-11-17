@@ -47,7 +47,7 @@ import {
   navItemsFor,
   sectionsFor,
   UTILITY_SECTIONS,
-  withAlertsChildren,
+  withResourceKindItems,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
 import { SectionMenu } from "./section-menu";
@@ -256,7 +256,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const sectionNav: SectionNav | null = activeSection?.children
     ? {
         title: activeSection.label,
-        items: navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting),
+        items: navItemsFor(withResourceKindItems(activeSection.children, resourceKindItems), instance?.hosting),
       }
     : null;
 

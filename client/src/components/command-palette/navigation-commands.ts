@@ -8,7 +8,7 @@ import {
   STREAM_ITEMS,
   sectionsFor,
   UTILITY_SECTIONS,
-  withAlertsChildren,
+  withResourceKindItems,
 } from "@/components/layout/nav-config";
 import { COMMAND_GROUP_NEW_ROUTE, COMMAND_GROUPS_PATH, COMMAND_NEW_ROUTE } from "@/lib/command-editor-route";
 import { MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
@@ -34,8 +34,6 @@ const PAGE_KEYWORDS: Record<string, readonly string[]> = {
   recaps: ["history", "past streams", "sessions", "summary"],
   supporters: ["leaderboard", "top cheerers", "gifters", "bits"],
   assets: ["files", "media", "images", "sounds", "uploads", "resources"],
-  workflows: ["automation", "rules", "builder"],
-  "starter-packs": ["templates", "presets", "get started"],
   modules: ["plugins", "extensions", "marketplace", "install"],
   learning: ["docs", "help", "tutorials"],
   logs: ["events", "debug", "errors"],
@@ -65,7 +63,7 @@ function pageCommand(item: NavItem, section?: string): PaletteCommand {
  * Every destination in the menu for an instance hosted this way, in menu order, plus the
  * pages it only reaches by a link. Instance settings are left out for a non-admin.
  * `resourceKindItems` are the pages of the kinds installed modules declare, which the
- * menu lists under Alerts. The invite action is offered only when `canInviteTeammates`.
+ * menu lists under Data. The invite action is offered only when `canInviteTeammates`.
  */
 export function navigationCommands(
   hosting: InstanceHosting,
@@ -80,7 +78,7 @@ export function navigationCommands(
       pages.push(pageCommand(section));
       continue;
     }
-    const children = withAlertsChildren(section.children, resourceKindItems);
+    const children = withResourceKindItems(section.children, resourceKindItems);
     for (const child of flattenNavItems(navItemsFor(children, hosting))) {
       pages.push(pageCommand(child, section.label));
     }

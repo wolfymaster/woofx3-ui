@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   MessageSquare,
   MessageSquarePlus,
-  PackagePlus,
   Palette,
   Radio,
   ScrollText,
@@ -20,7 +19,6 @@ import {
   ShieldCheck,
   Store,
   Users,
-  Workflow,
 } from "lucide-react";
 import { ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
@@ -30,7 +28,6 @@ import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
-export const STARTER_PACKS_PATH = "/stream/starter-packs";
 export const USER_PAGE_PATH = "/stream/page";
 
 export interface NavItem {
@@ -56,6 +53,11 @@ export interface NavItem {
   children?: NavItem[];
   /** Marked only on its own path, for an index entry whose siblings live below it. */
   exact?: boolean;
+  /**
+   * Heading of the run of entries this one belongs to. Entries of a group sit next to each
+   * other; the sidebar prints the heading where the group starts.
+   */
+  group?: string;
 }
 
 /** How the selected instance's engine is run; absent until an instance is known. */
@@ -86,6 +88,14 @@ export function sectionsFor(sections: NavSection[], isAdmin: boolean): NavSectio
   return isAdmin ? sections : sections.filter((section) => !section.adminOnly);
 }
 
+/** Group headings of the Stream sidebar, in the order the groups appear. */
+export const STREAM_GROUPS = {
+  react: "React",
+  build: "Build",
+  data: "Data",
+  community: "Community",
+} as const;
+
 export const STREAM_ITEMS: NavItem[] = [
   {
     id: "alerts",
@@ -93,24 +103,63 @@ export const STREAM_ITEMS: NavItem[] = [
     icon: STREAM_OBJECT_ICONS.alerts,
     href: "/stream/alerts",
     owns: [ALERT_LIBRARY_EDITOR_BASE, ALERT_RUN_BASE],
-    children: [
-      { id: "counters", label: "Counters", icon: STREAM_OBJECT_ICONS.counters, href: "/stream/counters" },
-      { id: "timers", label: "Timers", icon: STREAM_OBJECT_ICONS.timers, href: "/stream/timers" },
-      { id: "queues", label: "Queues", icon: STREAM_OBJECT_ICONS.queues, href: "/stream/queues" },
-      { id: "schedules", label: "Schedules", icon: STREAM_OBJECT_ICONS.schedules, href: "/stream/schedules" },
-      { id: "forms", label: "Forms", icon: STREAM_OBJECT_ICONS.forms, href: "/stream/forms" },
-      { id: "databases", label: "Databases", icon: STREAM_OBJECT_ICONS.databases, href: "/stream/databases" },
-      { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
-    ],
+    group: STREAM_GROUPS.react,
   },
-  { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands" },
-  { id: "moderation", label: "Moderation", icon: ShieldCheck, href: MODERATION_PATH },
-  { id: "scenes", label: "Scenes", icon: STREAM_OBJECT_ICONS.scenes, href: "/stream/scenes" },
-  { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
-  { id: "supporters", label: "Supporters", icon: HandHeart, href: "/stream/supporters" },
-  { id: "user-page", label: "Your page", icon: Globe, href: USER_PAGE_PATH },
-  { id: "assets", label: "Media", icon: FolderOpen, href: "/stream/assets" },
-  { id: "starter-packs", label: "Starter Packs", icon: PackagePlus, href: STARTER_PACKS_PATH },
+  { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands", group: STREAM_GROUPS.react },
+  {
+    id: "schedules",
+    label: "Schedules",
+    icon: STREAM_OBJECT_ICONS.schedules,
+    href: "/stream/schedules",
+    group: STREAM_GROUPS.react,
+  },
+  {
+    id: "scenes",
+    label: "Scenes",
+    icon: STREAM_OBJECT_ICONS.scenes,
+    href: "/stream/scenes",
+    group: STREAM_GROUPS.build,
+  },
+  { id: "assets", label: "Media", icon: FolderOpen, href: "/stream/assets", group: STREAM_GROUPS.build },
+  { id: "forms", label: "Forms", icon: STREAM_OBJECT_ICONS.forms, href: "/stream/forms", group: STREAM_GROUPS.build },
+  {
+    id: "counters",
+    label: "Counters",
+    icon: STREAM_OBJECT_ICONS.counters,
+    href: "/stream/counters",
+    group: STREAM_GROUPS.data,
+  },
+  {
+    id: "timers",
+    label: "Timers",
+    icon: STREAM_OBJECT_ICONS.timers,
+    href: "/stream/timers",
+    group: STREAM_GROUPS.data,
+  },
+  {
+    id: "queues",
+    label: "Queues",
+    icon: STREAM_OBJECT_ICONS.queues,
+    href: "/stream/queues",
+    group: STREAM_GROUPS.data,
+  },
+  {
+    id: "databases",
+    label: "Databases",
+    icon: STREAM_OBJECT_ICONS.databases,
+    href: "/stream/databases",
+    group: STREAM_GROUPS.data,
+  },
+  {
+    id: "supporters",
+    label: "Supporters",
+    icon: HandHeart,
+    href: "/stream/supporters",
+    group: STREAM_GROUPS.community,
+  },
+  { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH, group: STREAM_GROUPS.community },
+  { id: "moderation", label: "Moderation", icon: ShieldCheck, href: MODERATION_PATH, group: STREAM_GROUPS.community },
+  { id: "user-page", label: "Your page", icon: Globe, href: USER_PAGE_PATH, group: STREAM_GROUPS.community },
 ];
 
 export const HELP_ITEMS: NavItem[] = [
@@ -167,23 +216,17 @@ export function isNavItemActive(item: NavItem, location: string): boolean {
 }
 
 /**
- * `items` with `extra` nested under Alerts, ahead of Workflows: the resource kinds
- * installed modules declare, beside the built-in counters, timers, queues, schedules and forms.
- * `items` comes back unchanged when it has no Alerts entry.
+ * `items` with `extra` added at the end of the Data group: the resource kinds installed
+ * modules declare, beside the built-in counters, timers, queues and databases.
+ * `items` comes back unchanged when `extra` is empty or the menu has no Data group.
  */
-export function withAlertsChildren(items: NavItem[], extra: NavItem[]): NavItem[] {
-  if (extra.length === 0) {
+export function withResourceKindItems(items: NavItem[], extra: NavItem[]): NavItem[] {
+  const lastData = items.map((item) => item.group).lastIndexOf(STREAM_GROUPS.data);
+  if (extra.length === 0 || lastData === -1) {
     return items;
   }
-  return items.map((item) => {
-    if (item.id !== "alerts") {
-      return item;
-    }
-    const children = item.children ?? [];
-    const workflows = children.findIndex((child) => child.id === "workflows");
-    const at = workflows === -1 ? children.length : workflows;
-    return { ...item, children: [...children.slice(0, at), ...extra, ...children.slice(at)] };
-  });
+  const grouped = extra.map((item) => ({ ...item, group: STREAM_GROUPS.data }));
+  return [...items.slice(0, lastData + 1), ...grouped, ...items.slice(lastData + 1)];
 }
 
 export function findActiveSection(location: string): NavSection | null {
