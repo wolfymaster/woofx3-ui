@@ -511,7 +511,9 @@ export const revoke = mutation({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
     const inv = await ctx.db.get(args.invitationId);
-    if (!inv) throw new Error("Invitation not found");
+    if (!inv) {
+      throw new Error("Invitation not found");
+    }
 
     await requireAction(ctx, { engine: inv.instanceId }, "manageEngineMembers");
 
@@ -545,7 +547,9 @@ export const accept = mutation({
   args: { token: v.string() },
   handler: async (ctx, args): Promise<AcceptOutcome> => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
 
     const inv = await ctx.db
       .query("invitations")
@@ -572,7 +576,9 @@ export const accept = mutation({
     }
 
     const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
+    if (!user) {
+      throw new Error("User not found");
+    }
 
     const u = user as Record<string, unknown>;
     const twitchAccount = await ctx.db
