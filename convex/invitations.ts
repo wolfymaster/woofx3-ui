@@ -17,7 +17,6 @@ import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import {
   applyOrgRoleToEngines,
   getAccountMembership,
@@ -31,6 +30,7 @@ import {
   fetchTwitchUser,
   type HelixCredentials,
 } from "./lib/twitchUsers";
+import { orgCan, orgRoleOf } from "./org/policy";
 
 const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 

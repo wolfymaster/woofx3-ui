@@ -3,8 +3,8 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { type BillingBanner, billingBanner } from "./lib/billingBanner";
 import { engineAvailability } from "./lib/entitlementAccess";
-import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { orgCan, orgRoleOf } from "./org/policy";
 
 /**
  * The billing banner for the engine the viewer is on, with whether they may

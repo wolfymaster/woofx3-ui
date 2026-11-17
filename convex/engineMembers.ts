@@ -5,7 +5,6 @@ import { type MutationCtx, mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
-import { orgCan, orgRoleOf } from "./lib/orgRoles";
 import {
   getInstanceMembership,
   grantEngineRole,
@@ -14,6 +13,7 @@ import {
   type TeamMemberDto,
   toTeamMemberDto,
 } from "./lib/teamAccess";
+import { orgCan, orgRoleOf } from "./org/policy";
 
 // An engine's team: who can open this engine and with which engine role. The
 // org role only sets floors (lib/teamAccess.ts grantEngineRole), so the owner
