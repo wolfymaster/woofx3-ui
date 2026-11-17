@@ -29,7 +29,15 @@ import {
   fetchTwitchUser,
   type HelixCredentials,
 } from "./lib/twitchUsers";
-import { can, requireAction, requireActionFor, requireActionInAction, viewerRoles } from "./org/policy";
+import {
+  can,
+  orgCan,
+  orgRoleOf,
+  requireAction,
+  requireActionFor,
+  requireActionInAction,
+  viewerRoles,
+} from "./org/policy";
 
 const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -336,6 +344,9 @@ const TARGET_VALIDATOR = v.union(
 const INVITE_REFUSED =
   "This invitation couldn't be sent. Your organization may have no free seats, or this person may already be on this engine";
 
+const NOT_IN_ORGANIZATION =
+  "You can invite people who are already in your organization. Ask its owner or an admin to invite someone new";
+
 /**
  * Writes the invitation after re-checking, inside the transaction, that the
  * inviter may still manage the engine's members and the invitee is neither on it
@@ -360,12 +371,20 @@ export const insertInvitation = internalMutation({
     // inviting a guessed address would reveal whether it belongs to a member.
     const hidesMembers = args.target.kind === "email" && !can(inviter.roles, "viewMemberEmails");
 
+    // Someone who may not spend a seat may only invite people already in the
+    // org. `accept` enforces that for every invitation; refusing here as well
+    // would tell an email's owner apart as a member, so only a Twitch target,
+    // whose identity is public, is refused up front.
+    const inOrg = await inviteeInOrg(ctx, instance, args.target);
+    if (args.target.kind === "twitch" && !inOrg && !can(inviter.roles, "spendSeat")) {
+      throw new ConvexError({ code: "not_in_organization", message: NOT_IN_ORGANIZATION });
+    }
     const now = Date.now();
     if (await orgSeatsFull(ctx, instance.accountId)) {
       if (hidesMembers) {
         throw new ConvexError({ code: "invite_refused", message: INVITE_REFUSED });
       }
-      if (!(await inviteeInOrg(ctx, instance, args.target))) {
+      if (!inOrg) {
         throw new ConvexError({ code: "seats_full", message: SEATS_FULL });
       }
     }
@@ -516,7 +535,8 @@ export type AcceptOutcome =
   | { status: "not_found" }
   | { status: "wrong_account"; message: string }
   | { status: "engine_gone" }
-  | { status: "seats_full" };
+  | { status: "seats_full" }
+  | { status: "not_in_organization" };
 
 export const accept = mutation({
   args: { token: v.string() },
@@ -575,6 +595,11 @@ export const accept = mutation({
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
+    // The seat is taken now, so the inviter must still be allowed to spend one:
+    // an invitation from an engine admin only reaches people already in the org.
+    if (!existingMember && !orgCan(await orgRoleOf(ctx, account, inv.invitedByUserId), "spendSeat")) {
+      return { status: "not_in_organization" };
+    }
     if (!existingMember && (await orgSeatsFull(ctx, inv.accountId))) {
       return { status: "seats_full" };
     }

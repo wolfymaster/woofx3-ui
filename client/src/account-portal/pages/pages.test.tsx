@@ -134,6 +134,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
       viewOrganization: true,
       renameOrganization: owner,
       manageMembers: true,
+      spendSeat: true,
       viewMemberEmails: owner,
       manageEngines: true,
       renameEngine: owner,

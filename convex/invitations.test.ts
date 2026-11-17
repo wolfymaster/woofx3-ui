@@ -228,6 +228,94 @@ describe("invitations.listForEngine", () => {
   });
 });
 
+describe("joining the org takes someone who may spend a seat", () => {
+  async function seatsUsed(t: Backend, org: Org) {
+    return t.run(
+      async (ctx) =>
+        (
+          await ctx.db
+            .query("accountMembers")
+            .withIndex("by_account", (q) => q.eq("accountId", org.accountId))
+            .collect()
+        ).length
+    );
+  }
+
+  test("an engine admin who is an org member brings no one new into the org", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+    const { token } = await invite(t, adminId, org.instanceId, "new@example.com");
+    const before = await seatsUsed(t, org);
+    const userId = await addUser(t, "new@example.com");
+
+    const result = await as(t, userId).mutation(api.invitations.accept, { token });
+
+    expect(result).toEqual({ status: "not_in_organization" });
+    expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: null, engine: null });
+    expect(await seatsUsed(t, org)).toBe(before);
+  });
+
+  test("an engine admin who is an org member gives an existing org member the engine", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const secondId = await addEngine(t, org, "second");
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+    await t.run((ctx) => ctx.db.insert("instanceMembers", { instanceId: secondId, userId: adminId, role: "admin" }));
+    const userId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
+    const { token } = await invite(t, adminId, secondId, "member@example.com");
+
+    const result = await as(t, userId).mutation(api.invitations.accept, { token });
+
+    expect(result).toMatchObject({ status: "accepted", alreadyMember: true });
+    expect(await roles(t, org, userId, secondId)).toEqual({ org: "member", engine: "member" });
+  });
+
+  test("an org admin brings someone new into the org", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "admin", engineRole: "admin" });
+    const { token } = await invite(t, adminId, org.instanceId, "new@example.com");
+    const userId = await addUser(t, "new@example.com");
+
+    const result = await as(t, userId).mutation(api.invitations.accept, { token });
+
+    expect(result).toMatchObject({ status: "accepted", alreadyMember: false });
+    expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: "member", engine: "member" });
+  });
+
+  test("an invitation from an org admin demoted since adds no one new", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "admin", engineRole: "admin" });
+    const { token } = await invite(t, adminId, org.instanceId, "new@example.com");
+    await as(t, org.ownerId).mutation(api.accountMembers.updateMemberRole, {
+      accountId: org.accountId,
+      targetUserId: adminId,
+      role: "member",
+    });
+    const userId = await addUser(t, "new@example.com");
+
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({ status: "not_in_organization" });
+  });
+
+  test("an engine admin who is an org member is refused a Twitch account outside the org up front", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+
+    await expect(
+      t.mutation(internal.invitations.insertInvitation, {
+        instanceId: org.instanceId,
+        inviterUserId: adminId,
+        engineRole: "member",
+        target: { kind: "twitch", twitchUserId: "T9", login: "stranger", displayName: "Stranger" },
+      })
+    ).rejects.toMatchObject({ data: { code: "not_in_organization" } });
+    expect(await t.run((ctx) => ctx.db.query("invitations").collect())).toEqual([]);
+  });
+});
+
 describe("invitations.accept", () => {
   test("a new user joins the org as a member and gets only the invited engine", async () => {
     const t = newBackend();

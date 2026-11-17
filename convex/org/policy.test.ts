@@ -28,6 +28,7 @@ const EXPECTED: Record<Action, Record<Persona, boolean>> = {
   viewOrganization: { owner: true, admin: true, member: true, engineAdminOnly: true, none: false },
   renameOrganization: { owner: true, admin: false, member: false, engineAdminOnly: false, none: false },
   manageMembers: { owner: true, admin: true, member: false, engineAdminOnly: false, none: false },
+  spendSeat: { owner: true, admin: true, member: false, engineAdminOnly: false, none: false },
   viewMemberEmails: { owner: true, admin: false, member: false, engineAdminOnly: false, none: false },
   manageEngines: { owner: true, admin: true, member: false, engineAdminOnly: false, none: false },
   renameEngine: { owner: true, admin: false, member: false, engineAdminOnly: false, none: false },
