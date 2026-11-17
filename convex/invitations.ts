@@ -12,18 +12,10 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
-import { orgSeatsFull, SEATS_FULL } from "./lib/entitlementAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import {
-  applyOrgRoleToEngines,
-  getAccountMembership,
-  getInstanceMembership,
-  grantEngineRole,
-  maskedEmail,
-  normalizeEmail,
-} from "./lib/teamAccess";
+import { getInstanceMembership, maskedEmail, normalizeEmail } from "./lib/teamAccess";
 import {
   fetchHasChannelRole,
   fetchTwitchAppCredentials,
@@ -31,6 +23,13 @@ import {
   type HelixCredentials,
 } from "./lib/twitchUsers";
 import { requireEngineUsable } from "./org/billing";
+import {
+  applyOrgRoleToEngines,
+  getAccountMembership,
+  grantEngineRole,
+  orgSeatsFull,
+  SEATS_FULL,
+} from "./org/membership";
 import {
   can,
   orgCan,

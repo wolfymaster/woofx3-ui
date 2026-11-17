@@ -4,12 +4,12 @@ import { type MutationCtx, mutation, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import {
   getInstanceMembership,
-  grantEngineRole,
   linkedPlatformNames,
   memberDisplayName,
   type TeamMemberDto,
   toTeamMemberDto,
 } from "./lib/teamAccess";
+import { grantEngineRole } from "./org/membership";
 import { can, orgRoleOf, requireAction, viewerRoles } from "./org/policy";
 
 // An engine's team: who can open this engine and with which engine role. The

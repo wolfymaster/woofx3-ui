@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { PLACEHOLDER_NAME } from "./lib/firstRun";
+import { insertAccount } from "./org/membership";
 
 export const getMyAccount = query({
   args: {},
@@ -31,13 +32,6 @@ export const createAccount = mutation({
     return insertAccount(ctx, userId, args.name);
   },
 });
-
-async function insertAccount(ctx: MutationCtx, userId: Id<"users">, name: string): Promise<Id<"accounts">> {
-  const now = Date.now();
-  const accountId = await ctx.db.insert("accounts", { name, ownerId: userId, createdAt: now });
-  await ctx.db.insert("accountMembers", { accountId, userId, role: "owner", createdAt: now });
-  return accountId;
-}
 
 /** The account the user owns, made under the placeholder name when they have none. */
 export async function ensureOwnAccount(ctx: MutationCtx, userId: Id<"users">): Promise<Doc<"accounts">> {

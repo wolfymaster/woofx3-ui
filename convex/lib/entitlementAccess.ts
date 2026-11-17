@@ -70,8 +70,6 @@ export function hasFeature(availability: EngineAvailability, feature: Entitlemen
   return availability.availability === "hosted" && availability.entitlements.features.includes(feature);
 }
 
-export const SEATS_FULL = "Your plan's seats are all taken. Upgrade or remove someone to invite more people";
-
 /**
  * Whether a seat limit applies to the org. Seats belong to the org, not to an
  * engine: the limit applies once the org has a plan (a projection tier) or any
@@ -104,17 +102,4 @@ export async function orgSeatLimit(ctx: QueryCtx, accountId: Id<"accounts">): Pr
     return null;
   }
   return seatLimitOf(await entitlementsFor(ctx, billing));
-}
-
-/** Whether the org has no seat left for one more person (see orgSeatLimit). */
-export async function orgSeatsFull(ctx: QueryCtx, accountId: Id<"accounts">): Promise<boolean> {
-  const limit = await orgSeatLimit(ctx, accountId);
-  if (limit === null) {
-    return false;
-  }
-  const members = await ctx.db
-    .query("accountMembers")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .take(limit + 1);
-  return members.length >= limit;
 }

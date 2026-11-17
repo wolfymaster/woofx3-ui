@@ -3,9 +3,9 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { orgSeatLimit } from "../lib/entitlementAccess";
-import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../lib/teamAccess";
 import { logger } from "../logger";
 import { orgBillingRow } from "../org/billing";
+import { applyOrgRoleToEngines, getAccountMembership, grantEngineRole } from "../org/membership";
 import { orgRoleOf } from "../org/policy";
 import { migrations } from "./index";
 
