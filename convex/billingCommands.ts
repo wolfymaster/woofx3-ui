@@ -16,7 +16,7 @@ import {
 } from "./lib/billingClient";
 import { billingIntervalValidator, planTierValidator } from "./lib/organization";
 import { logger } from "./logger";
-import { orgCan, orgRoleOf, requireActionFor, requireActionInAction } from "./org/policy";
+import { type Refusal, requireActionFor, requireActionInAction } from "./org/policy";
 
 // The billing commands a person triggers in the org portal. Each checks that
 // the caller manages the org's billing, then asks the management plane to do
@@ -82,21 +82,19 @@ export function unwrap<T>(result: BillingResult<T>): T {
   return result.value;
 }
 
-export const assertBillingManager = internalQuery({
+/** The refusal for a user who may not manage the org's billing, or null when they may. */
+export const billingManagerRefusal = internalQuery({
   args: { accountId: v.id("accounts"), userId: v.id("users") },
-  handler: async (ctx, { accountId, userId }): Promise<null> => {
-    await requireActionFor(ctx, userId, { org: accountId }, "manageBilling");
-    return null;
-  },
-});
-
-/** Whether the user manages the org's billing; an id that is not an org of this deployment is no. */
-export const mayManageBilling = internalQuery({
-  args: { accountId: v.string(), userId: v.id("users") },
-  handler: async (ctx, { accountId, userId }): Promise<boolean> => {
-    const id = ctx.db.normalizeId("accounts", accountId);
-    const account = id === null ? null : await ctx.db.get(id);
-    return account !== null && orgCan(await orgRoleOf(ctx, account, userId), "manageBilling");
+  handler: async (ctx, { accountId, userId }): Promise<Refusal | null> => {
+    try {
+      await requireActionFor(ctx, userId, { org: accountId }, "manageBilling");
+      return null;
+    } catch (error) {
+      if (error instanceof ConvexError) {
+        return error.data as Refusal;
+      }
+      throw error;
+    }
   },
 });
 
@@ -109,7 +107,13 @@ export async function requireUser(ctx: ActionCtx): Promise<Id<"users">> {
 }
 
 async function requireManagerClient(ctx: ActionCtx, accountId: Id<"accounts">): Promise<BillingClient> {
-  await ctx.runQuery(internal.billingCommands.assertBillingManager, { accountId, userId: await requireUser(ctx) });
+  const refusal = await ctx.runQuery(internal.billingCommands.billingManagerRefusal, {
+    accountId,
+    userId: await requireUser(ctx),
+  });
+  if (refusal !== null) {
+    throw new ConvexError<Refusal>(refusal);
+  }
   return requireClient();
 }
 
@@ -162,7 +166,10 @@ export const invoices = action({
   args: { accountId: v.id("accounts") },
   handler: async (ctx, { accountId }): Promise<Invoice[] | null> => {
     const userId = await getAuthUserId(ctx);
-    if (userId === null || !(await ctx.runQuery(internal.billingCommands.mayManageBilling, { accountId, userId }))) {
+    if (
+      userId === null ||
+      (await ctx.runQuery(internal.billingCommands.billingManagerRefusal, { accountId, userId })) !== null
+    ) {
       return null;
     }
     return unwrap(await requireClient().listInvoices(accountId));
