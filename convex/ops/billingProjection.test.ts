@@ -60,15 +60,13 @@ describe("applyBillingProjection", () => {
     expect((await rows(t)).map((row) => [row.version, row.tier])).toEqual([[3, "starter"]]);
   });
 
-  test("a repeat of the same push replays the first answer, even after a newer one", async () => {
+  test("a repeat of the stored push is not applied again and writes no audit row", async () => {
     const t = newBackend();
     const accountId = await org(t);
-    const push = (version: number) =>
-      t.mutation(internal.ops.billingProjection.applyBillingProjection, parsed(wire(accountId, version)));
-    const first = await push(1);
-    await push(2);
-    expect(await push(1)).toEqual(first);
-    expect((await rows(t))[0]?.version).toBe(2);
+    const push = () => t.mutation(internal.ops.billingProjection.applyBillingProjection, parsed(wire(accountId, 1)));
+    expect(await push()).toEqual({ ok: true, result: { applied: true, version: 1 } });
+    expect(await push()).toEqual({ ok: true, result: { applied: false, version: 1 } });
+    expect(await t.run((ctx) => ctx.db.query("opsAuditLog").collect())).toHaveLength(1);
   });
 
   test("the same version with another body is a 409 and changes nothing", async () => {
@@ -77,7 +75,7 @@ describe("applyBillingProjection", () => {
     const push = (tier: string) =>
       t.mutation(internal.ops.billingProjection.applyBillingProjection, parsed(wire(accountId, 1, { tier })));
     await push("pro");
-    expect(await push("starter")).toMatchObject({ ok: false, status: 409, code: "idempotency_mismatch" });
+    expect(await push("starter")).toMatchObject({ ok: false, status: 409, code: "version_conflict" });
     expect((await rows(t))[0]?.tier).toBe("pro");
   });
 
@@ -176,7 +174,6 @@ describe("POST /api/ops/accounts/:id/billing-projection", () => {
       "X-Woofx3-Actor": "billing-plane",
       "X-Woofx3-Reason": encodeURIComponent("projection push"),
       "Content-Type": "application/json",
-      "Idempotency-Key": `${accountId}:${(body as { version?: number }).version}`,
       ...headers,
     };
     const defined = Object.fromEntries(Object.entries(all).filter(([, value]) => value !== undefined)) as Record<
@@ -204,7 +201,6 @@ describe("POST /api/ops/accounts/:id/billing-projection", () => {
         Authorization: `Bearer ${SECRET}`,
         "X-Woofx3-Actor": "ops@woofx3.tv",
         "X-Woofx3-Reason": encodeURIComponent("support ticket 12"),
-        "Idempotency-Key": "key-removed-route-1",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ reason: "chargeback" }),
@@ -234,7 +230,7 @@ describe("POST /api/ops/accounts/:id/billing-projection", () => {
     expect(await rows(t)).toEqual([]);
   });
 
-  test("an applied push is audited with the operator; a replay and a stale push are not", async () => {
+  test("an applied push is audited with the operator; a repeat and a stale push are not", async () => {
     const t = newBackend();
     const accountId = await org(t);
     await post(t, accountId, wire(accountId, 2));
@@ -251,37 +247,24 @@ describe("POST /api/ops/accounts/:id/billing-projection", () => {
     });
   });
 
-  test("applies a push, then replays it", async () => {
+  test("applies a push, then answers a repeat as not applied", async () => {
     const t = newBackend();
     const accountId = await org(t);
     const first = await post(t, accountId, wire(accountId, 4));
     expect(first.status).toBe(200);
     expect(await first.json()).toEqual({ data: { applied: true, version: 4 } });
     const again = await post(t, accountId, wire(accountId, 4));
-    expect(await again.json()).toEqual({ data: { applied: true, version: 4 } });
+    expect(await again.json()).toEqual({ data: { applied: false, version: 4 } });
     expect(await rows(t)).toHaveLength(1);
   });
 
-  test.each<[string, string | undefined, number, string]>([
-    ["missing", undefined, 400, "invalid_idempotency_key"],
-    ["malformed", "short", 400, "invalid_idempotency_key"],
-    ["not accountId:version", "another-key-entirely", 400, "invalid_idempotency_key"],
-  ])("a %s Idempotency-Key is refused", async (_name, key, status, code) => {
-    const t = newBackend();
-    const accountId = await org(t);
-    const response = await post(t, accountId, wire(accountId, 1), { "Idempotency-Key": key });
-    expect(response.status).toBe(status);
-    expect(await response.json()).toMatchObject({ error: { code } });
-    expect(await rows(t)).toEqual([]);
-  });
-
-  test("another body under the same key is a 409", async () => {
+  test("another body at the stored version is a 409 version_conflict", async () => {
     const t = newBackend();
     const accountId = await org(t);
     await post(t, accountId, wire(accountId, 1));
     const response = await post(t, accountId, wire(accountId, 1, { tier: "starter" }));
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: { code: "idempotency_mismatch" } });
+    expect(await response.json()).toMatchObject({ error: { code: "version_conflict" } });
   });
 
   test("an invalid body, or an account that differs from the path, is a 400", async () => {
@@ -289,7 +272,7 @@ describe("POST /api/ops/accounts/:id/billing-projection", () => {
     const accountId = await org(t);
     expect((await post(t, accountId, wire(accountId, 1, { standing: "paused" }))).status).toBe(400);
     const other = await org(t);
-    expect((await post(t, accountId, wire(other, 1), { "Idempotency-Key": `${accountId}:1` })).status).toBe(400);
+    expect((await post(t, accountId, wire(other, 1))).status).toBe(400);
   });
 
   test("an unknown org is the standard not-found", async () => {

@@ -9,7 +9,6 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
-import { opsRequestKindValidator } from "./lib/ops/idempotency";
 import { billingIntervalValidator, engineRoleValidator, orgRoleValidator, planTierValidator } from "./lib/organization";
 import { orgBillingFields } from "./lib/orgBilling";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
@@ -1509,11 +1508,11 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_account", ["accountId"]),
 
-  // opsRequests: the ops API's billing projection pushes by the caller's Idempotency-Key,
-  // so a retry replays the first success instead of writing twice. Claimed and
-  // settled in the same mutation as the write; see lib/ops/idempotency.ts.
+  // opsRequests: no code reads or writes it. The definition stays only while
+  // deployed rows exist, because Convex refuses a schema that omits a table
+  // holding data; drop it once those rows are cleared.
   opsRequests: defineTable({
-    write: opsRequestKindValidator,
+    write: v.literal("projection"),
     accountId: v.string(),
     key: v.string(),
     // Canonical JSON of the validated body; the same key with another body is refused.

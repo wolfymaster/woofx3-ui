@@ -4,12 +4,10 @@ import { httpAction } from "../_generated/server";
 import { authenticateOps } from "../lib/ops/auth";
 import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
 import { callerMayUse, nextSecretEnv, OPS_CALLERS } from "../lib/ops/callers";
-import { parseIdempotencyKey } from "../lib/ops/idempotency";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { matchOpsRoute } from "../lib/ops/routes";
 import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
-import { projectionIdempotencyKey } from "./billingProjection";
 
 /**
  * The ops API: what the internal backoffice reads about users, accounts and
@@ -164,13 +162,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
       }
       if (parsed.value.accountId !== route.accountId) {
         return error(400, "invalid_billing_projection", "accountId must match the account in the path");
-      }
-      const idempotencyKey = parseIdempotencyKey(request.headers);
-      if (!idempotencyKey.ok) {
-        return error(400, "invalid_idempotency_key", idempotencyKey.message);
-      }
-      if (idempotencyKey.value !== projectionIdempotencyKey(route.accountId, parsed.value.version)) {
-        return error(400, "invalid_idempotency_key", "Idempotency-Key must be {accountId}:{version}");
       }
       const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, {
         ...parsed.value,
