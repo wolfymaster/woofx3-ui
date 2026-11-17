@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useLogger } from "@/lib/logger-context";
 
+/** `interaction-only` leaves the widget hidden unless the visitor has something to do. */
+export type TurnstileAppearance = "always" | "interaction-only";
+
 /** The part of Cloudflare's widget script this page uses. */
 export interface TurnstileApi {
   render(
     container: HTMLElement,
     options: {
       sitekey: string;
+      appearance?: TurnstileAppearance;
       callback: (token: string) => void;
       "expired-callback": () => void;
       "error-callback": () => void;
@@ -61,10 +65,14 @@ export function TurnstileChallenge({
   siteKey,
   load,
   onToken,
+  appearance = "always",
+  className,
 }: {
   siteKey: string;
   load: () => Promise<TurnstileApi>;
   onToken: (token: string | null) => void;
+  appearance?: TurnstileAppearance;
+  className?: string;
 }) {
   const logger = useLogger();
   const container = useRef<HTMLDivElement>(null);
@@ -82,6 +90,7 @@ export function TurnstileChallenge({
           api,
           widgetId: api.render(container.current, {
             sitekey: siteKey,
+            appearance,
             callback: (token) => onToken(token),
             "expired-callback": () => onToken(null),
             "error-callback": () => {
@@ -99,10 +108,10 @@ export function TurnstileChallenge({
       live = false;
       rendered?.api.remove(rendered.widgetId);
     };
-  }, [siteKey, load, onToken, logger]);
+  }, [siteKey, load, onToken, appearance, logger]);
 
   return (
-    <div>
+    <div className={className}>
       <div ref={container} data-testid="turnstile-challenge" />
       {failed && (
         <p className="mt-1 text-sm text-muted">
