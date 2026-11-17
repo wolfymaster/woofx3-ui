@@ -51,10 +51,11 @@ export const set = internalMutation({
   args: {
     instanceId: v.string(),
     limits: hostedStorageOverrideValidator,
+    caller: v.string(),
     actor: v.string(),
     reason: v.string(),
   },
-  handler: async (ctx, { instanceId, limits, actor, reason }): Promise<StorageLimitsWriteResult> => {
+  handler: async (ctx, { instanceId, limits, caller, actor, reason }): Promise<StorageLimitsWriteResult> => {
     for (const value of HOSTED_STORAGE_LIMIT_FIELDS.map((field) => limits[field])) {
       if (value !== undefined && !isByteLimit(value)) {
         throw new Error(`Storage limits must be whole numbers of bytes of at least 0, or null; got ${value}`);
@@ -62,6 +63,7 @@ export const set = internalMutation({
     }
     const audit = (result: string) =>
       recordOpsAudit(ctx, {
+        caller,
         actor,
         action: "instances.setStorageLimits",
         target: instanceId,

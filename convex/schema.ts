@@ -1481,6 +1481,9 @@ export default defineSchema({
   // user or account, by the operator the backoffice named. Written in the
   // same mutation as the change it records.
   opsAuditLog: defineTable({
+    // The ops caller whose secret authenticated the request; absent on rows
+    // written before callers had their own secrets.
+    caller: v.optional(v.string()),
     actor: v.string(),
     action: v.string(),
     // The user, account, instance or maintenance engine id acted on.

@@ -7,9 +7,15 @@ import { recordOpsAudit } from "../lib/ops/audit";
  * HTTP handler records it after the read answers.
  */
 export const recordRead = internalMutation({
-  args: { actor: v.string(), action: v.string(), target: v.string(), reason: v.union(v.string(), v.null()) },
-  handler: async (ctx, { actor, action, target, reason }) => {
-    await recordOpsAudit(ctx, { actor, action, target, reason, result: "ok" });
+  args: {
+    caller: v.string(),
+    actor: v.string(),
+    action: v.string(),
+    target: v.string(),
+    reason: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, { caller, actor, action, target, reason }) => {
+    await recordOpsAudit(ctx, { caller, actor, action, target, reason, result: "ok" });
   },
 });
 
@@ -21,13 +27,14 @@ export const recordRead = internalMutation({
  */
 export const recordEngineAction = internalMutation({
   args: {
+    caller: v.string(),
     actor: v.string(),
     action: v.string(),
     target: v.string(),
     reason: v.string(),
     result: v.string(),
   },
-  handler: async (ctx, { actor, action, target, reason, result }) => {
-    await recordOpsAudit(ctx, { actor, action, target, reason, result });
+  handler: async (ctx, { caller, actor, action, target, reason, result }) => {
+    await recordOpsAudit(ctx, { caller, actor, action, target, reason, result });
   },
 });

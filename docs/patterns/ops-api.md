@@ -10,12 +10,20 @@ The internal backoffice (woofx3-maintenance `backoffice/`) shows operators manag
 
 ## Decision
 
-A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only the backoffice server calls.
+A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the backoffice server and the maintenance billing process call, each with its own secret and route scope.
 
 - **Authentication:**
-    - The caller sends `Authorization: Bearer <OPS_API_SECRET>`, compared in constant time.
-    - `OPS_API_SECRET_NEXT` is also accepted, so the secret can rotate.
-    - A secret shorter than 32 bytes counts as unset. With no secret configured, as on preview deployments, every route answers `401`; the API never fails open.
+    - The caller sends `Authorization: Bearer <secret>`, compared in constant time against every configured secret. The secret that matches names the caller, and the caller is recorded in `opsAuditLog.caller`.
+    - Callers are the table in `convex/lib/ops/callers.ts`. Each has `OPS_API_SECRET_<NAME>` and a `_NEXT` slot for rotation:
+
+      | Caller | Env | Routes |
+      | --- | --- | --- |
+      | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.billingProjection`, `notifications.create` |
+      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `accounts.billingProjectionReset` |
+      | `legacy` | `OPS_API_SECRET` | every route; logged as deprecated on each request |
+
+    - A route outside the caller's scope answers `403 forbidden_route`.
+    - A secret shorter than 43 characters counts as unset. With no secret configured, as on preview deployments, every route answers `401`; the API never fails open.
     - Routes authenticate before anything else, so an unauthenticated caller cannot tell which routes exist.
 - **Who is acting:**
     - Every request names the operator in `X-Woofx3-Actor`, or gets `400`.
@@ -79,5 +87,5 @@ Operators also set what only an operator may:
 - Email addresses and Twitch identities are returned in full to every backoffice role.
 
 ```bash
-bunx convex env set OPS_API_SECRET "$(openssl rand 32 | basenc --base64url | tr -d =)"
+bunx convex env set OPS_API_SECRET_BACKOFFICE "$(openssl rand 32 | basenc --base64url | tr -d =)"
 ```

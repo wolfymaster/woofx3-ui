@@ -20,12 +20,14 @@ export const act = internalAction({
   args: {
     instanceId: v.string(),
     action: v.union(v.literal("upgrade"), v.literal("retry"), v.literal("delete")),
+    caller: v.string(),
     actor: v.string(),
     reason: v.string(),
   },
-  handler: async (ctx, { instanceId, action, actor, reason }): Promise<EngineActionResult> => {
+  handler: async (ctx, { instanceId, action, caller, actor, reason }): Promise<EngineActionResult> => {
     const audit = (result: string) =>
       ctx.runMutation(internal.ops.audit.recordEngineAction, {
+        caller,
         actor,
         action: `engines.${action}`,
         target: instanceId,
