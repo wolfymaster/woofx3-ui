@@ -4,6 +4,7 @@ import { useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation, useSearch } from "wouter";
+import { SessionHint } from "@/components/auth/session-hint";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AccountViewerName } from "@/components/layout/account-viewer-name";
 import { AdminOnly } from "@/components/layout/admin-only";
@@ -418,6 +419,7 @@ function App() {
         (pages/auth/twitch-callback.tsx), so the handling is off.
       */}
       <ConvexAuthProvider client={convex} shouldHandleCode={false}>
+        <SessionHint />
         <EngineGatewayProvider gateway={hostedEngineGateway}>
           <AccountViewerName>
             <MarketplaceModeProvider mode={hostedMarketplaceMode}>

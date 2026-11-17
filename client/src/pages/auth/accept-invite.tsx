@@ -3,6 +3,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Loader2, MonitorPlay } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { AUTH_CARD_CLASS, AuthLayout } from "@/components/auth/auth-layout";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,8 +107,8 @@ export default function AcceptInvite() {
   }, [authLoading, isAuthenticated, navigate, runAccept, token, preview]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <AuthLayout>
+      <Card className={AUTH_CARD_CLASS}>
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary text-primary-foreground">
@@ -164,6 +165,6 @@ export default function AcceptInvite() {
           ) : null}
         </CardContent>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }
