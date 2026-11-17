@@ -188,6 +188,54 @@
         ],
         "type": "object"
       },
+      "BillingPlanPrice": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "enum": [
+              "usd"
+            ],
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "interval",
+          "amountCents",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "BillingPlanPrices": {
+        "properties": {
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/BillingPlanPrice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "prices"
+        ],
+        "type": "object"
+      },
       "BillingPortalBody": {
         "additionalProperties": false,
         "properties": {
@@ -1304,6 +1352,24 @@
           }
         ],
         "summary": "Where a checkout stands, for the success page"
+      }
+    },
+    "/v1/billing/prices": {
+      "get": {
+        "description": "Public, unauthenticated and cacheable: the price in effect today for every plan and interval, in whole cents. Every client shows these and none keeps a copy.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPlanPrices"
+                }
+              }
+            },
+            "description": "The prices in effect"
+          }
+        },
+        "summary": "What each plan sells for now"
       }
     },
     "/v1/billing/promotion-codes/{code}": {
