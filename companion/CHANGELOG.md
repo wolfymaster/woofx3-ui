@@ -1,5 +1,18 @@
 # woofx3 desktop changelog
 
+## [0.13.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.12.0...woofx3-v0.13.0) (2026-11-17)
+
+### Features
+
+* **marketplace:** pin the marketplace spec and its type generator ([7c40482](https://github.com/wolfymaster/woofx3-ui/commit/7c4048216124224defffea5cb1e74175fb6e565e))
+* **portal:** show plan prices and names from the plane ([babd039](https://github.com/wolfymaster/woofx3-ui/commit/babd039ea3ae6a484ed696af5d4d4a196dfd263e))
+
+### Bug Fixes
+
+* **billing:** refuse plane URLs that are not absolute https ([dc4a474](https://github.com/wolfymaster/woofx3-ui/commit/dc4a474c16be39e7fc50a9036a1ea5cece71b055))
+* **engines:** only the org owner may delete an engine ([64299a7](https://github.com/wolfymaster/woofx3-ui/commit/64299a7f16374b89a8ee1da0937abeb38532d70e))
+* **engines:** restrict engine url changes to the org owner ([0438874](https://github.com/wolfymaster/woofx3-ui/commit/0438874a2a051f2aa52180b5116ae43a664ba30d))
+
 ## [0.12.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.11.0...woofx3-v0.12.0) (2026-11-17)
 
 ### Features
