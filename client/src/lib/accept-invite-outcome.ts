@@ -16,6 +16,8 @@ export const ACCEPT_REFUSAL_MESSAGES: Record<
     "This organization has no free seats right now. Ask the person who invited you to free one up or upgrade their plan, then open this link again.",
   not_in_organization:
     "This invitation can't add you to the organization. Ask the organization's owner or an admin to invite you.",
+  org_suspended:
+    "This organization's subscription isn't active, so it can't take new people right now. Ask the organization's owner to reactivate it, then open this link again.",
 };
 
 /** The message for a refused outcome, or null when the outcome puts the user on the engine. */
