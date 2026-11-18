@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { MyOrganization } from "@convex/organizations";
 import { useQuery } from "convex/react";
 import {
@@ -10,6 +9,8 @@ import {
   LayoutDashboard,
   Loader2,
   Receipt,
+  Settings,
+  Sparkles,
   User,
   UserCog,
   Users,
@@ -41,14 +42,23 @@ import {
   useOptionalPortalScope,
 } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
+import GeneralPage from "./pages/general";
 import OverviewPage from "./pages/overview";
 import PaymentsPage from "./pages/payments";
 import PeoplePage from "./pages/people";
+import PlansPage from "./pages/plans";
 import SettingsPage from "./pages/settings";
 import SponsorshipPage from "./pages/sponsorship";
 import TeamPage from "./pages/team";
 import TeamInvitePage, { TEAM_INVITE_PATH } from "./pages/team-invite";
-import { ACCOUNT_PORTAL_PATH, PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
+import {
+  ACCOUNT_PORTAL_PATH,
+  PORTAL_PAGES,
+  type PortalPage,
+  type PortalPageId,
+  portalPage,
+  visiblePages,
+} from "./portal-pages";
 import { PERSONAL_SCOPE, type PortalScope, resolveScope } from "./portal-scope";
 import { resumesOnboarding, START_TRIAL_PATH, startsTrial } from "./start-trial";
 
@@ -59,6 +69,8 @@ const PAGES: Record<PortalPageId, () => React.ReactElement> = {
   people: PeoplePage,
   settings: SettingsPage,
   team: TeamPage,
+  general: GeneralPage,
+  plans: PlansPage,
 };
 
 /** Top-left switch between the person's own account and each organization they belong to. */
@@ -132,6 +144,8 @@ const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
   people: Users,
   settings: UserCog,
   team: UsersRound,
+  general: Building2,
+  plans: Sparkles,
 };
 
 function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
@@ -181,17 +195,40 @@ function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
   );
 }
 
-/** The dashboard's frame (header, section rail, scrolling content) with the portal's pages as the section. */
-function PortalLayout({ children }: { children: React.ReactNode }) {
-  const organization = useOptionalOrganization()?.organization ?? null;
-  const [location] = useLocation();
-  const nav: NavItem[] = visiblePages(organization?.can ?? null).map((page) => ({
+function navItemOf(page: PortalPage): NavItem {
+  return {
     id: `account-${page.id}`,
     label: page.label,
     icon: PAGE_ICONS[page.id],
     href: page.path,
     exact: page.path === ACCOUNT_PORTAL_PATH,
-  }));
+  };
+}
+
+/** The pages as nav entries: an organization's settings pages gather under one Settings entry. */
+function portalNav(pages: PortalPage[]): NavItem[] {
+  const settings = pages.filter((page) => page.inOrganizationSettings);
+  const items = pages.filter((page) => !page.inOrganizationSettings).map(navItemOf);
+  if (settings.length === 0) {
+    return items;
+  }
+  return [
+    ...items,
+    {
+      id: "account-organization-settings",
+      label: "Settings",
+      icon: Settings,
+      href: settings[0].path,
+      children: settings.map(navItemOf),
+    },
+  ];
+}
+
+/** The dashboard's frame (header, section rail, scrolling content) with the portal's pages as the section. */
+function PortalLayout({ children }: { children: React.ReactNode }) {
+  const organization = useOptionalOrganization()?.organization ?? null;
+  const [location] = useLocation();
+  const nav = portalNav(visiblePages(organization?.can ?? null));
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
       <PortalHeader nav={nav} location={location} />
