@@ -3712,6 +3712,7 @@ export interface components {
             addFeatures: ("userPages" | "userPages.customDomain" | "marketplace.premiumIncluded" | "business")[];
             limits: {
                 "analytics.retentionDays"?: number | null;
+                "org.managedEngines"?: number | null;
                 "org.members"?: number | null;
                 "storage.hostedAssetBytes"?: number | null;
                 "storage.hostedFileBytes"?: number | null;
@@ -3726,6 +3727,7 @@ export interface components {
             addFeatures: ("userPages" | "userPages.customDomain" | "marketplace.premiumIncluded" | "business")[];
             limits: {
                 "analytics.retentionDays"?: number | null;
+                "org.managedEngines"?: number | null;
                 "org.members"?: number | null;
                 "storage.hostedAssetBytes"?: number | null;
                 "storage.hostedFileBytes"?: number | null;

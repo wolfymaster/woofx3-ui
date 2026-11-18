@@ -746,6 +746,13 @@
                           "null"
                         ]
                       },
+                      "org.managedEngines": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
                       "org.members": {
                         "minimum": 0,
                         "type": [
@@ -839,6 +846,13 @@
               "limits": {
                 "properties": {
                   "analytics.retentionDays": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "org.managedEngines": {
                     "minimum": 0,
                     "type": [
                       "integer",
