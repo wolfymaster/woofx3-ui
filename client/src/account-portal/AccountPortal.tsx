@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Loader2,
   Receipt,
+  User,
   UserCog,
   Users,
   UsersRound,
@@ -33,7 +34,12 @@ import {
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
 import { BackToDashboard } from "./back-to-dashboard";
-import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
+import {
+  OrganizationProvider,
+  PortalScopeProvider,
+  useOptionalOrganization,
+  useOptionalPortalScope,
+} from "./organization-context";
 import { organizationLabels } from "./organization-labels";
 import OverviewPage from "./pages/overview";
 import PaymentsPage from "./pages/payments";
@@ -43,6 +49,7 @@ import SponsorshipPage from "./pages/sponsorship";
 import TeamPage from "./pages/team";
 import TeamInvitePage, { TEAM_INVITE_PATH } from "./pages/team-invite";
 import { ACCOUNT_PORTAL_PATH, PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
+import { PERSONAL_SCOPE, type PortalScope, resolveScope } from "./portal-scope";
 import { resumesOnboarding, START_TRIAL_PATH, startsTrial } from "./start-trial";
 
 const PAGES: Record<PortalPageId, () => React.ReactElement> = {
@@ -54,39 +61,63 @@ const PAGES: Record<PortalPageId, () => React.ReactElement> = {
   team: TeamPage,
 };
 
-/** The org the selected engine belongs to, else the one the caller owns, else the first. */
-function defaultOrganization(organizations: MyOrganization[], engineAccountId: Id<"accounts"> | undefined) {
-  return (
-    organizations.find((org) => org.accountId === engineAccountId) ??
-    organizations.find((org) => org.role === "owner") ??
-    organizations[0]
-  );
-}
-
-function OrganizationSwitcher() {
-  const { organization, organizations, select } = useOrganization();
+/** Top-left switch between the person's own account and each organization they belong to. */
+function ScopeSwitcher() {
+  const portal = useOptionalPortalScope();
+  const { user } = useConvexUser();
+  if (portal === null) {
+    return null;
+  }
+  const { scope, organizations, selectScope } = portal;
   const labels = organizationLabels(organizations);
   const labelOf = (org: MyOrganization) => labels.get(org.accountId) ?? org.name;
-  if (organizations.length < 2) {
-    return <span className="font-medium truncate">{organization.name}</span>;
+  const current =
+    scope.kind === "organization" ? organizations.find((org) => org.accountId === scope.accountId) : undefined;
+  const currentLabel = current === undefined ? "Personal" : labelOf(current);
+  const CurrentIcon = current === undefined ? User : Building2;
+  if (organizations.length === 0) {
+    return (
+      <span className="flex items-center gap-1.5 text-sm font-medium" data-testid="text-portal-scope">
+        <CurrentIcon className="h-4 w-4 text-muted-foreground" />
+        {currentLabel}
+      </span>
+    );
   }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1 font-medium" data-testid="button-switch-organization">
-          <span className="truncate">{labelOf(organization)}</span>
+        <Button variant="ghost" size="sm" className="gap-1.5 font-medium" data-testid="button-switch-scope">
+          <CurrentIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="truncate">{currentLabel}</span>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent align="start" className="w-60">
+        <DropdownMenuItem
+          onClick={() => selectScope(PERSONAL_SCOPE)}
+          className="flex items-center justify-between"
+          data-testid="item-scope-personal"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <User className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="truncate">{user?.name || "Personal"}</span>
+          </span>
+          {scope.kind === "personal" && <Check className="h-4 w-4 text-primary" />}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Organizations</DropdownMenuLabel>
         {organizations.map((org) => (
           <DropdownMenuItem
             key={org.accountId}
-            onClick={() => select(org.accountId)}
+            onClick={() => selectScope({ kind: "organization", accountId: org.accountId })}
             className="flex items-center justify-between"
+            data-testid={`item-scope-${org.accountId}`}
           >
-            <span className="truncate">{labelOf(org)}</span>
-            {org.accountId === organization.accountId && <Check className="h-4 w-4 text-primary" />}
+            <span className="flex items-center gap-2 min-w-0">
+              <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="truncate">{labelOf(org)}</span>
+            </span>
+            {current?.accountId === org.accountId && <Check className="h-4 w-4 text-primary" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -104,7 +135,6 @@ const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
 };
 
 function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
-  const organization = useOptionalOrganization()?.organization ?? null;
   const { instance } = useInstance();
   const { user } = useConvexUser();
   const { signOut } = useAuthActions();
@@ -119,14 +149,8 @@ function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
     <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
       <SectionMenu title="Account" items={nav} location={location} />
       <span className="font-semibold tracking-tight">woofx3</span>
-      <div className="flex items-center gap-1 text-sm min-w-0 flex-1">
-        {organization === null ? null : (
-          <>
-            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground shrink-0">Organization:</span>
-            <OrganizationSwitcher />
-          </>
-        )}
+      <div className="flex items-center min-w-0 flex-1">
+        <ScopeSwitcher />
       </div>
       <BackToDashboard hasEngine={Boolean(instance)} />
       <DropdownMenu>
@@ -206,7 +230,7 @@ export default function AccountPortal() {
   const organizations = useQuery(api.organizations.mine, {});
   const { instance } = useInstance();
   const search = useSearch();
-  const [selectedId, setSelectedId] = useState<Id<"accounts"> | null>(null);
+  const [picked, setPicked] = useState<PortalScope | null>(null);
 
   if (organizations === undefined) {
     return (
@@ -221,9 +245,9 @@ export default function AccountPortal() {
   if (resumesOnboarding(search, organizations)) {
     return <Redirect to={`${START_TRIAL_PATH}?${new URLSearchParams(search)}`} replace />;
   }
+  const scope = resolveScope(organizations, picked, instance?.accountId);
   const organization =
-    organizations.find((org) => org.accountId === selectedId) ??
-    defaultOrganization(organizations, instance?.accountId);
+    scope.kind === "organization" ? organizations.find((org) => org.accountId === scope.accountId) : undefined;
 
   const pages = (
     <PortalLayout>
@@ -240,10 +264,13 @@ export default function AccountPortal() {
       </Switch>
     </PortalLayout>
   );
-  if (organization === undefined) {
-    return pages;
-  }
   return (
-    <OrganizationProvider value={{ organization, organizations, select: setSelectedId }}>{pages}</OrganizationProvider>
+    <PortalScopeProvider value={{ scope, organizations, selectScope: setPicked }}>
+      {organization === undefined ? (
+        pages
+      ) : (
+        <OrganizationProvider value={{ organization, organizations }}>{pages}</OrganizationProvider>
+      )}
+    </PortalScopeProvider>
   );
 }

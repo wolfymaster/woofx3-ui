@@ -1,7 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { useMutation } from "convex/react";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
 import { useOptionalOrganization } from "../organization-context";
 import { RenameDialog } from "../rename-dialog";
 import { EngineList } from "./engine-list";
@@ -16,7 +15,11 @@ export default function OverviewPage() {
     <>
       <PageHeader
         title={organization?.name ?? "Overview"}
-        description={organization === null ? "Your woofx3 account." : "Your organization, its engines and its plan."}
+        description={
+          organization === null
+            ? "Every engine you can open, and your own sponsorships."
+            : "Your organization, its engines and its plan."
+        }
         actions={
           organization?.can.renameOrganization ? (
             <RenameDialog
@@ -29,21 +32,6 @@ export default function OverviewPage() {
         }
       />
       <div className="space-y-8">
-        {selection !== null && selection.organizations.length > 1 ? (
-          <nav aria-label="Your organizations" className="flex flex-wrap gap-2">
-            {selection.organizations.map((org) => (
-              <Button
-                key={org.accountId}
-                variant={org.accountId === organization?.accountId ? "secondary" : "outline"}
-                aria-pressed={org.accountId === organization?.accountId}
-                onClick={() => selection.select(org.accountId)}
-                data-testid={`button-select-org-${org.accountId}`}
-              >
-                {org.name}
-              </Button>
-            ))}
-          </nav>
-        ) : null}
         <EngineList />
         {organization?.can.manageBilling ? <OrganizationPlan /> : null}
       </div>

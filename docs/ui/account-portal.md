@@ -34,16 +34,18 @@ The portal belongs to the signed-in person. Every signed-in user on the web buil
 | Org member | Overview, Sponsorship, Payments |
 | Signed in, no organization | Overview, Sponsorship, Payments |
 
+The header's switcher (`portal-scope.ts`, `ScopeSwitcher`) chooses what the portal shows: **Personal**, which everyone has, or one of the viewer's organizations. In an organization's scope the pages work on that organization (its engines, plan, members); in the personal scope the Overview lists every engine the viewer can open across their organizations, with no create or rename, and the organization's pages that need a role are not offered. A person with no organization sees Personal alone. The portal opens on the organization of the engine they were last in, else one they own, else the first, else Personal.
+
 What a tab shows of the organization is gated by role, not by the tab being visible:
 
 | Tab | Path | Organization part (owner only, `manageBilling`) | Everyone |
 |---|---|---|---|
-| Overview | `/account` | the Subscription card: plan, state, discount; choose a plan and check out; manage billing | the organization's engines (each with "Launch dashboard"; the owner renames, `renameEngine`, and creates, `createEngine`), or a large call to action to create one; a switcher when the viewer is in several organizations |
+| Overview | `/account` | the Subscription card: plan, state, discount; choose a plan and check out; manage billing | the organization's engines (each with "Launch dashboard"; the owner renames, `renameEngine`, and creates, `createEngine`), or a large call to action to create one |
 | Sponsorship | `/account/sponsorship` | | the viewer's own sponsorships |
 | Payments | `/account/payments` | the organization's invoices | the viewer's own sponsor payments, in the same history |
 | People | `/account/people` | (`manageMembers`) change roles, remove | |
 
-An admin sees no organization billing: `organizations.mine` sends the subscription only to a role with `manageBilling`, the owner. The Overview header offers renaming the organization to the owner only (`renameOrganization`). The pages work with no organization at all: `organizations.mine` answers an empty list, the layout drops the organization switcher, and no organization query runs.
+An admin sees no organization billing: `organizations.mine` sends the subscription only to a role with `manageBilling`, the owner. The Overview header offers renaming the organization to the owner only (`renameOrganization`). The pages work with no organization at all: `organizations.mine` answers an empty list, the switcher shows only Personal, and no organization query runs.
 
 The Overview lists the organization's engines as cards, each with how it is hosted, where its build stands and a "Launch dashboard" button; members see the ones they can open. With no engine it shows a large call to action: the owner creates one here, a viewer with no organization goes to onboarding, and anyone else is told to ask an owner. An organization's first engine comes from onboarding; the owner (`createEngine`) adds more with "Create another engine" (`new-engine-dialog.tsx`):
 

@@ -9,7 +9,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from "rea
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { MASKED_EMAIL } from "@/components/team/member-emails";
-import { OrganizationProvider, type OrganizationSelection } from "../organization-context";
+import { OrganizationProvider, type OrganizationSelection, PortalScopeProvider } from "../organization-context";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -156,7 +156,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
     subscription: null,
     seats: { used: 2, limit: 5 },
   };
-  return { organization, organizations: [organization], select: () => undefined };
+  return { organization, organizations: [organization] };
 }
 
 function member(userId: string, role: OrgMember["role"], email?: string | null): OrgMember {
@@ -173,7 +173,8 @@ function member(userId: string, role: OrgMember["role"], email?: string | null):
 async function render(
   role: "owner" | "admin" | null,
   page: ReactNode,
-  answers: ConvexAnswers = { members: null, meId: "owner-user" }
+  answers: ConvexAnswers = { members: null, meId: "owner-user" },
+  personalScopeOf: "owner" | "admin" | null = null
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
   const memory = memoryLocation({ path: "/account" });
@@ -181,7 +182,21 @@ async function render(
     renderer = create(
       <Router hook={memory.hook} searchHook={useTestSearch}>
         <ConvexAnswersContext.Provider value={answers}>
-          {role === null ? page : <OrganizationProvider value={selection(role)}>{page}</OrganizationProvider>}
+          {personalScopeOf !== null ? (
+            <PortalScopeProvider
+              value={{
+                scope: { kind: "personal" },
+                organizations: selection(personalScopeOf).organizations,
+                selectScope: () => undefined,
+              }}
+            >
+              {page}
+            </PortalScopeProvider>
+          ) : role === null ? (
+            page
+          ) : (
+            <OrganizationProvider value={selection(role)}>{page}</OrganizationProvider>
+          )}
         </ConvexAnswersContext.Provider>
       </Router>,
       {
@@ -263,6 +278,16 @@ describe("People page", () => {
     expect(textOf(row)).not.toContain("—");
     expect(byTestId(renderer, "button-toggle-emails").length).toBe(0);
     expect(byTestId(renderer, "text-member-email").length).toBe(0);
+  });
+});
+
+describe("Overview in the personal scope", () => {
+  test("lists every engine the person can open across their organizations, with no create or rename", async () => {
+    const renderer = await render(null, <OverviewPage />, undefined, "owner");
+    expect(byTestId(renderer, "button-launch-instance-1").length).toBe(1);
+    expect(byTestId(renderer, "button-create-engine").length).toBe(0);
+    expect(byTestId(renderer, "button-rename-engine-instance-1").length).toBe(0);
+    expect(byTestId(renderer, "button-rename-organization").length).toBe(0);
   });
 });
 
