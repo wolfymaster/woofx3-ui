@@ -358,10 +358,10 @@ describe("checkoutState", () => {
 });
 
 describe("ensure", () => {
-  test("a plane failure is reported as false, never thrown", async () => {
+  test("a plane failure is returned, never thrown", async () => {
     const client = new FakeBillingClient();
     client.ensureAnswer = billingErr("payment_unavailable", "down");
-    expect(await ensureOrgBilling(client, "acc1" as never)).toBe(false);
+    expect(await ensureOrgBilling(client, "acc1" as never)).toEqual({ code: "payment_unavailable", message: "down" });
     expect(client.calls).toEqual([{ command: "ensure", args: ["acc1"] }]);
   });
 

@@ -1,5 +1,6 @@
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
+import { ENSURE_SWEEP } from "./billingCommands";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { TWITCH_SIGN_IN_STATE_SWEEP } from "./lib/twitchSignIn";
 
@@ -86,5 +87,11 @@ crons.interval("page submission delivery sweep", { minutes: 1 }, internal.userPa
 
 // Deletes delivered submissions past their retention. Pending and failed ones are kept.
 crons.interval("page submission prune", { hours: 6 }, internal.userPageForms.pruneDelivered, {});
+
+// An org that hosts a managed engine but never got a billing record (the plane
+// was down past the sign-up retries) is hosted unbilled and gated open. This
+// asks the plane to start billing for each such org and reports the ones it
+// still cannot.
+crons.interval("billing ensure sweep", { hours: ENSURE_SWEEP.intervalHours }, internal.billingCommands.ensureSweep, {});
 
 export default crons;

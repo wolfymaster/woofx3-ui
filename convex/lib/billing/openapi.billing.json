@@ -2,6 +2,1853 @@
   "components": {
     "parameters": {},
     "schemas": {
+      "BillingAdminAccount": {
+        "properties": {
+          "subscription": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BillingAdminSubscription"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "transitions": {
+            "description": "Newest first.",
+            "items": {
+              "$ref": "#/components/schemas/BillingAdminTransition"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "subscription",
+          "transitions"
+        ],
+        "type": "object"
+      },
+      "BillingAdminAddPriceBody": {
+        "additionalProperties": false,
+        "properties": {
+          "amountCents": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "effectiveMonth": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "interval",
+          "effectiveMonth",
+          "amountCents"
+        ],
+        "type": "object"
+      },
+      "BillingAdminAttention": {
+        "properties": {
+          "deadEffects": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "attempts": {
+                  "type": "integer"
+                },
+                "checkoutId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "diedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "effectKind": {
+                  "enum": [
+                    "stop_engines",
+                    "start_engines",
+                    "send_email",
+                    "notify",
+                    "publish_projection",
+                    "expire_checkout",
+                    "grant_entitlement",
+                    "revoke_entitlement"
+                  ],
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "lastError": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "userId": {
+                  "description": "The UI's id for the person, for a sponsorship's.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "accountId",
+                "userId",
+                "checkoutId",
+                "effectKind",
+                "attempts",
+                "lastError",
+                "createdAt",
+                "diedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "ownerEmailMissing": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "event": {
+                  "enum": [
+                    "TrialStarted",
+                    "EvaluationDue",
+                    "RetryDue",
+                    "GraceExpired",
+                    "SpinDownDue",
+                    "ExemptionExpired",
+                    "ProviderActivated",
+                    "PaymentSucceeded",
+                    "PaymentFailed",
+                    "ProviderEnded",
+                    "ExemptionGranted",
+                    "ExemptionRevoked",
+                    "OperatorSuspended",
+                    "OperatorUnsuspended",
+                    "EnginesStopped",
+                    "PlanChanged",
+                    "DiscountApplied",
+                    "OverridesChanged",
+                    "OverridesExpired"
+                  ],
+                  "type": "string"
+                },
+                "to": {
+                  "enum": [
+                    "trialing",
+                    "active",
+                    "past_due",
+                    "suspended",
+                    "exempt"
+                  ],
+                  "type": "string"
+                },
+                "transitionId": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "transitionId",
+                "accountId",
+                "version",
+                "event",
+                "to",
+                "at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "purchases": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "amountCents": {
+                  "type": "integer"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "checkoutId": {
+                  "type": "string"
+                },
+                "intentId": {
+                  "type": "string"
+                },
+                "listingId": {
+                  "type": "string"
+                },
+                "paymentRef": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "providerSessionRef": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "settle": {
+                  "enum": [
+                    "refund",
+                    "retry_or_refund",
+                    "answer_dispute"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "checkoutId",
+                "accountId",
+                "listingId",
+                "intentId",
+                "providerSessionRef",
+                "paymentRef",
+                "amountCents",
+                "reason",
+                "settle",
+                "at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "refusedProjections": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "accountId",
+                "version",
+                "reason",
+                "at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "reviewEventCount": {
+            "description": "Every event waiting; `reviewEvents` lists 200.",
+            "type": "integer"
+          },
+          "reviewEvents": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "eventId": {
+                  "type": "string"
+                },
+                "needsReview": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "enum": [
+                    "received",
+                    "applied",
+                    "ignored",
+                    "stray",
+                    "failed"
+                  ],
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "userId": {
+                  "description": "The UI's id for the person, for a sponsorship's.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "eventId",
+                "type",
+                "outcome",
+                "needsReview",
+                "accountId",
+                "userId",
+                "error",
+                "at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "stuckCheckouts": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "providerSessionRef": {
+                  "type": "string"
+                },
+                "userId": {
+                  "description": "The UI's id for the person, for a sponsorship's.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "accountId",
+                "userId",
+                "providerSessionRef",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "reviewEvents",
+          "reviewEventCount",
+          "refusedProjections",
+          "stuckCheckouts",
+          "purchases",
+          "deadEffects",
+          "ownerEmailMissing"
+        ],
+        "type": "object"
+      },
+      "BillingAdminConflictError": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BillingAdminRefusalCode"
+                  },
+                  {
+                    "enum": [
+                      "subscription_changed"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "enum": [
+                      "idempotency_key_reused"
+                    ],
+                    "type": "string"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "BillingAdminDeleted": {
+        "properties": {
+          "deleted": {
+            "enum": [
+              true
+            ],
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "BillingAdminDiscountBody": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "pattern": "^[a-z0-9_-]{1,40}$",
+            "type": "string"
+          },
+          "spec": {
+            "oneOf": [
+              {
+                "properties": {
+                  "duration": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "once"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "months"
+                            ],
+                            "type": "string"
+                          },
+                          "months": {
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "months"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "forever"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "percent_off"
+                    ],
+                    "type": "string"
+                  },
+                  "percent": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 100,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "percent",
+                  "duration"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "amountCents": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "currency": {
+                    "enum": [
+                      "usd"
+                    ],
+                    "type": "string"
+                  },
+                  "duration": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "once"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "months"
+                            ],
+                            "type": "string"
+                          },
+                          "months": {
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "months"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "forever"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "amount_off"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amountCents",
+                  "currency",
+                  "duration"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "spec"
+        ],
+        "type": "object"
+      },
+      "BillingAdminEnsureMisses": {
+        "properties": {
+          "misses": {
+            "items": {
+              "properties": {
+                "attempts": {
+                  "type": "integer"
+                },
+                "firstSeenAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "lastError": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "lastSeenAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "ownerId": {
+                  "type": "string"
+                },
+                "ownerType": {
+                  "enum": [
+                    "org",
+                    "user"
+                  ],
+                  "type": "string"
+                },
+                "resolvedAt": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "ownerType",
+                "ownerId",
+                "firstSeenAt",
+                "lastSeenAt",
+                "attempts",
+                "lastError",
+                "resolvedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "Pass as cursor for the next page; null at the end.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "misses",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "BillingAdminExemptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          },
+          "until": {
+            "description": "When it ends; null for an exemption with no end.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "plan",
+          "until"
+        ],
+        "type": "object"
+      },
+      "BillingAdminOverrides": {
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "addFeatures": {
+                    "items": {
+                      "enum": [
+                        "userPages",
+                        "userPages.customDomain",
+                        "marketplace.premiumIncluded",
+                        "business"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "limits": {
+                    "properties": {
+                      "analytics.retentionDays": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "org.managedEngines": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "org.members": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "storage.hostedAssetBytes": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "storage.hostedFileBytes": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "storage.moduleStorageBytes": {
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "removeFeatures": {
+                    "items": {
+                      "enum": [
+                        "userPages",
+                        "userPages.customDomain",
+                        "marketplace.premiumIncluded",
+                        "business"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "addFeatures",
+                  "removeFeatures",
+                  "limits"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "until": {
+                    "format": "date-time",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "until"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "BillingAdminOverridesBody": {
+        "allOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "addFeatures": {
+                "items": {
+                  "enum": [
+                    "userPages",
+                    "userPages.customDomain",
+                    "marketplace.premiumIncluded",
+                    "business"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "limits": {
+                "properties": {
+                  "analytics.retentionDays": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "org.managedEngines": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "org.members": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "storage.hostedAssetBytes": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "storage.hostedFileBytes": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "storage.moduleStorageBytes": {
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              "removeFeatures": {
+                "items": {
+                  "enum": [
+                    "userPages",
+                    "userPages.customDomain",
+                    "marketplace.premiumIncluded",
+                    "business"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "addFeatures",
+              "removeFeatures",
+              "limits"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "until": {
+                "description": "When the deal ends; null for a deal with no end.",
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "until"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "BillingAdminPayments": {
+        "properties": {
+          "payments": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "amountCents": {
+                  "type": "integer"
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "feeCents": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "interval": {
+                  "enum": [
+                    "month",
+                    "year",
+                    null
+                  ],
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "paidAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "plan": {
+                  "enum": [
+                    "starter",
+                    "pro",
+                    null
+                  ],
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "purpose": {
+                  "enum": [
+                    "subscription",
+                    "marketplace",
+                    "sponsorship"
+                  ],
+                  "type": "string"
+                },
+                "refundedCents": {
+                  "type": "integer"
+                },
+                "sponsorshipId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "accountId",
+                "sponsorshipId",
+                "purpose",
+                "plan",
+                "interval",
+                "amountCents",
+                "feeCents",
+                "refundedCents",
+                "currency",
+                "paidAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "payments"
+        ],
+        "type": "object"
+      },
+      "BillingAdminPlanBody": {
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "type": "object"
+      },
+      "BillingAdminPlanCounts": {
+        "properties": {
+          "plans": {
+            "items": {
+              "properties": {
+                "accounts": {
+                  "type": "integer"
+                },
+                "interval": {
+                  "enum": [
+                    "month",
+                    "year"
+                  ],
+                  "type": "string"
+                },
+                "plan": {
+                  "enum": [
+                    "starter",
+                    "pro"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "plan",
+                "interval",
+                "accounts"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "totalAccounts": {
+            "description": "Organizations with any billing at all.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plans",
+          "totalAccounts"
+        ],
+        "type": "object"
+      },
+      "BillingAdminPlanPrice": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "effectiveMonth": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "interval",
+          "effectiveMonth",
+          "amountCents",
+          "currency",
+          "createdBy",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "BillingAdminPlanPrices": {
+        "properties": {
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/BillingAdminPlanPrice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "prices"
+        ],
+        "type": "object"
+      },
+      "BillingAdminRefusalCode": {
+        "enum": [
+          "no_subscription",
+          "illegal_transition",
+          "provider_managed",
+          "trial_is_starter",
+          "invalid_exemption",
+          "not_suspended_by_operator",
+          "no_provider_subscription",
+          "unknown_discount",
+          "invalid_overrides_end",
+          "sponsorship_not_found",
+          "payment_not_found",
+          "refund_exceeds_payment",
+          "sponsorship_not_recurring",
+          "sponsorship_canceled",
+          "effect_not_dead",
+          "checkout_not_found",
+          "checkout_not_stuck",
+          "checkout_not_open",
+          "price_exists",
+          "price_not_found"
+        ],
+        "type": "string"
+      },
+      "BillingAdminRefusalError": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/BillingAdminRefusalCode"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSettled": {
+        "properties": {
+          "settled": {
+            "enum": [
+              true
+            ],
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "settled"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSponsorCancel": {
+        "properties": {
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          },
+          "currentPeriodEnd": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "past_due",
+              "canceled",
+              "complete"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "cancelAtPeriodEnd",
+          "currentPeriodEnd"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSponsorCancelBody": {
+        "additionalProperties": false,
+        "properties": {
+          "atPeriodEnd": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "atPeriodEnd"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSponsorCommitments": {
+        "properties": {
+          "commitments": {
+            "items": {
+              "properties": {
+                "amountCents": {
+                  "type": "integer"
+                },
+                "cancelAtPeriodEnd": {
+                  "type": "boolean"
+                },
+                "currentPeriodEnd": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "state": {
+                  "enum": [
+                    "active",
+                    "past_due"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "amountCents",
+                "state",
+                "cancelAtPeriodEnd",
+                "currentPeriodEnd"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "commitments"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSponsorRefund": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "paymentId": {
+            "type": "string"
+          },
+          "refundRef": {
+            "type": "string"
+          },
+          "refundedCents": {
+            "description": "The payment's refunded total after this refund.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paymentId",
+          "refundRef",
+          "amountCents",
+          "refundedCents"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSponsorRefundBody": {
+        "additionalProperties": false,
+        "properties": {
+          "amountCents": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "amountCents"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSponsorship": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "currentPeriodEnd": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "once"
+            ],
+            "type": "string"
+          },
+          "paidCents": {
+            "description": "What it has paid, less refunds.",
+            "type": "integer"
+          },
+          "review": {
+            "description": "The sponsor's newest event flagged for review, and how many there are.",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason",
+              "count"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "past_due",
+              "canceled",
+              "complete"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "interval",
+          "amountCents",
+          "currency",
+          "state",
+          "startedAt",
+          "currentPeriodEnd",
+          "cancelAtPeriodEnd",
+          "paidCents",
+          "review"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSponsorshipDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BillingAdminSponsorship"
+          },
+          {
+            "properties": {
+              "payments": {
+                "items": {
+                  "properties": {
+                    "amountCents": {
+                      "type": "integer"
+                    },
+                    "feeCents": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "paidAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "receiptUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "refundedCents": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "paidAt",
+                    "amountCents",
+                    "refundedCents",
+                    "feeCents",
+                    "receiptUrl"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "reviewEvents": {
+                "items": {
+                  "properties": {
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "eventId": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "eventId",
+                    "type",
+                    "outcome",
+                    "reason",
+                    "at"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "payments",
+              "reviewEvents"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "BillingAdminSponsorships": {
+        "properties": {
+          "nextCursor": {
+            "description": "Pass as cursor for the next page; null at the end.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sponsorships": {
+            "items": {
+              "$ref": "#/components/schemas/BillingAdminSponsorship"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sponsorships",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "BillingAdminStrays": {
+        "properties": {
+          "nextCursor": {
+            "description": "Pass as cursor for the next page; null at the end.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "strays": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "customerRef": {
+                  "type": "string"
+                },
+                "eventId": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "subscriptionRef": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "eventId",
+                "type",
+                "accountId",
+                "subscriptionRef",
+                "customerRef",
+                "at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "strays",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "BillingAdminSubscription": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "addOns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "discountLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exemptUntil": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "graceEndsAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextBillingAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextRetryAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "enum": [
+              "signup"
+            ],
+            "type": "string"
+          },
+          "overrides": {
+            "$ref": "#/components/schemas/BillingAdminOverrides"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "stripe",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "providerStatus": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "providerSubscriptionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "spinDownAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "trialing",
+              "active",
+              "past_due",
+              "suspended",
+              "exempt"
+            ],
+            "type": "string"
+          },
+          "stateReason": {
+            "enum": [
+              "no_payment_method",
+              "payment_failed",
+              "subscription_canceled",
+              "provider_ended",
+              "operator",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stateSince": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "trialStartedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accountId",
+          "version",
+          "plan",
+          "interval",
+          "state",
+          "stateReason",
+          "stateSince",
+          "trialStartedAt",
+          "nextBillingAt",
+          "graceEndsAt",
+          "nextRetryAt",
+          "exemptUntil",
+          "spinDownAt",
+          "addOns",
+          "discountLabel",
+          "overrides",
+          "provider",
+          "providerSubscriptionId",
+          "providerStatus",
+          "origin",
+          "updatedAt",
+          "updatedBy"
+        ],
+        "type": "object"
+      },
+      "BillingAdminTransition": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "TrialStarted",
+              "EvaluationDue",
+              "RetryDue",
+              "GraceExpired",
+              "SpinDownDue",
+              "ExemptionExpired",
+              "ProviderActivated",
+              "PaymentSucceeded",
+              "PaymentFailed",
+              "ProviderEnded",
+              "ExemptionGranted",
+              "ExemptionRevoked",
+              "OperatorSuspended",
+              "OperatorUnsuspended",
+              "EnginesStopped",
+              "PlanChanged",
+              "DiscountApplied",
+              "OverridesChanged",
+              "OverridesExpired"
+            ],
+            "type": "string"
+          },
+          "from": {
+            "enum": [
+              "trialing",
+              "active",
+              "past_due",
+              "suspended",
+              "exempt",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownerEmailMissing": {
+            "type": "boolean"
+          },
+          "reason": {
+            "enum": [
+              "no_payment_method",
+              "payment_failed",
+              "subscription_canceled",
+              "provider_ended",
+              "operator",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "to": {
+            "enum": [
+              "trialing",
+              "active",
+              "past_due",
+              "suspended",
+              "exempt"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "from",
+          "to",
+          "event",
+          "reason",
+          "actor",
+          "at",
+          "note",
+          "ownerEmailMissing"
+        ],
+        "type": "object"
+      },
       "BillingCheckout": {
         "properties": {
           "accountId": {
@@ -119,6 +1966,53 @@
         },
         "required": [
           "error"
+        ],
+        "type": "object"
+      },
+      "BillingEnsureMiss": {
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "firstSeenAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "ownerType": {
+            "enum": [
+              "org",
+              "user"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ownerType",
+          "ownerId",
+          "attempts",
+          "firstSeenAt",
+          "lastSeenAt"
+        ],
+        "type": "object"
+      },
+      "BillingEnsureMissBody": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
         ],
         "type": "object"
       },
@@ -636,6 +2530,2620 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/admin/billing/accounts/{id}": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. An organization with no billing yet has `subscription: null` and no transitions.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminAccount"
+                }
+              }
+            },
+            "description": "The organization's billing"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "An organization's subscription and its whole history"
+      }
+    },
+    "/v1/admin/billing/accounts/{id}/discount": {
+      "put": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminDiscountBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Attach a discount to an organization's provider subscription"
+      }
+    },
+    "/v1/admin/billing/accounts/{id}/exemption": {
+      "delete": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "End an organization's exemption"
+      },
+      "put": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminExemptionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Exempt an organization from paying, on a plan"
+      }
+    },
+    "/v1/admin/billing/accounts/{id}/overrides": {
+      "delete": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "End an organization's deal"
+      },
+      "put": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminOverridesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set an organization's deal: entitlements added, removed or limited on top of its plan"
+      }
+    },
+    "/v1/admin/billing/accounts/{id}/plan": {
+      "put": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminPlanBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set an organization's plan"
+      }
+    },
+    "/v1/admin/billing/accounts/{id}/suspend": {
+      "post": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Suspend an organization"
+      }
+    },
+    "/v1/admin/billing/accounts/{id}/unsuspend": {
+      "post": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lift an operator's suspension"
+      }
+    },
+    "/v1/admin/billing/attention": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. At most 200 of each kind: events flagged for review or failed, projections the UI refused, checkouts stuck open, module purchases to refund, dead effects, and transitions whose owner has no email.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminAttention"
+                }
+              }
+            },
+            "description": "What needs an operator"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Everything billing waits on an operator for"
+      }
+    },
+    "/v1/admin/billing/checkouts/{id}/close": {
+      "post": {
+        "description": "`billing:operate`. Acts only on what still waits for an operator, so a second click is refused; refusals store nothing under the Idempotency-Key. 404 `checkout_not_found`; 409 `checkout_not_stuck` for one under three hours old (its customer may still be paying), `checkout_not_open` for one already closed.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSettled"
+                }
+              }
+            },
+            "description": "Closed"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Close a checkout stuck open after its provider session ended"
+      }
+    },
+    "/v1/admin/billing/effects/{id}/abandon": {
+      "post": {
+        "description": "`billing:operate`. Acts only on what still waits for an operator, so a second click is refused; refusals store nothing under the Idempotency-Key. 409 `effect_not_dead` for an effect that is not dead.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSettled"
+                }
+              }
+            },
+            "description": "Settled"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Give up on a dead billing effect; a module purchase's grant flags its checkout for a refund"
+      }
+    },
+    "/v1/admin/billing/effects/{id}/retry": {
+      "post": {
+        "description": "`billing:operate`. Acts only on what still waits for an operator, so a second click is refused; refusals store nothing under the Idempotency-Key. 409 `effect_not_dead` for an effect that is not dead.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSettled"
+                }
+              }
+            },
+            "description": "Settled"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Put a dead billing effect back in the queue with fresh attempts"
+      }
+    },
+    "/v1/admin/billing/ensure-misses": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. Unresolved ones unless `includeResolved` is `true`.",
+        "parameters": [
+          {
+            "description": "The previous page's nextCursor.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The previous page's nextCursor.",
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeResolved",
+            "required": false,
+            "schema": {
+              "default": "false",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminEnsureMisses"
+                }
+              }
+            },
+            "description": "A page of misses"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Owners whose billing could not be started, most recently seen first"
+      }
+    },
+    "/v1/admin/billing/payments": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. `from` inclusive, `to` exclusive, at most 400 days apart.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminPayments"
+                }
+              }
+            },
+            "description": "The payments"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "What billing recorded as paid in a window, oldest first"
+      }
+    },
+    "/v1/admin/billing/plan-counts": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. Every plan and interval is listed, with 0 for one nobody pays on.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminPlanCounts"
+                }
+              }
+            },
+            "description": "The counts"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Organizations paying a provider on each plan and interval"
+      }
+    },
+    "/v1/admin/billing/prices": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. Newest month first within each plan and interval.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminPlanPrices"
+                }
+              }
+            },
+            "description": "The price list"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every plan price ever set"
+      },
+      "post": {
+        "description": "`billing:operate`. 409 `price_exists` when the plan and interval already have a price from that month; delete it first. Refusals store nothing under the Idempotency-Key.",
+        "parameters": [
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminAddPriceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminPlanPrice"
+                }
+              }
+            },
+            "description": "The price"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set a plan's price from a month on"
+      }
+    },
+    "/v1/admin/billing/prices/{plan}/{interval}/{effectiveMonth}": {
+      "delete": {
+        "description": "`billing:operate`. 404 `price_not_found` when there is none. The action record keeps what it said.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan",
+            "required": true,
+            "schema": {
+              "enum": [
+                "starter",
+                "pro"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "interval",
+            "required": true,
+            "schema": {
+              "enum": [
+                "month",
+                "year"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "effectiveMonth",
+            "required": true,
+            "schema": {
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminDeleted"
+                }
+              }
+            },
+            "description": "Removed"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a plan price entered by mistake"
+      }
+    },
+    "/v1/admin/billing/sponsor-commitments": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. `active`, or `past_due` while the provider retries.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSponsorCommitments"
+                }
+              }
+            },
+            "description": "The commitments"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Monthly sponsorships still charging each month"
+      }
+    },
+    "/v1/admin/billing/sponsorships": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. Filtered by state, interval, and the sponsors named by `userId` (repeat it for several).",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "active",
+                "past_due",
+                "canceled",
+                "complete"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval",
+            "required": false,
+            "schema": {
+              "enum": [
+                "month",
+                "once"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "userId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          {
+            "description": "The previous page's nextCursor.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The previous page's nextCursor.",
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSponsorships"
+                }
+              }
+            },
+            "description": "A page of sponsorships"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Sponsorships, newest first"
+      }
+    },
+    "/v1/admin/billing/sponsorships/{id}": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. 404 `sponsorship_not_found` when there is none.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSponsorshipDetail"
+                }
+              }
+            },
+            "description": "The sponsorship"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "One sponsorship with its payments and the sponsor's events flagged for review"
+      }
+    },
+    "/v1/admin/billing/sponsorships/{id}/cancel": {
+      "post": {
+        "description": "`billing:operate`. At the end of its period, or now when `atPeriodEnd` is false (the provider refunds nothing). The sponsor is told it was canceled by woofx3. 409 `sponsorship_not_recurring` for a one-time sponsorship and `sponsorship_canceled` for one that has ended.",
+        "parameters": [
+          {
+            "description": "The sponsorship.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The sponsorship.",
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminSponsorCancelBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSponsorCancel"
+                }
+              }
+            },
+            "description": "The sponsorship"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a monthly sponsorship"
+      }
+    },
+    "/v1/admin/billing/sponsorships/{id}/payments/{paymentId}/refunds": {
+      "post": {
+        "description": "`billing:operate`. The provider is asked under a key derived from the Idempotency-Key, so a retry after a lost answer asks for the same refund. 409 `refund_exceeds_payment` when more is asked than is left to refund. Refusals are not stored under the key: the same request is judged again when it is sent again.",
+        "parameters": [
+          {
+            "description": "The sponsorship.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The sponsorship.",
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "One of its payments.",
+            "in": "path",
+            "name": "paymentId",
+            "required": true,
+            "schema": {
+              "description": "One of its payments.",
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminSponsorRefundBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSponsorRefund"
+                }
+              }
+            },
+            "description": "The refund"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Refund some or all of a sponsorship's payment"
+      }
+    },
+    "/v1/admin/billing/strays": {
+      "get": {
+        "description": "`billing:admin-read`. Any organization's or sponsor's billing, for operators. An operator settles each in the provider.",
+        "parameters": [
+          {
+            "description": "The previous page's nextCursor.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The previous page's nextCursor.",
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminStrays"
+                }
+              }
+            },
+            "description": "A page of strays"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Provider subscriptions no organization follows, oldest first"
+      }
+    },
     "/v1/billing/accounts/{id}/checkouts": {
       "post": {
         "description": "Requests with one Idempotency-Key get one answer. The same terms within a half hour reuse the open provider session; other terms replace it, so an organization has one payable checkout. Refused while the organization pays, while a failing payment is mended in the portal (`subscription_exists`), and under an operator suspension.",
@@ -1204,6 +5712,95 @@
           }
         ],
         "summary": "Open the provider's customer portal"
+      }
+    },
+    "/v1/billing/accounts/{ownerType}/{ownerId}/ensure-miss": {
+      "post": {
+        "description": "For the UI's convergent pass, when `ensure` still fails for an owner it found with no billing. Each call counts one more attempt; the miss closes by itself when `ensure` later succeeds. The key must be bound to `ownerType` billing (403 `forbidden_billing_owner`).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ownerType",
+            "required": true,
+            "schema": {
+              "enum": [
+                "org",
+                "user"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "The UI's id for the organization or the person.",
+            "in": "path",
+            "name": "ownerId",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization or the person.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingEnsureMissBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingEnsureMiss"
+                }
+              }
+            },
+            "description": "The miss as recorded"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Report an owner whose billing the caller could not start"
       }
     },
     "/v1/billing/checkouts/{id}": {
