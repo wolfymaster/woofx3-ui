@@ -1,5 +1,11 @@
 # woofx3 desktop changelog
 
+## [0.17.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.16.0...woofx3-v0.17.0) (2026-11-18)
+
+### Features
+
+* **scenes:** group the widget palette by purpose ([b0ef2ed](https://github.com/wolfymaster/woofx3-ui/commit/b0ef2eddfe5139e07c2001e5708033cde0a244ca))
+
 ## [0.16.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.15.0...woofx3-v0.16.0) (2026-11-17)
 
 ### Features
