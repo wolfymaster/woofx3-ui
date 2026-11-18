@@ -4,6 +4,7 @@ import { Loader2, MonitorPlay } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { AUTH_CARD_CLASS, AuthLayout } from "@/components/auth/auth-layout";
+import { VerifyEmail } from "@/components/auth/verify-email";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { withNext } from "@/lib/auth-next-path";
 import { useLogger } from "@/lib/logger-context";
 import { $currentInstanceId } from "@/lib/stores";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
+import { isEmailUnverified } from "@/lib/verify-email";
 
 function getTokenFromLocation(): string | null {
   if (typeof window === "undefined") {
@@ -43,6 +45,7 @@ export default function AcceptInvite() {
 
   const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [needsVerifiedEmail, setNeedsVerifiedEmail] = useState(false);
   const ranAccept = useRef(false);
 
   const runAccept = useCallback(async () => {
@@ -53,6 +56,7 @@ export default function AcceptInvite() {
     }
     setStatus("working");
     setMessage(null);
+    setNeedsVerifiedEmail(false);
     try {
       const outcome = await accept({ token });
       const refusal = acceptRefusalMessage(outcome);
@@ -75,6 +79,12 @@ export default function AcceptInvite() {
       setMessage("You have joined the team. Redirecting…");
       setTimeout(() => navigate("/"), 1500);
     } catch (error) {
+      if (isEmailUnverified(error)) {
+        setStatus("error");
+        setNeedsVerifiedEmail(true);
+        setMessage("Verify your email address to accept this invitation.");
+        return;
+      }
       logger.error("Accepting an invitation failed", { error, requestId: convexRequestId(error) });
       setStatus("error");
       // The server answers expected outcomes as values; a throw here is unexpected
@@ -158,6 +168,7 @@ export default function AcceptInvite() {
             </div>
           ) : null}
           {message ? <p className="text-sm">{message}</p> : null}
+          {needsVerifiedEmail ? <VerifyEmail onVerified={() => void runAccept()} /> : null}
           {status === "error" ? (
             <Button variant="outline" onClick={() => navigate("/")}>
               Back to app
