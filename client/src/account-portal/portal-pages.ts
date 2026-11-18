@@ -2,7 +2,17 @@ import type { OrgCapabilities } from "@convex/organizations";
 
 export const ACCOUNT_PORTAL_PATH = "/account";
 
-export type PortalPageId = "overview" | "sponsorship" | "payments" | "people" | "settings" | "team";
+export const PLANS_PATH = `${ACCOUNT_PORTAL_PATH}/organization/plans`;
+
+export type PortalPageId =
+  | "overview"
+  | "sponsorship"
+  | "payments"
+  | "people"
+  | "settings"
+  | "team"
+  | "general"
+  | "plans";
 
 export interface PortalPage {
   id: PortalPageId;
@@ -10,6 +20,8 @@ export interface PortalPage {
   path: string;
   /** The org action a role needs to see the page; null means every signed-in user sees it. */
   visibleWith: keyof OrgCapabilities | null;
+  /** Pages of an organization's Settings sit under that entry in the nav. */
+  inOrganizationSettings?: boolean;
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [
@@ -19,6 +31,20 @@ export const PORTAL_PAGES: readonly PortalPage[] = [
   { id: "people", label: "People", path: `${ACCOUNT_PORTAL_PATH}/people`, visibleWith: "manageMembers" },
   { id: "settings", label: "Your settings", path: `${ACCOUNT_PORTAL_PATH}/settings`, visibleWith: null },
   { id: "team", label: "Team", path: `${ACCOUNT_PORTAL_PATH}/team`, visibleWith: null },
+  {
+    id: "general",
+    label: "General",
+    path: `${ACCOUNT_PORTAL_PATH}/organization/general`,
+    visibleWith: "viewOrganization",
+    inOrganizationSettings: true,
+  },
+  {
+    id: "plans",
+    label: "Plans",
+    path: PLANS_PATH,
+    visibleWith: "manageBilling",
+    inOrganizationSettings: true,
+  },
 ];
 
 /** The pages a viewer sees in the portal's nav; `can` is null for a viewer with no organization. */

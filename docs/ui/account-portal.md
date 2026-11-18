@@ -29,9 +29,9 @@ The portal belongs to the signed-in person. Every signed-in user on the web buil
 
 | Viewer | Tabs |
 |---|---|
-| Org owner | Overview, Sponsorship, Payments, People |
-| Org admin | Overview, Sponsorship, Payments, People |
-| Org member | Overview, Sponsorship, Payments |
+| Org owner | Overview, Sponsorship, Payments, People, Settings (General, Plans) |
+| Org admin | Overview, Sponsorship, Payments, People, Settings (General) |
+| Org member | Overview, Sponsorship, Payments, Settings (General) |
 | Signed in, no organization | Overview, Sponsorship, Payments |
 
 The header's switcher (`portal-scope.ts`, `ScopeSwitcher`) chooses what the portal shows: **Personal**, which everyone has, or one of the viewer's organizations. In an organization's scope the pages work on that organization (its engines, plan, members); in the personal scope the Overview lists every engine the viewer can open across their organizations, with no create or rename, and the organization's pages that need a role are not offered. A person with no organization sees Personal alone. The portal opens on the organization of the engine they were last in, else one they own, else the first, else Personal.
@@ -40,12 +40,14 @@ What a tab shows of the organization is gated by role, not by the tab being visi
 
 | Tab | Path | Organization part (owner only, `manageBilling`) | Everyone |
 |---|---|---|---|
-| Overview | `/account` | the Subscription card: plan, state, discount; choose a plan and check out; manage billing | the organization's engines (each with "Launch dashboard"; the owner renames, `renameEngine`, and creates, `createEngine`), or a large call to action to create one |
+| Overview | `/account` | | the organization's engines (each with "Launch dashboard"; the owner renames, `renameEngine`, and creates, `createEngine`), or a large call to action to create one |
 | Sponsorship | `/account/sponsorship` | | the viewer's own sponsorships |
 | Payments | `/account/payments` | the organization's invoices | the viewer's own sponsor payments, in the same history |
 | People | `/account/people` | (`manageMembers`) change roles, remove | |
+| Settings, General | `/account/organization/general` | (`viewOrganization`) the organization's name; the owner renames it (`renameOrganization`) | |
+| Settings, Plans | `/account/organization/plans` | the plan the organization is on and the ones it can move to: choose a plan and check out; manage billing | |
 
-An admin sees no organization billing: `organizations.mine` sends the subscription only to a role with `manageBilling`, the owner. The Overview header offers renaming the organization to the owner only (`renameOrganization`). The pages work with no organization at all: `organizations.mine` answers an empty list, the switcher shows only Personal, and no organization query runs.
+An admin sees no organization billing: `organizations.mine` sends the subscription only to a role with `manageBilling`, the owner.  The pages work with no organization at all: `organizations.mine` answers an empty list, the switcher shows only Personal, and no organization query runs.
 
 The Overview lists the organization's engines as cards, each with how it is hosted, where its build stands and a "Launch dashboard" button; members see the ones they can open. With no engine it shows a large call to action: the owner creates one here, a viewer with no organization goes to onboarding, and anyone else is told to ask an owner. An organization's first engine comes from onboarding; the owner (`createEngine`) adds more with "Create another engine" (`new-engine-dialog.tsx`):
 
@@ -54,7 +56,7 @@ The Overview lists the organization's engines as cards, each with how it is host
 
 Either way the new engine becomes the selected one (`$currentInstanceId`) and the dashboard goes to `/setup`, where a hosted engine shows its build progress and Try again (`provisioning.retry`) like the first engine's. Nothing changes the owner's default engine, so signing in still opens the one it did. Plans have no engine-count limit, and seats stay per organization whatever the number of engines.
 
-Plan picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. A checkout is refused while the provider subscription has not ended: one in good standing answers `already_subscribed`, and one whose payments are failing (past due, or suspended with the subscription still alive) answers `subscription_exists`, which sends the owner to the provider's portal to fix the payment method instead of paying for a second subscription. List prices in `@/billing/format.ts` must match the provider's prices and the marketing pricing page.
+The payment provider returns organization checkouts to `/account`; the Overview sends the billing owner on to Plans with the same query, where the result is shown. Plans shows an "Active plan" card (the plan's name, where it stands, what it includes) and below it the other plans: every plan while the organization is trialing or has no plan, and only the ones it is not on once a provider subscription is running (those buttons open the provider's portal). The Plans page picks its content in `billing-view.ts`: an organization with only self-hosted engines reads "No subscription needed for self-hosted engines"; an exempt one shows its plan with no buttons; a running provider subscription offers "Manage billing" (the provider's portal); otherwise the owner chooses a plan and checks out. A checkout is refused while the provider subscription has not ended: one in good standing answers `already_subscribed`, and one whose payments are failing (past due, or suspended with the subscription still alive) answers `subscription_exists`, which sends the owner to the provider's portal to fix the payment method instead of paying for a second subscription. List prices in `@/billing/format.ts` must match the provider's prices and the marketing pricing page.
 
 ## Sponsorships
 

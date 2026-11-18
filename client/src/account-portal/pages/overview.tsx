@@ -1,40 +1,27 @@
-import { api } from "@convex/_generated/api";
-import { useMutation } from "convex/react";
+import { Redirect, useSearch } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import { parseCheckoutReturn } from "@/lib/checkout-return";
 import { useOptionalOrganization } from "../organization-context";
-import { RenameDialog } from "../rename-dialog";
+import { PLANS_PATH } from "../portal-pages";
 import { EngineList } from "./engine-list";
-import { OrganizationPlan } from "./plan-card";
 
-/** The portal's home: the organizations the person is in, their engines, and the plan behind them. */
+/**
+ * The portal's home: the engines the person can launch. The payment provider returns checkouts here, so one that
+ * lands on an organization's billing owner goes on to the Plans page, which reports how it ended.
+ */
 export default function OverviewPage() {
-  const selection = useOptionalOrganization();
-  const organization = selection?.organization ?? null;
-  const rename = useMutation(api.organizations.rename);
+  const organization = useOptionalOrganization()?.organization ?? null;
+  const search = useSearch();
+  if (organization?.can.manageBilling && parseCheckoutReturn(search).kind !== "none") {
+    return <Redirect to={`${PLANS_PATH}?${search}`} replace />;
+  }
   return (
     <>
       <PageHeader
         title={organization?.name ?? "Overview"}
-        description={
-          organization === null
-            ? "Every engine you can open, and your own sponsorships."
-            : "Your organization, its engines and its plan."
-        }
-        actions={
-          organization?.can.renameOrganization ? (
-            <RenameDialog
-              title="Rename organization"
-              current={organization.name}
-              onRename={(name) => rename({ accountId: organization.accountId, name })}
-              testId="button-rename-organization"
-            />
-          ) : null
-        }
+        description={organization === null ? "Every engine you can open." : "This organization's engines."}
       />
-      <div className="space-y-8">
-        <EngineList />
-        {organization?.can.manageBilling ? <OrganizationPlan /> : null}
-      </div>
+      <EngineList />
     </>
   );
 }

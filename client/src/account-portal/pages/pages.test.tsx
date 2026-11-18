@@ -113,7 +113,9 @@ mock.module("@/components/ui/toggle-group", () => ({
 
 const { default: PeoplePage } = await import("./people");
 const { default: PaymentsPage } = await import("./payments");
+const { default: GeneralPage } = await import("./general");
 const { default: OverviewPage } = await import("./overview");
+const { default: PlansPage } = await import("./plans");
 const { default: SponsorshipPage } = await import("./sponsorship");
 
 const ACCOUNT_ID = "account-1" as Id<"accounts">;
@@ -333,20 +335,21 @@ const MANAGE_BUTTONS = [
 ];
 
 describe("Overview and Sponsorship pages", () => {
-  test("the owner sees the organization's subscription, its engine and a way to launch it", async () => {
+  test("the owner sees the organization's engine and a way to launch it, and no plan", async () => {
     const renderer = await render("owner", <OverviewPage />);
-    expect(JSON.stringify(renderer.toJSON())).toContain("Subscription");
     expect(byTestId(renderer, "button-launch-instance-1").length).toBe(1);
+    expect(byTestId(renderer, "card-active-plan").length).toBe(0);
   });
 
-  test("an admin sees the engines but no subscription", async () => {
-    const renderer = await render("admin", <OverviewPage />);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Subscription");
-    expect(byTestId(renderer, "button-launch-instance-1").length).toBe(1);
+  test("the owner's Plans page shows the plan they are on and the choices", async () => {
+    const renderer = await render("owner", <PlansPage />);
+    expect(byTestId(renderer, "card-active-plan").length).toBe(1);
+    expect(byTestId(renderer, "button-choose-starter").length).toBe(1);
+    expect(byTestId(renderer, "button-choose-pro").length).toBe(1);
   });
 
   test("the plan chooser shows the plane's prices and plan names", async () => {
-    const page = JSON.stringify((await render("owner", <OverviewPage />)).toJSON());
+    const page = JSON.stringify((await render("owner", <PlansPage />)).toJSON());
     expect(page).toContain("$75/mo");
     expect(page).toContain("$150/mo");
     expect(page).not.toContain("price unavailable");
@@ -354,14 +357,14 @@ describe("Overview and Sponsorship pages", () => {
 
   test("the plan chooser says price unavailable when the plane has no price to give", async () => {
     actionAnswers["prices:list"] = { state: "unavailable", names: { starter: "Starter", pro: "Pro" } };
-    const page = JSON.stringify((await render("owner", <OverviewPage />)).toJSON());
+    const page = JSON.stringify((await render("owner", <PlansPage />)).toJSON());
     expect(page).toContain("price unavailable");
     expect(page).not.toContain("/mo");
   });
 
-  test("only the owner's header has the rename control", async () => {
-    expect(byTestId(await render("owner", <OverviewPage />), "button-rename-organization").length).toBe(1);
-    expect(byTestId(await render("admin", <OverviewPage />), "button-rename-organization").length).toBe(0);
+  test("only the owner has the rename control", async () => {
+    expect(byTestId(await render("owner", <GeneralPage />), "button-rename-organization").length).toBe(1);
+    expect(byTestId(await render("admin", <GeneralPage />), "button-rename-organization").length).toBe(0);
   });
 
   test.each([["admin" as const], [null]])("%p with no sponsorship sees the pitch alone", async (role) => {
