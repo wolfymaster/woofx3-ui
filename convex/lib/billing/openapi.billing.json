@@ -103,7 +103,10 @@
                     "publish_projection",
                     "expire_checkout",
                     "grant_entitlement",
-                    "revoke_entitlement"
+                    "revoke_entitlement",
+                    "grant_credit",
+                    "apply_credit",
+                    "reward_referrer"
                   ],
                   "type": "string"
                 },
@@ -169,7 +172,8 @@
                     "PlanChanged",
                     "DiscountApplied",
                     "OverridesChanged",
-                    "OverridesExpired"
+                    "OverridesExpired",
+                    "RewardGranted"
                   ],
                   "type": "string"
                 },
@@ -1150,6 +1154,8 @@
           "no_provider_subscription",
           "unknown_discount",
           "invalid_overrides_end",
+          "invalid_reward",
+          "credits_disabled",
           "sponsorship_not_found",
           "payment_not_found",
           "refund_exceeds_payment",
@@ -1184,6 +1190,37 @@
         },
         "required": [
           "error"
+        ],
+        "type": "object"
+      },
+      "BillingAdminRewardBody": {
+        "additionalProperties": false,
+        "properties": {
+          "amountCents": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rewardId": {
+            "description": "Names the reward, normally the referral that earned it; granting the same id again adds nothing.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourcePaymentRef": {
+            "description": "The provider invoice that earned the reward; refunding it claws the unspent credit back.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "rewardId",
+          "amountCents",
+          "sourcePaymentRef"
         ],
         "type": "object"
       },
@@ -1781,7 +1818,8 @@
               "PlanChanged",
               "DiscountApplied",
               "OverridesChanged",
-              "OverridesExpired"
+              "OverridesExpired",
+              "RewardGranted"
             ],
             "type": "string"
           },
@@ -3403,6 +3441,145 @@
           }
         ],
         "summary": "Set an organization's plan"
+      }
+    },
+    "/v1/admin/billing/accounts/{id}/rewards": {
+      "post": {
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again. The credit lapses 12 months after it is granted and is spent on the organization's next provider invoice (once it pays). 409 `credits_disabled` while credits are switched off.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required. A repeat with the same key returns the original response.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "description": "Required. A repeat with the same key returns the original response.",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The operator's email address; recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-actor",
+            "required": true,
+            "schema": {
+              "description": "The operator's email address; recorded with the change.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+            "in": "header",
+            "name": "x-woofx3-reason",
+            "required": true,
+            "schema": {
+              "description": "Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingAdminRewardBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminSubscription"
+                }
+              }
+            },
+            "description": "The subscription after the change"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request, the operator or reason is missing, or refused as invalid_exemption"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAdminConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "The payment provider is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Grant an organization credit for a referral reward"
       }
     },
     "/v1/admin/billing/accounts/{id}/suspend": {
