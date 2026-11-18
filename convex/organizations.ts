@@ -2,12 +2,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type QueryCtx, query } from "./_generated/server";
-import { accountEntitlements, orgSeatLimit } from "./lib/entitlementAccess";
-import type { Entitlements, SubscriptionSummary } from "./lib/entitlements";
+import type { SubscriptionSummary } from "./lib/entitlements";
 import type { EngineRole, OrgRole } from "./lib/organization";
-import { billingFor, type ProjectedDiscount } from "./lib/orgBilling";
-import { ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireOrgAction } from "./lib/orgRoles";
+import type { ProjectedDiscount } from "./lib/orgBilling";
 import { linkedPlatformNames, memberDisplayName, memberEmailField } from "./lib/teamAccess";
+import { loadOrgContext, type OrgContext } from "./org/context";
+import { membershipsOf, orgMembers } from "./org/membership";
+import { can, ORG_ACTIONS, type OrgAction, orgCan, orgRoleOf, requireAction, viewerRoles } from "./org/policy";
 
 // The org portal's reads. Storage calls an organization an account; these
 // answer in the portal's terms. What each role sees follows orgCan: a page a
@@ -28,7 +29,7 @@ export interface OrgEngine {
   canOpen: boolean;
 }
 
-/** The subscription as the portal shows it. The discount is billing detail, so only the owner gets it. */
+/** The subscription as the portal shows it, to the role that manages billing. */
 export interface OrgSubscription extends SubscriptionSummary {
   spinDownAt: number | null;
   /** A provider subscription exists, so plan changes go through the provider's portal. */
@@ -45,7 +46,7 @@ export interface MyOrganization {
   can: OrgCapabilities;
   /** Every engine of the org for owners and admins; the ones they're on for members. */
   engines: OrgEngine[];
-  /** Null for a role that can't see billing. */
+  /** Null for a role that can't manage billing: only the owner sees it. */
   subscription: OrgSubscription | null;
   /**
    * Null for a role that can't manage members. `limit` is null when no seat
@@ -58,13 +59,9 @@ function capabilities(role: OrgRole): OrgCapabilities {
   return Object.fromEntries(ORG_ACTIONS.map((action) => [action, orgCan(role, action)])) as OrgCapabilities;
 }
 
-async function orgEngines(ctx: QueryCtx, account: Doc<"accounts">, userId: Id<"users">, all: boolean) {
-  const instances = await ctx.db
-    .query("instances")
-    .withIndex("by_account", (q) => q.eq("accountId", account._id))
-    .collect();
+async function orgEngines(ctx: QueryCtx, org: OrgContext, userId: Id<"users">, all: boolean) {
   const engines: OrgEngine[] = [];
-  for (const instance of instances) {
+  for (const instance of org.instances) {
     const membership = await ctx.db
       .query("instanceMembers")
       .withIndex("by_instance_user", (q) => q.eq("instanceId", instance._id).eq("userId", userId))
@@ -90,53 +87,36 @@ async function orgEngines(ctx: QueryCtx, account: Doc<"accounts">, userId: Id<"u
   return engines;
 }
 
-async function orgSubscription(
-  ctx: QueryCtx,
-  accountId: Id<"accounts">,
-  role: OrgRole,
-  entitlements: Entitlements
-): Promise<OrgSubscription | null> {
-  const billing = await billingFor(ctx, accountId);
-  const summary = entitlements.subscription;
-  if (billing === null || summary === null) {
+function orgSubscription(org: OrgContext): OrgSubscription | null {
+  if (org.billing === null) {
     return null;
   }
   return {
-    ...summary,
-    spinDownAt: billing.spinDownAt,
-    hasProviderSubscription: billing.hasProviderSubscription,
-    discount: orgCan(role, "manageBilling") ? billing.discount : null,
+    ...org.billing.summary,
+    spinDownAt: org.billing.spinDownAt,
+    hasProviderSubscription: org.billing.hasProviderSubscription,
+    discount: org.billing.discount,
   };
-}
-
-async function orgSeats(ctx: QueryCtx, accountId: Id<"accounts">, now: number) {
-  const members = await ctx.db
-    .query("accountMembers")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .collect();
-  return { used: members.length, limit: await orgSeatLimit(ctx, accountId, now) };
 }
 
 async function myOrganization(
   ctx: QueryCtx,
-  account: Doc<"accounts">,
-  userId: Id<"users">,
-  now: number
+  accountId: Id<"accounts">,
+  userId: Id<"users">
 ): Promise<MyOrganization | null> {
-  const role = await orgRoleOf(ctx, account, userId);
-  if (role === null) {
+  const org = await loadOrgContext(ctx, accountId, userId);
+  if (org === null) {
     return null;
   }
-  const can = capabilities(role);
-  const entitlements = await accountEntitlements(ctx, account._id, now);
+  const allowed = capabilities(org.role);
   return {
-    accountId: account._id,
-    name: account.name,
-    role,
-    can,
-    engines: await orgEngines(ctx, account, userId, can.manageEngines),
-    subscription: can.viewBilling ? await orgSubscription(ctx, account._id, role, entitlements) : null,
-    seats: can.manageMembers ? await orgSeats(ctx, account._id, now) : null,
+    accountId,
+    name: org.account.name,
+    role: org.role,
+    can: allowed,
+    engines: await orgEngines(ctx, org, userId, allowed.manageEngines),
+    subscription: allowed.manageBilling ? orgSubscription(org) : null,
+    seats: allowed.manageMembers ? org.seats : null,
   };
 }
 
@@ -148,21 +128,18 @@ async function myOrganization(
 export const capabilitiesForInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<OrgCapabilities | null> => {
-    const userId = await getAuthUserId(ctx);
-    const instance = await ctx.db.get(instanceId);
-    const account = instance === null ? null : await ctx.db.get(instance.accountId);
-    if (userId === null || account === null) {
+    const viewer = await viewerRoles(ctx, { engine: instanceId });
+    if (viewer === null || viewer.roles.org === null) {
       return null;
     }
-    const role = await orgRoleOf(ctx, account, userId);
-    return role === null ? null : capabilities(role);
+    return capabilities(viewer.roles.org);
   },
 });
 
-/** The organizations the caller belongs to, each as their role may see it. `now` (ms) resolves the plan. */
+/** The organizations the caller belongs to, each as their role may see it. */
 export const mine = query({
-  args: { now: v.number() },
-  handler: async (ctx, { now }): Promise<MyOrganization[]> => {
+  args: {},
+  handler: async (ctx): Promise<MyOrganization[]> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       return [];
@@ -171,15 +148,11 @@ export const mine = query({
       .query("accounts")
       .withIndex("by_owner", (q) => q.eq("ownerId", userId))
       .collect();
-    const rows = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    const rows = await membershipsOf(ctx, userId);
     const accountIds = new Set<Id<"accounts">>([...owned.map((a) => a._id), ...rows.map((r) => r.accountId)]);
     const organizations: MyOrganization[] = [];
     for (const accountId of accountIds) {
-      const account = await ctx.db.get(accountId);
-      const organization = account === null ? null : await myOrganization(ctx, account, userId, now);
+      const organization = await myOrganization(ctx, accountId, userId);
       if (organization !== null) {
         organizations.push(organization);
       }
@@ -202,16 +175,12 @@ export interface OrgMember {
 export const members = query({
   args: { accountId: v.id("accounts") },
   handler: async (ctx, { accountId }): Promise<OrgMember[] | null> => {
-    const userId = await getAuthUserId(ctx);
-    const account = await ctx.db.get(accountId);
-    if (userId === null || account === null) {
+    const viewer = await viewerRoles(ctx, { org: accountId });
+    if (viewer === null || !can(viewer.roles, "manageMembers")) {
       return null;
     }
-    const callerRole = await orgRoleOf(ctx, account, userId);
-    if (!orgCan(callerRole, "manageMembers")) {
-      return null;
-    }
-    const showEmails = orgCan(callerRole, "viewMemberEmails");
+    const { account } = viewer;
+    const showEmails = can(viewer.roles, "viewMemberEmails");
     const instances = await ctx.db
       .query("instances")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
@@ -220,10 +189,7 @@ export const members = query({
       ctx,
       instances.map((instance) => instance._id)
     );
-    const rows = await ctx.db
-      .query("accountMembers")
-      .withIndex("by_account", (q) => q.eq("accountId", accountId))
-      .collect();
+    const rows = await orgMembers(ctx, accountId);
     const result: OrgMember[] = [];
     for (const row of rows) {
       const user = await ctx.db.get(row.userId);
@@ -257,7 +223,7 @@ export const members = query({
 export const rename = mutation({
   args: { accountId: v.id("accounts"), name: v.string() },
   handler: async (ctx, { accountId, name }) => {
-    await requireOrgAction(ctx, accountId, "renameOrganization");
+    await requireAction(ctx, { org: accountId }, "renameOrganization");
     const trimmed = name.trim();
     if (trimmed === "" || trimmed.length > MAX_ORGANIZATION_NAME_LENGTH) {
       throw new ConvexError({

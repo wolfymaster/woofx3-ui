@@ -63,7 +63,7 @@ function as(t: Backend, userId: Id<"users">) {
 }
 
 async function mine(t: Backend, userId: Id<"users">) {
-  const [organization] = await as(t, userId).query(api.organizations.mine, { now: NOW });
+  const [organization] = await as(t, userId).query(api.organizations.mine, {});
   return organization;
 }
 
@@ -110,13 +110,14 @@ describe("organizations.mine", () => {
     expect((await mine(t, ownerId)).seats).toEqual({ used: 7, limit: null });
   });
 
-  test("an admin sees the plan but may not manage billing", async () => {
+  test("an admin is sent no subscription and may not manage billing", async () => {
     const t = newBackend();
     const org = await seedOrg(t);
     const adminId = await addMember(t, org, "admin", "admin");
     const organization = await mine(t, adminId);
-    expect(organization.subscription?.state).toBe("trialing");
+    expect(organization.subscription).toBeNull();
     expect(organization.can.manageBilling).toBe(false);
+    expect(organization.can.viewLicenseKeys).toBe(true);
   });
 
   test("an admin sees and renames every engine, and only the owner may create one", async () => {

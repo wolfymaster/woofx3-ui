@@ -6,12 +6,10 @@ import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
 import { CHAT_MESSAGE_EVENT, ChatCommandsLink } from "@/components/alerts/chat-commands-link";
 import { AlertsDashboard } from "@/components/alerts/dashboard/alerts-dashboard";
 import { EventTriggerList } from "@/components/alerts/event-trigger-list";
-import { ALERT_GROUPS_PATH, WorkflowGroupPages } from "@/components/alerts/workflow-group-pages";
 import { EmptyState } from "@/components/common/empty-state";
 import { ListDetail } from "@/components/layout/list-detail";
 import { PageHeader } from "@/components/layout/page-header";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
-import { useWorkflowGroupsSupported } from "@/engine/hooks/use-workflow-groups";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -31,8 +29,6 @@ import { $hideUnusedAlerts } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 const BASE_PATH = "/stream/alerts";
-/** The first segment below BASE_PATH that is the alert group pages rather than a menu path; no taxonomy uses it. */
-const GROUPS_SEGMENT = "groups";
 
 /**
  * Triggers, grouped by platform and then by what happened.
@@ -44,7 +40,6 @@ export default function Alerts() {
   const [location, navigate] = useLocation();
   const { triggerPresets, loading: catalogLoading } = useWorkflowCatalog();
   const workflows = useWorkflows();
-  const groupsSupported = useWorkflowGroupsSupported();
 
   // The trigger stays selected while the sheet closes, so its contents don't blank
   // out mid-animation.
@@ -99,11 +94,7 @@ export default function Alerts() {
   }, [rows, menuPathByEvent]);
 
   // Everything below the Alerts route is the selected menu path, as deep as the taxonomy nests.
-  const subPath = useMemo(() => subPathSegments(location, BASE_PATH), [location]);
-  // The group pages sit ahead of the menu path, and only on an engine that has groups.
-  const onGroupPages = groupsSupported && subPath[0] === GROUPS_SEGMENT;
-  const groupsRoute = onGroupPages ? subPath.slice(1) : null;
-  const selectedPath = useMemo(() => (onGroupPages ? [] : subPath), [onGroupPages, subPath]);
+  const selectedPath = useMemo(() => subPathSegments(location, BASE_PATH), [location]);
   const selectedId = selectedPath.length > 0 ? alertNodeId(selectedPath) : null;
   const node = selectedId === null ? undefined : findAlertNode(tree, selectedPath);
   const nodePresets = node ? subtreePresets(node) : [];
@@ -158,7 +149,7 @@ export default function Alerts() {
   return (
     <>
       <ListDetail
-        hasSelection={selectedId !== null || groupsRoute !== null}
+        hasSelection={selectedId !== null}
         back={{ href: BASE_PATH, label: "Alerts" }}
         overviewBelowList
         list={
@@ -171,8 +162,6 @@ export default function Alerts() {
             onAnchorSelect={requestScroll}
             hideUnused={hideUnused}
             onHideUnusedChange={(hide) => $hideUnusedAlerts.set(hide)}
-            groupsHref={groupsSupported ? ALERT_GROUPS_PATH : null}
-            groupsActive={groupsRoute !== null}
           />
         }
         detail={
@@ -182,12 +171,10 @@ export default function Alerts() {
             <div
               className={cn(
                 "mx-auto w-full px-4 pb-8 pt-6 sm:px-6",
-                selectedId === null && groupsRoute === null ? "max-w-[1200px]" : "max-w-[880px] sm:pt-16"
+                selectedId === null ? "max-w-[1200px]" : "max-w-[880px] sm:pt-16"
               )}
             >
-              {groupsRoute !== null ? (
-                <WorkflowGroupPages route={groupsRoute} />
-              ) : loading ? (
+              {loading ? (
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               ) : selectedId === null ? (
                 <>

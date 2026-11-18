@@ -78,7 +78,7 @@ it. Under the header it has tabs (`ListingModuleTabs`, with the tab in
 - **Files**: the module's file browser.
 - **Settings** and **Resources**, once it is installed: the same settings,
   webhook endpoints, local endpoint routing and resource instances as
-  an installed module's page (`/marketplace/installed/:id`).
+  an installed module's page (`/stream/modules/:id`).
 
 These come from `moduleDetail.getModuleDetail` for the listing, the action
 an installed module's page uses, and the tabs reuse that page's components
@@ -304,9 +304,9 @@ nothing itself. The browser runs the install as a state machine
   one listing from `GET /entitlements`, for the module page's key control.
 
 Any member may acquire and install. Only the organization's owner
-(`manageBilling`) may pay, and only its owner and admins (`viewBilling`) may
+(`manageBilling`) may pay, and only its owner and admins (`viewLicenseKeys`) may
 read a key. Both are checked on the organization that owns the engine
-(`requireOrgActionOnInstanceInAction`), and the browser reads the same answer
+(`requireAction` with the engine as subject), and the browser reads the same answer
 from `organizations.capabilitiesForInstance` through the session gateway's
 `useOrganizationAccess`.
 

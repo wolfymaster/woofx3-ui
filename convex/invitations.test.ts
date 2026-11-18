@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend, runMigration } from "./lib/convexTest.testing";
-import { accountEntitlements, SEATS_FULL } from "./lib/entitlementAccess";
+import { accountEntitlements } from "./lib/entitlementAccess";
 import type { EngineRole, OrgRole } from "./lib/organization";
 import { insertProjection } from "./lib/orgBilling.testing";
+import { SEATS_FULL } from "./org/membership";
 import { seedMissingTierPlans } from "./seeds/plans";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -115,7 +116,7 @@ async function fillSeats(t: Backend, org: Org): Promise<void> {
     await ctx.db.patch(org.instanceId, { hosting: "managed" });
     await insertProjection(ctx, org.accountId, { standing: "trialing", trialEndsAt: Date.now() + 30 * DAY_MS });
   });
-  const { limits } = await t.run((ctx) => accountEntitlements(ctx, org.accountId, Date.now()));
+  const { limits } = await t.run((ctx) => accountEntitlements(ctx, org.accountId));
   const limit = limits["org.members"];
   if (typeof limit !== "number") {
     throw new Error("the Starter plan has no seat limit");
@@ -139,7 +140,9 @@ describe("invitations.create", () => {
     const t = newBackend();
     const org = await seedOrg(t);
     const memberId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
-    await expect(invite(t, memberId, org.instanceId, "new@example.com")).rejects.toThrow("Not authorized");
+    await expect(invite(t, memberId, org.instanceId, "new@example.com")).rejects.toMatchObject({
+      data: { code: "not_authorized", action: "manageEngineMembers" },
+    });
   });
 
   test("refuses someone already on the engine, but not an org member who isn't", async () => {
@@ -214,7 +217,19 @@ describe("invitations.listForEngine", () => {
     const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
     await invite(t, org.ownerId, org.instanceId, "here@example.com");
     await invite(t, org.ownerId, secondId, "there@example.com");
-    expect(await listedEmails(t, adminId, org.instanceId)).toEqual(["here@example.com"]);
+    expect(await listedEmails(t, adminId, org.instanceId)).toEqual(["h***@example.com"]);
+  });
+
+  test.each<[string, OrgRole, string]>([
+    ["the owner", "owner", "here@example.com"],
+    ["an org admin", "admin", "h***@example.com"],
+  ])("%s sees an invitee's email as %s", async (_name, orgRole, shown) => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const viewerId =
+      orgRole === "owner" ? org.ownerId : await addUser(t, "admin@example.com", { org, orgRole, engineRole: "admin" });
+    await invite(t, org.ownerId, org.instanceId, "here@example.com");
+    expect(await listedEmails(t, viewerId, org.instanceId)).toEqual([shown]);
   });
 
   test("an engine member sees no invitations", async () => {
@@ -223,6 +238,94 @@ describe("invitations.listForEngine", () => {
     const memberId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
     await invite(t, org.ownerId, org.instanceId, "here@example.com");
     expect(await listedEmails(t, memberId, org.instanceId)).toBeNull();
+  });
+});
+
+describe("joining the org takes someone who may spend a seat", () => {
+  async function seatsUsed(t: Backend, org: Org) {
+    return t.run(
+      async (ctx) =>
+        (
+          await ctx.db
+            .query("accountMembers")
+            .withIndex("by_account", (q) => q.eq("accountId", org.accountId))
+            .collect()
+        ).length
+    );
+  }
+
+  test("an engine admin who is an org member brings no one new into the org", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+    const { token } = await invite(t, adminId, org.instanceId, "new@example.com");
+    const before = await seatsUsed(t, org);
+    const userId = await addUser(t, "new@example.com");
+
+    const result = await as(t, userId).mutation(api.invitations.accept, { token });
+
+    expect(result).toEqual({ status: "not_in_organization" });
+    expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: null, engine: null });
+    expect(await seatsUsed(t, org)).toBe(before);
+  });
+
+  test("an engine admin who is an org member gives an existing org member the engine", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const secondId = await addEngine(t, org, "second");
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+    await t.run((ctx) => ctx.db.insert("instanceMembers", { instanceId: secondId, userId: adminId, role: "admin" }));
+    const userId = await addUser(t, "member@example.com", { org, orgRole: "member", engineRole: "member" });
+    const { token } = await invite(t, adminId, secondId, "member@example.com");
+
+    const result = await as(t, userId).mutation(api.invitations.accept, { token });
+
+    expect(result).toMatchObject({ status: "accepted", alreadyMember: true });
+    expect(await roles(t, org, userId, secondId)).toEqual({ org: "member", engine: "member" });
+  });
+
+  test("an org admin brings someone new into the org", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "admin", engineRole: "admin" });
+    const { token } = await invite(t, adminId, org.instanceId, "new@example.com");
+    const userId = await addUser(t, "new@example.com");
+
+    const result = await as(t, userId).mutation(api.invitations.accept, { token });
+
+    expect(result).toMatchObject({ status: "accepted", alreadyMember: false });
+    expect(await roles(t, org, userId, org.instanceId)).toEqual({ org: "member", engine: "member" });
+  });
+
+  test("an invitation from an org admin demoted since adds no one new", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "admin", engineRole: "admin" });
+    const { token } = await invite(t, adminId, org.instanceId, "new@example.com");
+    await as(t, org.ownerId).mutation(api.accountMembers.updateMemberRole, {
+      accountId: org.accountId,
+      targetUserId: adminId,
+      role: "member",
+    });
+    const userId = await addUser(t, "new@example.com");
+
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toEqual({ status: "not_in_organization" });
+  });
+
+  test("an engine admin who is an org member is refused a Twitch account outside the org up front", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const adminId = await addUser(t, "admin@example.com", { org, orgRole: "member", engineRole: "admin" });
+
+    await expect(
+      t.mutation(internal.invitations.insertInvitation, {
+        instanceId: org.instanceId,
+        inviterUserId: adminId,
+        engineRole: "member",
+        target: { kind: "twitch", twitchUserId: "T9", login: "stranger", displayName: "Stranger" },
+      })
+    ).rejects.toMatchObject({ data: { code: "not_in_organization" } });
+    expect(await t.run((ctx) => ctx.db.query("invitations").collect())).toEqual([]);
   });
 });
 

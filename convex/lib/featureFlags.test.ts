@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import type { Id } from "../_generated/dataModel";
 import {
-  type FeatureFlagRow,
   type FeatureFlagSubject,
+  type FeatureFlagTargeting,
+  isFeatureFlagKey,
   isFlagOn,
   rolloutBucket,
+  validateFeatureFlagDefinition,
   validateFeatureFlagRules,
 } from "./featureFlags";
 
@@ -20,7 +22,7 @@ const subject: FeatureFlagSubject = {
   entitlements: [],
 };
 
-function rules(r: FeatureFlagRow["rules"]): FeatureFlagRow {
+function rules(r: FeatureFlagTargeting["rules"]): FeatureFlagTargeting {
   return { key: "demo", state: "rules", rules: r };
 }
 
@@ -103,5 +105,36 @@ describe("validateFeatureFlagRules", () => {
 
   it("rejects a blank license feature", () => {
     expect(() => validateFeatureFlagRules({ entitlement: " " })).toThrow();
+    expect(() => validateFeatureFlagRules({ entitlement: "no.such.feature" })).toThrow();
+  });
+});
+
+describe("isFeatureFlagKey", () => {
+  it("accepts the keys code and operators write", () => {
+    for (const key of ["scenes.newToolbar", "early-access", "chat.pins", "a"]) {
+      expect(isFeatureFlagKey(key)).toBe(true);
+    }
+  });
+
+  it("refuses a key a typo would produce", () => {
+    for (const key of ["", "Scenes.toolbar", ".leading", "trailing.", "two..dots", "with space", "x".repeat(65)]) {
+      expect(isFeatureFlagKey(key)).toBe(false);
+    }
+  });
+});
+
+describe("validateFeatureFlagDefinition", () => {
+  const valid = { description: "The new scene toolbar", owner: "ops@woofx3.tv", removeBy: "2026-12-31" };
+
+  it("accepts a complete definition", () => {
+    expect(() => validateFeatureFlagDefinition(valid)).not.toThrow();
+  });
+
+  it("rejects text an operator could not have meant", () => {
+    expect(() => validateFeatureFlagDefinition({ ...valid, description: "   " })).toThrow();
+    expect(() => validateFeatureFlagDefinition({ ...valid, description: "x".repeat(201) })).toThrow();
+    expect(() => validateFeatureFlagDefinition({ ...valid, owner: "" })).toThrow();
+    expect(() => validateFeatureFlagDefinition({ ...valid, removeBy: "soon" })).toThrow();
+    expect(() => validateFeatureFlagDefinition({ ...valid, removeBy: "2026-02-31" })).toThrow();
   });
 });

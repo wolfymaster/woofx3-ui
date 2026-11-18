@@ -4,12 +4,11 @@ import { httpAction } from "../_generated/server";
 import { authenticateOps } from "../lib/ops/auth";
 import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
 import { callerMayUse, nextSecretEnv, OPS_CALLERS } from "../lib/ops/callers";
-import { parseIdempotencyKey } from "../lib/ops/idempotency";
+import { parseFeatureFlagKeyRequest, parseFeatureFlagRequest } from "../lib/ops/featureFlagRequest";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { matchOpsRoute } from "../lib/ops/routes";
 import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
-import { projectionIdempotencyKey } from "./billingProjection";
 
 /**
  * The ops API: what the internal backoffice reads about users, accounts and
@@ -64,11 +63,10 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(user);
     }
     case "accounts.list":
-      return ok(await ctx.runQuery(internal.ops.reads.searchAccounts, { q, cursor, now: Date.now() }));
+      return ok(await ctx.runQuery(internal.ops.reads.searchAccounts, { q, cursor }));
     case "accounts.get": {
       const account = await ctx.runQuery(internal.ops.reads.getAccount, {
         accountId: route.accountId,
-        now: Date.now(),
       });
       if (account === null) {
         return error(404, "not_found", "No such account");
@@ -90,7 +88,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(await ctx.runQuery(internal.ops.reads.listEngines, { status, cursor }));
     }
     case "engines.moduleStorageLimits": {
-      return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor, now: Date.now() }));
+      return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor }));
     }
     case "engines.eventPath": {
       return ok(await ctx.runQuery(internal.ops.reads.engineEventPaths, { cursor }));
@@ -98,7 +96,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
     case "engines.byMaintenanceId": {
       const engine = await ctx.runQuery(internal.ops.reads.engineByMaintenanceId, {
         engineId: route.engineId,
-        now: Date.now(),
       });
       return engine === null ? error(404, "not_found", "No such engine") : ok(engine);
     }
@@ -159,6 +156,50 @@ export const opsHandler = httpAction(async (ctx, request) => {
       });
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
+    case "featureFlags.list":
+      return ok(await ctx.runQuery(internal.ops.featureFlags.list, { today: new Date().toISOString().slice(0, 10) }));
+    case "featureFlags.create": {
+      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.create, {
+        flag: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "featureFlags.update": {
+      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.update, {
+        flag: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "featureFlags.remove": {
+      const parsed = parseFeatureFlagKeyRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.remove, {
+        key: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
     case "accounts.billingProjection": {
       const parsed = parseBillingProjectionRequest(await request.json().catch(() => null));
       if (!parsed.ok) {
@@ -166,13 +207,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
       }
       if (parsed.value.accountId !== route.accountId) {
         return error(400, "invalid_billing_projection", "accountId must match the account in the path");
-      }
-      const idempotencyKey = parseIdempotencyKey(request.headers);
-      if (!idempotencyKey.ok) {
-        return error(400, "invalid_idempotency_key", idempotencyKey.message);
-      }
-      if (idempotencyKey.value !== projectionIdempotencyKey(route.accountId, parsed.value.version)) {
-        return error(400, "invalid_idempotency_key", "Idempotency-Key must be {accountId}:{version}");
       }
       const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, {
         ...parsed.value,

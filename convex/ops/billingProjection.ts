@@ -1,8 +1,9 @@
 import { v } from "convex/values";
+import type { Doc } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import { recordOpsAudit } from "../lib/ops/audit";
-import { claimOpsRequest, type OpsRequestId, requestFingerprint, settleOpsRequest } from "../lib/ops/idempotency";
-import { orgBillingFields, orgBillingFor } from "../lib/orgBilling";
+import { orgBillingFields } from "../lib/orgBilling";
+import { orgBillingRow } from "../org/billing";
 
 // The management plane's billing projection push. The projection is a read
 // model: Convex stores the newest version it was sent and enforces from it.
@@ -11,17 +12,27 @@ export type ProjectionWriteResult =
   | { ok: true; result: { applied: boolean; version: number } }
   | { ok: false; status: 404 | 409; code: string; message: string };
 
-/** The Idempotency-Key a push of `version` for `accountId` must carry. */
-export function projectionIdempotencyKey(accountId: string, version: number): string {
-  return `${accountId}:${version}`;
+/** Canonical JSON, keys sorted, so a stored row and a push compare equal when their fields do. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, field: unknown) =>
+    typeof field === "object" && field !== null && !Array.isArray(field)
+      ? Object.fromEntries(Object.entries(field).sort(([a], [b]) => (a < b ? -1 : 1)))
+      : field
+  );
+}
+
+function sameProjection(stored: Doc<"orgBilling">, projection: object): boolean {
+  const { _id, _creationTime, accountId, updatedAt, ...fields } = stored;
+  return canonical(fields) === canonical(projection);
 }
 
 /**
  * Upserts the org's projection unless a version at least as new is stored
- * (`applied: false`, with the stored version). Run once per idempotency key:
- * a repeat replays the first answer, the same key with another body is 409.
- * An unknown org is 404 and claims nothing. A push that is applied is audited
- * with the operator, in the same mutation; a replay or a stale push is not.
+ * (`applied: false`, with the stored version). A repeat of the stored version
+ * with the same body is `applied: false`; the same version with another body is
+ * 409 `version_conflict`, which the plane must not retry. An unknown org is
+ * 404. A push that is applied is audited with the operator, in the same
+ * mutation; a repeat or a stale push is not.
  */
 export const applyBillingProjection = internalMutation({
   args: { accountId: v.string(), caller: v.string(), actor: v.string(), auditReason: v.string(), ...orgBillingFields },
@@ -33,22 +44,16 @@ export const applyBillingProjection = internalMutation({
     if (accountId === null || (await ctx.db.get(accountId)) === null) {
       return { ok: false, status: 404, code: "not_found", message: "No such account" };
     }
-    const id: OpsRequestId = {
-      write: "projection",
-      accountId: rawAccountId,
-      key: projectionIdempotencyKey(rawAccountId, projection.version),
-    };
-    const claim = await claimOpsRequest<{ applied: boolean; version: number }>(
-      ctx,
-      id,
-      requestFingerprint(projection),
-      Date.now()
-    );
-    if (claim.kind === "answered") {
-      return claim.outcome;
-    }
-    const stored = await orgBillingFor(ctx, accountId);
+    const stored = await orgBillingRow(ctx, accountId);
     let result: { applied: boolean; version: number };
+    if (stored !== null && stored.version === projection.version && !sameProjection(stored, projection)) {
+      return {
+        ok: false,
+        status: 409,
+        code: "version_conflict",
+        message: "This version is already stored with different contents; send a higher version",
+      };
+    }
     if (stored !== null && stored.version >= projection.version) {
       result = { applied: false, version: stored.version };
     } else {
@@ -69,7 +74,6 @@ export const applyBillingProjection = internalMutation({
         result: "ok",
       });
     }
-    await settleOpsRequest(ctx, id, { ok: true, result }, Date.now());
     return { ok: true, result };
   },
 });
@@ -78,9 +82,7 @@ export const applyBillingProjection = internalMutation({
  * Sets an org's stored projection version back to 0 so the plane's next push
  * is applied, for a plane whose counter was rebuilt or an org whose stored
  * version is out of step. Every other field stays as it was, so entitlements
- * do not change until a push arrives. The org's remembered push keys are
- * forgotten too, or a re-sent version would replay its old answer instead of
- * being applied. Audited with the operator and reason.
+ * do not change until a push arrives. Audited with the operator and reason.
  */
 export const resetBillingProjection = internalMutation({
   args: { accountId: v.string(), caller: v.string(), actor: v.string(), auditReason: v.string() },
@@ -95,18 +97,11 @@ export const resetBillingProjection = internalMutation({
     if (accountId === null || (await ctx.db.get(accountId)) === null) {
       return { ok: false, status: 404, code: "not_found", message: "No such account" };
     }
-    const stored = await orgBillingFor(ctx, accountId);
+    const stored = await orgBillingRow(ctx, accountId);
     if (stored === null) {
       return { ok: false, status: 404, code: "no_projection", message: "The account has no stored projection" };
     }
     await ctx.db.patch(stored._id, { version: 0 });
-    const claims = await ctx.db
-      .query("opsRequests")
-      .withIndex("by_key", (q) => q.eq("write", "projection").eq("accountId", rawAccountId))
-      .collect();
-    for (const claim of claims) {
-      await ctx.db.delete(claim._id);
-    }
     await recordOpsAudit(ctx, {
       caller,
       actor,

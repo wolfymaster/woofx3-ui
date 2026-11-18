@@ -16,6 +16,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { hostedEngineGateway, InstanceEngineScope } from "@/engine/boot/hosted";
 import { EngineGatewayProvider } from "@/engine/context";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
+import { ALERT_GROUPS_PATH, LEGACY_ALERT_GROUPS_PATH, legacyAlertGroupsRedirect } from "@/lib/alert-groups-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import {
@@ -32,12 +33,15 @@ import { hostedFeatureSource } from "@/lib/hosted-feature-source";
 import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
 import {
+  LEGACY_INSTALLED_MODULE_ROUTE,
+  LEGACY_INSTALLED_PATH,
+  LEGACY_MODULES_PATH,
+  LEGACY_MODULES_ROUTE,
   legacyModulesRedirect,
   MARKETPLACE_BROWSE_ROUTE,
-  MARKETPLACE_INSTALLED_MODULE_ROUTE,
-  MARKETPLACE_INSTALLED_PATH,
   MARKETPLACE_UPLOAD_PATH,
-  modulesIndexRedirect,
+  MODULES_MODULE_ROUTE,
+  MODULES_PATH,
 } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
@@ -52,6 +56,7 @@ const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
 const AdminStorage = lazy(() => import("@/pages/admin/storage"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
+const AlertGroups = lazy(() => import("@/pages/alert-groups"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const Assets = lazy(() => import("@/pages/assets"));
 const AcceptInvite = lazy(() => import("@/pages/auth/accept-invite"));
@@ -75,10 +80,10 @@ const Logs = lazy(() => import("@/pages/logs"));
 const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
 const Modules = lazy(() => import("@/pages/modules"));
+const ModulesSettings = lazy(() => import("@/pages/modules-settings"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Scenes = lazy(() => import("@/pages/scenes"));
 const Setup = lazy(() => import("@/pages/setup"));
-const StarterPacks = lazy(() => import("@/pages/starter-packs"));
 const StreamRecap = lazy(() => import("@/pages/stream-recap"));
 const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
@@ -190,14 +195,15 @@ function Redirect({ to }: { to: string }) {
   return null;
 }
 
-/** Bare `/modules`, forwarded with its query string (see `modulesIndexRedirect`). */
-function ModulesIndexRedirect() {
-  return <Redirect to={modulesIndexRedirect(useSearch())} />;
+/** An old `/modules` or `/marketplace/installed` path, forwarded into the Modules group (see `legacyModulesRedirect`). */
+function LegacyModulesRedirect({ params }: { params: { rest?: string } }) {
+  return <Redirect to={legacyModulesRedirect(params.rest, useSearch())} />;
 }
 
-/** An old `/modules/…` path, forwarded into the Marketplace tab (see `legacyModulesRedirect`). */
-function LegacyModulesRedirect({ params }: { params: { rest: string } }) {
-  return <Redirect to={legacyModulesRedirect(params.rest, useSearch())} />;
+/** An old `/stream/alerts/groups` path, forwarded to the Alert Groups pages (see `legacyAlertGroupsRedirect`). */
+function LegacyAlertGroupsRedirect() {
+  const [location] = useLocation();
+  return <Redirect to={legacyAlertGroupsRedirect(location)} />;
 }
 
 function AppRoutes() {
@@ -260,6 +266,10 @@ function AppRoutes() {
                     <Route path="/stream">
                       <Redirect to="/stream/alerts" />
                     </Route>
+                    <Route path={ALERT_GROUPS_PATH} component={AlertGroups} />
+                    <Route path={`${ALERT_GROUPS_PATH}/*`} component={AlertGroups} />
+                    <Route path={LEGACY_ALERT_GROUPS_PATH} component={LegacyAlertGroupsRedirect} />
+                    <Route path={`${LEGACY_ALERT_GROUPS_PATH}/*`} component={LegacyAlertGroupsRedirect} />
                     <Route path="/stream/alerts" component={Alerts} />
                     <Route path="/stream/alerts/*" component={Alerts} />
                     <Route path={ALERT_LIBRARY_EDITOR_ROUTE} component={LibraryAlertEditor} />
@@ -292,23 +302,23 @@ function AppRoutes() {
                     <Route path="/stream/supporters" component={Supporters} />
                     <Route path={USER_PAGE_PATH} component={UserPage} />
                     <Route path="/stream/assets" component={Assets} />
-                    <Route path="/stream/starter-packs" component={StarterPacks} />
                     <Route path="/stream/workflows" component={Workflows} />
                     <Route path="/stream/workflows/new" component={Workflows} />
                     <Route path="/stream/workflows/:id" component={Workflows} />
                     <Route path="/stream/workflows/:id/edit" component={Workflows} />
                     <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
+                    {/* Modules group of the Stream tab */}
+                    <Route path={MODULES_PATH} component={ModulesSettings} />
+                    <Route path={MODULES_MODULE_ROUTE} component={Modules} />
+                    <Route path={LEGACY_MODULES_PATH} component={LegacyModulesRedirect} />
+                    <Route path={LEGACY_MODULES_ROUTE} component={LegacyModulesRedirect} />
+
                     {/* Marketplace section */}
-
                     <Route path={MARKETPLACE_UPLOAD_PATH} component={ModuleInstall} />
-                    <Route path={MARKETPLACE_INSTALLED_PATH} component={Modules} />
-                    <Route path={MARKETPLACE_INSTALLED_MODULE_ROUTE} component={Modules} />
+                    <Route path={LEGACY_INSTALLED_PATH} component={LegacyModulesRedirect} />
+                    <Route path={LEGACY_INSTALLED_MODULE_ROUTE} component={LegacyModulesRedirect} />
                     <Route path={MARKETPLACE_BROWSE_ROUTE} component={MarketplaceSection} />
-
-                    {/* Where installed modules used to live; old links forward into the Marketplace tab. */}
-                    <Route path="/modules/:rest" component={LegacyModulesRedirect} />
-                    <Route path="/modules" component={ModulesIndexRedirect} />
 
                     {/* Help section */}
                     <Route path="/help">

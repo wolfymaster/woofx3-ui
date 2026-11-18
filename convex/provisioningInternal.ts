@@ -3,7 +3,6 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { switchedStatus } from "./lib/engineSwitch";
-import { requireUsableSubscription } from "./lib/entitlementAccess";
 import { REQUEST_IN_FLIGHT_MS } from "./lib/firstRun";
 import {
   decideRedeployEvent,
@@ -12,10 +11,10 @@ import {
   type RedeployEvent,
   redeployRunFailed,
 } from "./lib/maintenanceUpgrade";
-import { billingFor } from "./lib/orgBilling";
-import { requireOrgActionFor } from "./lib/orgRoles";
-import { grantNewEngineMembers } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { assertNotSuspended, orgBillingRow } from "./org/billing";
+import { grantNewEngineMembers } from "./org/membership";
+import { requireActionFor } from "./org/policy";
 import { performRegistration } from "./registration";
 
 /**
@@ -97,16 +96,13 @@ export const reserveManagedInstance = internalMutation({
     newCreateRequestId: v.string(),
   },
   handler: async (ctx, { accountId, userId, slug, newRegistrationToken, newCreateRequestId }) => {
-    const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
+    const { account } = await requireActionFor(ctx, userId, { org: accountId }, "createEngine");
 
     const { instanceId } = await findOrCreateManagedInstance(ctx, account);
     await startTrialIfNew(ctx, accountId);
     // Every managed request (onboarding, the username form, retry) comes
     // through here, so a suspended org can't build an engine nothing would stop.
-    // An org the plane has not yet reported on is a new one: nothing to refuse.
-    if ((await billingFor(ctx, accountId)) !== null) {
-      await requireUsableSubscription(ctx, accountId);
-    }
+    await assertNotSuspended(ctx, accountId);
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -190,10 +186,8 @@ function buildInFlight(row: Doc<"engineProvisioning">, now: number): boolean {
 export const prepareNewEngine = internalMutation({
   args: { accountId: v.id("accounts"), userId: v.id("users"), name: v.string() },
   handler: async (ctx, { accountId, userId, name }): Promise<{ instanceId: Id<"instances">; building: boolean }> => {
-    const { account } = await requireOrgActionFor(ctx, accountId, userId, "createEngine");
-    if ((await billingFor(ctx, accountId)) !== null) {
-      await requireUsableSubscription(ctx, accountId);
-    }
+    const { account } = await requireActionFor(ctx, userId, { org: accountId }, "createEngine");
+    await assertNotSuspended(ctx, accountId);
     const { instanceId, created } = await findOrCreateManagedInstance(ctx, account);
     const provisioning = await ctx.db
       .query("engineProvisioning")
@@ -226,18 +220,11 @@ async function deleteHeldSlugs(ctx: MutationCtx, instanceId: Id<"instances">): P
   }
 }
 
-/**
- * Throws `subscription_suspended` unless the org's billing projection is
- * usable, for actions that resume a managed engine's run
- * outside `reserveManagedInstance`. An org with no billing yet is not
- * suspended, so it passes.
- */
+/** `assertNotSuspended` for actions that resume a managed engine's run outside `reserveManagedInstance`. */
 export const assertCanResumeEngine = internalQuery({
   args: { accountId: v.id("accounts") },
   handler: async (ctx, { accountId }): Promise<null> => {
-    if ((await billingFor(ctx, accountId)) !== null) {
-      await requireUsableSubscription(ctx, accountId);
-    }
+    await assertNotSuspended(ctx, accountId);
     return null;
   },
 });
@@ -249,7 +236,7 @@ export const assertCanResumeEngine = internalQuery({
  * and the scheduled action retries a failure itself.
  */
 export async function startTrialIfNew(ctx: MutationCtx, accountId: Id<"accounts">): Promise<void> {
-  if ((await billingFor(ctx, accountId)) !== null) {
+  if ((await orgBillingRow(ctx, accountId)) !== null) {
     return;
   }
   await ctx.scheduler.runAfter(0, internal.billingCommands.ensureBilling, { accountId });
@@ -298,7 +285,7 @@ export async function markFirstRun(ctx: MutationCtx, instanceId: Id<"instances">
   await ctx.db.insert("instanceSetup", { instanceId, platforms: [], firstRunAt: now, updatedAt: now });
 }
 
-/** What a first engine is derived from: whose it is, and the Twitch login that names it. */
+/** What a first engine is derived from: its org, and the Twitch login that names it. */
 export const firstEngineFacts = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
@@ -317,7 +304,7 @@ export const firstEngineFacts = internalQuery({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .first();
     const unsettledSlug = provisioning && requestStillOpen(provisioning) ? provisioning.slug : null;
-    return { accountId: account._id, ownerId: account.ownerId, login, unsettledSlug };
+    return { accountId: account._id, login, unsettledSlug };
   },
 });
 

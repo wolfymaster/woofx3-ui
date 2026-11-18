@@ -23,7 +23,6 @@ function facts(overrides: Partial<GettingStartedFacts> = {}, setup: Partial<Gett
     doneItemIds: [],
     obsStatus: null,
     hasImport: false,
-    hasStarterPack: false,
     installedModuleIds: [],
     pagePublished: false,
   };
@@ -37,15 +36,7 @@ function byId(input: GettingStartedFacts) {
 describe("gettingStartedItems", () => {
   test("lists the post-onboarding items for a fresh account, with no problem items", () => {
     const ids = gettingStartedItems(facts()).map((entry) => entry.id);
-    expect(ids).toEqual([
-      "overlay",
-      "test-alert",
-      "alerts",
-      "import",
-      "starter-packs",
-      "optional-platforms",
-      "your-page",
-    ]);
+    expect(ids).toEqual(["overlay", "test-alert", "alerts", "import", "optional-platforms", "your-page"]);
   });
 
   test("is all done once everything was done or dismissed", () => {
@@ -53,7 +44,6 @@ describe("gettingStartedItems", () => {
       facts({
         overlayFinished: true,
         doneItemIds: ["alerts", "dismissed:import", "dismissed:your-page"],
-        hasStarterPack: true,
         installedModuleIds: ["woofx3_obs"],
       })
     );
@@ -62,9 +52,8 @@ describe("gettingStartedItems", () => {
   });
 
   test("leaves a dismissed optional item out", () => {
-    const items = byId(facts({ doneItemIds: ["dismissed:import", "dismissed:starter-packs"] }));
+    const items = byId(facts({ doneItemIds: ["dismissed:import"] }));
     expect(items.import).toBeUndefined();
-    expect(items["starter-packs"]).toBeUndefined();
     expect(items["your-page"].actions).toEqual([{ kind: "dismiss-item", label: "Not for me", itemId: "your-page" }]);
   });
 
@@ -113,9 +102,7 @@ describe("gettingStartedItems", () => {
       )
     ).platforms;
     expect(item.status).toBe("problem");
-    expect(item.fixes).toEqual([
-      { kind: "route", label: "Review Twitch", href: "/marketplace/installed/woofx3_twitch" },
-    ]);
+    expect(item.fixes).toEqual([{ kind: "route", label: "Review Twitch", href: "/stream/modules/woofx3_twitch" }]);
   });
 
   test("sends Twitch back to the connect page when it is not linked", () => {
@@ -161,11 +148,8 @@ describe("gettingStartedItems", () => {
   });
 
   test("finishes the optional items from what exists", () => {
-    const items = byId(
-      facts({ hasImport: true, hasStarterPack: true, installedModuleIds: ["woofx3_spotify"], pagePublished: true })
-    );
+    const items = byId(facts({ hasImport: true, installedModuleIds: ["woofx3_spotify"], pagePublished: true }));
     expect(items.import.status).toBe("done");
-    expect(items["starter-packs"].status).toBe("done");
     expect(items["optional-platforms"].status).toBe("done");
     expect(items["your-page"].status).toBe("done");
   });
@@ -175,9 +159,7 @@ describe("gettingStartedItems", () => {
     const setup = { platforms: [twitch, spotify], platformsNeedingSettings: ["woofx3_spotify"] };
     const todo = byId(facts({}, setup))["platform-settings:woofx3_spotify"];
     expect(todo.status).toBe("todo");
-    expect(todo.fixes).toEqual([
-      { kind: "route", label: "Open Spotify", href: "/marketplace/installed/woofx3_spotify" },
-    ]);
+    expect(todo.fixes).toEqual([{ kind: "route", label: "Open Spotify", href: "/stream/modules/woofx3_spotify" }]);
     expect(todo.actions).toEqual([
       { kind: "mark-platform-settings-done", label: "Done", marketplaceModuleId: "woofx3_spotify" },
     ]);
@@ -232,7 +214,7 @@ describe("gettingStartedItems", () => {
     )["platform-settings:woofx3_obs"];
     expect(refused.status).toBe("problem");
     expect(refused.actions).toEqual([]);
-    expect(refused.fixes).toEqual([{ kind: "route", label: "Open OBS", href: "/marketplace/installed/woofx3_obs" }]);
+    expect(refused.fixes).toEqual([{ kind: "route", label: "Open OBS", href: "/stream/modules/woofx3_obs" }]);
   });
 
   test("keeps the Done button for OBS when the engine cannot report its connection", () => {

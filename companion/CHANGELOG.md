@@ -1,5 +1,42 @@
 # woofx3 desktop changelog
 
+## [0.18.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.17.0...woofx3-v0.18.0) (2026-11-18)
+
+### Features
+
+* **feature-flags:** manage flag definitions through the ops API ([858b2a4](https://github.com/wolfymaster/woofx3-ui/commit/858b2a452f6147494f237cf3c677d80d6b0f405d))
+
+## [0.17.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.16.0...woofx3-v0.17.0) (2026-11-18)
+
+### Features
+
+* **scenes:** group the widget palette by purpose ([b0ef2ed](https://github.com/wolfymaster/woofx3-ui/commit/b0ef2eddfe5139e07c2001e5708033cde0a244ca))
+
+## [0.16.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.15.0...woofx3-v0.16.0) (2026-11-17)
+
+### Features
+
+* **modules:** add a Modules group to the Stream sidebar ([532818d](https://github.com/wolfymaster/woofx3-ui/commit/532818d0e75f06a4bfa394458f12a60d0dae1327))
+* **nav:** give Alert Groups its own Stream sidebar entry ([09e07b8](https://github.com/wolfymaster/woofx3-ui/commit/09e07b84fd3a1d53131f366d53bab64c3e71e886))
+* **nav:** group the Stream sidebar by job ([5794587](https://github.com/wolfymaster/woofx3-ui/commit/5794587efcef3521b5e39903ebfebcf3ccddf98a))
+
+### Bug Fixes
+
+* **billing:** answer a suspended org's invite accept with a status ([72090c4](https://github.com/wolfymaster/woofx3-ui/commit/72090c45f8f6632efb45b51362c9a095976c3a06))
+* **invitations:** take a new seat only on an inviter's spendSeat ([5e46a7d](https://github.com/wolfymaster/woofx3-ui/commit/5e46a7daa6ee5d07707ba17b24feefea0d562b94))
+* **nav:** give Alert Groups an icon of its own ([88cd94c](https://github.com/wolfymaster/woofx3-ui/commit/88cd94c3938c1101952e7972a87ac0487933eae8))
+* **nav:** show installed modules and Alert Groups in the Stream sidebar ([6bda7fe](https://github.com/wolfymaster/woofx3-ui/commit/6bda7fef68d59884ceb5c3faf3a4872debc07704))
+
+## [0.15.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.14.0...woofx3-v0.15.0) (2026-11-17)
+
+### Features
+
+* **desktop:** show updates in a thin full-width bar above the header ([cb69682](https://github.com/wolfymaster/woofx3-ui/commit/cb696820bb74b6d8c8324a1c80a1e612e56b6e70))
+
+### Bug Fixes
+
+* **desktop:** use output for the update bar's live region ([3d5d333](https://github.com/wolfymaster/woofx3-ui/commit/3d5d3334891494cb11e8e3a6a7dca6e65865da0b))
+
 ## [0.14.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.13.0...woofx3-v0.14.0) (2026-11-17)
 
 ### Features

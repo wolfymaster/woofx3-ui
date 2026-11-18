@@ -12,25 +12,33 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
-import { orgSeatsFull, SEATS_FULL } from "./lib/entitlementAccess";
-import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
-import { orgCan, orgRoleOf } from "./lib/orgRoles";
-import {
-  applyOrgRoleToEngines,
-  getAccountMembership,
-  getInstanceMembership,
-  grantEngineRole,
-  normalizeEmail,
-} from "./lib/teamAccess";
+import { getInstanceMembership, maskedEmail, normalizeEmail } from "./lib/teamAccess";
 import {
   fetchHasChannelRole,
   fetchTwitchAppCredentials,
   fetchTwitchUser,
   type HelixCredentials,
 } from "./lib/twitchUsers";
+import { suspensionOf } from "./org/billing";
+import {
+  applyOrgRoleToEngines,
+  getAccountMembership,
+  grantEngineRole,
+  orgSeatsFull,
+  SEATS_FULL,
+} from "./org/membership";
+import {
+  can,
+  orgCan,
+  orgRoleOf,
+  requireAction,
+  requireActionFor,
+  requireActionInAction,
+  viewerRoles,
+} from "./org/policy";
 
 const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -55,10 +63,10 @@ type PendingInvitation = Pick<
   | "expiresAt"
 >;
 
-function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
+function toPendingInvitation(r: Doc<"invitations">, showEmail: boolean): PendingInvitation {
   return {
     _id: r._id,
-    email: r.email,
+    email: r.email === undefined || showEmail ? r.email : maskedEmail(r.email),
     platform: r.platform,
     platformLogin: r.platformLogin,
     platformDisplayName: r.platformDisplayName,
@@ -73,28 +81,25 @@ function toPendingInvitation(r: Doc<"invitations">): PendingInvitation {
 
 /**
  * Pending invitations the caller may manage on this engine's team page, or
- * null when they may manage none. Invitee emails are personal data, so the
- * list follows `revoke`: an engine's admins see its invitations, and only an
- * org role with `manageMembers` also sees the org-wide ones that predate
- * engine-scoped invites. `now` (ms) decides which have expired; a query
- * can't read the clock without losing its cache.
+ * null when they may manage none: an engine's admins see its invitations, as
+ * `revoke` allows. Invitee emails are personal data, so like members' they
+ * are shown whole only to a viewer with `viewMemberEmails` and masked for
+ * everyone else. `now` (ms) decides which have expired; a query can't read
+ * the clock without losing its cache.
  */
 export const listForEngine = query({
   args: { instanceId: v.id("instances"), now: v.number() },
   handler: async (ctx, { instanceId, now }): Promise<{ invitations: PendingInvitation[] } | null> => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      return null;
-    }
-    const membership = await getInstanceMembership(ctx, instanceId, userId);
-    if (!roleSatisfies(membership?.role, "admin")) {
+    const viewer = await viewerRoles(ctx, { engine: instanceId });
+    if (viewer === null || !can(viewer.roles, "manageEngineMembers")) {
       return null;
     }
     const rows = await ctx.db
       .query("invitations")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId).eq("status", "pending"))
       .collect();
-    const invitations = rows.filter((r) => r.expiresAt > now).map(toPendingInvitation);
+    const showEmails = can(viewer.roles, "viewMemberEmails");
+    const invitations = rows.filter((r) => r.expiresAt > now).map((r) => toPendingInvitation(r, showEmails));
     return { invitations };
   },
 });
@@ -144,27 +149,18 @@ interface TwitchLinkSummary {
 }
 
 /**
- * The engine's org and Twitch link (if any) for a lookup to borrow, when the
- * user is an admin of the engine, or null when they aren't. Tokens stay out
- * of the result: the action fetches them through `ensureFreshTwitchToken`.
+ * The engine's Twitch link (if any) for a lookup to borrow. Tokens stay out of
+ * the result: the action fetches them through `ensureFreshTwitchToken`.
  */
-export const engineInviterContext = internalQuery({
-  args: { instanceId: v.id("instances"), userId: v.id("users") },
-  handler: async (ctx, args): Promise<{ accountId: Id<"accounts">; twitchLink: TwitchLinkSummary | null } | null> => {
-    const membership = await getInstanceMembership(ctx, args.instanceId, args.userId);
-    const instance = await ctx.db.get(args.instanceId);
-    if (instance === null || !roleSatisfies(membership?.role, "admin")) {
-      return null;
-    }
+export const engineTwitchLink = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<TwitchLinkSummary | null> => {
     const link = await ctx.db
       .query("platformLinks")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .filter((q) => q.eq(q.field("platform"), "twitch"))
       .first();
-    return {
-      accountId: instance.accountId,
-      twitchLink: link ? { instanceId: instance._id, scopes: link.scopes ?? [] } : null,
-    };
+    return link ? { instanceId, scopes: link.scopes ?? [] } : null;
   },
 });
 
@@ -249,15 +245,8 @@ async function requireEngineInviter(
   ctx: ActionCtx,
   instanceId: Id<"instances">
 ): Promise<{ userId: Id<"users">; twitchLink: TwitchLinkSummary | null }> {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new Error("Not authenticated");
-  }
-  const context = await ctx.runQuery(internal.invitations.engineInviterContext, { instanceId, userId });
-  if (!context) {
-    throw new Error("Not authorized for this instance");
-  }
-  return { userId, twitchLink: context.twitchLink };
+  const { userId } = await requireActionInAction(ctx, { engine: instanceId }, "manageEngineMembers");
+  return { userId, twitchLink: await ctx.runQuery(internal.invitations.engineTwitchLink, { instanceId }) };
 }
 
 export interface TwitchInviteCandidate extends TwitchUser {
@@ -357,9 +346,12 @@ const TARGET_VALIDATOR = v.union(
 const INVITE_REFUSED =
   "This invitation couldn't be sent. Your organization may have no free seats, or this person may already be on this engine";
 
+const NOT_IN_ORGANIZATION =
+  "You can invite people who are already in your organization. Ask its owner or an admin to invite someone new";
+
 /**
  * Writes the invitation after re-checking, inside the transaction, that the
- * inviter is still an admin of the engine and the invitee is neither on it
+ * inviter may still manage the engine's members and the invitee is neither on it
  * nor already invited to it. A Twitch target's profile comes from the
  * server's own Helix lookup in `create`, never from the client.
  */
@@ -371,28 +363,30 @@ export const insertInvitation = internalMutation({
     target: TARGET_VALIDATOR,
   },
   handler: async (ctx, args): Promise<{ token: string; expiresAt: number }> => {
+    const inviter = await requireActionFor(ctx, args.inviterUserId, { engine: args.instanceId }, "manageEngineMembers");
     const instance = await ctx.db.get(args.instanceId);
-    const inviter = await getInstanceMembership(ctx, args.instanceId, args.inviterUserId);
-    if (instance === null || !roleSatisfies(inviter?.role, "admin")) {
-      throw new Error("Not authorized for this instance");
-    }
-
-    const account = await ctx.db.get(instance.accountId);
-    if (account === null) {
-      throw new Error(`insertInvitation: instance ${instance._id} belongs to missing org ${instance.accountId}`);
+    if (instance === null) {
+      throw new Error(`insertInvitation: engine ${args.instanceId} vanished inside the transaction`);
     }
     // Only a caller who may see member emails learns which refusal an address
     // hit; for anyone else "full" and "already on it" must read the same, or
     // inviting a guessed address would reveal whether it belongs to a member.
-    const hidesMembers =
-      args.target.kind === "email" && !orgCan(await orgRoleOf(ctx, account, args.inviterUserId), "viewMemberEmails");
+    const hidesMembers = args.target.kind === "email" && !can(inviter.roles, "viewMemberEmails");
 
+    // Someone who may not spend a seat may only invite people already in the
+    // org. `accept` enforces that for every invitation; refusing here as well
+    // would tell an email's owner apart as a member, so only a Twitch target,
+    // whose identity is public, is refused up front.
+    const inOrg = await inviteeInOrg(ctx, instance, args.target);
+    if (args.target.kind === "twitch" && !inOrg && !can(inviter.roles, "spendSeat")) {
+      throw new ConvexError({ code: "not_in_organization", message: NOT_IN_ORGANIZATION });
+    }
     const now = Date.now();
-    if (await orgSeatsFull(ctx, instance.accountId, now)) {
+    if (await orgSeatsFull(ctx, instance.accountId)) {
       if (hidesMembers) {
         throw new ConvexError({ code: "invite_refused", message: INVITE_REFUSED });
       }
-      if (!(await inviteeInOrg(ctx, instance, args.target))) {
+      if (!inOrg) {
         throw new ConvexError({ code: "seats_full", message: SEATS_FULL });
       }
     }
@@ -517,9 +511,11 @@ export const revoke = mutation({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
     const inv = await ctx.db.get(args.invitationId);
-    if (!inv) throw new Error("Invitation not found");
+    if (!inv) {
+      throw new Error("Invitation not found");
+    }
 
-    await requireInstanceRole(ctx, inv.instanceId, "admin");
+    await requireAction(ctx, { engine: inv.instanceId }, "manageEngineMembers");
 
     if (inv.status !== "pending") {
       throw new Error("Invitation is no longer pending");
@@ -543,13 +539,17 @@ export type AcceptOutcome =
   | { status: "not_found" }
   | { status: "wrong_account"; message: string }
   | { status: "engine_gone" }
-  | { status: "seats_full" };
+  | { status: "seats_full" }
+  | { status: "not_in_organization" }
+  | { status: "org_suspended" };
 
 export const accept = mutation({
   args: { token: v.string() },
   handler: async (ctx, args): Promise<AcceptOutcome> => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
 
     const inv = await ctx.db
       .query("invitations")
@@ -576,7 +576,9 @@ export const accept = mutation({
     }
 
     const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
+    if (!user) {
+      throw new Error("User not found");
+    }
 
     const u = user as Record<string, unknown>;
     const twitchAccount = await ctx.db
@@ -599,10 +601,19 @@ export const accept = mutation({
     if (engine === null) {
       return { status: "engine_gone" };
     }
+    const instance = await ctx.db.get(engine.instanceId);
+    if (instance !== null && (await suspensionOf(ctx, instance)) !== null) {
+      return { status: "org_suspended" };
+    }
 
     const existingMember =
       account.ownerId === userId || (await getAccountMembership(ctx, inv.accountId, userId)) !== null;
-    if (!existingMember && (await orgSeatsFull(ctx, inv.accountId, now))) {
+    // The seat is taken now, so the inviter must still be allowed to spend one:
+    // an invitation from an engine admin only reaches people already in the org.
+    if (!existingMember && !orgCan(await orgRoleOf(ctx, account, inv.invitedByUserId), "spendSeat")) {
+      return { status: "not_in_organization" };
+    }
+    if (!existingMember && (await orgSeatsFull(ctx, inv.accountId))) {
       return { status: "seats_full" };
     }
     if (account.ownerId !== userId) {

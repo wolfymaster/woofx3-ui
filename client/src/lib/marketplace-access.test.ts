@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { OrgRole } from "@convex/lib/organization";
-import { orgCan } from "@convex/lib/orgRoles";
+import { orgCan } from "@convex/org/policy";
 import type { OrganizationAccess } from "@/engine/types";
 import { canSeeLicenseKey, canStartPayment } from "./marketplace-access";
 
 /** The access the server answers for each organization role. */
 function accessOf(role: OrgRole): OrganizationAccess {
-  return { viewBilling: orgCan(role, "viewBilling"), manageBilling: orgCan(role, "manageBilling") };
+  return { viewLicenseKeys: orgCan(role, "viewLicenseKeys"), manageBilling: orgCan(role, "manageBilling") };
 }
 
 describe("canStartPayment", () => {

@@ -18,7 +18,7 @@ function capabilitiesRead(runtime: DirectRuntime): EngineRead<readonly string[]>
 }
 
 /** A direct engine has no organization behind it; whoever runs it holds everything it has. */
-const OWN_ENGINE_ACCESS: OrganizationAccess = { viewBilling: true, manageBilling: true };
+const OWN_ENGINE_ACCESS: OrganizationAccess = { viewLicenseKeys: true, manageBilling: true };
 
 /**
  * The live connection is the runtime's own engine session. Its engine and

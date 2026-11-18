@@ -138,8 +138,8 @@ export const getUser = internalQuery({
 
 /** Accounts, newest first; or the accounts whose name matches `q`. */
 export const searchAccounts = internalQuery({
-  args: { q: v.optional(v.string()), cursor: cursorArg, now: v.number() },
-  handler: async (ctx, { q, cursor, now }): Promise<Page<AccountSummaryDto>> => {
+  args: { q: v.optional(v.string()), cursor: cursorArg },
+  handler: async (ctx, { q, cursor }): Promise<Page<AccountSummaryDto>> => {
     const term = q?.trim() ?? "";
     const result =
       term === ""
@@ -149,7 +149,7 @@ export const searchAccounts = internalQuery({
             .withSearchIndex("search_name", (index) => index.search("name", term))
             .paginate({ numItems: PAGE_SIZE, cursor });
     return {
-      page: await Promise.all(result.page.map((account) => toAccountSummary(ctx, account, now))),
+      page: await Promise.all(result.page.map((account) => toAccountSummary(ctx, account))),
       cursor: result.isDone ? null : result.continueCursor,
     };
   },
@@ -164,7 +164,7 @@ export interface AccountDetailDto {
 }
 
 export const getAccount = internalQuery({
-  args: { accountId: v.string(), now: v.number() },
+  args: { accountId: v.string() },
   handler: async (ctx, args): Promise<AccountDetailDto | null> => {
     const accountId = ctx.db.normalizeId("accounts", args.accountId);
     const account = accountId ? await ctx.db.get(accountId) : null;
@@ -202,10 +202,10 @@ export const getAccount = internalQuery({
       });
     }
     return {
-      account: await toAccountSummary(ctx, account, args.now),
+      account: await toAccountSummary(ctx, account),
       members,
       invitations: invitations.filter((invitation) => invitation.status === "pending").map(invitationDto),
-      entitlements: planSummaryDto(await accountEntitlements(ctx, accountId, args.now)),
+      entitlements: planSummaryDto(await accountEntitlements(ctx, accountId)),
       instances,
     };
   },
@@ -222,8 +222,8 @@ export interface EngineDetailDto {
 }
 
 export const engineByMaintenanceId = internalQuery({
-  args: { engineId: v.string(), now: v.number() },
-  handler: async (ctx, { engineId, now }): Promise<EngineDetailDto | null> => {
+  args: { engineId: v.string() },
+  handler: async (ctx, { engineId }): Promise<EngineDetailDto | null> => {
     const row = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_maintenance_engine", (index) => index.eq("maintenanceEngineId", engineId))
@@ -242,8 +242,8 @@ export const engineByMaintenanceId = internalQuery({
     return {
       provisioning: provisioningDto(row),
       instance: instance ? instanceDto(instance) : null,
-      account: account ? await toAccountSummary(ctx, account, now) : null,
-      hostedStorage: instance?.hosting === "managed" ? await hostedStorageLimitsDto(ctx, instance, now) : null,
+      account: account ? await toAccountSummary(ctx, account) : null,
+      hostedStorage: instance?.hosting === "managed" ? await hostedStorageLimitsDto(ctx, instance) : null,
       isLive: live?.isLive ?? false,
     };
   },
@@ -295,8 +295,8 @@ export interface ModuleStorageLimitDto {
  * it read.
  */
 export const moduleStorageLimits = internalQuery({
-  args: { cursor: cursorArg, now: v.number() },
-  handler: async (ctx, { cursor, now }): Promise<Page<ModuleStorageLimitDto>> => {
+  args: { cursor: cursorArg },
+  handler: async (ctx, { cursor }): Promise<Page<ModuleStorageLimitDto>> => {
     const result = await ctx.db.query("engineProvisioning").paginate({ numItems: PAGE_SIZE, cursor });
     const page: ModuleStorageLimitDto[] = [];
     for (const row of result.page) {
@@ -307,7 +307,7 @@ export const moduleStorageLimits = internalQuery({
       if (instance?.hosting !== "managed") {
         continue;
       }
-      const limits = await hostedStorageLimitsDto(ctx, instance, now);
+      const limits = await hostedStorageLimitsDto(ctx, instance);
       page.push({
         engineId: row.maintenanceEngineId,
         instanceId: instance._id,
@@ -441,7 +441,7 @@ async function toUserDto(ctx: QueryCtx, user: Doc<"users">): Promise<UserDto> {
   return userDto(user, authAccounts, lastSession);
 }
 
-async function toAccountSummary(ctx: QueryCtx, account: Doc<"accounts">, now: number): Promise<AccountSummaryDto> {
+async function toAccountSummary(ctx: QueryCtx, account: Doc<"accounts">): Promise<AccountSummaryDto> {
   const owner = await ctx.db.get(account.ownerId);
   const members = await ctx.db
     .query("accountMembers")
@@ -455,7 +455,7 @@ async function toAccountSummary(ctx: QueryCtx, account: Doc<"accounts">, now: nu
     account,
     owner,
     members.length,
-    await accountEntitlements(ctx, account._id, now),
+    await accountEntitlements(ctx, account._id),
     engines.filter((engine) => engine.status !== "deleted").length
   );
 }

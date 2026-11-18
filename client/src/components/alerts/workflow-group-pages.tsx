@@ -33,6 +33,7 @@ import { useWorkflows } from "@/engine/hooks/use-workflows";
 import type { WorkflowGroup } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { ALERT_GROUPS_PATH, NEW_ALERT_GROUP_SEGMENT } from "@/lib/alert-groups-route";
 import { decodeSegment } from "@/lib/route-subpath";
 import {
   cardGroupIds,
@@ -42,10 +43,6 @@ import {
   type GroupableCard,
   groupableCards,
 } from "@/lib/workflow-groups";
-
-/** Where the group pages live, below the Alerts route. Must match the reserved segment in pages/alerts.tsx. */
-export const ALERT_GROUPS_PATH = "/stream/alerts/groups";
-export const NEW_ALERT_GROUP_SEGMENT = "new";
 
 export const SWITCH_EXPLAINER =
   "Turning this on switches on every trigger in it. Turning it off puts each one back how it was, unless another group that is on still includes it.";

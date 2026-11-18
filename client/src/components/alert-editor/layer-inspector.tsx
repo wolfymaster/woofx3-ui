@@ -1,7 +1,6 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { NodeView } from "@woofx3/scene/editor";
 import { Minus, Plus } from "lucide-react";
-import type { ReactNode } from "react";
 import { WidgetSettingsForm } from "@/components/scenes/widget-settings-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,14 +21,13 @@ interface LayerInspectorProps {
   /** When the layer plays within the alert. */
   window: LayerWindow;
   onChangeWindow: (window: LayerWindow) => void;
-  /** Shown below the layer's settings: its transitions and effects. */
-  children?: ReactNode;
 }
 
 /**
- * Edits the selected layer through the composition editor: the widget's own settings,
- * drawn from its schema exactly as the scene editor draws them, then when the layer
- * plays within the alert. Size and place are set on the stage, as on a scene's canvas.
+ * The Settings pane for a selected alert layer: the widget's own settings, drawn from
+ * its schema exactly as the scene editor draws them, then its Timing fields for when
+ * the layer plays within the alert. Transitions and effects live in their own panes.
+ * Size and place are set on the stage, as on a scene's canvas.
  */
 export function LayerInspector({
   node,
@@ -38,7 +36,6 @@ export function LayerInspector({
   onChangeSettings,
   window,
   onChangeWindow,
-  children,
 }: LayerInspectorProps) {
   return (
     <div className="flex flex-col gap-6">
@@ -51,7 +48,6 @@ export function LayerInspector({
         onChangeSetting={(key, value) => onChangeSettings({ [key]: value })}
       />
       <LayerWindowFields idPrefix={`layer-${node.id}`} window={window} onChange={onChangeWindow} />
-      {children}
     </div>
   );
 }

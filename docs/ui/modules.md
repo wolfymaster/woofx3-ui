@@ -1,23 +1,31 @@
 # Modules
 
-**Routes:** `/marketplace/installed`, `/marketplace/installed/:id`, `/marketplace/upload`
-**Primary files:** `client/src/pages/modules.tsx`, `client/src/pages/module-install.tsx`, `client/src/pages/module-detail.tsx`, `client/src/components/modules/uninstall-module-dialog.tsx`
+**Routes:** `/stream/modules`, `/stream/modules/:id`, `/marketplace/upload`
+**Primary files:** `client/src/pages/modules.tsx`, `client/src/pages/modules-settings.tsx`, `client/src/pages/module-install.tsx`, `client/src/hooks/use-installed-module-nav-items.tsx`, `client/src/components/modules/uninstall-module-dialog.tsx`
 
-Installed modules live in the [Marketplace](./marketplace.md) tab beside the
-storefront: its rail has an **Installed** entry and an **Upload a module**
-button. The `/modules` paths that came before still answer and redirect here
-(`legacyModulesRedirect` in `client/src/lib/marketplace-route.ts`): bare
-`/modules` goes to the storefront, or to the installed list for an
-integration's OAuth return, `/modules/install` to the upload page and
-`/modules/:id` to that module's page.
+Installed modules live in the **Modules** group of the Stream sidebar, below Data. The group lists **Settings**
+first, then every installed module, each row marked with where it came from (see below). Uploading a module stays in
+the [Marketplace](./marketplace.md) tab (`/marketplace/upload`). The paths that held installed modules before still
+answer and redirect (`legacyModulesRedirect` in `client/src/lib/marketplace-route.ts`): `/modules` and
+`/marketplace/installed` go to `/stream/modules`, `/modules/:id` and `/marketplace/installed/:id` to
+`/stream/modules/:id`, and `/modules/install` to the upload page. An integration's OAuth return,
+`/modules?integration=…`, lands on the settings page, which shows its result.
 
-## Installed modules (`/marketplace/installed`)
+## Module settings (`/stream/modules`)
+
+One page with a card per installed module, each holding that module's settings
+(the same `ModuleSettingsSections` the module page's Settings tab renders).
+Each card reads the module's detail with `getModuleDetail`, so a module that
+declares no settings has no card. The page also carries the module storage
+warning, the OAuth result banner and the Modules intro.
+
+## Installed modules
 
 - **Convex** holds the repository of **engine-confirmed** modules: a `moduleRepository` row is only written after the engine sends a `module.installed` webhook. A module that is mid-install or whose delivery failed does **not** appear in the catalog — its state is communicated through transient events instead (see below).
-- The page, its sidebar, the storefront and the upload page read the installed modules through the [engine gateway](../patterns/engine-gateway.md) (`modules.useInstalled`, an `InstalledModule` per module). The Convex adapter maps the `moduleRepository` rows; the direct gateway maps the engine's `listEngineModules`, cached and read again on `module.installed` and `module.deleted`.
-- The sidebar (`components/modules/module-sidebar.tsx`) lists the installed modules, each marked **Built in** when it ships with the engine (only the direct gateway knows this), **Marketplace** when it records the listing it came from, or **Uploaded** when it was installed from an uploaded archive. Choosing one opens its page. With nothing chosen, the page offers to upload a module (where uploads are offered) or browse the marketplace. A built-in module offers no Remove: the engine cannot uninstall it.
+- The sidebar, the settings page, the module page, the storefront and the upload page read the installed modules through the [engine gateway](../patterns/engine-gateway.md) (`modules.useInstalled`, an `InstalledModule` per module). The Convex adapter maps the `moduleRepository` rows; the direct gateway maps the engine's `listEngineModules`, cached and read again on `module.installed` and `module.deleted`.
+- The sidebar entries (`useInstalledModuleNavItems`) list the installed modules, each marked **Built in** when it ships with the engine (only the direct gateway knows this), **Marketplace** when it records the listing it came from, or **Uploaded** when it was installed from an uploaded archive. Choosing one opens its page. With no module installed, the settings page offers to upload a module (where uploads are offered) or browse the marketplace. A built-in module offers no Remove: the engine cannot uninstall it.
 
-## Module detail (`/marketplace/installed/:id`)
+## Module detail (`/stream/modules/:id`)
 
 The id is an installed module's bare key or a marketplace id. A module that is not installed yet shows its marketplace detail with an install button, which is how a getting-started item opens a platform to install.
 
@@ -32,7 +40,7 @@ The id is an installed module's bare key or a marketplace id. A module that is n
 
 ## Local mode
 
-The desktop app's local mode serves the Installed view and a module's page with no account, through the direct gateway (see [Companion app](./companion.md#the-dashboard-s-two-modes)). Its marketplace mode (`client/src/desktop/local-marketplace-mode.ts`) leaves out what needs the hosted site:
+The desktop app's local mode serves the Modules group and a module's page with no account, through the direct gateway (see [Companion app](./companion.md#the-dashboard-s-two-modes)). Its marketplace mode (`client/src/desktop/local-marketplace-mode.ts`) leaves out what needs the hosted site:
 
 - **Local endpoints.** The engine runs on this computer and dials a module's local endpoints itself, so there is no companion routing to explain and no setting the companion wrote.
 - **Webhook endpoints.** Inbound webhooks are relayed by the hosted site, which local mode has none of.
@@ -41,7 +49,6 @@ The desktop app's local mode serves the Installed view and a module's page with 
 
 ## Custom upload (`/marketplace/upload`)
 
-An upload installs onto the engine, not into the catalog, so this page shows the installed-modules sidebar.
 
 Installs are **asynchronous** and correlated via a `moduleKey` echoed by the engine in its webhook callback.
 
@@ -59,7 +66,7 @@ A hash of the in-browser zip is logged against the hash computed on the Convex s
 There is no dedicated upgrade RPC — **an update is an install of the newer version**, the same `api.marketplace.installModule` call the Store's Install button makes.
 
 - `moduleDetail.getModuleDetail` reports `latestVersion` for an installed module by fetching `GET /modules/{id}` from the marketplace, for the listing the module was installed from (`installedListing`: its install provenance, else the manifest id in its `moduleKey`). When it is newer than the installed `version`, `ModuleDetailPanel` shows an **Update to vX.Y.Z** button beside Remove.
-- The action needs only the listing id, so `modules.tsx` derives it from the installed row (`installedListing`) rather than from how the panel was opened — the Update button is therefore reachable from the Installed list, not only from the Store, and a later edition (routed by the manifest id every edition shares) updates within its own edition.
+- The action needs only the listing id, so `modules.tsx` derives it from the installed row (`installedListing`) rather than from how the panel was opened — the Update button is therefore reachable from the Modules group, not only from the Store, and a later edition (routed by the manifest id every edition shares) updates within its own edition.
 - Both sides upgrade **in place**. The engine replaces the previous version's registrations under a unique constraint on module name, and `moduleWebhook.processModuleInstalled` patches the existing `moduleRepository` row (`findSupersededModule` matches on the version-free leading segment of the `moduleKey`) instead of inserting a second one. Keeping the `_id` stable is what keeps trigger/action definitions, functions, widgets, assets and resource instances pointed at the module across an upgrade.
 - `getModuleDetail` is an action, not a reactive query, so the panel refetches once the install's transient event reports success — otherwise it would keep rendering the superseded version and its "Update available" notice.
 
@@ -144,7 +151,7 @@ The limit is soft. The engine never refuses a write, and nothing in the dashboar
 
 - `api.moduleStorage.usage` asks the engine for `getModuleStorageUsage` and compares it with the limit. It answers null for an engine someone else hosts.
 - The engine page shows a **Module storage** card for a managed engine: a meter against the limit.
-- The Modules page shows a warning above the catalog while the engine is over its limit.
+- The Modules settings page shows a warning above the cards while the engine is over its limit.
 
 Operators see the same figure from the other side: the maintenance API's daily usage collection reads the size of the engine's module storage replica, and the backoffice flags engines over their limit.
 

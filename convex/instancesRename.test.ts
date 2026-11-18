@@ -57,9 +57,11 @@ describe("instances.update name", () => {
 
   test("a plain member cannot rename", async () => {
     const f = await fixture();
-    await expect(f.member.mutation(api.instances.update, { instanceId: f.instanceId, name: "X" })).rejects.toThrow(
-      "Not authorized"
-    );
+    await expect(
+      f.member.mutation(api.instances.update, { instanceId: f.instanceId, name: "X" })
+    ).rejects.toMatchObject({
+      data: { code: "not_authorized", action: "operateEngine" },
+    });
   });
 
   test("an organization admin cannot rename", async () => {

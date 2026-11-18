@@ -42,7 +42,6 @@ async function viewer() {
       name: "Starter",
       features: [],
       limits: [],
-      offered: true,
       updatedAt: 1,
       updatedBy: "test",
     });
