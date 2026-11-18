@@ -137,6 +137,7 @@ describe("config", () => {
 describe("which key a call carries", () => {
   const calls: [string, () => Promise<unknown>, string | undefined][] = [
     ["ensure", () => client.ensure("acc1"), "Bearer org-key"],
+    ["reportEnsureMiss", () => client.reportEnsureMiss("acc1", "down"), "Bearer org-key"],
     ["startCheckout", () => client.startCheckout({ ...TERMS, idempotencyKey: "k" }), "Bearer org-key"],
     [
       "startMarketplaceCheckout",
@@ -196,6 +197,16 @@ describe("requests", () => {
     const seen = plane(201, { accountId: "acc1", version: 1, plan: "starter" });
     expect(await client.ensure("acc1")).toEqual({ ok: true, value: { accountId: "acc1", version: 1 } });
     expect(seen[0]?.headers["idempotency-key"]).toBe("ensure:acc1");
+  });
+
+  test("reportEnsureMiss posts the reason to the org's ensure-miss route", async () => {
+    const seen = plane(200, { ownerType: "org", ownerId: "acc1", attempts: 2 });
+    expect(await client.reportEnsureMiss("acc1", "down")).toEqual({ ok: true, value: { attempts: 2 } });
+    expect(seen[0]).toMatchObject({
+      url: "https://plane.test/v1/billing/accounts/org/acc1/ensure-miss",
+      method: "POST",
+      body: { reason: "down" },
+    });
   });
 
   test("openPortal sends no key and no body", async () => {
