@@ -79,6 +79,14 @@ export const ENTITLEMENT_LIMITS = {
     unit: "seats",
     default: 5,
   },
+  // Counts the org's managed engines that are not deleted; checked when another
+  // is requested (org/engines.ts). The default is the allowance of an org with
+  // no plan: its first engine only.
+  "org.managedEngines": {
+    description: "Managed engines in the organization",
+    unit: "engines",
+    default: 1,
+  },
   "analytics.retentionDays": {
     description: "How long analytics are kept",
     unit: "days",
