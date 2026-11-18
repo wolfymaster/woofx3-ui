@@ -68,3 +68,7 @@ A sponsorship belongs to a person, not an organization. The management plane own
 ## Entry points
 
 The profile menu's "Account" entry (any signed-in user, web build only) opens `/account`. The Team page has a "Manage organization" button for org owners and admins on a hosted engine, in the web build. Billing banners and in-app notices link to `/account`.
+
+## Verified email
+
+An email invitation is accepted only by an account whose address is verified and equals the invited address (`invitations.accept` throws `{ code: "email_unverified" }` otherwise); Twitch invitations are unchanged. A password sign-up is mailed a 6-digit code (`convex/emailVerification.ts`); anyone unverified requests one from Your settings or the invitation page, through the maintenance API's `/v1/email/messages` route with the `account-verification-code` template and a key with `email:send` (`MAINTENANCE_EMAIL_KEY`, else `MAINTENANCE_API_KEY`). `isEmailVerified` in `convex/org/identity.ts` is the one check; accounts that predate verification stay unverified until they verify.

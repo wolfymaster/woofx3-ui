@@ -6,7 +6,7 @@ import { components } from "../_generated/api";
  * Token buckets for actions that reach a paid or third-party API (Stripe via
  * the plane, Twitch). `capacity` is the burst a person can spend at once;
  * `rate` tokens per hour then refill it. Billing and sponsorship buckets are
- * keyed by the acting user; invitation buckets by the engine, so one admin
+ * keyed by the acting user; email verification by the user; invitation buckets by the engine, so one admin
  * cannot spend another engine's allowance.
  */
 export const ACTION_LIMITS = {
@@ -14,6 +14,7 @@ export const ACTION_LIMITS = {
   billingCheckoutStart: { kind: "token bucket", rate: 20, period: HOUR, capacity: 5 },
   sponsorshipStart: { kind: "token bucket", rate: 20, period: HOUR, capacity: 5 },
   inviteLookup: { kind: "token bucket", rate: 120, period: HOUR, capacity: 20 },
+  emailVerificationSend: { kind: "token bucket", rate: 6, period: HOUR, capacity: 3 },
   inviteCreate: { kind: "token bucket", rate: 60, period: HOUR, capacity: 15 },
 } as const;
 
