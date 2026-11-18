@@ -40,10 +40,14 @@ const BACKOFFICE_SCOPES: readonly OpsRouteName[] = [
   "instances.health",
   "audit.list",
   "notifications.list",
+  "featureFlags.list",
   "engines.act",
   "instances.setStorageLimits",
   "notifications.create",
   "notifications.delete",
+  "featureFlags.create",
+  "featureFlags.update",
+  "featureFlags.remove",
   "accounts.billingProjectionReset",
 ];
 

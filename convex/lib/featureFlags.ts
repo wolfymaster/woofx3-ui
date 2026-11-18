@@ -3,11 +3,24 @@ import type { Id } from "../_generated/dataModel";
 import { isEntitlementFeatureKey } from "./entitlements";
 
 /**
- * UI feature flags: who sees a UI feature while it rolls out. A flag is
- * temporary; once its feature is on for everyone the flag and its row are
- * deleted. Whether an account's plan includes a feature is an entitlement,
- * not a flag.
+ * UI feature flags: who sees a UI feature while it rolls out. A flag is a row
+ * in `featureFlags`, created and targeted by operators in the backoffice. A
+ * flag with no row does not exist and reads as off. A flag is temporary; once
+ * its feature is on for everyone its row is deleted. Whether an account's plan
+ * includes a feature is an entitlement, not a flag.
+ *
+ * Code reads a flag by key, so a flag nothing reads does nothing: an operator
+ * creates it, then a developer wires it into the UI.
  */
+
+/** How a flag is targeted. Everything but the key is what operators edit. */
+export interface FeatureFlagTargeting {
+  key: string;
+  state: "off" | "on" | "rules";
+  rules?: FeatureFlagRules;
+}
+
+/** What operators say about a flag when they create it. */
 export interface FeatureFlagDefinition {
   description: string;
   /** Who removes the flag once its rollout is done. */
@@ -17,18 +30,39 @@ export interface FeatureFlagDefinition {
 }
 
 /**
- * Every flag the UI knows. A key must be listed here before a row can be
- * written for it, so a flag cannot be turned on by a typo, and a row whose
- * key is gone from this list is ignored.
+ * A flag's key as code names it. There is no code-side registry: a key is
+ * whatever operators created, and the regex below is what keeps keys tidy.
  */
-export const FEATURE_FLAGS = {} as const satisfies Record<string, FeatureFlagDefinition>;
+export type FeatureFlagKey = string;
 
-export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
+/** Keys are a lowercase first letter, then dot- or dash-separated words, e.g. `scenes.newToolbar`. */
+const FEATURE_FLAG_KEY = /^[a-z][A-Za-z0-9]*(?:[.-][A-Za-z0-9]+)*$/;
+export const FEATURE_FLAG_KEY_MAX = 64;
+export const FEATURE_FLAG_DESCRIPTION_MAX = 200;
+export const FEATURE_FLAG_OWNER_MAX = 200;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const FEATURE_FLAG_KEYS: ReadonlySet<string> = new Set(Object.keys(FEATURE_FLAGS));
+export function isFeatureFlagKey(key: string): boolean {
+  return key.length <= FEATURE_FLAG_KEY_MAX && FEATURE_FLAG_KEY.test(key);
+}
 
-export function isFeatureFlagKey(key: string): key is FeatureFlagKey {
-  return FEATURE_FLAG_KEYS.has(key);
+/** Rejects a flag an operator could not have meant, before it is saved. */
+export function validateFeatureFlagDefinition(definition: FeatureFlagDefinition): void {
+  if (definition.description.trim() === "" || definition.description.length > FEATURE_FLAG_DESCRIPTION_MAX) {
+    throw new Error(`description must be 1 to ${FEATURE_FLAG_DESCRIPTION_MAX} characters`);
+  }
+  if (definition.owner.trim() === "" || definition.owner.length > FEATURE_FLAG_OWNER_MAX) {
+    throw new Error(`owner must be 1 to ${FEATURE_FLAG_OWNER_MAX} characters`);
+  }
+  if (!ISO_DATE.test(definition.removeBy) || !isRealDate(definition.removeBy)) {
+    throw new Error(`removeBy must be a date, YYYY-MM-DD, got "${definition.removeBy}"`);
+  }
+}
+
+/** A date that exists on the calendar: JavaScript rolls 2026-02-31 over, so compare it back. */
+function isRealDate(value: string): boolean {
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
 }
 
 export const featureFlagRulesValidator = v.object({
@@ -53,12 +87,6 @@ export interface FeatureFlagRules {
   entitlement?: string;
 }
 
-export interface FeatureFlagRow {
-  key: string;
-  state: "off" | "on" | "rules";
-  rules?: FeatureFlagRules;
-}
-
 /** Who a flag is evaluated for. Any part may be unknown, e.g. before an instance is chosen. */
 export interface FeatureFlagSubject {
   userId?: Id<"users">;
@@ -71,12 +99,13 @@ export interface FeatureFlagSubject {
 
 /**
  * Whether a flag is on for a subject. An allowlisted user, account or
- * instance always gets it, so an operator can try a feature on any instance.
+ * instance always gets it, so an operator can try a feature anywhere.
  * Otherwise every condition that is set must hold, and `percent`, when set,
  * admits a stable share of the audience. `rules` with nothing set is off:
- * an empty rule set is a mistake, not a way to say "everyone".
+ * an empty rule set is a mistake, not a way to say "everyone", so the
+ * backoffice refuses to save one.
  */
-export function isFlagOn(row: FeatureFlagRow | null, subject: FeatureFlagSubject): boolean {
+export function isFlagOn(row: FeatureFlagTargeting | null, subject: FeatureFlagSubject): boolean {
   if (row === null || row.state === "off") {
     return false;
   }
@@ -130,7 +159,7 @@ export function rolloutBucket(flagKey: string, audienceId: string): number {
 }
 
 /** Rejects rules an operator could not have meant, before they are saved. */
-export function validateFeatureFlagRules(rules: FeatureFlagRules): void {
+export function validateFeatureFlagRules(rules: Pick<FeatureFlagRules, "percent" | "entitlement">): void {
   if (rules.percent !== undefined && !(Number.isInteger(rules.percent) && rules.percent >= 0 && rules.percent <= 100)) {
     throw new Error(`percent must be an integer from 0 to 100, got ${rules.percent}`);
   }

@@ -1,5 +1,4 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import type { ReactNode } from "react";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
@@ -9,7 +8,7 @@ import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/f
 import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import type { VariableOption } from "@/lib/workflow-variables";
 
-interface WidgetSettingsPanelProps {
+interface WidgetSettingsFormProps {
   /** The widget's canonical id, `{moduleId}:widget:{manifestId}`. */
   widgetCanonicalId: string;
   settings: Record<string, unknown>;
@@ -17,27 +16,12 @@ interface WidgetSettingsPanelProps {
   renderers: Record<string, CustomFieldRenderer>;
   availableVariables?: VariableOption[];
   onChangeSetting: (key: string, value: unknown) => void;
-  /** Shown below the settings, in the same scrolling pane. */
-  children?: ReactNode;
 }
-
-/** Right-side settings pane for the currently-selected canvas widget. */
-export function WidgetSettingsPanel({ children, ...form }: WidgetSettingsPanelProps) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto p-4">
-        <WidgetSettingsForm {...form} />
-        {children}
-      </div>
-    </div>
-  );
-}
-
-type WidgetSettingsFormProps = Omit<WidgetSettingsPanelProps, "children">;
 
 /**
  * A widget's settings, drawn from its schema. The scene editor and the alert editor both
- * use it, so a widget shows the same fields wherever it is placed.
+ * use it, so a widget shows the same fields wherever it is placed. It is the Settings
+ * pane of the inspector; transitions and effects are separate panes beside it.
  */
 export function WidgetSettingsForm({
   widgetCanonicalId,

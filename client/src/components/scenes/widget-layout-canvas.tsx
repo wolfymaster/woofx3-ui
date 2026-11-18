@@ -20,9 +20,10 @@ import { canvasSettingsOf, catalogWidgetOf, type RemoteSelection } from "@/lib/s
 import type { VariableOption } from "@/lib/workflow-variables";
 import { CanvasSummary } from "./canvas-summary";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
-import { WidgetBehaviorsSection } from "./widget-behaviors-section";
+import { WidgetEffectsSection, WidgetTransitionsSection } from "./widget-behaviors-section";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
-import { WidgetSettingsPanel } from "./widget-settings-panel";
+import { WidgetInspectorTabs } from "./widget-inspector-tabs";
+import { WidgetSettingsForm } from "./widget-settings-panel";
 
 const ALERT_SURFACE = "alert";
 
@@ -263,26 +264,47 @@ export function WidgetLayoutCanvas({
       )}
       inspector={
         selected ? (
-          <WidgetSettingsPanel
-            widgetCanonicalId={selected.placement.widget}
-            settings={selected.placement.settings}
-            fields={selectedFields}
-            renderers={renderers}
-            availableVariables={availableVariables}
-            onChangeSetting={(key, value) => report(editor.nodes.patch(selected.id, { settings: { [key]: value } }))}
-          >
-            {state.doc !== null && (
-              <WidgetBehaviorsSection
-                editor={editor}
-                behaviors={state.doc.behaviors}
-                nodeId={selected.id}
-                row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
-                anchors={state.capabilities.anchors}
-                disabled={readOnly || state.capabilities.readOnly}
-                onRefused={onRefused}
+          <WidgetInspectorTabs
+            idPrefix={`scene-${selected.id}`}
+            settings={
+              <WidgetSettingsForm
+                widgetCanonicalId={selected.placement.widget}
+                settings={selected.placement.settings}
+                fields={selectedFields}
+                renderers={renderers}
+                availableVariables={availableVariables}
+                onChangeSetting={(key, value) =>
+                  report(editor.nodes.patch(selected.id, { settings: { [key]: value } }))
+                }
               />
-            )}
-          </WidgetSettingsPanel>
+            }
+            transitions={
+              state.doc === null ? null : (
+                <WidgetTransitionsSection
+                  editor={editor}
+                  behaviors={state.doc.behaviors}
+                  nodeId={selected.id}
+                  row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
+                  anchors={state.capabilities.anchors}
+                  disabled={readOnly || state.capabilities.readOnly}
+                  onRefused={onRefused}
+                />
+              )
+            }
+            effects={
+              state.doc === null ? null : (
+                <WidgetEffectsSection
+                  editor={editor}
+                  behaviors={state.doc.behaviors}
+                  nodeId={selected.id}
+                  row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
+                  anchors={state.capabilities.anchors}
+                  disabled={readOnly || state.capabilities.readOnly}
+                  onRefused={onRefused}
+                />
+              )
+            }
+          />
         ) : null
       }
       inspectorFallback={<CanvasSummary width={width} height={height} count={nodes.length} />}

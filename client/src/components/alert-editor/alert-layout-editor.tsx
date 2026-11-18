@@ -9,7 +9,8 @@ import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
-import { WidgetBehaviorsSection } from "@/components/scenes/widget-behaviors-section";
+import { WidgetEffectsSection, WidgetTransitionsSection } from "@/components/scenes/widget-behaviors-section";
+import { WidgetInspectorTabs } from "@/components/scenes/widget-inspector-tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -318,25 +319,41 @@ export function useAlertEditorView(
   };
   const selectedRow = selected ? rowFor(selected.placement.widget) : undefined;
   const inspector = selected ? (
-    <LayerInspector
-      key={selected.id}
-      node={selected}
-      fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
-      availableVariables={availableVariables}
-      onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
-      window={layerWindowOf(activityOf(doc.behaviors, selected.id)?.behavior ?? null)}
-      onChangeWindow={(window) => changeWindow(selected.id, window)}
-    >
-      <WidgetBehaviorsSection
-        editor={session.editor}
-        behaviors={doc.behaviors}
-        nodeId={selected.id}
-        row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
-        anchors={state.capabilities.anchors}
-        disabled={state.capabilities.readOnly}
-        onRefused={report}
-      />
-    </LayerInspector>
+    <WidgetInspectorTabs
+      idPrefix={`alert-${selected.id}`}
+      settings={
+        <LayerInspector
+          node={selected}
+          fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
+          availableVariables={availableVariables}
+          onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
+          window={layerWindowOf(activityOf(doc.behaviors, selected.id)?.behavior ?? null)}
+          onChangeWindow={(window) => changeWindow(selected.id, window)}
+        />
+      }
+      transitions={
+        <WidgetTransitionsSection
+          editor={session.editor}
+          behaviors={doc.behaviors}
+          nodeId={selected.id}
+          row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
+          anchors={state.capabilities.anchors}
+          disabled={state.capabilities.readOnly}
+          onRefused={report}
+        />
+      }
+      effects={
+        <WidgetEffectsSection
+          editor={session.editor}
+          behaviors={doc.behaviors}
+          nodeId={selected.id}
+          row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
+          anchors={state.capabilities.anchors}
+          disabled={state.capabilities.readOnly}
+          onRefused={report}
+        />
+      }
+    />
   ) : null;
 
   return {

@@ -1571,14 +1571,18 @@ export default defineSchema({
     .index("by_instance_released", ["instanceId", "releasedAt"])
     .index("by_released_created", ["releasedAt", "createdAt"]),
 
-  // featureFlags: an operator's targeting for a UI flag listed in
-  // lib/featureFlags.ts. A flag with no row is off. Written only by the
-  // internal featureFlags.set, never from the dashboard.
+  // featureFlags: a UI feature flag, created and targeted by operators in the
+  // backoffice. A flag with no row is off. Written only through the ops API
+  // (ops/featureFlags.ts), never from the dashboard.
   featureFlags: defineTable({
     key: v.string(),
+    description: v.string(),
+    owner: v.string(),
+    removeBy: v.string(),
     state: featureFlagStateValidator,
     rules: v.optional(featureFlagRulesValidator),
     updatedAt: v.number(),
+    updatedBy: v.string(),
   }).index("by_key", ["key"]),
 
   // scenes: scene configurations for browser sources
