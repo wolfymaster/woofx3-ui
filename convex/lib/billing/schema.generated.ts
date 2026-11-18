@@ -674,6 +674,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/billing/accounts/{id}/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant an organization credit for a referral reward
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again. The credit lapses 12 months after it is granted and is spent on the organization's next provider invoice (once it pays). 409 `credits_disabled` while credits are switched off.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminRewardBody"];
+                };
+            };
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/billing/accounts/{id}/suspend": {
         parameters: {
             query?: never;
@@ -3573,7 +3680,7 @@ export interface components {
                 /** Format: date-time */
                 diedAt: string;
                 /** @enum {string} */
-                effectKind: "stop_engines" | "start_engines" | "send_email" | "notify" | "publish_projection" | "expire_checkout" | "grant_entitlement" | "revoke_entitlement";
+                effectKind: "stop_engines" | "start_engines" | "send_email" | "notify" | "publish_projection" | "expire_checkout" | "grant_entitlement" | "revoke_entitlement" | "grant_credit" | "apply_credit" | "reward_referrer";
                 id: string;
                 lastError: string | null;
                 /** @description The UI's id for the person, for a sponsorship's. */
@@ -3584,7 +3691,7 @@ export interface components {
                 /** Format: date-time */
                 at: string;
                 /** @enum {string} */
-                event: "TrialStarted" | "EvaluationDue" | "RetryDue" | "GraceExpired" | "SpinDownDue" | "ExemptionExpired" | "ProviderActivated" | "PaymentSucceeded" | "PaymentFailed" | "ProviderEnded" | "ExemptionGranted" | "ExemptionRevoked" | "OperatorSuspended" | "OperatorUnsuspended" | "EnginesStopped" | "PlanChanged" | "DiscountApplied" | "OverridesChanged" | "OverridesExpired";
+                event: "TrialStarted" | "EvaluationDue" | "RetryDue" | "GraceExpired" | "SpinDownDue" | "ExemptionExpired" | "ProviderActivated" | "PaymentSucceeded" | "PaymentFailed" | "ProviderEnded" | "ExemptionGranted" | "ExemptionRevoked" | "OperatorSuspended" | "OperatorUnsuspended" | "EnginesStopped" | "PlanChanged" | "DiscountApplied" | "OverridesChanged" | "OverridesExpired" | "RewardGranted";
                 /** @enum {string} */
                 to: "trialing" | "active" | "past_due" | "suspended" | "exempt";
                 transitionId: string;
@@ -3791,12 +3898,19 @@ export interface components {
             prices: components["schemas"]["BillingAdminPlanPrice"][];
         };
         /** @enum {string} */
-        BillingAdminRefusalCode: "no_subscription" | "illegal_transition" | "provider_managed" | "trial_is_starter" | "invalid_exemption" | "not_suspended_by_operator" | "no_provider_subscription" | "unknown_discount" | "invalid_overrides_end" | "sponsorship_not_found" | "payment_not_found" | "refund_exceeds_payment" | "sponsorship_not_recurring" | "sponsorship_canceled" | "effect_not_dead" | "checkout_not_found" | "checkout_not_stuck" | "checkout_not_open" | "price_exists" | "price_not_found";
+        BillingAdminRefusalCode: "no_subscription" | "illegal_transition" | "provider_managed" | "trial_is_starter" | "invalid_exemption" | "not_suspended_by_operator" | "no_provider_subscription" | "unknown_discount" | "invalid_overrides_end" | "invalid_reward" | "credits_disabled" | "sponsorship_not_found" | "payment_not_found" | "refund_exceeds_payment" | "sponsorship_not_recurring" | "sponsorship_canceled" | "effect_not_dead" | "checkout_not_found" | "checkout_not_stuck" | "checkout_not_open" | "price_exists" | "price_not_found";
         BillingAdminRefusalError: {
             error: {
                 code: components["schemas"]["BillingAdminRefusalCode"];
                 message: string;
             };
+        };
+        BillingAdminRewardBody: {
+            amountCents: number;
+            /** @description Names the reward, normally the referral that earned it; granting the same id again adds nothing. */
+            rewardId: string;
+            /** @description The provider invoice that earned the reward; refunding it claws the unspent credit back. */
+            sourcePaymentRef: string | null;
         };
         BillingAdminSettled: {
             /** @enum {boolean} */
@@ -3936,7 +4050,7 @@ export interface components {
             /** Format: date-time */
             at: string;
             /** @enum {string} */
-            event: "TrialStarted" | "EvaluationDue" | "RetryDue" | "GraceExpired" | "SpinDownDue" | "ExemptionExpired" | "ProviderActivated" | "PaymentSucceeded" | "PaymentFailed" | "ProviderEnded" | "ExemptionGranted" | "ExemptionRevoked" | "OperatorSuspended" | "OperatorUnsuspended" | "EnginesStopped" | "PlanChanged" | "DiscountApplied" | "OverridesChanged" | "OverridesExpired";
+            event: "TrialStarted" | "EvaluationDue" | "RetryDue" | "GraceExpired" | "SpinDownDue" | "ExemptionExpired" | "ProviderActivated" | "PaymentSucceeded" | "PaymentFailed" | "ProviderEnded" | "ExemptionGranted" | "ExemptionRevoked" | "OperatorSuspended" | "OperatorUnsuspended" | "EnginesStopped" | "PlanChanged" | "DiscountApplied" | "OverridesChanged" | "OverridesExpired" | "RewardGranted";
             /** @enum {string|null} */
             from: "trialing" | "active" | "past_due" | "suspended" | "exempt" | null;
             note: string | null;
