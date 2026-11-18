@@ -1,6 +1,7 @@
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import { internalQuery, type QueryCtx } from "../_generated/server";
 import { type EntitlementOverrides, isUsable, type SubscriptionSummary } from "../lib/entitlements";
 import type { LifecycleReason } from "../lib/organization";
 import type { ProjectedDiscount } from "../lib/orgBilling";
@@ -134,3 +135,31 @@ export async function requireEngineUsable(ctx: QueryCtx, instanceId: Id<"instanc
     refuseSuspended(suspension);
   }
 }
+
+/**
+ * One page of the convergent ensure pass: the orgs on it that host a managed
+ * engine (one not yet deleted) and have no projection. Pages are of
+ * instances, so an org with engines on several pages can appear twice; the
+ * caller dedupes, and `ensure` is idempotent anyway.
+ */
+export const unbilledManagedOrgs = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const page = await ctx.db.query("instances").paginate(paginationOpts);
+    const accountIds = new Set<Id<"accounts">>();
+    for (const instance of page.page) {
+      if (instance.hosting !== "managed" || accountIds.has(instance.accountId)) {
+        continue;
+      }
+      const provisioning = await ctx.db
+        .query("engineProvisioning")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
+        .unique();
+      if (provisioning?.status === "deleted" || (await orgBillingRow(ctx, instance.accountId)) !== null) {
+        continue;
+      }
+      accountIds.add(instance.accountId);
+    }
+    return { accountIds: [...accountIds], continueCursor: page.continueCursor, isDone: page.isDone };
+  },
+});

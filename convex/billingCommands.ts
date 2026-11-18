@@ -259,17 +259,18 @@ export function ensureRetryDelayMs(attempt: number, random: number): number {
 }
 
 /**
- * Asks the plane to start the org's trial; whether it succeeded. The `ensure`
+ * Asks the plane to start the org's trial; the plane's error, or null when it succeeded. The `ensure`
  * contract takes no body, so the org's referral is not sent here: the plane
  * reads it from the ops route `accounts.referral`. Sending it with `ensure`
  * needs the billing contract to accept it first.
  */
-export async function ensureOrgBilling(client: BillingClient, accountId: Id<"accounts">): Promise<boolean> {
+export async function ensureOrgBilling(client: BillingClient, accountId: Id<"accounts">): Promise<BillingError | null> {
   const result = await client.ensure(accountId);
   if (!result.ok) {
     logger.warn("billing ensure failed", { accountId, error: result.error });
+    return result.error;
   }
-  return result.ok;
+  return null;
 }
 
 /**
@@ -282,7 +283,7 @@ export const ensureBilling = internalAction({
   args: { accountId: v.id("accounts"), attempt: v.optional(v.number()) },
   handler: async (ctx, { accountId, attempt = 0 }): Promise<void> => {
     const client = billingClientFromEnv();
-    if (client === null || (await ensureOrgBilling(client, accountId))) {
+    if (client === null || (await ensureOrgBilling(client, accountId)) === null) {
       return;
     }
     if (attempt + 1 >= ENSURE_RETRY.maxAttempts) {
@@ -296,5 +297,90 @@ export const ensureBilling = internalAction({
       accountId,
       attempt: attempt + 1,
     });
+  },
+});
+
+/** Tunables of the daily convergent ensure pass (`ensureSweep`). */
+export const ENSURE_SWEEP = {
+  intervalHours: 24,
+  /** Instances read per page, and so the most orgs one page can yield. */
+  batchSize: 50,
+  /** Most orgs one run asks the plane about, so a plane that is down costs a bounded run. */
+  maxOrgsPerRun: 200,
+} as const;
+
+export type EnsureSweepSummary = {
+  scanned: number;
+  ensured: number;
+  missed: number;
+  reportFailed: number;
+  capped: boolean;
+  elapsedMs: number;
+};
+
+/**
+ * Finds orgs that host a managed engine but have no billing projection and
+ * runs the same `ensure` sign-up does. Each org is isolated: a failure is
+ * reported to the plane as a miss and the pass moves on. Orgs are visited in
+ * instance order each run, so persistent failures at the front can starve
+ * later orgs once `maxOrgsPerRun` is reached; operators see the misses.
+ */
+export async function runEnsureSweep(
+  client: BillingClient,
+  listPage: (
+    cursor: string | null,
+    numItems: number
+  ) => Promise<{ accountIds: Id<"accounts">[]; continueCursor: string; isDone: boolean }>,
+  now: () => number,
+  config: Pick<typeof ENSURE_SWEEP, "batchSize" | "maxOrgsPerRun"> = ENSURE_SWEEP
+): Promise<EnsureSweepSummary> {
+  const startedAt = now();
+  const seen = new Set<Id<"accounts">>();
+  const summary = { scanned: 0, ensured: 0, missed: 0, reportFailed: 0, capped: false };
+  let cursor: string | null = null;
+  let isDone = false;
+  while (!isDone && !summary.capped) {
+    const page = await listPage(cursor, config.batchSize);
+    cursor = page.continueCursor;
+    isDone = page.isDone;
+    for (const accountId of page.accountIds) {
+      if (seen.has(accountId)) {
+        continue;
+      }
+      if (summary.scanned >= config.maxOrgsPerRun) {
+        summary.capped = true;
+        break;
+      }
+      seen.add(accountId);
+      summary.scanned += 1;
+      const error = await ensureOrgBilling(client, accountId);
+      if (error === null) {
+        summary.ensured += 1;
+        continue;
+      }
+      summary.missed += 1;
+      const reported = await client.reportEnsureMiss(accountId, `${error.code}: ${error.message}`.slice(0, 500));
+      if (!reported.ok) {
+        summary.reportFailed += 1;
+      }
+    }
+  }
+  return { ...summary, elapsedMs: now() - startedAt };
+}
+
+export const ensureSweep = internalAction({
+  args: {},
+  handler: async (ctx): Promise<void> => {
+    const client = billingClientFromEnv();
+    if (client === null) {
+      return;
+    }
+    const summary = await runEnsureSweep(
+      client,
+      (cursor, numItems) =>
+        ctx.runQuery(internal.org.billing.unbilledManagedOrgs, { paginationOpts: { cursor, numItems } }),
+      Date.now
+    );
+    logger.info("billing ensure sweep", summary);
   },
 });
