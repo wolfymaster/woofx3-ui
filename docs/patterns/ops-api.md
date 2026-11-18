@@ -19,7 +19,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the ba
       | Caller | Env | Routes |
       | --- | --- | --- |
       | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.billingProjection`, `notifications.create` |
-      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `accounts.billingProjectionReset` |
+      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `featureFlags.*`, `accounts.billingProjectionReset` |
       | `legacy` | `OPS_API_SECRET` | every route; logged as deprecated on each request |
 
     - A route outside the caller's scope answers `403 forbidden_route`.
@@ -46,6 +46,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the ba
 | `GET /api/ops/engines/module-storage-limits?cursor=` | Each managed engine's module storage limit (`storage.moduleStorageBytes` after its override), by maintenance engine id, a page at a time; `null` is unlimited. A page may hold fewer rows than its size: rows without a maintenance engine are skipped. The backoffice compares these with maintenance's replica sizes to flag engines over their limit. |
 | `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply), and `isLive`, whether its stream is live now. |
 | `GET /api/ops/instances/:id/health` | Live state, sync state, recent alerts and failing workflows. |
+| `GET /api/ops/feature-flags` | Every UI feature flag with its targeting, and the entitlements a rule may name. |
 | `GET /api/ops/audit?actor=&target=&cursor=` | The audit log, newest first, for one operator or one target. |
 
 List routes are cursor-paginated: pass back `cursor` until it is `null`.
@@ -63,6 +64,9 @@ Operators also set what only an operator may:
 | Route | Does |
 |---|---|
 | `POST /api/ops/instances/:instanceId/storage-limits` | Replaces a managed engine's hosted storage override, `{ totalBytes?, fileBytes?, moduleStorageBytes? }` in bytes. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears the override. An engine someone else hosts answers `409 not_managed`. |
+| `POST /api/ops/feature-flags` | Creates a flag from `{ key, description, owner, removeBy, state, rules? }`. The key is a lowercase word then dot- or dash-separated words; an existing key answers `409 already_exists`. Under `state: "rules"` at least one rule is required, and a target id that names no user, account or engine answers `400 unknown_target`. |
+| `PUT /api/ops/feature-flags` | Retargets the flag its body names, with the same shape and refusals as a create. `state: "off"` or `"on"` clears its rules. |
+| `POST /api/ops/feature-flags/delete` | Deletes the flag named by `key` in the body. Its key travels in the body because keys contain dots, and a path segment cannot. |
 | `POST /api/ops/accounts/:id/billing-projection` | The management plane's billing projection: tier (or `null`), add-ons, standing and its dates, `interval`, `exemptUntil`, `spinDownAt`, `hasProviderSubscription`, `discount` (`{ label }` or `null`) and entitlement overrides (`limits` values may be `null` for unlimited). `Idempotency-Key` must be `{accountId}:{version}`. Stored in `orgBilling` unless an equal or newer version is already held (`{ applied: false, version }`). Unknown fields, unknown override keys, a feature both added and removed, and a `trialing` standing with no `trialEndsAt` answer `400 invalid_billing_projection`, so Convex must learn a field before the plane sends it. Once an org has a projection it drives its entitlements; an org without one is gated as one with no subscription was before billing existed. An applied push is audited with the actor and reason. A `version` above 2^31 - 1 (the plane's counter is a Postgres `integer`) answers `400 invalid_billing_projection`. |
 | `POST /api/ops/accounts/:id/billing-projection-reset` | Operator-only. Sets the org's stored projection version back to 0 so the plane's next push is applied, for a stuck version or a rebuilt plane counter; answers `{ previousVersion, version: 0 }`. Every other stored field stays, so entitlements do not change until a push arrives. Forgets the org's remembered `Idempotency-Key`s so a re-sent version is applied, not replayed. `404 no_projection` when none is stored. Audited with the actor and the required reason. |
 
