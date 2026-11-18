@@ -58,7 +58,7 @@ const FOR_A_TIME = "for";
 /** What a newly timed effect lasts when "For a set time" is picked. */
 const DEFAULT_EFFECT_MS = 2_000;
 
-interface WidgetBehaviorsSectionProps {
+interface WidgetBehaviorSectionProps {
   editor: CompositionEditor;
   behaviors: Readonly<Record<BehaviorId, BehaviorDocument>>;
   nodeId: NodeId;
@@ -71,12 +71,60 @@ interface WidgetBehaviorsSectionProps {
   onRefused: (result: CommandResult) => void;
 }
 
-/**
- * How the selected widget enters and leaves, and the effects it plays while
- * shown. Every change goes to the composition editor's behaviors, which
- * refuses one the registry would not store.
- */
-export function WidgetBehaviorsSection({
+function reporterFor(onRefused: (result: CommandResult) => void) {
+  return (result: CommandResult) => {
+    if (!result.ok) {
+      onRefused(result);
+    }
+  };
+}
+
+/** How the selected widget enters and leaves. Every change goes to the composition editor. */
+export function WidgetTransitionsSection({
+  editor,
+  behaviors,
+  nodeId,
+  row,
+  disabled = false,
+  onRefused,
+}: WidgetBehaviorSectionProps) {
+  const report = reporterFor(onRefused);
+  return (
+    <section className="space-y-4" data-testid="widget-transitions">
+      <h3 className="text-sm font-semibold">Transitions</h3>
+      {PHASES.map(({ phase, label, hint }) => (
+        <TransitionPicker
+          key={phase}
+          id={`${nodeId}-transition-${phase}`}
+          label={label}
+          hint={hint}
+          phase={phase}
+          entry={transitionOf(behaviors, nodeId, phase)}
+          row={row}
+          disabled={disabled}
+          onPick={(kind, entry) => {
+            if (kind === NO_TRANSITION) {
+              if (entry !== null) {
+                report(editor.behaviors.remove(entry.id));
+              }
+              return;
+            }
+            const params = transitionParamsFor(kind, phase, entry?.behavior);
+            if (entry === null) {
+              report(editor.behaviors.add(nodeId, "transition", kind, {}, params));
+              return;
+            }
+            report(editor.behaviors.patch(entry.id, { kind, params }));
+          }}
+          onPatch={(id, patch) => report(editor.behaviors.patch(id, patch))}
+        />
+      ))}
+    </section>
+  );
+}
+
+/** What plays on the selected widget while it is shown. */
+export function WidgetEffectsSection({
   editor,
   behaviors,
   nodeId,
@@ -84,85 +132,45 @@ export function WidgetBehaviorsSection({
   anchors,
   disabled = false,
   onRefused,
-}: WidgetBehaviorsSectionProps) {
-  const report = (result: CommandResult) => {
-    if (!result.ok) {
-      onRefused(result);
-    }
-  };
+}: WidgetBehaviorSectionProps) {
+  const report = reporterFor(onRefused);
   const effects = behaviorsOf(behaviors, nodeId, "effect");
-
   return (
-    <>
-      <section className="mt-6 space-y-4 border-t pt-4" data-testid="widget-transitions">
-        <h3 className="text-sm font-semibold">Transitions</h3>
-        {PHASES.map(({ phase, label, hint }) => (
-          <TransitionPicker
-            key={phase}
-            id={`${nodeId}-transition-${phase}`}
-            label={label}
-            hint={hint}
-            phase={phase}
-            entry={transitionOf(behaviors, nodeId, phase)}
+    <section className="space-y-4" data-testid="widget-effects">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Effects</h3>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7"
+          disabled={disabled}
+          onClick={() => report(editor.behaviors.add(nodeId, "effect", "pulse"))}
+          data-testid="button-add-effect"
+        >
+          <Plus />
+          Add effect
+        </Button>
+      </div>
+      {effects.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Effects play on the widget while it is shown.</p>
+      ) : (
+        effects.map((entry, index) => (
+          <EffectCard
+            key={entry.id}
+            entry={entry}
             row={row}
+            allowedAnchors={anchors}
             disabled={disabled}
-            onPick={(kind, entry) => {
-              if (kind === NO_TRANSITION) {
-                if (entry !== null) {
-                  report(editor.behaviors.remove(entry.id));
-                }
-                return;
-              }
-              const params = transitionParamsFor(kind, phase, entry?.behavior);
-              if (entry === null) {
-                report(editor.behaviors.add(nodeId, "transition", kind, {}, params));
-                return;
-              }
-              report(editor.behaviors.patch(entry.id, { kind, params }));
-            }}
-            onPatch={(id, patch) => report(editor.behaviors.patch(id, patch))}
+            isFirst={index === 0}
+            isLast={index === effects.length - 1}
+            onPatch={(patch) => report(editor.behaviors.patch(entry.id, patch))}
+            onMove={(to) => report(editor.behaviors.reorder(entry.id, { index: to === "up" ? index - 1 : index + 1 }))}
+            onRemove={() => report(editor.behaviors.remove(entry.id))}
           />
-        ))}
-      </section>
-
-      <section className="mt-6 space-y-4 border-t pt-4" data-testid="widget-effects">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">Effects</h3>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7"
-            disabled={disabled}
-            onClick={() => report(editor.behaviors.add(nodeId, "effect", "pulse"))}
-            data-testid="button-add-effect"
-          >
-            <Plus />
-            Add effect
-          </Button>
-        </div>
-        {effects.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Effects play on the widget while it is shown.</p>
-        ) : (
-          effects.map((entry, index) => (
-            <EffectCard
-              key={entry.id}
-              entry={entry}
-              row={row}
-              allowedAnchors={anchors}
-              disabled={disabled}
-              isFirst={index === 0}
-              isLast={index === effects.length - 1}
-              onPatch={(patch) => report(editor.behaviors.patch(entry.id, patch))}
-              onMove={(to) =>
-                report(editor.behaviors.reorder(entry.id, { index: to === "up" ? index - 1 : index + 1 }))
-              }
-              onRemove={() => report(editor.behaviors.remove(entry.id))}
-            />
-          ))
-        )}
-      </section>
-    </>
+        ))
+      )}
+    </section>
   );
 }
 
