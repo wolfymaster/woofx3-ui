@@ -1,5 +1,11 @@
 # woofx3 desktop changelog
 
+## [0.18.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.17.0...woofx3-v0.18.0) (2026-11-18)
+
+### Features
+
+* **feature-flags:** manage flag definitions through the ops API ([858b2a4](https://github.com/wolfymaster/woofx3-ui/commit/858b2a452f6147494f237cf3c677d80d6b0f405d))
+
 ## [0.17.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.16.0...woofx3-v0.17.0) (2026-11-18)
 
 ### Features
