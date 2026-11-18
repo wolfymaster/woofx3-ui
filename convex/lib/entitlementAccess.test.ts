@@ -197,7 +197,7 @@ describe("seat limit", () => {
         expiresAt: Date.now() + 60_000,
         createdAt: 1,
       });
-      return ctx.db.insert("users", { name: email, email });
+      return ctx.db.insert("users", { name: email, email, emailVerificationTime: 1 });
     });
     return t.withIdentity({ subject: `${inviteeId}|s` }).mutation(api.invitations.accept, { token: email });
   }
@@ -268,7 +268,7 @@ describe("seat limit", () => {
         expiresAt: Date.now() + 60_000,
         createdAt: 1,
       });
-      return ctx.db.insert("users", { name: "Sixth", email: "sixth@example.com" });
+      return ctx.db.insert("users", { name: "Sixth", email: "sixth@example.com", emailVerificationTime: 1 });
     });
     expect(
       await t.withIdentity({ subject: `${inviteeId}|s` }).mutation(api.invitations.accept, { token: "full" })
