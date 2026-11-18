@@ -156,7 +156,6 @@ import type * as lib_ops_billingProjectionRequest from "../lib/ops/billingProjec
 import type * as lib_ops_callers from "../lib/ops/callers.js";
 import type * as lib_ops_dto from "../lib/ops/dto.js";
 import type * as lib_ops_featureFlagRequest from "../lib/ops/featureFlagRequest.js";
-import type * as lib_ops_idempotency from "../lib/ops/idempotency.js";
 import type * as lib_ops_notificationRequest from "../lib/ops/notificationRequest.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
@@ -267,7 +266,6 @@ import type * as ops_featureFlags from "../ops/featureFlags.js";
 import type * as ops_http from "../ops/http.js";
 import type * as ops_notifications from "../ops/notifications.js";
 import type * as ops_reads from "../ops/reads.js";
-import type * as ops_requests from "../ops/requests.js";
 import type * as ops_storageLimits from "../ops/storageLimits.js";
 import type * as org_billing from "../org/billing.js";
 import type * as org_context from "../org/context.js";
@@ -489,7 +487,6 @@ declare const fullApi: ApiFromModules<{
   "lib/ops/callers": typeof lib_ops_callers;
   "lib/ops/dto": typeof lib_ops_dto;
   "lib/ops/featureFlagRequest": typeof lib_ops_featureFlagRequest;
-  "lib/ops/idempotency": typeof lib_ops_idempotency;
   "lib/ops/notificationRequest": typeof lib_ops_notificationRequest;
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
@@ -600,7 +597,6 @@ declare const fullApi: ApiFromModules<{
   "ops/http": typeof ops_http;
   "ops/notifications": typeof ops_notifications;
   "ops/reads": typeof ops_reads;
-  "ops/requests": typeof ops_requests;
   "ops/storageLimits": typeof ops_storageLimits;
   "org/billing": typeof org_billing;
   "org/context": typeof org_context;
