@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { billingConvexError, ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
+import { ACTION_LIMITS } from "./lib/actionRateLimits";
 import { billingErr, PLANE_CODES } from "./lib/billingClient";
 import { FakeBillingClient } from "./lib/billingClient.fakes";
 import { newBackend } from "./lib/convexTest.testing";
@@ -269,6 +270,45 @@ describe("previewPromotionCode", () => {
       body: { error: { code: "promotion_code_not_found", message: "m" } },
     };
     expect(await as(t, ownerId).action(api.billingCommands.previewPromotionCode, { accountId, code: "X" })).toBeNull();
+  });
+});
+
+describe("billing rate limits", () => {
+  test("previewPromotionCode refuses the call after the burst, per user", async () => {
+    const t = newBackend();
+    const first = await seedOrg(t);
+    const second = await seedOrg(t);
+    answers["/promotion-codes/X"] = {
+      status: 404,
+      body: { error: { code: "promotion_code_not_found", message: "m" } },
+    };
+    const preview = (owner: typeof first) =>
+      as(t, owner.ownerId).action(api.billingCommands.previewPromotionCode, { accountId: owner.accountId, code: "X" });
+    for (let n = 0; n < ACTION_LIMITS.billingPromoPreview.capacity; n++) {
+      await preview(first);
+    }
+    const asked = seen.length;
+    expect(await errorData(preview(first))).toMatchObject({ code: "rate_limited", retryAfter: expect.any(Number) });
+    expect(seen.length).toBe(asked);
+    expect(await preview(second)).toBeNull();
+  });
+
+  test("startCheckout refuses the call after the burst, per user", async () => {
+    const t = newBackend();
+    const first = await seedOrg(t);
+    const second = await seedOrg(t);
+    answers["/checkouts"] = { status: 200, body: { url: "https://pay.example/1", checkoutId: "c1" } };
+    const start = (owner: typeof first) =>
+      as(t, owner.ownerId).action(api.billingCommands.startCheckout, {
+        accountId: owner.accountId,
+        plan: "pro",
+        interval: "month",
+      });
+    for (let n = 0; n < ACTION_LIMITS.billingCheckoutStart.capacity; n++) {
+      await start(first);
+    }
+    expect(await errorData(start(first))).toMatchObject({ code: "rate_limited" });
+    await start(second);
   });
 });
 

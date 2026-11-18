@@ -12,6 +12,7 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
+import { spendActionLimit } from "./lib/actionRateLimits";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
@@ -267,6 +268,7 @@ export const lookupTwitchUser = action({
   args: { instanceId: v.id("instances"), login: v.string() },
   handler: async (ctx, args): Promise<TwitchInviteCandidate | null> => {
     const { userId, twitchLink } = await requireEngineInviter(ctx, args.instanceId);
+    await spendActionLimit(ctx, "inviteLookup", args.instanceId);
 
     const login = normalizeTwitchLogin(args.login);
     if (!login) {
@@ -473,6 +475,7 @@ export const create = action({
   },
   handler: async (ctx, args): Promise<{ token: string; expiresAt: number }> => {
     const { userId, twitchLink } = await requireEngineInviter(ctx, args.instanceId);
+    await spendActionLimit(ctx, "inviteCreate", args.instanceId);
 
     if (args.target.kind === "email") {
       return ctx.runMutation(internal.invitations.insertInvitation, {
