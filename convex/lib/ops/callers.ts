@@ -53,12 +53,13 @@ const BACKOFFICE_SCOPES: readonly OpsRouteName[] = [
 
 /**
  * The internet-facing maintenance billing process holds only what billing
- * itself calls: identity reads, the projection push and notices. A leak of
+ * itself calls: identity reads, an org's referral, the projection push and notices. A leak of
  * its secret cannot act on engines or reset a projection.
  */
 const BILLING_SCOPES: readonly OpsRouteName[] = [
   "users.get",
   "accounts.get",
+  "accounts.referral",
   "accounts.billingProjection",
   "notifications.create",
 ];
@@ -74,7 +75,7 @@ export const OPS_CALLERS: readonly OpsCaller[] = [
   {
     name: "legacy",
     envPrefix: OPS_SECRET_ENV_BASE,
-    scopes: new Set<OpsRouteName>([...BACKOFFICE_SCOPES, "accounts.billingProjection"]),
+    scopes: new Set<OpsRouteName>([...BACKOFFICE_SCOPES, "accounts.billingProjection", "accounts.referral"]),
     deprecated: true,
   },
 ];

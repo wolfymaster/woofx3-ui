@@ -52,6 +52,15 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/accounts/k1/plan")).toBeNull();
   });
 
+  it("names the referral read, as a GET only", () => {
+    expect(matchOpsRoute("GET", "/api/ops/accounts/k1/referral")).toEqual({
+      method: "GET",
+      name: "accounts.referral",
+      accountId: "k1",
+    });
+    expect(matchOpsRoute("POST", "/api/ops/accounts/k1/referral")).toBeNull();
+  });
+
   it("names the billing projection reset, as a POST only", () => {
     expect(matchOpsRoute("POST", "/api/ops/accounts/k1/billing-projection-reset")).toEqual({
       method: "POST",
