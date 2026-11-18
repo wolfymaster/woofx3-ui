@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, type QueryCtx } from "./_generated/server";
+import { isEmailVerified } from "./org/identity";
 
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 const CODE_LENGTH = 10;
@@ -129,4 +130,28 @@ export async function referralForAccount(ctx: QueryCtx, accountId: Id<"accounts"
     .query("referrals")
     .withIndex("by_referred_account", (q) => q.eq("referredAccountId", accountId))
     .first();
+}
+
+/**
+ * Whether the referral may earn its referrer a reward: the referred org exists,
+ * the referrer has an org of their own that is a different one, and both people
+ * have verified their email. An unverified address proves nothing, so a farm of
+ * throwaway sign-ups cannot cash in.
+ */
+export async function rewardEligibility(
+  ctx: QueryCtx,
+  referral: Doc<"referrals">,
+  referrerAccountId: Id<"accounts"> | null
+): Promise<boolean> {
+  if (referral.referredAccountId === undefined || referrerAccountId === null) {
+    return false;
+  }
+  if (referrerAccountId === referral.referredAccountId || referral.referrerUserId === referral.referredUserId) {
+    return false;
+  }
+  const [referrer, referred] = await Promise.all([
+    ctx.db.get(referral.referrerUserId),
+    ctx.db.get(referral.referredUserId),
+  ]);
+  return referrer !== null && referred !== null && isEmailVerified(referrer) && isEmailVerified(referred);
 }

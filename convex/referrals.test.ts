@@ -118,22 +118,87 @@ describe("ops referral read", () => {
     process.env[ENV] = SECRET;
   });
 
-  test("returns the referral without leaking the referred or referrer identity", async () => {
-    const t = newBackend();
-    const referrerId = await newUser(t, "Referrer");
+  const VERIFIED = { emailVerificationTime: 1 };
+
+  async function seed(
+    t: Backend,
+    opts: { referrerVerified: boolean; referredVerified: boolean; referrerOrg: boolean }
+  ) {
+    const referrerId = await t.run((ctx) =>
+      ctx.db.insert("users", { name: "Referrer", ...(opts.referrerVerified ? VERIFIED : {}) })
+    );
+    const referrerAccountId = opts.referrerOrg ? await as(t, referrerId).mutation(ensureMyAccount, {}) : null;
     const code = await as(t, referrerId).mutation(myCode, {});
-    const referredId = await newUser(t, "New");
+    const referredId = await t.run((ctx) =>
+      ctx.db.insert("users", { name: "New", ...(opts.referredVerified ? VERIFIED : {}) })
+    );
     await as(t, referredId).mutation(capture, { code });
     const accountId = await as(t, referredId).mutation(ensureMyAccount, {});
+    return { referrerId, referredId, referrerAccountId, accountId, code };
+  }
+
+  const body = async (response: Response) => ((await response.json()) as { data: Record<string, unknown> }).data;
+
+  test("returns the referral shape without leaking user identity", async () => {
+    const t = newBackend();
+    const { referrerId, referredId, referrerAccountId, accountId, code } = await seed(t, {
+      referrerVerified: true,
+      referredVerified: true,
+      referrerOrg: true,
+    });
 
     const response = await read(t, accountId);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { data: Record<string, unknown> };
-    expect(Object.keys(body.data).sort()).toEqual(["capturedAt", "code", "referrerUserId", "status"]);
-    expect(body.data).toMatchObject({ referrerUserId: referrerId, code, status: "org_created" });
-    expect(JSON.stringify(body)).not.toContain(referredId);
+    const data = await body(response);
+    expect(Object.keys(data).sort()).toEqual([
+      "capturedAt",
+      "code",
+      "eligible",
+      "referralId",
+      "referrerAccountId",
+      "status",
+    ]);
+    const [row] = await referrals(t);
+    expect(data).toMatchObject({
+      referralId: row._id,
+      referrerAccountId,
+      code,
+      status: "org_created",
+      eligible: true,
+    });
+    const text = JSON.stringify(data);
+    expect(text).not.toContain(referredId);
+    expect(text).not.toContain(referrerId);
     const audit = await t.run((ctx) => ctx.db.query("opsAuditLog").collect());
     expect(audit).toMatchObject([{ action: "accounts.referral", target: accountId, caller: "billing" }]);
+  });
+
+  test.each([
+    ["the referrer is unverified", { referrerVerified: false, referredVerified: true, referrerOrg: true }],
+    ["the referred user is unverified", { referrerVerified: true, referredVerified: false, referrerOrg: true }],
+  ])("not eligible when %s", async (_name, opts) => {
+    const t = newBackend();
+    const { accountId } = await seed(t, opts);
+    expect((await body(await read(t, accountId))).eligible).toBe(false);
+  });
+
+  test("not eligible, and no referrer account, when the referrer has no org", async () => {
+    const t = newBackend();
+    const { accountId } = await seed(t, { referrerVerified: true, referredVerified: true, referrerOrg: false });
+    expect(await body(await read(t, accountId))).toMatchObject({ referrerAccountId: null, eligible: false });
+  });
+
+  test("not eligible when the referrer's org is the referred org", async () => {
+    const t = newBackend();
+    const { accountId } = await seed(t, { referrerVerified: true, referredVerified: true, referrerOrg: true });
+    await t.run(async (ctx) => {
+      const [row] = await ctx.db.query("referrals").collect();
+      await ctx.db.patch(row.referrerUserId, {});
+      const account = await ctx.db.get(row.referredAccountId as Id<"accounts">);
+      await ctx.db.patch(row.referredAccountId as Id<"accounts">, {});
+      await ctx.db.patch(row._id, { referrerUserId: account?.ownerId as Id<"users"> });
+    });
+    expect(await body(await read(t, accountId))).toMatchObject({ eligible: false });
   });
 
   test("an org with no referral answers 404", async () => {
