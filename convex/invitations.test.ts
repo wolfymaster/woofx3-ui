@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { ACTION_LIMITS } from "./lib/actionRateLimits";
 import { newBackend, runMigration } from "./lib/convexTest.testing";
 import { accountEntitlements } from "./lib/entitlementAccess";
 import type { EngineRole, OrgRole } from "./lib/organization";
@@ -154,6 +155,21 @@ describe("invitations.create", () => {
       data: { code: "already_on_engine", message: "That user is already on this engine" },
     });
     await invite(t, org.ownerId, org.instanceId, "off@example.com");
+  });
+});
+
+describe("invitations.create rate limit", () => {
+  test("refuses the call after the burst with a retryAfter, and each engine has its own bucket", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const other = await addEngine(t, org, "Second");
+    for (let n = 0; n < ACTION_LIMITS.inviteCreate.capacity; n++) {
+      await invite(t, org.ownerId, org.instanceId, `n${n}@example.com`);
+    }
+    await expect(invite(t, org.ownerId, org.instanceId, "late@example.com")).rejects.toMatchObject({
+      data: { code: "rate_limited", retryAfter: expect.any(Number) },
+    });
+    await invite(t, org.ownerId, other, "late@example.com");
   });
 });
 

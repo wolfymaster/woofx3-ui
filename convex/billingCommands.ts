@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalQuery } from "./_generated/server";
+import { type ActionLimitName, spendActionLimit } from "./lib/actionRateLimits";
 import {
   type AppliedDiscount,
   type BillingClient,
@@ -106,13 +107,18 @@ export async function requireUser(ctx: ActionCtx): Promise<Id<"users">> {
   return userId;
 }
 
-async function requireManagerClient(ctx: ActionCtx, accountId: Id<"accounts">): Promise<BillingClient> {
-  const refusal = await ctx.runQuery(internal.billingCommands.billingManagerRefusal, {
-    accountId,
-    userId: await requireUser(ctx),
-  });
+async function requireManagerClient(
+  ctx: ActionCtx,
+  accountId: Id<"accounts">,
+  limit?: ActionLimitName
+): Promise<BillingClient> {
+  const userId = await requireUser(ctx);
+  const refusal = await ctx.runQuery(internal.billingCommands.billingManagerRefusal, { accountId, userId });
   if (refusal !== null) {
     throw new ConvexError<Refusal>(refusal);
+  }
+  if (limit !== undefined) {
+    await spendActionLimit(ctx, limit, userId);
   }
   return requireClient();
 }
@@ -135,7 +141,7 @@ export const startCheckout = action({
     promotionCode: v.optional(v.string()),
   },
   handler: async (ctx, { accountId, plan, interval, promotionCode }): Promise<{ url: string; checkoutId: string }> => {
-    const client = await requireManagerClient(ctx, accountId);
+    const client = await requireManagerClient(ctx, accountId, "billingCheckoutStart");
     const terms = { accountId, tier: plan, interval, promotionCode: promotionCode?.trim() || undefined };
     return unwrap(
       await client.startCheckout({ ...terms, idempotencyKey: await checkoutIdempotencyKey(terms, Date.now()) })
@@ -147,7 +153,7 @@ export const startCheckout = action({
 export const previewPromotionCode = action({
   args: { accountId: v.id("accounts"), code: v.string() },
   handler: async (ctx, { accountId, code }): Promise<AppliedDiscount | null> => {
-    const client = await requireManagerClient(ctx, accountId);
+    const client = await requireManagerClient(ctx, accountId, "billingPromoPreview");
     const trimmed = code.trim();
     return trimmed === "" ? null : unwrap(await client.lookupPromotionCode(trimmed));
   },
@@ -208,7 +214,9 @@ export const checkoutState = action({
 export const startMarketplaceCheckout = action({
   args: { instanceId: v.id("instances"), intentId: v.string() },
   handler: async (ctx, { instanceId, intentId }): Promise<{ url: string; checkoutId: string }> => {
-    const accountId = (await requireActionInAction(ctx, { engine: instanceId }, "manageBilling")).account._id;
+    const { account, userId } = await requireActionInAction(ctx, { engine: instanceId }, "manageBilling");
+    const accountId = account._id;
+    await spendActionLimit(ctx, "billingCheckoutStart", userId);
     const client = requireClient();
     const request = { accountId, intentId: intentId.trim() };
     if (request.intentId === "") {
