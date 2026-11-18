@@ -13,7 +13,6 @@ import {
   Sparkles,
   User,
   UserCog,
-  Users,
   UsersRound,
 } from "lucide-react";
 import { useState } from "react";
@@ -45,7 +44,6 @@ import { organizationLabels } from "./organization-labels";
 import GeneralPage from "./pages/general";
 import OverviewPage from "./pages/overview";
 import PaymentsPage from "./pages/payments";
-import PeoplePage from "./pages/people";
 import PlansPage from "./pages/plans";
 import SettingsPage from "./pages/settings";
 import SponsorshipPage from "./pages/sponsorship";
@@ -66,7 +64,6 @@ const PAGES: Record<PortalPageId, () => React.ReactElement> = {
   overview: OverviewPage,
   sponsorship: SponsorshipPage,
   payments: PaymentsPage,
-  people: PeoplePage,
   settings: SettingsPage,
   team: TeamPage,
   general: GeneralPage,
@@ -141,7 +138,6 @@ const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
   overview: LayoutDashboard,
   sponsorship: Heart,
   payments: Receipt,
-  people: Users,
   settings: UserCog,
   team: UsersRound,
   general: Building2,

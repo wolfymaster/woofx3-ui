@@ -1,6 +1,6 @@
 # Account portal
 
-**Routes:** `/account` (Overview), `/account/sponsorship`, `/account/payments`, `/account/people`, and `/sponsor/start` (outside the portal)
+**Routes:** `/account` (Overview), `/account/sponsorship`, `/account/payments`, `/account/team`, and `/sponsor/start` (outside the portal)
 **Primary files:** `client/src/account-portal/`, `client/src/billing/`, `client/src/sponsorship/`, `convex/organizations.ts`, `convex/billingCommands.ts`, `convex/sponsorships.ts`
 
 The portal belongs to the signed-in person. Every signed-in user on the web build has an account page; the organization's content appears only for someone with a role in an organization. It is a route group inside the dashboard app, not a separate app. The shared components in `client/src/billing/` render both the organization's subscription and payments and, for a person's own sponsorship.
@@ -29,10 +29,10 @@ The portal belongs to the signed-in person. Every signed-in user on the web buil
 
 | Viewer | Tabs |
 |---|---|
-| Org owner | Overview, Sponsorship, Payments, People, Settings (General, Plans) |
-| Org admin | Overview, Sponsorship, Payments, People, Settings (General) |
-| Org member | Overview, Sponsorship, Payments, Settings (General) |
-| Signed in, no organization | Overview, Sponsorship, Payments |
+| Org owner | Overview, Sponsorship, Payments, Team, Settings (General, Plans) |
+| Org admin | Overview, Sponsorship, Payments, Team, Settings (General) |
+| Org member | Overview, Sponsorship, Payments, Team, Settings (General) |
+| Signed in, no organization | Overview, Sponsorship, Payments, Team |
 
 The header's switcher (`portal-scope.ts`, `ScopeSwitcher`) chooses what the portal shows: **Personal**, which everyone has, or one of the viewer's organizations. In an organization's scope the pages work on that organization (its engines, plan, members); in the personal scope the Overview lists every engine the viewer can open across their organizations, with no create or rename, and the organization's pages that need a role are not offered. A person with no organization sees Personal alone. The portal opens on the organization of the engine they were last in, else one they own, else the first, else Personal.
 
@@ -43,7 +43,7 @@ What a tab shows of the organization is gated by role, not by the tab being visi
 | Overview | `/account` | | the organization's engines (each with "Launch dashboard"; the owner renames, `renameEngine`, and creates, `createEngine`), or a large call to action to create one |
 | Sponsorship | `/account/sponsorship` | | the viewer's own sponsorships |
 | Payments | `/account/payments` | the organization's invoices | the viewer's own sponsor payments, in the same history |
-| People | `/account/people` | (`manageMembers`) change roles, remove | |
+| Team | `/account/team` | (`manageMembers`) an Organization view of members, their roles and seats: change roles, remove | the Engine access view: who can open the selected engine and its invitations (the same page as the dashboard's Team). Without `manageMembers`, or with no organization, only this view shows |
 | Settings, General | `/account/organization/general` | (`viewOrganization`) the organization's name; the owner renames it (`renameOrganization`) | |
 | Settings, Plans | `/account/organization/plans` | the plan the organization is on and the ones it can move to: choose a plan and check out; manage billing | |
 

@@ -111,7 +111,8 @@ mock.module("@/components/ui/toggle-group", () => ({
   ToggleGroupItem: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
 }));
 
-const { default: PeoplePage } = await import("./people");
+const { default: TeamPage } = await import("./team");
+const { TeamMembers } = await import("./team-members");
 const { default: PaymentsPage } = await import("./payments");
 const { default: GeneralPage } = await import("./general");
 const { default: OverviewPage } = await import("./overview");
@@ -245,10 +246,17 @@ describe("Overview engines", () => {
   });
 });
 
-describe("People page", () => {
+describe("Team page", () => {
+  test("a member manager chooses between the organization and engine access", async () => {
+    const renderer = await render("owner", <TeamPage />);
+    expect(byTestId(renderer, "toggle-team-view").length).toBe(1);
+  });
+});
+
+describe("Team members", () => {
   test("the owner sees a masked address until they choose to show it", async () => {
     const answers = { members: [member("owner-user", "owner", "owner@example.com")], meId: "owner-user" };
-    const renderer = await render("owner", <PeoplePage />, answers);
+    const renderer = await render("owner", <TeamMembers />, answers);
     expect(byTestId(renderer, "text-member-email").map(textOf)).toEqual([MASKED_EMAIL]);
     const [toggle] = byTestId(renderer, "button-toggle-emails");
     expect(toggle.props["aria-pressed"]).toBe(false);
@@ -265,17 +273,17 @@ describe("People page", () => {
 
   test("hides addresses again on a fresh load", async () => {
     const answers = { members: [member("owner-user", "owner", "owner@example.com")], meId: "owner-user" };
-    const first = await render("owner", <PeoplePage />, answers);
+    const first = await render("owner", <TeamMembers />, answers);
     await act(async () => {
       byTestId(first, "button-toggle-emails")[0].props.onClick();
     });
-    const second = await render("owner", <PeoplePage />, answers);
+    const second = await render("owner", <TeamMembers />, answers);
     expect(byTestId(second, "text-member-email").map(textOf)).toEqual([MASKED_EMAIL]);
   });
 
   test("someone sent no addresses gets no toggle and no email lines", async () => {
     const answers = { members: [member("owner-user", "owner"), member("admin-user", "admin")], meId: "admin-user" };
-    const renderer = await render("admin", <PeoplePage />, answers);
+    const renderer = await render("admin", <TeamMembers />, answers);
     const [row] = byTestId(renderer, "row-org-member-admin-user");
     expect(textOf(row)).not.toContain("—");
     expect(byTestId(renderer, "button-toggle-emails").length).toBe(0);
@@ -602,7 +610,7 @@ describe("narrow widths", () => {
 
   test("member rows stack their controls instead of clipping them in a table", async () => {
     const answers = { members: [member("owner-user", "owner")], meId: "owner-user" };
-    const renderer = await render("owner", <PeoplePage />, answers);
+    const renderer = await render("owner", <TeamMembers />, answers);
     const [row] = byTestId(renderer, "row-org-member-owner-user");
     expect(row.props.className).toContain("flex-col");
     expect(renderer.root.findAll((node) => node.type === "table").length).toBe(0);

@@ -10,8 +10,8 @@ function can(role: OrgRole): OrgCapabilities {
 
 // The "Who sees what" table: a page a role can't see isn't in its nav.
 const NAV: Array<[OrgRole, PortalPageId[]]> = [
-  ["owner", ["overview", "sponsorship", "payments", "people", "settings", "team", "general", "plans"]],
-  ["admin", ["overview", "sponsorship", "payments", "people", "settings", "team", "general"]],
+  ["owner", ["overview", "sponsorship", "payments", "settings", "team", "general", "plans"]],
+  ["admin", ["overview", "sponsorship", "payments", "settings", "team", "general"]],
   ["member", ["overview", "sponsorship", "payments", "settings", "team", "general"]],
 ];
 

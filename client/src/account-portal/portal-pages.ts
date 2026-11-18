@@ -4,15 +4,7 @@ export const ACCOUNT_PORTAL_PATH = "/account";
 
 export const PLANS_PATH = `${ACCOUNT_PORTAL_PATH}/organization/plans`;
 
-export type PortalPageId =
-  | "overview"
-  | "sponsorship"
-  | "payments"
-  | "people"
-  | "settings"
-  | "team"
-  | "general"
-  | "plans";
+export type PortalPageId = "overview" | "sponsorship" | "payments" | "settings" | "team" | "general" | "plans";
 
 export interface PortalPage {
   id: PortalPageId;
@@ -28,7 +20,6 @@ export const PORTAL_PAGES: readonly PortalPage[] = [
   { id: "overview", label: "Overview", path: ACCOUNT_PORTAL_PATH, visibleWith: null },
   { id: "sponsorship", label: "Sponsorship", path: `${ACCOUNT_PORTAL_PATH}/sponsorship`, visibleWith: null },
   { id: "payments", label: "Payments", path: `${ACCOUNT_PORTAL_PATH}/payments`, visibleWith: null },
-  { id: "people", label: "People", path: `${ACCOUNT_PORTAL_PATH}/people`, visibleWith: "manageMembers" },
   { id: "settings", label: "Your settings", path: `${ACCOUNT_PORTAL_PATH}/settings`, visibleWith: null },
   { id: "team", label: "Team", path: `${ACCOUNT_PORTAL_PATH}/team`, visibleWith: null },
   {

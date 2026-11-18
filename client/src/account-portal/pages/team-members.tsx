@@ -18,7 +18,8 @@ import { useOrganization } from "../organization-context";
 
 type ChangeableRole = "admin" | "member";
 
-export default function PeoplePage() {
+/** The organization's members and their roles; the organization-level half of the portal's Team page. */
+export function TeamMembers() {
   const { organization } = useOrganization();
   const { user } = useConvexUser();
   const meId = user && "_id" in user ? (user as { _id: Id<"users"> })._id : null;
@@ -43,7 +44,7 @@ export default function PeoplePage() {
   return (
     <>
       <PageHeader
-        title="People"
+        title="Team"
         description="Who's in this organization and what they can do."
         actions={
           members && hasMemberEmails(members) ? (
@@ -62,7 +63,9 @@ export default function PeoplePage() {
           {members === undefined ? (
             <p className="text-sm text-muted-foreground">Loading members...</p>
           ) : members === null ? (
-            <p className="text-sm text-muted-foreground">Your role in this organization doesn&apos;t include People.</p>
+            <p className="text-sm text-muted-foreground">
+              Your role in this organization doesn&apos;t include its member list.
+            </p>
           ) : (
             <ul className="divide-y">
               {members.map((member) => (
@@ -139,7 +142,7 @@ export default function PeoplePage() {
             </ul>
           )}
           <div className="flex flex-wrap justify-between gap-2 text-sm text-muted-foreground">
-            <span>Invite people from an engine&apos;s Team page.</span>
+            <span>Invite people from the Engine access view.</span>
             {seats ? <span data-testid="text-seats">{formatSeats(seats)}</span> : null}
           </div>
         </CardContent>
