@@ -332,7 +332,7 @@ export function defaultAlertsPack(imagesBaseUrl: string | null): StarterPack {
 }
 
 /** The seed's alerts by id and trigger, the same whether or not the images are included. */
-export const DEFAULT_ALERT_ITEMS: readonly Pick<StarterWorkflowItem, "id" | "trigger">[] = DEFAULT_ALERT_SPECS;
+export const DEFAULT_ALERT_ITEMS: readonly Pick<StarterWorkflowItem, "id" | "name" | "trigger">[] = DEFAULT_ALERT_SPECS;
 
 /**
  * The pack without the alerts whose event already starts a workflow on the

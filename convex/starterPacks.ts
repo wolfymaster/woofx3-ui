@@ -21,8 +21,9 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
 import { createCommandInEngine } from "./chatCommandActions";
+import { findEngineMergeTarget } from "./lib/engineWorkflows";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { createWorkflowInEngine, EngineConfirmationTimeout } from "./workflowActions";
+import { appendWorkflowSteps, createWorkflowInEngine, EngineConfirmationTimeout } from "./workflowActions";
 import type { CatalogBundle } from "./workflowCatalogContext";
 
 /**
@@ -407,17 +408,27 @@ async function installStarterPack(
     }
 
     try {
-      const engineId =
-        item.kind === "workflow"
-          ? await createWorkflowInEngine(
-              ctx,
-              instanceId,
-              instance,
-              // Carries a delay wait, which the shared WorkflowDefinition type does not model yet.
-              buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<WorkflowDefinition, "id">,
-              correlationKey
-            )
-          : await installCommand(item);
+      let engineId: string;
+      if (item.kind === "workflow") {
+        // Carries a delay wait, which the shared WorkflowDefinition type does not model yet.
+        const definition = buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<
+          WorkflowDefinition,
+          "id"
+        >;
+        const target = await findEngineMergeTarget(instance, definition.trigger as Record<string, unknown>);
+        engineId =
+          target === undefined
+            ? await createWorkflowInEngine(ctx, instanceId, instance, definition, correlationKey)
+            : await appendWorkflowSteps(
+                ctx,
+                instanceId,
+                instance,
+                target,
+                definition.tasks as unknown as readonly Record<string, unknown>[]
+              );
+      } else {
+        engineId = await installCommand(item);
+      }
       await ctx.runMutation(internal.starterPacks.completeItem, { rowId: claim.rowId, engineId });
       return { itemId: item.id, outcome: "installed" };
     } catch (err) {

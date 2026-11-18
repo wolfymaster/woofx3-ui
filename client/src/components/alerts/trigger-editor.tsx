@@ -4,10 +4,14 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import { ExternalLink } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
+import { TriggerSentence } from "@/components/alerts/trigger-sentence";
 import { TriggerWhenCard } from "@/components/alerts/trigger-when-card";
-import { FlowEditor } from "@/components/flow/flow-editor";
+import { InlineGroupPicker } from "@/components/alerts/trigger-workflow-groups";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import {
   useCreateWorkflowRequest,
@@ -15,6 +19,7 @@ import {
   useSetWorkflowEnabledRequest,
   useUpdateWorkflowRequest,
 } from "@/engine/hooks/use-workflows";
+import type { Workflow } from "@/engine/types";
 import { FLOW_REPLACED, useFlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
@@ -51,6 +56,8 @@ interface TriggerEditorProps {
   pin?: TriggerPin & { label: string };
   loadedOptions: ReadonlyMap<string, LoadedFieldOptions>;
   optionLabels: OptionLabels;
+  /** Every workflow on this trigger card, for the one bottom Group picker. */
+  workflows?: readonly Workflow[];
   /** A new trigger's workflow now exists in the engine. */
   onCreated: (engineWorkflowId: string) => void;
   onDeleted: () => void;
@@ -65,8 +72,10 @@ function lastStepReason(steps: StepNode[], id: string): string | null {
 }
 
 /**
- * One alert trigger opened for editing: the step editor (FlowEditor) with the trigger's
- * sentence as its "When" card, so its steps can wait, pause and branch like any workflow's.
+ * One alert trigger opened for editing. A sentence-first editor is the primary surface:
+ * clicking a phrase expands only that phrase's settings, inline, against the same workflow
+ * tree the full editor uses. Advanced holds the secondary settings and the one way out to
+ * the full editor.
  *
  * The trigger is a workflow of its own (lib/alert-triggers.ts), saved as it is edited: a
  * step when it closes, the sentence when a picker closes. A new trigger exists only here
@@ -81,6 +90,7 @@ export function TriggerEditor({
   pin,
   loadedOptions,
   optionLabels,
+  workflows,
   onCreated,
   onDeleted,
   alsoRuns,
@@ -113,6 +123,25 @@ export function TriggerEditor({
   const replaceTreeRef = useRef<(read: WorkflowTree, revision: number | undefined) => void>(() => undefined);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // The name in Advanced edits this workflow, never a copy made by a later save. A merge
+  // changes the workflow id, so a new id clears a name that belonged to the old workflow.
+  const [customName, setCustomName] = useState<string | null>(null);
+  const customNameRef = useRef<string | null>(null);
+  customNameRef.current = customName;
+  const storedName = saved?.definition.name ?? triggerPreset.name;
+  const [nameDraft, setNameDraft] = useState(storedName);
+  useEffect(() => {
+    setNameDraft(customName ?? storedName);
+  }, [customName, storedName]);
+  const previousWorkflowIdRef = useRef(saved?.engineWorkflowId);
+  useEffect(() => {
+    if (previousWorkflowIdRef.current !== saved?.engineWorkflowId) {
+      previousWorkflowIdRef.current = saved?.engineWorkflowId;
+      setCustomName(null);
+    }
+  }, [saved?.engineWorkflowId]);
 
   const values = useMemo(
     () => triggerFieldValues(tree.trigger.conditions, conditionFields),
@@ -149,7 +178,7 @@ export function TriggerEditor({
       try {
         if (saved) {
           definition.id = saved.definition.id;
-          definition.name = saved.definition.name;
+          definition.name = customNameRef.current ?? saved.definition.name;
           const outcome = await updateFromDefinition(
             saved.engineWorkflowId,
             escapeDollarKeys(definition),
@@ -166,7 +195,7 @@ export function TriggerEditor({
           baseRevisionRef.current = outcome.revision;
         } else {
           const { id: _unsaved, ...unsaved } = definition;
-          const name = sentenceText(parts) || triggerPreset.name;
+          const name = customNameRef.current ?? (sentenceText(parts) || triggerPreset.name);
           const { engineWorkflowId } = await createFromDefinition(escapeDollarKeys({ ...unsaved, name }));
           setCreated({ engineWorkflowId, definition: { ...definition, id: engineWorkflowId, name } });
           try {
@@ -252,6 +281,21 @@ export function TriggerEditor({
     }
   };
 
+  const commitStepName = () => {
+    const name = nameDraft.trim();
+    if (name.length === 0) {
+      toast({ title: "Give this trigger a name", variant: "destructive" });
+      setNameDraft(customName ?? storedName);
+      return;
+    }
+    if (name === (customName ?? storedName)) {
+      return;
+    }
+    customNameRef.current = name;
+    setCustomName(name);
+    void save.commit(treeRef.current);
+  };
+
   async function remove() {
     if (!saved) {
       onDeleted();
@@ -275,18 +319,7 @@ export function TriggerEditor({
 
   return (
     <div className="flex flex-col gap-4" data-testid="trigger-editor">
-      <FlowEditor
-        tree={tree}
-        onChange={setTree}
-        onCommit={save.commit}
-        save={save}
-        catalogTriggers={catalogTriggers}
-        catalogActions={catalogActions}
-        catalogLoading={catalogLoading}
-        actionPresets={actionPresets}
-        resourceLabels={resourceLabels}
-        conditionSupport={conditionSupport}
-        removeBlockedReason={saved ? lastStepReason : undefined}
+      <TriggerSentence
         when={
           <TriggerWhenCard
             parts={parts}
@@ -298,48 +331,83 @@ export function TriggerEditor({
             fallback={triggerPreset.name}
           />
         }
+        tree={tree}
+        onChange={setTree}
+        onCommit={save.commit}
+        save={save}
+        catalogTriggers={catalogTriggers}
+        catalogActions={catalogActions}
+        catalogLoading={catalogLoading}
+        actionPresets={actionPresets}
+        resourceLabels={resourceLabels}
+        conditionSupport={conditionSupport}
+        removeBlockedReason={saved ? lastStepReason : undefined}
+        onOpenAdvanced={() => setAdvancedOpen(true)}
       />
       {alsoRuns}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+      <AdvancedDisclosure open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="trigger-step-name">Step name</Label>
+          <Input
+            id="trigger-step-name"
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={commitStepName}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
+            data-testid="trigger-step-name"
+          />
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">Step ID</span>
+            <code className="w-fit text-[13px] text-muted-foreground" data-testid="trigger-step-id">
+              {tree.trigger.id}
+            </code>
+          </div>
+        </div>
+        {workflows && workflows.length > 0 && <InlineGroupPicker workflows={workflows} />}
         <Button
-          variant="ghost"
-          className="h-11 text-[13px] text-muted-foreground sm:h-9"
-          onClick={() => saved && navigate(`/stream/workflows/${saved.engineWorkflowId}`)}
+          variant="outline"
+          className="h-11 self-start sm:h-9"
           disabled={!saved}
           title={saved ? undefined : "Save a step first"}
+          onClick={() => saved && navigate(`/stream/workflows/${saved.engineWorkflowId}`)}
+          data-testid="open-full-editor"
         >
           <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-          Open the full editor
+          Edit this trigger as a workflow →
         </Button>
-        {confirmingDelete ? (
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] text-muted-foreground">
-              {alsoRuns ? "Delete your steps?" : "Delete this trigger?"}
-            </span>
-            <Button variant="ghost" className="h-11 sm:h-9" onClick={() => setConfirmingDelete(false)}>
-              Keep it
-            </Button>
-            <Button
-              variant="destructive"
-              className="h-11 sm:h-9"
-              onClick={() => void remove()}
-              disabled={isDeleting}
-              data-testid="confirm-delete-trigger"
-            >
-              Delete
-            </Button>
-          </div>
-        ) : (
-          <Button
-            variant="ghost"
-            className="h-11 text-[13px] text-red-600 hover:bg-destructive/10 hover:text-red-500 dark:text-red-300 dark:hover:text-red-200 sm:h-9"
-            onClick={() => setConfirmingDelete(true)}
-            data-testid="delete-trigger"
-          >
-            {alsoRuns ? "Delete your steps" : "Delete trigger"}
+      </AdvancedDisclosure>
+      {confirmingDelete ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] text-muted-foreground">
+            {alsoRuns ? "Delete your steps?" : "Delete this trigger?"}
+          </span>
+          <Button variant="ghost" className="h-11 sm:h-9" onClick={() => setConfirmingDelete(false)}>
+            Keep it
           </Button>
-        )}
-      </div>
+          <Button
+            variant="destructive"
+            className="h-11 sm:h-9"
+            onClick={() => void remove()}
+            disabled={isDeleting}
+            data-testid="confirm-delete-trigger"
+          >
+            Delete
+          </Button>
+        </div>
+      ) : (
+        <Button
+          variant="ghost"
+          className="h-11 self-start text-[13px] text-red-600 hover:bg-destructive/10 hover:text-red-500 dark:text-red-300 dark:hover:text-red-200 sm:h-9"
+          onClick={() => setConfirmingDelete(true)}
+          data-testid="delete-trigger"
+        >
+          {alsoRuns ? "Delete your steps" : "Delete trigger"}
+        </Button>
+      )}
     </div>
   );
 }

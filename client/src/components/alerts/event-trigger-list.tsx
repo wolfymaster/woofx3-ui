@@ -1,6 +1,12 @@
 import { ChevronRight, ExternalLink, Plus, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import {
+  ALERT_RECIPE_EVENT,
+  type AlertRecipe,
+  AlertRecipes,
+  cheerAlertRecipes,
+} from "@/components/alerts/alert-recipes";
 import { type SavedTrigger, TriggerEditor } from "@/components/alerts/trigger-editor";
 import { TriggerGroupCard } from "@/components/alerts/trigger-group-card";
 import { TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
@@ -12,10 +18,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
 import { useEngineScope } from "@/engine/context";
-import { useResourceLabels } from "@/engine/hooks/use-module-resources";
+import { useResourceInstancesOfKind, useResourceLabels } from "@/engine/hooks/use-module-resources";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
 import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertSectionAnchor } from "@/lib/alert-groups";
 import {
@@ -110,6 +117,12 @@ export function EventTriggerList({
     setLoadedOptions((previous) => new Map(previous).set(fieldId, entry));
   }, []);
   const resourceLabels = useResourceLabels();
+  const { actionPresets } = useWorkflowCatalog();
+  const counters = useResourceInstancesOfKind("counter");
+  const recipes = useMemo(
+    () => (event === ALERT_RECIPE_EVENT ? cheerAlertRecipes(actionPresets, counters ?? []) : []),
+    [event, actionPresets, counters]
+  );
   const optionLabels = useMemo<OptionLabels>(() => {
     const labels = resourceFieldLabels(conditionFields, resourceLabels);
     for (const [fieldId, entry] of Array.from(loadedOptions.entries())) {
@@ -140,7 +153,7 @@ export function EventTriggerList({
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   const startDraft = useCallback(
-    (seed?: ActionPreset, conditions?: EventTrigger["conditions"]) => {
+    (seed?: ActionPreset, conditions?: EventTrigger["conditions"], seedParameters?: Record<string, unknown>) => {
       setDraft(
         newTriggerTree({
           triggerPreset,
@@ -149,6 +162,7 @@ export function EventTriggerList({
           pin,
           conditions,
           seed,
+          seedParameters,
           aim: seed && actionScope ? aimFor(seed, actionScope) : undefined,
         })
       );
@@ -156,6 +170,11 @@ export function EventTriggerList({
       setExpandedId(NEW_TRIGGER);
     },
     [triggerPreset, conditionFields, all, pin, actionScope]
+  );
+
+  const startRecipe = useCallback(
+    (recipe: AlertRecipe) => startDraft(recipe.seed, undefined, recipe.parameters),
+    [startDraft]
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a request starts one draft, when its key changes
@@ -189,7 +208,7 @@ export function EventTriggerList({
       (phrase): SentencePart => ({ kind: "text", text: ` and ${phrase}` })
     ),
   ];
-  const stepEditor = (steps: EventTrigger, alsoRuns: ReactNode) => {
+  const stepEditor = (steps: EventTrigger, alsoRuns: ReactNode, workflows: readonly Workflow[]) => {
     const read = definitionToTree(steps.definition);
     return read.editable ? (
       <TriggerEditor
@@ -207,6 +226,7 @@ export function EventTriggerList({
         pin={pin}
         loadedOptions={loadedOptions}
         optionLabels={optionLabels}
+        workflows={workflows}
         onCreated={() => undefined}
         onDeleted={() => setExpandedId(null)}
         alsoRuns={alsoRuns}
@@ -279,6 +299,7 @@ export function EventTriggerList({
         </header>
       )}
 
+      {!bare && <AlertRecipes event={event} recipes={recipes} onPick={startRecipe} />}
       {children}
 
       <div className="flex flex-col gap-3">

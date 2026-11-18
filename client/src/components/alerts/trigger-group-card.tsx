@@ -1,12 +1,14 @@
 import { ChevronRight, ExternalLink } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { TriggerAdvancedSettings, TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
+import { InlineGroupPicker, TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { useResourceLabels } from "@/engine/hooks/use-module-resources";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
+import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
@@ -18,7 +20,6 @@ import {
   triggerParts,
   triggerSummary,
 } from "@/lib/alert-triggers";
-import type { SentencePart } from "@/lib/condition-sentence";
 import { stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
 import { resolveCatalogAction } from "@/lib/workflow-node-label";
@@ -74,7 +75,7 @@ interface TriggerGroupCardProps {
   isOpen: boolean;
   onToggle: () => void;
   /** The step editor for the streamer's steps, given what else runs on the trigger. */
-  editor: (steps: EventTrigger, alsoRuns: ReactNode) => ReactNode;
+  editor: (steps: EventTrigger, alsoRuns: ReactNode, workflows: readonly Workflow[]) => ReactNode;
   /** Starts the streamer's own steps on this trigger, which has none running. */
   onAddSteps: () => void;
 }
@@ -108,6 +109,7 @@ export function TriggerGroupCard({
     return health ? [health] : [];
   })[0];
   const firstId = group.members[0].row.engineWorkflowId;
+  const workflows = group.members.map((member) => member.row);
   const alsoRuns = parts.modules.length > 0 && (
     <AlsoRuns modules={parts.modules} afterSteps={parts.steps !== undefined} />
   );
@@ -161,16 +163,18 @@ export function TriggerGroupCard({
         <div className="flex flex-col gap-4 border-t p-4 sm:p-5">
           <SeparateOwnSteps parts={parts} />
           {parts.steps ? (
-            editor(parts.steps, alsoRuns || undefined)
+            editor(parts.steps, alsoRuns || undefined, workflows)
           ) : (
             <>
               <Button variant="outline" className="h-11 self-start sm:h-9" onClick={onAddSteps}>
                 Add your own steps
               </Button>
               {alsoRuns}
+              <AdvancedDisclosure>
+                <InlineGroupPicker workflows={workflows} />
+              </AdvancedDisclosure>
             </>
           )}
-          <TriggerAdvancedSettings workflows={group.members.map((member) => member.row)} />
         </div>
       )}
     </article>

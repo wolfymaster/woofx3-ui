@@ -1,7 +1,8 @@
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { ChevronRight, Info } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useId, useMemo, useState } from "react";
+import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { ModuleAssetFieldRenderer, withAssetModule } from "@/components/flow/module-asset-field";
@@ -35,6 +36,8 @@ export interface ActionSettingsEditorProps {
   onChange: (step: ActionNode) => void;
   /** Renames the step; without it the step's id isn't offered for editing (the macro pad). */
   onRename?: (oldId: string, newId: string) => void;
+  /** The sentence editor keeps Step ID in its one bottom Advanced disclosure instead. */
+  showStepId?: boolean;
 }
 
 /**
@@ -60,6 +63,7 @@ export function ActionSettingsEditor({
   availableVariables,
   onChange,
   onRename,
+  showStepId = true,
 }: ActionSettingsEditorProps) {
   const row = resolveCatalogAction(step, catalogActions);
   const fields = useMemo(() => {
@@ -73,6 +77,13 @@ export function ActionSettingsEditor({
     );
   }, [row]);
   const outputs = useMemo(() => parseDataShapeFields(row?.returns), [row]);
+  const alertLayoutFields = useMemo(
+    () => fields.filter((field) => field.type === "layout" && field.surface === "alert").map((field) => field.id),
+    [fields]
+  );
+  const isAlert = row?.handlerType === "alert" || alertLayoutFields.length > 0;
+  const [layoutOpen, setLayoutOpen] = useState(false);
+  const layout = step.parameters.layout ?? {};
 
   const setValue = (fieldId: string, value: unknown) =>
     onChange({ ...step, parameters: withSetting(step.parameters, fieldId, value) });
@@ -87,21 +98,37 @@ export function ActionSettingsEditor({
         </p>
       )}
       {row && fields.length === 0 && <p className="text-sm text-muted-foreground">This action has no settings.</p>}
-      {fields.map((field) => (
-        <SettingRow
-          key={field.id}
-          field={field}
-          values={step.parameters}
-          variables={availableVariables}
-          onChange={(value) => setValue(field.id, value)}
-        />
-      ))}
+      {isAlert && (
+        <button
+          type="button"
+          className="group flex flex-col items-start gap-1.5 self-start rounded-xl border p-2 text-left hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setLayoutOpen(!layoutOpen)}
+          aria-expanded={layoutOpen}
+          data-testid="alert-layout-preview-toggle"
+        >
+          <AlertLayoutPreview layout={layout} className="max-w-56" />
+          <span className="text-xs text-muted-foreground group-hover:text-foreground">
+            {layoutOpen ? "Hide alert contents" : "See alert contents"}
+          </span>
+        </button>
+      )}
+      {fields
+        .filter((field) => layoutOpen || !alertLayoutFields.includes(field.id))
+        .map((field) => (
+          <SettingRow
+            key={field.id}
+            field={field}
+            values={step.parameters}
+            variables={availableVariables}
+            onChange={(value) => setValue(field.id, value)}
+          />
+        ))}
       {outputs.length > 0 && (
         <p className="text-xs text-muted-foreground" data-testid="text-action-outputs">
           Later steps can use: {outputs.map((output) => output.path).join(", ")}.
         </p>
       )}
-      {onRename && (
+      {onRename && showStepId && (
         <Collapsible className="border-t pt-4">
           <CollapsibleTrigger
             className="group inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -160,10 +187,7 @@ function SettingRow({
   // Text in a control that can't draw it, such as an expression left unconverted in a
   // number input, would show as blank. It goes in the field that can show and fix it.
   const usingEarlier = use === "replace" && (chosenEarlier || isWholeReference(value) || isExpressionText(value));
-  const [helpOpen, setHelpOpen] = useState(false);
-  const helpId = useId();
   const problem = settingProblem(field, value);
-  const hasHelp = Boolean(field.hint || field.examplePayload);
   const canSwitch = use === "replace" && (usingEarlier || offered.length > 0);
 
   const switchSource = () => {
@@ -189,6 +213,11 @@ function SettingRow({
         <InsertRow field={field} offered={offered} onInsert={(token) => onChange(appendToken(value, token))} />
       )}
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+      {field.hint && (
+        <p className="text-xs text-muted-foreground" data-testid={`setting-hint-${field.id}`}>
+          What this changes: {field.hint}
+        </p>
+      )}
       {problem && (
         <p
           className={cn(
@@ -201,45 +230,15 @@ function SettingRow({
           {problem.message}
         </p>
       )}
-      {(canSwitch || hasHelp) && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {canSwitch && (
-            <button
-              type="button"
-              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-              onClick={switchSource}
-              data-testid={`button-setting-source-${field.id}`}
-            >
-              {usingEarlier ? "Use a fixed value instead" : "Use a value from earlier"}
-            </button>
-          )}
-          {hasHelp && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              aria-expanded={helpOpen}
-              aria-controls={helpId}
-              onClick={() => setHelpOpen(!helpOpen)}
-              data-testid={`button-setting-help-${field.id}`}
-            >
-              <Info className="h-3.5 w-3.5" aria-hidden="true" />
-              {helpOpen ? "Hide help" : "More about this setting"}
-            </button>
-          )}
-        </div>
-      )}
-      {hasHelp && helpOpen && (
-        <div id={helpId} className="space-y-2 rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          {field.hint && <p>{field.hint}</p>}
-          {field.examplePayload && (
-            <div className="space-y-1">
-              <p className="font-medium text-foreground">Example</p>
-              <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-background p-2 font-mono text-[11px] text-foreground">
-                {field.examplePayload}
-              </pre>
-            </div>
-          )}
-        </div>
+      {canSwitch && (
+        <button
+          type="button"
+          className="self-start text-xs font-medium text-primary underline-offset-4 hover:underline"
+          onClick={switchSource}
+          data-testid={`button-setting-source-${field.id}`}
+        >
+          {usingEarlier ? "Use a fixed value instead" : "Fill from an earlier step"}
+        </button>
       )}
     </div>
   );
@@ -287,6 +286,11 @@ function EarlierValue({
   );
 }
 
+/** The two places a value can come from, named for the reader rather than the engine. */
+function variableSection(group: string): string {
+  return group === "Trigger" ? "From the cheer" : "From earlier steps";
+}
+
 /** Earlier values to write into a text setting, each added at the end of what is there. */
 function InsertRow({
   field,
@@ -298,18 +302,54 @@ function InsertRow({
   onInsert: (token: string) => void;
 }) {
   const labelId = useId();
+  const [search, setSearch] = useState("");
+  const needle = search.trim().toLowerCase();
+  const matches = offered.filter(
+    (option) =>
+      !needle || option.label.toLowerCase().includes(needle) || option.description?.toLowerCase().includes(needle)
+  );
+  const sections = ["From the cheer", "From earlier steps"]
+    .map((title) => ({
+      title,
+      options: matches.filter((option) => variableSection(option.group) === title),
+    }))
+    .filter((section) => section.options.length > 0);
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span id={labelId} className="text-xs text-muted-foreground">
-        Insert a value from earlier
-      </span>
-      <VariableChips
-        labelledBy={labelId}
-        offered={offered}
-        isPressed={() => false}
-        onPick={onInsert}
-        testIdPrefix={`chip-insert-${field.id}`}
-      />
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-2.5" data-testid={`insert-row-${field.id}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span id={labelId} className="text-xs font-medium text-muted-foreground">
+          Insert a value
+        </span>
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search values"
+          aria-label="Search values to insert"
+          className="h-7 w-32 rounded-md border bg-background px-2 text-xs"
+          data-testid={`input-insert-search-${field.id}`}
+        />
+      </div>
+      {sections.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No values match that search.</p>
+      ) : (
+        sections.map((section) => (
+          <div key={section.title} className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {section.title}
+            </span>
+            <VariableChips
+              labelledBy={labelId}
+              offered={section.options}
+              isPressed={() => false}
+              onPick={onInsert}
+              showGroup={false}
+              testIdPrefix={`chip-insert-${field.id}`}
+            />
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -320,12 +360,14 @@ function VariableChips({
   isPressed,
   onPick,
   testIdPrefix = "chip-variable",
+  showGroup = true,
 }: {
   labelledBy: string;
   offered: VariableOption[];
   isPressed: (option: VariableOption) => boolean;
   onPick: (token: string) => void;
   testIdPrefix?: string;
+  showGroup?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? offered : offered.slice(0, SHOWN_VARIABLES);
@@ -348,7 +390,7 @@ function VariableChips({
             data-testid={`${testIdPrefix}-${option.value}`}
           >
             <span className="font-medium">{option.label}</span>
-            <span className="text-muted-foreground">{option.group}</span>
+            {showGroup && <span className="text-muted-foreground">{option.group}</span>}
           </button>
         );
       })}
