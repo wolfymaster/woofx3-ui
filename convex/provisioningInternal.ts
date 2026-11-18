@@ -13,6 +13,7 @@ import {
 } from "./lib/maintenanceUpgrade";
 import { logger } from "./logger";
 import { assertNotSuspended, orgBillingRow } from "./org/billing";
+import { assertManagedEngineRoom } from "./org/engines";
 import { grantNewEngineMembers } from "./org/membership";
 import { requireActionFor } from "./org/policy";
 import { performRegistration } from "./registration";
@@ -98,7 +99,11 @@ export const reserveManagedInstance = internalMutation({
   handler: async (ctx, { accountId, userId, slug, newRegistrationToken, newCreateRequestId }) => {
     const { account } = await requireActionFor(ctx, userId, { org: accountId }, "createEngine");
 
-    const { instanceId } = await findOrCreateManagedInstance(ctx, account);
+    const { instanceId, created } = await findOrCreateManagedInstance(ctx, account);
+    // Only a new instance is another engine; reusing an unfinished one is a retry.
+    if (created) {
+      await assertManagedEngineRoom(ctx, accountId, instanceId);
+    }
     await startTrialIfNew(ctx, accountId);
     // Every managed request (onboarding, the username form, retry) comes
     // through here, so a suspended org can't build an engine nothing would stop.
@@ -189,6 +194,9 @@ export const prepareNewEngine = internalMutation({
     const { account } = await requireActionFor(ctx, userId, { org: accountId }, "createEngine");
     await assertNotSuspended(ctx, accountId);
     const { instanceId, created } = await findOrCreateManagedInstance(ctx, account);
+    if (created) {
+      await assertManagedEngineRoom(ctx, accountId, instanceId);
+    }
     const provisioning = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
