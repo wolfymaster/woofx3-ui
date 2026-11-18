@@ -258,7 +258,12 @@ export function ensureRetryDelayMs(attempt: number, random: number): number {
   return Math.round(delay * (1 + ENSURE_RETRY.jitterRatio * (2 * random - 1)));
 }
 
-/** Asks the plane to start the org's trial; whether it succeeded. Failures are logged by the caller's retry policy. */
+/**
+ * Asks the plane to start the org's trial; whether it succeeded. The `ensure`
+ * contract takes no body, so the org's referral is not sent here: the plane
+ * reads it from the ops route `accounts.referral`. Sending it with `ensure`
+ * needs the billing contract to accept it first.
+ */
 export async function ensureOrgBilling(client: BillingClient, accountId: Id<"accounts">): Promise<boolean> {
   const result = await client.ensure(accountId);
   if (!result.ok) {

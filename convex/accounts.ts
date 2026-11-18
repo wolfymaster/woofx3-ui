@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation } from "./_generated/server";
 import { PLACEHOLDER_NAME } from "./lib/firstRun";
 import { insertAccount } from "./org/membership";
+import { attachReferredAccount } from "./referrals";
 
 /** The account the user owns, made under the placeholder name when they have none. */
 export async function ensureOwnAccount(ctx: MutationCtx, userId: Id<"users">): Promise<Doc<"accounts">> {
@@ -17,6 +18,7 @@ export async function ensureOwnAccount(ctx: MutationCtx, userId: Id<"users">): P
   if (!account) {
     throw new Error("The account just created cannot be read");
   }
+  await attachReferredAccount(ctx, userId, account._id);
   return account;
 }
 

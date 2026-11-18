@@ -7,6 +7,7 @@ export type OpsRoute =
   | { method: "GET"; name: "users.get"; userId: string }
   | { method: "GET"; name: "accounts.list" }
   | { method: "GET"; name: "accounts.get"; accountId: string }
+  | { method: "GET"; name: "accounts.referral"; accountId: string }
   | { method: "GET"; name: "engines.list" }
   | { method: "GET"; name: "engines.moduleStorageLimits" }
   | { method: "GET"; name: "engines.eventPath" }
@@ -114,6 +115,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
       }
       return null;
     case 3:
+      if (first === "accounts" && second && third === "referral") {
+        return { method, name: "accounts.referral", accountId: second };
+      }
       if (first === "engines" && second === "by-maintenance-id" && third) {
         return { method, name: "engines.byMaintenanceId", engineId: third };
       }

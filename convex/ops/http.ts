@@ -80,6 +80,17 @@ export const opsHandler = httpAction(async (ctx, request) => {
       });
       return ok(account);
     }
+    case "accounts.referral": {
+      const referral = await ctx.runQuery(internal.ops.referrals.forAccount, { accountId: route.accountId });
+      await ctx.runMutation(internal.ops.audit.recordRead, {
+        caller: auth.caller.name,
+        actor: auth.actor,
+        action: "accounts.referral",
+        target: route.accountId,
+        reason: auth.reason,
+      });
+      return referral === null ? error(404, "not_found", "No referral for this account") : ok(referral);
+    }
     case "engines.list": {
       const status = url.searchParams.get("status") ?? undefined;
       if (status !== undefined && !isProvisioningStatus(status)) {

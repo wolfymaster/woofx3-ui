@@ -132,6 +132,32 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .searchIndex("search_name", { searchField: "name" }),
 
+  // referralCodes: one random, unguessable sign-up code per user, made the
+  // first time they ask for it. Never derived from the user id.
+  referralCodes: defineTable({
+    userId: v.id("users"),
+    code: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_code", ["code"]),
+
+  // referrals: who brought a new user in. Written once by referrals.capture
+  // (first capture per referred user wins) and never edited or deleted, except
+  // by the status transition in referrals.ts. Deliberately not a field on
+  // accounts, so attribution cannot be rewritten with the account.
+  referrals: defineTable({
+    referredUserId: v.id("users"),
+    // Absent until the referred user's org exists.
+    referredAccountId: v.optional(v.id("accounts")),
+    referrerUserId: v.id("users"),
+    code: v.string(),
+    capturedAt: v.number(),
+    status: v.union(v.literal("captured"), v.literal("org_created")),
+  })
+    .index("by_referred_user", ["referredUserId"])
+    .index("by_referred_account", ["referredAccountId"]),
+
   // accountMembers: the organization's members and their org role. The owner
   // (accounts.ownerId) has exactly one row, with role "owner" (invariant I1).
   accountMembers: defineTable({

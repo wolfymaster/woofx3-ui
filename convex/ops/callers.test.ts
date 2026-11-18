@@ -18,6 +18,7 @@ const ENV_NAMES = [
 const BILLING_ROUTES: [string, string][] = [
   ["GET", "/api/ops/users/u1"],
   ["GET", "/api/ops/accounts/a1"],
+  ["GET", "/api/ops/accounts/a1/referral"],
   ["POST", "/api/ops/accounts/a1/billing-projection"],
   ["POST", "/api/ops/notifications"],
 ];
@@ -91,6 +92,11 @@ describe("ops caller scopes", () => {
   test.each(BACKOFFICE_ONLY_ROUTES)("backoffice may %s %s", async (method, path) => {
     const response = await call(newBackend(), method, path, SECRETS.backoffice);
     expect([401, 403]).not.toContain(response.status);
+  });
+
+  test("backoffice may not read a referral", async () => {
+    const response = await call(newBackend(), "GET", "/api/ops/accounts/a1/referral", SECRETS.backoffice);
+    expect(await forbiddenCode(response)).toBe("forbidden_route");
   });
 
   test("backoffice may not push a billing projection", async () => {

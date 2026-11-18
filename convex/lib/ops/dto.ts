@@ -225,6 +225,22 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
   };
 }
 
+export interface ReferralDto {
+  referrerUserId: string;
+  code: string;
+  capturedAt: number;
+  status: Doc<"referrals">["status"];
+}
+
+export function referralDto(referral: Doc<"referrals">): ReferralDto {
+  return {
+    referrerUserId: referral.referrerUserId,
+    code: referral.code,
+    capturedAt: referral.capturedAt,
+    status: referral.status,
+  };
+}
+
 export interface NotificationDto {
   id: string;
   heading: string;

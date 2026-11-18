@@ -1,6 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { AUTH_CARD_CLASS, AuthLayout } from "@/components/auth/auth-layout";
 import { TwitchGlyph } from "@/components/twitch/twitch-glyph";
@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
 import { afterRegisterPath, nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { IS_DESKTOP } from "@/lib/desktop";
+import { rememberReferral } from "@/lib/referral-capture";
 import { PASSWORD_MIN_LENGTH, type RegisterError, registerError } from "@/lib/register-error";
 import { signUpSiteKey } from "@/lib/sign-up-challenge";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
@@ -30,6 +31,9 @@ const SIGN_UP_SITE_KEY = IS_DESKTOP
   : signUpSiteKey(import.meta.env.VITE_TURNSTILE_SITE_KEY, import.meta.env.DEV);
 
 export default function Register() {
+  useEffect(() => {
+    rememberReferral(window.location.search);
+  }, []);
   const navigateAfterSignIn = useNavigateAfterSignIn();
   const { signIn } = useAuthActions();
   const [email, setEmail] = useState("");
