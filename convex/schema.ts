@@ -115,6 +115,17 @@ export default defineSchema({
   // Ops search by name; the email index comes with authTables.
   users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
+  // emailVerificationCodes: the one outstanding code per user for proving their
+  // address (lib/emailVerification.ts). Only a hash is stored; a new request
+  // replaces the row, so an old code stops working.
+  emailVerificationCodes: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    codeHash: v.string(),
+    expiresAt: v.number(),
+    failedAttempts: v.number(),
+  }).index("by_user", ["userId"]),
+
   // Personal preferences. A table rather than extra `users` fields so authTables stays stock.
   userSettings: defineTable({
     userId: v.id("users"),
