@@ -1,4 +1,4 @@
-import type { Doc } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { Entitlements } from "../entitlements";
 
 /**
@@ -226,18 +226,26 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
 }
 
 export interface ReferralDto {
-  referrerUserId: string;
+  referralId: string;
+  referrerAccountId: string | null;
   code: string;
   capturedAt: number;
   status: Doc<"referrals">["status"];
+  eligible: boolean;
 }
 
-export function referralDto(referral: Doc<"referrals">): ReferralDto {
+export function referralDto(
+  referral: Doc<"referrals">,
+  referrerAccountId: Id<"accounts"> | null,
+  eligible: boolean
+): ReferralDto {
   return {
-    referrerUserId: referral.referrerUserId,
+    referralId: referral._id,
+    referrerAccountId,
     code: referral.code,
     capturedAt: referral.capturedAt,
     status: referral.status,
+    eligible,
   };
 }
 
