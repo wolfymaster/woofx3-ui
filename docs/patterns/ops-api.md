@@ -18,7 +18,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the ba
 
       | Caller | Env | Routes |
       | --- | --- | --- |
-      | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.billingProjection`, `notifications.create` |
+      | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.referral`, `accounts.billingProjection`, `notifications.create` |
       | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `featureFlags.*`, `accounts.billingProjectionReset` |
       | `legacy` | `OPS_API_SECRET` | every route; logged as deprecated on each request |
 
@@ -42,6 +42,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the ba
 | `GET /api/ops/users/:id` | A user, their account and instance memberships, and how many sessions are active. |
 | `GET /api/ops/accounts?q=&cursor=` | Accounts with owner, member count, plan and managed engine count; `q` searches the name. |
 | `GET /api/ops/accounts/:id` | An account, its members, pending invitations, resolved entitlements, instances, and each instance's provisioning. Billing is not part of it: the management plane owns it. |
+| `GET /api/ops/accounts/:id/referral` | Who referred the org's owner: `{ referralId, referrerAccountId, code, capturedAt, status, eligible }`, or `404` when the owner arrived without a valid referral link. `referrerAccountId` is the org the referrer owns, `null` when they have none. `eligible` is true only when the referred org exists, the referrer has a different org, and both owners have verified their email. The billing caller only; the audit log records the read. |
 | `GET /api/ops/engines?status=&cursor=` | Every `engineProvisioning` row, or those in one status, for drift checks against the maintenance API. |
 | `GET /api/ops/engines/module-storage-limits?cursor=` | Each managed engine's module storage limit (`storage.moduleStorageBytes` after its override), by maintenance engine id, a page at a time; `null` is unlimited. A page may hold fewer rows than its size: rows without a maintenance engine are skipped. The backoffice compares these with maintenance's replica sizes to flag engines over their limit. |
 | `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply), and `isLive`, whether its stream is live now. |
@@ -76,6 +77,14 @@ Operators also set what only an operator may:
 - **Errors:** a refusal, such as an engine that isn't running, answers `409 refused`. A maintenance API failure answers `502 maintenance_error`.
 - **Audit:** the action calls the maintenance API between its own mutations, so its audit row is written when it finishes, success or failure, rather than in one mutation with the change.
 - **The maintenance API's own audit names the Convex client, not the operator.** Only admin keys may name an operator there, and Convex does not hold one. The operator is in `opsAuditLog` and the backoffice's audit.
+
+## Referral attribution
+
+- A user's sign-up code is random and lives in `referralCodes`, made the first time they ask. A sign-up link carries it as `?ref=`; the client keeps it through sign-in and sends it once from onboarding to `referrals.capture`.
+- `capture` writes one immutable `referrals` row per referred user, and the first capture wins. An unknown code, a self-referral, a user more than a day old and a repeat all answer success and write nothing, so the call does not reveal which codes exist.
+- The row names the org once it exists; that status change is the only edit a row ever gets.
+- The plane learns of an org through `ensure`, then reads its referral with the route above. The `ensure` contract carries no body, so the referral is not sent with it. If the plane later wants it pushed at creation, the contract must accept it first; `ensureOrgBilling` in `convex/billingCommands.ts` is where it would be passed.
+- No reward exists in this app. Rewards are the plane's.
 
 ## Consequences
 

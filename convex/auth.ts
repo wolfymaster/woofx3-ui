@@ -101,4 +101,11 @@ export const { auth, signIn, signOut, store } = convexAuth({
       },
     }),
   ],
+  callbacks: {
+    afterUserCreatedOrUpdated: async (ctx, { userId, existingUserId, type, provider }) => {
+      if (existingUserId === null && type === "credentials" && provider.id === "password") {
+        await ctx.scheduler.runAfter(0, internal.emailVerification.sendAtSignUp, { userId });
+      }
+    },
+  },
 });

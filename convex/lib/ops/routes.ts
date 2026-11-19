@@ -7,6 +7,7 @@ export type OpsRoute =
   | { method: "GET"; name: "users.get"; userId: string }
   | { method: "GET"; name: "accounts.list" }
   | { method: "GET"; name: "accounts.get"; accountId: string }
+  | { method: "GET"; name: "accounts.referral"; accountId: string }
   | { method: "GET"; name: "engines.list" }
   | { method: "GET"; name: "engines.moduleStorageLimits" }
   | { method: "GET"; name: "engines.eventPath" }
@@ -15,6 +16,10 @@ export type OpsRoute =
   | { method: "GET"; name: "audit.list" }
   | { method: "GET"; name: "notifications.list" }
   | { method: "GET"; name: "featureFlags.list" }
+  | { method: "GET"; name: "referralCodes.list" }
+  | { method: "POST"; name: "referralCodes.issue" }
+  | { method: "PATCH"; name: "referralCodes.update"; code: string }
+  | { method: "POST"; name: "referralCodes.revoke"; code: string }
   | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
   | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
   | { method: "POST"; name: "notifications.create" }
@@ -55,6 +60,12 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     if (segments.length === 3 && first === "accounts" && second && third === "billing-projection-reset") {
       return { method, name: "accounts.billingProjectionReset", accountId: second };
     }
+    if (segments.length === 1 && first === "referral-codes") {
+      return { method, name: "referralCodes.issue" };
+    }
+    if (segments.length === 3 && first === "referral-codes" && second && third === "revoke") {
+      return { method, name: "referralCodes.revoke", code: second };
+    }
     if (segments.length === 1 && first === "notifications") {
       return { method, name: "notifications.create" };
     }
@@ -66,6 +77,12 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     }
     if (segments.length === 3 && first === "notifications" && second && third === "delete") {
       return { method, name: "notifications.delete", notificationId: second };
+    }
+    return null;
+  }
+  if (method === "PATCH") {
+    if (segments.length === 2 && first === "referral-codes" && second) {
+      return { method, name: "referralCodes.update", code: second };
     }
     return null;
   }
@@ -98,6 +115,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
       if (first === "feature-flags") {
         return { method, name: "featureFlags.list" };
       }
+      if (first === "referral-codes") {
+        return { method, name: "referralCodes.list" };
+      }
       return null;
     case 2:
       if (first === "engines" && second === "module-storage-limits") {
@@ -114,6 +134,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
       }
       return null;
     case 3:
+      if (first === "accounts" && second && third === "referral") {
+        return { method, name: "accounts.referral", accountId: second };
+      }
       if (first === "engines" && second === "by-maintenance-id" && third) {
         return { method, name: "engines.byMaintenanceId", engineId: third };
       }

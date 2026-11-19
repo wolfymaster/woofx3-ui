@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { billingConvexError, ENSURE_RETRY, ensureOrgBilling, ensureRetryDelayMs } from "./billingCommands";
+import { ACTION_LIMITS } from "./lib/actionRateLimits";
 import { billingErr, PLANE_CODES } from "./lib/billingClient";
 import { FakeBillingClient } from "./lib/billingClient.fakes";
 import { newBackend } from "./lib/convexTest.testing";
@@ -272,6 +273,45 @@ describe("previewPromotionCode", () => {
   });
 });
 
+describe("billing rate limits", () => {
+  test("previewPromotionCode refuses the call after the burst, per user", async () => {
+    const t = newBackend();
+    const first = await seedOrg(t);
+    const second = await seedOrg(t);
+    answers["/promotion-codes/X"] = {
+      status: 404,
+      body: { error: { code: "promotion_code_not_found", message: "m" } },
+    };
+    const preview = (owner: typeof first) =>
+      as(t, owner.ownerId).action(api.billingCommands.previewPromotionCode, { accountId: owner.accountId, code: "X" });
+    for (let n = 0; n < ACTION_LIMITS.billingPromoPreview.capacity; n++) {
+      await preview(first);
+    }
+    const asked = seen.length;
+    expect(await errorData(preview(first))).toMatchObject({ code: "rate_limited", retryAfter: expect.any(Number) });
+    expect(seen.length).toBe(asked);
+    expect(await preview(second)).toBeNull();
+  });
+
+  test("startCheckout refuses the call after the burst, per user", async () => {
+    const t = newBackend();
+    const first = await seedOrg(t);
+    const second = await seedOrg(t);
+    answers["/checkouts"] = { status: 200, body: { url: "https://pay.example/1", checkoutId: "c1" } };
+    const start = (owner: typeof first) =>
+      as(t, owner.ownerId).action(api.billingCommands.startCheckout, {
+        accountId: owner.accountId,
+        plan: "pro",
+        interval: "month",
+      });
+    for (let n = 0; n < ACTION_LIMITS.billingCheckoutStart.capacity; n++) {
+      await start(first);
+    }
+    expect(await errorData(start(first))).toMatchObject({ code: "rate_limited" });
+    await start(second);
+  });
+});
+
 describe("checkoutState", () => {
   test("the org's owner reads the state, asking for that org; anyone else is refused before the plane is asked", async () => {
     const t = newBackend();
@@ -318,10 +358,10 @@ describe("checkoutState", () => {
 });
 
 describe("ensure", () => {
-  test("a plane failure is reported as false, never thrown", async () => {
+  test("a plane failure is returned, never thrown", async () => {
     const client = new FakeBillingClient();
     client.ensureAnswer = billingErr("payment_unavailable", "down");
-    expect(await ensureOrgBilling(client, "acc1" as never)).toBe(false);
+    expect(await ensureOrgBilling(client, "acc1" as never)).toEqual({ code: "payment_unavailable", message: "down" });
     expect(client.calls).toEqual([{ command: "ensure", args: ["acc1"] }]);
   });
 

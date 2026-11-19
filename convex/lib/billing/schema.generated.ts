@@ -4,6 +4,2228 @@
  */
 
 export interface paths {
+    "/v1/admin/billing/accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An organization's subscription and its whole history
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. An organization with no billing yet has `subscription: null` and no transitions.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The organization's billing */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminAccount"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/accounts/{id}/discount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Attach a discount to an organization's provider subscription
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminDiscountBody"];
+                };
+            };
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/accounts/{id}/exemption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Exempt an organization from paying, on a plan
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminExemptionBody"];
+                };
+            };
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * End an organization's exemption
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/accounts/{id}/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set an organization's deal: entitlements added, removed or limited on top of its plan
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminOverridesBody"];
+                };
+            };
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * End an organization's deal
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/accounts/{id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set an organization's plan
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminPlanBody"];
+                };
+            };
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/accounts/{id}/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant an organization credit for a referral reward
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again. The credit lapses 12 months after it is granted and is spent on the organization's next provider invoice (once it pays).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminRewardBody"];
+                };
+            };
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/accounts/{id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend an organization
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/accounts/{id}/unsuspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lift an operator's suspension
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The subscription after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSubscription"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything billing waits on an operator for
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. At most 200 of each kind: events flagged for review or failed, projections the UI refused, checkouts stuck open, module purchases to refund, dead effects, and transitions whose owner has no email.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description What needs an operator */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminAttention"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/checkouts/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a checkout stuck open after its provider session ended
+         * @description `billing:operate`. Acts only on what still waits for an operator, so a second click is refused; refusals store nothing under the Idempotency-Key. 404 `checkout_not_found`; 409 `checkout_not_stuck` for one under three hours old (its customer may still be paying), `checkout_not_open` for one already closed.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Closed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSettled"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminRefusalError"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/effects/{id}/abandon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give up on a dead billing effect; a module purchase's grant flags its checkout for a refund
+         * @description `billing:operate`. Acts only on what still waits for an operator, so a second click is refused; refusals store nothing under the Idempotency-Key. 409 `effect_not_dead` for an effect that is not dead.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Settled */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSettled"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/effects/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put a dead billing effect back in the queue with fresh attempts
+         * @description `billing:operate`. Acts only on what still waits for an operator, so a second click is refused; refusals store nothing under the Idempotency-Key. 409 `effect_not_dead` for an effect that is not dead.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Settled */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSettled"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/ensure-misses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Owners whose billing could not be started, most recently seen first
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. Unresolved ones unless `includeResolved` is `true`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description The previous page's nextCursor. */
+                    cursor?: string;
+                    limit?: number;
+                    includeResolved?: "true" | "false";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description A page of misses */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminEnsureMisses"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What billing recorded as paid in a window, oldest first
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. `from` inclusive, `to` exclusive, at most 400 days apart.
+         */
+        get: {
+            parameters: {
+                query: {
+                    from: string;
+                    to: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The payments */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminPayments"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/plan-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Organizations paying a provider on each plan and interval
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. Every plan and interval is listed, with 0 for one nobody pays on.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The counts */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminPlanCounts"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every plan price ever set
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. Newest month first within each plan and interval.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The price list */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminPlanPrices"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Set a plan's price from a month on
+         * @description `billing:operate`. 409 `price_exists` when the plan and interval already have a price from that month; delete it first. Refusals store nothing under the Idempotency-Key.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminAddPriceBody"];
+                };
+            };
+            responses: {
+                /** @description The price */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminPlanPrice"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/prices/{plan}/{interval}/{effectiveMonth}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a plan price entered by mistake
+         * @description `billing:operate`. 404 `price_not_found` when there is none. The action record keeps what it said.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    plan: "starter" | "pro";
+                    interval: "month" | "year";
+                    effectiveMonth: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminDeleted"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminRefusalError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/sponsor-commitments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Monthly sponsorships still charging each month
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. `active`, or `past_due` while the provider retries.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The commitments */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSponsorCommitments"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/sponsorships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sponsorships, newest first
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. Filtered by state, interval, and the sponsors named by `userId` (repeat it for several).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    state?: "pending" | "active" | "past_due" | "canceled" | "complete";
+                    interval?: "month" | "once";
+                    userId?: string | string[];
+                    /** @description The previous page's nextCursor. */
+                    cursor?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description A page of sponsorships */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSponsorships"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/sponsorships/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One sponsorship with its payments and the sponsor's events flagged for review
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. 404 `sponsorship_not_found` when there is none.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The sponsorship */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSponsorshipDetail"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminRefusalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/sponsorships/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a monthly sponsorship
+         * @description `billing:operate`. At the end of its period, or now when `atPeriodEnd` is false (the provider refunds nothing). The sponsor is told it was canceled by woofx3. 409 `sponsorship_not_recurring` for a one-time sponsorship and `sponsorship_canceled` for one that has ended.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The sponsorship. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminSponsorCancelBody"];
+                };
+            };
+            responses: {
+                /** @description The sponsorship */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSponsorCancel"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminRefusalError"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/sponsorships/{id}/payments/{paymentId}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refund some or all of a sponsorship's payment
+         * @description `billing:operate`. The provider is asked under a key derived from the Idempotency-Key, so a retry after a lost answer asks for the same refund. 409 `refund_exceeds_payment` when more is asked than is left to refund. Refusals are not stored under the key: the same request is judged again when it is sent again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Required. A repeat with the same key returns the original response. */
+                    "idempotency-key": string;
+                    /** @description The operator's email address; recorded with the change. */
+                    "x-woofx3-actor": string;
+                    /** @description Why, percent-encoded UTF-8 (1 to 500 characters); recorded with the change. */
+                    "x-woofx3-reason": string;
+                };
+                path: {
+                    /** @description The sponsorship. */
+                    id: string;
+                    /** @description One of its payments. */
+                    paymentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingAdminSponsorRefundBody"];
+                };
+            };
+            responses: {
+                /** @description The refund */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminSponsorRefund"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminRefusalError"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminConflictError"];
+                    };
+                };
+                /** @description The payment provider refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description The payment provider is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/strays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Provider subscriptions no organization follows, oldest first
+         * @description `billing:admin-read`. Any organization's or sponsor's billing, for operators. An operator settles each in the provider.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description The previous page's nextCursor. */
+                    cursor?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description A page of strays */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingAdminStrays"];
+                    };
+                };
+                /** @description Invalid request, the operator or reason is missing, or refused as invalid_exemption */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/accounts/{id}/checkouts": {
         parameters: {
             query?: never;
@@ -515,6 +2737,80 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/accounts/{ownerType}/{ownerId}/ensure-miss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report an owner whose billing the caller could not start
+         * @description For the UI's convergent pass, when `ensure` still fails for an owner it found with no billing. Each call counts one more attempt; the miss closes by itself when `ensure` later succeeds. The key must be bound to `ownerType` billing (403 `forbidden_billing_owner`).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    ownerType: "org" | "user";
+                    /** @description The UI's id for the organization or the person. */
+                    ownerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingEnsureMissBody"];
+                };
+            };
+            responses: {
+                /** @description The miss as recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingEnsureMiss"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
             };
@@ -1361,6 +3657,410 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        BillingAdminAccount: {
+            subscription: components["schemas"]["BillingAdminSubscription"] & (Record<string, never> | null);
+            /** @description Newest first. */
+            transitions: components["schemas"]["BillingAdminTransition"][];
+        };
+        BillingAdminAddPriceBody: {
+            amountCents: number;
+            effectiveMonth: string;
+            /** @enum {string} */
+            interval: "month" | "year";
+            /** @enum {string} */
+            plan: "starter" | "pro";
+        };
+        BillingAdminAttention: {
+            deadEffects: {
+                accountId: string | null;
+                attempts: number;
+                checkoutId: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                diedAt: string;
+                /** @enum {string} */
+                effectKind: "stop_engines" | "start_engines" | "send_email" | "notify" | "publish_projection" | "expire_checkout" | "grant_entitlement" | "revoke_entitlement" | "grant_credit" | "apply_credit" | "reward_referrer";
+                id: string;
+                lastError: string | null;
+                /** @description The UI's id for the person, for a sponsorship's. */
+                userId: string | null;
+            }[];
+            ownerEmailMissing: {
+                accountId: string;
+                /** Format: date-time */
+                at: string;
+                /** @enum {string} */
+                event: "TrialStarted" | "EvaluationDue" | "RetryDue" | "GraceExpired" | "SpinDownDue" | "ExemptionExpired" | "ProviderActivated" | "PaymentSucceeded" | "PaymentFailed" | "ProviderEnded" | "ExemptionGranted" | "ExemptionRevoked" | "OperatorSuspended" | "OperatorUnsuspended" | "EnginesStopped" | "PlanChanged" | "DiscountApplied" | "OverridesChanged" | "OverridesExpired" | "RewardGranted";
+                /** @enum {string} */
+                to: "trialing" | "active" | "past_due" | "suspended" | "exempt";
+                transitionId: string;
+                version: number;
+            }[];
+            purchases: {
+                accountId: string;
+                amountCents: number;
+                /** Format: date-time */
+                at: string;
+                checkoutId: string;
+                intentId: string;
+                listingId: string;
+                paymentRef: string | null;
+                providerSessionRef: string;
+                reason: string;
+                /** @enum {string} */
+                settle: "refund" | "retry_or_refund" | "answer_dispute";
+            }[];
+            refusedProjections: {
+                accountId: string;
+                /** Format: date-time */
+                at: string;
+                reason: string | null;
+                version: number;
+            }[];
+            /** @description Every event waiting; `reviewEvents` lists 200. */
+            reviewEventCount: number;
+            reviewEvents: {
+                accountId: string | null;
+                /** Format: date-time */
+                at: string;
+                error: string | null;
+                eventId: string;
+                needsReview: boolean;
+                /** @enum {string} */
+                outcome: "received" | "applied" | "ignored" | "stray" | "failed";
+                type: string;
+                /** @description The UI's id for the person, for a sponsorship's. */
+                userId: string | null;
+            }[];
+            stuckCheckouts: {
+                accountId: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                id: string;
+                providerSessionRef: string;
+                /** @description The UI's id for the person, for a sponsorship's. */
+                userId: string | null;
+            }[];
+        };
+        BillingAdminConflictError: {
+            error: {
+                code: components["schemas"]["BillingAdminRefusalCode"] | "subscription_changed" | "idempotency_key_reused";
+                message: string;
+            };
+        };
+        BillingAdminDeleted: {
+            /** @enum {boolean} */
+            deleted: true;
+        };
+        BillingAdminDiscountBody: {
+            key: string;
+            spec: {
+                duration: {
+                    /** @enum {string} */
+                    kind: "once";
+                } | {
+                    /** @enum {string} */
+                    kind: "months";
+                    months: number;
+                } | {
+                    /** @enum {string} */
+                    kind: "forever";
+                };
+                /** @enum {string} */
+                kind: "percent_off";
+                percent: number;
+            } | {
+                amountCents: number;
+                /** @enum {string} */
+                currency: "usd";
+                duration: {
+                    /** @enum {string} */
+                    kind: "once";
+                } | {
+                    /** @enum {string} */
+                    kind: "months";
+                    months: number;
+                } | {
+                    /** @enum {string} */
+                    kind: "forever";
+                };
+                /** @enum {string} */
+                kind: "amount_off";
+            };
+        };
+        BillingAdminEnsureMisses: {
+            misses: {
+                attempts: number;
+                /** Format: date-time */
+                firstSeenAt: string;
+                lastError: string | null;
+                /** Format: date-time */
+                lastSeenAt: string;
+                ownerId: string;
+                /** @enum {string} */
+                ownerType: "org" | "user";
+                /** Format: date-time */
+                resolvedAt: string | null;
+            }[];
+            /** @description Pass as cursor for the next page; null at the end. */
+            nextCursor: string | null;
+        };
+        BillingAdminExemptionBody: {
+            /** @enum {string} */
+            plan: "starter" | "pro";
+            /**
+             * Format: date-time
+             * @description When it ends; null for an exemption with no end.
+             */
+            until: string | null;
+        };
+        BillingAdminOverrides: ({
+            addFeatures: ("userPages" | "userPages.customDomain" | "marketplace.premiumIncluded" | "business")[];
+            limits: {
+                "analytics.retentionDays"?: number | null;
+                "org.managedEngines"?: number | null;
+                "org.members"?: number | null;
+                "storage.hostedAssetBytes"?: number | null;
+                "storage.hostedFileBytes"?: number | null;
+                "storage.moduleStorageBytes"?: number | null;
+            };
+            removeFeatures: ("userPages" | "userPages.customDomain" | "marketplace.premiumIncluded" | "business")[];
+        } & {
+            /** Format: date-time */
+            until: string | null;
+        }) | null;
+        BillingAdminOverridesBody: {
+            addFeatures: ("userPages" | "userPages.customDomain" | "marketplace.premiumIncluded" | "business")[];
+            limits: {
+                "analytics.retentionDays"?: number | null;
+                "org.managedEngines"?: number | null;
+                "org.members"?: number | null;
+                "storage.hostedAssetBytes"?: number | null;
+                "storage.hostedFileBytes"?: number | null;
+                "storage.moduleStorageBytes"?: number | null;
+            };
+            removeFeatures: ("userPages" | "userPages.customDomain" | "marketplace.premiumIncluded" | "business")[];
+        } & {
+            /**
+             * Format: date-time
+             * @description When the deal ends; null for a deal with no end.
+             */
+            until: string | null;
+        };
+        BillingAdminPayments: {
+            payments: {
+                accountId: string | null;
+                amountCents: number;
+                currency: string;
+                feeCents: number | null;
+                id: string;
+                /** @enum {string|null} */
+                interval: "month" | "year" | null;
+                /** Format: date-time */
+                paidAt: string;
+                /** @enum {string|null} */
+                plan: "starter" | "pro" | null;
+                /** @enum {string} */
+                purpose: "subscription" | "marketplace" | "sponsorship";
+                refundedCents: number;
+                sponsorshipId: string | null;
+            }[];
+        };
+        BillingAdminPlanBody: {
+            /** @enum {string} */
+            plan: "starter" | "pro";
+        };
+        BillingAdminPlanCounts: {
+            plans: {
+                accounts: number;
+                /** @enum {string} */
+                interval: "month" | "year";
+                /** @enum {string} */
+                plan: "starter" | "pro";
+            }[];
+            /** @description Organizations with any billing at all. */
+            totalAccounts: number;
+        };
+        BillingAdminPlanPrice: {
+            amountCents: number;
+            /** Format: date-time */
+            createdAt: string;
+            createdBy: string;
+            currency: string;
+            effectiveMonth: string;
+            /** @enum {string} */
+            interval: "month" | "year";
+            /** @enum {string} */
+            plan: "starter" | "pro";
+        };
+        BillingAdminPlanPrices: {
+            prices: components["schemas"]["BillingAdminPlanPrice"][];
+        };
+        /** @enum {string} */
+        BillingAdminRefusalCode: "no_subscription" | "illegal_transition" | "provider_managed" | "trial_is_starter" | "invalid_exemption" | "not_suspended_by_operator" | "no_provider_subscription" | "unknown_discount" | "invalid_overrides_end" | "invalid_reward" | "sponsorship_not_found" | "payment_not_found" | "refund_exceeds_payment" | "sponsorship_not_recurring" | "sponsorship_canceled" | "effect_not_dead" | "checkout_not_found" | "checkout_not_stuck" | "checkout_not_open" | "price_exists" | "price_not_found";
+        BillingAdminRefusalError: {
+            error: {
+                code: components["schemas"]["BillingAdminRefusalCode"];
+                message: string;
+            };
+        };
+        BillingAdminRewardBody: {
+            amountCents: number;
+            /** @description Names the reward, normally the referral that earned it; granting the same id again adds nothing. */
+            rewardId: string;
+            /** @description The provider invoice that earned the reward; refunding it claws the unspent credit back. */
+            sourcePaymentRef: string | null;
+        };
+        BillingAdminSettled: {
+            /** @enum {boolean} */
+            settled: true;
+        };
+        BillingAdminSponsorCancel: {
+            cancelAtPeriodEnd: boolean;
+            /** Format: date-time */
+            currentPeriodEnd: string | null;
+            /** @enum {string} */
+            state: "pending" | "active" | "past_due" | "canceled" | "complete";
+        };
+        BillingAdminSponsorCancelBody: {
+            atPeriodEnd: boolean;
+        };
+        BillingAdminSponsorCommitments: {
+            commitments: {
+                amountCents: number;
+                cancelAtPeriodEnd: boolean;
+                /** Format: date-time */
+                currentPeriodEnd: string;
+                id: string;
+                /** @enum {string} */
+                state: "active" | "past_due";
+            }[];
+        };
+        BillingAdminSponsorRefund: {
+            amountCents: number;
+            paymentId: string;
+            refundRef: string;
+            /** @description The payment's refunded total after this refund. */
+            refundedCents: number;
+        };
+        BillingAdminSponsorRefundBody: {
+            amountCents: number;
+        };
+        BillingAdminSponsorship: {
+            amountCents: number;
+            cancelAtPeriodEnd: boolean;
+            currency: string;
+            /** Format: date-time */
+            currentPeriodEnd: string | null;
+            id: string;
+            /** @enum {string} */
+            interval: "month" | "once";
+            /** @description What it has paid, less refunds. */
+            paidCents: number;
+            /** @description The sponsor's newest event flagged for review, and how many there are. */
+            review: {
+                count: number;
+                reason: string;
+            } | null;
+            /** Format: date-time */
+            startedAt: string;
+            /** @enum {string} */
+            state: "pending" | "active" | "past_due" | "canceled" | "complete";
+            userId: string;
+        };
+        BillingAdminSponsorshipDetail: components["schemas"]["BillingAdminSponsorship"] & {
+            payments: {
+                amountCents: number;
+                feeCents: number | null;
+                id: string;
+                /** Format: date-time */
+                paidAt: string;
+                receiptUrl: string | null;
+                refundedCents: number;
+            }[];
+            reviewEvents: {
+                /** Format: date-time */
+                at: string;
+                eventId: string;
+                outcome: string;
+                reason: string | null;
+                type: string;
+            }[];
+        };
+        BillingAdminSponsorships: {
+            /** @description Pass as cursor for the next page; null at the end. */
+            nextCursor: string | null;
+            sponsorships: components["schemas"]["BillingAdminSponsorship"][];
+        };
+        BillingAdminStrays: {
+            /** @description Pass as cursor for the next page; null at the end. */
+            nextCursor: string | null;
+            strays: {
+                accountId: string | null;
+                /** Format: date-time */
+                at: string;
+                customerRef: string;
+                eventId: string;
+                id: string;
+                subscriptionRef: string;
+                type: string;
+            }[];
+        };
+        BillingAdminSubscription: {
+            accountId: string;
+            addOns: string[];
+            discountLabel: string | null;
+            /** Format: date-time */
+            exemptUntil: string | null;
+            /** Format: date-time */
+            graceEndsAt: string | null;
+            /** @enum {string|null} */
+            interval: "month" | "year" | null;
+            /** Format: date-time */
+            nextBillingAt: string | null;
+            /** Format: date-time */
+            nextRetryAt: string | null;
+            /** @enum {string} */
+            origin: "signup";
+            overrides: components["schemas"]["BillingAdminOverrides"];
+            /** @enum {string} */
+            plan: "starter" | "pro";
+            /** @enum {string|null} */
+            provider: "stripe" | null;
+            providerStatus: string | null;
+            providerSubscriptionId: string | null;
+            /** Format: date-time */
+            spinDownAt: string | null;
+            /** @enum {string} */
+            state: "trialing" | "active" | "past_due" | "suspended" | "exempt";
+            /** @enum {string|null} */
+            stateReason: "no_payment_method" | "payment_failed" | "subscription_canceled" | "provider_ended" | "operator" | null;
+            /** Format: date-time */
+            stateSince: string;
+            /** Format: date-time */
+            trialStartedAt: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+            updatedBy: string;
+            version: number;
+        };
+        BillingAdminTransition: {
+            actor: string;
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            event: "TrialStarted" | "EvaluationDue" | "RetryDue" | "GraceExpired" | "SpinDownDue" | "ExemptionExpired" | "ProviderActivated" | "PaymentSucceeded" | "PaymentFailed" | "ProviderEnded" | "ExemptionGranted" | "ExemptionRevoked" | "OperatorSuspended" | "OperatorUnsuspended" | "EnginesStopped" | "PlanChanged" | "DiscountApplied" | "OverridesChanged" | "OverridesExpired" | "RewardGranted";
+            /** @enum {string|null} */
+            from: "trialing" | "active" | "past_due" | "suspended" | "exempt" | null;
+            note: string | null;
+            ownerEmailMissing: boolean;
+            /** @enum {string|null} */
+            reason: "no_payment_method" | "payment_failed" | "subscription_canceled" | "provider_ended" | "operator" | null;
+            /** @enum {string} */
+            to: "trialing" | "active" | "past_due" | "suspended" | "exempt";
+            version: number;
+        };
         BillingCheckout: {
             accountId: string | null;
             id: string;
@@ -1386,6 +4086,19 @@ export interface components {
                 code: components["schemas"]["BillingRefusalCode"] | "idempotency_key_reused";
                 message: string;
             };
+        };
+        BillingEnsureMiss: {
+            attempts: number;
+            /** Format: date-time */
+            firstSeenAt: string;
+            /** Format: date-time */
+            lastSeenAt: string;
+            ownerId: string;
+            /** @enum {string} */
+            ownerType: "org" | "user";
+        };
+        BillingEnsureMissBody: {
+            reason: string;
         };
         BillingInvoice: {
             amountCents: number;

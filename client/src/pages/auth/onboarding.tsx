@@ -17,6 +17,7 @@ import {
   type OnboardingRoute,
   onboardingRoute,
 } from "@/lib/onboarding-route";
+import { takeReferral } from "@/lib/referral-capture";
 import { $currentInstanceId } from "@/lib/stores";
 
 /**
@@ -39,6 +40,7 @@ export default function Onboarding() {
 
   const ensureFirstRun = useMutation(api.setup.ensureFirstRun);
   const ensureMyAccount = useMutation(api.accounts.ensureMyAccount);
+  const captureReferral = useMutation(api.referrals.capture);
   const createInstance = useMutation(api.instances.create);
   const registerInstance = useAction(api.registration.registerInstance);
   const managedEngines = useQuery(api.provisioning.isAvailable);
@@ -92,6 +94,13 @@ export default function Onboarding() {
       setConnecting(false);
     }
   }
+
+  useEffect(() => {
+    const code = isAuthenticated ? takeReferral() : null;
+    if (code !== null) {
+      captureReferral({ code }).catch((err: unknown) => logger.warn("Could not record the referral", { error: err }));
+    }
+  }, [isAuthenticated, captureReferral, logger]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: each route starts once, guarded by `started`.
   useEffect(() => {

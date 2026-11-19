@@ -18,6 +18,7 @@ const ENV_NAMES = [
 const BILLING_ROUTES: [string, string][] = [
   ["GET", "/api/ops/users/u1"],
   ["GET", "/api/ops/accounts/a1"],
+  ["GET", "/api/ops/accounts/a1/referral"],
   ["POST", "/api/ops/accounts/a1/billing-projection"],
   ["POST", "/api/ops/notifications"],
 ];
@@ -35,6 +36,10 @@ const BACKOFFICE_ONLY_ROUTES: [string, string][] = [
   ["PUT", "/api/ops/feature-flags"],
   ["POST", "/api/ops/feature-flags/delete"],
   ["POST", "/api/ops/accounts/a1/billing-projection-reset"],
+  ["GET", "/api/ops/referral-codes"],
+  ["POST", "/api/ops/referral-codes"],
+  ["PATCH", "/api/ops/referral-codes/abc"],
+  ["POST", "/api/ops/referral-codes/abc/revoke"],
 ];
 
 let saved: Record<string, string | undefined> = {};
@@ -64,7 +69,7 @@ function call(t: ReturnType<typeof newBackend>, method: string, path: string, se
       "X-Woofx3-Reason": "test",
       "Content-Type": "application/json",
     },
-    body: method === "POST" || method === "PUT" ? "{}" : undefined,
+    body: method === "POST" || method === "PUT" || method === "PATCH" ? "{}" : undefined,
   });
 }
 
@@ -91,6 +96,11 @@ describe("ops caller scopes", () => {
   test.each(BACKOFFICE_ONLY_ROUTES)("backoffice may %s %s", async (method, path) => {
     const response = await call(newBackend(), method, path, SECRETS.backoffice);
     expect([401, 403]).not.toContain(response.status);
+  });
+
+  test("backoffice may not read a referral", async () => {
+    const response = await call(newBackend(), "GET", "/api/ops/accounts/a1/referral", SECRETS.backoffice);
+    expect(await forbiddenCode(response)).toBe("forbidden_route");
   });
 
   test("backoffice may not push a billing projection", async () => {
