@@ -1,5 +1,5 @@
 {
   "source": "woofx3-maintenance openapi/billing.json",
-  "sourceCommit": "c7760504a91a6026a9f7874dcfe09aa4a8b01d47",
-  "specSha256": "6839d57a6e4adbaedfa3db9943ecbbe244d38604b758d5d0039461b150600371"
+  "sourceCommit": "0e7fc22386cf4cba64bd545db7eb2e029d577cea",
+  "specSha256": "174ed4502f69ad13e2b962ec787f60ca4334947f444948f622f202e5e93455ec"
 }
