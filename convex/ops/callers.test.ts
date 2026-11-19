@@ -36,6 +36,10 @@ const BACKOFFICE_ONLY_ROUTES: [string, string][] = [
   ["PUT", "/api/ops/feature-flags"],
   ["POST", "/api/ops/feature-flags/delete"],
   ["POST", "/api/ops/accounts/a1/billing-projection-reset"],
+  ["GET", "/api/ops/referral-codes"],
+  ["POST", "/api/ops/referral-codes"],
+  ["PATCH", "/api/ops/referral-codes/abc"],
+  ["POST", "/api/ops/referral-codes/abc/revoke"],
 ];
 
 let saved: Record<string, string | undefined> = {};
@@ -65,7 +69,7 @@ function call(t: ReturnType<typeof newBackend>, method: string, path: string, se
       "X-Woofx3-Reason": "test",
       "Content-Type": "application/json",
     },
-    body: method === "POST" || method === "PUT" ? "{}" : undefined,
+    body: method === "POST" || method === "PUT" || method === "PATCH" ? "{}" : undefined,
   });
 }
 

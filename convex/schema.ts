@@ -143,12 +143,20 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .searchIndex("search_name", { searchField: "name" }),
 
-  // referralCodes: one random, unguessable sign-up code per user, made the
-  // first time they ask for it. Never derived from the user id.
+  // referralCodes: sign-up codes an operator issues to chosen people; users
+  // cannot make their own. The code is random and unguessable, never derived
+  // from the user id. Each code carries its own reward terms, so no default
+  // exists to fall back on. A revoked code stays as a row so the referrals
+  // that used it keep their history, but capture ignores it.
   referralCodes: defineTable({
     userId: v.id("users"),
     code: v.string(),
     createdAt: v.number(),
+    // Whole cents the referrer earns per eligible referral, at most 1_000_000.
+    rewardCents: v.number(),
+    // The operator actor string the issuing ops request carried.
+    issuedBy: v.string(),
+    revokedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_code", ["code"]),
@@ -157,15 +165,19 @@ export default defineSchema({
   // (first capture per referred user wins) and never edited or deleted, except
   // by the status transition in referrals.ts. Deliberately not a field on
   // accounts, so attribution cannot be rewritten with the account.
+  // rewardCents is the code's terms at capture, frozen: editing a code's
+  // terms later only affects later captures.
   referrals: defineTable({
     referredUserId: v.id("users"),
     // Absent until the referred user's org exists.
     referredAccountId: v.optional(v.id("accounts")),
     referrerUserId: v.id("users"),
     code: v.string(),
+    rewardCents: v.number(),
     capturedAt: v.number(),
     status: v.union(v.literal("captured"), v.literal("org_created")),
   })
+    .index("by_code", ["code"])
     .index("by_referred_user", ["referredUserId"])
     .index("by_referred_account", ["referredAccountId"]),
 
