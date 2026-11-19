@@ -1,5 +1,15 @@
 # woofx3 desktop changelog
 
+## [0.22.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.21.0...woofx3-v0.22.0) (2026-11-19)
+
+### Features
+
+* **desktop:** bundle engine v0.72.0 ([96fcb54](https://github.com/wolfymaster/woofx3-ui/commit/96fcb545cc0415e73798cd1bd1eecb23bc00f287))
+
+### Bug Fixes
+
+* **marketplace:** stop downloading archives before a listing is claimed ([9720a28](https://github.com/wolfymaster/woofx3-ui/commit/9720a287567efcd9304f22af03ea730f00477fd2))
+
 ## [0.21.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.20.0...woofx3-v0.21.0) (2026-11-19)
 
 ### Features
