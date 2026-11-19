@@ -61,14 +61,15 @@ function hasTestId(renderer: ReactTestRenderer, testId: string): boolean {
 }
 
 describe("AlertLayoutPreview in action settings", () => {
-  test("an Alert action shows the still preview", () => {
+  test("an Alert action shows a preview that opens the alert editor", () => {
     const renderer = render(alertStep, alertRow);
-    expect(hasTestId(renderer, "alert-layout-preview-toggle")).toBe(true);
-    expect(JSON.stringify(renderer.toJSON())).toContain("See alert contents");
+    const preview = renderer.root.findByProps({ "data-testid": "alert-layout-preview" });
+    expect(preview.props["aria-label"]).toBe("Edit alert");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("See alert contents");
   });
 
   test("a non-Alert action shows no preview", () => {
     const renderer = render(chatStep, chatRow);
-    expect(hasTestId(renderer, "alert-layout-preview-toggle")).toBe(false);
+    expect(hasTestId(renderer, "alert-layout-preview")).toBe(false);
   });
 });

@@ -7,7 +7,9 @@ import { ConfigurationForm, type FieldDescriptor } from "@/components/common/con
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { ModuleAssetFieldRenderer, withAssetModule } from "@/components/flow/module-asset-field";
 import { StepIdField } from "@/components/flow/step-id-field";
+import { AlertLayoutDialogBody } from "@/components/scenes/alert-layout-field";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
@@ -82,8 +84,13 @@ export function ActionSettingsEditor({
     [fields]
   );
   const isAlert = row?.handlerType === "alert" || alertLayoutFields.length > 0;
-  const [layoutOpen, setLayoutOpen] = useState(false);
+  const [alertEditorOpen, setAlertEditorOpen] = useState(false);
   const layout = step.parameters.layout ?? {};
+  // An alert's layout and target are drawn together in the compact row below, not as
+  // ordinary settings: clicking the still opens the same editor the full layout field does.
+  const layoutField = fields.find((field) => field.type === "layout" && field.surface === "alert");
+  const widgetFields = fields.filter((field) => field.source?.kind === "alertWidgets");
+  const compactFieldIds = new Set([...alertLayoutFields, ...widgetFields.map((field) => field.id)]);
 
   const setValue = (fieldId: string, value: unknown) =>
     onChange({ ...step, parameters: withSetting(step.parameters, fieldId, value) });
@@ -99,21 +106,32 @@ export function ActionSettingsEditor({
       )}
       {row && fields.length === 0 && <p className="text-sm text-muted-foreground">This action has no settings.</p>}
       {isAlert && (
-        <button
-          type="button"
-          className="group flex flex-col items-start gap-1.5 self-start rounded-xl border p-2 text-left hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => setLayoutOpen(!layoutOpen)}
-          aria-expanded={layoutOpen}
-          data-testid="alert-layout-preview-toggle"
-        >
-          <AlertLayoutPreview layout={layout} className="max-w-56" />
-          <span className="text-xs text-muted-foreground group-hover:text-foreground">
-            {layoutOpen ? "Hide alert contents" : "See alert contents"}
-          </span>
-        </button>
+        <div className="flex items-start gap-3" data-testid="alert-action-summary">
+          <button
+            type="button"
+            className="shrink-0 rounded-lg border p-1 text-left hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:border-border"
+            onClick={() => setAlertEditorOpen(true)}
+            disabled={layoutField === undefined}
+            aria-label="Edit alert"
+            title="Edit alert"
+            data-testid="alert-layout-preview"
+          >
+            <AlertLayoutPreview layout={layout} className="w-36" />
+          </button>
+          {widgetFields.map((field) => (
+            <div key={field.id} className="min-w-0 flex-1">
+              <SettingRow
+                field={field}
+                values={step.parameters}
+                variables={availableVariables}
+                onChange={(value) => setValue(field.id, value)}
+              />
+            </div>
+          ))}
+        </div>
       )}
       {fields
-        .filter((field) => layoutOpen || !alertLayoutFields.includes(field.id))
+        .filter((field) => !compactFieldIds.has(field.id))
         .map((field) => (
           <SettingRow
             key={field.id}
@@ -123,6 +141,22 @@ export function ActionSettingsEditor({
             onChange={(value) => setValue(field.id, value)}
           />
         ))}
+      {alertEditorOpen && layoutField && (
+        <Dialog open onOpenChange={setAlertEditorOpen}>
+          <AlertLayoutDialogBody
+            field={withoutHelp(layoutField)}
+            value={layout}
+            availableVariables={availableVariables}
+            onDone={(next) => {
+              if (next !== null) {
+                setValue(layoutField.id, next);
+              }
+              setAlertEditorOpen(false);
+            }}
+            onCancel={() => setAlertEditorOpen(false)}
+          />
+        </Dialog>
+      )}
       {outputs.length > 0 && (
         <p className="text-xs text-muted-foreground" data-testid="text-action-outputs">
           Later steps can use: {outputs.map((output) => output.path).join(", ")}.
