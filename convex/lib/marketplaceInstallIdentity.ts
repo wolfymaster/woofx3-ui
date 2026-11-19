@@ -39,11 +39,6 @@ export function listingManifestId(listing: ListingManifestRef): string {
   return manifestId ? manifestId : listing.id;
 }
 
-/** The install key barkloader accepts: `{manifest id}:{version}:{sha7}`. */
-export function marketplaceInstallKey(manifestId: string, version: string, sha256: string): string {
-  return `${manifestId}:${version}:${sha256.slice(0, 7)}`;
-}
-
 /** Install provenance as a `moduleRepository` row carries it. */
 export interface MarketplaceProvenance {
   marketplaceListingId?: string;

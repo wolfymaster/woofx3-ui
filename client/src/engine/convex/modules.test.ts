@@ -37,26 +37,6 @@ beforeEach(() => {
   result = null;
 });
 
-describe("modules.useMarketplaceInstallRequest", () => {
-  test("installs the listing with the approved permissions and endpoints", async () => {
-    result = { moduleKey: "obs:1.2.0:abcdef1" };
-    const install = renderInScope(() => convexModulesGateway.useMarketplaceInstallRequest());
-    const answer = await install("listing-1", ["chat:read"], ["obs-websocket"]);
-    expect(calls).toEqual([
-      {
-        name: "marketplace:installModule",
-        args: {
-          instanceId,
-          marketplaceModuleId: "listing-1",
-          approvedPermissions: ["chat:read"],
-          approvedLocalEndpoints: ["obs-websocket"],
-        },
-      },
-    ]);
-    expect(answer).toEqual({ moduleKey: "obs:1.2.0:abcdef1" });
-  });
-});
-
 describe("modules.useLicensedInstallRequest", () => {
   test("installs the listing with its key and approvals, and passes the engine's answer on", async () => {
     result = { status: "installed", moduleKey: "obs:1.2.0:abcdef1" };

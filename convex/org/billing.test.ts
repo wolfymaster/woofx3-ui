@@ -156,11 +156,12 @@ const REFUSED: Array<[string, Call]> = [
     (t, s) => as(t, s.adminId).mutation(api.instances.update, { instanceId: s.instanceId, name: "Renamed" }),
   ],
   [
-    "a module install (marketplace.installModule)",
+    "a module install (marketplace.installWithLicense)",
     (t, s) =>
-      as(t, s.adminId).action(api.marketplace.installModule, {
+      as(t, s.adminId).action(api.marketplace.installWithLicense, {
         instanceId: s.instanceId,
-        marketplaceModuleId: "module-1",
+        listingId: "module-1",
+        licenseKey: "W3X-KEY",
         approvedPermissions: [],
         approvedLocalEndpoints: [],
       }),

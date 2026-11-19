@@ -179,18 +179,6 @@ export function unapprovedLocalEndpoints<T extends { id: string }>(
   return next.filter((endpoint) => !known.has(endpoint.id));
 }
 
-/**
- * The ids of the endpoints `manifest` declares that are not in `approved`.
- * The server-side half of the install review: an install is refused while
- * this is non-empty, like a permission nobody approved.
- */
-export function unapprovedLocalEndpointIds(manifest: unknown, approved: readonly string[]): string[] {
-  const known = new Set(approved);
-  return readLocalEndpoints(manifest)
-    .map((endpoint) => endpoint.id)
-    .filter((id) => !known.has(id));
-}
-
 /** The setting keys an endpoint names, host first. */
 export function localSettingKeys(endpoint: LocalEndpoint): string[] {
   return [endpoint.hostSetting, endpoint.portSetting, ...(endpoint.passwordSetting ? [endpoint.passwordSetting] : [])];

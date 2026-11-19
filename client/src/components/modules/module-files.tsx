@@ -1,3 +1,4 @@
+import { INSTALL_TO_BROWSE_MESSAGE } from "@shared/module-files";
 import {
   ChevronDown,
   ChevronRight,
@@ -219,6 +220,8 @@ export function ModuleFilesTab({ files }: { files: ModuleFiles }) {
         </Button>
       </div>
     );
+  } else if (list.list.notInstalled) {
+    body = <p className="text-sm text-muted-foreground">{INSTALL_TO_BROWSE_MESSAGE}</p>;
   } else if (!list.list.available) {
     body = (
       <p className="text-sm text-muted-foreground">

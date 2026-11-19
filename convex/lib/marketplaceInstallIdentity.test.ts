@@ -4,27 +4,14 @@ import {
   installedVersionsByListing,
   laterEditionInstalled,
   listingManifestId,
-  marketplaceInstallKey,
   moduleInstalled,
   resolveProvenance,
 } from "./marketplaceInstallIdentity";
 
-const SHA = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-
 describe("install keys", () => {
-  test("a first edition keeps the key it always had: its listing id is its manifest id", () => {
-    const edition1 = { id: "cozy", moduleKey: "cozy" };
-    expect(marketplaceInstallKey(listingManifestId(edition1), "1.4.2", SHA)).toBe("cozy:1.4.2:abcdef0");
-    // The key every install sent before editions, `{listing id}:{version}:{sha7}`.
-    expect(marketplaceInstallKey(listingManifestId(edition1), "1.4.2", SHA)).toBe(
-      `${edition1.id}:1.4.2:${SHA.slice(0, 7)}`
-    );
-  });
-
-  test("a later edition installs under its manifest id, which barkloader computes from the archive", () => {
-    const edition2 = { id: "cozy-v2", moduleKey: "cozy" };
-    expect(listingManifestId(edition2)).toBe("cozy");
-    expect(marketplaceInstallKey(listingManifestId(edition2), "2.0.0", SHA)).toBe("cozy:2.0.0:abcdef0");
+  test("a first edition installs under its listing id, a later one under its manifest id", () => {
+    expect(listingManifestId({ id: "cozy", moduleKey: "cozy" })).toBe("cozy");
+    expect(listingManifestId({ id: "cozy-v2", moduleKey: "cozy" })).toBe("cozy");
   });
 
   test("a marketplace that predates editions sends no moduleKey; its listing id is the manifest id", () => {

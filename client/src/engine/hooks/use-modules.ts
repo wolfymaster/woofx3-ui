@@ -42,10 +42,6 @@ export function useEngineWorkflowsRequest() {
 }
 
 /** Starts a marketplace install or update; its progress and outcome arrive under the returned key. */
-export function useMarketplaceInstallRequest() {
-  return useEngineGateway().modules.useMarketplaceInstallRequest();
-}
-
 /** Installs a held listing with its license key. Needs an engine with the `marketplace.licenseKeys` capability. */
 export function useLicensedInstallRequest() {
   return useEngineGateway().modules.useLicensedInstallRequest();

@@ -101,23 +101,15 @@ export async function contentAccessFor(ctx: ActionCtx, instanceId: Id<"instances
 }
 
 /**
- * Fetches what a listing installs -- a module archive's download URL or a
- * bundle -- for an account.
- *
- * Asked anonymously first, at the instance's own access, because that is how
- * a free listing's content is served and it keeps the instance's catalog
- * slice in force: a listing hidden from it answers 404 and nothing more. A
- * 401 means the listing is visible but not free, and only then is it asked
- * again with the write token as the buyer. The marketplace serves it only if
- * that account holds the listing, so this never decides who may have it.
+ * Fetches a bundle's content for an account that has already claimed the
+ * listing with `acquireListing`. With the write token the account asks as
+ * the buyer; without it `acquireListing` only let a free listing through,
+ * and the marketplace serves that to anyone. The marketplace decides who may
+ * have the content either way, so this never does.
  */
-export async function fetchListingContent(path: string, content: ContentAccess): Promise<unknown> {
-  try {
+export async function fetchClaimedListingContent(path: string, content: ContentAccess): Promise<unknown> {
+  if (!commerceConfigured()) {
     return await marketplaceGet(path, content.access);
-  } catch (err) {
-    if (!(err instanceof MarketplaceError) || err.status !== 401 || !commerceConfigured()) {
-      throw err;
-    }
   }
   return await marketplaceAuthed(`${path}${queryString({ buyerRef: content.buyerRef })}`, "GET");
 }

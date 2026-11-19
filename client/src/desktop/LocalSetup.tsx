@@ -15,7 +15,7 @@ import {
 } from "@/engine/hooks/use-dashboard";
 import { useApplyDefaultSeedRequest, useDefaultSeedStatus } from "@/engine/hooks/use-default-seed";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
-import { useInstalledModules, useMarketplaceInstallRequest, useModuleDetailRequest } from "@/engine/hooks/use-modules";
+import { useInstalledModules, useLicensedInstallRequest, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 import { localDashboardCatalog } from "@/lib/dashboard-widgets/local-catalog";
@@ -44,7 +44,7 @@ interface Consent {
  * follows from the setup page once the module is in.
  */
 function useFinishConnect() {
-  const install = useMarketplaceInstallRequest();
+  const install = useLicensedInstallRequest();
   const panels = useDashboardPanels();
   const addPanel = useAddDashboardPanelRequest();
   const setPanelWidgets = useSetDashboardPanelWidgetsRequest();
@@ -56,7 +56,21 @@ function useFinishConnect() {
         throw new Error("Still loading; try again in a moment.");
       }
       if (!twitchModuleInstalled(modules)) {
-        await install(TWITCH_MODULE_ID, consent.permissions, consent.localEndpoints);
+        const outcome = await install({
+          listingId: TWITCH_MODULE_ID,
+          licenseKey: null,
+          approvedPermissions: consent.permissions,
+          approvedLocalEndpoints: consent.localEndpoints,
+        });
+        if (outcome.status === "needs_approval") {
+          const asked = [
+            ...outcome.unapproved,
+            ...outcome.unapprovedLocalEndpoints.map((id) => `local endpoint ${id}`),
+          ];
+          throw new Error(
+            `Twitch asks for access that was not approved (${asked.join(", ")}). Review it and try again.`
+          );
+        }
       }
       if (panels.length === 0) {
         const panelId = await addPanel(DEFAULT_DASHBOARD_LAYOUT_ID, "Main");

@@ -6,7 +6,7 @@
  * data a namespace serves from either store (the macro pad), so only the
  * Convex adapter (client/src/engine/convex/) may call it; boundary.test.ts
  * holds every other file to that. An entry naming a function
- * (`marketplace.installModule`) claims that function alone, leaving the rest
+ * (`marketplaceCatalog.installBundle`) claims that function alone, leaving the rest
  * of the module cloud-owned.
  *
  * Cloud-owned modules (accounts, instances, provisioning, the legacy module listings, Twitch
@@ -27,7 +27,6 @@ export const ENGINE_NAMESPACE_MODULES = {
     "moduleDetail",
     "moduleStorage",
     // The rest of marketplace is the legacy module listings, which the cloud serves.
-    "marketplace.installModule",
     "marketplaceCatalog.installBundle",
     // The rest of moduleRepository is the cloud's own record of installed modules.
     "moduleRepository.list",

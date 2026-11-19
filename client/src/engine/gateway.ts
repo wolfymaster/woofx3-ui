@@ -89,7 +89,7 @@ import type {
   ModuleAsset,
   ModuleDetail,
   ModuleFileContent,
-  ModuleFileList,
+  ModuleFileListing,
   ModuleId,
   ModuleLicenseLookup,
   ModuleOAuthConnect,
@@ -475,7 +475,7 @@ export interface ModulesGateway {
   useSettingsRequest(): (moduleId: string) => Promise<ModuleSettingValue[]>;
   /** Rejects for a key the module does not declare as a setting. */
   useUpdateSettingRequest(): (moduleId: string, key: string, value: string) => Promise<ModuleSettingValue>;
-  useFilesRequest(): (moduleId: string) => Promise<ModuleFileList>;
+  useFilesRequest(): (moduleId: string) => Promise<ModuleFileListing>;
   useFileRequest(): (moduleId: string, path: string) => Promise<ModuleFileContent>;
   /**
    * Asks the engine to uninstall; resolves with the key its outcome is
@@ -486,17 +486,6 @@ export interface ModulesGateway {
   useReconcileUninstallRequest(): (moduleId: ModuleId, correlationKey: string) => Promise<{ stillInstalled: boolean }>;
   /** The engine's workflows, by id and name. */
   useWorkflowsRequest(): () => Promise<EngineWorkflowOption[]>;
-  /**
-   * Installs or updates a marketplace module; resolves with the key its
-   * progress and outcome are reported under (`transientEvents`), not when it
-   * is installed. Rejects when the archive declares a permission or local
-   * endpoint (by id) outside the approved lists.
-   */
-  useMarketplaceInstallRequest(): (
-    marketplaceModuleId: string,
-    approvedPermissions: string[],
-    approvedLocalEndpoints: string[]
-  ) => Promise<{ moduleKey: string }>;
   /**
    * Installs or updates a module or theme listing the account holds, on an
    * engine with the `marketplace.licenseKeys` capability. Rejects with the

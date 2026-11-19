@@ -154,19 +154,6 @@ function useBundleInstallRequest() {
   );
 }
 
-function useMarketplaceInstallRequest() {
-  const installModule = useInstanceAction(api.marketplace.installModule);
-  return useCallback(
-    (marketplaceModuleId: string, approvedPermissions: string[], approvedLocalEndpoints: string[]) =>
-      installModule({
-        marketplaceModuleId,
-        approvedPermissions,
-        approvedLocalEndpoints,
-      }),
-    [installModule]
-  );
-}
-
 function toLicensedInstallOutcome(
   result: FunctionReturnType<typeof api.marketplace.installWithLicense>
 ): LicensedInstallOutcome {
@@ -260,7 +247,6 @@ export const convexModulesGateway: ModulesGateway = {
   useUninstallRequest,
   useReconcileUninstallRequest,
   useWorkflowsRequest,
-  useMarketplaceInstallRequest,
   useLicensedInstallRequest,
   useLicenseKeyRequest,
   useBundleInstallRequest,

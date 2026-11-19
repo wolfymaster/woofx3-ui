@@ -20,7 +20,6 @@ import type {
   MarketplaceCatalogQuery,
   MarketplaceInstallRequest,
   MarketplaceInstallResult,
-  MarketplaceListingInspection,
   ModuleFileContent,
   ModuleFileList,
   ModuleSetting,
@@ -156,7 +155,6 @@ type DirectFakeSurface = Pick<
   | "marketplaceSearch"
   | "marketplaceCounts"
   | "marketplaceGetAuthor"
-  | "inspectMarketplaceListing"
   | "installMarketplaceListing"
   | "getInstalledModuleLicense"
   | "installMarketplaceBundle"
@@ -267,8 +265,6 @@ export class FakeEngineState {
   catalogCounts: unknown | { refusedWith: number } = { counts: {}, total: 0 };
   /** The marketplace's answers to `/authors/{slug}` by slug, given the page asked for; a slug not here is refused with 404. */
   authors: Record<string, (query: MarketplaceAuthorQuery | undefined) => unknown> = {};
-  /** Listing inspections by id; an id not here is refused, as a paid listing is without a buyer token. */
-  inspections: Record<string, MarketplaceListingInspection> = {};
   /** License keys of installed modules by manifest id; a module not here has none. */
   moduleLicenses: Record<string, { listingId: string; key: string }> = {};
   /** What `installMarketplaceListing` and `installMarketplaceBundle` answer. */
@@ -871,15 +867,6 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
       throw new Error(marketplaceRefusal(404));
     }
     return author(query);
-  }
-
-  async inspectMarketplaceListing(listingId: string, buyerToken?: string): Promise<MarketplaceListingInspection> {
-    this.state.record("inspectMarketplaceListing", listingId, buyerToken);
-    const inspection = this.state.inspections[listingId];
-    if (inspection === undefined) {
-      throw new Error("Payment required");
-    }
-    return inspection;
   }
 
   async installMarketplaceListing(
