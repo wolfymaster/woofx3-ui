@@ -1,23 +1,60 @@
+import type { z } from "zod";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { Entitlements } from "../entitlements";
+import type {
+  accountDetailDtoSchema,
+  accountSummaryDtoSchema,
+  auditEntryDtoSchema,
+  engineDetailDtoSchema,
+  engineEventPathDtoSchema,
+  featureFlagCatalogDtoSchema,
+  featureFlagDtoSchema,
+  featureFlagRulesDtoSchema,
+  hostedStorageLimitsDtoSchema,
+  instanceDtoSchema,
+  instanceHealthDtoSchema,
+  invitationDtoSchema,
+  moduleStorageLimitDtoSchema,
+  notificationDtoSchema,
+  planSummaryDtoSchema,
+  provisioningDtoSchema,
+  referralCodeDtoSchema,
+  referralDtoSchema,
+  userDetailDtoSchema,
+  userDtoSchema,
+  userRefDtoSchema,
+} from "./contract";
 
 /**
  * What the ops API returns. Every response is built field by field from
- * these, never by spreading a document, so a secret added to a table later
+ * the contract's schemas (contract.ts), never by spreading a document, so a secret added to a table later
  * cannot reach the backoffice without someone writing it here. Never
  * returned: registration tokens, instance client secrets and webhook
  * secrets, invitation tokens, OAuth and platform tokens, session tokens,
  * and anything in authAccounts beyond the provider and its account id.
  */
 
-export interface UserDto {
-  id: string;
-  email: string | null;
-  name: string | null;
-  providers: { provider: string; providerAccountId: string }[];
-  createdAt: number;
-  lastSessionAt: number | null;
-}
+export type UserDto = z.infer<typeof userDtoSchema>;
+export type UserRefDto = z.infer<typeof userRefDtoSchema>;
+export type PlanSummaryDto = z.infer<typeof planSummaryDtoSchema>;
+export type AccountSummaryDto = z.infer<typeof accountSummaryDtoSchema>;
+export type InvitationDto = z.infer<typeof invitationDtoSchema>;
+export type InstanceDto = z.infer<typeof instanceDtoSchema>;
+export type ProvisioningDto = z.infer<typeof provisioningDtoSchema>;
+export type AuditEntryDto = z.infer<typeof auditEntryDtoSchema>;
+export type NotificationDto = z.infer<typeof notificationDtoSchema>;
+export type FeatureFlagRulesDto = z.infer<typeof featureFlagRulesDtoSchema>;
+export type FeatureFlagDto = z.infer<typeof featureFlagDtoSchema>;
+export type FeatureFlagCatalogDto = z.infer<typeof featureFlagCatalogDtoSchema>;
+export type UserDetailDto = z.infer<typeof userDetailDtoSchema>;
+export type AccountDetailDto = z.infer<typeof accountDetailDtoSchema>;
+export type EngineDetailDto = z.infer<typeof engineDetailDtoSchema>;
+export type ModuleStorageLimitDto = z.infer<typeof moduleStorageLimitDtoSchema>;
+export type EngineEventPathDto = z.infer<typeof engineEventPathDtoSchema>;
+export type InstanceHealthDto = z.infer<typeof instanceHealthDtoSchema>;
+export type ReferralDto = z.infer<typeof referralDtoSchema>;
+export type ReferralCodeDto = z.infer<typeof referralCodeDtoSchema>;
+export type HostedStorageLimitsDto = z.infer<typeof hostedStorageLimitsDtoSchema>;
 
 export function userDto(
   user: Doc<"users">,
@@ -37,20 +74,8 @@ export function userDto(
   };
 }
 
-export interface UserRefDto {
-  id: string;
-  email: string | null;
-  name: string | null;
-}
-
 export function userRefDto(user: Doc<"users">): UserRefDto {
   return { id: user._id, email: user.email ?? null, name: user.name ?? null };
-}
-
-export interface PlanSummaryDto {
-  plan: { key: string; name: string } | null;
-  features: string[];
-  limits: Record<string, number | null>;
 }
 
 export function planSummaryDto(entitlements: Entitlements): PlanSummaryDto {
@@ -59,16 +84,6 @@ export function planSummaryDto(entitlements: Entitlements): PlanSummaryDto {
     features: [...entitlements.features],
     limits: { ...entitlements.limits },
   };
-}
-
-export interface AccountSummaryDto {
-  id: string;
-  name: string;
-  owner: UserRefDto | null;
-  memberCount: number;
-  plan: { key: string; name: string } | null;
-  managedEngineCount: number;
-  createdAt: number;
 }
 
 export function accountSummaryDto(
@@ -89,16 +104,6 @@ export function accountSummaryDto(
   };
 }
 
-export interface InvitationDto {
-  id: string;
-  email: string | null;
-  platformLogin: string | null;
-  role: string;
-  status: string;
-  expiresAt: number;
-  createdAt: number;
-}
-
 export function invitationDto(invitation: Doc<"invitations">): InvitationDto {
   return {
     id: invitation._id,
@@ -109,18 +114,6 @@ export function invitationDto(invitation: Doc<"invitations">): InvitationDto {
     expiresAt: invitation.expiresAt,
     createdAt: invitation.createdAt,
   };
-}
-
-export interface InstanceDto {
-  id: string;
-  accountId: string;
-  name: string;
-  url: string;
-  hosting: "managed" | "external";
-  createdAt: number;
-  lastEngineActivityAt: number | null;
-  companionHostname: string | null;
-  marketplaceDevAccess: boolean;
 }
 
 export function instanceDto(instance: Doc<"instances">): InstanceDto {
@@ -135,32 +128,6 @@ export function instanceDto(instance: Doc<"instances">): InstanceDto {
     companionHostname: instance.companionHostname ?? null,
     marketplaceDevAccess: instance.marketplaceDevAccess ?? false,
   };
-}
-
-export interface ProvisioningDto {
-  id: string;
-  instanceId: string;
-  accountId: string;
-  maintenanceEngineId: string | null;
-  runId: string | null;
-  slug: string;
-  status: Doc<"engineProvisioning">["status"];
-  steps: { key: string; label: string; status: string; error: string | null; detail: string | null }[];
-  publicUrl: string | null;
-  reportedVersion: string | null;
-  error: string | null;
-  registrationAttempts: number;
-  upgrade: {
-    fromVersion: string;
-    toVersion: string;
-    startedAt: number;
-    attempt: number;
-    rollingBack: boolean;
-    outcome: string | null;
-    error: string | null;
-    acknowledged: boolean;
-  } | null;
-  createdAt: number;
 }
 
 export function provisioningDto(row: Doc<"engineProvisioning">): ProvisioningDto {
@@ -199,18 +166,6 @@ export function provisioningDto(row: Doc<"engineProvisioning">): ProvisioningDto
   };
 }
 
-export interface AuditEntryDto {
-  id: string;
-  caller: string | null;
-  actor: string;
-  action: string;
-  target: string;
-  reason: string | null;
-  request: string | null;
-  result: string;
-  at: number;
-}
-
 export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
   return {
     id: entry._id,
@@ -223,16 +178,6 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
     result: entry.result,
     at: entry.at,
   };
-}
-
-export interface ReferralDto {
-  referralId: string;
-  referrerAccountId: string | null;
-  code: string;
-  rewardCents: number;
-  capturedAt: number;
-  status: Doc<"referrals">["status"];
-  eligible: boolean;
 }
 
 export function referralDto(
@@ -249,17 +194,6 @@ export function referralDto(
     status: referral.status,
     eligible,
   };
-}
-
-export interface ReferralCodeDto {
-  code: string;
-  userId: string;
-  email: string | null;
-  rewardCents: number;
-  issuedBy: string;
-  issuedAt: number;
-  revokedAt: number | null;
-  referralCount: number;
 }
 
 export function referralCodeDto(
@@ -279,19 +213,6 @@ export function referralCodeDto(
   };
 }
 
-export interface NotificationDto {
-  id: string;
-  heading: string;
-  description: string;
-  link: string | null;
-  actionLabel: string | null;
-  audience: { kind: "all" } | { kind: "account"; accountId: string } | { kind: "user"; userId: string };
-  recipients: number;
-  delivering: boolean;
-  createdBy: string;
-  createdAt: number;
-}
-
 export function notificationDto(notification: Doc<"notifications">): NotificationDto {
   return {
     id: notification._id,
@@ -305,37 +226,6 @@ export function notificationDto(notification: Doc<"notifications">): Notificatio
     createdBy: notification.createdBy,
     createdAt: notification._creationTime,
   };
-}
-
-/** A flag's targeting, with every field present so the backoffice never guesses. */
-export interface FeatureFlagRulesDto {
-  users: string[];
-  accounts: string[];
-  instances: string[];
-  percent: number | null;
-  hosting: "managed" | "external" | null;
-  entitlement: string | null;
-}
-
-export interface FeatureFlagDto {
-  key: string;
-  description: string;
-  owner: string;
-  /** ISO date by which the flag should be gone. */
-  removeBy: string;
-  state: "off" | "on" | "rules";
-  rules: FeatureFlagRulesDto;
-  /** Past its removeBy date, so it is cleanup to do. */
-  overdue: boolean;
-  updatedAt: number;
-  /** The operator who last changed it. */
-  updatedBy: string;
-}
-
-/** Every flag and the entitlements a rule may name, as the backoffice's flag page reads them. */
-export interface FeatureFlagCatalogDto {
-  flags: FeatureFlagDto[];
-  entitlements: { key: string; description: string }[];
 }
 
 export function featureFlagDto(row: Doc<"featureFlags">, today: string): FeatureFlagDto {

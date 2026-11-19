@@ -19,7 +19,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the ba
       | Caller | Env | Routes |
       | --- | --- | --- |
       | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.referral`, `accounts.billingProjection`, `notifications.create` |
-      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `featureFlags.*`, `accounts.billingProjectionReset` |
+      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `featureFlags.*`, `referralCodes.*`, `accounts.billingProjectionReset` |
       | `legacy` | `OPS_API_SECRET` | every route; logged as deprecated on each request |
 
     - A route outside the caller's scope answers `403 forbidden_route`.
@@ -36,40 +36,31 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the ba
 - **Billing is not edited here.** Subscriptions, exemptions, discounts, tier changes and suspensions are the management plane's, changed in its own operator tooling; this API only receives the projection it pushes, and offers no route to write any of it.
 - **Audit:** `opsAuditLog` records every write, in the same mutation as the change, and every read of a single user or account. It is indexed by time, operator and target.
 
-| Route | Returns |
-|---|---|
-| `GET /api/ops/users?q=&cursor=` | Users, newest first. `q` is an email address exactly, a Twitch user id exactly, or words of the name. |
-| `GET /api/ops/users/:id` | A user, their account and instance memberships, and how many sessions are active. |
-| `GET /api/ops/accounts?q=&cursor=` | Accounts with owner, member count, plan and managed engine count; `q` searches the name. |
-| `GET /api/ops/accounts/:id` | An account, its members, pending invitations, resolved entitlements, instances, and each instance's provisioning. Billing is not part of it: the management plane owns it. |
-| `GET /api/ops/accounts/:id/referral` | Who referred the org's owner: `{ referralId, referrerAccountId, code, capturedAt, status, eligible }`, or `404` when the owner arrived without a valid referral link. `referrerAccountId` is the org the referrer owns, `null` when they have none. `eligible` is true only when the referred org exists, the referrer has a different org, and both owners have verified their email. The billing caller only; the audit log records the read. |
-| `GET /api/ops/engines?status=&cursor=` | Every `engineProvisioning` row, or those in one status, for drift checks against the maintenance API. |
-| `GET /api/ops/engines/module-storage-limits?cursor=` | Each managed engine's module storage limit (`storage.moduleStorageBytes` after its override), by maintenance engine id, a page at a time; `null` is unlimited. A page may hold fewer rows than its size: rows without a maintenance engine are skipped. The backoffice compares these with maintenance's replica sizes to flag engines over their limit. |
-| `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply), and `isLive`, whether its stream is live now. |
-| `GET /api/ops/instances/:id/health` | Live state, sync state, recent alerts and failing workflows. |
-| `GET /api/ops/feature-flags` | Every UI feature flag with its targeting, and the entitlements a rule may name. |
-| `GET /api/ops/audit?actor=&target=&cursor=` | The audit log, newest first, for one operator or one target. |
+## The contract
 
-List routes are cursor-paginated: pass back `cursor` until it is `null`.
+The routes, query parameters, request bodies, response shapes and error codes are one source: `convex/lib/ops/contract.ts`. It holds a Zod schema for every body, query and DTO, and a route table of name, method, path template, query, body, response and error codes. A route's name (`users.list`) is its OpenAPI `operationId` and the key in a caller's scope.
 
-Operators act on a customer's managed engine exactly as the customer could:
+Everything else derives from it, and nothing is copied by hand:
 
-| Route | Does |
-|---|---|
-| `POST /api/ops/engines/:instanceId/upgrade` | The customer's upgrade, to the offered release. |
-| `POST /api/ops/engines/:instanceId/retry` | The customer's retry of a failed run or registration. |
-| `POST /api/ops/engines/:instanceId/delete` | The customer's delete: the engine is torn down, and the instance stays. |
+- **The route matcher** (`convex/lib/ops/routes.ts`) is built from the table's path templates. The table is checked when the module loads: duplicate names or endpoints, a path outside `/api/ops/` or a parameter with no name throw at import.
+- **Request bodies** are parsed with the contract's schemas (`parseRequestBody`), so what the document says is what the handler enforces. A refused body answers `400` with the route's error code (`invalid_notification`, `invalid_feature_flag`, `invalid_storage_limits`, `invalid_billing_projection`) and the first problem as its message. Every body refuses a field the schema does not declare.
+- **DTO types** (`convex/lib/ops/dto.ts`) are `z.infer` of the contract's schemas, and each mapper is typed to return one.
+- **The OpenAPI 3.1 document** is `openapi/ops.json`, written by `bun run ops:openapi` with sorted keys. A test fails when the committed file differs from what the contract generates, so a contract change and its regenerated document land together. Read the document, not this page, for the list of routes, parameters and error codes.
 
-Operators also set what only an operator may:
+How the contract is checked:
 
-| Route | Does |
-|---|---|
-| `POST /api/ops/instances/:instanceId/storage-limits` | Replaces a managed engine's hosted storage override, `{ totalBytes?, fileBytes?, moduleStorageBytes? }` in bytes. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears the override. An engine someone else hosts answers `409 not_managed`. |
-| `POST /api/ops/feature-flags` | Creates a flag from `{ key, description, owner, removeBy, state, rules? }`. The key is a lowercase word then dot- or dash-separated words; an existing key answers `409 already_exists`. Under `state: "rules"` at least one rule is required, and a target id that names no user, account or engine answers `400 unknown_target`. |
-| `PUT /api/ops/feature-flags` | Retargets the flag its body names, with the same shape and refusals as a create. `state: "off"` or `"on"` clears its rules. |
-| `POST /api/ops/feature-flags/delete` | Deletes the flag named by `key` in the body. Its key travels in the body because keys contain dots, and a path segment cannot. |
-| `POST /api/ops/accounts/:id/billing-projection` | The management plane's billing projection: tier (or `null`), add-ons, standing and its dates, `interval`, `exemptUntil`, `spinDownAt`, `hasProviderSubscription`, `discount` (`{ label }` or `null`) and entitlement overrides (`limits` values may be `null` for unlimited). Stored in `orgBilling` unless an equal or newer version is already held (`{ applied: false, version }`); the same version with different contents answers `409 version_conflict`, which the plane must not retry. Unknown fields, unknown override keys, a feature both added and removed, and a `trialing` standing with no `trialEndsAt`, a `past_due` standing with no `graceEndsAt`, and an add-on code does not list answer `400 invalid_billing_projection`, so Convex must learn a field before the plane sends it. Once an org has a projection it drives its entitlements; an org without one is gated as one with no subscription was before billing existed. An applied push is audited with the actor and reason. A `version` above 2^31 - 1 (the plane's counter is a Postgres `integer`) answers `400 invalid_billing_projection`. |
-| `POST /api/ops/accounts/:id/billing-projection-reset` | Operator-only. Sets the org's stored projection version back to 0 so the plane's next push is applied, for a stuck version or a rebuilt plane counter; answers `{ previousVersion, version: 0 }`. Every other stored field stays, so entitlements do not change until a push arrives. `404 no_projection` when none is stored. Audited with the actor and the required reason. |
+- A test calls every route over HTTP against seeded data and parses each answer with that route's response schema, so a handler cannot drift from the document. `engines.act` is the one route it does not call, because the maintenance API answers it.
+- The DTO test walks every response for forbidden keys and for secret values.
+- A test checks that every caller scope names a real route and that every route is in some caller's scope.
+
+A consumer types its client from `openapi/ops.json` and validates what it receives: a response is `{ data }` and an error is `{ error: { code, message } }`, so parse `data` with the schema of the operation's `200` response before using it, and treat an answer that fails it as an error. Send `X-Woofx3-Actor` always, and `X-Woofx3-Reason` on every write. List routes are cursor-paginated: pass back `cursor` until it is `null`.
+
+Operators act on a customer's managed engine (`engines.act`: upgrade, retry, delete) exactly as the customer could, and set what only an operator may: a managed engine's hosted storage override, feature flags, notifications, and the billing projection reset.
+
+- **Hosted storage override:** `instances.setStorageLimits` replaces the whole override. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears it. An engine someone else hosts answers `409 not_managed`.
+- **Feature flags:** a create and an update carry the same whole definition. Under `state: "rules"` at least one rule is required, and a target id that names no user, account or instance answers `400 unknown_target`. A flag's key travels in the body of a removal because keys contain dots and a path segment cannot.
+- **Billing projection:** `accounts.billingProjection` stores the management plane's projection in `orgBilling` unless an equal or newer version is held (`{ applied: false, version }`). The same version with different contents answers `409 version_conflict`, which the plane must not retry. Unknown fields, unknown override keys, a feature both added and removed, a `trialing` standing with no `trialEndsAt`, a `past_due` standing with no `graceEndsAt`, a `suspended` standing with no reason and an add-on code does not list answer `400 invalid_billing_projection`, so Convex must learn a field before the plane sends it. A `version` above 2^31 - 1 (the plane's counter is a Postgres `integer`) is refused too. Once an org has a projection it drives its entitlements. An applied push is audited with the actor and reason.
+- **Billing projection reset:** operator-only. Sets the stored version back to 0 so the plane's next push is applied, for a stuck version or a rebuilt plane counter. Every other stored field stays, so entitlements do not change until a push arrives. `404 no_projection` when none is stored.
 
 - **One implementation:** both paths run `convex/lib/managedEngineActions.ts`. The provisioning row, the runs, the callbacks and a rollback are identical; only `upgrade.requestedBy` names the operator, as `{ operator: email }`.
 - **Not shown to the customer:** `provisioning.forInstance` strips `requestedBy`, and the customer sees the run like any other.
@@ -83,7 +74,7 @@ Operators also set what only an operator may:
 - A user's sign-up code is random and lives in `referralCodes`, made the first time they ask. A sign-up link carries it as `?ref=`; the client keeps it through sign-in and sends it once from onboarding to `referrals.capture`.
 - `capture` writes one immutable `referrals` row per referred user, and the first capture wins. An unknown code, a self-referral, a user more than a day old and a repeat all answer success and write nothing, so the call does not reveal which codes exist.
 - The row names the org once it exists; that status change is the only edit a row ever gets.
-- The plane learns of an org through `ensure`, then reads its referral with the route above. The `ensure` contract carries no body, so the referral is not sent with it. If the plane later wants it pushed at creation, the contract must accept it first; `ensureOrgBilling` in `convex/billingCommands.ts` is where it would be passed.
+- The plane learns of an org through `ensure`, then reads its referral with `accounts.referral`. The `ensure` contract carries no body, so the referral is not sent with it. If the plane later wants it pushed at creation, the contract must accept it first; `ensureOrgBilling` in `convex/billingCommands.ts` is where it would be passed.
 - No reward exists in this app. Rewards are the plane's.
 
 ## Consequences

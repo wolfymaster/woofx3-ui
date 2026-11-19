@@ -10,6 +10,7 @@
     "includes": [
       "**",
       "!convex/_generated",
+      "!openapi",
       "!convex/lib/billing/schema.generated.ts",
       "!convex/lib/billing/openapi.billing.json",
       "!convex/lib/marketplace/schema.generated.ts",

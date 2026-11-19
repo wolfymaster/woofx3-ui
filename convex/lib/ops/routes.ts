@@ -1,150 +1,59 @@
-/** The ops API's routes, under OPS_PATH_PREFIX. Ids are Convex ids or maintenance engine ids, never paths. */
+import { z } from "zod";
+import { OPS_PATH_PREFIX, OPS_ROUTES, type OpsRoute, type OpsRouteSpec } from "./contract";
 
-export const OPS_PATH_PREFIX = "/api/ops/";
-
-export type OpsRoute =
-  | { method: "GET"; name: "users.list" }
-  | { method: "GET"; name: "users.get"; userId: string }
-  | { method: "GET"; name: "accounts.list" }
-  | { method: "GET"; name: "accounts.get"; accountId: string }
-  | { method: "GET"; name: "accounts.referral"; accountId: string }
-  | { method: "GET"; name: "engines.list" }
-  | { method: "GET"; name: "engines.moduleStorageLimits" }
-  | { method: "GET"; name: "engines.eventPath" }
-  | { method: "GET"; name: "engines.byMaintenanceId"; engineId: string }
-  | { method: "GET"; name: "instances.health"; instanceId: string }
-  | { method: "GET"; name: "audit.list" }
-  | { method: "GET"; name: "notifications.list" }
-  | { method: "GET"; name: "featureFlags.list" }
-  | { method: "GET"; name: "referralCodes.list" }
-  | { method: "POST"; name: "referralCodes.issue" }
-  | { method: "PATCH"; name: "referralCodes.update"; code: string }
-  | { method: "POST"; name: "referralCodes.revoke"; code: string }
-  | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
-  | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
-  | { method: "POST"; name: "notifications.create" }
-  | { method: "POST"; name: "notifications.delete"; notificationId: string }
-  | { method: "POST"; name: "featureFlags.create" }
-  | { method: "POST"; name: "featureFlags.remove" }
-  | { method: "PUT"; name: "featureFlags.update" }
-  | { method: "POST"; name: "accounts.billingProjection"; accountId: string }
-  | { method: "POST"; name: "accounts.billingProjectionReset"; accountId: string };
-
-/** What an operator can do to a customer's managed engine, exactly as the customer could. */
-export type EngineAction = "upgrade" | "retry" | "delete";
-
-const ENGINE_ACTIONS: ReadonlySet<string> = new Set<EngineAction>(["upgrade", "retry", "delete"]);
+export { OPS_PATH_PREFIX };
+export type { EngineAction, OpsRoute } from "./contract";
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
+const ID_SEGMENT_SCHEMA = z.string().regex(SEGMENT);
+
+interface CompiledRoute {
+  spec: OpsRouteSpec;
+  /** Each path segment: a literal to equal, or the name of the parameter it carries. */
+  segments: readonly ({ literal: string } | { param: string })[];
+}
+
+const COMPILED: readonly CompiledRoute[] = (OPS_ROUTES as readonly OpsRouteSpec[]).map((spec) => {
+  return {
+    spec,
+    segments: spec.path
+      .slice(OPS_PATH_PREFIX.length)
+      .split("/")
+      .map((segment) => {
+        const param = /^\{(\w+)\}$/.exec(segment)?.[1];
+        return param === undefined ? { literal: segment } : { param };
+      }),
+  };
+});
 
 /** The route a request names, or null for one the API does not serve. */
 export function matchOpsRoute(method: string, pathname: string): OpsRoute | null {
   if (!pathname.startsWith(OPS_PATH_PREFIX)) {
     return null;
   }
-  const segments = pathname.slice(OPS_PATH_PREFIX.length).replace(/\/$/, "").split("/");
-  if (!segments.every((segment) => SEGMENT.test(segment))) {
+  const requested = pathname.slice(OPS_PATH_PREFIX.length).replace(/\/$/, "").split("/");
+  if (!requested.every((segment) => SEGMENT.test(segment))) {
     return null;
   }
-  const [first, second, third] = segments;
-  if (method === "POST") {
-    if (segments.length === 3 && first === "engines" && second && third && ENGINE_ACTIONS.has(third)) {
-      return { method, name: "engines.act", instanceId: second, action: third as EngineAction };
+  for (const { spec, segments } of COMPILED) {
+    if (spec.method !== method || segments.length !== requested.length) {
+      continue;
     }
-    if (segments.length === 3 && first === "instances" && second && third === "storage-limits") {
-      return { method, name: "instances.setStorageLimits", instanceId: second };
+    const params: Record<string, string> = {};
+    const matches = segments.every((expected, index) => {
+      const actual = requested[index] ?? "";
+      if ("literal" in expected) {
+        return expected.literal === actual;
+      }
+      if (!(spec.params?.[expected.param] ?? ID_SEGMENT_SCHEMA).safeParse(actual).success) {
+        return false;
+      }
+      params[expected.param] = actual;
+      return true;
+    });
+    if (matches) {
+      return { method: spec.method, name: spec.name, ...params } as OpsRoute;
     }
-    if (segments.length === 3 && first === "accounts" && second && third === "billing-projection") {
-      return { method, name: "accounts.billingProjection", accountId: second };
-    }
-    if (segments.length === 3 && first === "accounts" && second && third === "billing-projection-reset") {
-      return { method, name: "accounts.billingProjectionReset", accountId: second };
-    }
-    if (segments.length === 1 && first === "referral-codes") {
-      return { method, name: "referralCodes.issue" };
-    }
-    if (segments.length === 3 && first === "referral-codes" && second && third === "revoke") {
-      return { method, name: "referralCodes.revoke", code: second };
-    }
-    if (segments.length === 1 && first === "notifications") {
-      return { method, name: "notifications.create" };
-    }
-    if (segments.length === 1 && first === "feature-flags") {
-      return { method, name: "featureFlags.create" };
-    }
-    if (segments.length === 2 && first === "feature-flags" && second === "delete") {
-      return { method, name: "featureFlags.remove" };
-    }
-    if (segments.length === 3 && first === "notifications" && second && third === "delete") {
-      return { method, name: "notifications.delete", notificationId: second };
-    }
-    return null;
   }
-  if (method === "PATCH") {
-    if (segments.length === 2 && first === "referral-codes" && second) {
-      return { method, name: "referralCodes.update", code: second };
-    }
-    return null;
-  }
-  if (method === "PUT") {
-    if (segments.length === 1 && first === "feature-flags") {
-      return { method, name: "featureFlags.update" };
-    }
-    return null;
-  }
-  if (method !== "GET") {
-    return null;
-  }
-  switch (segments.length) {
-    case 1:
-      if (first === "users") {
-        return { method, name: "users.list" };
-      }
-      if (first === "accounts") {
-        return { method, name: "accounts.list" };
-      }
-      if (first === "engines") {
-        return { method, name: "engines.list" };
-      }
-      if (first === "audit") {
-        return { method, name: "audit.list" };
-      }
-      if (first === "notifications") {
-        return { method, name: "notifications.list" };
-      }
-      if (first === "feature-flags") {
-        return { method, name: "featureFlags.list" };
-      }
-      if (first === "referral-codes") {
-        return { method, name: "referralCodes.list" };
-      }
-      return null;
-    case 2:
-      if (first === "engines" && second === "module-storage-limits") {
-        return { method, name: "engines.moduleStorageLimits" };
-      }
-      if (first === "engines" && second === "event-path") {
-        return { method, name: "engines.eventPath" };
-      }
-      if (first === "users" && second) {
-        return { method, name: "users.get", userId: second };
-      }
-      if (first === "accounts" && second) {
-        return { method, name: "accounts.get", accountId: second };
-      }
-      return null;
-    case 3:
-      if (first === "accounts" && second && third === "referral") {
-        return { method, name: "accounts.referral", accountId: second };
-      }
-      if (first === "engines" && second === "by-maintenance-id" && third) {
-        return { method, name: "engines.byMaintenanceId", engineId: third };
-      }
-      if (first === "instances" && second && third === "health") {
-        return { method, name: "instances.health", instanceId: second };
-      }
-      return null;
-    default:
-      return null;
-  }
+  return null;
 }

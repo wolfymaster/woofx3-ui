@@ -5,7 +5,7 @@ import { ENTITLEMENT_FEATURES } from "../lib/entitlements";
 import type { FeatureFlagRules } from "../lib/featureFlags";
 import { recordOpsAudit } from "../lib/ops/audit";
 import { type FeatureFlagCatalogDto, type FeatureFlagDto, featureFlagDto } from "../lib/ops/dto";
-import { type FeatureFlagRulesInput, featureFlagInputValidator } from "../lib/ops/featureFlagRequest";
+import { type FeatureFlagRulesInput, featureFlagInputValidator } from "../lib/ops/featureFlagInput";
 
 /**
  * Feature flags as operators manage them: every flag with its targeting, and

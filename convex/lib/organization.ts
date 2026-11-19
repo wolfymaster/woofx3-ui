@@ -35,6 +35,14 @@ export type PlanTier = Infer<typeof planTierValidator>;
 export type BillingInterval = Infer<typeof billingIntervalValidator>;
 export type SubscriptionState = Infer<typeof subscriptionStateValidator>;
 
+export const LIFECYCLE_REASONS = [
+  "no_payment_method",
+  "payment_failed",
+  "subscription_canceled",
+  "provider_ended",
+  "operator",
+] as const;
+
 /** Why a projected standing is past_due or suspended. */
 export const lifecycleReasonValidator = v.union(
   v.literal("no_payment_method"),

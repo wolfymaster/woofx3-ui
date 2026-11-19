@@ -1,0 +1,4712 @@
+{
+  "components": {
+    "parameters": {},
+    "schemas": {
+      "AccountDetailDto": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AccountSummaryDto"
+          },
+          "entitlements": {
+            "$ref": "#/components/schemas/PlanSummaryDto"
+          },
+          "instances": {
+            "items": {
+              "properties": {
+                "instance": {
+                  "$ref": "#/components/schemas/InstanceDto"
+                },
+                "provisioning": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProvisioningDto"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "instance",
+                "provisioning"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "invitations": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationDto"
+            },
+            "type": "array"
+          },
+          "members": {
+            "items": {
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "user": {
+                  "$ref": "#/components/schemas/UserRefDto"
+                }
+              },
+              "required": [
+                "user",
+                "role"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "account",
+          "members",
+          "invitations",
+          "entitlements",
+          "instances"
+        ],
+        "type": "object"
+      },
+      "AccountPage": {
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "items": {
+              "$ref": "#/components/schemas/AccountSummaryDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "AccountSummaryDto": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "managedEngineCount": {
+            "type": "integer"
+          },
+          "memberCount": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRefDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "owner",
+          "memberCount",
+          "plan",
+          "managedEngineCount",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "AuditEntryDto": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "type": "number"
+          },
+          "caller": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "caller",
+          "actor",
+          "action",
+          "target",
+          "reason",
+          "request",
+          "result",
+          "at"
+        ],
+        "type": "object"
+      },
+      "AuditEntryPage": {
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "BillingProjectionRequest": {
+        "additionalProperties": false,
+        "description": "Unknown fields are refused, so Convex must learn a field before the plane sends it. `overrides.limits` is an object of amounts; null is unlimited.",
+        "properties": {
+          "accountId": {
+            "description": "Must equal the account in the path.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "addOns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "discount": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exemptUntil": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "graceEndsAt": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasProviderSubscription": {
+            "type": "boolean"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "enum": [
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overrides": {
+            "properties": {
+              "addFeatures": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "limits": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "removeFeatures": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "addFeatures",
+              "removeFeatures",
+              "limits"
+            ],
+            "type": "object"
+          },
+          "periodEnd": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_payment_method",
+                  "payment_failed",
+                  "subscription_canceled",
+                  "provider_ended",
+                  "operator"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spinDownAt": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standing": {
+            "enum": [
+              "trialing",
+              "active",
+              "past_due",
+              "suspended",
+              "exempt"
+            ],
+            "type": "string"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "enum": [
+                  "starter",
+                  "pro"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trialEndsAt": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accountId",
+          "version",
+          "tier",
+          "addOns",
+          "standing",
+          "reason",
+          "trialEndsAt",
+          "graceEndsAt",
+          "periodEnd",
+          "interval",
+          "exemptUntil",
+          "spinDownAt",
+          "hasProviderSubscription",
+          "discount",
+          "overrides"
+        ],
+        "type": "object"
+      },
+      "EngineActionResult": {
+        "anyOf": [
+          {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "started",
+                  "already_running",
+                  "already_current",
+                  "not_started"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "retried": {
+                "enum": [
+                  "provisioning",
+                  "registration",
+                  "upgrade"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "retried"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "deprovisioning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "deprovisioning"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": "Upgrade answers `outcome`, retry answers `retried`, delete answers `deprovisioning`."
+      },
+      "EngineDetailDto": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountSummaryDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hostedStorage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostedStorageLimitsDto"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the instance is gone or someone else hosts the engine."
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstanceDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isLive": {
+            "description": "True while the owner's stream is live.",
+            "type": "boolean"
+          },
+          "provisioning": {
+            "$ref": "#/components/schemas/ProvisioningDto"
+          }
+        },
+        "required": [
+          "provisioning",
+          "instance",
+          "account",
+          "hostedStorage",
+          "isLive"
+        ],
+        "type": "object"
+      },
+      "EngineEventPathDto": {
+        "properties": {
+          "eventsTargetSetAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "enum": [
+              "queue",
+              "webhook"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "name",
+          "path",
+          "eventsTargetSetAt"
+        ],
+        "type": "object"
+      },
+      "EngineEventPathPage": {
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "items": {
+              "$ref": "#/components/schemas/EngineEventPathDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "FeatureFlagCatalogDto": {
+        "properties": {
+          "entitlements": {
+            "items": {
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "description"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureFlagDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "flags",
+          "entitlements"
+        ],
+        "type": "object"
+      },
+      "FeatureFlagDto": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "overdue": {
+            "description": "Past its removeBy date, so it is cleanup to do.",
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "removeBy": {
+            "description": "ISO date by which the flag should be gone.",
+            "format": "date",
+            "type": "string"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/FeatureFlagRulesDto"
+          },
+          "state": {
+            "enum": [
+              "off",
+              "on",
+              "rules"
+            ],
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "updatedBy": {
+            "description": "The operator who last changed it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description",
+          "owner",
+          "removeBy",
+          "state",
+          "rules",
+          "overdue",
+          "updatedAt",
+          "updatedBy"
+        ],
+        "type": "object"
+      },
+      "FeatureFlagKeyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "A lowercase word, then dot- or dash-separated words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "FeatureFlagRequest": {
+        "additionalProperties": false,
+        "description": "The whole definition: a create and an update carry the same shape; the key names the row.",
+        "properties": {
+          "description": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "key": {
+            "description": "A lowercase word, then dot- or dash-separated words.",
+            "type": "string"
+          },
+          "owner": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "removeBy": {
+            "format": "date",
+            "type": "string"
+          },
+          "rules": {
+            "additionalProperties": false,
+            "description": "Required under state \"rules\" and refused otherwise.",
+            "properties": {
+              "accounts": {
+                "items": {
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              "entitlement": {
+                "description": "A key of the entitlement catalog, as `featureFlags.list` returns it.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "hosting": {
+                "enum": [
+                  "managed",
+                  "external"
+                ],
+                "type": "string"
+              },
+              "instances": {
+                "items": {
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              "percent": {
+                "description": "A whole number from 0 to 100.",
+                "type": "number"
+              },
+              "users": {
+                "items": {
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "state": {
+            "enum": [
+              "off",
+              "on",
+              "rules"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description",
+          "owner",
+          "removeBy",
+          "state"
+        ],
+        "type": "object"
+      },
+      "FeatureFlagRulesDto": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "entitlement": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hosting": {
+            "enum": [
+              "managed",
+              "external",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "instances": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "percent": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "users": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "users",
+          "accounts",
+          "instances",
+          "percent",
+          "hosting",
+          "entitlement"
+        ],
+        "type": "object"
+      },
+      "HostedStorageLimits": {
+        "description": "Null is unlimited.",
+        "properties": {
+          "fileBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "moduleStorageBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "totalBytes",
+          "fileBytes",
+          "moduleStorageBytes"
+        ],
+        "type": "object"
+      },
+      "HostedStorageLimitsDto": {
+        "properties": {
+          "effective": {
+            "$ref": "#/components/schemas/HostedStorageLimits"
+          },
+          "inherited": {
+            "$ref": "#/components/schemas/HostedStorageLimits"
+          },
+          "override": {
+            "$ref": "#/components/schemas/HostedStorageOverride"
+          }
+        },
+        "required": [
+          "inherited",
+          "override",
+          "effective"
+        ],
+        "type": "object"
+      },
+      "HostedStorageOverride": {
+        "description": "A field left out inherits the account's limit; null is unlimited.",
+        "properties": {
+          "fileBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "moduleStorageBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalBytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "InstanceDto": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "companionHostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "hosting": {
+            "enum": [
+              "managed",
+              "external"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastEngineActivityAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "marketplaceDevAccess": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "name",
+          "url",
+          "hosting",
+          "createdAt",
+          "lastEngineActivityAt",
+          "companionHostname",
+          "marketplaceDevAccess"
+        ],
+        "type": "object"
+      },
+      "InstanceHealthDto": {
+        "properties": {
+          "failingWorkflows": {
+            "items": {
+              "properties": {
+                "engineWorkflowId": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "since": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "engineWorkflowId",
+                "reason",
+                "since"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "instance": {
+            "$ref": "#/components/schemas/InstanceDto"
+          },
+          "live": {
+            "properties": {
+              "isLive": {
+                "type": "boolean"
+              },
+              "lastUpdateSource": {
+                "type": "string"
+              },
+              "lastUpdatedAt": {
+                "type": "number"
+              },
+              "startedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "isLive",
+              "startedAt",
+              "lastUpdatedAt",
+              "lastUpdateSource"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "recentAlerts": {
+            "items": {
+              "properties": {
+                "createdAt": {
+                  "type": "number"
+                },
+                "engineAlertId": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "engineAlertId",
+                "status",
+                "error",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sync": {
+            "properties": {
+              "consecutiveErrorCount": {
+                "type": "integer"
+              },
+              "lastDurationMs": {
+                "type": "number"
+              },
+              "lastError": {
+                "type": "string"
+              },
+              "lastSyncedAt": {
+                "type": "number"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "lastSyncedAt",
+              "lastError",
+              "consecutiveErrorCount",
+              "lastDurationMs"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "instance",
+          "live",
+          "sync",
+          "recentAlerts",
+          "failingWorkflows"
+        ],
+        "type": "object"
+      },
+      "InvitationDto": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "platformLogin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "platformLogin",
+          "role",
+          "status",
+          "expiresAt",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "IssueReferralCodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "description": "The operator named on the code.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "email": {
+            "description": "The user the code is issued to; they must already have signed in.",
+            "type": "string"
+          },
+          "rewardCents": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "email",
+          "rewardCents",
+          "actor"
+        ],
+        "type": "object"
+      },
+      "ModuleStorageLimitDto": {
+        "properties": {
+          "engineId": {
+            "description": "The maintenance API's engine id.",
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "limitBytes": {
+            "description": "Null is unlimited.",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "engineId",
+          "instanceId",
+          "limitBytes"
+        ],
+        "type": "object"
+      },
+      "ModuleStorageLimitPage": {
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleStorageLimitDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "NotificationDto": {
+        "properties": {
+          "actionLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "audience": {
+            "oneOf": [
+              {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "all"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "accountId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "account"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "accountId"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "user"
+                    ],
+                    "type": "string"
+                  },
+                  "userId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "userId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "delivering": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "heading": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recipients": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "heading",
+          "description",
+          "link",
+          "actionLabel",
+          "audience",
+          "recipients",
+          "delivering",
+          "createdBy",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "NotificationPage": {
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "NotificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actionLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The link button's text, at most 24 characters; only with a link."
+          },
+          "audience": {
+            "oneOf": [
+              {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "all"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "accountId": {
+                    "description": "The account the notification is for.",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "account"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "accountId"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "user"
+                    ],
+                    "type": "string"
+                  },
+                  "userId": {
+                    "description": "The user the notification is for.",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "userId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "description": {
+            "maxLength": 150,
+            "minLength": 1,
+            "type": "string"
+          },
+          "heading": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An in-app path starting with \"/\" or an https:// URL, at most 500 characters."
+          },
+          "requestId": {
+            "description": "Makes a repeated request answer the notification already created.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId",
+          "heading",
+          "description",
+          "audience"
+        ],
+        "type": "object"
+      },
+      "PlanRef": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "type": "object"
+      },
+      "PlanSummaryDto": {
+        "properties": {
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limits": {
+            "additionalProperties": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "description": "Null is unlimited.",
+            "type": "object"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "plan",
+          "features",
+          "limits"
+        ],
+        "type": "object"
+      },
+      "ProvisioningDto": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "maintenanceEngineId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registrationAttempts": {
+            "type": "integer"
+          },
+          "reportedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "requested",
+              "provisioning",
+              "ready",
+              "registering",
+              "registered",
+              "upgrading",
+              "failed",
+              "deprovisioning",
+              "deleted",
+              "stopping",
+              "stopped",
+              "starting"
+            ],
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "status",
+                "error",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "upgrade": {
+            "properties": {
+              "acknowledged": {
+                "type": "boolean"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fromVersion": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rollingBack": {
+                "type": "boolean"
+              },
+              "startedAt": {
+                "type": "number"
+              },
+              "toVersion": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "fromVersion",
+              "toVersion",
+              "startedAt",
+              "attempt",
+              "rollingBack",
+              "outcome",
+              "error",
+              "acknowledged"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "instanceId",
+          "accountId",
+          "maintenanceEngineId",
+          "runId",
+          "slug",
+          "status",
+          "steps",
+          "publicUrl",
+          "reportedVersion",
+          "error",
+          "registrationAttempts",
+          "upgrade",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "ProvisioningPage": {
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "items": {
+              "$ref": "#/components/schemas/ProvisioningDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "ReferralCodeDto": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuedAt": {
+            "type": "number"
+          },
+          "issuedBy": {
+            "type": "string"
+          },
+          "referralCount": {
+            "type": "integer"
+          },
+          "revokedAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rewardCents": {
+            "type": "integer"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "userId",
+          "email",
+          "rewardCents",
+          "issuedBy",
+          "issuedAt",
+          "revokedAt",
+          "referralCount"
+        ],
+        "type": "object"
+      },
+      "ReferralCodePage": {
+        "properties": {
+          "codes": {
+            "items": {
+              "$ref": "#/components/schemas/ReferralCodeDto"
+            },
+            "type": "array"
+          },
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "codes",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "ReferralDto": {
+        "properties": {
+          "capturedAt": {
+            "type": "number"
+          },
+          "code": {
+            "type": "string"
+          },
+          "eligible": {
+            "description": "True only when the referred org exists, the referrer has a different org, and both owners verified their email.",
+            "type": "boolean"
+          },
+          "referralId": {
+            "type": "string"
+          },
+          "referrerAccountId": {
+            "description": "The org the referrer owns; null when they have none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rewardCents": {
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "captured",
+              "org_created"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "referralId",
+          "referrerAccountId",
+          "code",
+          "rewardCents",
+          "capturedAt",
+          "status",
+          "eligible"
+        ],
+        "type": "object"
+      },
+      "RevokeReferralCodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "description": "The operator named on the code.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor"
+        ],
+        "type": "object"
+      },
+      "StorageLimitsRequest": {
+        "additionalProperties": false,
+        "description": "Replaces the engine's whole override. A field left out inherits the account's limit, null is unlimited, and `{}` clears the override.",
+        "properties": {
+          "fileBytes": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "moduleStorageBytes": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "totalBytes": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "UpdateReferralCodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "description": "The operator named on the code.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rewardCents": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rewardCents",
+          "actor"
+        ],
+        "type": "object"
+      },
+      "UserDetailDto": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "name",
+                "role"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "activeSessionCount": {
+            "type": "integer"
+          },
+          "instances": {
+            "items": {
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "instanceId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "instanceId",
+                "accountId",
+                "name",
+                "role"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserDto"
+          }
+        },
+        "required": [
+          "user",
+          "accounts",
+          "instances",
+          "activeSessionCount"
+        ],
+        "type": "object"
+      },
+      "UserDto": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastSessionAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "providers": {
+            "items": {
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "providerAccountId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "providerAccountId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "providers",
+          "createdAt",
+          "lastSessionAt"
+        ],
+        "type": "object"
+      },
+      "UserPage": {
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "items": {
+              "$ref": "#/components/schemas/UserDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "UserRefDto": {
+        "properties": {
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "A per-caller secret of at least 43 characters. Each caller may use only the routes in its scope; any other route answers 403.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "What the internal backoffice reads about users, accounts and engines, and what the maintenance billing process pushes. Servers call it with a per-caller secret; it sends no CORS headers.",
+    "title": "woofx3 ops API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/ops/accounts": {
+      "get": {
+        "operationId": "accounts.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "What to search for.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AccountPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Accounts with owner, member count, plan and managed engine count; `q` searches the name."
+      }
+    },
+    "/api/ops/accounts/{accountId}": {
+      "get": {
+        "operationId": "accounts.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AccountDetailDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "An account, its members, pending invitations, resolved entitlements, instances and each instance's provisioning. Audited."
+      }
+    },
+    "/api/ops/accounts/{accountId}/billing-projection": {
+      "post": {
+        "operationId": "accounts.billingProjection",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingProjectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "properties": {
+                        "applied": {
+                          "type": "boolean"
+                        },
+                        "version": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "applied",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, invalid_billing_projection."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: version_conflict."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Stores the management plane's billing projection unless an equal or newer version is held (`applied: false`)."
+      }
+    },
+    "/api/ops/accounts/{accountId}/billing-projection-reset": {
+      "post": {
+        "operationId": "accounts.billingProjectionReset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "properties": {
+                        "previousVersion": {
+                          "type": "integer"
+                        },
+                        "version": {
+                          "enum": [
+                            0
+                          ],
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "previousVersion",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found, no_projection."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Sets the stored projection version back to 0 so the plane's next push is applied."
+      }
+    },
+    "/api/ops/accounts/{accountId}/referral": {
+      "get": {
+        "operationId": "accounts.referral",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Who referred the org's owner, or 404 when the owner arrived without a valid referral link. Audited."
+      }
+    },
+    "/api/ops/audit": {
+      "get": {
+        "operationId": "audit.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AuditEntryPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, one_filter."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The audit log, newest first, for one operator or one target, not both."
+      }
+    },
+    "/api/ops/engines": {
+      "get": {
+        "operationId": "engines.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "requested",
+                "provisioning",
+                "ready",
+                "registering",
+                "registered",
+                "upgrading",
+                "failed",
+                "deprovisioning",
+                "deleted",
+                "stopping",
+                "stopped",
+                "starting"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProvisioningPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, invalid_status."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Every engine provisioning row, or those in one status, for drift checks against the maintenance API."
+      }
+    },
+    "/api/ops/engines/by-maintenance-id/{engineId}": {
+      "get": {
+        "operationId": "engines.byMaintenanceId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engineId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EngineDetailDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "One managed engine's provisioning row, instance, account and hosted storage limits."
+      }
+    },
+    "/api/ops/engines/event-path": {
+      "get": {
+        "operationId": "engines.eventPath",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EngineEventPathPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Which route each registered engine posts its events to."
+      }
+    },
+    "/api/ops/engines/module-storage-limits": {
+      "get": {
+        "operationId": "engines.moduleStorageLimits",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ModuleStorageLimitPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Each managed engine's module storage limit after its override, by maintenance engine id. A page may hold fewer rows than its size: engines without a maintenance id or hosted elsewhere are skipped."
+      }
+    },
+    "/api/ops/engines/{instanceId}/{action}": {
+      "post": {
+        "operationId": "engines.act",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instanceId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "enum": [
+                "upgrade",
+                "retry",
+                "delete"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EngineActionResult"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: refused."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: maintenance_error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "An operator's upgrade, retry or delete of a customer's managed engine, exactly as the customer could."
+      }
+    },
+    "/api/ops/feature-flags": {
+      "get": {
+        "operationId": "featureFlags.list",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FeatureFlagCatalogDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Every UI feature flag with its targeting, and the entitlements a rule may name."
+      },
+      "post": {
+        "operationId": "featureFlags.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeatureFlagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FeatureFlagDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, invalid_feature_flag, unknown_target."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: already_exists."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Creates a flag."
+      },
+      "put": {
+        "operationId": "featureFlags.update",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeatureFlagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FeatureFlagDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, invalid_feature_flag, unknown_target."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Retargets the flag the body names, with the same shape and refusals as a create."
+      }
+    },
+    "/api/ops/feature-flags/delete": {
+      "post": {
+        "operationId": "featureFlags.remove",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeatureFlagKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, invalid_feature_flag."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Deletes the flag the body names. The key travels in the body because keys contain dots."
+      }
+    },
+    "/api/ops/instances/{instanceId}/health": {
+      "get": {
+        "operationId": "instances.health",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instanceId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/InstanceHealthDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Live state, sync state, recent alerts and failing workflows."
+      }
+    },
+    "/api/ops/instances/{instanceId}/storage-limits": {
+      "post": {
+        "operationId": "instances.setStorageLimits",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instanceId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageLimitsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/HostedStorageLimitsDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, invalid_storage_limits."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_managed."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replaces a managed engine's hosted storage override."
+      }
+    },
+    "/api/ops/notifications": {
+      "get": {
+        "operationId": "notifications.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/NotificationPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Notifications, newest first."
+      },
+      "post": {
+        "operationId": "notifications.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/NotificationDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, invalid_notification."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Creates a notification; a repeated `requestId` answers the one already created."
+      }
+    },
+    "/api/ops/notifications/{notificationId}/delete": {
+      "post": {
+        "operationId": "notifications.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notificationId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Deletes a notification."
+      }
+    },
+    "/api/ops/referral-codes": {
+      "get": {
+        "operationId": "referralCodes.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodePage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Referral codes, newest first."
+      },
+      "post": {
+        "operationId": "referralCodes.issue",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueReferralCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodeDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, validation_failed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: user_not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: code_exists."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Issues a code to the user with the given email."
+      }
+    },
+    "/api/ops/referral-codes/{code}": {
+      "patch": {
+        "operationId": "referralCodes.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReferralCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodeDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, validation_failed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: code_revoked."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Changes a code's reward."
+      }
+    },
+    "/api/ops/referral-codes/{code}/revoke": {
+      "post": {
+        "operationId": "referralCodes.revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeReferralCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodeDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, validation_failed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: code_revoked."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Revokes a code."
+      }
+    },
+    "/api/ops/users": {
+      "get": {
+        "operationId": "users.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "What to search for.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Users, newest first. `q` is an email address exactly, a Twitch user id exactly, or words of the name."
+      }
+    },
+    "/api/ops/users/{userId}": {
+      "get": {
+        "operationId": "users.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserDetailDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "A user, their account and instance memberships, and how many sessions are active. Audited."
+      }
+    }
+  },
+  "webhooks": {}
+}

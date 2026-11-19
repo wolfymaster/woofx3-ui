@@ -3,24 +3,29 @@ import type { Doc } from "../_generated/dataModel";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import { accountEntitlements } from "../lib/entitlementAccess";
 import {
+  type AccountDetailDto,
   type AccountSummaryDto,
   type AuditEntryDto,
   accountSummaryDto,
   auditEntryDto,
+  type EngineDetailDto,
+  type EngineEventPathDto,
   type InstanceDto,
+  type InstanceHealthDto,
   type InvitationDto,
   instanceDto,
   invitationDto,
-  type PlanSummaryDto,
+  type ModuleStorageLimitDto,
   type ProvisioningDto,
   planSummaryDto,
   provisioningDto,
+  type UserDetailDto,
   type UserDto,
   type UserRefDto,
   userDto,
   userRefDto,
 } from "../lib/ops/dto";
-import { type HostedStorageLimitsDto, hostedStorageLimitsDto } from "./storageLimits";
+import { hostedStorageLimitsDto } from "./storageLimits";
 
 /**
  * The ops API's reads. Only ops/http.ts calls these, after it has
@@ -79,13 +84,6 @@ export const searchUsers = internalQuery({
     };
   },
 });
-
-export interface UserDetailDto {
-  user: UserDto;
-  accounts: { accountId: string; name: string; role: string }[];
-  instances: { instanceId: string; accountId: string; name: string; role: string }[];
-  activeSessionCount: number;
-}
 
 export const getUser = internalQuery({
   args: { userId: v.string() },
@@ -155,14 +153,6 @@ export const searchAccounts = internalQuery({
   },
 });
 
-export interface AccountDetailDto {
-  account: AccountSummaryDto;
-  members: { user: UserRefDto; role: string }[];
-  invitations: InvitationDto[];
-  entitlements: PlanSummaryDto;
-  instances: { instance: InstanceDto; provisioning: ProvisioningDto | null }[];
-}
-
 export const getAccount = internalQuery({
   args: { accountId: v.string() },
   handler: async (ctx, args): Promise<AccountDetailDto | null> => {
@@ -210,16 +200,6 @@ export const getAccount = internalQuery({
     };
   },
 });
-
-export interface EngineDetailDto {
-  provisioning: ProvisioningDto;
-  instance: InstanceDto | null;
-  account: AccountSummaryDto | null;
-  /** Null when the instance is gone or someone else hosts the engine, so it has no hosted storage. */
-  hostedStorage: HostedStorageLimitsDto | null;
-  /** True while the owner's stream is live; false when it is offline or the instance has never reported. */
-  isLive: boolean;
-}
 
 export const engineByMaintenanceId = internalQuery({
   args: { engineId: v.string() },
@@ -279,14 +259,6 @@ export const listEngines = internalQuery({
   },
 });
 
-/** One managed engine's module storage limit, by the id the maintenance API knows it by. */
-export interface ModuleStorageLimitDto {
-  engineId: string;
-  instanceId: string;
-  /** Null is unlimited. */
-  limitBytes: number | null;
-}
-
 /**
  * Every managed engine's module storage limit, a page at a time, so the
  * backoffice can flag the engines whose replica has grown past theirs. Rows
@@ -317,20 +289,6 @@ export const moduleStorageLimits = internalQuery({
     return { page, cursor: result.isDone ? null : result.continueCursor };
   },
 });
-
-export interface InstanceHealthDto {
-  instance: InstanceDto;
-  live: { isLive: boolean; startedAt: string | null; lastUpdatedAt: number; lastUpdateSource: string } | null;
-  sync: {
-    status: string;
-    lastSyncedAt: number;
-    lastError: string;
-    consecutiveErrorCount: number;
-    lastDurationMs: number;
-  } | null;
-  recentAlerts: { engineAlertId: string; status: string; error: string | null; createdAt: number }[];
-  failingWorkflows: { engineWorkflowId: string; reason: string | null; since: string }[];
-}
 
 export const instanceHealth = internalQuery({
   args: { instanceId: v.string() },
@@ -458,14 +416,6 @@ async function toAccountSummary(ctx: QueryCtx, account: Doc<"accounts">): Promis
     await accountEntitlements(ctx, account._id),
     engines.filter((engine) => engine.status !== "deleted").length
   );
-}
-
-/** Which route a registered engine posts its events to; the gate for retiring the webhook route's events. */
-export interface EngineEventPathDto {
-  instanceId: string;
-  name: string;
-  path: "queue" | "webhook";
-  eventsTargetSetAt: number | null;
 }
 
 export const engineEventPaths = internalQuery({
