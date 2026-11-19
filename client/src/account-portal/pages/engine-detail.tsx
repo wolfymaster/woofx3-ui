@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { toast } from "@/hooks/use-toast";
@@ -20,6 +21,7 @@ import { useLogger } from "@/lib/logger-context";
 import { $currentInstanceId } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { type EngineHealth, engineHealth, type HealthTone } from "../engine-health";
+import { isUnsettled, visibleModules } from "../engine-modules";
 import { useOrganization } from "../organization-context";
 import { ENGINES_PATH } from "../portal-pages";
 import { RenameDialog } from "../rename-dialog";
@@ -31,6 +33,9 @@ const TONE_CLASS: Record<HealthTone, string> = {
   bad: "text-destructive",
   neutral: "text-muted-foreground",
 };
+
+/** A search box only helps once the list is long enough to scan by eye no longer. */
+const MODULES_SEARCHABLE_FROM = 8;
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -212,41 +217,62 @@ function People({ instanceId }: { instanceId: Id<"instances"> }) {
   );
 }
 
-const MODULE_STATUS_LABEL: Record<string, string> = {
-  installed: "Installed",
-  pending: "Pending",
-  delivering: "Installing",
-  failed: "Failed",
-};
-
+/** Modules that are not running yet or failed are listed first; one that is running needs no mark. */
 function Modules({ instanceId }: { instanceId: Id<"instances"> }) {
   const modules = useQuery(api.moduleRepository.list, { instanceId });
+  const [search, setSearch] = useState("");
+  const unsettled = modules?.filter(isUnsettled) ?? [];
+  const shown = visibleModules(modules ?? [], search);
   return (
     <Card data-testid="card-engine-modules">
       <CardHeader>
-        <CardTitle>Modules</CardTitle>
-        <CardDescription>What is installed on this engine.</CardDescription>
+        <CardTitle className="flex items-center gap-2">
+          Modules
+          {modules ? <Badge variant="secondary">{modules.length}</Badge> : null}
+        </CardTitle>
+        <CardDescription>
+          {unsettled.length > 0 ? `${unsettled.length} not running yet or failed.` : "Everything installed is running."}
+        </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         {modules === undefined ? <p className="text-sm text-muted-foreground">Loading modules...</p> : null}
         {modules?.length === 0 ? <p className="text-sm text-muted-foreground">No modules installed.</p> : null}
-        <ul className="divide-y">
-          {modules?.map((module) => (
+        {modules && modules.length > MODULES_SEARCHABLE_FROM ? (
+          <Input
+            aria-label="Search modules"
+            placeholder="Search modules..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            data-testid="input-search-modules"
+          />
+        ) : null}
+        <ul className="max-h-80 divide-y overflow-y-auto" data-testid="list-engine-modules">
+          {shown.map((module) => (
             <li
               key={module._id}
-              className="flex items-center justify-between gap-3 py-2.5"
+              className="flex items-center justify-between gap-3 py-2"
               data-testid={`row-engine-module-${module._id}`}
             >
               <span className="min-w-0">
-                <span className="block truncate font-medium">{module.name}</span>
-                <span className="text-xs text-muted-foreground">{module.version}</span>
+                <span className="block truncate text-sm font-medium">{module.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {[module.version, module.category, module.author].filter(Boolean).join(" · ")}
+                </span>
+                {isUnsettled(module) && module.statusMessage ? (
+                  <span className="block truncate text-xs text-destructive">{module.statusMessage}</span>
+                ) : null}
               </span>
-              <Badge variant={module.status === "failed" ? "destructive" : "secondary"}>
-                {MODULE_STATUS_LABEL[module.status ?? "installed"] ?? "Installed"}
-              </Badge>
+              {isUnsettled(module) ? (
+                <Badge variant={module.status === "failed" ? "destructive" : "secondary"}>
+                  {module.status === "failed" ? "Failed" : "Installing"}
+                </Badge>
+              ) : null}
             </li>
           ))}
         </ul>
+        {modules && modules.length > 0 && shown.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No module matches that search.</p>
+        ) : null}
       </CardContent>
     </Card>
   );
