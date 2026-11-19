@@ -159,6 +159,7 @@ import type * as lib_ops_callers from "../lib/ops/callers.js";
 import type * as lib_ops_contract from "../lib/ops/contract.js";
 import type * as lib_ops_dto from "../lib/ops/dto.js";
 import type * as lib_ops_featureFlagInput from "../lib/ops/featureFlagInput.js";
+import type * as lib_ops_openapi from "../lib/ops/openapi.js";
 import type * as lib_ops_request from "../lib/ops/request.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
 import type * as lib_orgBilling from "../lib/orgBilling.js";
@@ -497,6 +498,7 @@ declare const fullApi: ApiFromModules<{
   "lib/ops/contract": typeof lib_ops_contract;
   "lib/ops/dto": typeof lib_ops_dto;
   "lib/ops/featureFlagInput": typeof lib_ops_featureFlagInput;
+  "lib/ops/openapi": typeof lib_ops_openapi;
   "lib/ops/request": typeof lib_ops_request;
   "lib/ops/routes": typeof lib_ops_routes;
   "lib/orgBilling": typeof lib_orgBilling;
