@@ -799,7 +799,8 @@
           "hosting": {
             "enum": [
               "managed",
-              "external"
+              "external",
+              null
             ],
             "type": [
               "string",
