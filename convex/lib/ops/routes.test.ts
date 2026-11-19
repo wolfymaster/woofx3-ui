@@ -61,6 +61,24 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("POST", "/api/ops/accounts/k1/referral")).toBeNull();
   });
 
+  it("names the referral code routes by method", () => {
+    expect(matchOpsRoute("GET", "/api/ops/referral-codes")).toEqual({ method: "GET", name: "referralCodes.list" });
+    expect(matchOpsRoute("POST", "/api/ops/referral-codes")).toEqual({ method: "POST", name: "referralCodes.issue" });
+    expect(matchOpsRoute("PATCH", "/api/ops/referral-codes/abc")).toEqual({
+      method: "PATCH",
+      name: "referralCodes.update",
+      code: "abc",
+    });
+    expect(matchOpsRoute("POST", "/api/ops/referral-codes/abc/revoke")).toEqual({
+      method: "POST",
+      name: "referralCodes.revoke",
+      code: "abc",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/referral-codes/abc")).toBeNull();
+    expect(matchOpsRoute("PATCH", "/api/ops/referral-codes")).toBeNull();
+    expect(matchOpsRoute("DELETE", "/api/ops/referral-codes/abc")).toBeNull();
+  });
+
   it("names the billing projection reset, as a POST only", () => {
     expect(matchOpsRoute("POST", "/api/ops/accounts/k1/billing-projection-reset")).toEqual({
       method: "POST",

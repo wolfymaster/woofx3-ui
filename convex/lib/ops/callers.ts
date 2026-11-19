@@ -49,6 +49,10 @@ const BACKOFFICE_SCOPES: readonly OpsRouteName[] = [
   "featureFlags.update",
   "featureFlags.remove",
   "accounts.billingProjectionReset",
+  "referralCodes.list",
+  "referralCodes.issue",
+  "referralCodes.update",
+  "referralCodes.revoke",
 ];
 
 /**
