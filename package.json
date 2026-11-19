@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "check": "tsc",
     "billing:types": "bun run scripts/generate-billing-types.ts",
+    "ops:openapi": "bun run scripts/generate-ops-openapi.ts",
     "marketplace:types": "bun run scripts/generate-marketplace-types.ts",
     "check:convex": "tsc -p convex/tsconfig.json",
     "test": "bun test",
@@ -27,6 +28,7 @@
     "companion:test": "cargo test --manifest-path companion/core/Cargo.toml"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "7.3.4",
     "@auth/core": "^0.37.0",
     "@convex-dev/auth": "^0.0.91",
     "@convex-dev/migrations": "^0.3.7",
