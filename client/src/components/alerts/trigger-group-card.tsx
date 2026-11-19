@@ -119,47 +119,69 @@ export function TriggerGroupCard({
       className={cn("rounded-2xl border bg-card transition-colors duration-300", isOpen && "border-foreground/20")}
       data-testid={`trigger-card-${firstId}`}
     >
-      <div className="group relative flex items-center gap-2 py-2.5 pl-3.5 pr-2.5">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={isOpen}
-          aria-label={`${title}. ${isOpen ? "Close" : "Open"}`}
-          className="h-[52px] w-3 shrink-0 rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
-          data-testid={`trigger-toggle-${firstId}`}
-        />
-        <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
-          {!isOpen && (
+      {!isOpen && (
+        <div className="group relative flex items-center gap-2 py-2.5 pl-3.5 pr-2.5">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={false}
+            aria-label={`${title}. Open`}
+            className="h-[52px] w-3 shrink-0 rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
+            data-testid={`trigger-toggle-${firstId}`}
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
             <span className="text-base font-medium leading-snug decoration-muted-foreground/70 underline-offset-4 group-hover:underline group-hover:decoration-dotted">
               {sentence}
             </span>
-          )}
-          <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
-            {!anyOn && (
-              <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
-            )}
-            <TriggerGroupChips workflows={group.members.map((member) => member.row)} />
-            {unhealthy && (
-              <span className="relative z-10 shrink-0">
-                <NotRunningBadge health={unhealthy} />
-              </span>
-            )}
-            {!isOpen && <span className="truncate">{summary}</span>}
-          </span>
+            <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
+              {!anyOn && (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
+              )}
+              <TriggerGroupChips workflows={group.members.map((member) => member.row)} />
+              {unhealthy && (
+                <span className="relative z-10 shrink-0">
+                  <NotRunningBadge health={unhealthy} />
+                </span>
+              )}
+              <span className="truncate">{summary}</span>
+            </span>
+          </div>
+          <div className="relative z-10 flex h-11 w-14 shrink-0 items-center justify-center">
+            <Switch
+              checked={anyOn}
+              disabled={isSwitching}
+              onCheckedChange={() => void switchWorkflows(group.members, !anyOn)}
+              aria-label="Trigger on"
+              data-testid={`trigger-enabled-${firstId}`}
+            />
+          </div>
         </div>
-        <div className="relative z-10 flex h-11 w-14 shrink-0 items-center justify-center">
-          <Switch
-            checked={anyOn}
-            disabled={isSwitching}
-            onCheckedChange={() => void switchWorkflows(group.members, !anyOn)}
-            aria-label="Trigger on"
-            data-testid={`trigger-enabled-${firstId}`}
-          />
-        </div>
-      </div>
+      )}
 
       {isOpen && (
-        <div className="card-reveal flex flex-col gap-4 border-t p-4 sm:p-5">
+        <div className="card-reveal flex flex-col gap-4 p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={cn("text-[13px] font-medium", !anyOn && "text-muted-foreground")}>
+                {anyOn ? "Trigger on" : "Trigger paused"}
+              </span>
+              {unhealthy && <NotRunningBadge health={unhealthy} />}
+            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex h-11 w-14 items-center justify-center">
+                <Switch
+                  checked={anyOn}
+                  disabled={isSwitching}
+                  onCheckedChange={() => void switchWorkflows(group.members, !anyOn)}
+                  aria-label="Trigger on"
+                  data-testid={`trigger-enabled-${firstId}`}
+                />
+              </div>
+              <Button variant="ghost" size="sm" onClick={onToggle} data-testid={`trigger-done-${firstId}`}>
+                Done
+              </Button>
+            </div>
+          </div>
           <SeparateOwnSteps parts={parts} />
           {parts.steps ? (
             editor(parts.steps, alsoRuns || undefined, workflows)
