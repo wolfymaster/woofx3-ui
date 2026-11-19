@@ -41,17 +41,14 @@ function planSummary(subscription: OrgSubscription, { prices, names }: PlanPrice
   return `${planLabel(subscription, names)} - ${formatPrice(prices, subscription.plan, subscription.interval)}`;
 }
 
-/** Every plan is listed, so the one an organization is on can be compared with the rest; none when it can't buy. */
-function offeredPlans(view: BillingView): PlanTier[] {
-  switch (view.kind) {
-    case "choose_plan":
-    case "no_plan":
-    case "provider_managed":
-      return PLAN_TIERS;
-    case "exempt":
-    case "no_subscription_needed":
-      return [];
-  }
+/** Every plan is listed whatever the organization has, so the one it is on can be compared with the rest. */
+function offeredPlans(): PlanTier[] {
+  return PLAN_TIERS;
+}
+
+/** Whether the plans are only shown: a self-hosted or complimentary organization has nothing to buy. */
+function isReadOnly(view: BillingView): boolean {
+  return view.kind === "exempt" || view.kind === "no_subscription_needed";
 }
 
 /** The plan an organization pays for through the provider; null before it has bought one. */
@@ -68,13 +65,10 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
   const [code, setCode] = useState("");
   const [preview, setPreview] = useState<{ code: string; discount: AppliedDiscount | null } | null>(null);
   const { busy, go } = useProviderRedirect();
-  const plans = offeredPlans(view);
+  const plans = offeredPlans();
+  const readOnly = isReadOnly(view);
   const changesExisting = view.kind === "provider_managed";
   const current = currentPlan(view);
-
-  if (plans.length === 0) {
-    return null;
-  }
 
   async function applyCode() {
     try {
@@ -112,9 +106,15 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
   return (
     <section className="space-y-6" data-testid="section-upgrade-options">
       <div className="space-y-1 text-center">
-        <h2 className="text-lg font-semibold">{changesExisting ? "All plans" : "Choose a plan"}</h2>
+        <h2 className="text-lg font-semibold">
+          {readOnly ? "Plans for hosted engines" : changesExisting ? "All plans" : "Choose a plan"}
+        </h2>
         <p className="text-sm text-muted-foreground">
-          {changesExisting ? "Compare plans and change yours any time." : "Pick the plan to run your engine on."}
+          {readOnly
+            ? "What a hosted engine runs on."
+            : changesExisting
+              ? "Compare plans and change yours any time."
+              : "Pick the plan to run your engine on."}
         </p>
       </div>
       <fieldset className="mx-auto flex w-fit items-center gap-1 rounded-lg bg-muted p-1">
@@ -155,24 +155,26 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between gap-4">
                 <PlanHighlights items={details.highlights} />
-                <Button
-                  disabled={busy || plan === current}
-                  variant={plan === current ? "outline" : "default"}
-                  onClick={() => choose(plan)}
-                  data-testid={`button-choose-${plan}`}
-                >
-                  {plan === current
-                    ? "Your plan"
-                    : changesExisting
-                      ? `Change to ${planName(names, plan)}`
-                      : `Choose ${planName(names, plan)}`}
-                </Button>
+                {readOnly ? null : (
+                  <Button
+                    disabled={busy || plan === current}
+                    variant={plan === current ? "outline" : "default"}
+                    onClick={() => choose(plan)}
+                    data-testid={`button-choose-${plan}`}
+                  >
+                    {plan === current
+                      ? "Your plan"
+                      : changesExisting
+                        ? `Change to ${planName(names, plan)}`
+                        : `Choose ${planName(names, plan)}`}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           );
         })}
       </div>
-      {changesExisting ? null : (
+      {changesExisting || readOnly ? null : (
         <Collapsible>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="h-auto px-0 text-sm font-normal underline underline-offset-2">

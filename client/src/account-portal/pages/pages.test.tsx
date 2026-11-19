@@ -140,7 +140,10 @@ const { default: SponsorshipPage } = await import("./sponsorship");
 
 const ACCOUNT_ID = "account-1" as Id<"accounts">;
 
+let engineHosting: "managed" | "external" = "managed";
+
 beforeEach(() => {
+  engineHosting = "managed";
   search = "";
   actionAnswers = { "prices:list": PRICES_READY };
   askedActions = [];
@@ -170,7 +173,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
       {
         instanceId: "instance-1" as Id<"instances">,
         name: "Main",
-        hosting: "managed" as const,
+        hosting: engineHosting,
         status: "registered" as const,
         canOpen: true,
       },
@@ -404,6 +407,14 @@ describe("Overview and Sponsorship pages", () => {
     expect(byTestId(renderer, "card-active-plan").length).toBe(1);
     expect(byTestId(renderer, "button-choose-starter").length).toBe(1);
     expect(byTestId(renderer, "button-choose-pro").length).toBe(1);
+  });
+
+  test("an organization with only self-hosted engines still sees every plan, with nothing to buy", async () => {
+    engineHosting = "external";
+    const renderer = await render("owner", <PlansPage />);
+    expect(byTestId(renderer, "card-plan-starter").length).toBe(1);
+    expect(byTestId(renderer, "card-plan-pro").length).toBe(1);
+    expect(byTestId(renderer, "button-choose-pro").length).toBe(0);
   });
 
   test("the plan chooser shows the plane's prices and plan names", async () => {
