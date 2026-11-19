@@ -1,4 +1,4 @@
-import type { Doc } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { Entitlements } from "../entitlements";
 
 /**
@@ -225,6 +225,60 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
   };
 }
 
+export interface ReferralDto {
+  referralId: string;
+  referrerAccountId: string | null;
+  code: string;
+  rewardCents: number;
+  capturedAt: number;
+  status: Doc<"referrals">["status"];
+  eligible: boolean;
+}
+
+export function referralDto(
+  referral: Doc<"referrals">,
+  referrerAccountId: Id<"accounts"> | null,
+  eligible: boolean
+): ReferralDto {
+  return {
+    referralId: referral._id,
+    referrerAccountId,
+    code: referral.code,
+    rewardCents: referral.rewardCents,
+    capturedAt: referral.capturedAt,
+    status: referral.status,
+    eligible,
+  };
+}
+
+export interface ReferralCodeDto {
+  code: string;
+  userId: string;
+  email: string | null;
+  rewardCents: number;
+  issuedBy: string;
+  issuedAt: number;
+  revokedAt: number | null;
+  referralCount: number;
+}
+
+export function referralCodeDto(
+  row: Doc<"referralCodes">,
+  email: string | null,
+  referralCount: number
+): ReferralCodeDto {
+  return {
+    code: row.code,
+    userId: row.userId,
+    email,
+    rewardCents: row.rewardCents,
+    issuedBy: row.issuedBy,
+    issuedAt: row.createdAt,
+    revokedAt: row.revokedAt ?? null,
+    referralCount,
+  };
+}
+
 export interface NotificationDto {
   id: string;
   heading: string;
@@ -250,6 +304,58 @@ export function notificationDto(notification: Doc<"notifications">): Notificatio
     delivering: notification.delivering,
     createdBy: notification.createdBy,
     createdAt: notification._creationTime,
+  };
+}
+
+/** A flag's targeting, with every field present so the backoffice never guesses. */
+export interface FeatureFlagRulesDto {
+  users: string[];
+  accounts: string[];
+  instances: string[];
+  percent: number | null;
+  hosting: "managed" | "external" | null;
+  entitlement: string | null;
+}
+
+export interface FeatureFlagDto {
+  key: string;
+  description: string;
+  owner: string;
+  /** ISO date by which the flag should be gone. */
+  removeBy: string;
+  state: "off" | "on" | "rules";
+  rules: FeatureFlagRulesDto;
+  /** Past its removeBy date, so it is cleanup to do. */
+  overdue: boolean;
+  updatedAt: number;
+  /** The operator who last changed it. */
+  updatedBy: string;
+}
+
+/** Every flag and the entitlements a rule may name, as the backoffice's flag page reads them. */
+export interface FeatureFlagCatalogDto {
+  flags: FeatureFlagDto[];
+  entitlements: { key: string; description: string }[];
+}
+
+export function featureFlagDto(row: Doc<"featureFlags">, today: string): FeatureFlagDto {
+  return {
+    key: row.key,
+    description: row.description,
+    owner: row.owner,
+    removeBy: row.removeBy,
+    state: row.state,
+    rules: {
+      users: [...(row.rules?.users ?? [])],
+      accounts: [...(row.rules?.accounts ?? [])],
+      instances: [...(row.rules?.instances ?? [])],
+      percent: row.rules?.percent ?? null,
+      hosting: row.rules?.hosting ?? null,
+      entitlement: row.rules?.entitlement ?? null,
+    },
+    overdue: row.removeBy < today,
+    updatedAt: row.updatedAt,
+    updatedBy: row.updatedBy,
   };
 }
 

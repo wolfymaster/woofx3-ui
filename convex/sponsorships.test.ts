@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConvexError } from "convex/values";
 import { api } from "./_generated/api";
+import { ACTION_LIMITS } from "./lib/actionRateLimits";
 import { newBackend } from "./lib/convexTest.testing";
 
 type Backend = ReturnType<typeof newBackend>;
@@ -212,6 +213,25 @@ describe("start", () => {
       code: "invalid_sponsorship_amount",
       message: "That amount isn't one we can accept for a sponsorship.",
     });
+  });
+});
+
+describe("start rate limit", () => {
+  test("refuses the call after the burst, per viewer", async () => {
+    const t = newBackend();
+    const { viewerId, otherId } = await seedUsers(t);
+    answers["/sponsorship-checkouts"] = { status: 200, body: { url: "https://pay.example/1", checkoutId: "c1" } };
+    const args = { amountCents: 25_000, interval: "month" } as const;
+    for (let n = 0; n < ACTION_LIMITS.sponsorshipStart.capacity; n++) {
+      await as(t, viewerId).action(api.sponsorships.start, args);
+    }
+    const asked = seen.length;
+    expect(await errorData(as(t, viewerId).action(api.sponsorships.start, args))).toMatchObject({
+      code: "rate_limited",
+      retryAfter: expect.any(Number),
+    });
+    expect(seen.length).toBe(asked);
+    await as(t, otherId).action(api.sponsorships.start, args);
   });
 });
 

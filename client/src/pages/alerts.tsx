@@ -3,7 +3,7 @@ import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
-import { CHAT_MESSAGE_EVENT, ChatCommandTriggers } from "@/components/alerts/chat-command-triggers";
+import { CHAT_MESSAGE_EVENT, ChatCommandsLink } from "@/components/alerts/chat-commands-link";
 import { AlertsDashboard } from "@/components/alerts/dashboard/alerts-dashboard";
 import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { EmptyState } from "@/components/common/empty-state";
@@ -207,7 +207,7 @@ export default function Alerts() {
                       headingLevel={nodePresets.length > 1 ? "h2" : "h1"}
                       onTest={() => openTest(preset.id)}
                     >
-                      {preset.event === CHAT_MESSAGE_EVENT && <ChatCommandTriggers />}
+                      {preset.event === CHAT_MESSAGE_EVENT && <ChatCommandsLink />}
                     </EventTriggerList>
                   ))}
                 </div>

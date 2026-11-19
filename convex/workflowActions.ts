@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
+import { appendSteps } from "@shared/workflow-merge";
 import {
   buildTriggerOptions,
   type CancelWorkflowResult,
@@ -141,6 +142,83 @@ export const createFromDefinition = action({
   },
 });
 
+type UpdateOutcome =
+  | { conflict: false; engineWorkflowId: string; revision?: number }
+  | { conflict: true; definition: unknown; revision?: number };
+
+/**
+ * Replace an engine workflow's definition. Waits for the engine's webhook echo
+ * before returning, unless the engine refused the update as made from an older
+ * copy: then nothing changed and no echo is coming.
+ */
+export async function updateWorkflowInEngine(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  instance: InstanceContext,
+  engineWorkflowId: string,
+  engineDefinition: WorkflowDefinition,
+  expectedRevision?: number,
+  correlationKey: string = crypto.randomUUID()
+): Promise<UpdateOutcome> {
+  await ctx.runMutation(internal.workflowInternal.insertPending, {
+    correlationKey,
+    instanceId,
+    op: "update",
+    expiresAt: Date.now() + CORRELATION_TIMEOUT_MS + 5_000,
+  });
+
+  const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+  const updated = await rpc.updateWorkflow(engineWorkflowId, {
+    definition: engineDefinition,
+    correlationKey,
+    expectedRevision,
+  });
+  if (updated !== null && "conflict" in updated) {
+    return {
+      conflict: true,
+      definition: escapeDollarKeys(updated.current.definition),
+      revision: updated.current.revision,
+    };
+  }
+
+  const result = await waitForCompletion(ctx, correlationKey);
+  return { conflict: false, engineWorkflowId: result, revision: updated?.revision };
+}
+
+/**
+ * Extend the workflow an install found on an existing trigger: its id, name,
+ * trigger and order stay put, and only its steps grow. A concurrent edit is a
+ * failure here — the claim is released so the install can be tried again,
+ * never turned into a second workflow.
+ */
+export async function appendWorkflowSteps(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  instance: InstanceContext,
+  workflow: { id: string; definition: WorkflowDefinition },
+  tasks: readonly Record<string, unknown>[],
+  correlationKey?: string
+): Promise<string> {
+  const definition = {
+    ...workflow.definition,
+    id: workflow.id,
+    tasks: appendSteps(workflow.definition.tasks as unknown as readonly Record<string, unknown>[], tasks),
+  } as unknown as WorkflowDefinition;
+  const outcome = await updateWorkflowInEngine(
+    ctx,
+    instanceId,
+    instance,
+    workflow.id,
+    definition,
+    undefined,
+    correlationKey
+  );
+  if (outcome.conflict) {
+    throw new Error("The trigger changed while the item was installing. Try again.");
+  }
+  return outcome.engineWorkflowId;
+}
+
 /**
  * Update an existing workflow's definition in the engine. Waits for the
  * engine's webhook echo before returning, unless the engine refused the update
@@ -153,40 +231,10 @@ export const updateFromDefinition = action({
     definition: v.any(), // WorkflowDefinition
     expectedRevision: v.optional(v.number()),
   },
-  handler: async (
-    ctx,
-    { instanceId, engineWorkflowId, definition, expectedRevision }
-  ): Promise<
-    | { conflict: false; engineWorkflowId: string; revision?: number }
-    | { conflict: true; definition: unknown; revision?: number }
-  > => {
+  handler: async (ctx, { instanceId, engineWorkflowId, definition, expectedRevision }): Promise<UpdateOutcome> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
-    const correlationKey = crypto.randomUUID();
-
-    await ctx.runMutation(internal.workflowInternal.insertPending, {
-      correlationKey,
-      instanceId,
-      op: "update",
-      expiresAt: Date.now() + CORRELATION_TIMEOUT_MS + 5_000,
-    });
-
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const engineDefinition = unescapeDollarKeys(definition) as WorkflowDefinition;
-    const updated = await rpc.updateWorkflow(engineWorkflowId, {
-      definition: engineDefinition,
-      correlationKey,
-      expectedRevision,
-    });
-    if (updated !== null && "conflict" in updated) {
-      return {
-        conflict: true,
-        definition: escapeDollarKeys(updated.current.definition),
-        revision: updated.current.revision,
-      };
-    }
-
-    const result = await waitForCompletion(ctx, correlationKey);
-    return { conflict: false, engineWorkflowId: result, revision: updated?.revision };
+    return updateWorkflowInEngine(ctx, instanceId, bundle, engineWorkflowId, engineDefinition, expectedRevision);
   },
 });
 

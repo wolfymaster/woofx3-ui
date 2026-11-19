@@ -160,12 +160,12 @@ describe("computeAvailableVariables", () => {
     const tree: WorkflowTree = { trigger, steps: [increment, secondStep] };
     const options = computeAvailableVariables(tree, "notify", actionCatalog, triggerCatalog);
     expect(options).toContainEqual(
-      expect.objectContaining({ value: "${increment.next}", label: "next", group: "Increment Counter" })
+      expect.objectContaining({ value: "${increment.next}", label: "Next", group: "Increment Counter" })
     );
     expect(options).toContainEqual(
       expect.objectContaining({
         value: "${increment.previous}",
-        label: "previous",
+        label: "Previous",
         group: "Increment Counter",
       })
     );
@@ -190,7 +190,7 @@ describe("computeAvailableVariables", () => {
     const tree: WorkflowTree = { trigger, steps: [increment, cond] };
     const options = computeAvailableVariables(tree, "inside", actionCatalog, triggerCatalog);
     expect(options).toContainEqual(
-      expect.objectContaining({ value: "${increment.next}", label: "next", group: "Increment Counter" })
+      expect.objectContaining({ value: "${increment.next}", label: "Next", group: "Increment Counter" })
     );
     expect(options).toContainEqual(
       expect.objectContaining({ value: "${big-cheer.result}", label: "Condition result", group: "Condition" })
@@ -233,7 +233,7 @@ describe("computeAvailableVariables", () => {
       expect.objectContaining({ value: "${trigger.data.user}", label: "Cheerer", group: "Trigger" })
     );
     expect(options).toContainEqual(
-      expect.objectContaining({ value: "${increment.next}", label: "next", group: "Increment Counter" })
+      expect.objectContaining({ value: "${increment.next}", label: "Next", group: "Increment Counter" })
     );
     // Its own result isn't available to itself.
     expect(options.some((o) => o.value === "${big-cheer.result}")).toBe(false);
@@ -244,7 +244,7 @@ describe("computeAvailableVariables", () => {
     const tree: WorkflowTree = { trigger, steps: [increment, wait] };
     const options = computeAvailableVariables(tree, "hold", actionCatalog, triggerCatalog);
     expect(options).toContainEqual(
-      expect.objectContaining({ value: "${increment.next}", label: "next", group: "Increment Counter" })
+      expect.objectContaining({ value: "${increment.next}", label: "Next", group: "Increment Counter" })
     );
   });
 

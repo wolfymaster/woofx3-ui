@@ -34,6 +34,7 @@ export const STARTER_ACTION_REFS = {
   shoutout: "woofx3_twitch:action:twitch.shoutout",
   clip: "woofx3_twitch:action:twitch.clip",
   marker: "woofx3_twitch:action:twitch.marker",
+  counterIncrement: "woofx3:action:counter.increment",
   alert: "woofx3:action:alert",
 } as const;
 

@@ -79,6 +79,14 @@ export const ENTITLEMENT_LIMITS = {
     unit: "seats",
     default: 5,
   },
+  // Counts the org's managed engines that are not deleted; checked when another
+  // is requested (org/engines.ts). The default is the allowance of an org with
+  // no plan: its first engine only.
+  "org.managedEngines": {
+    description: "Managed engines in the organization",
+    unit: "engines",
+    default: 1,
+  },
   "analytics.retentionDays": {
     description: "How long analytics are kept",
     unit: "days",
@@ -187,7 +195,7 @@ export function addOnFeatures(
 }
 
 export interface Entitlements {
-  /** The plan the account is on; null when no plan applies, not even a default. */
+  /** The plan the account is on; null when no plan applies. */
   plan: { key: string; name: string } | null;
   /** The org's subscription; null when it has none. */
   subscription: SubscriptionSummary | null;
@@ -258,8 +266,6 @@ export function isWithinLimit(entitlements: Entitlements, key: EntitlementLimitK
   return limit === null || usage <= limit;
 }
 
-const PLAN_KEY = /^[a-z][a-z0-9-]{0,39}$/;
-
 /**
  * Rejects a plan or an override an operator could not have meant, before it
  * is saved: unknown keys, a feature both added and removed, a limit set
@@ -292,11 +298,5 @@ export function validateEntitlementInput(
     if (value !== null && !(Number.isSafeInteger(value) && value >= 0)) {
       throw new Error(`Limit "${key}" must be a whole number of at least 0, or null for unlimited; got ${value}`);
     }
-  }
-}
-
-export function validatePlanKey(key: string): void {
-  if (!PLAN_KEY.test(key)) {
-    throw new Error(`Plan key "${key}" must be lowercase letters, digits and dashes, starting with a letter`);
   }
 }

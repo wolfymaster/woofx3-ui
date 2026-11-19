@@ -1,5 +1,39 @@
 # woofx3 desktop changelog
 
+## [0.19.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.18.0...woofx3-v0.19.0) (2026-11-19)
+
+### Features
+
+* **auth:** carry a referral link code through sign-up ([76e6004](https://github.com/wolfymaster/woofx3-ui/commit/76e6004bf671ba2987dbb05ecc8d5b0dca04eca8))
+* **client:** ask for the emailed code on the invite page and in settings ([99449a5](https://github.com/wolfymaster/woofx3-ui/commit/99449a550aa72d1b306131de5daf55babba73feb))
+
+## [0.18.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.17.0...woofx3-v0.18.0) (2026-11-18)
+
+### Features
+
+* **feature-flags:** manage flag definitions through the ops API ([858b2a4](https://github.com/wolfymaster/woofx3-ui/commit/858b2a452f6147494f237cf3c677d80d6b0f405d))
+
+## [0.17.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.16.0...woofx3-v0.17.0) (2026-11-18)
+
+### Features
+
+* **scenes:** group the widget palette by purpose ([b0ef2ed](https://github.com/wolfymaster/woofx3-ui/commit/b0ef2eddfe5139e07c2001e5708033cde0a244ca))
+
+## [0.16.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.15.0...woofx3-v0.16.0) (2026-11-17)
+
+### Features
+
+* **modules:** add a Modules group to the Stream sidebar ([532818d](https://github.com/wolfymaster/woofx3-ui/commit/532818d0e75f06a4bfa394458f12a60d0dae1327))
+* **nav:** give Alert Groups its own Stream sidebar entry ([09e07b8](https://github.com/wolfymaster/woofx3-ui/commit/09e07b84fd3a1d53131f366d53bab64c3e71e886))
+* **nav:** group the Stream sidebar by job ([5794587](https://github.com/wolfymaster/woofx3-ui/commit/5794587efcef3521b5e39903ebfebcf3ccddf98a))
+
+### Bug Fixes
+
+* **billing:** answer a suspended org's invite accept with a status ([72090c4](https://github.com/wolfymaster/woofx3-ui/commit/72090c45f8f6632efb45b51362c9a095976c3a06))
+* **invitations:** take a new seat only on an inviter's spendSeat ([5e46a7d](https://github.com/wolfymaster/woofx3-ui/commit/5e46a7daa6ee5d07707ba17b24feefea0d562b94))
+* **nav:** give Alert Groups an icon of its own ([88cd94c](https://github.com/wolfymaster/woofx3-ui/commit/88cd94c3938c1101952e7972a87ac0487933eae8))
+* **nav:** show installed modules and Alert Groups in the Stream sidebar ([6bda7fe](https://github.com/wolfymaster/woofx3-ui/commit/6bda7fef68d59884ceb5c3faf3a4872debc07704))
+
 ## [0.15.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.14.0...woofx3-v0.15.0) (2026-11-17)
 
 ### Features

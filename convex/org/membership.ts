@@ -39,6 +39,14 @@ export async function orgMembersPage(
     .paginate(paginationOpts);
 }
 
+/** The org the user owns, or null when they have none. */
+export async function ownedAccountOf(ctx: QueryCtx, userId: Id<"users">): Promise<Doc<"accounts"> | null> {
+  return ctx.db
+    .query("accounts")
+    .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+    .first();
+}
+
 /** The user's org memberships. An owner has one for each org they own. */
 export async function membershipsOf(ctx: QueryCtx, userId: Id<"users">): Promise<Doc<"accountMembers">[]> {
   return ctx.db

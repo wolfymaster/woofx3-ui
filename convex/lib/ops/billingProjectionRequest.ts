@@ -1,5 +1,5 @@
 import type { Infer } from "convex/values";
-import { type LimitValue, validateEntitlementInput } from "../entitlements";
+import { ADD_ONS, type LimitValue, validateEntitlementInput } from "../entitlements";
 import type { ParseResult } from "../notifications";
 import {
   BILLING_INTERVALS,
@@ -69,6 +69,10 @@ export function parseBillingProjectionRequest(body: unknown): ParseResult<Billin
   if (!isStringArray(addOns)) {
     return fail("addOns must be an array of strings");
   }
+  const unknownAddOn = addOns.find((key) => !(key in ADD_ONS));
+  if (unknownAddOn !== undefined) {
+    return fail(`Unknown add-on "${unknownAddOn}"; code must list it in ADD_ONS first`);
+  }
   if (!SUBSCRIPTION_STATES.includes(standing as SubscriptionState)) {
     return fail(`standing must be one of ${SUBSCRIPTION_STATES.join(", ")}`);
   }
@@ -77,6 +81,9 @@ export function parseBillingProjectionRequest(body: unknown): ParseResult<Billin
   }
   if (standing === "suspended" && reason === null) {
     return fail("a suspended standing needs a reason");
+  }
+  if (standing === "past_due" && body.graceEndsAt === null) {
+    return fail("a past_due standing needs graceEndsAt");
   }
   if (standing === "trialing" && body.trialEndsAt === null) {
     return fail("a trialing standing needs trialEndsAt");

@@ -4,12 +4,16 @@ import { httpAction } from "../_generated/server";
 import { authenticateOps } from "../lib/ops/auth";
 import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
 import { callerMayUse, nextSecretEnv, OPS_CALLERS } from "../lib/ops/callers";
-import { parseIdempotencyKey } from "../lib/ops/idempotency";
+import { parseFeatureFlagKeyRequest, parseFeatureFlagRequest } from "../lib/ops/featureFlagRequest";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
+import {
+  parseIssueReferralCodeRequest,
+  parseRevokeReferralCodeRequest,
+  parseUpdateReferralCodeRequest,
+} from "../lib/ops/referralCodeRequest";
 import { matchOpsRoute } from "../lib/ops/routes";
 import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
-import { projectionIdempotencyKey } from "./billingProjection";
 
 /**
  * The ops API: what the internal backoffice reads about users, accounts and
@@ -80,6 +84,17 @@ export const opsHandler = httpAction(async (ctx, request) => {
         reason: auth.reason,
       });
       return ok(account);
+    }
+    case "accounts.referral": {
+      const referral = await ctx.runQuery(internal.ops.referrals.forAccount, { accountId: route.accountId });
+      await ctx.runMutation(internal.ops.audit.recordRead, {
+        caller: auth.caller.name,
+        actor: auth.actor,
+        action: "accounts.referral",
+        target: route.accountId,
+        reason: auth.reason,
+      });
+      return referral === null ? error(404, "not_found", "No referral for this account") : ok(referral);
     }
     case "engines.list": {
       const status = url.searchParams.get("status") ?? undefined;
@@ -157,6 +172,97 @@ export const opsHandler = httpAction(async (ctx, request) => {
       });
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
+    case "featureFlags.list":
+      return ok(await ctx.runQuery(internal.ops.featureFlags.list, { today: new Date().toISOString().slice(0, 10) }));
+    case "featureFlags.create": {
+      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.create, {
+        flag: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "featureFlags.update": {
+      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.update, {
+        flag: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "featureFlags.remove": {
+      const parsed = parseFeatureFlagKeyRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "invalid_feature_flag", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.featureFlags.remove, {
+        key: parsed.value,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "referralCodes.list":
+      return ok(await ctx.runQuery(internal.ops.referralCodes.list, { cursor }));
+    case "referralCodes.issue": {
+      const parsed = parseIssueReferralCodeRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "validation_failed", parsed.message);
+      }
+      const outcome = await ctx.runMutation(internal.ops.referralCodes.issue, {
+        email: parsed.value.email,
+        rewardCents: parsed.value.rewardCents,
+        issuedBy: parsed.value.actor,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        // authenticateOps required a reason for this write.
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? json(201, { data: outcome.result }) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "referralCodes.update": {
+      const parsed = parseUpdateReferralCodeRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "validation_failed", parsed.message);
+      }
+      const outcome = await ctx.runMutation(internal.ops.referralCodes.update, {
+        code: route.code,
+        rewardCents: parsed.value.rewardCents,
+        updatedBy: parsed.value.actor,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "referralCodes.revoke": {
+      const parsed = parseRevokeReferralCodeRequest(await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "validation_failed", parsed.message);
+      }
+      const outcome = await ctx.runMutation(internal.ops.referralCodes.revoke, {
+        code: route.code,
+        revokedBy: parsed.value.actor,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
     case "accounts.billingProjection": {
       const parsed = parseBillingProjectionRequest(await request.json().catch(() => null));
       if (!parsed.ok) {
@@ -164,13 +270,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
       }
       if (parsed.value.accountId !== route.accountId) {
         return error(400, "invalid_billing_projection", "accountId must match the account in the path");
-      }
-      const idempotencyKey = parseIdempotencyKey(request.headers);
-      if (!idempotencyKey.ok) {
-        return error(400, "invalid_idempotency_key", idempotencyKey.message);
-      }
-      if (idempotencyKey.value !== projectionIdempotencyKey(route.accountId, parsed.value.version)) {
-        return error(400, "invalid_idempotency_key", "Idempotency-Key must be {accountId}:{version}");
       }
       const outcome = await ctx.runMutation(internal.ops.billingProjection.applyBillingProjection, {
         ...parsed.value,

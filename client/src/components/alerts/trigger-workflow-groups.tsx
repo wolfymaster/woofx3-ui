@@ -1,13 +1,5 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   useAddWorkflowGroupMembersRequest,
   useRemoveWorkflowGroupMembersRequest,
@@ -51,30 +43,16 @@ function GroupChips({ groupIds }: { groupIds: string[] }) {
 }
 
 /**
- * A trigger card's advanced settings: which alert groups it is in. Joining or
- * leaving applies to every workflow on the card. Hidden on an engine without groups.
+ * The group checkboxes for the trigger being edited. Inline in the page — no menu, popover
+ * or dialog — so it can sit inside the one bottom Advanced disclosure alongside Step name
+ * and the link to the full editor. Hidden on an engine without groups.
  */
-export function TriggerAdvancedSettings({ workflows }: { workflows: readonly Workflow[] }) {
+export function InlineGroupPicker({ workflows }: { workflows: readonly Workflow[] }) {
   const supported = useWorkflowGroupsSupported();
-  const [open, setOpen] = useState(false);
   if (!supported) {
     return null;
   }
-  return (
-    <div className="flex flex-col gap-3 border-t pt-3">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        className="flex items-center gap-1.5 self-start text-[13px] text-muted-foreground hover:text-foreground"
-        data-testid="trigger-advanced-toggle"
-      >
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        Advanced
-      </button>
-      {open && <GroupPicker workflows={workflows} />}
-    </div>
-  );
+  return <GroupPicker workflows={workflows} />;
 }
 
 function GroupPicker({ workflows }: { workflows: readonly Workflow[] }) {
@@ -86,7 +64,6 @@ function GroupPicker({ workflows }: { workflows: readonly Workflow[] }) {
   const inGroups = commonGroupIds(workflows);
   const workflowIds = workflows.map((workflow) => workflow.engineWorkflowId);
   const sorted = [...(groups ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  const chosen = sorted.filter((group) => inGroups.includes(group.engineGroupId)).map((group) => group.name);
 
   async function toggle(engineGroupId: string, join: boolean) {
     setPending(true);
@@ -104,34 +81,29 @@ function GroupPicker({ workflows }: { workflows: readonly Workflow[] }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <span className="text-[13px] text-muted-foreground">Groups</span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={pending} data-testid="trigger-groups-select">
-            {chosen.length === 0 ? "None" : chosen.join(", ")}
-            <ChevronDown className="ml-2 h-3.5 w-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {sorted.length === 0 ? (
-            <p className="px-2 py-1.5 text-[13px] text-muted-foreground">No groups yet.</p>
-          ) : (
-            sorted.map((group) => (
-              <DropdownMenuCheckboxItem
-                key={group.engineGroupId}
-                checked={inGroups.includes(group.engineGroupId)}
-                onCheckedChange={(checked) => void toggle(group.engineGroupId, checked === true)}
-              >
-                {group.name}
-              </DropdownMenuCheckboxItem>
-            ))
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <div className="flex flex-col gap-2" data-testid="inline-group-picker">
+      <span className="text-[13px] font-medium">Group</span>
+      {sorted.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">No groups yet.</p>
+      ) : (
+        sorted.map((group) => (
+          <div key={group.engineGroupId} className="flex items-center gap-2 text-[13px]">
+            <input
+              id={`trigger-group-${group.engineGroupId}`}
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={inGroups.includes(group.engineGroupId)}
+              disabled={pending}
+              onChange={(event) => void toggle(group.engineGroupId, event.target.checked)}
+              data-testid={`trigger-group-${group.engineGroupId}`}
+            />
+            <label htmlFor={`trigger-group-${group.engineGroupId}`}>{group.name}</label>
+          </div>
+        ))
+      )}
       <Link
         href={`${ALERT_GROUPS_PATH}/${NEW_ALERT_GROUP_SEGMENT}`}
-        className="text-[13px] text-muted-foreground underline"
+        className="self-start text-[13px] text-muted-foreground underline"
       >
         Make a new group
       </Link>

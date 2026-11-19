@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalQuery } from "./_generated/server";
+import { type ActionLimitName, spendActionLimit } from "./lib/actionRateLimits";
 import {
   type AppliedDiscount,
   type BillingClient,
@@ -19,7 +20,7 @@ import {
 } from "./lib/billingClient";
 import { billingIntervalValidator, planTierValidator } from "./lib/organization";
 import { logger } from "./logger";
-import { orgCan, orgRoleOf, requireActionFor, requireActionInAction } from "./org/policy";
+import { type Refusal, requireActionFor, requireActionInAction } from "./org/policy";
 
 // The billing commands a person triggers in the org portal. Each checks that
 // the caller manages the org's billing, then asks the management plane to do
@@ -90,21 +91,19 @@ export function unwrap<T>(result: BillingResult<T>): T {
   return result.value;
 }
 
-export const assertBillingManager = internalQuery({
+/** The refusal for a user who may not manage the org's billing, or null when they may. */
+export const billingManagerRefusal = internalQuery({
   args: { accountId: v.id("accounts"), userId: v.id("users") },
-  handler: async (ctx, { accountId, userId }): Promise<null> => {
-    await requireActionFor(ctx, userId, { org: accountId }, "manageBilling");
-    return null;
-  },
-});
-
-/** Whether the user manages the org's billing; an id that is not an org of this deployment is no. */
-export const mayManageBilling = internalQuery({
-  args: { accountId: v.string(), userId: v.id("users") },
-  handler: async (ctx, { accountId, userId }): Promise<boolean> => {
-    const id = ctx.db.normalizeId("accounts", accountId);
-    const account = id === null ? null : await ctx.db.get(id);
-    return account !== null && orgCan(await orgRoleOf(ctx, account, userId), "manageBilling");
+  handler: async (ctx, { accountId, userId }): Promise<Refusal | null> => {
+    try {
+      await requireActionFor(ctx, userId, { org: accountId }, "manageBilling");
+      return null;
+    } catch (error) {
+      if (error instanceof ConvexError) {
+        return error.data as Refusal;
+      }
+      throw error;
+    }
   },
 });
 
@@ -116,8 +115,19 @@ export async function requireUser(ctx: ActionCtx): Promise<Id<"users">> {
   return userId;
 }
 
-async function requireManagerClient(ctx: ActionCtx, accountId: Id<"accounts">): Promise<BillingClient> {
-  await ctx.runQuery(internal.billingCommands.assertBillingManager, { accountId, userId: await requireUser(ctx) });
+async function requireManagerClient(
+  ctx: ActionCtx,
+  accountId: Id<"accounts">,
+  limit?: ActionLimitName
+): Promise<BillingClient> {
+  const userId = await requireUser(ctx);
+  const refusal = await ctx.runQuery(internal.billingCommands.billingManagerRefusal, { accountId, userId });
+  if (refusal !== null) {
+    throw new ConvexError<Refusal>(refusal);
+  }
+  if (limit !== undefined) {
+    await spendActionLimit(ctx, limit, userId);
+  }
   return requireClient();
 }
 
@@ -139,7 +149,7 @@ export const startCheckout = action({
     promotionCode: v.optional(v.string()),
   },
   handler: async (ctx, { accountId, plan, interval, promotionCode }): Promise<{ url: string; checkoutId: string }> => {
-    const client = await requireManagerClient(ctx, accountId);
+    const client = await requireManagerClient(ctx, accountId, "billingCheckoutStart");
     const terms = { accountId, tier: plan, interval, promotionCode: promotionCode?.trim() || undefined };
     return unwrap(
       await client.startCheckout({ ...terms, idempotencyKey: await checkoutIdempotencyKey(terms, Date.now()) })
@@ -151,7 +161,7 @@ export const startCheckout = action({
 export const previewPromotionCode = action({
   args: { accountId: v.id("accounts"), code: v.string() },
   handler: async (ctx, { accountId, code }): Promise<AppliedDiscount | null> => {
-    const client = await requireManagerClient(ctx, accountId);
+    const client = await requireManagerClient(ctx, accountId, "billingPromoPreview");
     const trimmed = code.trim();
     return trimmed === "" ? null : unwrap(await client.lookupPromotionCode(trimmed));
   },
@@ -200,7 +210,10 @@ export const invoices = action({
   args: { accountId: v.id("accounts") },
   handler: async (ctx, { accountId }): Promise<Invoice[] | null> => {
     const userId = await getAuthUserId(ctx);
-    if (userId === null || !(await ctx.runQuery(internal.billingCommands.mayManageBilling, { accountId, userId }))) {
+    if (
+      userId === null ||
+      (await ctx.runQuery(internal.billingCommands.billingManagerRefusal, { accountId, userId })) !== null
+    ) {
       return null;
     }
     return unwrap(await requireClient().listInvoices(accountId));
@@ -239,7 +252,9 @@ export const checkoutState = action({
 export const startMarketplaceCheckout = action({
   args: { instanceId: v.id("instances"), intentId: v.string() },
   handler: async (ctx, { instanceId, intentId }): Promise<{ url: string; checkoutId: string }> => {
-    const accountId = (await requireActionInAction(ctx, { engine: instanceId }, "manageBilling")).account._id;
+    const { account, userId } = await requireActionInAction(ctx, { engine: instanceId }, "manageBilling");
+    const accountId = account._id;
+    await spendActionLimit(ctx, "billingCheckoutStart", userId);
     const client = requireClient();
     const request = { accountId, intentId: intentId.trim() };
     if (request.intentId === "") {
@@ -281,13 +296,19 @@ export function ensureRetryDelayMs(attempt: number, random: number): number {
   return Math.round(delay * (1 + ENSURE_RETRY.jitterRatio * (2 * random - 1)));
 }
 
-/** Asks the plane to start the org's trial; whether it succeeded. Failures are logged by the caller's retry policy. */
-export async function ensureOrgBilling(client: BillingClient, accountId: Id<"accounts">): Promise<boolean> {
+/**
+ * Asks the plane to start the org's trial; the plane's error, or null when it succeeded. The `ensure`
+ * contract takes no body, so the org's referral is not sent here: the plane
+ * reads it from the ops route `accounts.referral`. Sending it with `ensure`
+ * needs the billing contract to accept it first.
+ */
+export async function ensureOrgBilling(client: BillingClient, accountId: Id<"accounts">): Promise<BillingError | null> {
   const result = await client.ensure(accountId);
   if (!result.ok) {
     logger.warn("billing ensure failed", { accountId, error: result.error });
+    return result.error;
   }
-  return result.ok;
+  return null;
 }
 
 /**
@@ -300,7 +321,7 @@ export const ensureBilling = internalAction({
   args: { accountId: v.id("accounts"), attempt: v.optional(v.number()) },
   handler: async (ctx, { accountId, attempt = 0 }): Promise<void> => {
     const client = billingClientFromEnv();
-    if (client === null || (await ensureOrgBilling(client, accountId))) {
+    if (client === null || (await ensureOrgBilling(client, accountId)) === null) {
       return;
     }
     if (attempt + 1 >= ENSURE_RETRY.maxAttempts) {
@@ -314,5 +335,90 @@ export const ensureBilling = internalAction({
       accountId,
       attempt: attempt + 1,
     });
+  },
+});
+
+/** Tunables of the daily convergent ensure pass (`ensureSweep`). */
+export const ENSURE_SWEEP = {
+  intervalHours: 24,
+  /** Instances read per page, and so the most orgs one page can yield. */
+  batchSize: 50,
+  /** Most orgs one run asks the plane about, so a plane that is down costs a bounded run. */
+  maxOrgsPerRun: 200,
+} as const;
+
+export type EnsureSweepSummary = {
+  scanned: number;
+  ensured: number;
+  missed: number;
+  reportFailed: number;
+  capped: boolean;
+  elapsedMs: number;
+};
+
+/**
+ * Finds orgs that host a managed engine but have no billing projection and
+ * runs the same `ensure` sign-up does. Each org is isolated: a failure is
+ * reported to the plane as a miss and the pass moves on. Orgs are visited in
+ * instance order each run, so persistent failures at the front can starve
+ * later orgs once `maxOrgsPerRun` is reached; operators see the misses.
+ */
+export async function runEnsureSweep(
+  client: BillingClient,
+  listPage: (
+    cursor: string | null,
+    numItems: number
+  ) => Promise<{ accountIds: Id<"accounts">[]; continueCursor: string; isDone: boolean }>,
+  now: () => number,
+  config: Pick<typeof ENSURE_SWEEP, "batchSize" | "maxOrgsPerRun"> = ENSURE_SWEEP
+): Promise<EnsureSweepSummary> {
+  const startedAt = now();
+  const seen = new Set<Id<"accounts">>();
+  const summary = { scanned: 0, ensured: 0, missed: 0, reportFailed: 0, capped: false };
+  let cursor: string | null = null;
+  let isDone = false;
+  while (!isDone && !summary.capped) {
+    const page = await listPage(cursor, config.batchSize);
+    cursor = page.continueCursor;
+    isDone = page.isDone;
+    for (const accountId of page.accountIds) {
+      if (seen.has(accountId)) {
+        continue;
+      }
+      if (summary.scanned >= config.maxOrgsPerRun) {
+        summary.capped = true;
+        break;
+      }
+      seen.add(accountId);
+      summary.scanned += 1;
+      const error = await ensureOrgBilling(client, accountId);
+      if (error === null) {
+        summary.ensured += 1;
+        continue;
+      }
+      summary.missed += 1;
+      const reported = await client.reportEnsureMiss(accountId, `${error.code}: ${error.message}`.slice(0, 500));
+      if (!reported.ok) {
+        summary.reportFailed += 1;
+      }
+    }
+  }
+  return { ...summary, elapsedMs: now() - startedAt };
+}
+
+export const ensureSweep = internalAction({
+  args: {},
+  handler: async (ctx): Promise<void> => {
+    const client = billingClientFromEnv();
+    if (client === null) {
+      return;
+    }
+    const summary = await runEnsureSweep(
+      client,
+      (cursor, numItems) =>
+        ctx.runQuery(internal.org.billing.unbilledManagedOrgs, { paginationOpts: { cursor, numItems } }),
+      Date.now
+    );
+    logger.info("billing ensure sweep", summary);
   },
 });

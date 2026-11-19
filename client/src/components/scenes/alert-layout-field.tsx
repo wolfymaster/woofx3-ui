@@ -85,7 +85,7 @@ export function AlertLayoutField({ field, value, onChange, availableVariables }:
 }
 
 /** The dialog's content, mounted while it is open, so each opening edits a fresh copy of the step's layout. */
-function AlertLayoutDialogBody({
+export function AlertLayoutDialogBody({
   field,
   value,
   availableVariables,

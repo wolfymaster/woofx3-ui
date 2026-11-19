@@ -9,7 +9,6 @@ import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/feat
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
-import { opsRequestKindValidator } from "./lib/ops/idempotency";
 import { billingIntervalValidator, engineRoleValidator, orgRoleValidator, planTierValidator } from "./lib/organization";
 import { orgBillingFields } from "./lib/orgBilling";
 import { desktopSignInOutcomeValidator, signInClientValidator } from "./lib/twitchSignIn";
@@ -116,6 +115,17 @@ export default defineSchema({
   // Ops search by name; the email index comes with authTables.
   users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
+  // emailVerificationCodes: the one outstanding code per user for proving their
+  // address (lib/emailVerification.ts). Only a hash is stored; a new request
+  // replaces the row, so an old code stops working.
+  emailVerificationCodes: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    codeHash: v.string(),
+    expiresAt: v.number(),
+    failedAttempts: v.number(),
+  }).index("by_user", ["userId"]),
+
   // Personal preferences. A table rather than extra `users` fields so authTables stays stock.
   userSettings: defineTable({
     userId: v.id("users"),
@@ -132,6 +142,44 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .searchIndex("search_name", { searchField: "name" }),
+
+  // referralCodes: sign-up codes an operator issues to chosen people; users
+  // cannot make their own. The code is random and unguessable, never derived
+  // from the user id. Each code carries its own reward terms, so no default
+  // exists to fall back on. A revoked code stays as a row so the referrals
+  // that used it keep their history, but capture ignores it.
+  referralCodes: defineTable({
+    userId: v.id("users"),
+    code: v.string(),
+    createdAt: v.number(),
+    // Whole cents the referrer earns per eligible referral, at most 1_000_000.
+    rewardCents: v.number(),
+    // The operator actor string the issuing ops request carried.
+    issuedBy: v.string(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_code", ["code"]),
+
+  // referrals: who brought a new user in. Written once by referrals.capture
+  // (first capture per referred user wins) and never edited or deleted, except
+  // by the status transition in referrals.ts. Deliberately not a field on
+  // accounts, so attribution cannot be rewritten with the account.
+  // rewardCents is the code's terms at capture, frozen: editing a code's
+  // terms later only affects later captures.
+  referrals: defineTable({
+    referredUserId: v.id("users"),
+    // Absent until the referred user's org exists.
+    referredAccountId: v.optional(v.id("accounts")),
+    referrerUserId: v.id("users"),
+    code: v.string(),
+    rewardCents: v.number(),
+    capturedAt: v.number(),
+    status: v.union(v.literal("captured"), v.literal("org_created")),
+  })
+    .index("by_code", ["code"])
+    .index("by_referred_user", ["referredUserId"])
+    .index("by_referred_account", ["referredAccountId"]),
 
   // accountMembers: the organization's members and their org role. The owner
   // (accounts.ownerId) has exactly one row, with role "owner" (invariant I1).
@@ -1509,11 +1557,11 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_account", ["accountId"]),
 
-  // opsRequests: the ops API's billing projection pushes by the caller's Idempotency-Key,
-  // so a retry replays the first success instead of writing twice. Claimed and
-  // settled in the same mutation as the write; see lib/ops/idempotency.ts.
+  // opsRequests: no code reads or writes it. The definition stays only while
+  // deployed rows exist, because Convex refuses a schema that omits a table
+  // holding data; drop it once those rows are cleared.
   opsRequests: defineTable({
-    write: opsRequestKindValidator,
+    write: v.literal("projection"),
     accountId: v.string(),
     key: v.string(),
     // Canonical JSON of the validated body; the same key with another body is refused.
@@ -1547,12 +1595,12 @@ export default defineSchema({
   plans: defineTable({
     key: v.string(),
     name: v.string(),
+    // description and offered are no longer written or read; rows stored by
+    // earlier code still carry them, so the schema keeps accepting them.
     description: v.optional(v.string()),
     features: v.array(v.string()),
     limits: limitValuesValidator,
-    // Whether new accounts may choose or be sold it. An account already on a
-    // plan keeps it when it stops being offered.
-    offered: v.boolean(),
+    offered: v.optional(v.boolean()),
     updatedAt: v.number(),
     // Who last changed it: an operator's email, or "cli".
     updatedBy: v.string(),
@@ -1572,14 +1620,18 @@ export default defineSchema({
     .index("by_instance_released", ["instanceId", "releasedAt"])
     .index("by_released_created", ["releasedAt", "createdAt"]),
 
-  // featureFlags: an operator's targeting for a UI flag listed in
-  // lib/featureFlags.ts. A flag with no row is off. Written only by the
-  // internal featureFlags.set, never from the dashboard.
+  // featureFlags: a UI feature flag, created and targeted by operators in the
+  // backoffice. A flag with no row is off. Written only through the ops API
+  // (ops/featureFlags.ts), never from the dashboard.
   featureFlags: defineTable({
     key: v.string(),
+    description: v.string(),
+    owner: v.string(),
+    removeBy: v.string(),
     state: featureFlagStateValidator,
     rules: v.optional(featureFlagRulesValidator),
     updatedAt: v.number(),
+    updatedBy: v.string(),
   }).index("by_key", ["key"]),
 
   // scenes: scene configurations for browser sources

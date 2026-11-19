@@ -268,6 +268,25 @@ export function waitExportVariables(step: WaitNode, catalogTriggers: CatalogTrig
   return options;
 }
 
+/** Event keys readers meet on the alerts page, named for the person or thing they describe. */
+const PLAIN_TRIGGER_LABELS: Readonly<Record<string, string>> = {
+  user: "Cheerer",
+  userName: "Cheerer's name",
+  userId: "Cheerer's id",
+  amount: "Bits cheered",
+  bits: "Bits cheered",
+  gifterName: "Gifter's name",
+  message: "Message",
+};
+
+/** A payload key as a phrase, so the page never shows `${trigger.data.userName}` as "userName". */
+function plainVariableLabel(path: string): string {
+  return (
+    PLAIN_TRIGGER_LABELS[path] ??
+    (path.split(".").pop() ?? path).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (first) => first.toUpperCase())
+  );
+}
+
 /**
  * A trigger's payload comes from its declared `emits` when it has one. Otherwise it
  * falls back to deriving variables from config fields carrying an `eventPath`, for a
@@ -280,7 +299,7 @@ function triggerDataVariables(
   if (emits.length > 0) {
     return emits.map((field) => ({
       value: `\${trigger.data.${field.path}}`,
-      label: field.path,
+      label: plainVariableLabel(field.path),
       group: "Trigger",
       type: field.type,
       description: field.description,
@@ -305,7 +324,7 @@ export function stepOutputVariables(
 ): VariableOption[] {
   return returns.map((field) => ({
     value: `\${${stepId}.${field.path}}`,
-    label: field.path,
+    label: plainVariableLabel(field.path),
     group,
     type: field.type,
     description: field.description,

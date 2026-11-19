@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { billingConvexError, requireClient, requireUser, unwrap } from "./billingCommands";
+import { spendActionLimit } from "./lib/actionRateLimits";
 import {
   type CheckoutState,
   type Sponsorship,
@@ -66,6 +67,7 @@ export const start = action({
   handler: async (ctx, { amountCents, interval }): Promise<{ url: string; checkoutId: string }> => {
     const userId = await requireUser(ctx);
     assertAmount(amountCents);
+    await spendActionLimit(ctx, "sponsorshipStart", userId);
     const request = { userId, amountCents, interval };
     return unwrap(
       await requireClient().startSponsorshipCheckout({

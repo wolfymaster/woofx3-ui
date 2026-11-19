@@ -17,7 +17,6 @@ export interface PlanSeed {
   name: string;
   features: string[];
   limits: LimitValue[];
-  offered: boolean;
 }
 
 export const PLAN_SEEDS: readonly PlanSeed[] = [
@@ -27,11 +26,11 @@ export const PLAN_SEEDS: readonly PlanSeed[] = [
     features: [],
     limits: [
       { key: "org.members", value: 5 },
+      { key: "org.managedEngines", value: 1 },
       { key: "storage.moduleStorageBytes", value: 50 * GiB },
       { key: "storage.hostedAssetBytes", value: 100 * GiB },
       { key: "analytics.retentionDays", value: 30 },
     ],
-    offered: true,
   },
   {
     key: "pro",
@@ -39,11 +38,11 @@ export const PLAN_SEEDS: readonly PlanSeed[] = [
     features: ["business", "marketplace.premiumIncluded", "userPages.customDomain"],
     limits: [
       { key: "org.members", value: null },
+      { key: "org.managedEngines", value: 3 },
       { key: "storage.moduleStorageBytes", value: 100 * GiB },
       { key: "storage.hostedAssetBytes", value: 500 * GiB },
       { key: "analytics.retentionDays", value: 90 },
     ],
-    offered: true,
   },
 ];
 

@@ -51,7 +51,6 @@ describe("a signed-in user with no engine", () => {
     expect(await asUser.query(api.instances.listForCurrentUser, {})).toEqual([]);
     expect(await asUser.query(api.provisioning.isAvailable, {})).toEqual({ available: true });
     expect(await asUser.query(api.previewEngine.get, {})).toBeNull();
-    expect(await asUser.query(api.accounts.getMyAccount, {})).toBeNull();
     expect(await asUser.query(api.organizations.mine, {})).toEqual([]);
     await asUser.query(api.users.getMe, {});
 

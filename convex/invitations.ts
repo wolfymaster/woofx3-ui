@@ -12,6 +12,7 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
+import { spendActionLimit } from "./lib/actionRateLimits";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { invitationEngine } from "./lib/invitationEngine";
 import { acceptRefusal, invitationTarget } from "./lib/invitationTarget";
@@ -23,6 +24,7 @@ import {
   type HelixCredentials,
 } from "./lib/twitchUsers";
 import { suspensionOf } from "./org/billing";
+import { isEmailVerified } from "./org/identity";
 import {
   applyOrgRoleToEngines,
   getAccountMembership,
@@ -300,6 +302,7 @@ export const lookupTwitchUser = action({
   args: { instanceId: v.id("instances"), login: v.string() },
   handler: async (ctx, args): Promise<TwitchInviteCandidate | null> => {
     const { userId, twitchLink } = await requireEngineInviter(ctx, args.instanceId);
+    await spendActionLimit(ctx, "inviteLookup", args.instanceId);
 
     const login = normalizeTwitchLogin(args.login);
     if (!login) {
@@ -339,29 +342,35 @@ export const lookupTwitchUser = action({
 // Create
 // ---------------------------------------------------------------------------
 
-/** Whether the person an invitation names already has a seat in the engine's org. */
+/**
+ * Whether the person an invitation names already has a seat in the engine's org.
+ * An email can belong to several users when addresses are unverified, and only
+ * a verified one proves the address is theirs, so with more than one the
+ * unverified users do not count.
+ */
 async function inviteeInOrg(
   ctx: QueryCtx,
   instance: Doc<"instances">,
   target: Infer<typeof TARGET_VALIDATOR>
 ): Promise<boolean> {
-  const userId =
-    target.kind === "email"
-      ? (
-          await ctx.db
-            .query("users")
-            .withIndex("email", (q) => q.eq("email", normalizeEmail(target.email)))
-            .first()
-        )?._id
-      : (
-          await ctx.db
-            .query("authAccounts")
-            .withIndex("providerAndAccountId", (q) =>
-              q.eq("provider", "twitch").eq("providerAccountId", target.twitchUserId)
-            )
-            .first()
-        )?.userId;
-  return userId !== undefined && (await getAccountMembership(ctx, instance.accountId, userId)) !== null;
+  if (target.kind === "email") {
+    const sharing = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", normalizeEmail(target.email)))
+      .collect();
+    const owners = sharing.length > 1 ? sharing.filter(isEmailVerified) : sharing;
+    for (const user of owners) {
+      if ((await getAccountMembership(ctx, instance.accountId, user._id)) !== null) {
+        return true;
+      }
+    }
+    return false;
+  }
+  const twitchAccount = await ctx.db
+    .query("authAccounts")
+    .withIndex("providerAndAccountId", (q) => q.eq("provider", "twitch").eq("providerAccountId", target.twitchUserId))
+    .first();
+  return twitchAccount !== null && (await getAccountMembership(ctx, instance.accountId, twitchAccount.userId)) !== null;
 }
 
 const TARGET_VALIDATOR = v.union(
@@ -506,6 +515,7 @@ export const create = action({
   },
   handler: async (ctx, args): Promise<{ token: string; expiresAt: number }> => {
     const { userId, twitchLink } = await requireEngineInviter(ctx, args.instanceId);
+    await spendActionLimit(ctx, "inviteCreate", args.instanceId);
 
     if (args.target.kind === "email") {
       return ctx.runMutation(internal.invitations.insertInvitation, {
@@ -544,7 +554,9 @@ export const revoke = mutation({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
     const inv = await ctx.db.get(args.invitationId);
-    if (!inv) throw new Error("Invitation not found");
+    if (!inv) {
+      throw new Error("Invitation not found");
+    }
 
     await requireAction(ctx, { engine: inv.instanceId }, "manageEngineMembers");
 
@@ -561,6 +573,9 @@ export const revoke = mutation({
  * values, not throws: production Convex hides a thrown message from the
  * client, so a throw would reach the user as "Server Error".
  */
+/** What `accept` throws for an email invitation when the caller's address is not verified. */
+export type EmailUnverifiedRefusal = { code: "email_unverified"; message: string };
+
 export type AcceptOutcome =
   | { status: "accepted"; accountId: Id<"accounts">; instanceId: Id<"instances">; alreadyMember: boolean }
   | { status: "already_member"; instanceId: Id<"instances"> }
@@ -578,7 +593,9 @@ export const accept = mutation({
   args: { token: v.string() },
   handler: async (ctx, args): Promise<AcceptOutcome> => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
 
     const inv = await ctx.db
       .query("invitations")
@@ -605,7 +622,9 @@ export const accept = mutation({
     }
 
     const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
+    if (!user) {
+      throw new Error("User not found");
+    }
 
     const u = user as Record<string, unknown>;
     const twitchAccount = await ctx.db
@@ -618,6 +637,14 @@ export const accept = mutation({
     });
     if (refusal) {
       return { status: "wrong_account", message: refusal };
+    }
+    // The address is what proves the caller is the invitee, so it must be
+    // verified; a Twitch invite is proven by the Twitch account instead.
+    if (inv.email !== undefined && !isEmailVerified(user)) {
+      throw new ConvexError<EmailUnverifiedRefusal>({
+        code: "email_unverified",
+        message: "Verify your email address to accept this invitation.",
+      });
     }
 
     const account = await ctx.db.get(inv.accountId);

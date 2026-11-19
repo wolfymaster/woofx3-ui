@@ -1,4 +1,5 @@
 import { unescapeDollarKeys } from "@shared/dollar-keys";
+import { conditionSetKey } from "@shared/trigger-identity";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { Workflow } from "@/engine/types";
@@ -84,7 +85,7 @@ export function groupEventTriggers(triggers: readonly EventTrigger[]): TriggerGr
     // A workflow keeping several triggers in its tasks has conditions its trigger doesn't
     // show, so it matches nothing else.
     const key = definitionToTree(trigger.definition).editable
-      ? conditionsKey(trigger.conditions)
+      ? `conditions:${conditionSetKey(trigger.conditions)}`
       : `workflow:${trigger.row.engineWorkflowId}`;
     const group = groups.get(key);
     if (group) {
@@ -94,14 +95,6 @@ export function groupEventTriggers(triggers: readonly EventTrigger[]): TriggerGr
     }
   }
   return Array.from(groups.values());
-}
-
-/** The same conditions give the same key whatever order they were written in. */
-function conditionsKey(conditions: readonly ConditionConfig[]): string {
-  const written = conditions.map((condition) =>
-    JSON.stringify([condition.field, condition.operator, condition.value ?? null])
-  );
-  return `conditions:${Array.from(new Set(written)).sort().join("|")}`;
 }
 
 /** What a module calls its steps on this trigger. Barkloader names its workflows `{module}/{manifest name}`. */
@@ -288,6 +281,8 @@ export interface NewTriggerOptions {
   conditions?: ConditionConfig[];
   /** A step the trigger starts with, aimed by `aim` when given. */
   seed?: ActionPreset;
+  /** Values the seed starts with, before the phrase is opened. */
+  seedParameters?: Record<string, unknown>;
   aim?: TriggerPin;
 }
 
@@ -300,7 +295,7 @@ export const SEED_STEP_ID = "step_1";
  * no condition, so they read as missing in the sentence until they are chosen.
  */
 export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
-  const { triggerPreset, conditionFields, order, pin, conditions, seed, aim } = options;
+  const { triggerPreset, conditionFields, order, pin, conditions, seed, seedParameters, aim } = options;
   const values = {
     ...getDefaultConfigValues(conditionFields),
     ...(pin ? { [pin.fieldId]: pin.value } : {}),
@@ -308,6 +303,9 @@ export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
   const tasks: WorkflowDefinition["tasks"] = [];
   if (seed) {
     const node = presetToActionNode(seed, SEED_STEP_ID);
+    if (seedParameters) {
+      node.parameters = { ...node.parameters, ...seedParameters };
+    }
     if (aim) {
       // Aimed and nothing else: an optional number field seeded with its minimum
       // would replace the instance's own setting (Increment counter's "Counts by").

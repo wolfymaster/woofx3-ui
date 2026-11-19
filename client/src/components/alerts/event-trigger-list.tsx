@@ -1,6 +1,12 @@
 import { ChevronRight, ExternalLink, Plus, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import {
+  ALERT_RECIPE_EVENT,
+  type AlertRecipe,
+  AlertRecipes,
+  cheerAlertRecipes,
+} from "@/components/alerts/alert-recipes";
 import { type SavedTrigger, TriggerEditor } from "@/components/alerts/trigger-editor";
 import { TriggerGroupCard } from "@/components/alerts/trigger-group-card";
 import { TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
@@ -12,10 +18,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
 import { useEngineScope } from "@/engine/context";
-import { useResourceLabels } from "@/engine/hooks/use-module-resources";
+import { useResourceInstancesOfKind, useResourceLabels } from "@/engine/hooks/use-module-resources";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
 import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertSectionAnchor } from "@/lib/alert-groups";
 import {
@@ -110,6 +117,12 @@ export function EventTriggerList({
     setLoadedOptions((previous) => new Map(previous).set(fieldId, entry));
   }, []);
   const resourceLabels = useResourceLabels();
+  const { actionPresets } = useWorkflowCatalog();
+  const counters = useResourceInstancesOfKind("counter");
+  const recipes = useMemo(
+    () => (event === ALERT_RECIPE_EVENT ? cheerAlertRecipes(actionPresets, counters ?? []) : []),
+    [event, actionPresets, counters]
+  );
   const optionLabels = useMemo<OptionLabels>(() => {
     const labels = resourceFieldLabels(conditionFields, resourceLabels);
     for (const [fieldId, entry] of Array.from(loadedOptions.entries())) {
@@ -140,7 +153,7 @@ export function EventTriggerList({
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   const startDraft = useCallback(
-    (seed?: ActionPreset, conditions?: EventTrigger["conditions"]) => {
+    (seed?: ActionPreset, conditions?: EventTrigger["conditions"], seedParameters?: Record<string, unknown>) => {
       setDraft(
         newTriggerTree({
           triggerPreset,
@@ -149,6 +162,7 @@ export function EventTriggerList({
           pin,
           conditions,
           seed,
+          seedParameters,
           aim: seed && actionScope ? aimFor(seed, actionScope) : undefined,
         })
       );
@@ -156,6 +170,11 @@ export function EventTriggerList({
       setExpandedId(NEW_TRIGGER);
     },
     [triggerPreset, conditionFields, all, pin, actionScope]
+  );
+
+  const startRecipe = useCallback(
+    (recipe: AlertRecipe) => startDraft(recipe.seed, undefined, recipe.parameters),
+    [startDraft]
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a request starts one draft, when its key changes
@@ -189,7 +208,12 @@ export function EventTriggerList({
       (phrase): SentencePart => ({ kind: "text", text: ` and ${phrase}` })
     ),
   ];
-  const stepEditor = (steps: EventTrigger, alsoRuns: ReactNode) => {
+  const stepEditor = (
+    steps: EventTrigger,
+    alsoRuns: ReactNode,
+    workflows: readonly Workflow[],
+    registerClose: (close: () => Promise<boolean>) => void
+  ) => {
     const read = definitionToTree(steps.definition);
     return read.editable ? (
       <TriggerEditor
@@ -207,8 +231,10 @@ export function EventTriggerList({
         pin={pin}
         loadedOptions={loadedOptions}
         optionLabels={optionLabels}
+        workflows={workflows}
         onCreated={() => undefined}
         onDeleted={() => setExpandedId(null)}
+        registerClose={registerClose}
         alsoRuns={alsoRuns}
       />
     ) : null;
@@ -279,6 +305,7 @@ export function EventTriggerList({
         </header>
       )}
 
+      {!bare && <AlertRecipes event={event} recipes={recipes} onPick={startRecipe} />}
       {children}
 
       <div className="flex flex-col gap-3">
@@ -441,25 +468,20 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
 
   return (
     <article
-      className={cn("rounded-2xl border bg-card", isExpanded && "border-foreground/20")}
+      className={cn("rounded-2xl border bg-card transition-colors duration-300", isExpanded && "border-foreground/20")}
       data-testid={`trigger-card-${row.engineWorkflowId}`}
     >
-      <div className="relative flex items-center gap-2 py-2.5 pl-2 pr-2.5">
+      <div className="group relative flex items-center gap-2 py-2.5 pl-3.5 pr-2.5">
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={isExpanded}
           aria-label={`${title}. ${isExpanded ? "Close" : "Open"}`}
-          className="flex h-[52px] w-9 shrink-0 items-center justify-center rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
+          className="h-[52px] w-3 shrink-0 rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
           data-testid={`trigger-toggle-${row.engineWorkflowId}`}
-        >
-          <ChevronRight
-            className={cn("h-4 w-4 transition-transform duration-150", isExpanded && "rotate-90")}
-            aria-hidden="true"
-          />
-        </button>
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
-          <span className="text-base font-medium leading-snug">
+          <span className="text-base font-medium leading-snug decoration-muted-foreground/70 underline-offset-4 group-hover:underline group-hover:decoration-dotted">
             {storedTogether > 1 ? title : <SentenceText sentence={sentence} />}
           </span>
           <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
@@ -487,7 +509,7 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
       </div>
 
       {isExpanded && (
-        <div className="border-t p-4 sm:p-5">
+        <div className="card-reveal border-t p-4 sm:p-5">
           {!read.editable && (
             <div className="flex flex-col gap-3">
               {storedTogether > 1 ? (

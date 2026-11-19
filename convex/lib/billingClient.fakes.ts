@@ -25,6 +25,7 @@ import {
 export interface BillingCall {
   command:
     | "ensure"
+    | "reportEnsureMiss"
     | "startCheckout"
     | "startMarketplaceCheckout"
     | "openPortal"
@@ -85,6 +86,11 @@ export class FakeBillingClient implements BillingClient {
   async ensure(accountId: string) {
     this.calls.push({ command: "ensure", args: [accountId] });
     return this.ensureAnswer ?? billingOk({ accountId, version: 1 });
+  }
+
+  async reportEnsureMiss(accountId: string, reason: string) {
+    this.calls.push({ command: "reportEnsureMiss", args: [accountId, reason] });
+    return billingOk({ attempts: 1 });
   }
 
   async startCheckout(request: CheckoutRequest) {

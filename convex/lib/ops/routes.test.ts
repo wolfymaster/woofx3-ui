@@ -34,6 +34,7 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/audit")).toEqual({ method: "GET", name: "audit.list" });
     expect(matchOpsRoute("GET", "/api/ops/plans")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/notifications")).toEqual({ method: "GET", name: "notifications.list" });
+    expect(matchOpsRoute("GET", "/api/ops/feature-flags")).toEqual({ method: "GET", name: "featureFlags.list" });
     expect(matchOpsRoute("GET", "/api/ops/payments/strays")).toBeNull();
   });
 
@@ -49,6 +50,33 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/accounts/k1/billing-projection")).toBeNull();
     expect(matchOpsRoute("POST", "/api/ops/accounts/k1/delete")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/accounts/k1/plan")).toBeNull();
+  });
+
+  it("names the referral read, as a GET only", () => {
+    expect(matchOpsRoute("GET", "/api/ops/accounts/k1/referral")).toEqual({
+      method: "GET",
+      name: "accounts.referral",
+      accountId: "k1",
+    });
+    expect(matchOpsRoute("POST", "/api/ops/accounts/k1/referral")).toBeNull();
+  });
+
+  it("names the referral code routes by method", () => {
+    expect(matchOpsRoute("GET", "/api/ops/referral-codes")).toEqual({ method: "GET", name: "referralCodes.list" });
+    expect(matchOpsRoute("POST", "/api/ops/referral-codes")).toEqual({ method: "POST", name: "referralCodes.issue" });
+    expect(matchOpsRoute("PATCH", "/api/ops/referral-codes/abc")).toEqual({
+      method: "PATCH",
+      name: "referralCodes.update",
+      code: "abc",
+    });
+    expect(matchOpsRoute("POST", "/api/ops/referral-codes/abc/revoke")).toEqual({
+      method: "POST",
+      name: "referralCodes.revoke",
+      code: "abc",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/referral-codes/abc")).toBeNull();
+    expect(matchOpsRoute("PATCH", "/api/ops/referral-codes")).toBeNull();
+    expect(matchOpsRoute("DELETE", "/api/ops/referral-codes/abc")).toBeNull();
   });
 
   it("names the billing projection reset, as a POST only", () => {
@@ -92,6 +120,25 @@ describe("matchOpsRoute", () => {
       instanceId: "i1",
     });
     expect(matchOpsRoute("GET", "/api/ops/instances/i1/storage-limits")).toBeNull();
+  });
+
+  it("names each feature flag write, keeping keys out of the path", () => {
+    expect(matchOpsRoute("POST", "/api/ops/feature-flags")).toEqual({
+      method: "POST",
+      name: "featureFlags.create",
+    });
+    expect(matchOpsRoute("PUT", "/api/ops/feature-flags")).toEqual({
+      method: "PUT",
+      name: "featureFlags.update",
+    });
+    expect(matchOpsRoute("POST", "/api/ops/feature-flags/delete")).toEqual({
+      method: "POST",
+      name: "featureFlags.remove",
+    });
+    // Flag keys contain dots, so they travel in the body, never a path segment.
+    expect(matchOpsRoute("PUT", "/api/ops/feature-flags/scenes.newToolbar")).toBeNull();
+    expect(matchOpsRoute("POST", "/api/ops/feature-flags/delete/x")).toBeNull();
+    expect(matchOpsRoute("GET", "/api/ops/feature-flags/delete")).toBeNull();
   });
 
   it("serves nothing else", () => {

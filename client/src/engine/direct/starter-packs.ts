@@ -13,6 +13,7 @@ import {
   starterItemKey,
   validateStarterValues,
 } from "@shared/starter-packs";
+import { appendSteps, findMergeTarget, isModuleWorkflowName, type MergeWorkflowFields } from "@shared/workflow-merge";
 import type { UISetting, UISettingValue } from "@woofx3/api";
 import type { WorkflowDefinition } from "@woofx3/api/workflow-definition";
 import { useMemo } from "react";
@@ -153,6 +154,19 @@ export async function installPackItems(
     commandIds: new Set(commands.map((command) => command.id)),
     commandNames: new Set(commands.map((command) => command.command.toLowerCase())),
   };
+  const candidates: (MergeWorkflowFields & { id: string })[] = workflows.flatMap((workflow) => {
+    if (workflow.definition === null) {
+      return [];
+    }
+    return [
+      {
+        id: workflow.id,
+        isEnabled: workflow.isEnabled,
+        managed: isModuleWorkflowName(workflow.name),
+        definition: workflow.definition,
+      },
+    ];
+  });
 
   const groupIdsFor = (names: readonly string[]): string[] =>
     names.map((name) => {
@@ -180,13 +194,34 @@ export async function installPackItems(
     return created.id;
   };
 
-  // The engine creates every workflow off; a pack's is installed to work.
+  // The engine creates every workflow off; a pack's is installed to work. A
+  // pack item that lands on an existing trigger extends it instead, keeping
+  // that workflow's id, name and order.
   const installWorkflow = async (definition: Omit<WorkflowDefinition, "id">): Promise<string> => {
-    const created = await runtime.call("createWorkflow", (api) =>
-      api.createWorkflow({ definition, correlationKey: crypto.randomUUID() })
+    const target = findMergeTarget(candidates, definition.trigger as Record<string, unknown>);
+    if (target === undefined) {
+      const created = await runtime.call("createWorkflow", (api) =>
+        api.createWorkflow({ definition, correlationKey: crypto.randomUUID() })
+      );
+      await runtime.call("setWorkflowEnabled", (api) => api.setWorkflowEnabled(created.id, true, crypto.randomUUID()));
+      return created.id;
+    }
+    const appended = {
+      ...target.definition,
+      id: target.id,
+      tasks: appendSteps(
+        target.definition.tasks as unknown as readonly Record<string, unknown>[],
+        definition.tasks as unknown as readonly Record<string, unknown>[]
+      ),
+    } as unknown as WorkflowDefinition;
+    const result = await runtime.call("updateWorkflow", (api) =>
+      api.updateWorkflow(target.id, { definition: appended, correlationKey: crypto.randomUUID() })
     );
-    await runtime.call("setWorkflowEnabled", (api) => api.setWorkflowEnabled(created.id, true, crypto.randomUUID()));
-    return created.id;
+    if (result !== null && "conflict" in result) {
+      throw new Error("The trigger changed while the pack was installing. Try again.");
+    }
+    target.definition = appended;
+    return target.id;
   };
 
   const installItem = async (item: StarterItem): Promise<StarterPackInstallOutcome> => {
