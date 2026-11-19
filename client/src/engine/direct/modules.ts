@@ -188,29 +188,6 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     return result.workflows.map((workflow) => ({ id: workflow.id, name: workflow.name }));
   };
 
-  const marketplaceInstall = async (
-    listingId: string,
-    approvedPermissions: string[],
-    approvedLocalEndpoints: string[]
-  ): Promise<{ moduleKey: string }> => {
-    const result = await runtime.call("installMarketplaceListing", (api) =>
-      api.installMarketplaceListing(listingId, { approvedPermissions, approvedLocalEndpoints })
-    );
-    switch (result.status) {
-      case "installed":
-        return { moduleKey: result.moduleKey };
-      case "needs_approval": {
-        const asked = [...result.unapproved, ...result.unapprovedLocalEndpoints.map((id) => `local endpoint ${id}`)];
-        throw new Error(
-          `${result.name}@${result.version} asks for access that was not approved (${asked.join(", ")}). ` +
-            "Review the module and install again."
-        );
-      }
-      case "payment_required":
-        throw new Error(paidListingMessage(result.name));
-    }
-  };
-
   const licensedInstall = async (install: LicensedInstall): Promise<LicensedInstallOutcome> => {
     const request: MarketplaceInstallRequest = {
       approvedPermissions: install.approvedPermissions,
@@ -267,7 +244,6 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     useUninstallRequest: () => useEngineRequest(uninstall),
     useReconcileUninstallRequest: () => useEngineRequest(reconcileUninstall),
     useWorkflowsRequest: () => useEngineRequest(workflows),
-    useMarketplaceInstallRequest: () => useEngineRequest(marketplaceInstall),
     useLicensedInstallRequest: () => useEngineRequest(licensedInstall),
     useLicenseKeyRequest: () => useEngineRequest(licenseKey),
     useBundleInstallRequest: () => useEngineRequest(bundleInstall),

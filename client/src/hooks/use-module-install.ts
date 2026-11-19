@@ -1,16 +1,14 @@
 import type { LocalEndpointSummary } from "@shared/local-endpoints";
-import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { useEngineScope } from "@/engine/context";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
-import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
 import {
   useMarketplaceAcquireForInstallRequest,
   useMarketplacePurchaseCheckoutRequest,
   useMarketplacePurchaseCheckoutStateRequest,
 } from "@/engine/hooks/use-marketplace";
-import { useLicensedInstallRequest, useMarketplaceInstallRequest } from "@/engine/hooks/use-modules";
+import { useLicensedInstallRequest } from "@/engine/hooks/use-modules";
 import { useOrganizationAccess } from "@/engine/hooks/use-organization-access";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
@@ -33,10 +31,9 @@ import { browserPurchaseEngineStorage, rememberPurchaseEngine } from "@/lib/purc
 // approval gate, the payment wait, the engine's progress events, and the
 // timeout.
 //
-// An engine with the `marketplace.licenseKeys` capability installs with a
-// license: the account acquires the listing (paying first when it costs
-// money, through billing's checkout for the purchase intent) and the engine
-// downloads it with the key. Any other engine installs by listing id alone.
+// The account acquires the listing (paying first when it costs money,
+// through billing's checkout for the purchase intent) and the engine
+// downloads it with the license key. The state machine is `@/lib/install-flow`.
 
 /** How long to wait for the engine before calling an install failed. */
 const INSTALL_TIMEOUT_MS = 60_000;
@@ -99,11 +96,8 @@ export interface ModuleInstall {
   /** Starts an install or update, asking for approval first when needed. */
   request: (request: InstallRequest) => void;
   approvalDialogProps: ApprovalDialogProps;
-  /**
-   * Null on an engine without license keys. Otherwise buying a module also
-   * starts with `request`: the streamer approves first, then pays.
-   */
-  licensed: LicensedInstallFlow | null;
+  /** Buying a module also starts with `request`: the streamer approves first, then pays. */
+  licensed: LicensedInstallFlow;
 }
 
 /** What one install request sends and asks the streamer for. */
@@ -209,17 +203,6 @@ function useInstallReport(moduleKey: string | null, onReport: (report: InstallRe
  * show what the account owns.
  */
 export function useModuleInstall(
-  onInstalled?: (moduleKey: string) => void,
-  onPurchaseConfirmed?: () => void
-): ModuleInstall {
-  const licenseKeys = useEngineCapability(ENGINE_CAPABILITIES.marketplaceLicenseKeys);
-  const licensed = useLicensedModuleInstall(onInstalled, onPurchaseConfirmed);
-  const unlicensed = useUnlicensedModuleInstall(onInstalled);
-  return licenseKeys ? licensed : unlicensed;
-}
-
-/** The install on an engine with license keys: the state machine in `@/lib/install-flow`. */
-function useLicensedModuleInstall(
   onInstalled?: (moduleKey: string) => void,
   onPurchaseConfirmed?: () => void
 ): ModuleInstall {
@@ -332,107 +315,5 @@ function useLicensedModuleInstall(
       onCancel: () => dispatch({ type: "consent_withdrawn" }),
     },
     licensed: { step: state.step, confirmPurchase, recheckPurchase },
-  };
-}
-
-interface PendingApproval {
-  request: InstallRequest;
-  consent: Consent;
-}
-
-/**
- * The install on an engine without license keys: by listing id, with the
- * approvals, through the Convex `installModule` action.
- *
- * Kept only for engines that do not report the `marketplace.licenseKeys`
- * capability. Delete it, with `installModule`'s Convex download path, once
- * every engine reports that capability; nothing counts that coverage yet, so
- * the deletion waits on it being counted. It must be gone before the
- * marketplace stops serving downloads without a license key, which would
- * break it.
- */
-function useUnlicensedModuleInstall(onInstalled?: (moduleKey: string) => void): ModuleInstall {
-  const { instanceId } = useEngineScope();
-  const installMarketplaceModule = useMarketplaceInstallRequest();
-  const [isInstalling, setIsInstalling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
-  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
-
-  const onReport = (report: InstallReport) => {
-    if (report.status === "failed") {
-      setError(report.message);
-    }
-    setIsInstalling(false);
-    setPendingModuleKey(null);
-    if (report.status === "succeeded" && pendingModuleKey) {
-      onInstalled?.(pendingModuleKey);
-    }
-  };
-  const installEvent = useInstallReport(pendingModuleKey, onReport);
-
-  const run = useCallback(
-    async (marketplaceId: string, approvedPermissions: string[], approvedLocalEndpoints: string[]) => {
-      if (!instanceId) {
-        return;
-      }
-      setIsInstalling(true);
-      setError(null);
-      try {
-        const { moduleKey } = await installMarketplaceModule(
-          marketplaceId,
-          approvedPermissions,
-          approvedLocalEndpoints
-        );
-        setPendingModuleKey(moduleKey);
-      } catch (err) {
-        setError(actionErrorMessage(err));
-        setIsInstalling(false);
-      }
-    },
-    [instanceId, installMarketplaceModule]
-  );
-
-  const request = useCallback(
-    (request: InstallRequest) => {
-      const consent = consentFor(request);
-      if (!needsPrompt(consent)) {
-        void run(request.marketplaceId, consent.approved, consent.approvedLocalEndpoints);
-        return;
-      }
-      setPendingApproval({ request, consent });
-    },
-    [run]
-  );
-
-  const dismissError = useCallback(() => setError(null), []);
-
-  return {
-    isInstalling,
-    error,
-    dismissError,
-    progressMessage: isInstalling ? (installEvent?.message ?? null) : null,
-    succeeded: installEvent?.status === "success",
-    pendingModuleKey,
-    request,
-    approvalDialogProps: {
-      open: pendingApproval !== null,
-      mode: pendingApproval?.request.mode ?? "install",
-      moduleName: pendingApproval?.request.moduleName ?? "This module",
-      permissions: pendingApproval?.consent.toApprove ?? [],
-      localEndpoints: pendingApproval?.consent.endpointsToApprove ?? [],
-      onApprove: () => {
-        if (pendingApproval) {
-          void run(
-            pendingApproval.request.marketplaceId,
-            pendingApproval.consent.approved,
-            pendingApproval.consent.approvedLocalEndpoints
-          );
-        }
-        setPendingApproval(null);
-      },
-      onCancel: () => setPendingApproval(null),
-    },
-    licensed: null,
   };
 }

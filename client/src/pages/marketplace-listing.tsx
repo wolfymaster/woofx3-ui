@@ -231,7 +231,7 @@ function ListingBody({
   const moduleDetail = detailLoad.status === "ready" ? detailLoad.detail : null;
 
   const install = useModuleInstall(onRefetch, onRefetch);
-  const confirmPurchase = install.licensed?.confirmPurchase;
+  const confirmPurchase = install.licensed.confirmPurchase;
   const returnedCheckoutId = purchaseReturn?.checkoutId;
   // Followed on the engine the checkout was opened on, so an organization's
   // checkout is never asked about, or paid again, as another's.
@@ -241,7 +241,7 @@ function ListingBody({
       confirmPurchase({ listingId: listing.id, checkoutId: returnedCheckoutId });
     }
   }, [returnedCheckoutId, onPurchaseEngine, confirmPurchase, listing.id]);
-  const installStep = install.licensed?.step;
+  const installStep = install.licensed.step;
   const settledPurchase = useRef(onPurchaseSettled);
   settledPurchase.current = onPurchaseSettled;
   useEffect(() => {
@@ -253,7 +253,7 @@ function ListingBody({
     }
     settledPurchase.current();
   }, [returnedCheckoutId, installStep]);
-  const recheckPurchase = install.licensed?.recheckPurchase ?? null;
+  const recheckPurchase = install.licensed.recheckPurchase;
   const [removing, setRemoving] = useState(false);
   const [bundleInstalled, setBundleInstalled] = useState<{ kind: "scene" | "alert" } | null>(null);
 
@@ -359,7 +359,7 @@ function ListingBody({
             state={state}
             isInstalling={install.isInstalling}
             onInstallModule={requestInstall}
-            onPurchase={install.licensed ? requestInstall : undefined}
+            onPurchase={requestInstall}
             onBundleInstalled={(result) => {
               setBundleInstalled({ kind: result.kind });
               onRefetch();
@@ -380,7 +380,7 @@ function ListingBody({
               {install.progressMessage}
             </p>
           )}
-          {install.licensed?.step === "finalizing_payment" && (
+          {install.licensed.step === "finalizing_payment" && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="text-finalizing-payment">
               <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" />
               {CHECKOUT_POLL_TEXT.polling}

@@ -487,17 +487,6 @@ export interface ModulesGateway {
   /** The engine's workflows, by id and name. */
   useWorkflowsRequest(): () => Promise<EngineWorkflowOption[]>;
   /**
-   * Installs or updates a marketplace module; resolves with the key its
-   * progress and outcome are reported under (`transientEvents`), not when it
-   * is installed. Rejects when the archive declares a permission or local
-   * endpoint (by id) outside the approved lists.
-   */
-  useMarketplaceInstallRequest(): (
-    marketplaceModuleId: string,
-    approvedPermissions: string[],
-    approvedLocalEndpoints: string[]
-  ) => Promise<{ moduleKey: string }>;
-  /**
    * Installs or updates a module or theme listing the account holds, on an
    * engine with the `marketplace.licenseKeys` capability. Rejects with the
    * engine's reason when it refuses the install.

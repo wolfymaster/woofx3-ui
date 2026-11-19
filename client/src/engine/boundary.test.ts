@@ -195,7 +195,7 @@ describe("engine adapter boundary", () => {
 
 // A Convex module a namespace owns whole is the adapter's to import, types
 // included: a screen naming its shapes would depend on how the Convex gateway
-// serves the engine. A function entry (`marketplace.installModule`) leaves its module's
+// serves the engine. A function entry (`marketplaceCatalog.installBundle`) leaves its module's
 // other exports to the cloud, so only whole-module entries are guarded.
 const CONVEX_DIR = join(CLIENT_SRC, "..", "..", "convex");
 const CONVEX_ALIAS = "@convex/";
@@ -453,7 +453,7 @@ describe("engine boundary", () => {
     expect(pattern.test("useAction(api.engineSync.syncNow)")).toBe(true);
     expect(pattern.test("useQuery(api.macros.list)")).toBe(true);
     expect(pattern.test("useQuery(api.macroTriggers.listForInstance)")).toBe(false);
-    expect(pattern.test("useAction(api.marketplace.installModule)")).toBe(true);
+    expect(pattern.test("useAction(api.marketplaceCatalog.installBundle)")).toBe(true);
     expect(pattern.test("useAction(api.marketplace.listModules)")).toBe(false);
     expect(pattern.test("useQuery(api.scenesLibrary.list)")).toBe(false);
     expect(pattern.test("useQuery(api.instances.listForCurrentUser)")).toBe(false);
