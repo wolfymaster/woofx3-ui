@@ -43,7 +43,7 @@ The routes, query parameters, request bodies, response shapes and error codes ar
 Everything else derives from it, and nothing is copied by hand:
 
 - **The route matcher** (`convex/lib/ops/routes.ts`) is built from the table's path templates. The table is checked when the module loads: duplicate names or endpoints, a path outside `/api/ops/` or a parameter with no name throw at import.
-- **Request bodies** are parsed with the contract's schemas (`parseRequestBody`), so what the document says is what the handler enforces. A refused body answers `400` with the route's error code (`invalid_notification`, `invalid_feature_flag`, `invalid_storage_limits`, `invalid_billing_projection`) and the first problem as its message. The storage-limits and billing-projection bodies refuse unknown fields; the notification and feature-flag bodies ignore them.
+- **Request bodies** are parsed with the contract's schemas (`parseRequestBody`), so what the document says is what the handler enforces. A refused body answers `400` with the route's error code (`invalid_notification`, `invalid_feature_flag`, `invalid_storage_limits`, `invalid_billing_projection`) and the first problem as its message. Every body refuses a field the schema does not declare.
 - **DTO types** (`convex/lib/ops/dto.ts`) are `z.infer` of the contract's schemas, and each mapper is typed to return one.
 - **The OpenAPI 3.1 document** is `openapi/ops.json`, written by `bun run ops:openapi` with sorted keys. A test fails when the committed file differs from what the contract generates, so a contract change and its regenerated document land together. Read the document, not this page, for the list of routes, parameters and error codes.
 

@@ -1,7 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { OPS_CALLERS } from "./callers";
-import { buildOpsOpenApi, OPS_ROUTES, type OpsRouteSpec, validateOpsRoutes } from "./contract";
+import {
+  billingProjectionRequestSchema,
+  buildOpsOpenApi,
+  featureFlagKeyRequestSchema,
+  featureFlagRequestSchema,
+  issueReferralCodeRequestSchema,
+  notificationRequestSchema,
+  OPS_ROUTES,
+  type OpsRouteSpec,
+  revokeReferralCodeRequestSchema,
+  storageLimitsRequestSchema,
+  updateReferralCodeRequestSchema,
+  validateOpsRoutes,
+} from "./contract";
 import { OPS_OPENAPI_PATH, opsOpenApiText } from "./openapi";
 
 const ROUTES = OPS_ROUTES as readonly OpsRouteSpec[];
@@ -103,5 +116,26 @@ describe("caller scopes", () => {
     const scoped = new Set(OPS_CALLERS.flatMap((caller) => [...caller.scopes]));
     const unscoped = [...names].filter((name) => !scoped.has(name));
     expect(unscoped.sort()).toEqual([...ROUTES_IN_NO_SCOPE].sort());
+  });
+});
+
+describe("request bodies", () => {
+  const schemas = {
+    billingProjection: billingProjectionRequestSchema,
+    featureFlag: featureFlagRequestSchema,
+    featureFlagKey: featureFlagKeyRequestSchema,
+    issueReferralCode: issueReferralCodeRequestSchema,
+    notification: notificationRequestSchema,
+    revokeReferralCode: revokeReferralCodeRequestSchema,
+    storageLimits: storageLimitsRequestSchema,
+    updateReferralCode: updateReferralCodeRequestSchema,
+  };
+
+  test.each(Object.entries(schemas))("%s refuses a field the schema does not declare", (_name, schema) => {
+    const result = schema.safeParse({ notDeclared: 1 });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.code === "unrecognized_keys")).toBe(true);
+    }
   });
 });

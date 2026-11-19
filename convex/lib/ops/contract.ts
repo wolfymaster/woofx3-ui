@@ -475,6 +475,7 @@ export const notificationRequestSchema = z
       { errorMap: () => ({ message: NOTIFICATION_AUDIENCE_MESSAGE }) }
     ),
   })
+  .strict()
   .transform((raw, ctx) => {
     const actionLabel = (raw.actionLabel ?? "").trim();
     const link = (raw.link ?? "").trim();
@@ -535,6 +536,7 @@ const featureFlagRulesRequestSchema = z
       .optional()
       .openapi({ description: "A key of the entitlement catalog, as `featureFlags.list` returns it." }),
   })
+  .strict()
   .transform((input, ctx) => {
     const rules: {
       users?: string[];
@@ -593,6 +595,7 @@ export const featureFlagRequestSchema = z
       description: 'Required under state "rules" and refused otherwise.',
     }),
   })
+  .strict()
   .transform((flag, ctx) => {
     const refuse = (message: string) => {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message });
@@ -612,12 +615,12 @@ export const featureFlagRequestSchema = z
     return flag;
   })
   .openapi("FeatureFlagRequest", {
-    description:
-      "The whole definition: a create and an update carry the same shape; the key names the row. Unknown fields are ignored.",
+    description: "The whole definition: a create and an update carry the same shape; the key names the row.",
   });
 
 export const featureFlagKeyRequestSchema = z
   .object({ key: flagKey("key must name a feature flag") })
+  .strict()
   .openapi("FeatureFlagKeyRequest");
 
 const MAX_REWARD_CENTS = 1_000_000;
@@ -646,13 +649,18 @@ export const issueReferralCodeRequestSchema = z
     rewardCents: referralReward,
     actor: referralActor,
   })
+  .strict()
   .openapi("IssueReferralCodeRequest");
 
 export const updateReferralCodeRequestSchema = z
   .object({ rewardCents: referralReward, actor: referralActor })
+  .strict()
   .openapi("UpdateReferralCodeRequest");
 
-export const revokeReferralCodeRequestSchema = z.object({ actor: referralActor }).openapi("RevokeReferralCodeRequest");
+export const revokeReferralCodeRequestSchema = z
+  .object({ actor: referralActor })
+  .strict()
+  .openapi("RevokeReferralCodeRequest");
 
 const BILLING_LIMIT_ENTRIES_MESSAGE = "overrides.limits must be an object of amounts";
 const BILLING_OVERRIDES_MESSAGE =
