@@ -40,7 +40,7 @@ import {
   commerceConfigured,
   contentAccessFor,
   contentRefusal,
-  fetchListingContent,
+  fetchClaimedListingContent,
   marketplaceAccessForInstanceId,
 } from "./lib/marketplaceEntitlement";
 import {
@@ -351,7 +351,7 @@ export const installBundle = action({
       await acquireListing(ctx, args.instanceId, listing.id, listing.name);
       let bundlePayload: unknown;
       try {
-        bundlePayload = await fetchListingContent(
+        bundlePayload = await fetchClaimedListingContent(
           `/catalog/${encodeURIComponent(listing.id)}/bundle`,
           await contentAccessFor(ctx, args.instanceId)
         );

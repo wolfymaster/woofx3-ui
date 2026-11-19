@@ -49,7 +49,7 @@ retired or unpriced one is unavailable, and one that costs money shows
 
 | Type | What it is | How it installs |
 |---|---|---|
-| `module` | The existing module format | Unchanged: `api.marketplace.installModule` |
+| `module` | The existing module format | `api.marketplace.installWithLicense` |
 | `theme` | Reskins a widget of another module | The same path — a theme pack *is* a module archive |
 | `emote` | An image pack. No code, no behaviour | Nothing to install; the images are the product |
 | `overlay` | A prepackaged scene | `marketplaceCatalog.installBundle` → `createScene` |
@@ -158,8 +158,8 @@ but its page still works for the accounts that hold it and points them at the
 new one (`supersededBy`).
 
 Every edition of a module installs under its manifest id (the listing's
-`moduleKey`): the install key is `{manifest id}:{version}:{sha7}` on both
-install paths, because barkloader computes the key from the archive and
+`moduleKey`): the install key is `{manifest id}:{version}:{sha7}` on
+every install, because barkloader computes the key from the archive and
 refuses any other. Edition 2 therefore replaces edition 1 in place, and
 edition 1's key is the one it always had (its listing id is its manifest id).
 Since the key no longer says which listing is installed, a `moduleRepository`
@@ -208,10 +208,10 @@ Every listing type buys this way, bundles included: a bundle's install writes
 a scene or an alert composition rather than a module, but the purchase is the
 same purchase.
 
-**The gate is on the server, and it fails closed.** Both install paths call
-`acquireListing` (`convex/lib/marketplaceEntitlement.ts`) before the engine is
-asked to install anything — for a module, after the streamer approves its
-permissions, so backing out acquires nothing.
+**The gate is on the server, and it fails closed.** A module is claimed by the
+engine (see "Installing on the engine"). A bundle's install calls
+`acquireListing` (`convex/lib/marketplaceEntitlement.ts`) before its content is
+fetched.
 
 - With `MARKETPLACE_CONVEX_TOKEN` set, it is the marketplace's
   `POST /catalog/{id}/acquire`: it claims a free listing or a free upgrade,
@@ -221,34 +221,34 @@ permissions, so backing out acquires nothing.
 - Without the token nothing can be recorded, so only a listing the public
   catalog prices `free` installs.
 
-Content — a module archive or a bundle — is fetched by `fetchListingContent`:
-anonymously at the engine's own catalog access first, which is how free
-content is served and keeps dev-tier listings hidden from engines not
-flagged for them; then, only on a 401 (visible but not free), with the write
-token as the buyer. The marketplace serves it only to an account that holds
-the listing. Previews — the module detail's permission read, the file browser
-for a module not yet installed, setup platforms — use the same fetch without
-acquiring anything.
+A bundle's content is fetched by `fetchClaimedListingContent`, only after
+`acquireListing` has claimed the listing: as the buyer with the write token, or
+without one at the engine's catalog access for a listing the public catalog
+prices free. The marketplace serves it only to an account that holds the
+listing. Nothing downloads a module archive in Convex: the module detail's
+permission read and the setup platform review read the listing's own detail
+(`listingDeclarations`), and the file browser lists a module's files only once
+it is installed.
 
 ### Installing on the engine
 
-On an engine that supports it, the engine does the fetching and the acquire
-instead (`convex/lib/marketplaceEngineInstall.ts`).
-`marketplaceEngineFor` picks the path per call, and takes the engine only when
-all of these hold, checked cheapest first:
+A module install always runs on the engine (`convex/lib/marketplaceEngineInstall.ts`),
+for every kind of instance, dev-tier ones included. The engine reads the
+listing, claims it with `acquire` and downloads the build itself, with a fresh
+buyer token. `marketplaceEngineFor` needs:
 
-- the engine does not have dev marketplace access (the engine reads
-  `/catalog/{id}` anonymously, where dev-tier listings do not exist);
-- `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are set, so a buyer token can
-  be minted;
-- the engine answers (`getEngineInfo`).
+- the instance to be registered with its engine and
+  `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` to be set, so a buyer token can
+  be minted; without them a module install is refused with a plain message,
+  and a bundle install falls back to the Convex acquire path above;
+- the engine to answer (`getEngineInfo`). An engine that does not answer fails
+  the install with "Your engine isn't answering right now"; nothing falls back
+  to another path.
 
-Otherwise everything above runs unchanged. On the engine path, the module install (`installMarketplaceListing`),
-the bundle install (`installMarketplaceBundle`), the file list of a module not
-yet installed and the setup platform review (`inspectMarketplaceListing`) each
-get a fresh buyer token. The engine calls `acquire` itself with that token,
-which also counts the install, so Convex does not call `acquireListing` there.
-Inspecting acquires nothing.
+The module install (`installMarketplaceListing`) and the bundle install
+(`installMarketplaceBundle`) each get a fresh buyer token. The engine calls
+`acquire` itself with that token, which also counts the install, so Convex does
+not call `acquireListing` for a module.
 
 A module install also reads the listing from `/catalog/{id}` first, for its
 name and its manifest id (`moduleKey`), which the engine's install key must
@@ -273,16 +273,15 @@ What differs on the engine path:
   and skipped when the engine's own callback already settled the key. A
   failure before that is reported by the action itself; the browser only
   watches the key the action returns.
-- Reading one file of a module that is not installed still uses the archive
-  fetched by Convex, because the engine has no call for it.
 
 ## Licensed installs
 
-An engine that reports the `marketplace.licenseKeys` capability installs a
-module or theme listing with the organization's **license key**, and claims
-nothing itself. The browser runs the install as a state machine
-(`client/src/lib/install-flow.ts`), driven by `useLicensedModuleInstall` in
-`hooks/use-module-install.ts`.
+A module or theme listing installs with the organization's **license key**,
+and the browser claims nothing itself. The browser runs the install as a state
+machine (`client/src/lib/install-flow.ts`), driven by `useModuleInstall` in
+`hooks/use-module-install.ts`. An engine that does not report the
+`marketplace.licenseKeys` capability cannot install from the marketplace until
+it is updated.
 
 ### The actions
 
@@ -391,21 +390,6 @@ grant revokes the entitlement, so a later acquire is refused as
 Consent comes before acquire, so a streamer who backs out claims nothing.
 Every command is idempotent, so a reload starts again from what the
 marketplace and the engine say.
-
-### Transitional paths
-
-These cover engines and purchases the licensed flow does not reach yet. Each
-must be deleted once its condition holds:
-
-- **The unlicensed install** (`useUnlicensedModuleInstall`, the Convex
-  `installModule` action) runs on an engine without `marketplace.licenseKeys`.
-  Buying on such an engine is refused outright: the purchase needs the same
-  capability, because the license the install carries is what the marketplace
-  grants it.
-- **The Convex download path** in `installFromMarketplace` fetches the archive
-  in Convex without a key. Both go once every engine reports the capability,
-  which nothing counts yet, and before the marketplace requires a key for every
-  download, which would break them.
 
 ## Author pages
 

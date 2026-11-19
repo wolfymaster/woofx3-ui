@@ -1211,28 +1211,6 @@ describe("modules", () => {
     expect(runtime.queryClient.getQueryState(directKeys.moduleResources.instances())?.isInvalidated).toBe(true);
   });
 
-  test("a marketplace install sends the approvals and explains a refusal", async () => {
-    const { runtime, state } = await connected();
-    const install = renderDirect(() => directModulesGateway(runtime).useMarketplaceInstallRequest()).current();
-    expect(await install("listing", ["chat.read"], ["obs"])).toEqual({ moduleKey: "listing:1.0.0:abc1234" });
-    expect(state.callsOf("installMarketplaceListing")).toEqual([
-      ["listing", { approvedPermissions: ["chat.read"], approvedLocalEndpoints: ["obs"] }],
-    ]);
-
-    state.listingInstall = {
-      status: "needs_approval",
-      name: "Cozy",
-      version: "2.0.0",
-      unapproved: ["chat.write"],
-      unapprovedLocalEndpoints: ["obs"],
-    };
-    expect(String(await install("listing", [], []).catch((error: Error) => error))).toContain(
-      "(chat.write, local endpoint obs)"
-    );
-    state.listingInstall = { status: "payment_required", name: "Cozy", version: "2.0.0" };
-    expect(String(await install("listing", [], []).catch((error: Error) => error))).toContain("Sign in");
-  });
-
   test("a licensed install sends the key when there is one, and answers needs_approval with what the build asks", async () => {
     const { runtime, state } = await connected();
     const install = renderDirect(() => directModulesGateway(runtime).useLicensedInstallRequest()).current();
