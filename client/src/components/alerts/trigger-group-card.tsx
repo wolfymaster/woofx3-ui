@@ -1,12 +1,14 @@
-import { ChevronRight, ExternalLink } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { ExternalLink, X } from "lucide-react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { TriggerAdvancedSettings, TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
+import { InlineGroupPicker, TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { useResourceLabels } from "@/engine/hooks/use-module-resources";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
+import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
@@ -18,7 +20,6 @@ import {
   triggerParts,
   triggerSummary,
 } from "@/lib/alert-triggers";
-import type { SentencePart } from "@/lib/condition-sentence";
 import { stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
 import { resolveCatalogAction } from "@/lib/workflow-node-label";
@@ -73,8 +74,13 @@ interface TriggerGroupCardProps {
   title: string;
   isOpen: boolean;
   onToggle: () => void;
-  /** The step editor for the streamer's steps, given what else runs on the trigger. */
-  editor: (steps: EventTrigger, alsoRuns: ReactNode) => ReactNode;
+  /** The step editor for the streamer's steps, given what else runs on the trigger and where to register its pending save. */
+  editor: (
+    steps: EventTrigger,
+    alsoRuns: ReactNode,
+    workflows: readonly Workflow[],
+    registerClose: (close: () => Promise<boolean>) => void
+  ) => ReactNode;
   /** Starts the streamer's own steps on this trigger, which has none running. */
   onAddSteps: () => void;
 }
@@ -108,69 +114,111 @@ export function TriggerGroupCard({
     return health ? [health] : [];
   })[0];
   const firstId = group.members[0].row.engineWorkflowId;
+  const workflows = group.members.map((member) => member.row);
   const alsoRuns = parts.modules.length > 0 && (
     <AlsoRuns modules={parts.modules} afterSteps={parts.steps !== undefined} />
   );
+  const closeRef = useRef<() => Promise<boolean>>();
+  const registerClose = useCallback((close: () => Promise<boolean>) => {
+    closeRef.current = close;
+  }, []);
+  const collapse = useCallback(() => {
+    void (async () => {
+      const ok = closeRef.current ? await closeRef.current() : true;
+      if (ok) {
+        onToggle();
+      }
+    })();
+  }, [onToggle]);
 
   return (
     <article
-      className={cn("rounded-2xl border bg-card", isOpen && "border-foreground/20")}
+      className={cn("rounded-2xl border bg-card transition-colors duration-300", isOpen && "border-foreground/20")}
       data-testid={`trigger-card-${firstId}`}
     >
-      <div className="relative flex items-center gap-2 py-2.5 pl-2 pr-2.5">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={isOpen}
-          aria-label={`${title}. ${isOpen ? "Close" : "Open"}`}
-          className="flex h-[52px] w-9 shrink-0 items-center justify-center rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
-          data-testid={`trigger-toggle-${firstId}`}
-        >
-          <ChevronRight
-            className={cn("h-4 w-4 transition-transform duration-150", isOpen && "rotate-90")}
-            aria-hidden="true"
+      {!isOpen && (
+        <div className="group relative flex items-center gap-2 py-2.5 pl-3.5 pr-2.5">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={false}
+            aria-label={`${title}. Open`}
+            className="h-[52px] w-3 shrink-0 rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
+            data-testid={`trigger-toggle-${firstId}`}
           />
-        </button>
-        <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
-          <span className="text-base font-medium leading-snug">{sentence}</span>
-          <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
-            {!anyOn && (
-              <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
-            )}
-            <TriggerGroupChips workflows={group.members.map((member) => member.row)} />
-            {unhealthy && (
-              <span className="relative z-10 shrink-0">
-                <NotRunningBadge health={unhealthy} />
-              </span>
-            )}
-            <span className="truncate">{summary}</span>
-          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
+            <span className="text-base font-medium leading-snug decoration-muted-foreground/70 underline-offset-4 group-hover:underline group-hover:decoration-dotted">
+              {sentence}
+            </span>
+            <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
+              {!anyOn && (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
+              )}
+              <TriggerGroupChips workflows={group.members.map((member) => member.row)} />
+              {unhealthy && (
+                <span className="relative z-10 shrink-0">
+                  <NotRunningBadge health={unhealthy} />
+                </span>
+              )}
+              <span className="truncate">{summary}</span>
+            </span>
+          </div>
+          <div className="relative z-10 flex h-11 w-14 shrink-0 items-center justify-center">
+            <Switch
+              checked={anyOn}
+              disabled={isSwitching}
+              onCheckedChange={() => void switchWorkflows(group.members, !anyOn)}
+              aria-label="Trigger on"
+              data-testid={`trigger-enabled-${firstId}`}
+            />
+          </div>
         </div>
-        <div className="relative z-10 flex h-11 w-14 shrink-0 items-center justify-center">
-          <Switch
-            checked={anyOn}
-            disabled={isSwitching}
-            onCheckedChange={() => void switchWorkflows(group.members, !anyOn)}
-            aria-label="Trigger on"
-            data-testid={`trigger-enabled-${firstId}`}
-          />
-        </div>
-      </div>
+      )}
 
       {isOpen && (
-        <div className="flex flex-col gap-4 border-t p-4 sm:p-5">
+        <div className="card-reveal flex flex-col gap-4 p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={cn("text-[13px] font-medium", !anyOn && "text-muted-foreground")}>
+                {anyOn ? "Trigger on" : "Trigger paused"}
+              </span>
+              {unhealthy && <NotRunningBadge health={unhealthy} />}
+            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex h-11 w-14 items-center justify-center">
+                <Switch
+                  checked={anyOn}
+                  disabled={isSwitching}
+                  onCheckedChange={() => void switchWorkflows(group.members, !anyOn)}
+                  aria-label="Trigger on"
+                  data-testid={`trigger-enabled-${firstId}`}
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={collapse}
+                aria-label="Collapse trigger"
+                data-testid={`trigger-collapse-${firstId}`}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
           <SeparateOwnSteps parts={parts} />
           {parts.steps ? (
-            editor(parts.steps, alsoRuns || undefined)
+            editor(parts.steps, alsoRuns || undefined, workflows, registerClose)
           ) : (
             <>
               <Button variant="outline" className="h-11 self-start sm:h-9" onClick={onAddSteps}>
                 Add your own steps
               </Button>
               {alsoRuns}
+              <AdvancedDisclosure>
+                <InlineGroupPicker workflows={workflows} />
+              </AdvancedDisclosure>
             </>
           )}
-          <TriggerAdvancedSettings workflows={group.members.map((member) => member.row)} />
         </div>
       )}
     </article>

@@ -17,6 +17,7 @@ import {
 } from "./_generated/server";
 import { addGroupMemberInEngine, createCommandInEngine, createGroupInEngine } from "./chatCommandActions";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { findEngineMergeTarget } from "./lib/engineWorkflows";
 import { requireInstanceRole, requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { flattenSteps } from "./lib/setupImport/build";
 import { compileCommandActions, compileWorkflow, missingRequirementMessage } from "./lib/setupImport/compile";
@@ -36,7 +37,12 @@ import {
 import { isInstanceMember } from "./lib/teamAccess";
 import { findResourceKind } from "./resourceKinds";
 import { starterCatalog } from "./starterPacks";
-import { createWorkflowInEngine, EngineConfirmationTimeout, type InstanceContext } from "./workflowActions";
+import {
+  appendWorkflowSteps,
+  createWorkflowInEngine,
+  EngineConfirmationTimeout,
+  type InstanceContext,
+} from "./workflowActions";
 import type { CatalogBundle } from "./workflowCatalogContext";
 
 /**
@@ -797,14 +803,25 @@ async function applyWorkflow(
   await ctx.runMutation(internal.setupImports.setCorrelation, { itemId: item._id, correlationKey });
   let engineId: string;
   try {
-    engineId = await createWorkflowInEngine(
-      ctx,
-      instanceId,
-      instance,
-      // Carries delay waits and `$ref`s, which the shared WorkflowDefinition type does not model.
-      definition as unknown as Omit<WorkflowDefinition, "id">,
-      correlationKey
-    );
+    const target = await findEngineMergeTarget(instance, definition.trigger as Record<string, unknown>);
+    engineId =
+      target === undefined
+        ? await createWorkflowInEngine(
+            ctx,
+            instanceId,
+            instance,
+            // Carries delay waits and `$ref`s, which the shared WorkflowDefinition type does not model.
+            definition as unknown as Omit<WorkflowDefinition, "id">,
+            correlationKey
+          )
+        : await appendWorkflowSteps(
+            ctx,
+            instanceId,
+            instance,
+            target,
+            definition.tasks as unknown as readonly Record<string, unknown>[],
+            correlationKey
+          );
   } catch (err) {
     if (err instanceof EngineConfirmationTimeout) {
       return { outcome: "pending", message: "The engine has not confirmed it yet; it shows as imported once it does." };

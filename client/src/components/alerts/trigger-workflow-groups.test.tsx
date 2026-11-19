@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { Router } from "wouter";
+import { memoryLocation } from "wouter/memory-location";
 import { EngineGatewayProvider } from "@/engine/context";
 import type { EngineGateway } from "@/engine/gateway";
 import type { Workflow, WorkflowGroup } from "@/engine/types";
-import { TriggerAdvancedSettings, TriggerGroupChips } from "./trigger-workflow-groups";
+import { InlineGroupPicker, TriggerGroupChips } from "./trigger-workflow-groups";
 
 function workflow(id: string, groupIds: string[]): Workflow {
   return { engineWorkflowId: id, definition: {}, isEnabled: true, groupIds, createdAt: 0, updatedAt: 0 };
@@ -38,7 +40,11 @@ function gatewayWith(supported: boolean, onGroupsRead: () => void = () => {}): E
 async function render(gateway: EngineGateway, element: ReactElement): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
-    renderer = create(<EngineGatewayProvider gateway={gateway}>{element}</EngineGatewayProvider>);
+    renderer = create(
+      <Router hook={memoryLocation({ path: "/" }).hook}>
+        <EngineGatewayProvider gateway={gateway}>{element}</EngineGatewayProvider>
+      </Router>
+    );
   });
   // Lets a support check the component started settle.
   await act(async () => {
@@ -77,14 +83,19 @@ describe("TriggerGroupChips", () => {
   });
 });
 
-describe("TriggerAdvancedSettings", () => {
-  test("is offered when the engine has groups", async () => {
-    const renderer = await render(gatewayWith(true), <TriggerAdvancedSettings workflows={[workflow("w-1", [])]} />);
-    expect(text(renderer)).toContain("Advanced");
+describe("InlineGroupPicker", () => {
+  test("offers the groups as inline checkboxes, with no menu overlay", async () => {
+    const renderer = await render(gatewayWith(true), <InlineGroupPicker workflows={[workflow("w-1", ["g-1"])]} />);
+    const tree = text(renderer);
+    expect(tree).toContain("Group");
+    expect(tree).toContain("Holiday");
+    expect(tree).toContain("Sponsor");
+    expect(tree).toContain("checkbox");
+    expect(tree).not.toContain("menu");
   });
 
   test("is hidden on an engine without groups", async () => {
-    const renderer = await render(gatewayWith(false), <TriggerAdvancedSettings workflows={[workflow("w-1", [])]} />);
+    const renderer = await render(gatewayWith(false), <InlineGroupPicker workflows={[workflow("w-1", [])]} />);
     expect(renderer.toJSON()).toBeNull();
   });
 });

@@ -22,6 +22,8 @@ export interface StepInlineEditorProps {
   onChange: (step: StepNode) => void;
   /** Absent where steps have no ids the streamer edits, as on a macro button. */
   onRename?: (oldId: string, newId: string) => void;
+  /** The sentence editor keeps Step ID in its bottom Advanced disclosure. */
+  showStepId?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export function StepInlineEditor({
   conditionSources,
   onChange,
   onRename,
+  showStepId,
 }: StepInlineEditorProps) {
   if (catalogLoading) {
     return <p className="text-sm text-muted-foreground">Loading catalog…</p>;
@@ -52,6 +55,7 @@ export function StepInlineEditor({
           availableVariables={availableVariables}
           onChange={onChange}
           onRename={onRename}
+          showStepId={showStepId}
         />
       );
     case "condition":

@@ -214,6 +214,17 @@ describe("newTriggerTree", () => {
     expect(step.id).toBe(SEED_STEP_ID);
     expect(step.type === "action" && step.parameters).toEqual({ target: "deaths" });
   });
+
+  test("a recipe seed starts with the values it was chosen with", () => {
+    const tree = newTriggerTree({
+      triggerPreset: preset,
+      conditionFields: [],
+      seed: increment,
+      seedParameters: { target: "woofx3:counter:hype" },
+    });
+    const [step] = tree.steps;
+    expect(step.type === "action" && step.parameters).toMatchObject({ target: "woofx3:counter:hype" });
+  });
 });
 
 describe("a trigger split from a workflow of several", () => {
