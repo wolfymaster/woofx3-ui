@@ -1,5 +1,11 @@
 # woofx3 desktop changelog
 
+## [0.20.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.19.0...woofx3-v0.20.0) (2026-11-19)
+
+### Features
+
+* **alerts:** sentence-first trigger editor with inline install recipes ([f180de8](https://github.com/wolfymaster/woofx3-ui/commit/f180de8db6b08e6222cfe4ad841f7b9da88034db))
+
 ## [0.19.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.18.0...woofx3-v0.19.0) (2026-11-19)
 
 ### Features
