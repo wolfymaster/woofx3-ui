@@ -91,6 +91,18 @@ function UpgradeOptions({
   }
 
   const promotionCode = preview?.discount ? preview.code : undefined;
+  function choiceLabel(plan: PlanTier): string {
+    if (isCurrent(plan)) {
+      return "Your plan";
+    }
+    if (!changesExisting) {
+      return `Choose ${planName(names, plan)}`;
+    }
+    if (plan === current?.plan) {
+      return `Switch to ${interval === "year" ? "yearly" : "monthly"} billing`;
+    }
+    return `Change to ${planName(names, plan)}`;
+  }
   const isCurrent = (plan: PlanTier) => current !== null && plan === current.plan && interval === current.interval;
 
   function choose(plan: PlanTier) {
@@ -175,13 +187,7 @@ function UpgradeOptions({
                     onClick={() => choose(plan)}
                     data-testid={`button-choose-${plan}`}
                   >
-                    {isCurrent(plan)
-                      ? "Your plan"
-                      : changesExisting
-                        ? plan === current?.plan
-                          ? `Switch to ${interval === "year" ? "yearly" : "monthly"} billing`
-                          : `Change to ${planName(names, plan)}`
-                        : `Choose ${planName(names, plan)}`}
+                    {choiceLabel(plan)}
                   </Button>
                 )}
               </CardContent>
