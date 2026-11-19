@@ -1,14 +1,7 @@
 import { actionDefinitionRow, triggerDefinitionRow } from "@shared/definition-rows";
-import type { LocalEndpointSummary, LocalProtocol } from "@shared/local-endpoints";
 import { installedDetail, type ModuleDetailResult } from "@shared/module-detail";
 import { bareModuleKey } from "@shared/module-key";
-import type {
-  AvailableFunction,
-  EngineModuleSummary,
-  MarketplaceListingInspection,
-  ModuleSetting,
-  Woofx3EngineApi,
-} from "@woofx3/api";
+import type { AvailableFunction, EngineModuleSummary, ModuleSetting, Woofx3EngineApi } from "@woofx3/api";
 import type { InstalledModule, ModuleDetail, ModuleId, ModuleProvenance, ModuleSettingValue } from "@/engine/types";
 import { toModuleId } from "../ids";
 
@@ -154,18 +147,6 @@ export function toInstalledModuleDetail(
     registrations.widgets.filter(owns).map((w) => ({ widgetId: w.id, name: w.name })),
     manifest
   );
-}
-
-const LOCAL_PROTOCOLS: ReadonlySet<string> = new Set<LocalProtocol>(["websocket", "http"]);
-
-/**
- * The local endpoints an inspection reports, kept to the protocols this
- * dashboard knows; the engine validated every entry at publish.
- */
-export function inspectionLocalEndpoints(inspection: MarketplaceListingInspection): LocalEndpointSummary[] {
-  return inspection.localEndpoints
-    .filter((endpoint) => LOCAL_PROTOCOLS.has(endpoint.protocol))
-    .map((endpoint) => ({ id: endpoint.id, name: endpoint.name, protocol: endpoint.protocol as LocalProtocol }));
 }
 
 export function toModuleDetail(result: ModuleDetailResult<ModuleId>): ModuleDetail {

@@ -1,12 +1,11 @@
 /**
  * Marketplace installs carried out by the engine.
  *
- * The engine can install a listing by id (`installMarketplaceListing`), read
- * the build an install would use (`inspectMarketplaceListing`) and install an
- * overlay or alert bundle (`installMarketplaceBundle`). It reads the listing,
+ * The engine can install a listing by id (`installMarketplaceListing`) and
+ * install an overlay or alert bundle (`installMarketplaceBundle`). It reads the listing,
  * claims it with `acquire`, downloads and verifies the content itself, with a
- * buyer token this deployment mints. The Convex actions that install, review
- * and browse marketplace content take that path only when
+ * buyer token this deployment mints. The Convex actions that install marketplace
+ * content take that path only when
  * `marketplaceEngineFor` allows it, and otherwise run their own download path.
  * Either way they answer with the same shapes.
  *
@@ -14,14 +13,11 @@
  * Convex functions.
  */
 
-import type { LocalEndpointSummary, LocalProtocol } from "@shared/local-endpoints";
 import { type CatalogListing, isModuleListing, parseCatalogDetail } from "@shared/marketplace-catalog";
 import type {
   MarketplaceBundleInstallResult as EngineBundleInstallResult,
   MarketplaceInstallResult as EngineModuleInstallResult,
   MarketplaceInstallRequest,
-  MarketplaceListingInspection,
-  ModuleFileList,
 } from "@woofx3/api";
 import { parseMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
 import { ConvexError } from "convex/values";
@@ -66,10 +62,7 @@ export type InstallBundleResult = {
 };
 
 /** The engine methods the marketplace path calls. */
-export type MarketplaceEngine = Pick<
-  EngineApi,
-  "installMarketplaceListing" | "inspectMarketplaceListing" | "installMarketplaceBundle"
->;
+export type MarketplaceEngine = Pick<EngineApi, "installMarketplaceListing" | "installMarketplaceBundle">;
 
 // --- routing ---
 
@@ -416,48 +409,4 @@ export async function installBundleThroughEngine(
     throw engineFailure(err);
   }
   return bundleInstallResultFromEngine(result);
-}
-
-// --- reviews and file browsing ---
-
-/** An uninstalled listing's files, as `listModuleFiles` answers for an installed one. */
-export function moduleFilesFromInspection(inspection: MarketplaceListingInspection): ModuleFileList {
-  return { available: true, files: inspection.files.map(({ path, size }) => ({ path, size })) };
-}
-
-/**
- * The build an install would use, read by the engine. Claims nothing, so
- * browsing or reviewing a listing is never counted as an install. Failures
- * propagate: both callers already turn any failure into their own answer.
- */
-export async function inspectThroughEngine(
-  deps: EngineCallDeps,
-  listingId: string
-): Promise<MarketplaceListingInspection> {
-  const buyerToken = await deps.buyerToken();
-  return await deps.engine().inspectMarketplaceListing(listingId, buyerToken);
-}
-
-/** What the setup review offers for approval of one listing. */
-export interface SetupReview {
-  permissions: string[];
-  localEndpoints: LocalEndpointSummary[];
-}
-
-const LOCAL_PROTOCOLS: ReadonlySet<string> = new Set<LocalProtocol>(["websocket", "http"]);
-
-/**
- * What the setup review shows for a listing: its permissions and local
- * endpoints. The engine reports every `local[]` entry with an id; one with a
- * protocol the dashboard cannot show is left out, as `readLocalEndpoints`
- * leaves it out of an archive read here. An install whose archive still
- * declares it comes back as `needs_approval`.
- */
-export function setupReviewFromInspection(inspection: MarketplaceListingInspection): SetupReview {
-  return {
-    permissions: [...inspection.permissions],
-    localEndpoints: inspection.localEndpoints
-      .filter((endpoint) => LOCAL_PROTOCOLS.has(endpoint.protocol) && endpoint.name.trim() !== "")
-      .map((endpoint) => ({ id: endpoint.id, name: endpoint.name, protocol: endpoint.protocol as LocalProtocol })),
-  };
 }

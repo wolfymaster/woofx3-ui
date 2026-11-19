@@ -2,12 +2,12 @@ import { assetsOfKinds, manifestAssets } from "@shared/module-assets";
 import {
   applyMarketplaceMetadata,
   listingDeclarations,
-  type MarketplaceMergeData,
   marketplaceDetail,
   marketplaceMetadataOf,
 } from "@shared/module-detail";
+import { INSTALL_TO_BROWSE_MESSAGE, type ModuleFileListing, NOT_INSTALLED_FILE_LIST } from "@shared/module-files";
 import { declaredSettingsOnly } from "@shared/module-settings-visibility";
-import type { EngineModuleSummary, MarketplaceInstallRequest, MarketplaceListingInspection } from "@woofx3/api";
+import type { EngineModuleSummary, MarketplaceInstallRequest } from "@woofx3/api";
 import { ENGINE_CAPABILITIES } from "@woofx3/api/capabilities";
 import type { ModulesGateway } from "@/engine/gateway";
 import type {
@@ -19,7 +19,6 @@ import type {
   ModuleAsset,
   ModuleDetail,
   ModuleFileContent,
-  ModuleFileList,
   ModuleId,
   ModuleLicenseLookup,
   ModuleSettingValue,
@@ -30,7 +29,6 @@ import { MODULE_INVALIDATIONS } from "./invalidations";
 import { directKeys as k } from "./keys";
 import {
   catalogModuleRecord,
-  inspectionLocalEndpoints,
   isModuleNamed,
   toInstalledModule,
   toInstalledModuleDetail,
@@ -82,21 +80,11 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
   const invalidateModules = () =>
     Promise.all(MODULE_INVALIDATIONS().map((queryKey) => runtime.queryClient.invalidateQueries({ queryKey })));
 
-  /** The build an install would use. Null when it cannot be read, such as a paid listing's. */
-  const inspectListing = async (listingId: string): Promise<MarketplaceListingInspection | null> => {
-    try {
-      return await runtime.call("inspectMarketplaceListing", (api) => api.inspectMarketplaceListing(listingId));
-    } catch (error) {
-      runtime.logger.warn("could not inspect marketplace listing", { listingId, error });
-      return null;
-    }
-  };
-
   /** A marketplace miss must not fail an installed module's detail. */
-  const listingMetadata = async (listingId: string): Promise<MarketplaceMergeData | null> => {
+  const listingRecord = async (listingId: string): Promise<Record<string, unknown> | null> => {
     try {
-      return marketplaceMetadataOf(
-        catalogModuleRecord(await runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(listingId)))
+      return catalogModuleRecord(
+        await runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(listingId))
       );
     } catch {
       return null;
@@ -106,34 +94,32 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
   const detail = async (moduleId: string): Promise<ModuleDetail> => {
     const summary = await installedModule(moduleId);
     if (summary === undefined) {
-      const [listing, inspection] = await Promise.all([
-        runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(moduleId)),
-        inspectListing(moduleId),
-      ]);
-      const record = catalogModuleRecord(listing);
+      const record = catalogModuleRecord(
+        await runtime.call("marketplaceGetListing", (api) => api.marketplaceGetListing(moduleId))
+      );
       const declared = listingDeclarations(record);
       return toModuleDetail({
         ...marketplaceDetail(moduleId, record, null),
-        permissions: declared?.permissions ?? inspection?.permissions ?? null,
-        localEndpoints: declared?.localEndpoints ?? (inspection ? inspectionLocalEndpoints(inspection) : null),
+        permissions: declared?.permissions ?? null,
+        localEndpoints: declared?.localEndpoints ?? null,
       });
     }
 
     const listingId = summary.marketplaceListingId;
-    const [catalog, functions, widgets, metadata] = await Promise.all([
+    const [catalog, functions, widgets, record] = await Promise.all([
       runtime.call("getWorkflowCatalog", (api) => api.getWorkflowCatalog()),
       runtime.call("listAvailableFunctions", (api) => api.listAvailableFunctions()),
       runtime.call("getAvailableWidgets", (api) => api.getAvailableWidgets()),
-      listingId ? listingMetadata(listingId) : Promise.resolve(null),
+      listingId ? listingRecord(listingId) : Promise.resolve(null),
     ]);
     const result = toInstalledModuleDetail(summary, { catalog, functions, widgets: widgets.widgets });
-    if (metadata) {
-      applyMarketplaceMetadata(result, metadata);
+    if (record) {
+      applyMarketplaceMetadata(result, marketplaceMetadataOf(record));
     }
     if (listingId && result.latestVersion !== undefined && result.latestVersion !== result.version) {
-      const latest = await inspectListing(listingId);
+      const latest = record ? listingDeclarations(record) : null;
       result.latestPermissions = latest?.permissions ?? null;
-      result.latestLocalEndpoints = latest ? inspectionLocalEndpoints(latest) : null;
+      result.latestLocalEndpoints = latest?.localEndpoints ?? null;
     }
     return toModuleDetail(result);
   };
@@ -160,25 +146,22 @@ export function directModulesGateway(runtime: DirectRuntime): ModulesGateway {
     );
   };
 
-  const files = async (moduleId: string): Promise<ModuleFileList> => {
+  const files = async (moduleId: string): Promise<ModuleFileListing> => {
     const summary = await installedModule(moduleId);
     if (summary === undefined) {
-      const inspection = await runtime.call("inspectMarketplaceListing", (api) =>
-        api.inspectMarketplaceListing(moduleId)
-      );
-      return { available: true, files: inspection.files.map(({ path, size }) => ({ path, size })) };
+      return NOT_INSTALLED_FILE_LIST;
     }
     return await runtime.call("listModuleFiles", (api) => api.listModuleFiles(summary.moduleId));
   };
 
-  /** The engine reads files of installed modules only; a listing's are listed but not read. */
+  /** The engine reads files of installed modules only; a listing's are not available until it is installed. */
   const file = async (moduleId: string, path: string): Promise<ModuleFileContent> => {
     if (path === "") {
       throw new Error("A file path is required");
     }
     const summary = await installedModule(moduleId);
     if (summary === undefined) {
-      throw new Error("Install the module to read its files.");
+      throw new Error(INSTALL_TO_BROWSE_MESSAGE);
     }
     return await runtime.call("getModuleFile", (api) => api.getModuleFile(summary.moduleId, path));
   };

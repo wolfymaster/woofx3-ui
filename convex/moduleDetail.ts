@@ -4,27 +4,21 @@ import {
   applyMarketplaceMetadata,
   installedDetail,
   listingDeclarations,
+  type ManifestDeclarations,
   type MarketplaceMergeData,
   type ModuleDetailResult,
-  manifestDeclarations,
   marketplaceDetail,
   marketplaceMetadataOf,
 } from "@shared/module-detail";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action } from "./_generated/server";
+import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import type { MarketplaceAccess } from "./lib/marketplaceAccess";
-import { buyerRefFor } from "./lib/marketplaceEntitlement";
 import { installedListing } from "./lib/marketplaceInstallIdentity";
 import { logger } from "./logger";
-import {
-  fetchMarketplaceArchiveManifest,
-  fetchMarketplaceDownload,
-  marketplaceAccessForInstance,
-  marketplaceFetch,
-} from "./marketplace";
+import { marketplaceAccessForInstance, marketplaceFetch } from "./marketplace";
 
 export const getModuleDetail = action({
   args: {
@@ -78,47 +72,42 @@ export const getModuleDetail = action({
         applyMarketplaceMetadata(detail, marketplaceMeta);
       }
       if (marketplaceId && detail.latestVersion !== undefined && detail.latestVersion !== detail.version) {
-        const latest = manifestDeclarations(await readMarketplaceManifest(ctx, instanceId, marketplaceId, access));
+        const latest = await fetchListingDeclarations(marketplaceId, access);
         detail.latestPermissions = latest.permissions;
         detail.latestLocalEndpoints = latest.localEndpoints;
       }
       return detail;
     }
 
-    const [payload, manifest] = await Promise.all([
-      marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`, access),
-      readMarketplaceManifest(ctx, instanceId, moduleId, access),
-    ]);
+    const payload = await marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`, access);
     return {
-      ...marketplaceDetail(moduleId, payload, manifest),
-      ...(listingDeclarations(payload) ?? manifestDeclarations(manifest)),
+      ...marketplaceDetail(moduleId, payload, null),
+      ...(listingDeclarations(payload) ?? UNKNOWN_DECLARATIONS),
     };
   },
 });
 
+const UNKNOWN_DECLARATIONS: ManifestDeclarations = { permissions: null, localEndpoints: null };
+
 /**
- * Null when the archive cannot be read, which includes a paid module this
- * account has not bought: its archive is the product. The detail view still
- * renders: functions lose their file paths, and the permissions and local
- * endpoints come from the listing, or show as unknown when the marketplace
- * does not send them. Install does not depend on this read: it re-reads the
- * archive and refuses permissions the streamer did not approve.
+ * What the listing's current build asks to approve, read from the listing's
+ * own detail so nothing is downloaded before the account has claimed it. Both
+ * are null (shown as unknown) when the marketplace is unreachable or does not
+ * send them.
  */
-async function readMarketplaceManifest(
-  ctx: ActionCtx,
-  instanceId: Id<"instances">,
+async function fetchListingDeclarations(
   marketplaceId: string,
   access: MarketplaceAccess
-): Promise<unknown> {
+): Promise<ManifestDeclarations> {
   try {
-    const content = { access, buyerRef: await buyerRefFor(ctx, instanceId) };
-    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId, content));
+    const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceId)}`, access);
+    return listingDeclarations(payload) ?? UNKNOWN_DECLARATIONS;
   } catch (err) {
-    logger.warn("could not read marketplace module manifest", {
+    logger.warn("could not read marketplace listing declarations", {
       marketplaceId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return null;
+    return UNKNOWN_DECLARATIONS;
   }
 }
 

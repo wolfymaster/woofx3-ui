@@ -5,6 +5,9 @@ import type { FormFieldType } from "@shared/user-pages";
 
 import type { MacroFields } from "@shared/macro-pad";
 import type { ListingType } from "@shared/marketplace-catalog";
+
+export type { ModuleFileListing } from "@shared/module-files";
+
 import type { SceneEditorSession, WidgetThemes } from "@woofx3/api";
 import type { ModerationActionRecord, ModerationConfig } from "@woofx3/api/moderation-config";
 import type { ConfigField } from "@woofx3/api/ui-schema";
@@ -19,7 +22,6 @@ export type {
   EventLogSelection,
   EventLogSettings,
   ModuleFileContent,
-  ModuleFileList,
   ObsStatus,
   SceneRepairResult,
   StorageConfig,

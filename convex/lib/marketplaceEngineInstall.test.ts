@@ -4,7 +4,6 @@ import type {
   MarketplaceInstallResult as EngineModuleInstallResult,
   MarketplaceBundleInstallResult,
   MarketplaceInstallRequest,
-  MarketplaceListingInspection,
 } from "@woofx3/api";
 import { formatMarketplaceCatalogError } from "@woofx3/api/marketplace-catalog";
 import { getFunctionName } from "convex/server";
@@ -16,18 +15,15 @@ import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBu
 import {
   buyerTokensConfigured,
   engineFailure,
-  inspectThroughEngine,
   installBundleThroughEngine,
   installModuleThroughEngine,
   type MarketplaceEngine,
   type ModuleInstallProgress,
   marketplaceEngineFor,
   marketplaceModuleEngineFor,
-  moduleFilesFromInspection,
   moduleInstallProgress,
   moduleListingStaysOnConvex,
   routeThroughEngine,
-  setupReviewFromInspection,
   versionFromModuleKey,
 } from "./marketplaceEngineInstall";
 import { acquireRefusal, notBoughtMessage } from "./marketplaceEntitlement";
@@ -50,13 +46,6 @@ function fakeEngine(handlers: Partial<MarketplaceEngine>) {
           throw new Error("unexpected installMarketplaceListing");
         }
         return await handlers.installMarketplaceListing(...args);
-      },
-      inspectMarketplaceListing: async (...args: Parameters<MarketplaceEngine["inspectMarketplaceListing"]>) => {
-        calls.push({ method: "inspectMarketplaceListing", args });
-        if (!handlers.inspectMarketplaceListing) {
-          throw new Error("unexpected inspectMarketplaceListing");
-        }
-        return await handlers.inspectMarketplaceListing(...args);
       },
       installMarketplaceBundle: async (...args: Parameters<MarketplaceEngine["installMarketplaceBundle"]>) => {
         calls.push({ method: "installMarketplaceBundle", args });
@@ -355,63 +344,6 @@ describe("installBundleThroughEngine", () => {
     expect(await convexErrorMessage(installBundleThroughEngine(t.deps, "cozy"))).toBe(
       "Marketplace POST /catalog/cozy/acquire failed with 409 (listing_unavailable: replaced)"
     );
-  });
-});
-
-const INSPECTION: MarketplaceListingInspection = {
-  listingId: LISTING,
-  type: "module",
-  name: "OBS Scenes",
-  version: "1.4.2",
-  moduleKey: KEY,
-  sha256: SHA,
-  sizeBytes: 2048,
-  manifest: { id: LISTING, name: "OBS Scenes", version: "1.4.2", description: "" },
-  permissions: ["chat.read", "obs.control"],
-  localEndpoints: [
-    { id: "obs", name: "OBS", protocol: "websocket" },
-    { id: "printer", name: "Printer", protocol: "lpr" },
-    { id: "blank", name: " ", protocol: "http" },
-  ],
-  files: [
-    { path: "manifest.json", size: 120 },
-    { path: "src/index.ts", size: 900 },
-  ],
-};
-
-describe("inspectThroughEngine", () => {
-  test("reads the build with a buyer token and lists its files as listModuleFiles does", async () => {
-    const engine = fakeEngine({ inspectMarketplaceListing: async () => INSPECTION });
-    const inspection = await inspectThroughEngine({ engine: engine.open, buyerToken: async () => TOKEN }, LISTING);
-    expect(engine.calls).toEqual([{ method: "inspectMarketplaceListing", args: [LISTING, TOKEN] }]);
-    expect(moduleFilesFromInspection(inspection)).toEqual({
-      available: true,
-      files: [
-        { path: "manifest.json", size: 120 },
-        { path: "src/index.ts", size: 900 },
-      ],
-    });
-  });
-
-  test("a failure propagates unchanged, for the caller to answer as it does on the Convex path", async () => {
-    const failure = new Error("Marketplace archive does not match the marketplace's sha256 hash");
-    const engine = fakeEngine({
-      inspectMarketplaceListing: async () => {
-        throw failure;
-      },
-    });
-    await expect(inspectThroughEngine({ engine: engine.open, buyerToken: async () => TOKEN }, LISTING)).rejects.toBe(
-      failure
-    );
-  });
-});
-
-describe("setupReviewFromInspection", () => {
-  test("offers the permissions and the endpoints the dashboard can show", () => {
-    expect(setupReviewFromInspection(INSPECTION)).toEqual({
-      permissions: ["chat.read", "obs.control"],
-      localEndpoints: [{ id: "obs", name: "OBS", protocol: "websocket" }],
-    });
   });
 });
 
