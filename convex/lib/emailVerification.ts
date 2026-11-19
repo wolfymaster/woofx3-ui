@@ -60,7 +60,7 @@ export class MaintenanceVerificationMailer implements VerificationMailer {
       body: JSON.stringify({
         template: EMAIL_VERIFICATION.template,
         to: request.to,
-        variables: { code: request.code, expires_minutes: EMAIL_VERIFICATION.codeTtlMs / 60_000 },
+        variables: { code: request.code, expiresMinutes: EMAIL_VERIFICATION.codeTtlMs / 60_000 },
       }),
       signal: AbortSignal.timeout(EMAIL_VERIFICATION.requestTimeoutMs),
     });
