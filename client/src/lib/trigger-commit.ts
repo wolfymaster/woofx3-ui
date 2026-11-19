@@ -6,13 +6,7 @@ import { triggerFieldValues } from "@/lib/alert-triggers";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
 import { countActionSteps, definitionToTree, type WorkflowTree } from "@/lib/workflow-tree";
 
-/**
- * A trigger is a workflow and nothing else: catalog presets describe what the engine can do,
- * while the tree here holds its configuration. This module saves that one tree and keeps no
- * second store, so ordering, merging and health stay properties of the workflow.
- *
- * Every decision about a save is here; the caller only says what to show and where to go.
- */
+/** Every decision about a save is here; the caller only says what to show and where to go. */
 
 /** The workflow a saved trigger is, as the editor saves it back. */
 export interface SavedTrigger {
@@ -46,11 +40,6 @@ export interface TriggerCommitDeps {
   setEnabled: (engineWorkflowId: string, enabled: boolean) => Promise<unknown>;
 }
 
-/**
- * The one tree being saved. Presets describe capability; workflows hold the
- * configuration, with no third store — ordering, merging and health stay the
- * workflow's, not a cache's.
- */
 export interface TriggerCommitArgs {
   tree: WorkflowTree;
   saved: SavedTrigger | undefined;

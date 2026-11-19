@@ -7,7 +7,7 @@ import {
   AlertRecipes,
   cheerAlertRecipes,
 } from "@/components/alerts/alert-recipes";
-import { type SavedTrigger, TriggerEditor } from "@/components/alerts/trigger-editor";
+import { TriggerEditor } from "@/components/alerts/trigger-editor";
 import { TriggerGroupCard } from "@/components/alerts/trigger-group-card";
 import { TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
@@ -42,6 +42,7 @@ import {
 import { type OptionLabels, type SentencePart, sentenceParts, sentenceText } from "@/lib/condition-sentence";
 import { isInternalSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
+import type { SavedTrigger } from "@/lib/trigger-commit";
 import { cn } from "@/lib/utils";
 import { resourceFieldLabels } from "@/lib/wait-event";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";

@@ -7,7 +7,7 @@ import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/p
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
 
-/** A capability row from the engine. The configured triggers are workflows, not a second catalogue-side store. */
+/** A capability row from the engine. */
 export type CatalogTriggerRow = {
   id: string;
   canonicalRef?: string;
@@ -35,7 +35,6 @@ export type CatalogTriggerRow = {
   moduleLabel?: string;
 };
 
-/** The action half of that capability-only catalogue; configured steps live in workflows. */
 export type CatalogActionRow = {
   id: string;
   canonicalRef?: string;
@@ -59,11 +58,7 @@ export type CatalogActionRow = {
   moduleLabel?: string;
 };
 
-/**
- * A preset is only what the engine can do; the configured trigger lives in its workflow.
- * Keeping this a pure row-to-preset adapter (with no cache of its own) is what lets the Alerts
- * side order, merge and report health from workflows alone.
- */
+/** Normalise one catalog row into a preset. */
 export function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
   const fields = withFieldOptionsOwner(
@@ -91,7 +86,7 @@ export function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   };
 }
 
-/** The action half of the same capability-only adapter; see `toTriggerPreset`. */
+/** The action half of the catalog adapter; see `toTriggerPreset`. */
 export function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
   const fields = withFieldOptionsOwner(
@@ -120,7 +115,7 @@ export function toActionPreset(row: CatalogActionRow): ActionPreset {
   };
 }
 
-/** Reads capability from the engine and memoises its normalisation; no configured state is kept here. */
+/** Reads the catalog and memoises its normalisation. */
 export function useWorkflowCatalog() {
   const { instanceId, isInstanceLoading } = useEngineScope();
   const raw = useRawWorkflowCatalog();

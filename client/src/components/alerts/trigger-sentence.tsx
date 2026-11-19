@@ -212,26 +212,11 @@ export function TriggerSentence({
   );
 
   const state: SentenceState = {
-    expandedId: interaction.expandedId,
-    openPoint: interaction.openPoint,
-    confirmingRemoveId: interaction.confirmingRemoveId,
+    ...interaction,
     actionPresets,
     summaryOf,
     shortLabelOf,
     renderEditor,
-    placeOf: interaction.placeOf,
-    removeBlockedReason: interaction.removeBlockedReason,
-    saveView: interaction.saveView,
-    openChanged: interaction.openChanged,
-    discardOpen: interaction.discardOpen,
-    toggle: interaction.toggle,
-    openPicker: interaction.openPicker,
-    closePicker: interaction.closePicker,
-    pick: interaction.pick,
-    move: interaction.move,
-    askRemove: interaction.askRemove,
-    cancelRemove: interaction.cancelRemove,
-    remove: interaction.remove,
     onOpenAdvanced,
   };
 

@@ -1,8 +1,6 @@
 import { taxonomyLabel, triggerMenuAxis } from "@/lib/taxonomy";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
-export { taxonomyLabel } from "@/lib/taxonomy";
-
 /**
  * The Alerts menu: platform first, then what happened.
  *

@@ -37,8 +37,6 @@ import {
   type WorkflowTree,
 } from "@/lib/workflow-tree";
 
-export type { SavedTrigger } from "@/lib/trigger-commit";
-
 interface TriggerEditorProps {
   triggerPreset: TriggerPreset;
   conditionFields: ConfigField[];

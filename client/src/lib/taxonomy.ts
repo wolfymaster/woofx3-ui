@@ -6,9 +6,8 @@
  * choice of entry as two named functions makes their different acceptance explicit.
  */
 
-/** A well-formed entry: its axis prefix (empty for an unqualified entry) and trimmed segments. */
+/** A well-formed entry: its trimmed segments. */
 export interface TaxonomyAxis {
-  prefix: string;
   segments: readonly string[];
 }
 
@@ -17,7 +16,7 @@ function parseAxis(entry: string, prefix: string): TaxonomyAxis | undefined {
     .slice(prefix.length)
     .split(".")
     .map((segment) => segment.trim());
-  return segments.every((segment) => segment.length > 0) ? { prefix, segments } : undefined;
+  return segments.every((segment) => segment.length > 0) ? { segments } : undefined;
 }
 
 /**
