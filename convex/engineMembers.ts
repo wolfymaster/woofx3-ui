@@ -117,3 +117,31 @@ export const remove = mutation({
     await resyncRelayIfBridging(ctx, instanceId);
   },
 });
+
+/**
+ * Gives an organization member access to this engine, as a member or an admin. Someone not yet in the organization
+ * joins it by invitation instead (see invitations.create), so this never adds a person to the organization.
+ */
+export const add = mutation({
+  args: {
+    instanceId: v.id("instances"),
+    targetUserId: v.id("users"),
+    role: v.union(v.literal("admin"), v.literal("member")),
+  },
+  handler: async (ctx, { instanceId, targetUserId, role }) => {
+    await requireAction(ctx, { engine: instanceId }, "manageEngineMembers");
+    const instance = await ctx.db.get(instanceId);
+    if (instance === null) {
+      throw new Error("Engine not found");
+    }
+    const account = await ctx.db.get(instance.accountId);
+    if (account === null) {
+      throw new Error(`Engine ${instanceId} belongs to missing org ${instance.accountId}`);
+    }
+    if ((await orgRoleOf(ctx, account, targetUserId)) === null) {
+      throw new ConvexError({ code: "not_in_organization", message: "Invite them to the engine instead" });
+    }
+    await grantEngineRole(ctx, instanceId, targetUserId, role);
+    await resyncRelayIfBridging(ctx, instanceId);
+  },
+});
