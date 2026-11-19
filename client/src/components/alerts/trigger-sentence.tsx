@@ -41,6 +41,7 @@ import {
   isEditableStep,
   removeStepFromTree,
   type StepNode,
+  stepKindLabel,
   updateStepInTree,
   type WorkflowTree,
 } from "@/lib/workflow-tree";
@@ -85,6 +86,8 @@ interface SentenceState {
   confirmingRemoveId: string | null;
   actionPresets: readonly ActionPreset[];
   summaryOf: (step: StepNode) => StepSummary;
+  /** A step's short name for its settings header, so the header doesn't repeat the sentence. */
+  shortLabelOf: (step: StepNode) => string;
   renderEditor: (step: StepNode) => ReactNode;
   placeOf: (id: string) => { index: number; count: number } | null;
   removeBlockedReason: (id: string) => string | null;
@@ -387,6 +390,16 @@ export function TriggerSentence({
     ]
   );
 
+  const shortLabelOf = useCallback(
+    (step: StepNode): string => {
+      if (step.type === "action") {
+        return resolveCatalogAction(step, catalogActions)?.name?.trim() || stepKindLabel(step);
+      }
+      return stepKindLabel(step);
+    },
+    [catalogActions]
+  );
+
   const openChanged = expandedId !== null && JSON.stringify(tree) !== JSON.stringify(baselineRef.current);
   const saveView = flowSaveView({
     changed: save.changed,
@@ -401,6 +414,7 @@ export function TriggerSentence({
     confirmingRemoveId,
     actionPresets,
     summaryOf,
+    shortLabelOf,
     renderEditor,
     placeOf: (id) => findStepPlace(tree.steps, id),
     removeBlockedReason: (id) => removeBlockedReason?.(tree.steps, id) ?? null,
@@ -523,7 +537,9 @@ function Phrase({ step, index }: { step: StepNode; index: number }) {
           data-testid={`sentence-section-${step.id}`}
         >
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            <span className="mr-auto text-[13px] font-medium">{summary.title}</span>
+            <span className="mr-auto text-[13px] font-medium" data-testid={`sentence-section-label-${step.id}`}>
+              {flow.shortLabelOf(step)}
+            </span>
             <Button
               type="button"
               variant="ghost"

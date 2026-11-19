@@ -128,6 +128,15 @@ describe("TriggerSentence", () => {
     expect(findAll(renderer, "sentence-section-say-thanks")).toHaveLength(1);
   });
 
+  test("an open phrase names its settings short, without repeating the sentence", async () => {
+    const renderer = await render();
+    await act(async () => {
+      findAll(renderer, "sentence-phrase-show-alert")[0].props.onClick();
+    });
+    const label = findAll(renderer, "sentence-section-label-show-alert")[0];
+    expect(label.props.children).toBe("Bits alert");
+  });
+
   test("Done closes the open section", async () => {
     const renderer = await render();
     await act(async () => {

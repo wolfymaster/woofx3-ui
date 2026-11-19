@@ -119,7 +119,7 @@ export function TriggerGroupCard({
       className={cn("rounded-2xl border bg-card", isOpen && "border-foreground/20")}
       data-testid={`trigger-card-${firstId}`}
     >
-      <div className="relative flex items-center gap-2 py-2.5 pl-2 pr-2.5">
+      <div className="group relative flex items-center gap-2 py-2.5 pl-2 pr-2.5">
         <button
           type="button"
           onClick={onToggle}
@@ -134,7 +134,11 @@ export function TriggerGroupCard({
           />
         </button>
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
-          <span className="text-base font-medium leading-snug">{sentence}</span>
+          {!isOpen && (
+            <span className="text-base font-medium leading-snug decoration-muted-foreground/70 underline-offset-4 group-hover:underline group-hover:decoration-dotted">
+              {sentence}
+            </span>
+          )}
           <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
             {!anyOn && (
               <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
@@ -145,7 +149,7 @@ export function TriggerGroupCard({
                 <NotRunningBadge health={unhealthy} />
               </span>
             )}
-            <span className="truncate">{summary}</span>
+            {!isOpen && <span className="truncate">{summary}</span>}
           </span>
         </div>
         <div className="relative z-10 flex h-11 w-14 shrink-0 items-center justify-center">
