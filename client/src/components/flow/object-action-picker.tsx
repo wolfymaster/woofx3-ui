@@ -36,6 +36,20 @@ export type ObjectActionPick =
   | { kind: "action"; preset: ActionPreset; parameters: Record<string, unknown> }
   | { kind: FlowStepKind };
 
+/**
+ * The picker's contract beyond these props:
+ *
+ * - It renders inline, in place where it is mounted. It never opens a dialog or
+ *   popover, including to create a missing counter, timer or queue.
+ * - Escape walks back one level: object → search → cancel. A dialog that holds
+ *   the picker must let those events through (`isInsideActionPicker` in its
+ *   `onEscapeKeyDown`), or the picker never gets its back step.
+ * - Instance lists come from `useActionObjectInstances`: an entry that is
+ *   `undefined` means that list is still loading, not that it is empty.
+ *
+ * Grouping and search share this one component and this one small interface on
+ * purpose; neither is worth splitting out just to shorten the file.
+ */
 export interface ObjectActionPickerProps {
   presets: readonly ActionPreset[];
   /** The flow steps offered besides actions, in this order. Empty offers actions alone. */
@@ -56,9 +70,9 @@ const ITEM_ATTRIBUTE = "data-picker-item";
 const ROOT_ATTRIBUTE = "data-object-action-picker";
 
 /**
- * Whether a key event started inside a picker, which uses Escape to step back.
- * A dialog holding a picker keeps itself open for such an Escape (by preventing
- * the event in its onEscapeKeyDown); the picker still steps back.
+ * Whether a key event started inside a picker. A dialog holding one keeps itself
+ * open for that Escape (by preventing the event in its `onEscapeKeyDown`) so the
+ * picker can do its object → search → cancel step; see `ObjectActionPickerProps`.
  */
 export function isInsideActionPicker(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(`[${ROOT_ATTRIBUTE}]`) !== null;
@@ -73,8 +87,7 @@ const itemClass =
  * reading as the finished step. Search reaches every verb, the streamer's own
  * names and the flow steps from the start.
  *
- * It renders inline and never opens a dialog or popover, including to create a
- * missing counter, timer or queue.
+ * Its rendering, Escape and loading contract is on `ObjectActionPickerProps`.
  */
 export function ObjectActionPicker({
   presets,
