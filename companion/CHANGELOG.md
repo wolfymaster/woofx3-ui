@@ -1,5 +1,12 @@
 # woofx3 desktop changelog
 
+## [0.19.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.18.0...woofx3-v0.19.0) (2026-11-19)
+
+### Features
+
+* **auth:** carry a referral link code through sign-up ([76e6004](https://github.com/wolfymaster/woofx3-ui/commit/76e6004bf671ba2987dbb05ecc8d5b0dca04eca8))
+* **client:** ask for the emailed code on the invite page and in settings ([99449a5](https://github.com/wolfymaster/woofx3-ui/commit/99449a550aa72d1b306131de5daf55babba73feb))
+
 ## [0.18.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.17.0...woofx3-v0.18.0) (2026-11-18)
 
 ### Features
