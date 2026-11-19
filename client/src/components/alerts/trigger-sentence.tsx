@@ -1,5 +1,5 @@
 import { FORM_KIND } from "@shared/resource-kinds";
-import { ArrowDown, ArrowUp, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { FlowSaveBar, StepSaveFooter } from "@/components/flow/flow-save-status";
 import { ObjectActionPicker } from "@/components/flow/object-action-picker";
@@ -440,7 +440,7 @@ export function TriggerSentence({
   return (
     <SentenceContext.Provider value={state}>
       <div ref={rootRef} className="flex flex-col gap-2" data-testid="trigger-sentence">
-        <div className="text-base leading-relaxed text-foreground">
+        <div className="text-[17px] leading-[1.7] tracking-[-0.01em] text-foreground">
           {when}
           <Connector>then</Connector>
           <SentenceList steps={tree.steps} path={null} />
@@ -499,7 +499,7 @@ function Phrase({ step, index }: { step: StepNode; index: number }) {
     <>
       <button
         type="button"
-        className={cn("phrase inline-flex items-baseline gap-1 rounded-md px-1 font-medium", expanded && "phrase-open")}
+        className={cn("phrase inline-block rounded-md px-1 font-medium", expanded && "phrase-open")}
         onClick={() => flow.toggle(step.id)}
         aria-expanded={expanded}
         aria-label={`Step ${index + 1}: ${summary.title}`}
@@ -507,10 +507,6 @@ function Phrase({ step, index }: { step: StepNode; index: number }) {
         data-testid={`sentence-phrase-${step.id}`}
       >
         {summary.parts ? <SentenceParts parts={summary.parts} /> : summary.title}
-        <ChevronDown
-          className={cn("h-3.5 w-3.5 self-center transition-transform", expanded && "rotate-180")}
-          aria-hidden="true"
-        />
       </button>
       {confirming && (
         <span className="inline-flex items-center gap-2 rounded-md bg-muted px-2 py-1 text-[13px]">

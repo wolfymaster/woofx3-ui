@@ -1,4 +1,4 @@
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
@@ -116,23 +116,18 @@ export function TriggerGroupCard({
 
   return (
     <article
-      className={cn("rounded-2xl border bg-card", isOpen && "border-foreground/20")}
+      className={cn("rounded-2xl border bg-card transition-colors duration-300", isOpen && "border-foreground/20")}
       data-testid={`trigger-card-${firstId}`}
     >
-      <div className="group relative flex items-center gap-2 py-2.5 pl-2 pr-2.5">
+      <div className="group relative flex items-center gap-2 py-2.5 pl-3.5 pr-2.5">
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={isOpen}
           aria-label={`${title}. ${isOpen ? "Close" : "Open"}`}
-          className="flex h-[52px] w-9 shrink-0 items-center justify-center rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
+          className="h-[52px] w-3 shrink-0 rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
           data-testid={`trigger-toggle-${firstId}`}
-        >
-          <ChevronRight
-            className={cn("h-4 w-4 transition-transform duration-150", isOpen && "rotate-90")}
-            aria-hidden="true"
-          />
-        </button>
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
           {!isOpen && (
             <span className="text-base font-medium leading-snug decoration-muted-foreground/70 underline-offset-4 group-hover:underline group-hover:decoration-dotted">
@@ -164,7 +159,7 @@ export function TriggerGroupCard({
       </div>
 
       {isOpen && (
-        <div className="flex flex-col gap-4 border-t p-4 sm:p-5">
+        <div className="card-reveal flex flex-col gap-4 border-t p-4 sm:p-5">
           <SeparateOwnSteps parts={parts} />
           {parts.steps ? (
             editor(parts.steps, alsoRuns || undefined, workflows)

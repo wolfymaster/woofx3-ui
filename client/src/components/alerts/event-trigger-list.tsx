@@ -462,25 +462,20 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
 
   return (
     <article
-      className={cn("rounded-2xl border bg-card", isExpanded && "border-foreground/20")}
+      className={cn("rounded-2xl border bg-card transition-colors duration-300", isExpanded && "border-foreground/20")}
       data-testid={`trigger-card-${row.engineWorkflowId}`}
     >
-      <div className="relative flex items-center gap-2 py-2.5 pl-2 pr-2.5">
+      <div className="group relative flex items-center gap-2 py-2.5 pl-3.5 pr-2.5">
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={isExpanded}
           aria-label={`${title}. ${isExpanded ? "Close" : "Open"}`}
-          className="flex h-[52px] w-9 shrink-0 items-center justify-center rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
+          className="h-[52px] w-3 shrink-0 rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
           data-testid={`trigger-toggle-${row.engineWorkflowId}`}
-        >
-          <ChevronRight
-            className={cn("h-4 w-4 transition-transform duration-150", isExpanded && "rotate-90")}
-            aria-hidden="true"
-          />
-        </button>
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
-          <span className="text-base font-medium leading-snug">
+          <span className="text-base font-medium leading-snug decoration-muted-foreground/70 underline-offset-4 group-hover:underline group-hover:decoration-dotted">
             {storedTogether > 1 ? title : <SentenceText sentence={sentence} />}
           </span>
           <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
@@ -508,7 +503,7 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
       </div>
 
       {isExpanded && (
-        <div className="border-t p-4 sm:p-5">
+        <div className="card-reveal border-t p-4 sm:p-5">
           {!read.editable && (
             <div className="flex flex-col gap-3">
               {storedTogether > 1 ? (

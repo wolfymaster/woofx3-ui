@@ -1,5 +1,4 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConditionValueEditor, type LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { Button } from "@/components/ui/button";
@@ -90,7 +89,7 @@ export function TriggerWhenCard({
                 }}
                 type="button"
                 className={cn(
-                  "phrase inline-flex items-baseline gap-0.5 rounded-md px-1 font-medium",
+                  "phrase inline-block rounded-md px-1 font-medium",
                   open && "phrase-open",
                   part.state === "missing" ? "text-amber-600 dark:text-amber-300" : "text-primary-text"
                 )}
@@ -100,10 +99,6 @@ export function TriggerWhenCard({
                 data-testid={`condition-value-${part.fieldId}`}
               >
                 {part.text}
-                <ChevronDown
-                  className={cn("h-3.5 w-3.5 self-center transition-transform", open && "rotate-180")}
-                  aria-hidden="true"
-                />
               </button>
             );
           })
