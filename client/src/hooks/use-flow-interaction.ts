@@ -47,6 +47,11 @@ export interface FlowInteractionWording {
   referencedElsewhere: (oldId: string, newId: string) => string;
 }
 
+/**
+ * What a view hands the shared machine. Presets describe capability; this `tree`
+ * is the workflow holding the configuration, and there is no third store — so
+ * ordering, merging and health keep coming from it alone.
+ */
 export interface FlowInteractionArgs {
   tree: WorkflowTree;
   onChange: (tree: WorkflowTree) => void;

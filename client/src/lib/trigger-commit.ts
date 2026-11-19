@@ -46,6 +46,11 @@ export interface TriggerCommitDeps {
   setEnabled: (engineWorkflowId: string, enabled: boolean) => Promise<unknown>;
 }
 
+/**
+ * The one tree being saved. Presets describe capability; workflows hold the
+ * configuration, with no third store — ordering, merging and health stay the
+ * workflow's, not a cache's.
+ */
 export interface TriggerCommitArgs {
   tree: WorkflowTree;
   saved: SavedTrigger | undefined;
