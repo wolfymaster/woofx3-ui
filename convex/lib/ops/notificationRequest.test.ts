@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { parseNotificationRequest } from "./notificationRequest";
+import { notificationRequestSchema } from "./contract";
+import { parseRequestBody } from "./request";
+
+const parseNotificationRequest = (body: unknown) => parseRequestBody(notificationRequestSchema, body);
 
 const valid = {
   requestId: "r1",

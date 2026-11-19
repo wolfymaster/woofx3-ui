@@ -1,13 +1,17 @@
 import { internal } from "../_generated/api";
-import type { Doc } from "../_generated/dataModel";
 import { httpAction } from "../_generated/server";
 import { authenticateOps } from "../lib/ops/auth";
-import { parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
 import { callerMayUse, nextSecretEnv, OPS_CALLERS } from "../lib/ops/callers";
-import { parseFeatureFlagKeyRequest, parseFeatureFlagRequest } from "../lib/ops/featureFlagRequest";
-import { parseNotificationRequest } from "../lib/ops/notificationRequest";
+import {
+  billingProjectionRequestSchema,
+  featureFlagKeyRequestSchema,
+  featureFlagRequestSchema,
+  notificationRequestSchema,
+  provisioningStatusSchema,
+  storageLimitsRequestSchema,
+} from "../lib/ops/contract";
+import { parseRequestBody } from "../lib/ops/request";
 import { matchOpsRoute } from "../lib/ops/routes";
-import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
 
 /**
@@ -81,11 +85,12 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(account);
     }
     case "engines.list": {
-      const status = url.searchParams.get("status") ?? undefined;
-      if (status !== undefined && !isProvisioningStatus(status)) {
-        return error(400, "invalid_status", `Unknown status "${status}"`);
+      const requested = url.searchParams.get("status") ?? undefined;
+      const status = requested === undefined ? undefined : provisioningStatusSchema.safeParse(requested);
+      if (status !== undefined && !status.success) {
+        return error(400, "invalid_status", `Unknown status "${requested}"`);
       }
-      return ok(await ctx.runQuery(internal.ops.reads.listEngines, { status, cursor }));
+      return ok(await ctx.runQuery(internal.ops.reads.listEngines, { status: status?.data, cursor }));
     }
     case "engines.moduleStorageLimits": {
       return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor }));
@@ -116,7 +121,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
     }
     case "instances.setStorageLimits": {
       const body = await request.json().catch(() => null);
-      const parsed = parseStorageLimitsRequest(body);
+      const parsed = parseRequestBody(storageLimitsRequestSchema, body);
       if (!parsed.ok) {
         return error(400, "invalid_storage_limits", parsed.message);
       }
@@ -134,7 +139,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return ok(await ctx.runQuery(internal.ops.notifications.list, { cursor }));
     case "notifications.create": {
       const body = await request.json().catch(() => null);
-      const parsed = parseNotificationRequest(body);
+      const parsed = parseRequestBody(notificationRequestSchema, body);
       if (!parsed.ok) {
         return error(400, "invalid_notification", parsed.message);
       }
@@ -159,7 +164,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
     case "featureFlags.list":
       return ok(await ctx.runQuery(internal.ops.featureFlags.list, { today: new Date().toISOString().slice(0, 10) }));
     case "featureFlags.create": {
-      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      const parsed = parseRequestBody(featureFlagRequestSchema, await request.json().catch(() => null));
       if (!parsed.ok) {
         return error(400, "invalid_feature_flag", parsed.message);
       }
@@ -173,7 +178,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
     case "featureFlags.update": {
-      const parsed = parseFeatureFlagRequest(await request.json().catch(() => null));
+      const parsed = parseRequestBody(featureFlagRequestSchema, await request.json().catch(() => null));
       if (!parsed.ok) {
         return error(400, "invalid_feature_flag", parsed.message);
       }
@@ -187,13 +192,13 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
     case "featureFlags.remove": {
-      const parsed = parseFeatureFlagKeyRequest(await request.json().catch(() => null));
+      const parsed = parseRequestBody(featureFlagKeyRequestSchema, await request.json().catch(() => null));
       if (!parsed.ok) {
         return error(400, "invalid_feature_flag", parsed.message);
       }
       // authenticateOps required a reason for this write.
       const outcome = await ctx.runMutation(internal.ops.featureFlags.remove, {
-        key: parsed.value,
+        key: parsed.value.key,
         caller: auth.caller.name,
         actor: auth.actor,
         reason: auth.reason ?? "",
@@ -201,7 +206,7 @@ export const opsHandler = httpAction(async (ctx, request) => {
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
     case "accounts.billingProjection": {
-      const parsed = parseBillingProjectionRequest(await request.json().catch(() => null));
+      const parsed = parseRequestBody(billingProjectionRequestSchema, await request.json().catch(() => null));
       if (!parsed.ok) {
         return error(400, "invalid_billing_projection", parsed.message);
       }
@@ -237,27 +242,6 @@ export const opsHandler = httpAction(async (ctx, request) => {
     }
   }
 });
-
-type ProvisioningStatus = Doc<"engineProvisioning">["status"];
-
-const PROVISIONING_STATUSES: ReadonlySet<string> = new Set<ProvisioningStatus>([
-  "requested",
-  "provisioning",
-  "ready",
-  "registering",
-  "registered",
-  "upgrading",
-  "failed",
-  "deprovisioning",
-  "deleted",
-  "stopping",
-  "stopped",
-  "starting",
-]);
-
-function isProvisioningStatus(status: string): status is ProvisioningStatus {
-  return PROVISIONING_STATUSES.has(status);
-}
 
 function ok(data: unknown): Response {
   return json(200, { data });

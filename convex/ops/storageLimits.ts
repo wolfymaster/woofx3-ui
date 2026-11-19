@@ -11,18 +11,7 @@ import {
   isByteLimit,
 } from "../lib/hostedStorage";
 import { recordOpsAudit } from "../lib/ops/audit";
-
-/**
- * An engine's hosted storage limits as operators see them: what its account's
- * entitlements give it, its own override, and the limits that apply. Whether
- * they bind depends on the engine still being on hosted storage, which only
- * the engine can say; see lib/hostedStorage.ts.
- */
-export interface HostedStorageLimitsDto {
-  inherited: HostedStorageLimits;
-  override: HostedStorageOverride;
-  effective: HostedStorageLimits;
-}
+import type { HostedStorageLimitsDto } from "../lib/ops/dto";
 
 export async function hostedStorageLimitsDto(
   ctx: QueryCtx,

@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { newBackend } from "../lib/convexTest.testing";
-import { MAX_PROJECTION_VERSION, parseBillingProjectionRequest } from "../lib/ops/billingProjectionRequest";
 import { callerSecretEnv } from "../lib/ops/callers";
+import { billingProjectionRequestSchema, MAX_PROJECTION_VERSION } from "../lib/ops/contract";
+import { parseRequestBody } from "../lib/ops/request";
+
+const parseBillingProjectionRequest = (body: unknown) => parseRequestBody(billingProjectionRequestSchema, body);
 
 type Backend = ReturnType<typeof newBackend>;
 

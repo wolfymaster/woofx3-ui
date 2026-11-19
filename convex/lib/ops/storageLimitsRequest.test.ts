@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { parseStorageLimitsRequest } from "./storageLimitsRequest";
+import { storageLimitsRequestSchema } from "./contract";
+import { parseRequestBody } from "./request";
+
+const parseStorageLimitsRequest = (body: unknown) => parseRequestBody(storageLimitsRequestSchema, body);
 
 describe("parseStorageLimitsRequest", () => {
   it("keeps amounts, unlimited and inherited fields apart", () => {

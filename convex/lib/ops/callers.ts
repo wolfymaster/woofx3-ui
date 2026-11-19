@@ -1,6 +1,6 @@
-import type { OpsRoute } from "./routes";
+import type { OpsRouteName } from "./contract";
 
-export type OpsRouteName = OpsRoute["name"];
+export type { OpsRouteName };
 
 export interface OpsCaller {
   /** Recorded on every audit row the caller's requests write. */

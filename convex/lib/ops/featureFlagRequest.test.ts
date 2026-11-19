@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { parseFeatureFlagKeyRequest, parseFeatureFlagRequest } from "./featureFlagRequest";
+import { featureFlagKeyRequestSchema, featureFlagRequestSchema } from "./contract";
+import { parseRequestBody } from "./request";
+
+const parseFeatureFlagRequest = (body: unknown) => parseRequestBody(featureFlagRequestSchema, body);
+const parseFeatureFlagKeyRequest = (body: unknown) => parseRequestBody(featureFlagKeyRequestSchema, body);
 
 const valid = {
   key: "scenes.newToolbar",
@@ -67,7 +71,7 @@ describe("parseFeatureFlagRequest", () => {
 
 describe("parseFeatureFlagKeyRequest", () => {
   it("takes the key a removal names", () => {
-    expect(parseFeatureFlagKeyRequest({ key: "chat.pins" })).toEqual({ ok: true, value: "chat.pins" });
+    expect(parseFeatureFlagKeyRequest({ key: "chat.pins" })).toEqual({ ok: true, value: { key: "chat.pins" } });
     expect(parseFeatureFlagKeyRequest({ key: " " }).ok).toBe(false);
     expect(parseFeatureFlagKeyRequest({}).ok).toBe(false);
     expect(parseFeatureFlagKeyRequest(null).ok).toBe(false);
