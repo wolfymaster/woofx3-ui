@@ -229,6 +229,7 @@ export interface ReferralDto {
   referralId: string;
   referrerAccountId: string | null;
   code: string;
+  rewardCents: number;
   capturedAt: number;
   status: Doc<"referrals">["status"];
   eligible: boolean;
@@ -243,9 +244,38 @@ export function referralDto(
     referralId: referral._id,
     referrerAccountId,
     code: referral.code,
+    rewardCents: referral.rewardCents,
     capturedAt: referral.capturedAt,
     status: referral.status,
     eligible,
+  };
+}
+
+export interface ReferralCodeDto {
+  code: string;
+  userId: string;
+  email: string | null;
+  rewardCents: number;
+  issuedBy: string;
+  issuedAt: number;
+  revokedAt: number | null;
+  referralCount: number;
+}
+
+export function referralCodeDto(
+  row: Doc<"referralCodes">,
+  email: string | null,
+  referralCount: number
+): ReferralCodeDto {
+  return {
+    code: row.code,
+    userId: row.userId,
+    email,
+    rewardCents: row.rewardCents,
+    issuedBy: row.issuedBy,
+    issuedAt: row.createdAt,
+    revokedAt: row.revokedAt ?? null,
+    referralCount,
   };
 }
 

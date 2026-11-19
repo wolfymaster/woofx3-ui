@@ -4,9 +4,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, type QueryCtx } from "./_generated/server";
 import { isEmailVerified } from "./org/identity";
 
-const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
-const CODE_LENGTH = 10;
-const MAX_CODE_ATTEMPTS = 5;
 /** Longest a code may be, so a hostile client cannot make the lookup read a huge string. */
 const MAX_SUPPLIED_CODE_LENGTH = 64;
 /**
@@ -16,48 +13,9 @@ const MAX_SUPPLIED_CODE_LENGTH = 64;
  */
 export const CAPTURE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-function randomCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
-  return Array.from(bytes, (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("");
-}
-
-/** The user's sign-up code, made on first use. */
-export async function codeFor(ctx: MutationCtx, userId: Id<"users">): Promise<string> {
-  const existing = await ctx.db
-    .query("referralCodes")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .first();
-  if (existing) {
-    return existing.code;
-  }
-  for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
-    const code = randomCode();
-    const taken = await ctx.db
-      .query("referralCodes")
-      .withIndex("by_code", (q) => q.eq("code", code))
-      .first();
-    if (taken === null) {
-      await ctx.db.insert("referralCodes", { userId, code, createdAt: Date.now() });
-      return code;
-    }
-  }
-  throw new Error("Could not find an unused referral code");
-}
-
-export const myCode = mutation({
-  args: {},
-  handler: async (ctx): Promise<string> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-    return codeFor(ctx, userId);
-  },
-});
-
 /**
  * Records who referred the signed-in user, from the code their sign-up link
- * carried. Always answers null: an unknown code, a self-referral, a user who
+ * carried. Always answers null: an unknown or revoked code, a self-referral, a user who
  * is not new and a repeat capture are ignored alike, so the call reveals
  * nothing about which codes exist.
  */
@@ -86,7 +44,7 @@ export const capture = mutation({
       .query("referralCodes")
       .withIndex("by_code", (q) => q.eq("code", code))
       .first();
-    if (owner === null || owner.userId === userId) {
+    if (owner === null || owner.revokedAt !== undefined || owner.userId === userId) {
       return null;
     }
     const account = await ctx.db
@@ -98,6 +56,7 @@ export const capture = mutation({
       referredAccountId: account?._id,
       referrerUserId: owner.userId,
       code,
+      rewardCents: owner.rewardCents,
       capturedAt: Date.now(),
       status: account ? "org_created" : "captured",
     });

@@ -8,7 +8,6 @@ import { CAPTURE_WINDOW_MS } from "./referrals";
 
 type Backend = ReturnType<typeof newBackend>;
 
-const myCode = makeFunctionReference<"mutation", Record<string, never>, string>("referrals:myCode");
 const capture = makeFunctionReference<"mutation", { code: string }, null>("referrals:capture");
 const ensureMyAccount = makeFunctionReference<"mutation", Record<string, never>, Id<"accounts">>(
   "accounts:ensureMyAccount"
@@ -16,25 +15,19 @@ const ensureMyAccount = makeFunctionReference<"mutation", Record<string, never>,
 
 const as = (t: Backend, userId: Id<"users">) => t.withIdentity({ subject: `${userId}|s` });
 const newUser = (t: Backend, name: string) => t.run((ctx) => ctx.db.insert("users", { name }));
+const REWARD_CENTS = 2500;
+const issueCode = (t: Backend, userId: Id<"users">, rewardCents = REWARD_CENTS, code = `code${userId}`.slice(0, 10)) =>
+  t.run(async (ctx) => {
+    await ctx.db.insert("referralCodes", {
+      userId,
+      code,
+      createdAt: Date.now(),
+      rewardCents,
+      issuedBy: "ops@example.com",
+    });
+    return code;
+  });
 const referrals = (t: Backend) => t.run((ctx) => ctx.db.query("referrals").collect());
-
-describe("referral codes", () => {
-  test("a user keeps one code, and it is not their id", async () => {
-    const t = newBackend();
-    const userId = await newUser(t, "Ref");
-    const first = await as(t, userId).mutation(myCode, {});
-    expect(await as(t, userId).mutation(myCode, {})).toBe(first);
-    expect(first).toMatch(/^[a-z2-9]{10}$/);
-    expect(first).not.toContain(userId);
-  });
-
-  test("two users get different codes", async () => {
-    const t = newBackend();
-    const a = await as(t, await newUser(t, "A")).mutation(myCode, {});
-    const b = await as(t, await newUser(t, "B")).mutation(myCode, {});
-    expect(a).not.toBe(b);
-  });
-});
 
 describe("referral capture", () => {
   let t: Backend;
@@ -43,7 +36,7 @@ describe("referral capture", () => {
   beforeEach(async () => {
     t = newBackend();
     referrerId = await newUser(t, "Referrer");
-    code = await as(t, referrerId).mutation(myCode, {});
+    code = await issueCode(t, referrerId);
   });
 
   test("records the referrer, then the org once it exists", async () => {
@@ -64,9 +57,39 @@ describe("referral capture", () => {
     expect(await referrals(t)).toMatchObject([{ referredAccountId: accountId, status: "org_created" }]);
   });
 
+  test("snapshots the code's terms, which a later edit does not touch", async () => {
+    const referredId = await newUser(t, "New");
+    await as(t, referredId).mutation(capture, { code });
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("referralCodes")
+        .withIndex("by_code", (q) => q.eq("code", code))
+        .first();
+      await ctx.db.patch(row?._id as Id<"referralCodes">, { rewardCents: 9999 });
+    });
+    const laterId = await newUser(t, "Later");
+    await as(t, laterId).mutation(capture, { code });
+    const rows = await referrals(t);
+    expect(rows.find((row) => row.referredUserId === referredId)?.rewardCents).toBe(REWARD_CENTS);
+    expect(rows.find((row) => row.referredUserId === laterId)?.rewardCents).toBe(9999);
+  });
+
+  test("a revoked code is ignored like an unknown one", async () => {
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("referralCodes")
+        .withIndex("by_code", (q) => q.eq("code", code))
+        .first();
+      await ctx.db.patch(row?._id as Id<"referralCodes">, { revokedAt: Date.now() });
+    });
+    const referredId = await newUser(t, "New");
+    expect(await as(t, referredId).mutation(capture, { code })).toBeNull();
+    expect(await referrals(t)).toEqual([]);
+  });
+
   test("the first capture wins", async () => {
     const otherId = await newUser(t, "Other");
-    const otherCode = await as(t, otherId).mutation(myCode, {});
+    const otherCode = await issueCode(t, otherId);
     const referredId = await newUser(t, "New");
     await as(t, referredId).mutation(capture, { code });
     await as(t, referredId).mutation(capture, { code: otherCode });
@@ -128,7 +151,7 @@ describe("ops referral read", () => {
       ctx.db.insert("users", { name: "Referrer", ...(opts.referrerVerified ? VERIFIED : {}) })
     );
     const referrerAccountId = opts.referrerOrg ? await as(t, referrerId).mutation(ensureMyAccount, {}) : null;
-    const code = await as(t, referrerId).mutation(myCode, {});
+    const code = await issueCode(t, referrerId);
     const referredId = await t.run((ctx) =>
       ctx.db.insert("users", { name: "New", ...(opts.referredVerified ? VERIFIED : {}) })
     );
@@ -156,6 +179,7 @@ describe("ops referral read", () => {
       "eligible",
       "referralId",
       "referrerAccountId",
+      "rewardCents",
       "status",
     ]);
     const [row] = await referrals(t);
@@ -163,6 +187,7 @@ describe("ops referral read", () => {
       referralId: row._id,
       referrerAccountId,
       code,
+      rewardCents: REWARD_CENTS,
       status: "org_created",
       eligible: true,
     });
