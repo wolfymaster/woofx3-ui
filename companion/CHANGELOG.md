@@ -1,5 +1,29 @@
 # woofx3 desktop changelog
 
+## [0.21.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.20.0...woofx3-v0.21.0) (2026-11-19)
+
+### Features
+
+* **account:** change plan in place with a charge breakdown ([855d24c](https://github.com/wolfymaster/woofx3-ui/commit/855d24cf80649845d139f08f5f1fa938ea1817ea))
+* **account:** engine access follows the selected organization ([6b0fc6b](https://github.com/wolfymaster/woofx3-ui/commit/6b0fc6b4ec51cc4df718fad6725fa136a18d0c8b))
+* **account:** Engines page, engine dashboard and a docked Upgrade entry ([2208533](https://github.com/wolfymaster/woofx3-ui/commit/2208533943ae3a7e573a73a63f7fea26958d0f8c))
+* **account:** fold People into the portal's Team page ([47ba2cb](https://github.com/wolfymaster/woofx3-ui/commit/47ba2cb13671cbcdd3c5b6deef63ec218cc14bb6))
+* **account:** make the portal Overview a dashboard of engines and plan ([59ab396](https://github.com/wolfymaster/woofx3-ui/commit/59ab3961a78a32c459a20d7012c2ba555c64b8b0))
+* **account:** organization Settings with General and Plans ([5bbf09e](https://github.com/wolfymaster/woofx3-ui/commit/5bbf09e8d75735fb12b4b2030f1db0e76a03b8e9))
+* **account:** scale the engine dashboard's module list ([af068dd](https://github.com/wolfymaster/woofx3-ui/commit/af068dde2e8250ccaafc61cbdb9e4b9c8e0bf509))
+* **account:** scope-aware nav, one Team page and an organization dashboard ([6866667](https://github.com/wolfymaster/woofx3-ui/commit/686666799586b81d82b37d52fb689bf6849f80c4))
+* **account:** show connection health, last report and channel on engine cards ([e4b1d0e](https://github.com/wolfymaster/woofx3-ui/commit/e4b1d0e79b406afbc1aa6ddbb3a6edde1672cc0b))
+* **account:** switch between Personal and organizations in the portal header ([3fc83f5](https://github.com/wolfymaster/woofx3-ui/commit/3fc83f5fe03c62355cbafc1474ad48f9c6c987de))
+* **auth:** hide the sign-up visitor check unless it needs the visitor ([886ccd4](https://github.com/wolfymaster/woofx3-ui/commit/886ccd4e6ca26aa422d3e117d58fea5c98bae3dd))
+* **onboarding:** choose a plan first on the web ([c2bd758](https://github.com/wolfymaster/woofx3-ui/commit/c2bd7587c6558902745bc30242b0623db27f5991))
+* **onboarding:** show the web plan step on the sign-in background ([f858a1d](https://github.com/wolfymaster/woofx3-ui/commit/f858a1d41deb84e4d9625bbb31275980d7bd22e3))
+* **sponsorship:** return sponsors to their own page after the provider ([7d5c790](https://github.com/wolfymaster/woofx3-ui/commit/7d5c790227f295cdfcaac675a54e73942497439e))
+* **team:** add an organization member to an engine and list invitations org-wide ([cc6e894](https://github.com/wolfymaster/woofx3-ui/commit/cc6e89417526cddb9947397400f5eb4b9ac4a00c))
+
+### Bug Fixes
+
+* **account:** list every plan on Plans, also for self-hosted organizations ([006caf5](https://github.com/wolfymaster/woofx3-ui/commit/006caf5ca274a70ca64d6095073fe21ad310eb51))
+
 ## [0.20.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.19.0...woofx3-v0.20.0) (2026-11-19)
 
 ### Features
