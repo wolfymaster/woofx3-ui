@@ -103,6 +103,8 @@
     "@types/react-dom": "^18.3.1",
     "@types/react-test-renderer": "18.3.1",
     "@vitejs/plugin-react": "^4.7.0",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
     "autoprefixer": "^10.4.20",
     "conventional-changelog-conventionalcommits": "9.3.1",
     "convex-test": "^0.0.54",

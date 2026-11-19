@@ -1,12 +1,42 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import Ajv2020 from "ajv/dist/2020";
+import addFormats from "ajv-formats";
 import { newBackend } from "../lib/convexTest.testing";
-import { OPS_ROUTES, type OpsRouteSpec } from "../lib/ops/contract";
+import { buildOpsOpenApi, OPS_ROUTES, type OpsRouteSpec } from "../lib/ops/contract";
 
 /**
  * Every route is called over HTTP against seeded data, and each 200 answer is
  * parsed with the response schema the contract publishes, so the document
  * cannot drift from what the handler sends.
  */
+
+/**
+ * What a consumer does with the published document: each answer is validated against the route's own schema in it, so
+ * a document that refuses an answer the handler really gives (a nullable enum without null, say) fails here and not in
+ * the backoffice.
+ */
+const document = buildOpsOpenApi() as {
+  paths: Record<
+    string,
+    Record<string, { operationId: string; responses: Record<string, { content?: Record<string, { schema: object }> }> }>
+  >;
+  components: object;
+};
+const ajv = addFormats(new Ajv2020({ strict: false }));
+
+function answerProblems(name: string, answer: unknown): string[] {
+  const operation = Object.values(document.paths)
+    .flatMap((methods) => Object.values(methods))
+    .find((candidate) => candidate.operationId === name);
+  const schema =
+    operation?.responses["200"]?.content?.["application/json"]?.schema ??
+    operation?.responses["201"]?.content?.["application/json"]?.schema;
+  if (schema === undefined) {
+    return [`${name} publishes no success body`];
+  }
+  const validate = ajv.compile({ ...schema, components: document.components });
+  return validate(answer) ? [] : (validate.errors ?? []).map((error) => `${error.instancePath} ${error.message}`);
+}
 
 const SECRET = "l".repeat(43);
 const SECRET_ENV = "OPS_API_SECRET";
@@ -146,6 +176,7 @@ describe("the ops API answers what its contract says", () => {
         ok: true,
         issues: [],
       });
+      expect({ name, problems: answerProblems(name, json) }).toEqual({ name, problems: [] });
       exercised.add(name);
       return json.data;
     }

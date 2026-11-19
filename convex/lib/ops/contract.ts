@@ -1178,7 +1178,7 @@ export function buildOpsOpenApi(): Record<string, unknown> {
         "What the internal backoffice reads about users, accounts and engines, and what the maintenance billing process pushes. Servers call it with a per-caller secret; it sends no CORS headers.",
     },
   });
-  return dropRepeatedAlternatives(document) as Record<string, unknown>;
+  return admitNullInNullableEnums(dropRepeatedAlternatives(document)) as Record<string, unknown>;
 }
 
 /** The generator lists `null` twice for a union that includes z.null(); a repeated alternative adds nothing. */
@@ -1201,6 +1201,28 @@ function dropRepeatedAlternatives(node: unknown): unknown {
     } else {
       copy[key] = mapped;
     }
+  }
+  return copy;
+}
+
+/**
+ * The generator keeps a nullable enum's values as they are, so a schema typed `["string", "null"]` refuses the very
+ * null it allows. A nullable enum lists null among its values.
+ */
+function admitNullInNullableEnums(node: unknown): unknown {
+  if (Array.isArray(node)) {
+    return node.map(admitNullInNullableEnums);
+  }
+  if (node === null || typeof node !== "object") {
+    return node;
+  }
+  const copy: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(node)) {
+    copy[key] = admitNullInNullableEnums(child);
+  }
+  const { type, enum: values } = copy;
+  if (Array.isArray(type) && type.includes("null") && Array.isArray(values) && !values.includes(null)) {
+    copy.enum = [...values, null];
   }
   return copy;
 }
