@@ -1155,7 +1155,6 @@
           "unknown_discount",
           "invalid_overrides_end",
           "invalid_reward",
-          "credits_disabled",
           "sponsorship_not_found",
           "payment_not_found",
           "refund_exceeds_payment",
@@ -3445,7 +3444,7 @@
     },
     "/v1/admin/billing/accounts/{id}/rewards": {
       "post": {
-        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again. The credit lapses 12 months after it is granted and is spent on the organization's next provider invoice (once it pays). 409 `credits_disabled` while credits are switched off.",
+        "description": "`billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again. The credit lapses 12 months after it is granted and is spent on the organization's next provider invoice (once it pays).",
         "parameters": [
           {
             "description": "The UI's id for the organization.",
