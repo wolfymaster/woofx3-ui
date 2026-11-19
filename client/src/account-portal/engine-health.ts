@@ -22,7 +22,6 @@ const SETTING_UP: ReadonlyArray<NonNullable<OrgEngine["status"]>> = [
   "ready",
   "registering",
   "starting",
-  "upgrading",
 ];
 
 /** One reading of how an engine is doing, from where its build stands and what its links report. */
@@ -37,6 +36,9 @@ export function engineHealth({ engine, linkNeedsReconnect, lastEngineActivityAt 
   if (status === "deprovisioning" || status === "deleted") {
     return { label: "Being deleted", tone: "neutral", reasons: [] };
   }
+  if (status === "upgrading") {
+    return { label: "Upgrading", tone: "neutral", reasons: [] };
+  }
   if (status !== null && SETTING_UP.includes(status)) {
     return { label: "Setting up", tone: "neutral", reasons: [] };
   }
@@ -48,3 +50,11 @@ export function engineHealth({ engine, linkNeedsReconnect, lastEngineActivityAt 
   }
   return { label: "Healthy", tone: "good", reasons: [] };
 }
+
+/** Text colour for a tone, shared wherever a health reading is shown. */
+export const TONE_CLASS: Record<HealthTone, string> = {
+  good: "text-emerald-600 dark:text-emerald-400",
+  warning: "text-amber-600 dark:text-amber-400",
+  bad: "text-destructive",
+  neutral: "text-muted-foreground",
+};

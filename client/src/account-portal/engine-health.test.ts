@@ -17,10 +17,19 @@ describe("engineHealth", () => {
     expect([health.label, health.tone]).toEqual(["Needs attention", "bad"]);
   });
 
-  test.each(["provisioning", "registering", "upgrading"] as const)("%s reads as setting up", (status) => {
+  test.each(["provisioning", "registering", "starting"] as const)("%s reads as setting up", (status) => {
     expect(
       engineHealth({ engine: { ...hosted, status }, linkNeedsReconnect: false, lastEngineActivityAt: null }).label
     ).toBe("Setting up");
+  });
+
+  test("an engine being upgraded says so", () => {
+    const health = engineHealth({
+      engine: { ...hosted, status: "upgrading" },
+      linkNeedsReconnect: false,
+      lastEngineActivityAt: 1,
+    });
+    expect(health.label).toBe("Upgrading");
   });
 
   test("a paused engine is neutral", () => {

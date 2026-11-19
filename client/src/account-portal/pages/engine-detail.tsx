@@ -20,41 +20,16 @@ import { actionErrorMessage } from "@/lib/action-error";
 import { useLogger } from "@/lib/logger-context";
 import { $currentInstanceId } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { type EngineHealth, engineHealth, type HealthTone } from "../engine-health";
+import { type EngineHealth, engineHealth, type HealthTone, TONE_CLASS } from "../engine-health";
 import { isUnsettled, visibleModules } from "../engine-modules";
+import { formatAgo } from "../format-ago";
 import { useOrganization } from "../organization-context";
 import { ENGINES_PATH } from "../portal-pages";
 import { RenameDialog } from "../rename-dialog";
 import { useEngineUpgrade } from "../use-engine-upgrade";
 
-const TONE_CLASS: Record<HealthTone, string> = {
-  good: "text-emerald-600 dark:text-emerald-400",
-  warning: "text-amber-600 dark:text-amber-400",
-  bad: "text-destructive",
-  neutral: "text-muted-foreground",
-};
-
 /** A search box only helps once the list is long enough to scan by eye no longer. */
 const MODULES_SEARCHABLE_FROM = 8;
-
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-
-/** "just now", "5 minutes ago", "3 hours ago", "2 days ago". */
-function formatAgo(ms: number, now: number): string {
-  const age = Math.max(0, now - ms);
-  if (age < MINUTE_MS) {
-    return "just now";
-  }
-  const [count, unit] =
-    age < HOUR_MS
-      ? [Math.floor(age / MINUTE_MS), "minute"]
-      : age < DAY_MS
-        ? [Math.floor(age / HOUR_MS), "hour"]
-        : [Math.floor(age / DAY_MS), "day"];
-  return `${count} ${unit}${count === 1 ? "" : "s"} ago`;
-}
 
 function Stat({
   icon,

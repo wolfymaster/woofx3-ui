@@ -11,7 +11,16 @@ import {
 } from "./billing-view";
 
 function engine(hosting: OrgEngine["hosting"]): OrgEngine {
-  return { instanceId: "i" as Id<"instances">, name: hosting, hosting, status: null, canOpen: true };
+  return {
+    instanceId: "i" as Id<"instances">,
+    name: hosting,
+    hosting,
+    status: null,
+    canOpen: true,
+    lastEngineActivityAt: null,
+    linkedChannel: null,
+    linkNeedsReconnect: false,
+  };
 }
 
 function subscription(overrides: Partial<OrgSubscription> = {}): OrgSubscription {

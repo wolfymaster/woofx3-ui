@@ -186,6 +186,9 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
         hosting: engineHosting,
         status: "registered" as const,
         canOpen: true,
+        lastEngineActivityAt: Date.parse("2026-11-01T12:00:00Z"),
+        linkedChannel: { platform: "twitch", name: "wolfy" },
+        linkNeedsReconnect: false,
       },
     ],
     subscription: null,
@@ -372,6 +375,12 @@ describe("Engines", () => {
       expect(byTestId(renderer, "button-manage-instance-1").length).toBe(1);
       expect(byTestId(renderer, "button-rename-engine-instance-1").length).toBe(0);
     }
+  });
+
+  test("each card says whether the engine is healthy, when it last reported and which channel it acts on", async () => {
+    const renderer = await render("owner", <EnginesPage />);
+    expect(text(renderer, "text-health-instance-1")).toEqual(["Healthy"]);
+    expect(textOf(byTestId(renderer, "status-engine-instance-1")[0])).toContain("wolfy on twitch");
   });
 
   test("the version and an available upgrade show on the engine's card", async () => {

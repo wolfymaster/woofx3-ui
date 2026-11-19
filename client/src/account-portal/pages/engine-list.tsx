@@ -4,34 +4,16 @@ import { Link, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { $currentInstanceId } from "@/lib/stores";
+import { cn } from "@/lib/utils";
+import { engineHealth, TONE_CLASS } from "../engine-health";
+import { formatAgo } from "../format-ago";
 import { NewEngineDialog } from "../new-engine-dialog";
 import { useOptionalOrganization, useOptionalPortalScope } from "../organization-context";
 import { organizationLabels } from "../organization-labels";
 import { enginePath } from "../portal-pages";
 import { useEngineUpgrade } from "../use-engine-upgrade";
-
-const STATUS_LABELS: Record<NonNullable<OrgEngine["status"]>, string> = {
-  requested: "Setting up",
-  provisioning: "Setting up",
-  ready: "Setting up",
-  registering: "Setting up",
-  registered: "Running",
-  upgrading: "Upgrading",
-  failed: "Failed",
-  deprovisioning: "Being deleted",
-  deleted: "Deleted",
-  stopping: "Pausing",
-  stopped: "Paused",
-  starting: "Starting",
-};
-
-function engineStatus(engine: OrgEngine): string {
-  if (engine.hosting === "external") {
-    return "No subscription needed";
-  }
-  return engine.status === null ? "Not set up" : STATUS_LABELS[engine.status];
-}
 
 /** What release a hosted engine runs, and a badge when a newer one is on offer. */
 export function EngineVersion({ engine, enabled }: { engine: OrgEngine; enabled: boolean }) {
@@ -44,6 +26,35 @@ export function EngineVersion({ engine, enabled }: { engine: OrgEngine; enabled:
       {info?.current ? <span data-testid={`text-version-${engine.instanceId}`}>{info.current}</span> : null}
       {info?.available ? <Badge data-testid={`badge-upgrade-${engine.instanceId}`}>Upgrade available</Badge> : null}
     </>
+  );
+}
+
+/** Whether the engine is connected and healthy, when it last reported in, and the channel it acts on. */
+function EngineStatus({ engine }: { engine: OrgEngine }) {
+  const now = useMinuteClock();
+  const health = engineHealth({
+    engine,
+    linkNeedsReconnect: engine.linkNeedsReconnect,
+    lastEngineActivityAt: engine.lastEngineActivityAt,
+  });
+  return (
+    <div className="space-y-1 text-sm" data-testid={`status-engine-${engine.instanceId}`}>
+      <p className={cn("flex items-center gap-2 font-medium", TONE_CLASS[health.tone])}>
+        <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
+        <span data-testid={`text-health-${engine.instanceId}`}>{health.label}</span>
+      </p>
+      {health.reasons.map((reason) => (
+        <p key={reason} className="text-muted-foreground">
+          {reason}
+        </p>
+      ))}
+      <p className="text-muted-foreground">
+        {engine.lastEngineActivityAt === null
+          ? "Has not reported in yet"
+          : `Last heard ${formatAgo(engine.lastEngineActivityAt, now)}`}
+        {engine.linkedChannel ? ` · ${engine.linkedChannel.name} on ${engine.linkedChannel.platform}` : ""}
+      </p>
+    </div>
   );
 }
 
@@ -123,25 +134,27 @@ export function EngineList() {
               <CardTitle className="truncate">{engine.name}</CardTitle>
               <CardDescription className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{engine.hosting === "managed" ? "Hosted" : "Self-hosted"}</Badge>
-                <span>{engineStatus(engine)}</span>
                 <EngineVersion engine={engine} enabled={scoped?.can.manageEngines === true} />
                 {scoped === null ? <span>· {labels.get(organization.accountId) ?? organization.name}</span> : null}
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {engine.canOpen ? (
-                <Button
-                  onClick={() => openDashboard(engine.instanceId)}
-                  data-testid={`button-launch-${engine.instanceId}`}
-                >
-                  Launch dashboard
-                </Button>
-              ) : null}
-              {scoped !== null && engine.canOpen ? (
-                <Button asChild variant="outline" data-testid={`button-manage-${engine.instanceId}`}>
-                  <Link href={enginePath(engine.instanceId)}>Manage</Link>
-                </Button>
-              ) : null}
+            <CardContent className="space-y-4">
+              <EngineStatus engine={engine} />
+              <div className="flex flex-wrap gap-2">
+                {engine.canOpen ? (
+                  <Button
+                    onClick={() => openDashboard(engine.instanceId)}
+                    data-testid={`button-launch-${engine.instanceId}`}
+                  >
+                    Launch dashboard
+                  </Button>
+                ) : null}
+                {scoped !== null && engine.canOpen ? (
+                  <Button asChild variant="outline" data-testid={`button-manage-${engine.instanceId}`}>
+                    <Link href={enginePath(engine.instanceId)}>Manage</Link>
+                  </Button>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         ))}
