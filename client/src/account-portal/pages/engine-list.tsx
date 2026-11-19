@@ -1,11 +1,13 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MyOrganization, OrgEngine } from "@convex/organizations";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLogger } from "@/lib/logger-context";
 import { $currentInstanceId } from "@/lib/stores";
 import { NewEngineDialog } from "../new-engine-dialog";
 import { useOptionalOrganization, useOptionalPortalScope } from "../organization-context";
@@ -32,6 +34,28 @@ function engineStatus(engine: OrgEngine): string {
     return "No subscription needed";
   }
   return engine.status === null ? "Not set up" : STATUS_LABELS[engine.status];
+}
+
+/** Whether a newer engine release than the one this hosted engine runs is on offer; asked once per engine. */
+function UpgradeBadge({ instanceId }: { instanceId: Id<"instances"> }) {
+  const upgradeInfo = useAction(api.provisioning.upgradeInfo);
+  const logger = useLogger();
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    let current = true;
+    upgradeInfo({ instanceId }).then(
+      (info) => {
+        if (current) {
+          setAvailable(info.available);
+        }
+      },
+      (error: unknown) => logger.warn("Could not check for an engine upgrade", { error, instanceId })
+    );
+    return () => {
+      current = false;
+    };
+  }, [upgradeInfo, instanceId, logger]);
+  return available ? <Badge data-testid={`badge-upgrade-${instanceId}`}>Upgrade available</Badge> : null;
 }
 
 /** The first thing a person without an engine sees: one big way to make one. */
@@ -112,6 +136,9 @@ export function EngineList() {
               <CardDescription className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{engine.hosting === "managed" ? "Hosted" : "Self-hosted"}</Badge>
                 <span>{engineStatus(engine)}</span>
+                {scoped?.can.manageEngines && engine.hosting === "managed" && engine.status === "registered" ? (
+                  <UpgradeBadge instanceId={engine.instanceId} />
+                ) : null}
                 {scoped === null ? <span>· {labels.get(organization.accountId) ?? organization.name}</span> : null}
               </CardDescription>
             </CardHeader>

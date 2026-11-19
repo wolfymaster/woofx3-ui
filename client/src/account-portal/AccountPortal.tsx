@@ -39,6 +39,7 @@ import {
   PortalScopeProvider,
   useOptionalOrganization,
   useOptionalPortalScope,
+  usePortalScope,
 } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
 import GeneralPage from "./pages/general";
@@ -223,8 +224,9 @@ function portalNav(pages: PortalPage[]): NavItem[] {
 /** The dashboard's frame (header, section rail, scrolling content) with the portal's pages as the section. */
 function PortalLayout({ children }: { children: React.ReactNode }) {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const { scope } = usePortalScope();
   const [location] = useLocation();
-  const nav = portalNav(visiblePages(organization?.can ?? null));
+  const nav = portalNav(visiblePages(scope.kind, organization?.can ?? null));
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
       <PortalHeader nav={nav} location={location} />
@@ -246,8 +248,9 @@ function PortalLayout({ children }: { children: React.ReactNode }) {
 /** A page the viewer's role can't see sends them to the index, which every signed-in user can see. */
 function PortalPageRoute({ id }: { id: PortalPageId }) {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const { scope } = usePortalScope();
   const page = portalPage(id);
-  if (!visiblePages(organization?.can ?? null).includes(page)) {
+  if (!visiblePages(scope.kind, organization?.can ?? null).includes(page)) {
     return <Redirect to={ACCOUNT_PORTAL_PATH} replace />;
   }
   const Page = PAGES[id];

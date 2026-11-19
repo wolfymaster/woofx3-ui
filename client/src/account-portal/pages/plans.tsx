@@ -13,6 +13,7 @@ import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-
 import { StatusBanner } from "@/billing/status-banner";
 import { type PlanPrices, usePlanPrices } from "@/billing/use-plan-prices";
 import { PageHeader } from "@/components/layout/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -21,6 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
 import { CHECKOUT_CANCELLED_TEXT, CHECKOUT_POLL_TEXT, parseCheckoutReturn } from "@/lib/checkout-return";
 import { useCheckoutPoll } from "@/lib/use-checkout-poll";
+import { cn } from "@/lib/utils";
 import { type BillingView, billingView, checkoutRefusalAction } from "../billing-view";
 import { useOrganization } from "../organization-context";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
@@ -39,18 +41,22 @@ function planSummary(subscription: OrgSubscription, { prices, names }: PlanPrice
   return `${planLabel(subscription, names)} - ${formatPrice(prices, subscription.plan, subscription.interval)}`;
 }
 
-/** The plans an organization can move to, given what it already has. */
+/** Every plan is listed, so the one an organization is on can be compared with the rest; none when it can't buy. */
 function offeredPlans(view: BillingView): PlanTier[] {
   switch (view.kind) {
     case "choose_plan":
     case "no_plan":
-      return PLAN_TIERS;
     case "provider_managed":
-      return PLAN_TIERS.filter((plan) => plan !== view.subscription.plan);
+      return PLAN_TIERS;
     case "exempt":
     case "no_subscription_needed":
       return [];
   }
+}
+
+/** The plan an organization pays for through the provider; null before it has bought one. */
+function currentPlan(view: BillingView): PlanTier | null {
+  return view.kind === "provider_managed" ? view.subscription.plan : null;
 }
 
 function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingView }) {
@@ -64,6 +70,7 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
   const { busy, go } = useProviderRedirect();
   const plans = offeredPlans(view);
   const changesExisting = view.kind === "provider_managed";
+  const current = currentPlan(view);
 
   if (plans.length === 0) {
     return null;
@@ -105,9 +112,9 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
   return (
     <section className="space-y-6" data-testid="section-upgrade-options">
       <div className="space-y-1 text-center">
-        <h2 className="text-lg font-semibold">{changesExisting ? "Ready to go further?" : "Choose a plan"}</h2>
+        <h2 className="text-lg font-semibold">{changesExisting ? "All plans" : "Choose a plan"}</h2>
         <p className="text-sm text-muted-foreground">
-          {changesExisting ? "Move up whenever you like." : "Pick the plan to run your engine on."}
+          {changesExisting ? "Compare plans and change yours any time." : "Pick the plan to run your engine on."}
         </p>
       </div>
       <fieldset className="mx-auto flex w-fit items-center gap-1 rounded-lg bg-muted p-1">
@@ -131,18 +138,34 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
         {plans.map((plan) => {
           const details = PLAN_DETAILS[plan];
           return (
-            <Card key={plan} className="flex flex-col" data-testid={`card-plan-${plan}`}>
+            <Card
+              key={plan}
+              className={cn("flex flex-col", plan === current && "border-primary ring-1 ring-primary")}
+              data-testid={`card-plan-${plan}`}
+            >
               <CardHeader>
                 <CardTitle className="flex items-baseline justify-between">
-                  <span>{planName(names, plan)}</span>
+                  <span className="flex items-center gap-2">
+                    {planName(names, plan)}
+                    {plan === current ? <Badge data-testid={`badge-current-${plan}`}>Current plan</Badge> : null}
+                  </span>
                   <span className="text-lg font-normal">{formatPrice(prices, plan, interval)}</span>
                 </CardTitle>
                 <CardDescription>{details.tagline}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between gap-4">
                 <PlanHighlights items={details.highlights} />
-                <Button disabled={busy} onClick={() => choose(plan)} data-testid={`button-choose-${plan}`}>
-                  {changesExisting ? `Change to ${planName(names, plan)}` : `Choose ${planName(names, plan)}`}
+                <Button
+                  disabled={busy || plan === current}
+                  variant={plan === current ? "outline" : "default"}
+                  onClick={() => choose(plan)}
+                  data-testid={`button-choose-${plan}`}
+                >
+                  {plan === current
+                    ? "Your plan"
+                    : changesExisting
+                      ? `Change to ${planName(names, plan)}`
+                      : `Choose ${planName(names, plan)}`}
                 </Button>
               </CardContent>
             </Card>

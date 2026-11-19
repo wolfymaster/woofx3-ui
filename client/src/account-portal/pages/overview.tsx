@@ -4,9 +4,10 @@ import { parseCheckoutReturn } from "@/lib/checkout-return";
 import { useOptionalOrganization } from "../organization-context";
 import { PLANS_PATH } from "../portal-pages";
 import { EngineList } from "./engine-list";
+import { OrganizationDashboard } from "./organization-dashboard";
 
 /**
- * The portal's home: the engines the person can launch. The payment provider returns checkouts here, so one that
+ * The portal's home: a person's launchable engines in the personal scope, an organization's dashboard in its own. The payment provider returns checkouts here, so one that
  * lands on an organization's billing owner goes on to the Plans page, which reports how it ended.
  */
 export default function OverviewPage() {
@@ -19,9 +20,9 @@ export default function OverviewPage() {
     <>
       <PageHeader
         title={organization?.name ?? "Overview"}
-        description={organization === null ? "Every engine you can open." : "This organization's engines."}
+        description={organization === null ? "Every engine you can open." : "How this organization stands."}
       />
-      <EngineList />
+      {organization === null ? <EngineList /> : <OrganizationDashboard organization={organization} />}
     </>
   );
 }

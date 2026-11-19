@@ -1,4 +1,5 @@
 import type { OrgCapabilities } from "@convex/organizations";
+import type { PortalScope } from "./portal-scope";
 
 export const ACCOUNT_PORTAL_PATH = "/account";
 
@@ -10,6 +11,8 @@ export interface PortalPage {
   id: PortalPageId;
   label: string;
   path: string;
+  /** The scopes whose nav lists the page: a person's own things are personal, the organization's are not. */
+  scopes: readonly PortalScope["kind"][];
   /** The org action a role needs to see the page; null means every signed-in user sees it. */
   visibleWith: keyof OrgCapabilities | null;
   /** Pages of an organization's Settings sit under that entry in the nav. */
@@ -17,15 +20,46 @@ export interface PortalPage {
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [
-  { id: "overview", label: "Overview", path: ACCOUNT_PORTAL_PATH, visibleWith: null },
-  { id: "sponsorship", label: "Sponsorship", path: `${ACCOUNT_PORTAL_PATH}/sponsorship`, visibleWith: null },
-  { id: "payments", label: "Payments", path: `${ACCOUNT_PORTAL_PATH}/payments`, visibleWith: null },
-  { id: "settings", label: "Your settings", path: `${ACCOUNT_PORTAL_PATH}/settings`, visibleWith: null },
-  { id: "team", label: "Team", path: `${ACCOUNT_PORTAL_PATH}/team`, visibleWith: null },
+  {
+    id: "overview",
+    label: "Overview",
+    path: ACCOUNT_PORTAL_PATH,
+    scopes: ["personal", "organization"],
+    visibleWith: null,
+  },
+  {
+    id: "sponsorship",
+    label: "Sponsorship",
+    path: `${ACCOUNT_PORTAL_PATH}/sponsorship`,
+    scopes: ["personal"],
+    visibleWith: null,
+  },
+  {
+    id: "payments",
+    label: "Payments",
+    path: `${ACCOUNT_PORTAL_PATH}/payments`,
+    scopes: ["organization"],
+    visibleWith: "manageBilling",
+  },
+  {
+    id: "settings",
+    label: "Your settings",
+    path: `${ACCOUNT_PORTAL_PATH}/settings`,
+    scopes: ["personal"],
+    visibleWith: null,
+  },
+  {
+    id: "team",
+    label: "Team",
+    path: `${ACCOUNT_PORTAL_PATH}/team`,
+    scopes: ["organization"],
+    visibleWith: "manageMembers",
+  },
   {
     id: "general",
     label: "General",
     path: `${ACCOUNT_PORTAL_PATH}/organization/general`,
+    scopes: ["organization"],
     visibleWith: "viewOrganization",
     inOrganizationSettings: true,
   },
@@ -33,14 +67,17 @@ export const PORTAL_PAGES: readonly PortalPage[] = [
     id: "plans",
     label: "Plans",
     path: PLANS_PATH,
+    scopes: ["organization"],
     visibleWith: "manageBilling",
     inOrganizationSettings: true,
   },
 ];
 
-/** The pages a viewer sees in the portal's nav; `can` is null for a viewer with no organization. */
-export function visiblePages(can: OrgCapabilities | null): PortalPage[] {
-  return PORTAL_PAGES.filter((page) => page.visibleWith === null || can?.[page.visibleWith] === true);
+/** The pages a viewer sees in the portal's nav for a scope; `can` is null for a viewer with no organization. */
+export function visiblePages(scope: PortalScope["kind"], can: OrgCapabilities | null): PortalPage[] {
+  return PORTAL_PAGES.filter(
+    (page) => page.scopes.includes(scope) && (page.visibleWith === null || can?.[page.visibleWith] === true)
+  );
 }
 
 export function portalPage(id: PortalPageId): PortalPage {

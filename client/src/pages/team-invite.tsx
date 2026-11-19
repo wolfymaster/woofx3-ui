@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import type { TwitchInviteCandidate } from "@convex/invitations";
 import { useAction, useQuery } from "convex/react";
 import { ArrowLeft, Copy, Link as LinkIcon, Loader2, Mail, Search, UserPlus } from "lucide-react";
@@ -37,9 +38,16 @@ function inviteUrl(token: string): string {
  * A Twitch invite is only created after the inviter has seen who the name
  * belongs to, so a typo cannot hand access to a stranger.
  */
-export default function TeamInvite({ basePath = "/team" }: { basePath?: string }) {
+export default function TeamInvite({
+  basePath = "/team",
+  engineId,
+}: {
+  basePath?: string;
+  /** Invites to this engine instead of the selected one; null when the caller has none to offer. */
+  engineId?: Id<"instances"> | null;
+}) {
   const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const instanceId = engineId === undefined ? instance?._id : (engineId ?? undefined);
 
   const teamData = useQuery(api.engineMembers.listForEngine, instanceId ? { instanceId } : "skip");
   const access = teamInviteAccess(teamData);

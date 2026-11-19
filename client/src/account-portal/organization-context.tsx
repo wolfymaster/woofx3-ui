@@ -43,3 +43,12 @@ export function PortalScopeProvider({ value, children }: { value: PortalScopeSta
 export function useOptionalPortalScope(): PortalScopeState | null {
   return useContext(PortalScopeContext);
 }
+
+/** The scope the portal shows. Only pages inside the portal's frame call this. */
+export function usePortalScope(): PortalScopeState {
+  const state = useContext(PortalScopeContext);
+  if (state === null) {
+    throw new Error("usePortalScope needs the portal's frame above it");
+  }
+  return state;
+}
