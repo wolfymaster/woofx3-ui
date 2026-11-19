@@ -685,7 +685,7 @@ export interface paths {
         put?: never;
         /**
          * Grant an organization credit for a referral reward
-         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again. The credit lapses 12 months after it is granted and is spent on the organization's next provider invoice (once it pays). 409 `credits_disabled` while credits are switched off.
+         * @description `billing:operate`. A lifecycle input like any other, recorded as a transition by the operator. Refusals are stored under the Idempotency-Key and replayed; a 409 `subscription_changed` (another writer won twice) stores nothing, so the same request may be sent again. The credit lapses 12 months after it is granted and is spent on the organization's next provider invoice (once it pays).
          */
         post: {
             parameters: {
@@ -3898,7 +3898,7 @@ export interface components {
             prices: components["schemas"]["BillingAdminPlanPrice"][];
         };
         /** @enum {string} */
-        BillingAdminRefusalCode: "no_subscription" | "illegal_transition" | "provider_managed" | "trial_is_starter" | "invalid_exemption" | "not_suspended_by_operator" | "no_provider_subscription" | "unknown_discount" | "invalid_overrides_end" | "invalid_reward" | "credits_disabled" | "sponsorship_not_found" | "payment_not_found" | "refund_exceeds_payment" | "sponsorship_not_recurring" | "sponsorship_canceled" | "effect_not_dead" | "checkout_not_found" | "checkout_not_stuck" | "checkout_not_open" | "price_exists" | "price_not_found";
+        BillingAdminRefusalCode: "no_subscription" | "illegal_transition" | "provider_managed" | "trial_is_starter" | "invalid_exemption" | "not_suspended_by_operator" | "no_provider_subscription" | "unknown_discount" | "invalid_overrides_end" | "invalid_reward" | "sponsorship_not_found" | "payment_not_found" | "refund_exceeds_payment" | "sponsorship_not_recurring" | "sponsorship_canceled" | "effect_not_dead" | "checkout_not_found" | "checkout_not_stuck" | "checkout_not_open" | "price_exists" | "price_not_found";
         BillingAdminRefusalError: {
             error: {
                 code: components["schemas"]["BillingAdminRefusalCode"];
