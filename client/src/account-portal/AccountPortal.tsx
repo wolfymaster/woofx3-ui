@@ -9,11 +9,10 @@ import {
   LayoutDashboard,
   Loader2,
   Receipt,
-  Settings,
+  Server,
   Sparkles,
   User,
   UserCog,
-  Users,
   UsersRound,
 } from "lucide-react";
 import { useState } from "react";
@@ -40,12 +39,13 @@ import {
   PortalScopeProvider,
   useOptionalOrganization,
   useOptionalPortalScope,
+  usePortalScope,
 } from "./organization-context";
 import { organizationLabels } from "./organization-labels";
-import GeneralPage from "./pages/general";
+import EngineDetailPage from "./pages/engine-detail";
+import EnginesPage from "./pages/engines";
 import OverviewPage from "./pages/overview";
 import PaymentsPage from "./pages/payments";
-import PeoplePage from "./pages/people";
 import PlansPage from "./pages/plans";
 import SettingsPage from "./pages/settings";
 import SponsorshipPage from "./pages/sponsorship";
@@ -53,6 +53,7 @@ import TeamPage from "./pages/team";
 import TeamInvitePage, { TEAM_INVITE_PATH } from "./pages/team-invite";
 import {
   ACCOUNT_PORTAL_PATH,
+  ENGINES_PATH,
   PORTAL_PAGES,
   type PortalPage,
   type PortalPageId,
@@ -64,12 +65,11 @@ import { resumesOnboarding, START_TRIAL_PATH, startsTrial } from "./start-trial"
 
 const PAGES: Record<PortalPageId, () => React.ReactElement> = {
   overview: OverviewPage,
+  engines: EnginesPage,
   sponsorship: SponsorshipPage,
   payments: PaymentsPage,
-  people: PeoplePage,
   settings: SettingsPage,
   team: TeamPage,
-  general: GeneralPage,
   plans: PlansPage,
 };
 
@@ -139,12 +139,11 @@ function ScopeSwitcher() {
 
 const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
   overview: LayoutDashboard,
+  engines: Server,
   sponsorship: Heart,
   payments: Receipt,
-  people: Users,
   settings: UserCog,
   team: UsersRound,
-  general: Building2,
   plans: Sparkles,
 };
 
@@ -202,33 +201,16 @@ function navItemOf(page: PortalPage): NavItem {
     icon: PAGE_ICONS[page.id],
     href: page.path,
     exact: page.path === ACCOUNT_PORTAL_PATH,
+    docked: page.docked,
   };
-}
-
-/** The pages as nav entries: an organization's settings pages gather under one Settings entry. */
-function portalNav(pages: PortalPage[]): NavItem[] {
-  const settings = pages.filter((page) => page.inOrganizationSettings);
-  const items = pages.filter((page) => !page.inOrganizationSettings).map(navItemOf);
-  if (settings.length === 0) {
-    return items;
-  }
-  return [
-    ...items,
-    {
-      id: "account-organization-settings",
-      label: "Settings",
-      icon: Settings,
-      href: settings[0].path,
-      children: settings.map(navItemOf),
-    },
-  ];
 }
 
 /** The dashboard's frame (header, section rail, scrolling content) with the portal's pages as the section. */
 function PortalLayout({ children }: { children: React.ReactNode }) {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const { scope } = usePortalScope();
   const [location] = useLocation();
-  const nav = portalNav(visiblePages(organization?.can ?? null));
+  const nav = visiblePages(scope.kind, organization?.can ?? null).map(navItemOf);
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
       <PortalHeader nav={nav} location={location} />
@@ -250,8 +232,9 @@ function PortalLayout({ children }: { children: React.ReactNode }) {
 /** A page the viewer's role can't see sends them to the index, which every signed-in user can see. */
 function PortalPageRoute({ id }: { id: PortalPageId }) {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const { scope } = usePortalScope();
   const page = portalPage(id);
-  if (!visiblePages(organization?.can ?? null).includes(page)) {
+  if (!visiblePages(scope.kind, organization?.can ?? null).includes(page)) {
     return <Redirect to={ACCOUNT_PORTAL_PATH} replace />;
   }
   const Page = PAGES[id];
@@ -295,6 +278,7 @@ export default function AccountPortal() {
           </Route>
         ))}
         <Route path={TEAM_INVITE_PATH} component={TeamInvitePage} />
+        <Route path={`${ENGINES_PATH}/:instanceId`} component={EngineDetailPage} />
         <Route>
           <p className="text-muted-foreground">There&apos;s no such page in the account portal.</p>
         </Route>

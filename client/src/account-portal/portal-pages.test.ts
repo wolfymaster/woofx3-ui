@@ -9,28 +9,30 @@ function can(role: OrgRole): OrgCapabilities {
 }
 
 // The "Who sees what" table: a page a role can't see isn't in its nav.
-const NAV: Array<[OrgRole, PortalPageId[]]> = [
-  ["owner", ["overview", "sponsorship", "payments", "people", "settings", "team", "general", "plans"]],
-  ["admin", ["overview", "sponsorship", "payments", "people", "settings", "team", "general"]],
-  ["member", ["overview", "sponsorship", "payments", "settings", "team", "general"]],
+const ORGANIZATION_NAV: Array<[OrgRole, PortalPageId[]]> = [
+  ["owner", ["overview", "engines", "payments", "team", "plans"]],
+  ["admin", ["overview", "engines", "team"]],
+  ["member", ["overview", "engines"]],
 ];
 
-describe("visiblePages", () => {
-  for (const [role, pages] of NAV) {
+describe("visiblePages in an organization's scope", () => {
+  for (const [role, pages] of ORGANIZATION_NAV) {
     test(`${role} sees ${pages.join(", ")}`, () => {
-      expect(visiblePages(can(role)).map((page) => page.id)).toEqual(pages);
+      expect(visiblePages("organization", can(role)).map((page) => page.id)).toEqual(pages);
     });
   }
 });
 
-describe("visiblePages without an organization", () => {
-  test("shows the personal pages only", () => {
-    expect(visiblePages(null).map((page) => page.id)).toEqual([
+describe("visiblePages in the personal scope", () => {
+  test("lists a person's own pages, with no team or payments", () => {
+    expect(visiblePages("personal", null).map((page) => page.id)).toEqual(["overview", "sponsorship", "settings"]);
+  });
+
+  test("is the same for someone who owns an organization", () => {
+    expect(visiblePages("personal", can("owner")).map((page) => page.id)).toEqual([
       "overview",
       "sponsorship",
-      "payments",
       "settings",
-      "team",
     ]);
   });
 });
