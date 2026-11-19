@@ -57,7 +57,12 @@ export type CatalogActionRow = {
   moduleLabel?: string;
 };
 
-function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
+/**
+ * A preset is only what the engine can do; the configured trigger lives in its workflow.
+ * Keeping this a pure row-to-preset adapter (with no cache of its own) is what lets the Alerts
+ * side order, merge and report health from workflows alone.
+ */
+export function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
   const fields = withFieldOptionsOwner(
     withModuleName(parseConfigFields(row.configFields), row.moduleName),
@@ -84,7 +89,8 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   };
 }
 
-function toActionPreset(row: CatalogActionRow): ActionPreset {
+/** The action half of the same capability-only adapter; see `toTriggerPreset`. */
+export function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
   const fields = withFieldOptionsOwner(
     withModuleName(parseConfigFields(row.configFields), row.moduleName),
@@ -112,6 +118,7 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
   };
 }
 
+/** Reads capability from the engine and memoises its normalisation; no configured state is kept here. */
 export function useWorkflowCatalog() {
   const { instanceId, isInstanceLoading } = useEngineScope();
   const raw = useRawWorkflowCatalog();
