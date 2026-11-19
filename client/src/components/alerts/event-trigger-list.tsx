@@ -208,7 +208,12 @@ export function EventTriggerList({
       (phrase): SentencePart => ({ kind: "text", text: ` and ${phrase}` })
     ),
   ];
-  const stepEditor = (steps: EventTrigger, alsoRuns: ReactNode, workflows: readonly Workflow[]) => {
+  const stepEditor = (
+    steps: EventTrigger,
+    alsoRuns: ReactNode,
+    workflows: readonly Workflow[],
+    registerClose: (close: () => Promise<boolean>) => void
+  ) => {
     const read = definitionToTree(steps.definition);
     return read.editable ? (
       <TriggerEditor
@@ -229,6 +234,7 @@ export function EventTriggerList({
         workflows={workflows}
         onCreated={() => undefined}
         onDeleted={() => setExpandedId(null)}
+        registerClose={registerClose}
         alsoRuns={alsoRuns}
       />
     ) : null;

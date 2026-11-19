@@ -63,6 +63,8 @@ interface TriggerEditorProps {
   onDeleted: () => void;
   /** What else runs on this trigger, shown under the steps. Delete then says it takes only the steps. */
   alsoRuns?: ReactNode;
+  /** Lets the surrounding card save pending edits before it closes, so closing never drops work. */
+  registerClose?: (close: () => Promise<boolean>) => void;
 }
 
 const LAST_STEP_REASON = "A trigger needs at least one step. Delete the trigger instead, or add another step first.";
@@ -94,6 +96,7 @@ export function TriggerEditor({
   onCreated,
   onDeleted,
   alsoRuns,
+  registerClose,
 }: TriggerEditorProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -238,6 +241,18 @@ export function TriggerEditor({
     commit,
     !saved && countActionSteps(tree.steps) === 0 ? "Not saved yet. Add a step to save this trigger." : null
   );
+
+  const pendingCloseRef = useRef<() => Promise<boolean>>(async () => true);
+  pendingCloseRef.current = async () => {
+    if (!save.changed) {
+      return true;
+    }
+    return save.commit(treeRef.current);
+  };
+  useEffect(() => {
+    registerClose?.(() => pendingCloseRef.current());
+    return () => registerClose?.(async () => true);
+  }, [registerClose]);
 
   const { markSaved } = save;
   replaceTreeRef.current = (read, revision) => {

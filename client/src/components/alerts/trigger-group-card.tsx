@@ -1,5 +1,5 @@
-import { ExternalLink } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { ExternalLink, X } from "lucide-react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
 import { InlineGroupPicker, TriggerGroupChips } from "@/components/alerts/trigger-workflow-groups";
@@ -74,8 +74,13 @@ interface TriggerGroupCardProps {
   title: string;
   isOpen: boolean;
   onToggle: () => void;
-  /** The step editor for the streamer's steps, given what else runs on the trigger. */
-  editor: (steps: EventTrigger, alsoRuns: ReactNode, workflows: readonly Workflow[]) => ReactNode;
+  /** The step editor for the streamer's steps, given what else runs on the trigger and where to register its pending save. */
+  editor: (
+    steps: EventTrigger,
+    alsoRuns: ReactNode,
+    workflows: readonly Workflow[],
+    registerClose: (close: () => Promise<boolean>) => void
+  ) => ReactNode;
   /** Starts the streamer's own steps on this trigger, which has none running. */
   onAddSteps: () => void;
 }
@@ -113,6 +118,18 @@ export function TriggerGroupCard({
   const alsoRuns = parts.modules.length > 0 && (
     <AlsoRuns modules={parts.modules} afterSteps={parts.steps !== undefined} />
   );
+  const closeRef = useRef<() => Promise<boolean>>();
+  const registerClose = useCallback((close: () => Promise<boolean>) => {
+    closeRef.current = close;
+  }, []);
+  const collapse = useCallback(() => {
+    void (async () => {
+      const ok = closeRef.current ? await closeRef.current() : true;
+      if (ok) {
+        onToggle();
+      }
+    })();
+  }, [onToggle]);
 
   return (
     <article
@@ -177,14 +194,20 @@ export function TriggerGroupCard({
                   data-testid={`trigger-enabled-${firstId}`}
                 />
               </div>
-              <Button variant="ghost" size="sm" onClick={onToggle} data-testid={`trigger-done-${firstId}`}>
-                Done
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={collapse}
+                aria-label="Collapse trigger"
+                data-testid={`trigger-collapse-${firstId}`}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>
           <SeparateOwnSteps parts={parts} />
           {parts.steps ? (
-            editor(parts.steps, alsoRuns || undefined, workflows)
+            editor(parts.steps, alsoRuns || undefined, workflows, registerClose)
           ) : (
             <>
               <Button variant="outline" className="h-11 self-start sm:h-9" onClick={onAddSteps}>
