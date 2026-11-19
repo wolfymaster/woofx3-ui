@@ -1,13 +1,18 @@
 import {
   type AppliedDiscount,
   type BillingClient,
+  type BillingInterval,
   type BillingResult,
+  type BillingTier,
   billingOk,
   type CheckoutRequest,
   type CheckoutView,
   type Invoice,
   type MarketplaceCheckoutRequest,
+  type PlanChangeOutcome,
+  type PlanChangePreview,
   type PlanPrice,
+  type ScheduledPlanChange,
   type Sponsorship,
   type SponsorshipCheckoutRequest,
   type SponsorshipCheckoutView,
@@ -24,6 +29,9 @@ export interface BillingCall {
     | "startMarketplaceCheckout"
     | "openPortal"
     | "listInvoices"
+    | "previewPlanChange"
+    | "changePlan"
+    | "scheduledPlanChange"
     | "lookupPromotionCode"
     | "checkoutState"
     | "planPrices"
@@ -47,6 +55,16 @@ export class FakeBillingClient implements BillingClient {
   });
   portalAnswer: BillingResult<{ url: string }> = billingOk({ url: "https://pay.example/portal" });
   invoicesAnswer: BillingResult<Invoice[]> = billingOk([]);
+  previewAnswer: BillingResult<PlanChangePreview> = billingOk({
+    timing: "now",
+    effectiveAt: 0,
+    currency: "usd",
+    lines: [],
+    dueNowCents: 0,
+    next: { amountCents: 2_000, at: 0 },
+  });
+  changeAnswer: BillingResult<PlanChangeOutcome> = billingOk({ kind: "applied" });
+  scheduledAnswer: BillingResult<ScheduledPlanChange | null> = billingOk(null);
   promotionAnswer: BillingResult<AppliedDiscount | null> = billingOk(null);
   checkoutStateAnswer: BillingResult<CheckoutView> | null = null;
   pricesAnswer: BillingResult<PlanPrice[]> = billingOk([
@@ -87,6 +105,21 @@ export class FakeBillingClient implements BillingClient {
   async listInvoices(accountId: string) {
     this.calls.push({ command: "listInvoices", args: [accountId] });
     return this.invoicesAnswer;
+  }
+
+  async previewPlanChange(accountId: string, target: { plan: BillingTier; interval: BillingInterval }) {
+    this.calls.push({ command: "previewPlanChange", args: [accountId, target] });
+    return this.previewAnswer;
+  }
+
+  async changePlan(accountId: string, target: { plan: BillingTier; interval: BillingInterval }) {
+    this.calls.push({ command: "changePlan", args: [accountId, target] });
+    return this.changeAnswer;
+  }
+
+  async scheduledPlanChange(accountId: string) {
+    this.calls.push({ command: "scheduledPlanChange", args: [accountId] });
+    return this.scheduledAnswer;
   }
 
   async lookupPromotionCode(code: string) {

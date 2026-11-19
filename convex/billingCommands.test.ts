@@ -234,6 +234,89 @@ describe("openPortal", () => {
   });
 });
 
+describe("plan changes", () => {
+  const target = { plan: "pro", interval: "year" } as const;
+
+  test("only the owner may preview, change or read the booked move", async () => {
+    const t = newBackend();
+    const { adminId, accountId } = await seedOrg(t);
+    const admin = as(t, adminId);
+    const refusal = "Your organization role doesn't allow this";
+    await expect(admin.action(api.billingCommands.previewPlanChange, { accountId, ...target })).rejects.toThrow(
+      refusal
+    );
+    await expect(admin.action(api.billingCommands.changePlan, { accountId, ...target })).rejects.toThrow(refusal);
+    await expect(admin.action(api.billingCommands.scheduledPlanChange, { accountId })).rejects.toThrow(refusal);
+    expect(seen).toEqual([]);
+  });
+
+  test("a preview is the plane's charge with its dates as epoch milliseconds", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    answers["/plan-change/preview"] = {
+      status: 200,
+      body: {
+        timing: "now",
+        effectiveAt: "2026-12-01T00:00:00.000Z",
+        currency: "usd",
+        lines: [{ description: "Unused time", amountCents: -3_000 }],
+        dueNowCents: -3_000,
+        next: { amountCents: 150_000, at: "2027-12-01T00:00:00.000Z" },
+      },
+    };
+    expect(await as(t, ownerId).action(api.billingCommands.previewPlanChange, { accountId, ...target })).toEqual({
+      timing: "now",
+      effectiveAt: Date.parse("2026-12-01T00:00:00.000Z"),
+      currency: "usd",
+      lines: [{ description: "Unused time", amountCents: -3_000 }],
+      dueNowCents: -3_000,
+      next: { amountCents: 150_000, at: Date.parse("2027-12-01T00:00:00.000Z") },
+    });
+    expect(seen[0]?.body).toEqual(target);
+  });
+
+  test("a move up is applied; a move down says when it starts", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const owner = as(t, ownerId);
+    answers["/plan-change"] = { status: 200, body: { kind: "applied", scheduled: null } };
+    expect(await owner.action(api.billingCommands.changePlan, { accountId, ...target })).toEqual({ kind: "applied" });
+    answers["/plan-change"] = {
+      status: 200,
+      body: { kind: "scheduled", scheduled: { plan: "starter", interval: "month", at: "2027-01-01T00:00:00.000Z" } },
+    };
+    expect(
+      await owner.action(api.billingCommands.changePlan, { accountId, plan: "starter", interval: "month" })
+    ).toEqual({
+      kind: "scheduled",
+      change: { plan: "starter", interval: "month", at: Date.parse("2027-01-01T00:00:00.000Z") },
+    });
+  });
+
+  test("a declined card and an unsubscribed org keep their wording", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    const owner = as(t, ownerId);
+    answers["/plan-change"] = { status: 409, body: { error: { code: "payment_declined", message: "plane words" } } };
+    expect(await errorData(owner.action(api.billingCommands.changePlan, { accountId, ...target }))).toEqual({
+      code: "payment_declined",
+      message: "Your card was declined. Update your payment method in Manage billing and try again.",
+    });
+    answers["/plan-change"] = { status: 409, body: { error: { code: "not_subscribed", message: "plane words" } } };
+    expect(await errorData(owner.action(api.billingCommands.changePlan, { accountId, ...target }))).toEqual({
+      code: "not_subscribed",
+      message: "This organization has no subscription to change. Choose a plan first.",
+    });
+  });
+
+  test("the booked move is read back, or null", async () => {
+    const t = newBackend();
+    const { ownerId, accountId } = await seedOrg(t);
+    answers["/plan-change"] = { status: 200, body: { scheduled: null } };
+    expect(await as(t, ownerId).action(api.billingCommands.scheduledPlanChange, { accountId })).toBeNull();
+  });
+});
+
 describe("invoices", () => {
   test("null for an admin without asking the plane; the owner's come from it", async () => {
     const t = newBackend();
