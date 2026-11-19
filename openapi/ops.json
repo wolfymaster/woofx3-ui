@@ -683,6 +683,7 @@
         "type": "object"
       },
       "FeatureFlagKeyRequest": {
+        "additionalProperties": false,
         "properties": {
           "key": {
             "description": "A lowercase word, then dot- or dash-separated words.",
@@ -695,7 +696,8 @@
         "type": "object"
       },
       "FeatureFlagRequest": {
-        "description": "The whole definition: a create and an update carry the same shape; the key names the row. Unknown fields are ignored.",
+        "additionalProperties": false,
+        "description": "The whole definition: a create and an update carry the same shape; the key names the row.",
         "properties": {
           "description": {
             "maxLength": 200,
@@ -716,6 +718,7 @@
             "type": "string"
           },
           "rules": {
+            "additionalProperties": false,
             "description": "Required under state \"rules\" and refused otherwise.",
             "properties": {
               "accounts": {
@@ -1127,6 +1130,7 @@
         "type": "object"
       },
       "IssueReferralCodeRequest": {
+        "additionalProperties": false,
         "properties": {
           "actor": {
             "description": "The operator named on the code.",
@@ -1322,6 +1326,7 @@
         "type": "object"
       },
       "NotificationRequest": {
+        "additionalProperties": false,
         "properties": {
           "actionLabel": {
             "anyOf": [
@@ -1783,6 +1788,7 @@
         "type": "object"
       },
       "RevokeReferralCodeRequest": {
+        "additionalProperties": false,
         "properties": {
           "actor": {
             "description": "The operator named on the code.",
@@ -1840,6 +1846,7 @@
         "type": "object"
       },
       "UpdateReferralCodeRequest": {
+        "additionalProperties": false,
         "properties": {
           "actor": {
             "description": "The operator named on the code.",
