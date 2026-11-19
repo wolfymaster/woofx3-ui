@@ -26,7 +26,7 @@ import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { logger } from "../logger";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
+import { marketplaceAccessFor } from "./marketplaceAccess";
 import { marketplaceGet } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
 import { notBoughtMessage } from "./marketplaceEntitlement";
@@ -66,113 +66,80 @@ export type MarketplaceEngine = Pick<EngineApi, "installMarketplaceListing" | "i
 
 // --- routing ---
 
-/** What decides the path for one instance. */
-export interface EngineInstallGate {
-  access: MarketplaceAccess;
-  /** Whether this deployment can mint buyer tokens at all. */
-  buyerTokens: boolean;
-}
-
-/**
- * Whether the engine path runs.
- *
- * Dev access keeps the Convex path: the engine reads `/catalog/{id}`
- * anonymously, where dev-tier listings do not exist. A deployment without
- * the buyer signing key keeps it too, because the engine could then only
- * install free listings and would claim nothing for the buyer.
- */
-export function routeThroughEngine(gate: EngineInstallGate): boolean {
-  return gate.access !== "dev" && gate.buyerTokens;
-}
-
 /** Whether `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are both set. */
 export function buyerTokensConfigured(env: Record<string, string | undefined> = process.env): boolean {
   return Boolean(env[BUYER_SIGNING_KEY_ENV]?.trim() && env[BUYER_SIGNING_KEY_ID_ENV]?.trim());
 }
 
+const ENGINE_UNREACHABLE_COPY = "Your engine isn't answering right now. Make sure it is running, then try again.";
+const ENGINE_UNAVAILABLE_COPY = "Marketplace installs aren't available for this engine right now.";
+const LISTING_UNREADABLE_COPY = "This module's marketplace listing couldn't be read. Try again in a moment.";
+
 /**
- * The engine to run a marketplace operation on for `instanceId`, or null for
- * the Convex path. An instance that is not registered with its engine gets
- * null, so the Convex path reports that as it always has. An engine that does
- * not answer gets the Convex path too: reviews and file browsing do not need
- * the engine there, and an install fails the way it always has.
+ * The engine to run a marketplace operation on for `instanceId`, or null when
+ * it has none to run on: an instance not registered with its engine, or a
+ * deployment that cannot mint buyer tokens (the engine could then claim
+ * nothing for the buyer). An engine that does not answer fails the call, so
+ * an install never quietly goes somewhere else.
  */
 export async function marketplaceEngineFor(
   ctx: ActionCtx,
   instanceId: Id<"instances">
 ): Promise<EngineCredentials | null> {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
-  if (!instance?.clientId || !instance.clientSecret) {
+  if (!instance?.clientId || !instance.clientSecret || !buyerTokensConfigured()) {
     return null;
   }
   const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
-  if (!routeThroughEngine({ access: marketplaceAccessFor(instance), buyerTokens: buyerTokensConfigured() })) {
-    return null;
-  }
   try {
     await createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret).getEngineInfo();
   } catch (err) {
-    logger.warn("marketplace install routing: engine unreachable, using the Convex path", {
+    logger.warn("marketplace install: engine unreachable", {
       instanceId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return null;
+    throw new ConvexError(ENGINE_UNREACHABLE_COPY);
   }
   return engine;
 }
 
 /**
- * Why a listing stays on the Convex path although the instance is routed to
- * the engine, or null when the engine may install it. Only module and theme
- * listings install as modules; anything else keeps the Convex path, which
- * refuses it with its own error.
- */
-export function moduleListingStaysOnConvex(listing: CatalogListing): string | null {
-  if (!isModuleListing(listing.type)) {
-    return `a ${listing.type} listing does not install as a module`;
-  }
-  return null;
-}
-
-/**
  * The engine to install module listing `listingId` on, with the listing as
- * the catalog describes it, or null for the Convex path.
- *
- * Reads `/catalog/{id}` only once the instance is routed to the engine, so
- * an instance on the Convex path asks nothing more of the marketplace. A listing that
- * cannot be read keeps the Convex path, which then reports the failure the
- * way it always has.
+ * the catalog describes it. Throws a message the streamer can read when the
+ * engine is unavailable, the listing cannot be read, or it does not install
+ * as a module.
  */
 export async function marketplaceModuleEngineFor(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
   listingId: string
-): Promise<{ engine: EngineCredentials; listing: CatalogListing } | null> {
+): Promise<{ engine: EngineCredentials; listing: CatalogListing }> {
   const engine = await marketplaceEngineFor(ctx, instanceId);
   if (!engine) {
-    return null;
+    throw new ConvexError(ENGINE_UNAVAILABLE_COPY);
+  }
+  const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+  if (!instance) {
+    throw new ConvexError(ENGINE_UNAVAILABLE_COPY);
   }
   let listing: CatalogListing | null;
   try {
-    // Public: the engine path never runs at dev access.
-    const payload = await marketplaceGet(`/catalog/${encodeURIComponent(listingId)}`, "public");
+    const payload = await marketplaceGet(`/catalog/${encodeURIComponent(listingId)}`, marketplaceAccessFor(instance));
     listing = parseCatalogDetail(
       payload && typeof payload === "object" ? (payload as { listing?: unknown }).listing : null
     );
   } catch (err) {
-    logger.warn("marketplace listing could not be read for the engine path", {
+    logger.warn("marketplace listing could not be read for an install", {
       listingId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return null;
+    throw new ConvexError(LISTING_UNREADABLE_COPY);
   }
   if (!listing) {
-    return null;
+    throw new ConvexError(`Marketplace listing ${listingId} was not found`);
   }
-  const reason = moduleListingStaysOnConvex(listing);
-  if (reason !== null) {
-    logger.info("marketplace install stays on the Convex path", { listingId, reason });
-    return null;
+  if (!isModuleListing(listing.type)) {
+    throw new ConvexError(`${listing.name} is a ${listing.type} listing and does not install as a module`);
   }
   return { engine, listing };
 }

@@ -1,16 +1,12 @@
 "use node";
 
-import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { unapprovedLocalEndpointIds } from "@shared/local-endpoints";
 import { type CatalogListing, isModuleListing, parseCatalogDetail } from "@shared/marketplace-catalog";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "@shared/marketplace-images";
-import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "@shared/module-permissions";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
-import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
 import { marketplaceGet, withClientErrors } from "./lib/marketplaceApi";
@@ -21,25 +17,11 @@ import {
   type MarketplaceInstallResult,
   marketplaceEngineSession,
   marketplaceModuleEngineFor,
-  moduleInstallProgress,
 } from "./lib/marketplaceEngineInstall";
-import {
-  acquireListing,
-  buyerTokenFor,
-  type ContentAccess,
-  contentAccessFor,
-  contentRefusal,
-  fetchListingContent,
-} from "./lib/marketplaceEntitlement";
-import { listingManifestId, marketplaceInstallKey } from "./lib/marketplaceInstallIdentity";
-import type { LocalEngineApi } from "./moduleEngine";
+import { buyerTokenFor } from "./lib/marketplaceEntitlement";
+import { listingManifestId } from "./lib/marketplaceInstallIdentity";
 
 const MARKETPLACE_TIMEOUT_MS = 10_000;
-const ARCHIVE_TIMEOUT_MS = 30_000;
-// Module archives carry code, manifests and a few assets. The cap keeps a
-// malformed or hostile listing from making a Convex action buffer an unbounded
-// download just to read one small JSON file.
-const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 
 export interface MarketplaceTriggerSummary {
   slug: string;
@@ -148,78 +130,6 @@ export async function marketplaceFetch(path: string, access: MarketplaceAccess):
   } finally {
     clearTimeout(timer);
   }
-}
-
-export interface MarketplaceDownload {
-  url: string;
-  sha256: string;
-}
-
-/**
- * A presigned URL for a module's archive. A module that is not free is only
- * handed out for an account that holds it (see `fetchListingContent`).
- */
-export async function fetchMarketplaceDownload(
-  marketplaceModuleId: string,
-  content: ContentAccess
-): Promise<MarketplaceDownload> {
-  const payload = await fetchListingContent(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, content);
-  const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-  const url = asString(obj.url);
-  if (!url) {
-    throw new Error("Marketplace did not return a download URL");
-  }
-  const sha256 = asString(obj.sha256).toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(sha256)) {
-    throw new Error("Marketplace did not return a valid sha256 hash");
-  }
-  return { url, sha256 };
-}
-
-/**
- * The manifest inside a marketplace archive.
- *
- * The marketplace API does not expose a module's permissions or local
- * endpoints, so they are read from the archive the engine would install. The
- * bytes are checked against the listing's sha256 so what is shown for
- * approval belongs to exactly the build whose hash goes into the install's
- * moduleKey.
- */
-export async function fetchMarketplaceArchiveManifest(download: MarketplaceDownload): Promise<unknown> {
-  return readArchiveManifest(await fetchMarketplaceArchive(download));
-}
-
-/** A marketplace module's archive bytes, checked against the listing's sha256. */
-export async function fetchMarketplaceArchive(download: MarketplaceDownload): Promise<Uint8Array> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ARCHIVE_TIMEOUT_MS);
-  let bytes: Uint8Array;
-  try {
-    const res = await fetch(download.url, { method: "GET", signal: controller.signal });
-    if (!res.ok) {
-      throw new Error(`Module archive download failed: ${res.status} ${res.statusText}`);
-    }
-    const declaredLength = Number(res.headers.get("content-length"));
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_ARCHIVE_BYTES) {
-      throw new Error(`Module archive is ${declaredLength} bytes, over the ${MAX_ARCHIVE_BYTES} byte limit`);
-    }
-    bytes = new Uint8Array(await res.arrayBuffer());
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Module archive download timed out after ${ARCHIVE_TIMEOUT_MS}ms`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
-  if (bytes.byteLength > MAX_ARCHIVE_BYTES) {
-    throw new Error(`Module archive is ${bytes.byteLength} bytes, over the ${MAX_ARCHIVE_BYTES} byte limit`);
-  }
-  const actualSha256 = createHash("sha256").update(bytes).digest("hex");
-  if (actualSha256 !== download.sha256) {
-    throw new Error("Module archive does not match the marketplace's sha256 hash");
-  }
-  return bytes;
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -486,132 +396,6 @@ function engineModuleInstallDeps(
   };
 }
 
-/**
- * Installs the marketplace's current build of a module on an engine, provided
- * every permission its archive declares is in `approvedPermissions` and every
- * local endpoint in `approvedLocalEndpoints`. Callers decide who may install;
- * this only checks consent. Engine and marketplace failures throw.
- *
- * Runs on the engine when `marketplaceModuleEngineFor` routes it there, and
- * otherwise downloads and checks the archive here and hands the engine its URL.
- */
-async function installFromMarketplace(
-  ctx: ActionCtx,
-  {
-    instanceId,
-    engine,
-    marketplaceModuleId,
-    approvedPermissions,
-    approvedLocalEndpoints,
-  }: {
-    instanceId: Id<"instances">;
-    engine: EngineCredentials;
-    marketplaceModuleId: string;
-    approvedPermissions: readonly string[];
-    approvedLocalEndpoints: readonly string[];
-  }
-): Promise<MarketplaceInstallResult> {
-  const viaEngine = await marketplaceModuleEngineFor(ctx, instanceId, marketplaceModuleId);
-  if (viaEngine) {
-    const { listing } = viaEngine;
-    return await installModuleThroughEngine(engineModuleInstallDeps(ctx, instanceId, viaEngine.engine, listing), {
-      listingId: marketplaceModuleId,
-      listingName: listing.name,
-      manifestId: listingManifestId(listing),
-      approvedPermissions,
-      approvedLocalEndpoints,
-    });
-  }
-
-  // The Convex download path: Convex fetches the archive itself, without a
-  // license key, so it works only while the marketplace still serves free and
-  // held listings without one. It stays for engines on the dev tier or without
-  // buyer tokens, and for those without `marketplace.licenseKeys`. Delete it
-  // with the browser's unlicensed install (`useUnlicensedModuleInstall`) once
-  // every engine reports that capability, and before the marketplace requires
-  // a key for every download.
-  const access = await marketplaceAccessForInstance(ctx, instanceId);
-  const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`, access);
-  const rawModule =
-    detailPayload && typeof detailPayload === "object" ? (detailPayload as Record<string, unknown>).module : undefined;
-  const detail = parseDetail(rawModule);
-  if (!detail) {
-    throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
-  }
-
-  let download: MarketplaceDownload;
-  try {
-    download = await fetchMarketplaceDownload(marketplaceModuleId, await contentAccessFor(ctx, instanceId));
-  } catch (err) {
-    const refusal = contentRefusal(err, detail.name);
-    if (refusal !== null) {
-      throw new ConvexError(refusal);
-    }
-    throw err;
-  }
-  const manifest = await fetchMarketplaceArchiveManifest(download);
-  const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
-  const unapprovedLocalEndpoints = unapprovedLocalEndpointIds(manifest, approvedLocalEndpoints);
-  if (unapproved.length > 0 || unapprovedLocalEndpoints.length > 0) {
-    return {
-      status: "needs_approval",
-      name: detail.name,
-      version: detail.version,
-      unapproved,
-      unapprovedLocalEndpoints,
-    };
-  }
-  // After consent, so a streamer who backs out of the permission prompt has
-  // not acquired anything; before the engine, because a listing the account
-  // does not hold must not install, and the browser's Buy button is not a
-  // guard -- this is. A free listing is claimed here, which is also what
-  // counts the install.
-  await acquireListing(ctx, instanceId, marketplaceModuleId, detail.name);
-
-  // Keyed by manifest id, which barkloader computes from the archive and
-  // insists on: a later edition installs under its first edition's id and
-  // replaces it in place.
-  const moduleKey = marketplaceInstallKey(listingManifestId(detail), detail.version, download.sha256);
-  await ctx.runMutation(internal.marketplaceInstalls.record, {
-    instanceId,
-    moduleKey,
-    listingId: marketplaceModuleId,
-    edition: detail.edition,
-  });
-
-  const progress = moduleInstallProgress(moduleKey, detail.name, detail.version);
-  await ctx.runMutation(internal.transientEvents.emit, {
-    instanceId,
-    correlationKey: moduleKey,
-    type: "module.install",
-    status: "progress",
-    message: progress.message,
-    data: progress.data,
-  });
-
-  try {
-    const rpc = createEngineRpcSession<LocalEngineApi>(engine.url, engine.clientId, engine.clientSecret);
-    await rpc.installModuleFromUrl(download.url, moduleKey, {
-      name: detail.name,
-      version: detail.version,
-      source: "marketplace",
-      marketplaceModuleId,
-    });
-    return { status: "installed", moduleKey };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await ctx.runMutation(internal.transientEvents.emit, {
-      instanceId,
-      correlationKey: moduleKey,
-      type: "module.install",
-      status: "error",
-      message: `Marketplace install failed: ${message}`,
-      data: { moduleName: detail.name, moduleVersion: detail.version, source: "marketplace" },
-    });
-    throw err;
-  }
-}
-
 /** The instance's engine, for a signed-in user who may act on the instance. */
 async function registeredEngineForUser(ctx: ActionCtx, instanceId: Id<"instances">): Promise<EngineCredentials> {
   const userId = await getAuthUserId(ctx);
@@ -630,40 +414,6 @@ async function registeredEngineForUser(ctx: ActionCtx, instanceId: Id<"instances
   }
   return { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret };
 }
-
-export const installModule = action({
-  args: {
-    instanceId: v.id("instances"),
-    marketplaceModuleId: v.string(),
-    // Every permission the streamer has approved for this module, including
-    // those an installed version already held. The install is refused when the
-    // archive declares one outside this list, which also catches a listing
-    // republished with new permissions after the streamer reviewed it.
-    approvedPermissions: v.array(v.string()),
-    // Likewise the ids of the `local[]` endpoints the streamer approved.
-    approvedLocalEndpoints: v.array(v.string()),
-  },
-  handler: async (
-    ctx,
-    { instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }
-  ): Promise<{ moduleKey: string }> => {
-    const result = await installFromMarketplace(ctx, {
-      instanceId,
-      engine: await registeredEngineForUser(ctx, instanceId),
-      marketplaceModuleId,
-      approvedPermissions,
-      approvedLocalEndpoints,
-    });
-    if (result.status === "needs_approval") {
-      const asked = [...result.unapproved, ...result.unapprovedLocalEndpoints.map((id) => `local endpoint ${id}`)];
-      throw new Error(
-        `${result.name}@${result.version} asks for access that was not approved (${asked.join(", ")}). ` +
-          "Review the module and install again."
-      );
-    }
-    return { moduleKey: result.moduleKey };
-  },
-});
 
 /**
  * Installs a module or theme listing the account holds, on an engine with the
@@ -712,9 +462,10 @@ export const installWithLicense = action({
 });
 
 /**
- * `installModule` without a signed-in user, for installs the streamer approved
- * earlier and that run later on the instance's behalf, such as the platforms
- * chosen at setup once the engine is ready. The approval that authorizes it is
+ * Installs a module on an instance's behalf, without a signed-in user, for
+ * installs the streamer approved earlier and that run later, such as the
+ * platforms chosen at setup once the engine is ready. The engine claims the
+ * listing and downloads it. The approval that authorizes it is
  * `approvedPermissions` and `approvedLocalEndpoints`, recorded when the
  * streamer chose the module; a build asking for more comes back as
  * `needs_approval` instead of installing.
@@ -730,17 +481,11 @@ export const installApprovedModule = internalAction({
     ctx,
     { instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }
   ): Promise<MarketplaceInstallResult> => {
-    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
-    if (!instance) {
-      throw new Error(`Instance ${instanceId} not found`);
-    }
-    if (!instance.clientId || !instance.clientSecret) {
-      throw new Error("Instance is not registered with the engine");
-    }
-    return await installFromMarketplace(ctx, {
-      instanceId,
-      engine: { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret },
-      marketplaceModuleId,
+    const { engine, listing } = await marketplaceModuleEngineFor(ctx, instanceId, marketplaceModuleId);
+    return await installModuleThroughEngine(engineModuleInstallDeps(ctx, instanceId, engine, listing), {
+      listingId: marketplaceModuleId,
+      listingName: listing.name,
+      manifestId: listingManifestId(listing),
       approvedPermissions,
       approvedLocalEndpoints,
     });

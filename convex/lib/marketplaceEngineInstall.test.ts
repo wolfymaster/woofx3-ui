@@ -22,8 +22,6 @@ import {
   marketplaceEngineFor,
   marketplaceModuleEngineFor,
   moduleInstallProgress,
-  moduleListingStaysOnConvex,
-  routeThroughEngine,
   versionFromModuleKey,
 } from "./marketplaceEngineInstall";
 import { acquireRefusal, notBoughtMessage } from "./marketplaceEntitlement";
@@ -104,20 +102,6 @@ async function convexErrorMessage(promise: Promise<unknown>): Promise<string> {
   throw new Error("expected a ConvexError");
 }
 
-describe("routeThroughEngine", () => {
-  test("takes the engine path with public access and buyer tokens", () => {
-    expect(routeThroughEngine({ access: "public", buyerTokens: true })).toBe(true);
-  });
-
-  test("dev access keeps the Convex path", () => {
-    expect(routeThroughEngine({ access: "dev", buyerTokens: true })).toBe(false);
-  });
-
-  test("a deployment that cannot mint buyer tokens keeps the Convex path", () => {
-    expect(routeThroughEngine({ access: "public", buyerTokens: false })).toBe(false);
-  });
-});
-
 describe("buyerTokensConfigured", () => {
   test("needs both the key and its id", () => {
     expect(buyerTokensConfigured({ [BUYER_SIGNING_KEY_ENV]: "{}", [BUYER_SIGNING_KEY_ID_ENV]: "k1" })).toBe(true);
@@ -174,38 +158,44 @@ describe("marketplaceEngineFor", () => {
 
   const registered = { url: "https://engine.example", clientId: "c", clientSecret: "s", accountId: "a" };
 
-  test("an engine that cannot be reached answers the Convex path", async () => {
+  test("an engine that cannot be reached fails the call instead of taking another path", async () => {
     const { ctx, queries } = fakeCtx(registered);
-    expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
+    expect(await convexErrorMessage(marketplaceEngineFor(ctx, instanceId))).toContain("isn't answering");
     expect(queries).toEqual(["instances:getInternal"]);
     expect(fetched.length).toBeGreaterThan(0);
     expect(fetched.every((url) => url.startsWith(registered.url))).toBe(true);
   });
 
-  test("a module install on an unreachable engine takes the Convex path without asking the marketplace", async () => {
+  test("a module install on an unreachable engine fails without asking the marketplace", async () => {
     const { ctx } = fakeCtx(registered);
-    expect(await marketplaceModuleEngineFor(ctx, instanceId, LISTING)).toBeNull();
+    expect(await convexErrorMessage(marketplaceModuleEngineFor(ctx, instanceId, LISTING))).toContain("isn't answering");
     expect(fetched.every((url) => url.startsWith(registered.url))).toBe(true);
   });
 
-  test("without the buyer signing key the engine is never asked", async () => {
+  test("dev access is routed to the engine like any other", async () => {
+    const { ctx } = fakeCtx({ ...registered, marketplaceDevAccess: true });
+    expect(await convexErrorMessage(marketplaceEngineFor(ctx, instanceId))).toContain("isn't answering");
+    expect(fetched.length).toBeGreaterThan(0);
+  });
+
+  test("without the buyer signing key the engine is never asked, and a module install is refused", async () => {
     delete process.env[BUYER_SIGNING_KEY_ID_ENV];
     const { ctx, queries } = fakeCtx(registered);
     expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
     expect(queries).toEqual(["instances:getInternal"]);
+    expect(await convexErrorMessage(marketplaceModuleEngineFor(ctx, instanceId, LISTING))).toContain(
+      "aren't available"
+    );
     expect(fetched).toEqual([]);
   });
 
-  test("dev access answers the Convex path without asking the engine", async () => {
-    const { ctx, queries } = fakeCtx({ ...registered, marketplaceDevAccess: true });
-    expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
-    expect(queries).toEqual(["instances:getInternal"]);
-    expect(fetched).toEqual([]);
-  });
-
-  test("an instance not registered with its engine answers the Convex path", async () => {
-    expect(await marketplaceEngineFor(fakeCtx({ ...registered, clientSecret: undefined }).ctx, instanceId)).toBeNull();
+  test("an instance not registered with its engine has no engine, and a module install is refused", async () => {
+    const unregistered = fakeCtx({ ...registered, clientSecret: undefined }).ctx;
+    expect(await marketplaceEngineFor(unregistered, instanceId)).toBeNull();
     expect(await marketplaceEngineFor(fakeCtx(null).ctx, instanceId)).toBeNull();
+    expect(await convexErrorMessage(marketplaceModuleEngineFor(unregistered, instanceId, LISTING))).toContain(
+      "aren't available"
+    );
   });
 });
 
@@ -416,29 +406,10 @@ describe("engineFailure", () => {
   });
 });
 
-function listing(overrides: Record<string, unknown>): CatalogListing {
+function _listing(overrides: Record<string, unknown>): CatalogListing {
   const parsed = parseCatalogListing({ id: "cozy", type: "module", name: "Cozy", version: "1.0.0", ...overrides });
   if (!parsed) {
     throw new Error("test listing did not parse");
   }
   return parsed;
 }
-
-describe("moduleListingStaysOnConvex", () => {
-  test("a module or theme installs on the engine", () => {
-    expect(moduleListingStaysOnConvex(listing({ moduleKey: "cozy" }))).toBeNull();
-    expect(moduleListingStaysOnConvex(listing({ type: "theme", moduleKey: "cozy" }))).toBeNull();
-    expect(moduleListingStaysOnConvex(listing({}))).toBeNull();
-  });
-
-  test("a later edition installs on the engine too", () => {
-    expect(moduleListingStaysOnConvex(listing({ id: "cozy-v2", moduleKey: "cozy", edition: 2 }))).toBeNull();
-    expect(
-      moduleListingStaysOnConvex(listing({ id: "cozy-v2", type: "theme", moduleKey: "cozy", edition: 2 }))
-    ).toBeNull();
-  });
-
-  test("a listing that is not a module stays on the Convex path, which refuses it", () => {
-    expect(moduleListingStaysOnConvex(listing({ type: "overlay" }))).not.toBeNull();
-  });
-});
