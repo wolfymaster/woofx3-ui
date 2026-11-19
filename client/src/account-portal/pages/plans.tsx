@@ -1,13 +1,14 @@
 import { api } from "@convex/_generated/api";
-import type { AppliedDiscount } from "@convex/lib/billingClient";
+import type { Id } from "@convex/_generated/dataModel";
+import type { AppliedDiscount, ScheduledPlanChange } from "@convex/lib/billingClient";
 import type { BillingInterval, PlanTier } from "@convex/lib/organization";
 import type { OrgSubscription } from "@convex/organizations";
 import { useAction } from "convex/react";
 import { Check } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearch } from "wouter";
 import { BillingSummary, type BillingSummaryItem } from "@/billing/billing-summary";
-import { describeDiscount, formatPrice, planName } from "@/billing/format";
+import { describeDiscount, formatDay, formatPrice, planName } from "@/billing/format";
 import { PLAN_DETAILS } from "@/billing/plan-details";
 import { ProviderRedirectButton, useProviderRedirect } from "@/billing/provider-redirect";
 import { StatusBanner } from "@/billing/status-banner";
@@ -21,10 +22,12 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
 import { CHECKOUT_CANCELLED_TEXT, CHECKOUT_POLL_TEXT, parseCheckoutReturn } from "@/lib/checkout-return";
+import { useLogger } from "@/lib/logger-context";
 import { useCheckoutPoll } from "@/lib/use-checkout-poll";
 import { cn } from "@/lib/utils";
 import { type BillingView, billingView, checkoutRefusalAction } from "../billing-view";
 import { useOrganization } from "../organization-context";
+import { PlanChangeDialog, type PlanChangeTarget } from "../plan-change-dialog";
 import { planLabel, stateLabel, subscriptionNotice } from "../subscription-text";
 
 const PLAN_TIERS: PlanTier[] = ["starter", "pro"];
@@ -51,24 +54,32 @@ function isReadOnly(view: BillingView): boolean {
   return view.kind === "exempt" || view.kind === "no_subscription_needed";
 }
 
-/** The plan an organization pays for through the provider; null before it has bought one. */
-function currentPlan(view: BillingView): PlanTier | null {
-  return view.kind === "provider_managed" ? view.subscription.plan : null;
+/** The plan and interval an organization pays for through the provider; null before it has bought one. */
+function currentTarget(view: BillingView): PlanChangeTarget | null {
+  if (view.kind !== "provider_managed" || view.subscription.plan === null) {
+    return null;
+  }
+  return { plan: view.subscription.plan, interval: view.subscription.interval ?? "month" };
 }
 
-function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingView }) {
+function UpgradeOptions({
+  prices,
+  names,
+  view,
+  onChange,
+}: PlanPrices & { view: BillingView; onChange: (target: PlanChangeTarget) => void }) {
   const { organization } = useOrganization();
   const startCheckout = useAction(api.billingCommands.startCheckout);
   const openPortal = useAction(api.billingCommands.openPortal);
   const previewPromotionCode = useAction(api.billingCommands.previewPromotionCode);
-  const [interval, setInterval] = useState<BillingInterval>("month");
+  const current = currentTarget(view);
+  const [interval, setInterval] = useState<BillingInterval>(current?.interval ?? "month");
   const [code, setCode] = useState("");
   const [preview, setPreview] = useState<{ code: string; discount: AppliedDiscount | null } | null>(null);
   const { busy, go } = useProviderRedirect();
   const plans = offeredPlans();
   const readOnly = isReadOnly(view);
   const changesExisting = view.kind === "provider_managed";
-  const current = currentPlan(view);
 
   async function applyCode() {
     try {
@@ -80,12 +91,14 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
   }
 
   const promotionCode = preview?.discount ? preview.code : undefined;
+  const isCurrent = (plan: PlanTier) => current !== null && plan === current.plan && interval === current.interval;
 
   function choose(plan: PlanTier) {
+    if (changesExisting) {
+      onChange({ plan, interval });
+      return;
+    }
     return go(async () => {
-      if (changesExisting) {
-        return openPortal({ accountId: organization.accountId });
-      }
       try {
         return await startCheckout({ accountId: organization.accountId, plan, interval, promotionCode });
       } catch (error) {
@@ -140,14 +153,14 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
           return (
             <Card
               key={plan}
-              className={cn("flex flex-col", plan === current && "border-primary ring-1 ring-primary")}
+              className={cn("flex flex-col", isCurrent(plan) && "border-primary ring-1 ring-primary")}
               data-testid={`card-plan-${plan}`}
             >
               <CardHeader>
                 <CardTitle className="flex items-baseline justify-between">
                   <span className="flex items-center gap-2">
                     {planName(names, plan)}
-                    {plan === current ? <Badge data-testid={`badge-current-${plan}`}>Current plan</Badge> : null}
+                    {isCurrent(plan) ? <Badge data-testid={`badge-current-${plan}`}>Current plan</Badge> : null}
                   </span>
                   <span className="text-lg font-normal">{formatPrice(prices, plan, interval)}</span>
                 </CardTitle>
@@ -157,15 +170,17 @@ function UpgradeOptions({ prices, names, view }: PlanPrices & { view: BillingVie
                 <PlanHighlights items={details.highlights} />
                 {readOnly ? null : (
                   <Button
-                    disabled={busy || plan === current}
-                    variant={plan === current ? "outline" : "default"}
+                    disabled={busy || isCurrent(plan)}
+                    variant={isCurrent(plan) ? "outline" : "default"}
                     onClick={() => choose(plan)}
                     data-testid={`button-choose-${plan}`}
                   >
-                    {plan === current
+                    {isCurrent(plan)
                       ? "Your plan"
                       : changesExisting
-                        ? `Change to ${planName(names, plan)}`
+                        ? plan === current?.plan
+                          ? `Switch to ${interval === "year" ? "yearly" : "monthly"} billing`
+                          : `Change to ${planName(names, plan)}`
                         : `Choose ${planName(names, plan)}`}
                   </Button>
                 )}
@@ -283,6 +298,77 @@ function ActivePlan({
   );
 }
 
+/** The move down booked for the end of the paid period, asked of the plane; null when none is or none is asked for. */
+function useScheduledChange(accountId: Id<"accounts">, enabled: boolean) {
+  const scheduledPlanChange = useAction(api.billingCommands.scheduledPlanChange);
+  const logger = useLogger();
+  const [change, setChange] = useState<ScheduledPlanChange | null>(null);
+  const [round, setRound] = useState(0);
+  // `round` restarts the ask; the answer itself does not depend on it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: round is the reload trigger
+  useEffect(() => {
+    if (!enabled) {
+      setChange(null);
+      return;
+    }
+    let current = true;
+    scheduledPlanChange({ accountId }).then(
+      (answer) => current && setChange(answer),
+      (error: unknown) => logger.warn("Could not read the scheduled plan change", { error, accountId })
+    );
+    return () => {
+      current = false;
+    };
+  }, [scheduledPlanChange, accountId, enabled, logger, round]);
+  return { change, reload: () => setRound((value) => value + 1) };
+}
+
+/** A booked move down, with a way to cancel it by asking for the plan the organization is on. */
+function ScheduledChangeBanner({
+  change,
+  current,
+  names,
+  onKept,
+}: {
+  change: ScheduledPlanChange;
+  current: PlanChangeTarget;
+  names: Readonly<Record<string, string>>;
+  onKept: () => void;
+}) {
+  const { organization } = useOrganization();
+  const changePlan = useAction(api.billingCommands.changePlan);
+  const [busy, setBusy] = useState(false);
+
+  async function keep() {
+    setBusy(true);
+    try {
+      await changePlan({ accountId: organization.accountId, ...current });
+      toast({ title: "You're staying on your plan." });
+      onKept();
+    } catch (error) {
+      toast({ title: "Could not cancel the change", description: actionErrorMessage(error), variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <StatusBanner
+      tone="info"
+      action={
+        <Button variant="outline" size="sm" disabled={busy} onClick={keep} data-testid="button-keep-plan">
+          Keep my plan
+        </Button>
+      }
+    >
+      <span data-testid="text-scheduled-change">
+        You'll move to {planName(names, change.plan)} ({change.interval === "year" ? "yearly" : "monthly"}) on{" "}
+        {formatDay(change.at)}. You keep your current plan until then.
+      </span>
+    </StatusBanner>
+  );
+}
+
 /** The organization's plan and the ones it can move to. Checkout comes back here. */
 export default function PlansPage() {
   const { organization } = useOrganization();
@@ -301,6 +387,13 @@ export default function PlansPage() {
     view.kind === "provider_managed"
   );
 
+  const current = currentTarget(view);
+  const scheduled = useScheduledChange(accountId, view.kind === "provider_managed");
+  const [pending, setPending] = useState<PlanChangeTarget | null>(null);
+  const [applied, setApplied] = useState<PlanChangeTarget | null>(null);
+  // A move up reaches the organization's subscription a moment after the plane makes it.
+  const updating = applied !== null && (current?.plan !== applied.plan || current?.interval !== applied.interval);
+
   const checkoutNotice =
     checkoutReturn.kind === "cancelled" ? (
       <p className="text-center text-sm text-muted-foreground" data-testid="text-checkout-cancelled">
@@ -318,9 +411,35 @@ export default function PlansPage() {
     <>
       <PageHeader title="Plans" description="The plan behind this organization's hosted engines." />
       <div className="space-y-10">
+        {scheduled.change !== null && current !== null ? (
+          <ScheduledChangeBanner
+            change={scheduled.change}
+            current={current}
+            names={planPrices.names}
+            onKept={scheduled.reload}
+          />
+        ) : null}
+        {updating ? (
+          <p className="text-center text-sm text-muted-foreground" data-testid="text-plan-updating">
+            Your plan is updating. This page refreshes in a moment.
+          </p>
+        ) : null}
         <ActivePlan view={view} planPrices={planPrices} checkoutNotice={checkoutNotice} />
-        <UpgradeOptions {...planPrices} view={view} />
+        <UpgradeOptions {...planPrices} view={view} onChange={setPending} />
       </div>
+      {pending === null ? null : (
+        <PlanChangeDialog
+          accountId={accountId}
+          target={pending}
+          names={planPrices.names}
+          onClose={() => setPending(null)}
+          onChanged={(outcome) => {
+            setPending(null);
+            setApplied(outcome.kind === "applied" ? pending : null);
+            scheduled.reload();
+          }}
+        />
+      )}
     </>
   );
 }

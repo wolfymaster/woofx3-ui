@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
 import type { Invoice, Sponsorship } from "@convex/lib/billingClient";
-import type { OrgMember } from "@convex/organizations";
+import type { MyOrganization, OrgMember } from "@convex/organizations";
 import { getFunctionName } from "convex/server";
 import { ConvexError } from "convex/values";
 import { createContext, type ReactNode, useContext } from "react";
@@ -137,6 +137,28 @@ mock.module("@/components/ui/dropdown-menu", () => ({
   DropdownMenuContent: () => null,
 }));
 
+// Radix's dialog portals into the document; the plan-change dialog only needs its markup, shown while it is open.
+const dialog = await import("@/components/ui/dialog");
+const DialogOpenContext = createContext(false);
+mock.module("@/components/ui/dialog", () => ({
+  ...dialog,
+  Dialog: ({ children, open }: { children: ReactNode; open?: boolean }) => (
+    <DialogOpenContext.Provider value={open === true}>{children}</DialogOpenContext.Provider>
+  ),
+  DialogTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  DialogContent: function DialogContent({
+    children,
+    "data-testid": testId,
+  }: {
+    children: ReactNode;
+    "data-testid"?: string;
+  }) {
+    return useContext(DialogOpenContext) ? <div data-testid={testId}>{children}</div> : null;
+  },
+  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
+}));
+
 // The clock's interval needs a window, which the test renderer lacks.
 mock.module("@/hooks/use-minute-clock", () => ({ useMinuteClock: () => 0 }));
 
@@ -151,9 +173,11 @@ const { default: SponsorshipPage } = await import("./sponsorship");
 const ACCOUNT_ID = "account-1" as Id<"accounts">;
 
 let engineHosting: "managed" | "external" = "managed";
+let subscription: MyOrganization["subscription"] = null;
 
 beforeEach(() => {
   engineHosting = "managed";
+  subscription = null;
   search = "";
   actionAnswers = { "prices:list": PRICES_READY };
   askedActions = [];
@@ -191,7 +215,7 @@ function selection(role: "owner" | "admin"): OrganizationSelection {
         linkNeedsReconnect: false,
       },
     ],
-    subscription: null,
+    subscription,
     seats: { used: 2, limit: 5 },
   };
   return { organization, organizations: [organization] };
@@ -281,6 +305,136 @@ describe("Overview engines", () => {
     const renderer = await render("admin", <OverviewPage />);
     expect(byTestId(renderer, "row-engine-instance-1").length).toBe(1);
     expect(byTestId(renderer, "button-create-engine").length).toBe(0);
+  });
+});
+
+describe("Plan changes", () => {
+  const paying = (
+    plan: "starter" | "pro",
+    interval: "month" | "year"
+  ): NonNullable<MyOrganization["subscription"]> => ({
+    plan,
+    interval,
+    state: "active",
+    stateReason: null,
+    nextBillingAt: Date.parse("2026-12-15T00:00:00Z"),
+    graceEndsAt: null,
+    exemptUntil: null,
+    spinDownAt: null,
+    hasProviderSubscription: true,
+    discount: null,
+  });
+  const UP_PREVIEW = {
+    timing: "now",
+    effectiveAt: Date.parse("2026-11-20T00:00:00Z"),
+    currency: "usd",
+    lines: [
+      { description: "Unused time on Starter", amountCents: -3_750 },
+      { description: "Remaining time on Pro", amountCents: 7_500 },
+    ],
+    dueNowCents: 3_750,
+    next: { amountCents: 15_000, at: Date.parse("2026-12-15T00:00:00Z") },
+  };
+  const DOWN_PREVIEW = {
+    timing: "period_end",
+    effectiveAt: Date.parse("2026-12-15T00:00:00Z"),
+    currency: "usd",
+    lines: [],
+    dueNowCents: 0,
+    next: { amountCents: 7_500, at: Date.parse("2026-12-15T00:00:00Z") },
+  };
+
+  test("marks the plan and interval the organization pays for, and no other", async () => {
+    subscription = paying("pro", "month");
+    const renderer = await render("owner", <PlansPage />);
+    expect(byTestId(renderer, "badge-current-pro").length).toBe(1);
+    expect(byTestId(renderer, "badge-current-starter").length).toBe(0);
+    expect(textOf(byTestId(renderer, "button-choose-pro")[0])).toBe("Your plan");
+    expect(textOf(byTestId(renderer, "button-choose-starter")[0])).toBe("Change to Starter");
+  });
+
+  test("a move up shows what is charged now, line by line, before anything changes", async () => {
+    subscription = paying("starter", "month");
+    actionAnswers["billingCommands:previewPlanChange"] = UP_PREVIEW;
+    const renderer = await render("owner", <PlansPage />);
+    await act(async () => {
+      byTestId(renderer, "button-choose-pro")[0].props.onClick();
+    });
+    await settle();
+    expect(byTestId(renderer, "row-plan-change-line").map(textOf)).toEqual([
+      "Unused time on Starter-$37.50",
+      "Remaining time on Pro$75.00",
+    ]);
+    expect(text(renderer, "text-plan-change-due")).toEqual(["$37.50"]);
+    expect(textOf(byTestId(renderer, "button-confirm-plan-change")[0])).toBe("Pay $37.50 and switch");
+    expect(askedActions).not.toContain("billingCommands:changePlan");
+  });
+
+  test("confirming makes the change", async () => {
+    subscription = paying("starter", "month");
+    actionAnswers["billingCommands:previewPlanChange"] = UP_PREVIEW;
+    actionAnswers["billingCommands:changePlan"] = { kind: "applied" };
+    const renderer = await render("owner", <PlansPage />);
+    await act(async () => {
+      byTestId(renderer, "button-choose-pro")[0].props.onClick();
+    });
+    await settle();
+    await act(async () => {
+      byTestId(renderer, "button-confirm-plan-change")[0].props.onClick();
+    });
+    await settle();
+    expect(askedActions).toContain("billingCommands:changePlan");
+    expect(byTestId(renderer, "dialog-plan-change").length).toBe(0);
+  });
+
+  test("a move down says nothing is charged and when it starts", async () => {
+    subscription = paying("pro", "month");
+    actionAnswers["billingCommands:previewPlanChange"] = DOWN_PREVIEW;
+    const renderer = await render("owner", <PlansPage />);
+    await act(async () => {
+      byTestId(renderer, "button-choose-starter")[0].props.onClick();
+    });
+    await settle();
+    expect(text(renderer, "text-plan-change-due")).toEqual(["No charge today."]);
+    expect(textOf(byTestId(renderer, "text-plan-change-next")[0])).toContain("$75/mo");
+    expect(textOf(byTestId(renderer, "button-confirm-plan-change")[0])).toMatch(/^Switch on /);
+  });
+
+  test("a preview that fails says so and cannot be confirmed", async () => {
+    subscription = paying("starter", "month");
+    actionAnswers["billingCommands:previewPlanChange"] = new Error("Billing is unavailable right now.");
+    const renderer = await render("owner", <PlansPage />);
+    await act(async () => {
+      byTestId(renderer, "button-choose-pro")[0].props.onClick();
+    });
+    await settle();
+    expect(byTestId(renderer, "text-plan-change-failed").length).toBe(1);
+    expect(byTestId(renderer, "button-confirm-plan-change")[0].props.disabled).toBe(true);
+  });
+
+  test("a booked move down is shown with a way to keep the plan", async () => {
+    subscription = paying("pro", "month");
+    actionAnswers["billingCommands:scheduledPlanChange"] = {
+      plan: "starter",
+      interval: "month",
+      at: Date.parse("2026-12-15T00:00:00Z"),
+    };
+    actionAnswers["billingCommands:changePlan"] = { kind: "kept" };
+    const renderer = await render("owner", <PlansPage />);
+    await settle();
+    expect(textOf(byTestId(renderer, "text-scheduled-change")[0])).toContain("move to Starter");
+    await act(async () => {
+      byTestId(renderer, "button-keep-plan")[0].props.onClick();
+    });
+    await settle();
+    expect(askedActions).toContain("billingCommands:changePlan");
+  });
+
+  test("an organization still on its trial goes through checkout, not a plan change", async () => {
+    subscription = { ...paying("starter", "month"), state: "trialing", hasProviderSubscription: false };
+    const renderer = await render("owner", <PlansPage />);
+    expect(byTestId(renderer, "badge-current-starter").length).toBe(0);
+    expect(askedActions).not.toContain("billingCommands:scheduledPlanChange");
   });
 });
 
