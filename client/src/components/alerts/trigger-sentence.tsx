@@ -1,13 +1,18 @@
 import { FORM_KIND } from "@shared/resource-kinds";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
 import { FlowSaveBar, StepSaveFooter } from "@/components/flow/flow-save-status";
 import { ObjectActionPicker } from "@/components/flow/object-action-picker";
 import { StepInlineEditor } from "@/components/flow/step-inline-editor";
 import { Button } from "@/components/ui/button";
 import { useResourceInstancesOfKind } from "@/engine/hooks/use-module-resources";
+import {
+  type FlowFocusTarget,
+  type FlowInteractionFocus,
+  type FlowInteractionWording,
+  useFlowInteraction,
+} from "@/hooks/use-flow-interaction";
 import type { FlowSave } from "@/hooks/use-flow-save";
-import { useToast } from "@/hooks/use-toast";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import {
   type ConditionSources,
@@ -16,42 +21,23 @@ import {
   NO_ENGINE_CONDITION_SUPPORT,
 } from "@/lib/condition-builder";
 import type { SentencePart } from "@/lib/condition-sentence";
-import { type FlowSaveView, flowSaveView } from "@/lib/flow-save";
-import {
-  descendantIds,
-  type FlowPick,
-  findStepPlace,
-  type InsertPoint,
-  insertAtPoint,
-  insertPointKey,
-  moveStepInTree,
-  sameInsertPoint,
-  stepForPick,
-} from "@/lib/flow-tree";
+import type { FlowSaveView } from "@/lib/flow-save";
+import { descendantIds, type FlowPick, type InsertPoint, insertPointKey, sameInsertPoint } from "@/lib/flow-tree";
 import { FORM_SUBMITTED_EVENT, formAnswerVariables } from "@/lib/form-kind";
 import type { SceneRow } from "@/lib/scene-field-options";
 import { type StepSummary, stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
-import { storedExpressionProblem } from "@/lib/variable-display";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import {
   type BranchPath,
-  findStepInTree,
   isEditableStep,
-  removeStepFromTree,
   type StepNode,
   stepKindLabel,
   updateStepInTree,
   type WorkflowTree,
 } from "@/lib/workflow-tree";
-import {
-  collectStepIds,
-  computeAvailableVariables,
-  isStepIdReferenced,
-  isValidStepId,
-  type VariableOption,
-} from "@/lib/workflow-variables";
+import { collectStepIds, computeAvailableVariables, type VariableOption } from "@/lib/workflow-variables";
 
 /**
  * The alert's sentence: "When …, then …, if … otherwise …". Each phrase is a button that
@@ -78,7 +64,19 @@ export interface TriggerSentenceProps {
   onOpenAdvanced: () => void;
 }
 
-type FocusTarget = { attribute: string; value: string } | null;
+/**
+ * A phrase hands focus to the section it opened and returns it to the phrase on the way out.
+ * The numbered flow leaves focus on the control the reader clicked instead.
+ */
+const SENTENCE_FOCUS: FlowInteractionFocus = {
+  open: (id): FlowFocusTarget => ({ attribute: "data-step-section", value: id }),
+  leave: (id): FlowFocusTarget => ({ attribute: "data-step-toggle", value: id }),
+};
+
+const SENTENCE_WORDING: FlowInteractionWording = {
+  alreadyUsed: (newId) => `"${newId}" is already used by another step.`,
+  referencedElsewhere: (oldId, newId) => `References to "${oldId}" weren't updated — edit them to use "${newId}".`,
+};
 
 interface SentenceState {
   expandedId: string | null;
@@ -132,202 +130,15 @@ export function TriggerSentence({
   removeBlockedReason,
   onOpenAdvanced,
 }: TriggerSentenceProps) {
-  const { toast } = useToast();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [openPoint, setOpenPoint] = useState<InsertPoint | null>(null);
-  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
-  const [focusTarget, setFocusTarget] = useState<FocusTarget>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const treeRef = useRef(tree);
-  treeRef.current = tree;
-  /** The tree as it was when the open phrase was opened, for "no changes" and Discard. */
-  const baselineRef = useRef(tree);
-
-  useEffect(() => {
-    if (!focusTarget) {
-      return;
-    }
-    const candidates = rootRef.current?.querySelectorAll<HTMLElement>(`[${focusTarget.attribute}]`);
-    for (const node of candidates ?? []) {
-      if (node.getAttribute(focusTarget.attribute) === focusTarget.value) {
-        node.focus();
-        break;
-      }
-    }
-    setFocusTarget(null);
-  }, [focusTarget]);
-
-  const commitChecked = useCallback(
-    async (next: WorkflowTree): Promise<boolean> => {
-      const problem = storedExpressionProblem(next.steps);
-      if (problem !== null) {
-        toast({ title: "Fix this expression to save", description: problem, variant: "destructive" });
-        return false;
-      }
-      return onCommit(next);
-    },
-    [onCommit, toast]
-  );
-
-  const leaveExpanded = useCallback(async (): Promise<boolean> => {
-    if (expandedId === null) {
-      return true;
-    }
-    const current = treeRef.current;
-    if (JSON.stringify(current) === JSON.stringify(baselineRef.current)) {
-      setExpandedId(null);
-      return true;
-    }
-    const ok = await commitChecked(current);
-    if (ok) {
-      setExpandedId(null);
-    }
-    return ok;
-  }, [expandedId, commitChecked]);
-
-  const toggle = useCallback(
-    (id: string) => {
-      void (async () => {
-        if (expandedId === id) {
-          if (await leaveExpanded()) {
-            setFocusTarget({ attribute: "data-step-toggle", value: id });
-          }
-          return;
-        }
-        if (await leaveExpanded()) {
-          baselineRef.current = treeRef.current;
-          setOpenPoint(null);
-          setExpandedId(id);
-          setFocusTarget({ attribute: "data-step-section", value: id });
-        }
-      })();
-    },
-    [expandedId, leaveExpanded]
-  );
-
-  const openPicker = useCallback(
-    (point: InsertPoint) => {
-      void (async () => {
-        if (await leaveExpanded()) {
-          setOpenPoint(point);
-        }
-      })();
-    },
-    [leaveExpanded]
-  );
-
-  const closePicker = useCallback(() => {
-    if (openPoint) {
-      setFocusTarget({ attribute: "data-insert-point", value: insertPointKey(openPoint) });
-    }
-    setOpenPoint(null);
-  }, [openPoint]);
-
-  const pick = useCallback(
-    (point: InsertPoint, choice: FlowPick) => {
-      let step: StepNode;
-      try {
-        step = stepForPick(choice, tree.steps);
-      } catch (err) {
-        toast({
-          title: "Can't add this action",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "destructive",
-        });
-        return;
-      }
-      baselineRef.current = tree;
-      onChange({ ...tree, steps: insertAtPoint(tree.steps, point, step) });
-      setOpenPoint(null);
-      setExpandedId(step.id);
-      setFocusTarget({ attribute: "data-step-toggle", value: step.id });
-    },
-    [tree, onChange, toast]
-  );
-
-  const commitStructural = useCallback(
-    async (next: WorkflowTree, closesExpanded: boolean) => {
-      onChange(next);
-      const ok = await commitChecked(next);
-      if (closesExpanded) {
-        setExpandedId(null);
-      } else if (ok) {
-        baselineRef.current = next;
-      }
-    },
-    [onChange, commitChecked]
-  );
-
-  const move = useCallback(
-    (id: string, direction: -1 | 1) => {
-      const steps = moveStepInTree(tree.steps, id, direction);
-      if (steps === tree.steps) {
-        return;
-      }
-      const place = findStepPlace(steps, id);
-      const atEdge = place !== null && (direction === -1 ? place.index === 0 : place.index === place.count - 1);
-      setFocusTarget({ attribute: "data-step-move", value: `${id}:${atEdge ? -direction : direction}` });
-      void commitStructural({ ...tree, steps }, false);
-    },
-    [tree, commitStructural]
-  );
-
-  const remove = useCallback(
-    (id: string) => {
-      const step = findStepInTree(tree.steps, id);
-      if (!step) {
-        return;
-      }
-      const closesExpanded = expandedId === id || (expandedId !== null && descendantIds(step).includes(expandedId));
-      setConfirmingRemoveId(null);
-      void commitStructural({ ...tree, steps: removeStepFromTree(tree.steps, id) }, closesExpanded);
-    },
-    [tree, expandedId, commitStructural]
-  );
-
-  const rename = useCallback(
-    (oldId: string, rawNewId: string) => {
-      const newId = rawNewId.trim();
-      if (newId === oldId) {
-        return;
-      }
-      if (!newId || !isValidStepId(newId)) {
-        toast({
-          title: "Invalid step ID",
-          description: "Use only letters, numbers, dots, underscores, and hyphens.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const ids = collectStepIds(tree.steps);
-      ids.delete(oldId);
-      if (ids.has(newId)) {
-        toast({
-          title: "Step ID already in use",
-          description: `"${newId}" is already used by another step.`,
-          variant: "destructive",
-        });
-        return;
-      }
-      if (isStepIdReferenced(tree.steps, oldId)) {
-        toast({
-          title: "Step ID renamed",
-          description: `References to "${oldId}" weren't updated — edit them to use "${newId}".`,
-        });
-      }
-      onChange({ ...tree, steps: updateStepInTree(tree.steps, oldId, (step) => ({ ...step, id: newId })) });
-      setExpandedId(newId);
-    },
-    [tree, onChange, toast]
-  );
-
-  const discardOpen = useCallback(() => {
-    if (expandedId !== null) {
-      setFocusTarget({ attribute: "data-step-toggle", value: expandedId });
-    }
-    onChange(baselineRef.current);
-    setExpandedId(null);
-  }, [onChange, expandedId]);
+  const interaction = useFlowInteraction({
+    tree,
+    onChange,
+    onCommit,
+    save,
+    removeBlockedReason,
+    focus: SENTENCE_FOCUS,
+    wording: SENTENCE_WORDING,
+  });
 
   const existingStepIds = useMemo(() => collectStepIds(tree.steps), [tree.steps]);
   const triggerRow = useMemo(
@@ -371,7 +182,7 @@ export function TriggerSentence({
           availableVariables={availableFor(step)}
           conditionSources={sources}
           onChange={(next) => onChange({ ...tree, steps: updateStepInTree(tree.steps, step.id, () => next) })}
-          onRename={rename}
+          onRename={interaction.rename}
           showStepId={false}
         />
       );
@@ -386,7 +197,7 @@ export function TriggerSentence({
       conditionSupport,
       onChange,
       tree,
-      rename,
+      interaction.rename,
     ]
   );
 
@@ -400,52 +211,39 @@ export function TriggerSentence({
     [catalogActions]
   );
 
-  const openChanged = expandedId !== null && JSON.stringify(tree) !== JSON.stringify(baselineRef.current);
-  const saveView = flowSaveView({
-    changed: save.changed,
-    phase: save.phase,
-    problem: save.problem,
-    notSavedYet: save.notSavedYet,
-  });
-
   const state: SentenceState = {
-    expandedId,
-    openPoint,
-    confirmingRemoveId,
+    expandedId: interaction.expandedId,
+    openPoint: interaction.openPoint,
+    confirmingRemoveId: interaction.confirmingRemoveId,
     actionPresets,
     summaryOf,
     shortLabelOf,
     renderEditor,
-    placeOf: (id) => findStepPlace(tree.steps, id),
-    removeBlockedReason: (id) => removeBlockedReason?.(tree.steps, id) ?? null,
-    saveView,
-    openChanged,
-    discardOpen,
-    toggle,
-    openPicker,
-    closePicker,
-    pick,
-    move,
-    askRemove: setConfirmingRemoveId,
-    cancelRemove: () => {
-      if (confirmingRemoveId) {
-        setFocusTarget({ attribute: "data-step-remove", value: confirmingRemoveId });
-      }
-      setConfirmingRemoveId(null);
-    },
-    remove,
+    placeOf: interaction.placeOf,
+    removeBlockedReason: interaction.removeBlockedReason,
+    saveView: interaction.saveView,
+    openChanged: interaction.openChanged,
+    discardOpen: interaction.discardOpen,
+    toggle: interaction.toggle,
+    openPicker: interaction.openPicker,
+    closePicker: interaction.closePicker,
+    pick: interaction.pick,
+    move: interaction.move,
+    askRemove: interaction.askRemove,
+    cancelRemove: interaction.cancelRemove,
+    remove: interaction.remove,
     onOpenAdvanced,
   };
 
   return (
     <SentenceContext.Provider value={state}>
-      <div ref={rootRef} className="flex flex-col gap-2" data-testid="trigger-sentence">
+      <div ref={interaction.rootRef} className="flex flex-col gap-2" data-testid="trigger-sentence">
         <div className="text-[17px] leading-[1.7] tracking-[-0.01em] text-foreground">
           {when}
           <Connector>then</Connector>
           <SentenceList steps={tree.steps} path={null} />
         </div>
-        <FlowSaveBar view={saveView} hidden={expandedId !== null} onRetry={() => void commitChecked(tree)} />
+        <FlowSaveBar view={interaction.saveView} hidden={interaction.expandedId !== null} onRetry={interaction.retry} />
       </div>
     </SentenceContext.Provider>
   );
