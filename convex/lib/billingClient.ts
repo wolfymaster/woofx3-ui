@@ -222,6 +222,9 @@ const ensureSchema: z.ZodType<Pick<Schemas["BillingSubscription"], "accountId" |
   accountId: z.string(),
   version: z.number(),
 });
+const ensureMissSchema: z.ZodType<Pick<Schemas["BillingEnsureMiss"], "attempts">> = z.object({
+  attempts: z.number(),
+});
 const invoicesSchema = z.object({ invoices: z.array(invoiceWireSchema) });
 const checkoutViewSchema: z.ZodType<CheckoutView> = z.object({
   id: z.string(),
@@ -260,6 +263,8 @@ export interface SponsorshipCheckoutRequest {
 export interface BillingClient {
   /** Starts the org's trial if it has no billing yet. Idempotent. */
   ensure(accountId: string): Promise<BillingResult<{ accountId: string; version: number }>>;
+  /** Tells the plane an org's `ensure` still fails, so operators see it; each call counts one more attempt. */
+  reportEnsureMiss(accountId: string, reason: string): Promise<BillingResult<{ attempts: number }>>;
   startCheckout(request: CheckoutRequest): Promise<BillingResult<{ url: string; checkoutId: string }>>;
   /** A checkout for a module purchase; paying it returns the buyer to the listing's page. */
   startMarketplaceCheckout(
@@ -445,6 +450,18 @@ export class HttpBillingClient implements BillingClient {
         idempotencyKey: ensureIdempotencyKey(accountId),
       },
       ensureSchema
+    );
+  }
+
+  reportEnsureMiss(accountId: string, reason: string) {
+    return this.send(
+      {
+        owner: "org",
+        method: "POST",
+        path: `/v1/billing/accounts/org/${encodeURIComponent(accountId)}/ensure-miss`,
+        body: { reason } satisfies Schemas["BillingEnsureMissBody"],
+      },
+      ensureMissSchema
     );
   }
 

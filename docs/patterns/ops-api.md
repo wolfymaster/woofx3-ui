@@ -18,8 +18,8 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that the ba
 
       | Caller | Env | Routes |
       | --- | --- | --- |
-      | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.billingProjection`, `notifications.create` |
-      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `featureFlags.*`, `accounts.billingProjectionReset` |
+      | `billing` | `OPS_API_SECRET_BILLING` | `users.get`, `accounts.get`, `accounts.referral`, `accounts.billingProjection`, `notifications.create` |
+      | `backoffice` | `OPS_API_SECRET_BACKOFFICE` | every read, `engines.act`, `instances.setStorageLimits`, `notifications.*`, `featureFlags.*`, `referralCodes.*`, `accounts.billingProjectionReset` |
       | `legacy` | `OPS_API_SECRET` | every route; logged as deprecated on each request |
 
     - A route outside the caller's scope answers `403 forbidden_route`.
@@ -68,6 +68,14 @@ Operators act on a customer's managed engine (`engines.act`: upgrade, retry, del
 - **Errors:** a refusal, such as an engine that isn't running, answers `409 refused`. A maintenance API failure answers `502 maintenance_error`.
 - **Audit:** the action calls the maintenance API between its own mutations, so its audit row is written when it finishes, success or failure, rather than in one mutation with the change.
 - **The maintenance API's own audit names the Convex client, not the operator.** Only admin keys may name an operator there, and Convex does not hold one. The operator is in `opsAuditLog` and the backoffice's audit.
+
+## Referral attribution
+
+- A user's sign-up code is random and lives in `referralCodes`, made the first time they ask. A sign-up link carries it as `?ref=`; the client keeps it through sign-in and sends it once from onboarding to `referrals.capture`.
+- `capture` writes one immutable `referrals` row per referred user, and the first capture wins. An unknown code, a self-referral, a user more than a day old and a repeat all answer success and write nothing, so the call does not reveal which codes exist.
+- The row names the org once it exists; that status change is the only edit a row ever gets.
+- The plane learns of an org through `ensure`, then reads its referral with `accounts.referral`. The `ensure` contract carries no body, so the referral is not sent with it. If the plane later wants it pushed at creation, the contract must accept it first; `ensureOrgBilling` in `convex/billingCommands.ts` is where it would be passed.
+- No reward exists in this app. Rewards are the plane's.
 
 ## Consequences
 

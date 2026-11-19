@@ -6,9 +6,12 @@ import {
   billingProjectionRequestSchema,
   featureFlagKeyRequestSchema,
   featureFlagRequestSchema,
+  issueReferralCodeRequestSchema,
   notificationRequestSchema,
   provisioningStatusSchema,
+  revokeReferralCodeRequestSchema,
   storageLimitsRequestSchema,
+  updateReferralCodeRequestSchema,
 } from "../lib/ops/contract";
 import { parseRequestBody } from "../lib/ops/request";
 import { matchOpsRoute } from "../lib/ops/routes";
@@ -83,6 +86,17 @@ export const opsHandler = httpAction(async (ctx, request) => {
         reason: auth.reason,
       });
       return ok(account);
+    }
+    case "accounts.referral": {
+      const referral = await ctx.runQuery(internal.ops.referrals.forAccount, { accountId: route.accountId });
+      await ctx.runMutation(internal.ops.audit.recordRead, {
+        caller: auth.caller.name,
+        actor: auth.actor,
+        action: "accounts.referral",
+        target: route.accountId,
+        reason: auth.reason,
+      });
+      return referral === null ? error(404, "not_found", "No referral for this account") : ok(referral);
     }
     case "engines.list": {
       const requested = url.searchParams.get("status") ?? undefined;
@@ -199,6 +213,53 @@ export const opsHandler = httpAction(async (ctx, request) => {
       // authenticateOps required a reason for this write.
       const outcome = await ctx.runMutation(internal.ops.featureFlags.remove, {
         key: parsed.value.key,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "referralCodes.list":
+      return ok(await ctx.runQuery(internal.ops.referralCodes.list, { cursor }));
+    case "referralCodes.issue": {
+      const parsed = parseRequestBody(issueReferralCodeRequestSchema, await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "validation_failed", parsed.message);
+      }
+      const outcome = await ctx.runMutation(internal.ops.referralCodes.issue, {
+        email: parsed.value.email,
+        rewardCents: parsed.value.rewardCents,
+        issuedBy: parsed.value.actor,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        // authenticateOps required a reason for this write.
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? json(201, { data: outcome.result }) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "referralCodes.update": {
+      const parsed = parseRequestBody(updateReferralCodeRequestSchema, await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "validation_failed", parsed.message);
+      }
+      const outcome = await ctx.runMutation(internal.ops.referralCodes.update, {
+        code: route.code,
+        rewardCents: parsed.value.rewardCents,
+        updatedBy: parsed.value.actor,
+        caller: auth.caller.name,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "referralCodes.revoke": {
+      const parsed = parseRequestBody(revokeReferralCodeRequestSchema, await request.json().catch(() => null));
+      if (!parsed.ok) {
+        return error(400, "validation_failed", parsed.message);
+      }
+      const outcome = await ctx.runMutation(internal.ops.referralCodes.revoke, {
+        code: route.code,
+        revokedBy: parsed.value.actor,
         caller: auth.caller.name,
         actor: auth.actor,
         reason: auth.reason ?? "",

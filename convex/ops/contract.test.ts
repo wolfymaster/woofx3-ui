@@ -102,6 +102,16 @@ async function seed(t: ReturnType<typeof newBackend>) {
       sinceMs: 1,
       receivedAt: 1,
     });
+    const referrerId = await ctx.db.insert("users", { name: "Bo", email: "bo@example.com" });
+    await ctx.db.insert("referrals", {
+      referredUserId: userId,
+      referredAccountId: accountId,
+      referrerUserId: referrerId,
+      code: "abc",
+      rewardCents: 500,
+      capturedAt: 1,
+      status: "org_created",
+    });
     return { userId, accountId, instanceId };
   });
 }
@@ -112,10 +122,10 @@ describe("the ops API answers what its contract says", () => {
     const { userId, accountId, instanceId } = await seed(t);
     const exercised = new Set<string>();
 
-    async function call(name: string, path: string, body?: unknown, method?: string) {
+    async function call(name: string, path: string, body?: unknown, expectedStatus = 200) {
       const route = spec(name);
       const response = await t.fetch(path, {
-        method: method ?? route.method,
+        method: route.method,
         headers: {
           Authorization: `Bearer ${SECRET}`,
           "X-Woofx3-Actor": "ops@example.com",
@@ -125,7 +135,11 @@ describe("the ops API answers what its contract says", () => {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const json = (await response.json()) as { data?: unknown; error?: unknown };
-      expect({ name, status: response.status, error: json.error }).toEqual({ name, status: 200, error: undefined });
+      expect({ name, status: response.status, error: json.error }).toEqual({
+        name,
+        status: expectedStatus,
+        error: undefined,
+      });
       const parsed = route.response.safeParse(json.data);
       expect({ name, ok: parsed.success, issues: parsed.success ? [] : parsed.error.issues }).toEqual({
         name,
@@ -169,6 +183,19 @@ describe("the ops API answers what its contract says", () => {
     await call("featureFlags.update", "/api/ops/feature-flags", { ...flag, state: "on", rules: undefined });
     await call("featureFlags.list", "/api/ops/feature-flags");
     await call("featureFlags.remove", "/api/ops/feature-flags/delete", { key: flag.key });
+    await call("accounts.referral", `/api/ops/accounts/${accountId}/referral`);
+    const issued = (await call(
+      "referralCodes.issue",
+      "/api/ops/referral-codes",
+      { email: "ada@example.com", rewardCents: 500, actor: "ops@example.com" },
+      201
+    )) as { code: string };
+    await call("referralCodes.list", "/api/ops/referral-codes");
+    await call("referralCodes.update", `/api/ops/referral-codes/${issued.code}`, {
+      rewardCents: 700,
+      actor: "ops@example.com",
+    });
+    await call("referralCodes.revoke", `/api/ops/referral-codes/${issued.code}/revoke`, { actor: "ops@example.com" });
     const projection = {
       accountId,
       version: 1,

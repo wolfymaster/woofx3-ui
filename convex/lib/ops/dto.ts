@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Doc } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { Entitlements } from "../entitlements";
 import type {
   accountDetailDtoSchema,
@@ -18,6 +18,8 @@ import type {
   notificationDtoSchema,
   planSummaryDtoSchema,
   provisioningDtoSchema,
+  referralCodeDtoSchema,
+  referralDtoSchema,
   userDetailDtoSchema,
   userDtoSchema,
   userRefDtoSchema,
@@ -50,6 +52,8 @@ export type EngineDetailDto = z.infer<typeof engineDetailDtoSchema>;
 export type ModuleStorageLimitDto = z.infer<typeof moduleStorageLimitDtoSchema>;
 export type EngineEventPathDto = z.infer<typeof engineEventPathDtoSchema>;
 export type InstanceHealthDto = z.infer<typeof instanceHealthDtoSchema>;
+export type ReferralDto = z.infer<typeof referralDtoSchema>;
+export type ReferralCodeDto = z.infer<typeof referralCodeDtoSchema>;
 export type HostedStorageLimitsDto = z.infer<typeof hostedStorageLimitsDtoSchema>;
 
 export function userDto(
@@ -173,6 +177,39 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
     request: entry.request ?? null,
     result: entry.result,
     at: entry.at,
+  };
+}
+
+export function referralDto(
+  referral: Doc<"referrals">,
+  referrerAccountId: Id<"accounts"> | null,
+  eligible: boolean
+): ReferralDto {
+  return {
+    referralId: referral._id,
+    referrerAccountId,
+    code: referral.code,
+    rewardCents: referral.rewardCents,
+    capturedAt: referral.capturedAt,
+    status: referral.status,
+    eligible,
+  };
+}
+
+export function referralCodeDto(
+  row: Doc<"referralCodes">,
+  email: string | null,
+  referralCount: number
+): ReferralCodeDto {
+  return {
+    code: row.code,
+    userId: row.userId,
+    email,
+    rewardCents: row.rewardCents,
+    issuedBy: row.issuedBy,
+    issuedAt: row.createdAt,
+    revokedAt: row.revokedAt ?? null,
+    referralCount,
   };
 }
 

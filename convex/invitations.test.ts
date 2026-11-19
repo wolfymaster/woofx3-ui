@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { ACTION_LIMITS } from "./lib/actionRateLimits";
 import { newBackend, runMigration } from "./lib/convexTest.testing";
 import { accountEntitlements } from "./lib/entitlementAccess";
 import type { EngineRole, OrgRole } from "./lib/organization";
@@ -54,7 +55,7 @@ async function addUser(
   membership?: { org: Org; orgRole: OrgRole; engineRole: EngineRole | null }
 ): Promise<Id<"users">> {
   return t.run(async (ctx) => {
-    const userId = await ctx.db.insert("users", { name: email, email });
+    const userId = await ctx.db.insert("users", { name: email, email, emailVerificationTime: 1 });
     if (membership) {
       const { org, orgRole, engineRole } = membership;
       await ctx.db.insert("accountMembers", { accountId: org.accountId, userId, role: orgRole, createdAt: 1 });
@@ -154,6 +155,21 @@ describe("invitations.create", () => {
       data: { code: "already_on_engine", message: "That user is already on this engine" },
     });
     await invite(t, org.ownerId, org.instanceId, "off@example.com");
+  });
+});
+
+describe("invitations.create rate limit", () => {
+  test("refuses the call after the burst with a retryAfter, and each engine has its own bucket", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const other = await addEngine(t, org, "Second");
+    for (let n = 0; n < ACTION_LIMITS.inviteCreate.capacity; n++) {
+      await invite(t, org.ownerId, org.instanceId, `n${n}@example.com`);
+    }
+    await expect(invite(t, org.ownerId, org.instanceId, "late@example.com")).rejects.toMatchObject({
+      data: { code: "rate_limited", retryAfter: expect.any(Number) },
+    });
+    await invite(t, org.ownerId, other, "late@example.com");
   });
 });
 
@@ -475,5 +491,86 @@ describe("invitations.accept", () => {
     const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
     const preview = await t.query(api.invitations.previewByToken, { token });
     expect(preview).toMatchObject({ accountName: "Org", engineName: "Main" });
+  });
+});
+
+describe("invitations.accept needs a verified email", () => {
+  async function addUnverifiedUser(t: Backend, email: string): Promise<Id<"users">> {
+    return t.run((ctx) => ctx.db.insert("users", { name: email, email }));
+  }
+
+  test("an unverified user is refused with email_unverified and gets nothing", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    const userId = await addUnverifiedUser(t, "new@example.com");
+    await expect(as(t, userId).mutation(api.invitations.accept, { token })).rejects.toMatchObject({
+      data: { code: "email_unverified" },
+    });
+    expect((await roles(t, org, userId, org.instanceId)).engine).toBeNull();
+  });
+
+  test("a verified user is accepted", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    const userId = await addUnverifiedUser(t, "new@example.com");
+    await t.run((ctx) => ctx.db.patch(userId, { emailVerificationTime: 5 }));
+    const result = await as(t, userId).mutation(api.invitations.accept, { token });
+    expect(result).toMatchObject({ status: "accepted" });
+  });
+
+  test("the address matches case-insensitively", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const { token } = await invite(t, org.ownerId, org.instanceId, "new@example.com");
+    const userId = await t.run((ctx) =>
+      ctx.db.insert("users", { name: "n", email: "New@Example.com", emailVerificationTime: 5 })
+    );
+    expect(await as(t, userId).mutation(api.invitations.accept, { token })).toMatchObject({ status: "accepted" });
+  });
+
+  test("a twitch-target invitation does not need a verified email", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    const userId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("users", { name: "streamer" });
+      await ctx.db.insert("authAccounts", { userId: id, provider: "twitch", providerAccountId: "T1" });
+      await ctx.db.insert("invitations", {
+        accountId: org.accountId,
+        role: "member",
+        instanceId: org.instanceId,
+        engineRole: "member",
+        platform: "twitch",
+        platformUserId: "T1",
+        token: "twitch-token",
+        invitedByUserId: org.ownerId,
+        status: "pending",
+        expiresAt: Date.now() + DAY_MS,
+        createdAt: 1,
+      });
+      return id;
+    });
+    expect(await as(t, userId).mutation(api.invitations.accept, { token: "twitch-token" })).toMatchObject({
+      status: "accepted",
+    });
+  });
+
+  test("two users sharing an address: only the verified one's seat counts, so a full org still refuses", async () => {
+    const t = newBackend();
+    const org = await seedOrg(t);
+    await fillSeats(t, org);
+    const verified = await addUser(t, "dup@example.com");
+    const twin = await addUnverifiedUser(t, "dup@example.com");
+    await t.run((ctx) =>
+      ctx.db.insert("accountMembers", { accountId: org.accountId, userId: twin, role: "member", createdAt: 1 })
+    );
+    await expect(invite(t, org.ownerId, org.instanceId, "dup@example.com")).rejects.toMatchObject({
+      data: { code: "seats_full" },
+    });
+    await t.run((ctx) =>
+      ctx.db.insert("accountMembers", { accountId: org.accountId, userId: verified, role: "member", createdAt: 1 })
+    );
+    await invite(t, org.ownerId, org.instanceId, "dup@example.com");
   });
 });

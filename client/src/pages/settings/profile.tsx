@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { VerifyEmail } from "@/components/auth/verify-email";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -181,6 +182,31 @@ function PasswordCard({ hasPassword }: { hasPassword: boolean }) {
   );
 }
 
+function EmailCard() {
+  const { toast } = useToast();
+  const status = useQuery(api.emailVerification.status);
+  if (!status || status.email === null) {
+    return null;
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Email</CardTitle>
+        <CardDescription>
+          {status.verified
+            ? `${status.email} is verified. You can accept invitations sent to it.`
+            : "Verify your email to accept invitations sent to it."}
+        </CardDescription>
+      </CardHeader>
+      {status.verified ? null : (
+        <CardContent>
+          <VerifyEmail onVerified={() => toast({ title: "Email verified" })} />
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 function DefaultEngineCard() {
   const { instances } = useInstance();
   const settings = useQuery(api.userSettings.getMine);
@@ -256,6 +282,7 @@ export default function ProfileSettings() {
       {user && methods ? (
         <div className="space-y-4">
           <DisplayNameCard name={user.name ?? ""} fromTwitch={methods.twitch} />
+          <EmailCard />
           <PasswordCard hasPassword={methods.password} />
           <DefaultEngineCard />
           <SetUpOwnEngineCard />

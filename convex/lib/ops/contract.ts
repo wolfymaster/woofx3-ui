@@ -18,6 +18,7 @@ import {
   notificationLinkKind,
 } from "../notifications";
 import { BILLING_INTERVALS, LIFECYCLE_REASONS, PLAN_TIERS, SUBSCRIPTION_STATES } from "../organization";
+import { normalizeEmail } from "../teamAccess";
 
 /**
  * The ops API's contract, and the single source everything else derives from:
@@ -215,6 +216,41 @@ export const notificationDtoSchema = z
     createdAt: epochMs,
   })
   .openapi("NotificationDto");
+
+export const referralDtoSchema = z
+  .object({
+    referralId: z.string(),
+    referrerAccountId: z
+      .string()
+      .nullable()
+      .openapi({ description: "The org the referrer owns; null when they have none." }),
+    code: z.string(),
+    rewardCents: z.number().int(),
+    capturedAt: epochMs,
+    status: z.enum(["captured", "org_created"]),
+    eligible: z.boolean().openapi({
+      description:
+        "True only when the referred org exists, the referrer has a different org, and both owners verified their email.",
+    }),
+  })
+  .openapi("ReferralDto");
+
+export const referralCodeDtoSchema = z
+  .object({
+    code: z.string(),
+    userId: z.string(),
+    email: z.string().nullable(),
+    rewardCents: z.number().int(),
+    issuedBy: z.string(),
+    issuedAt: epochMs,
+    revokedAt: epochMs.nullable(),
+    referralCount: z.number().int(),
+  })
+  .openapi("ReferralCodeDto");
+
+export const referralCodePageSchema = z
+  .object({ codes: z.array(referralCodeDtoSchema), cursor: z.string().nullable() })
+  .openapi("ReferralCodePage");
 
 /** A flag's targeting, with every field present so the backoffice never guesses. */
 export const featureFlagRulesDtoSchema = z
@@ -584,6 +620,40 @@ export const featureFlagKeyRequestSchema = z
   .object({ key: flagKey("key must name a feature flag") })
   .openapi("FeatureFlagKeyRequest");
 
+const MAX_REWARD_CENTS = 1_000_000;
+const REFERRAL_ACTOR_MAX = 200;
+const REFERRAL_EMAIL_MAX = 320;
+const REFERRAL_ACTOR_MESSAGE = `actor must be 1 to ${REFERRAL_ACTOR_MAX} characters`;
+const REFERRAL_REWARD_MESSAGE = `rewardCents must be a positive integer of at most ${MAX_REWARD_CENTS}`;
+
+const referralActor = text(REFERRAL_ACTOR_MESSAGE)
+  .trim()
+  .min(1, REFERRAL_ACTOR_MESSAGE)
+  .max(REFERRAL_ACTOR_MAX, REFERRAL_ACTOR_MESSAGE)
+  .openapi({ description: "The operator named on the code." });
+const referralReward = z
+  .number({ required_error: REFERRAL_REWARD_MESSAGE, invalid_type_error: REFERRAL_REWARD_MESSAGE })
+  .int(REFERRAL_REWARD_MESSAGE)
+  .positive(REFERRAL_REWARD_MESSAGE)
+  .max(MAX_REWARD_CENTS, REFERRAL_REWARD_MESSAGE);
+
+export const issueReferralCodeRequestSchema = z
+  .object({
+    email: text("email must be an email address")
+      .transform((email) => normalizeEmail(email))
+      .refine((email) => email.includes("@") && email.length <= REFERRAL_EMAIL_MAX, "email must be an email address")
+      .openapi({ description: "The user the code is issued to; they must already have signed in." }),
+    rewardCents: referralReward,
+    actor: referralActor,
+  })
+  .openapi("IssueReferralCodeRequest");
+
+export const updateReferralCodeRequestSchema = z
+  .object({ rewardCents: referralReward, actor: referralActor })
+  .openapi("UpdateReferralCodeRequest");
+
+export const revokeReferralCodeRequestSchema = z.object({ actor: referralActor }).openapi("RevokeReferralCodeRequest");
+
 const BILLING_LIMIT_ENTRIES_MESSAGE = "overrides.limits must be an object of amounts";
 const BILLING_OVERRIDES_MESSAGE =
   "overrides needs addFeatures and removeFeatures as arrays of strings, and limits as an object";
@@ -699,7 +769,7 @@ export const billingProjectionRequestSchema = z
 export interface OpsRouteSpec {
   /** The route's name: its operationId, and what a caller's scope lists. */
   name: string;
-  method: "GET" | "POST" | "PUT";
+  method: "GET" | "POST" | "PUT" | "PATCH";
   /** Under OPS_PATH_PREFIX; `{name}` is one path segment. */
   path: string;
   summary: string;
@@ -707,8 +777,10 @@ export interface OpsRouteSpec {
   params?: Record<string, z.ZodTypeAny>;
   query?: z.AnyZodObject;
   body?: z.ZodTypeAny;
-  /** The `data` of a 200 answer. */
+  /** The `data` of the success answer. */
   response: z.ZodTypeAny;
+  /** Status of the success answer; 200 unless stated. */
+  successStatus?: 200 | 201;
   /** Status to the codes the route itself can answer, besides the authentication ones every route can. */
   errors?: Record<number, readonly string[]>;
 }
@@ -752,6 +824,14 @@ export const OPS_ROUTES = [
     summary:
       "An account, its members, pending invitations, resolved entitlements, instances and each instance's provisioning. Audited.",
     response: accountDetailDtoSchema,
+    errors: { 404: ["not_found"] },
+  },
+  {
+    name: "accounts.referral",
+    method: "GET",
+    path: "/api/ops/accounts/{accountId}/referral",
+    summary: "Who referred the org's owner, or 404 when the owner arrived without a valid referral link. Audited.",
+    response: referralDtoSchema,
     errors: { 404: ["not_found"] },
   },
   {
@@ -819,6 +899,42 @@ export const OPS_ROUTES = [
     path: "/api/ops/feature-flags",
     summary: "Every UI feature flag with its targeting, and the entitlements a rule may name.",
     response: featureFlagCatalogDtoSchema,
+  },
+  {
+    name: "referralCodes.list",
+    method: "GET",
+    path: "/api/ops/referral-codes",
+    summary: "Referral codes, newest first.",
+    query: pageQuery,
+    response: referralCodePageSchema,
+  },
+  {
+    name: "referralCodes.issue",
+    method: "POST",
+    path: "/api/ops/referral-codes",
+    summary: "Issues a code to the user with the given email.",
+    body: issueReferralCodeRequestSchema,
+    response: referralCodeDtoSchema,
+    successStatus: 201,
+    errors: { 400: ["validation_failed"], 404: ["user_not_found"], 409: ["code_exists"] },
+  },
+  {
+    name: "referralCodes.update",
+    method: "PATCH",
+    path: "/api/ops/referral-codes/{code}",
+    summary: "Changes a code's reward.",
+    body: updateReferralCodeRequestSchema,
+    response: referralCodeDtoSchema,
+    errors: { 400: ["validation_failed"], 404: ["not_found"], 409: ["code_revoked"] },
+  },
+  {
+    name: "referralCodes.revoke",
+    method: "POST",
+    path: "/api/ops/referral-codes/{code}/revoke",
+    summary: "Revokes a code.",
+    body: revokeReferralCodeRequestSchema,
+    response: referralCodeDtoSchema,
+    errors: { 400: ["validation_failed"], 404: ["not_found"], 409: ["code_revoked"] },
   },
   {
     name: "engines.act",
@@ -1025,7 +1141,7 @@ export function buildOpsOpenApi(): Record<string, unknown> {
     );
     registry.registerPath({
       operationId: spec.name,
-      method: spec.method.toLowerCase() as "get" | "post" | "put",
+      method: spec.method.toLowerCase() as "get" | "post" | "put" | "patch",
       path: spec.path,
       summary: spec.summary,
       security: [{ [bearerAuth]: [] }],
@@ -1036,7 +1152,7 @@ export function buildOpsOpenApi(): Record<string, unknown> {
         ...(spec.body ? { body: { required: true, content: { "application/json": { schema: spec.body } } } } : {}),
       },
       responses: {
-        200: {
+        [spec.successStatus ?? 200]: {
           description: "The result, under `data`.",
           content: { "application/json": { schema: z.object({ data: spec.response }) } },
         },

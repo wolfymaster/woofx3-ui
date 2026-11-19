@@ -3,6 +3,7 @@ import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { newBackend } from "./lib/convexTest.testing";
 import { insertProjection } from "./lib/orgBilling.testing";
+import { seedMissingTierPlans } from "./seeds/plans";
 
 type Backend = ReturnType<typeof newBackend>;
 
@@ -16,6 +17,7 @@ interface Org {
 /** A trialing org whose owner and admin are on its registered hosted engine, the owner's default. */
 async function seedOrg(t: Backend): Promise<Org> {
   return t.run(async (ctx) => {
+    await seedMissingTierPlans(ctx, "test");
     const ownerId = await ctx.db.insert("users", { name: "Wolfy" });
     const adminId = await ctx.db.insert("users", { name: "Kit" });
     const accountId = await ctx.db.insert("accounts", { name: "Wolfy Streams", ownerId, createdAt: 1 });
@@ -32,7 +34,7 @@ async function seedOrg(t: Backend): Promise<Org> {
     await ctx.db.insert("instanceMembers", { instanceId: firstId, userId: ownerId, role: "owner" });
     await ctx.db.insert("instanceMembers", { instanceId: firstId, userId: adminId, role: "admin" });
     await ctx.db.insert("userSettings", { userId: ownerId, defaultInstanceId: firstId, updatedAt: 1 });
-    await insertProjection(ctx, accountId, { standing: "trialing", trialEndsAt: Date.now() + 1_000_000 });
+    await insertProjection(ctx, accountId, { tier: "pro", standing: "trialing", trialEndsAt: Date.now() + 1_000_000 });
     return { ownerId, adminId, accountId, firstId };
   });
 }

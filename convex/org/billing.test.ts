@@ -52,7 +52,11 @@ async function seed(t: Backend, org: Org): Promise<Seeded> {
     const ownerId = await ctx.db.insert("users", { name: "Owner" });
     const adminId = await ctx.db.insert("users", { name: "Admin" });
     const memberId = await ctx.db.insert("users", { name: "Member" });
-    const inviteeId = await ctx.db.insert("users", { name: "Invitee", email: "invitee@example.com" });
+    const inviteeId = await ctx.db.insert("users", {
+      name: "Invitee",
+      email: "invitee@example.com",
+      emailVerificationTime: 1,
+    });
     const accountId = await ctx.db.insert("accounts", { name: "Org", ownerId, createdAt: 1 });
     await ctx.db.insert("accountMembers", { accountId, userId: ownerId, role: "owner", createdAt: 1 });
     await ctx.db.insert("accountMembers", { accountId, userId: adminId, role: "admin", createdAt: 1 });
