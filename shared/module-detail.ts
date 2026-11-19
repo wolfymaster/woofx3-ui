@@ -72,14 +72,14 @@ export interface ModuleDetailResult<ModuleRef = string> {
   manifestResourceKinds: ManifestResourceKind[];
   /**
    * Permission ids the manifest of `version` declares. Null when they could not
-   * be read (an installed row with no stored manifest, or an unreachable
-   * marketplace archive).
+   * be read (an installed row with no stored manifest, or a marketplace that
+   * does not send them).
    */
   permissions: string[] | null;
   /**
-   * Permission ids `latestVersion` declares, read from its marketplace archive.
+   * Permission ids `latestVersion` declares, read from its marketplace listing.
    * Present only for an installed module whose marketplace version differs from
-   * the installed one; null when that archive could not be read.
+   * the installed one; null when the listing could not be read.
    */
   latestPermissions?: string[] | null;
   /** What the manifest of `version` reaches on the streamer's network (`local[]`); null when unreadable, like `permissions`. */
@@ -91,13 +91,6 @@ export interface ModuleDetailResult<ModuleRef = string> {
 export interface ManifestDeclarations {
   permissions: string[] | null;
   localEndpoints: LocalEndpointSummary[] | null;
-}
-
-export function manifestDeclarations(manifest: unknown): ManifestDeclarations {
-  if (manifest === null) {
-    return { permissions: null, localEndpoints: null };
-  }
-  return { permissions: parseManifestPermissions(manifest), localEndpoints: localEndpointSummaries(manifest) };
 }
 
 const LISTING_LOCAL_PROTOCOLS: ReadonlySet<string> = new Set<LocalProtocol>(["websocket", "http"]);

@@ -1,4 +1,5 @@
-import type { ModuleFileContent, ModuleFileList } from "@woofx3/api/api";
+import type { ModuleFileListing } from "@shared/module-files";
+import type { ModuleFileContent } from "@woofx3/api/api";
 import { useCallback, useRef, useState } from "react";
 import { useEngineScope } from "@/engine/context";
 import { useModuleFileRequest, useModuleFilesRequest } from "@/engine/hooks/use-modules";
@@ -7,7 +8,7 @@ import { actionErrorMessage } from "@/lib/action-error";
 export type ModuleFileListState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; list: ModuleFileList }
+  | { status: "ready"; list: ModuleFileListing }
   | { status: "error"; message: string };
 
 export type ModuleFileState =

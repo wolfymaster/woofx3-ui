@@ -89,7 +89,7 @@ import type {
   ModuleAsset,
   ModuleDetail,
   ModuleFileContent,
-  ModuleFileList,
+  ModuleFileListing,
   ModuleId,
   ModuleLicenseLookup,
   ModuleOAuthConnect,
@@ -475,7 +475,7 @@ export interface ModulesGateway {
   useSettingsRequest(): (moduleId: string) => Promise<ModuleSettingValue[]>;
   /** Rejects for a key the module does not declare as a setting. */
   useUpdateSettingRequest(): (moduleId: string, key: string, value: string) => Promise<ModuleSettingValue>;
-  useFilesRequest(): (moduleId: string) => Promise<ModuleFileList>;
+  useFilesRequest(): (moduleId: string) => Promise<ModuleFileListing>;
   useFileRequest(): (moduleId: string, path: string) => Promise<ModuleFileContent>;
   /**
    * Asks the engine to uninstall; resolves with the key its outcome is
