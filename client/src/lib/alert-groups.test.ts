@@ -11,8 +11,8 @@ import {
   OTHER_PLATFORM_KEY,
   pruneUnusedAlerts,
   subtreePresets,
-  taxonomyLabel,
 } from "@/lib/alert-groups";
+import { taxonomyLabel } from "@/lib/taxonomy";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
 const icon = (() => null) as unknown as TriggerPreset["icon"];

@@ -23,10 +23,6 @@ import {
 import { collectStepIds, isStepIdReferenced, isValidStepId } from "@/lib/workflow-variables";
 
 /**
- * Every trigger the streamer writes is a workflow: presets from the engine catalog describe
- * capability, while the tree edited here holds the configuration. There is no third store, so
- * ordering, merging and health keep coming from the tree alone.
- *
  * The one rule callers need: at most one step is open. Leaving it commits only when the tree
  * differs from its baseline, a failed commit keeps it open, and a caller whose tree was replaced
  * during the save resolves false. Both the sentence and the numbered flow use this same machine.
@@ -47,11 +43,6 @@ export interface FlowInteractionWording {
   referencedElsewhere: (oldId: string, newId: string) => string;
 }
 
-/**
- * What a view hands the shared machine. Presets describe capability; this `tree`
- * is the workflow holding the configuration, and there is no third store — so
- * ordering, merging and health keep coming from it alone.
- */
 export interface FlowInteractionArgs {
   tree: WorkflowTree;
   onChange: (tree: WorkflowTree) => void;
@@ -60,8 +51,8 @@ export interface FlowInteractionArgs {
   removeBlockedReason?: (steps: StepNode[], id: string) => string | null;
   focus?: FlowInteractionFocus;
   wording?: FlowInteractionWording;
-  /** The numbered flow also needs the surface-wide save flag before calling an open step changed. */
-  openChangedIncludesSurface?: boolean;
+  /** The numbered flow requires the surface-wide save flag before calling an open step changed. */
+  openChangedRequiresSavedChange?: boolean;
 }
 
 const DEFAULT_WORDING: FlowInteractionWording = {
@@ -106,7 +97,7 @@ export function useFlowInteraction({
   removeBlockedReason,
   focus,
   wording = DEFAULT_WORDING,
-  openChangedIncludesSurface = false,
+  openChangedRequiresSavedChange = false,
 }: FlowInteractionArgs): FlowInteraction {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -323,7 +314,7 @@ export function useFlowInteraction({
 
   const openChanged =
     expandedId !== null &&
-    (!openChangedIncludesSurface || save === undefined || save.changed) &&
+    (!openChangedRequiresSavedChange || save === undefined || save.changed) &&
     JSON.stringify(tree) !== JSON.stringify(baselineRef.current);
   const saveView = save
     ? flowSaveView({

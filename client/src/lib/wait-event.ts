@@ -1,11 +1,11 @@
 import type { AggregationConfig, ConditionConfig, ConditionOperator } from "@woofx3/api";
 import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
-import { taxonomyLabel } from "@/lib/alert-groups";
 import { type OptionLabels, type SentencePart, sentenceParts, sentenceText } from "@/lib/condition-sentence";
 import { conditionValueText } from "@/lib/condition-value";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { isCommandsSource, parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
+import { taxonomyLabel } from "@/lib/taxonomy";
 import { DEFAULT_AGGREGATION, type EventWaitConfig, formatDelay, parseGoDuration } from "@/lib/wait-config";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
 import { conditionsToFieldValues, decodeConditionValue, fieldValuesToConditions } from "@/lib/workflow-presets-json";

@@ -154,7 +154,7 @@ export function FlowEditor({
     onCommit,
     save,
     removeBlockedReason,
-    openChangedIncludesSurface: true,
+    openChangedRequiresSavedChange: true,
   });
 
   const numbers = useMemo(() => stepNumbers(tree.steps), [tree.steps]);
@@ -210,10 +210,8 @@ export function FlowEditor({
   );
 
   const state: FlowState = {
+    ...interaction,
     numbers,
-    expandedId: interaction.expandedId,
-    openPoint: interaction.openPoint,
-    confirmingRemoveId: interaction.confirmingRemoveId,
     actionPresets,
     summaryOf: (step) =>
       stepSummary(step, {
@@ -238,20 +236,7 @@ export function FlowEditor({
         scenes,
       }),
     iconOf: (step) => stepIcon(step, catalogActions),
-    placeOf: interaction.placeOf,
-    removeBlockedReason: interaction.removeBlockedReason,
     renderEditor,
-    saveView: interaction.saveView,
-    openChanged: interaction.openChanged,
-    discardOpen: interaction.discardOpen,
-    toggle: interaction.toggle,
-    openPicker: interaction.openPicker,
-    closePicker: interaction.closePicker,
-    pick: interaction.pick,
-    move: interaction.move,
-    askRemove: interaction.askRemove,
-    cancelRemove: interaction.cancelRemove,
-    remove: interaction.remove,
   };
 
   return (

@@ -21,11 +21,11 @@ import {
   flattenAlertTree,
   pruneUnusedAlerts,
   subtreePresets,
-  taxonomyLabel,
 } from "@/lib/alert-groups";
 import { eventTriggers, groupEventTriggers } from "@/lib/alert-triggers";
 import { decodeSegment, subPathSegments } from "@/lib/route-subpath";
 import { $hideUnusedAlerts } from "@/lib/stores";
+import { taxonomyLabel } from "@/lib/taxonomy";
 import { cn } from "@/lib/utils";
 
 const BASE_PATH = "/stream/alerts";
