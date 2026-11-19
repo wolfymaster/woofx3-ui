@@ -1126,6 +1126,31 @@
         ],
         "type": "object"
       },
+      "IssueReferralCodeRequest": {
+        "properties": {
+          "actor": {
+            "description": "The operator named on the code.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "email": {
+            "description": "The user the code is issued to; they must already have signed in.",
+            "type": "string"
+          },
+          "rewardCents": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "email",
+          "rewardCents",
+          "actor"
+        ],
+        "type": "object"
+      },
       "ModuleStorageLimitDto": {
         "properties": {
           "engineId": {
@@ -1647,6 +1672,130 @@
         ],
         "type": "object"
       },
+      "ReferralCodeDto": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuedAt": {
+            "type": "number"
+          },
+          "issuedBy": {
+            "type": "string"
+          },
+          "referralCount": {
+            "type": "integer"
+          },
+          "revokedAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rewardCents": {
+            "type": "integer"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "userId",
+          "email",
+          "rewardCents",
+          "issuedBy",
+          "issuedAt",
+          "revokedAt",
+          "referralCount"
+        ],
+        "type": "object"
+      },
+      "ReferralCodePage": {
+        "properties": {
+          "codes": {
+            "items": {
+              "$ref": "#/components/schemas/ReferralCodeDto"
+            },
+            "type": "array"
+          },
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "codes",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "ReferralDto": {
+        "properties": {
+          "capturedAt": {
+            "type": "number"
+          },
+          "code": {
+            "type": "string"
+          },
+          "eligible": {
+            "description": "True only when the referred org exists, the referrer has a different org, and both owners verified their email.",
+            "type": "boolean"
+          },
+          "referralId": {
+            "type": "string"
+          },
+          "referrerAccountId": {
+            "description": "The org the referrer owns; null when they have none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rewardCents": {
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "captured",
+              "org_created"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "referralId",
+          "referrerAccountId",
+          "code",
+          "rewardCents",
+          "capturedAt",
+          "status",
+          "eligible"
+        ],
+        "type": "object"
+      },
+      "RevokeReferralCodeRequest": {
+        "properties": {
+          "actor": {
+            "description": "The operator named on the code.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor"
+        ],
+        "type": "object"
+      },
       "StorageLimitsRequest": {
         "additionalProperties": false,
         "description": "Replaces the engine's whole override. A field left out inherits the account's limit, null is unlimited, and `{}` clears the override.",
@@ -1688,6 +1837,26 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "UpdateReferralCodeRequest": {
+        "properties": {
+          "actor": {
+            "description": "The operator named on the code.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rewardCents": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rewardCents",
+          "actor"
+        ],
         "type": "object"
       },
       "UserDetailDto": {
@@ -2308,6 +2477,99 @@
           }
         ],
         "summary": "Sets the stored projection version back to 0 so the plane's next push is applied."
+      }
+    },
+    "/api/ops/accounts/{accountId}/referral": {
+      "get": {
+        "operationId": "accounts.referral",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Who referred the org's owner, or 404 when the owner arrived without a valid referral link. Audited."
       }
     },
     "/api/ops/audit": {
@@ -3809,6 +4071,447 @@
           }
         ],
         "summary": "Deletes a notification."
+      }
+    },
+    "/api/ops/referral-codes": {
+      "get": {
+        "operationId": "referralCodes.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `cursor` of the previous page.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodePage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Referral codes, newest first."
+      },
+      "post": {
+        "operationId": "referralCodes.issue",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueReferralCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodeDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, validation_failed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: user_not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: code_exists."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Issues a code to the user with the given email."
+      }
+    },
+    "/api/ops/referral-codes/{code}": {
+      "patch": {
+        "operationId": "referralCodes.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReferralCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodeDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, validation_failed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: code_revoked."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Changes a code's reward."
+      }
+    },
+    "/api/ops/referral-codes/{code}/revoke": {
+      "post": {
+        "operationId": "referralCodes.revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Actor",
+            "required": true,
+            "schema": {
+              "description": "The operator the caller acts for.",
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Woofx3-Reason",
+            "required": true,
+            "schema": {
+              "description": "Why, as percent-encoded UTF-8 (encodeURIComponent), at most 500 characters.",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeReferralCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReferralCodeDto"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result, under `data`."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: actor_required, invalid_reason, reason_too_long, reason_required, validation_failed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: unauthorized."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: forbidden_route."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: not_found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error codes: code_revoked."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Revokes a code."
       }
     },
     "/api/ops/users": {
