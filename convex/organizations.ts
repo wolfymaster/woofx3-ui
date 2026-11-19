@@ -27,6 +27,12 @@ export interface OrgEngine {
   status: ProvisioningStatus | null;
   /** Whether the caller is on the engine, so "Open dashboard" works for them. */
   canOpen: boolean;
+  /** When the engine last called Convex; null before it ever has. */
+  lastEngineActivityAt: number | null;
+  /** The streaming channel linked to the engine, if any. */
+  linkedChannel: { platform: string; name: string } | null;
+  /** The platform refused the linked account's sign-in, so automation on it is not running. */
+  linkNeedsReconnect: boolean;
 }
 
 /** The subscription as the portal shows it, to the role that manages billing. */
@@ -76,12 +82,19 @@ async function orgEngines(ctx: QueryCtx, org: OrgContext, userId: Id<"users">, a
           .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
           .first()
       : null;
+    const links = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instance._id))
+      .collect();
     engines.push({
       instanceId: instance._id,
       name: instance.name,
       hosting: managed ? "managed" : "external",
       status: provisioning?.status ?? null,
       canOpen: membership !== null,
+      lastEngineActivityAt: instance.lastEngineActivityAt ?? null,
+      linkedChannel: links[0] === undefined ? null : { platform: links[0].platform, name: links[0].platformUsername },
+      linkNeedsReconnect: links.some((link) => link.authFailedAt !== undefined),
     });
   }
   return engines;

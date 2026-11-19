@@ -54,6 +54,8 @@ export interface NavItem {
    * always show beneath it, so the menu keeps one shape on every page.
    */
   children?: NavItem[];
+  /** Sits at the foot of a section's sidebar, above the collapse control, instead of in the list. */
+  docked?: boolean;
   /** Marked only on its own path, for an index entry whose siblings live below it. */
   exact?: boolean;
   /**

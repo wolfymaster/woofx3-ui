@@ -14,6 +14,9 @@ import {
   checkoutIdempotencyKey,
   type Invoice,
   marketplaceCheckoutIdempotencyKey,
+  type PlanChangeOutcome,
+  type PlanChangePreview,
+  type ScheduledPlanChange,
 } from "./lib/billingClient";
 import { billingIntervalValidator, planTierValidator } from "./lib/organization";
 import { logger } from "./logger";
@@ -60,6 +63,11 @@ const FRIENDLY_MESSAGES: Partial<Record<BillingError["code"], string>> = {
   payment_request_invalid: "We could not start your payment. Please contact support.",
   identity_unavailable: RETRY_MESSAGE,
   unreachable: RETRY_MESSAGE,
+  not_subscribed: "This organization has no subscription to change. Choose a plan first.",
+  plan_change_blocked:
+    "Your payment method needs attention, or this subscription is ending. Fix that in Manage billing first.",
+  already_on_plan: "The organization is already on that plan.",
+  payment_declined: "Your card was declined. Update your payment method in Manage billing and try again.",
   sponsorship_not_found: "We could not find that sponsorship.",
   sponsorship_canceled: "This sponsorship has ended. Start a new one instead.",
   sponsorship_not_recurring: "A one-time sponsorship has nothing to change or cancel.",
@@ -164,6 +172,36 @@ export const openPortal = action({
   handler: async (ctx, { accountId }): Promise<{ url: string }> => {
     const client = await requireManagerClient(ctx, accountId);
     return unwrap(await client.openPortal(accountId));
+  },
+});
+
+/** What moving to another plan would charge now and when it would start; nothing is changed. */
+export const previewPlanChange = action({
+  args: { accountId: v.id("accounts"), plan: planTierValidator, interval: billingIntervalValidator },
+  handler: async (ctx, { accountId, plan, interval }): Promise<PlanChangePreview> => {
+    const client = await requireManagerClient(ctx, accountId);
+    return unwrap(await client.previewPlanChange(accountId, { plan, interval }));
+  },
+});
+
+/**
+ * Moves the org's paid subscription to another plan in place: up is charged now, down is booked for the end of the
+ * paid period. The new plan reaches the org's subscription by the plane's projection, as every change does.
+ */
+export const changePlan = action({
+  args: { accountId: v.id("accounts"), plan: planTierValidator, interval: billingIntervalValidator },
+  handler: async (ctx, { accountId, plan, interval }): Promise<PlanChangeOutcome> => {
+    const client = await requireManagerClient(ctx, accountId);
+    return unwrap(await client.changePlan(accountId, { plan, interval }));
+  },
+});
+
+/** The move down booked for the end of the paid period, if any. */
+export const scheduledPlanChange = action({
+  args: { accountId: v.id("accounts") },
+  handler: async (ctx, { accountId }): Promise<ScheduledPlanChange | null> => {
+    const client = await requireManagerClient(ctx, accountId);
+    return unwrap(await client.scheduledPlanChange(accountId));
   },
 });
 

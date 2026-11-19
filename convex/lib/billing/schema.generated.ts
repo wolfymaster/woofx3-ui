@@ -2642,6 +2642,292 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/billing/accounts/{id}/plan-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The move to another plan booked for the period's end */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The booked move, if any */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingPlanChangeState"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingRefusalError"];
+                    };
+                };
+                /** @description A dependency refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description A dependency is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Move the organization to another plan
+         * @description A move up is charged now and takes effect at once; a move down is booked for the period's end. Asking for the plan the organization is on cancels a booked move. A card the provider refuses is `payment_declined` and changes nothing. The new plan reaches the organization's billing through the provider's subscription webhook.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingPlanTarget"];
+                };
+            };
+            responses: {
+                /** @description What was done */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingPlanChangeOutcome"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingRefusalError"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingConflictError"];
+                    };
+                };
+                /** @description A dependency refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description A dependency is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/accounts/{id}/plan-change/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What moving to another plan would charge
+         * @description Reads the charge from the provider and changes nothing. A move up is charged now: `lines` are the credit for the unused time and the charge for the rest of the period, and `dueNowCents` their total. A move down waits for the period's end and charges nothing now. Refused without a paid subscription in good standing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The UI's id for the organization. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BillingPlanTarget"];
+                };
+            };
+            responses: {
+                /** @description The preview */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingPlanChangePreview"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Refused: what the request names does not exist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingRefusalError"];
+                    };
+                };
+                /** @description Refused or in conflict with the current state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingConflictError"];
+                    };
+                };
+                /** @description A dependency refused the request */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+                /** @description A dependency is unavailable; retry later */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingUnavailableError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/accounts/{id}/portal-sessions": {
         parameters: {
             query?: never;
@@ -4115,6 +4401,31 @@ export interface components {
         BillingMarketplaceCheckoutBody: {
             intentId: string;
         };
+        BillingPlanChangeOutcome: {
+            /** @enum {string} */
+            kind: "applied" | "scheduled" | "kept";
+            scheduled: components["schemas"]["BillingScheduledPlanChange"];
+        };
+        BillingPlanChangePreview: {
+            currency: string;
+            dueNowCents: number;
+            /** Format: date-time */
+            effectiveAt: string;
+            lines: {
+                amountCents: number;
+                description: string;
+            }[];
+            next: {
+                amountCents: number;
+                /** Format: date-time */
+                at: string;
+            };
+            /** @enum {string} */
+            timing: "now" | "period_end";
+        };
+        BillingPlanChangeState: {
+            scheduled: components["schemas"]["BillingScheduledPlanChange"];
+        };
         BillingPlanPrice: {
             amountCents: number;
             /** @enum {string} */
@@ -4127,8 +4438,14 @@ export interface components {
         BillingPlanPrices: {
             prices: components["schemas"]["BillingPlanPrice"][];
         };
+        BillingPlanTarget: {
+            /** @enum {string} */
+            interval: "month" | "year";
+            /** @enum {string} */
+            plan: "starter" | "pro";
+        };
         /** @enum {string} */
-        BillingRefusalCode: "subscription_not_found" | "account_not_found" | "already_subscribed" | "subscription_exists" | "suspended_by_operator" | "exempt" | "checkout_in_progress" | "no_customer" | "unknown_discount" | "promotion_code_not_found" | "checkout_not_found" | "intent_not_found" | "intent_not_payable" | "intent_expiring" | "intent_already_paid" | "intent_invalid" | "listing_unavailable" | "invalid_sponsorship_amount" | "invalid_return_url" | "sponsorship_not_found" | "sponsorship_not_recurring" | "sponsorship_canceled";
+        BillingRefusalCode: "subscription_not_found" | "account_not_found" | "already_subscribed" | "subscription_exists" | "suspended_by_operator" | "exempt" | "checkout_in_progress" | "no_customer" | "unknown_discount" | "promotion_code_not_found" | "checkout_not_found" | "intent_not_found" | "intent_not_payable" | "intent_expiring" | "intent_already_paid" | "intent_invalid" | "listing_unavailable" | "invalid_sponsorship_amount" | "invalid_return_url" | "sponsorship_not_found" | "sponsorship_not_recurring" | "sponsorship_canceled" | "not_subscribed" | "plan_change_blocked" | "already_on_plan" | "payment_declined";
         BillingRefusalError: {
             error: {
                 code: components["schemas"]["BillingRefusalCode"];
@@ -4138,6 +4455,14 @@ export interface components {
         BillingReturnUrlBody: {
             returnUrl: string;
         };
+        BillingScheduledPlanChange: {
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            interval: "month" | "year";
+            /** @enum {string} */
+            plan: "starter" | "pro";
+        } | null;
         BillingSponsorship: {
             amountCents: number;
             cancelAtPeriodEnd: boolean;

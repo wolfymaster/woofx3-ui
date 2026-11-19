@@ -2119,6 +2119,101 @@
         ],
         "type": "object"
       },
+      "BillingPlanChangeOutcome": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "applied",
+              "scheduled",
+              "kept"
+            ],
+            "type": "string"
+          },
+          "scheduled": {
+            "$ref": "#/components/schemas/BillingScheduledPlanChange"
+          }
+        },
+        "required": [
+          "kind",
+          "scheduled"
+        ],
+        "type": "object"
+      },
+      "BillingPlanChangePreview": {
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "dueNowCents": {
+            "type": "integer"
+          },
+          "effectiveAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "properties": {
+                "amountCents": {
+                  "type": "integer"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "amountCents"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next": {
+            "properties": {
+              "amountCents": {
+                "type": "integer"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "amountCents",
+              "at"
+            ],
+            "type": "object"
+          },
+          "timing": {
+            "enum": [
+              "now",
+              "period_end"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "timing",
+          "effectiveAt",
+          "currency",
+          "lines",
+          "dueNowCents",
+          "next"
+        ],
+        "type": "object"
+      },
+      "BillingPlanChangeState": {
+        "properties": {
+          "scheduled": {
+            "$ref": "#/components/schemas/BillingScheduledPlanChange"
+          }
+        },
+        "required": [
+          "scheduled"
+        ],
+        "type": "object"
+      },
       "BillingPlanPrice": {
         "properties": {
           "amountCents": {
@@ -2167,6 +2262,30 @@
         ],
         "type": "object"
       },
+      "BillingPlanTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "interval"
+        ],
+        "type": "object"
+      },
       "BillingRefusalCode": {
         "enum": [
           "subscription_not_found",
@@ -2190,7 +2309,11 @@
           "invalid_return_url",
           "sponsorship_not_found",
           "sponsorship_not_recurring",
-          "sponsorship_canceled"
+          "sponsorship_canceled",
+          "not_subscribed",
+          "plan_change_blocked",
+          "already_on_plan",
+          "payment_declined"
         ],
         "type": "string"
       },
@@ -2230,6 +2353,37 @@
           "returnUrl"
         ],
         "type": "object"
+      },
+      "BillingScheduledPlanChange": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "type": "string"
+          },
+          "plan": {
+            "enum": [
+              "starter",
+              "pro"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "interval",
+          "at"
+        ],
+        "type": [
+          "object",
+          "null"
+        ]
       },
       "BillingSponsorship": {
         "properties": {
@@ -5781,6 +5935,324 @@
           }
         ],
         "summary": "Open a checkout for a module purchase"
+      }
+    },
+    "/v1/billing/accounts/{id}/plan-change": {
+      "get": {
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPlanChangeState"
+                }
+              }
+            },
+            "description": "The booked move, if any"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The move to another plan booked for the period's end"
+      },
+      "post": {
+        "description": "A move up is charged now and takes effect at once; a move down is booked for the period's end. Asking for the plan the organization is on cancels a booked move. A card the provider refuses is `payment_declined` and changes nothing. The new plan reaches the organization's billing through the provider's subscription webhook.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingPlanTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPlanChangeOutcome"
+                }
+              }
+            },
+            "description": "What was done"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move the organization to another plan"
+      }
+    },
+    "/v1/billing/accounts/{id}/plan-change/preview": {
+      "post": {
+        "description": "Reads the charge from the provider and changes nothing. A move up is charged now: `lines` are the credit for the unused time and the charge for the rest of the period, and `dueNowCents` their total. A move down waits for the period's end and charges nothing now. Refused without a paid subscription in good standing.",
+        "parameters": [
+          {
+            "description": "The UI's id for the organization.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "The UI's id for the organization.",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingPlanTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPlanChangePreview"
+                }
+              }
+            },
+            "description": "The preview"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, or the key is bound to the other billing owner (error code forbidden_billing_owner)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingRefusalError"
+                }
+              }
+            },
+            "description": "Refused: what the request names does not exist"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingConflictError"
+                }
+              }
+            },
+            "description": "Refused or in conflict with the current state"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency refused the request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUnavailableError"
+                }
+              }
+            },
+            "description": "A dependency is unavailable; retry later"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "What moving to another plan would charge"
       }
     },
     "/v1/billing/accounts/{id}/portal-sessions": {

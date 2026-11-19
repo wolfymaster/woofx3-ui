@@ -169,7 +169,11 @@ describe("start", () => {
     });
     await as(t, viewerId).action(api.sponsorships.start, args);
     expect(seen[0]?.path).toBe(`/v1/billing/users/${viewerId}/sponsorship-checkouts`);
-    expect(seen[0]?.body).toEqual({ amountCents: 25_000, interval: "month", returnUrl: "https://app.test/account" });
+    expect(seen[0]?.body).toEqual({
+      amountCents: 25_000,
+      interval: "month",
+      returnUrl: "https://app.test/account/sponsorship",
+    });
     expect(seen[0]?.idempotencyKey).toMatch(new RegExp(`^sponsorship-checkout:${viewerId}:month:25000:\\d+$`));
     expect(seen[1]?.idempotencyKey).toBe(seen[0]?.idempotencyKey ?? "");
   });
@@ -237,7 +241,9 @@ describe("paymentMethodSession", () => {
     const { viewerId } = await seedUsers(t);
     answers["/payment-method-sessions"] = { status: 200, body: { url: "https://pay.example/pm" } };
     await as(t, viewerId).action(api.sponsorships.paymentMethodSession, { sponsorshipId: "sp1" });
-    expect(seen[0]?.body).toEqual({ returnUrl: "https://app.test/account?sponsorshipPaymentMethod=returned" });
+    expect(seen[0]?.body).toEqual({
+      returnUrl: "https://app.test/account/sponsorship?sponsorshipPaymentMethod=returned",
+    });
   });
 });
 

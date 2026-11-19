@@ -106,6 +106,39 @@ export const listForEngine = query({
   },
 });
 
+export interface OrganizationInvitation extends PendingInvitation {
+  engineName: string;
+}
+
+/** Every pending invitation to the organization's engines, for a role that manages its members; null otherwise. */
+export const listForOrganization = query({
+  args: { accountId: v.id("accounts"), now: v.number() },
+  handler: async (ctx, { accountId, now }): Promise<OrganizationInvitation[] | null> => {
+    const viewer = await viewerRoles(ctx, { org: accountId });
+    if (viewer === null || !can(viewer.roles, "manageMembers")) {
+      return null;
+    }
+    const showEmails = can(viewer.roles, "viewMemberEmails");
+    const instances = await ctx.db
+      .query("instances")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .collect();
+    const invitations: OrganizationInvitation[] = [];
+    for (const instance of instances) {
+      const rows = await ctx.db
+        .query("invitations")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instance._id).eq("status", "pending"))
+        .collect();
+      for (const row of rows) {
+        if (row.expiresAt > now) {
+          invitations.push({ ...toPendingInvitation(row, showEmails), engineName: instance.name });
+        }
+      }
+    }
+    return invitations;
+  },
+});
+
 /**
  * Who an invite link is for, so the accept page can say which Twitch account
  * to sign in with before anyone is signed in. Holding the token is what grants

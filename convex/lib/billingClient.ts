@@ -222,6 +222,24 @@ const ensureSchema: z.ZodType<Pick<Schemas["BillingSubscription"], "accountId" |
   accountId: z.string(),
   version: z.number(),
 });
+const planTargetShape = {
+  plan: specEnumSchema<BillingTier>("BillingPlanTarget", "plan"),
+  interval: specEnumSchema<BillingInterval>("BillingPlanTarget", "interval"),
+};
+const planChangePreviewWireSchema = z.object({
+  timing: z.enum(["now", "period_end"]),
+  effectiveAt: z.string(),
+  currency: z.string(),
+  lines: z.array(z.object({ description: z.string(), amountCents: z.number() })),
+  dueNowCents: z.number(),
+  next: z.object({ amountCents: z.number(), at: z.string() }),
+});
+const scheduledPlanChangeWireSchema = z.object({ ...planTargetShape, at: z.string() });
+const planChangeOutcomeWireSchema = z.object({
+  kind: z.enum(["applied", "scheduled", "kept"]),
+  scheduled: scheduledPlanChangeWireSchema.nullable(),
+});
+const planChangeStateWireSchema = z.object({ scheduled: scheduledPlanChangeWireSchema.nullable() });
 const ensureMissSchema: z.ZodType<Pick<Schemas["BillingEnsureMiss"], "attempts">> = z.object({
   attempts: z.number(),
 });
@@ -231,6 +249,25 @@ const checkoutViewSchema: z.ZodType<CheckoutView> = z.object({
   accountId: z.string(),
   state: checkoutStateSchema,
 });
+
+/** What moving to another plan would charge: `lines` and `dueNowCents` are what is taken now, nothing for a move down. */
+export interface PlanChangePreview {
+  timing: "now" | "period_end";
+  effectiveAt: number;
+  currency: string;
+  lines: Array<{ description: string; amountCents: number }>;
+  dueNowCents: number;
+  next: { amountCents: number; at: number };
+}
+
+/** A move to another plan that the plane will make at the end of the paid period. */
+export interface ScheduledPlanChange {
+  plan: BillingTier;
+  interval: BillingInterval;
+  at: number;
+}
+
+export type PlanChangeOutcome = { kind: "applied" | "kept" } | { kind: "scheduled"; change: ScheduledPlanChange };
 
 export interface CheckoutRequest {
   accountId: string;
@@ -273,6 +310,18 @@ export interface BillingClient {
   /** The plane returns the customer to its billing page; it also accepts a `returnPath`, which no page sends yet. */
   openPortal(accountId: string): Promise<BillingResult<{ url: string }>>;
   listInvoices(accountId: string): Promise<BillingResult<Invoice[]>>;
+  /** Reads what the move would charge; changes nothing. */
+  previewPlanChange(
+    accountId: string,
+    target: { plan: BillingTier; interval: BillingInterval }
+  ): Promise<BillingResult<PlanChangePreview>>;
+  /** Up is charged now, down is booked for the period's end, and the current plan cancels a booked move. */
+  changePlan(
+    accountId: string,
+    target: { plan: BillingTier; interval: BillingInterval }
+  ): Promise<BillingResult<PlanChangeOutcome>>;
+  /** The move booked for the period's end, or null. */
+  scheduledPlanChange(accountId: string): Promise<BillingResult<ScheduledPlanChange | null>>;
   /** `null` when no active code by that name exists. */
   lookupPromotionCode(code: string): Promise<BillingResult<AppliedDiscount | null>>;
   /** `accountId` is the org the caller acts for; another org's checkout answers `checkout_not_found`. */
@@ -513,6 +562,61 @@ export class HttpBillingClient implements BillingClient {
     return billingOk(
       result.value.invoices.map((invoice) => ({ ...invoice, periodStart: Date.parse(invoice.periodStart) }))
     );
+  }
+
+  async previewPlanChange(accountId: string, target: { plan: BillingTier; interval: BillingInterval }) {
+    const result = await this.send(
+      {
+        owner: "org",
+        method: "POST",
+        path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/plan-change/preview`,
+        body: target satisfies Schemas["BillingPlanTarget"],
+      },
+      planChangePreviewWireSchema
+    );
+    if (!result.ok) {
+      return result;
+    }
+    const { effectiveAt, next, ...rest } = result.value;
+    return billingOk({ ...rest, effectiveAt: Date.parse(effectiveAt), next: { ...next, at: Date.parse(next.at) } });
+  }
+
+  async changePlan(accountId: string, target: { plan: BillingTier; interval: BillingInterval }) {
+    const result = await this.send(
+      {
+        owner: "org",
+        method: "POST",
+        path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/plan-change`,
+        body: target satisfies Schemas["BillingPlanTarget"],
+      },
+      planChangeOutcomeWireSchema
+    );
+    if (!result.ok) {
+      return result;
+    }
+    const { kind, scheduled } = result.value;
+    if (kind === "scheduled" && scheduled !== null) {
+      return billingOk<PlanChangeOutcome>({ kind, change: { ...scheduled, at: Date.parse(scheduled.at) } });
+    }
+    if (kind === "scheduled") {
+      return billingErr<PlanChangeOutcome>(
+        "unexpected_response",
+        "The billing service booked a plan change without saying when."
+      );
+    }
+    return billingOk<PlanChangeOutcome>({ kind });
+  }
+
+  async scheduledPlanChange(accountId: string) {
+    const result = await this.send(
+      { owner: "org", method: "GET", path: `/v1/billing/accounts/${encodeURIComponent(accountId)}/plan-change` },
+      planChangeStateWireSchema
+    );
+    if (!result.ok) {
+      return result;
+    }
+    const { scheduled } = result.value;
+    return billingOk(scheduled === null ? null : { ...scheduled, at: Date.parse(scheduled.at) });
   }
 
   async lookupPromotionCode(code: string) {

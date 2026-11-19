@@ -1,23 +1,23 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { MyOrganization } from "@convex/organizations";
 import { useQuery } from "convex/react";
 import {
   Building2,
   Check,
   ChevronDown,
+  Heart,
+  LayoutDashboard,
   Loader2,
   Receipt,
   Server,
-  Settings,
   Sparkles,
+  User,
   UserCog,
-  Users,
   UsersRound,
 } from "lucide-react";
 import { useState } from "react";
 import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
-import { ADMIN_ITEMS, type NavItem, navItemsFor } from "@/components/layout/nav-config";
+import type { NavItem } from "@/components/layout/nav-config";
 import { SectionMenu } from "@/components/layout/section-menu";
 import { SectionSidebar } from "@/components/layout/section-sidebar";
 import { ThemeMenuSub } from "@/components/layout/theme-menu";
@@ -33,64 +33,103 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useInstance } from "@/hooks/use-instance";
-import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { BackToDashboard } from "./back-to-dashboard";
-import { OrganizationProvider, useOptionalOrganization, useOrganization } from "./organization-context";
+import {
+  OrganizationProvider,
+  PortalScopeProvider,
+  useOptionalOrganization,
+  useOptionalPortalScope,
+  usePortalScope,
+} from "./organization-context";
 import { organizationLabels } from "./organization-labels";
-import AdminPage, { AdminSectionPage, adminHref } from "./pages/admin";
+import EngineDetailPage from "./pages/engine-detail";
 import EnginesPage from "./pages/engines";
+import OverviewPage from "./pages/overview";
 import PaymentsPage from "./pages/payments";
-import PeoplePage from "./pages/people";
-import PlanPage from "./pages/plan";
+import PlansPage from "./pages/plans";
 import SettingsPage from "./pages/settings";
+import SponsorshipPage from "./pages/sponsorship";
 import TeamPage from "./pages/team";
 import TeamInvitePage, { TEAM_INVITE_PATH } from "./pages/team-invite";
-import { ACCOUNT_PORTAL_PATH, PORTAL_PAGES, type PortalPageId, portalPage, visiblePages } from "./portal-pages";
-import { START_TRIAL_PATH, startsTrial } from "./start-trial";
+import {
+  ACCOUNT_PORTAL_PATH,
+  ENGINES_PATH,
+  PORTAL_PAGES,
+  type PortalPage,
+  type PortalPageId,
+  portalPage,
+  visiblePages,
+} from "./portal-pages";
+import { PERSONAL_SCOPE, type PortalScope, resolveScope } from "./portal-scope";
+import { resumesOnboarding, START_TRIAL_PATH, startsTrial } from "./start-trial";
 
 const PAGES: Record<PortalPageId, () => React.ReactElement> = {
-  plan: PlanPage,
-  payments: PaymentsPage,
-  people: PeoplePage,
+  overview: OverviewPage,
   engines: EnginesPage,
+  sponsorship: SponsorshipPage,
+  payments: PaymentsPage,
   settings: SettingsPage,
   team: TeamPage,
-  admin: AdminPage,
+  plans: PlansPage,
 };
 
-/** The org the selected engine belongs to, else the one the caller owns, else the first. */
-function defaultOrganization(organizations: MyOrganization[], engineAccountId: Id<"accounts"> | undefined) {
-  return (
-    organizations.find((org) => org.accountId === engineAccountId) ??
-    organizations.find((org) => org.role === "owner") ??
-    organizations[0]
-  );
-}
-
-function OrganizationSwitcher() {
-  const { organization, organizations, select } = useOrganization();
+/** Top-left switch between the person's own account and each organization they belong to. */
+function ScopeSwitcher() {
+  const portal = useOptionalPortalScope();
+  const { user } = useConvexUser();
+  if (portal === null) {
+    return null;
+  }
+  const { scope, organizations, selectScope } = portal;
   const labels = organizationLabels(organizations);
   const labelOf = (org: MyOrganization) => labels.get(org.accountId) ?? org.name;
-  if (organizations.length < 2) {
-    return <span className="font-medium truncate">{organization.name}</span>;
+  const current =
+    scope.kind === "organization" ? organizations.find((org) => org.accountId === scope.accountId) : undefined;
+  const currentLabel = current === undefined ? "Personal" : labelOf(current);
+  const CurrentIcon = current === undefined ? User : Building2;
+  if (organizations.length === 0) {
+    return (
+      <span className="flex items-center gap-1.5 text-sm font-medium" data-testid="text-portal-scope">
+        <CurrentIcon className="h-4 w-4 text-muted-foreground" />
+        {currentLabel}
+      </span>
+    );
   }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1 font-medium" data-testid="button-switch-organization">
-          <span className="truncate">{labelOf(organization)}</span>
+        <Button variant="ghost" size="sm" className="gap-1.5 font-medium" data-testid="button-switch-scope">
+          <CurrentIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="truncate">{currentLabel}</span>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent align="start" className="w-60">
+        <DropdownMenuItem
+          onClick={() => selectScope(PERSONAL_SCOPE)}
+          className="flex items-center justify-between"
+          data-testid="item-scope-personal"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <User className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="truncate">{user?.name || "Personal"}</span>
+          </span>
+          {scope.kind === "personal" && <Check className="h-4 w-4 text-primary" />}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Organizations</DropdownMenuLabel>
         {organizations.map((org) => (
           <DropdownMenuItem
             key={org.accountId}
-            onClick={() => select(org.accountId)}
+            onClick={() => selectScope({ kind: "organization", accountId: org.accountId })}
             className="flex items-center justify-between"
+            data-testid={`item-scope-${org.accountId}`}
           >
-            <span className="truncate">{labelOf(org)}</span>
-            {org.accountId === organization.accountId && <Check className="h-4 w-4 text-primary" />}
+            <span className="flex items-center gap-2 min-w-0">
+              <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="truncate">{labelOf(org)}</span>
+            </span>
+            {current?.accountId === org.accountId && <Check className="h-4 w-4 text-primary" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -99,17 +138,16 @@ function OrganizationSwitcher() {
 }
 
 const PAGE_ICONS: Record<PortalPageId, NavItem["icon"]> = {
-  plan: Sparkles,
-  payments: Receipt,
-  people: Users,
+  overview: LayoutDashboard,
   engines: Server,
+  sponsorship: Heart,
+  payments: Receipt,
   settings: UserCog,
   team: UsersRound,
-  admin: Settings,
+  plans: Sparkles,
 };
 
 function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
-  const organization = useOptionalOrganization()?.organization ?? null;
   const { instance } = useInstance();
   const { user } = useConvexUser();
   const { signOut } = useAuthActions();
@@ -124,14 +162,8 @@ function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
     <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
       <SectionMenu title="Account" items={nav} location={location} />
       <span className="font-semibold tracking-tight">woofx3</span>
-      <div className="flex items-center gap-1 text-sm min-w-0 flex-1">
-        {organization === null ? null : (
-          <>
-            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground shrink-0">Organization:</span>
-            <OrganizationSwitcher />
-          </>
-        )}
+      <div className="flex items-center min-w-0 flex-1">
+        <ScopeSwitcher />
       </div>
       <BackToDashboard hasEngine={Boolean(instance)} />
       <DropdownMenu>
@@ -162,26 +194,23 @@ function PortalHeader({ nav, location }: { nav: NavItem[]; location: string }) {
   );
 }
 
-/** The dashboard's frame (header, section rail, scrolling content) with the portal's pages as the section. */
-function PortalLayout({ children }: { children: React.ReactNode }) {
-  const organization = useOptionalOrganization()?.organization ?? null;
-  const [location] = useLocation();
-  const { instance } = useInstance();
-  const isInstanceAdmin = useIsInstanceAdmin() ?? false;
-  const nav: NavItem[] = visiblePages(organization?.can ?? null, isInstanceAdmin).map((page) => ({
+function navItemOf(page: PortalPage): NavItem {
+  return {
     id: `account-${page.id}`,
     label: page.label,
     icon: PAGE_ICONS[page.id],
     href: page.path,
     exact: page.path === ACCOUNT_PORTAL_PATH,
-    children:
-      page.id === "admin"
-        ? navItemsFor(
-            ADMIN_ITEMS.map((item) => ({ ...item, href: adminHref(item.id) })),
-            instance?.hosting
-          )
-        : undefined,
-  }));
+    docked: page.docked,
+  };
+}
+
+/** The dashboard's frame (header, section rail, scrolling content) with the portal's pages as the section. */
+function PortalLayout({ children }: { children: React.ReactNode }) {
+  const organization = useOptionalOrganization()?.organization ?? null;
+  const { scope } = usePortalScope();
+  const [location] = useLocation();
+  const nav = visiblePages(scope.kind, organization?.can ?? null).map(navItemOf);
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
       <PortalHeader nav={nav} location={location} />
@@ -203,8 +232,9 @@ function PortalLayout({ children }: { children: React.ReactNode }) {
 /** A page the viewer's role can't see sends them to the index, which every signed-in user can see. */
 function PortalPageRoute({ id }: { id: PortalPageId }) {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const { scope } = usePortalScope();
   const page = portalPage(id);
-  if (!visiblePages(organization?.can ?? null, true).includes(page)) {
+  if (!visiblePages(scope.kind, organization?.can ?? null).includes(page)) {
     return <Redirect to={ACCOUNT_PORTAL_PATH} replace />;
   }
   const Page = PAGES[id];
@@ -220,7 +250,7 @@ export default function AccountPortal() {
   const organizations = useQuery(api.organizations.mine, {});
   const { instance } = useInstance();
   const search = useSearch();
-  const [selectedId, setSelectedId] = useState<Id<"accounts"> | null>(null);
+  const [picked, setPicked] = useState<PortalScope | null>(null);
 
   if (organizations === undefined) {
     return (
@@ -232,9 +262,12 @@ export default function AccountPortal() {
   if (startsTrial(search, organizations)) {
     return <Redirect to={START_TRIAL_PATH} replace />;
   }
+  if (resumesOnboarding(search, organizations)) {
+    return <Redirect to={`${START_TRIAL_PATH}?${new URLSearchParams(search)}`} replace />;
+  }
+  const scope = resolveScope(organizations, picked, instance?.accountId);
   const organization =
-    organizations.find((org) => org.accountId === selectedId) ??
-    defaultOrganization(organizations, instance?.accountId);
+    scope.kind === "organization" ? organizations.find((org) => org.accountId === scope.accountId) : undefined;
 
   const pages = (
     <PortalLayout>
@@ -245,17 +278,20 @@ export default function AccountPortal() {
           </Route>
         ))}
         <Route path={TEAM_INVITE_PATH} component={TeamInvitePage} />
-        <Route path={adminHref(":section")} component={AdminSectionPage} />
+        <Route path={`${ENGINES_PATH}/:instanceId`} component={EngineDetailPage} />
         <Route>
           <p className="text-muted-foreground">There&apos;s no such page in the account portal.</p>
         </Route>
       </Switch>
     </PortalLayout>
   );
-  if (organization === undefined) {
-    return pages;
-  }
   return (
-    <OrganizationProvider value={{ organization, organizations, select: setSelectedId }}>{pages}</OrganizationProvider>
+    <PortalScopeProvider value={{ scope, organizations, selectScope: setPicked }}>
+      {organization === undefined ? (
+        pages
+      ) : (
+        <OrganizationProvider value={{ organization, organizations }}>{pages}</OrganizationProvider>
+      )}
+    </PortalScopeProvider>
   );
 }

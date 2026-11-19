@@ -144,6 +144,8 @@ export default function Register() {
                   siteKey={SIGN_UP_SITE_KEY}
                   load={loadTurnstileScript}
                   onToken={setTurnstileToken}
+                  appearance="interaction-only"
+                  className="flex justify-center"
                 />
 
                 {error && (

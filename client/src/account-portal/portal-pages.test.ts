@@ -9,37 +9,38 @@ function can(role: OrgRole): OrgCapabilities {
 }
 
 // The "Who sees what" table: a page a role can't see isn't in its nav.
-const NAV: Array<[OrgRole, PortalPageId[]]> = [
-  ["owner", ["plan", "payments", "people", "engines", "settings", "team"]],
-  ["admin", ["plan", "payments", "people", "engines", "settings", "team"]],
-  ["member", ["plan", "payments", "engines", "settings", "team"]],
+const ORGANIZATION_NAV: Array<[OrgRole, PortalPageId[]]> = [
+  ["owner", ["overview", "engines", "payments", "team", "plans"]],
+  ["admin", ["overview", "engines", "team"]],
+  ["member", ["overview", "engines"]],
 ];
 
-describe("visiblePages", () => {
-  for (const [role, pages] of NAV) {
+describe("visiblePages in an organization's scope", () => {
+  for (const [role, pages] of ORGANIZATION_NAV) {
     test(`${role} sees ${pages.join(", ")}`, () => {
-      expect(visiblePages(can(role), false).map((page) => page.id)).toEqual(pages);
+      expect(visiblePages("organization", can(role)).map((page) => page.id)).toEqual(pages);
     });
   }
 });
 
-describe("visiblePages without an organization", () => {
-  test("shows the personal pages only", () => {
-    expect(visiblePages(null, false).map((page) => page.id)).toEqual(["plan", "payments", "settings", "team"]);
+describe("visiblePages in the personal scope", () => {
+  test("lists a person's own pages, with no team or payments", () => {
+    expect(visiblePages("personal", null).map((page) => page.id)).toEqual(["overview", "sponsorship", "settings"]);
   });
-});
 
-describe("visiblePages for an instance admin", () => {
-  test("adds Admin, with or without an organization", () => {
-    expect(visiblePages(null, true).map((page) => page.id)).toEqual(["plan", "payments", "settings", "team", "admin"]);
-    expect(visiblePages(can("member"), true).map((page) => page.id)).toContain("admin");
+  test("is the same for someone who owns an organization", () => {
+    expect(visiblePages("personal", can("owner")).map((page) => page.id)).toEqual([
+      "overview",
+      "sponsorship",
+      "settings",
+    ]);
   });
 });
 
 describe("portalPage", () => {
-  test("the Plan tab is the index, the rest are nested", () => {
+  test("the Overview tab is the index, the rest are nested", () => {
     expect(ACCOUNT_PORTAL_PATH).toBe("/account");
-    expect(portalPage("plan").path).toBe(ACCOUNT_PORTAL_PATH);
+    expect(portalPage("overview").path).toBe(ACCOUNT_PORTAL_PATH);
     expect(portalPage("payments").path).toBe(`${ACCOUNT_PORTAL_PATH}/payments`);
   });
 });
