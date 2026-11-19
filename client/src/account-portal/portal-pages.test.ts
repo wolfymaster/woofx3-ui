@@ -10,9 +10,9 @@ function can(role: OrgRole): OrgCapabilities {
 
 // The "Who sees what" table: a page a role can't see isn't in its nav.
 const ORGANIZATION_NAV: Array<[OrgRole, PortalPageId[]]> = [
-  ["owner", ["overview", "payments", "team", "general", "plans"]],
-  ["admin", ["overview", "team", "general"]],
-  ["member", ["overview", "general"]],
+  ["owner", ["overview", "engines", "payments", "team", "plans"]],
+  ["admin", ["overview", "engines", "team"]],
+  ["member", ["overview", "engines"]],
 ];
 
 describe("visiblePages in an organization's scope", () => {

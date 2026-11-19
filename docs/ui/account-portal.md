@@ -30,21 +30,24 @@ The portal belongs to the signed-in person. Every signed-in user on the web buil
 | Scope | Viewer | Tabs |
 |---|---|---|
 | Personal | Anyone signed in | Overview, Sponsorship, Your settings |
-| Organization | Owner | Overview, Payments, Team, Settings (General, Plans) |
-| Organization | Admin | Overview, Team, Settings (General) |
-| Organization | Member | Overview, Settings (General) |
+| Organization | Owner | Overview, Engines, Payments, Team, Upgrade |
+| Organization | Admin | Overview, Engines, Team |
+| Organization | Member | Overview, Engines |
+
+Upgrade (the Plans page) is docked at the foot of the nav, above the collapse control (`docked` on the nav item).
 
 The header's switcher (`portal-scope.ts`, `ScopeSwitcher`) chooses what the portal shows: **Personal**, which everyone has, or one of the viewer's organizations. Personal holds a person's own things: sponsorships (with their receipts), their settings, and the Overview that lists every engine they can open across their organizations. An organization's scope holds that organization's dashboard, payments, team and settings; sponsorship and personal settings are not offered there. A person with no organization sees Personal alone. The portal opens on the organization of the engine they were last in, else one they own, else the first, else Personal.
 
 | Tab | Path | What it shows |
 |---|---|---|
 | Overview, personal | `/account` | every engine the viewer can open, with "Launch dashboard", or a large call to action to create one |
-| Overview, organization | `/account` | a dashboard (`organization-dashboard.tsx`): the plan and where it stands, the next billing date (the trial's end while trialing), the engine and seat counts, a notice when billing needs attention, the engines (hosting, build state, an "Upgrade available" badge when a newer engine release is on offer, "Launch dashboard"; the owner renames and creates), and the last five invoices for the billing owner |
+| Overview, organization | `/account` | a dashboard (`organization-dashboard.tsx`): the plan and where it stands, the next billing date (the trial's end while trialing), the engine and seat counts, a notice when billing needs attention, the engines (hosting, build state, an "Upgrade available" badge when a newer engine release is on offer, "Launch dashboard", "Manage"; the owner creates), and the owner renames the organization from the page header, and the last five invoices for the billing owner |
+| Engines | `/account/engines` | every engine of the organization as a card (hosting, build state, release and an "Upgrade available" badge, "Launch dashboard", "Manage"); the owner creates more |
+| Engine | `/account/engines/:instanceId` | one engine's dashboard (`engine-detail.tsx`): health (`engine-health.ts`, plus a live connection check), release and whether an upgrade is on offer, the people who can open it with their role, its limits (storage, module storage, the organization's seats), installed modules and linked streaming accounts. The owner renames it here. An id outside the selected organization goes back to Engines |
 | Sponsorship | `/account/sponsorship` | the viewer's sponsorships and the receipts of what they paid |
 | Payments | `/account/payments` | (`manageBilling`) the organization's invoices |
 | Team | `/account/team` | (`manageMembers`) one list of the organization's people, each with the engines they can open and their role on each. A plain member's engines are added (`engineMembers.add`), changed (`setRole`) or taken away (`remove`) per engine; owners and admins have every engine. The organization role changes and a member is removed through `accountMembers`. "Invite to an engine" opens the invite form for the chosen engine, and the pending invitations of every engine (`invitations.listForOrganization`) can be revoked |
-| Settings, General | `/account/organization/general` | (`viewOrganization`) the organization's name; the owner renames it (`renameOrganization`) |
-| Settings, Plans | `/account/organization/plans` | (`manageBilling`) the plan the organization is on and every plan, the current one marked: choose a plan and check out; manage billing |
+| Upgrade | `/account/organization/plans` | (`manageBilling`) the plan the organization is on and every plan, the current one marked: choose a plan and check out; manage billing |
 
 An invitation names an engine. Accepting it makes the person a member of the organization with access to that engine only; they see no other engine until it is granted.
 

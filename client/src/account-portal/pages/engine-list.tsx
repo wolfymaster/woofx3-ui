@@ -1,18 +1,15 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MyOrganization, OrgEngine } from "@convex/organizations";
-import { useAction, useMutation } from "convex/react";
-import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useLogger } from "@/lib/logger-context";
 import { $currentInstanceId } from "@/lib/stores";
 import { NewEngineDialog } from "../new-engine-dialog";
 import { useOptionalOrganization, useOptionalPortalScope } from "../organization-context";
 import { organizationLabels } from "../organization-labels";
-import { RenameDialog } from "../rename-dialog";
+import { enginePath } from "../portal-pages";
+import { useEngineUpgrade } from "../use-engine-upgrade";
 
 const STATUS_LABELS: Record<NonNullable<OrgEngine["status"]>, string> = {
   requested: "Setting up",
@@ -36,26 +33,18 @@ function engineStatus(engine: OrgEngine): string {
   return engine.status === null ? "Not set up" : STATUS_LABELS[engine.status];
 }
 
-/** Whether a newer engine release than the one this hosted engine runs is on offer; asked once per engine. */
-function UpgradeBadge({ instanceId }: { instanceId: Id<"instances"> }) {
-  const upgradeInfo = useAction(api.provisioning.upgradeInfo);
-  const logger = useLogger();
-  const [available, setAvailable] = useState(false);
-  useEffect(() => {
-    let current = true;
-    upgradeInfo({ instanceId }).then(
-      (info) => {
-        if (current) {
-          setAvailable(info.available);
-        }
-      },
-      (error: unknown) => logger.warn("Could not check for an engine upgrade", { error, instanceId })
-    );
-    return () => {
-      current = false;
-    };
-  }, [upgradeInfo, instanceId, logger]);
-  return available ? <Badge data-testid={`badge-upgrade-${instanceId}`}>Upgrade available</Badge> : null;
+/** What release a hosted engine runs, and a badge when a newer one is on offer. */
+export function EngineVersion({ engine, enabled }: { engine: OrgEngine; enabled: boolean }) {
+  const info = useEngineUpgrade(
+    engine.instanceId,
+    enabled && engine.hosting === "managed" && engine.status === "registered"
+  );
+  return (
+    <>
+      {info?.current ? <span data-testid={`text-version-${engine.instanceId}`}>{info.current}</span> : null}
+      {info?.available ? <Badge data-testid={`badge-upgrade-${engine.instanceId}`}>Upgrade available</Badge> : null}
+    </>
+  );
 }
 
 /** The first thing a person without an engine sees: one big way to make one. */
@@ -100,7 +89,6 @@ interface EngineRow {
 export function EngineList() {
   const selection = useOptionalOrganization();
   const portal = useOptionalPortalScope();
-  const renameEngine = useMutation(api.instances.update);
   const [, navigate] = useLocation();
 
   const scoped = selection?.organization ?? null;
@@ -136,9 +124,7 @@ export function EngineList() {
               <CardDescription className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{engine.hosting === "managed" ? "Hosted" : "Self-hosted"}</Badge>
                 <span>{engineStatus(engine)}</span>
-                {scoped?.can.manageEngines && engine.hosting === "managed" && engine.status === "registered" ? (
-                  <UpgradeBadge instanceId={engine.instanceId} />
-                ) : null}
+                <EngineVersion engine={engine} enabled={scoped?.can.manageEngines === true} />
                 {scoped === null ? <span>· {labels.get(organization.accountId) ?? organization.name}</span> : null}
               </CardDescription>
             </CardHeader>
@@ -151,13 +137,10 @@ export function EngineList() {
                   Launch dashboard
                 </Button>
               ) : null}
-              {scoped?.can.renameEngine && engine.canOpen ? (
-                <RenameDialog
-                  title="Rename engine"
-                  current={engine.name}
-                  onRename={(name) => renameEngine({ instanceId: engine.instanceId, name })}
-                  testId={`button-rename-engine-${engine.instanceId}`}
-                />
+              {scoped !== null && engine.canOpen ? (
+                <Button asChild variant="outline" data-testid={`button-manage-${engine.instanceId}`}>
+                  <Link href={enginePath(engine.instanceId)}>Manage</Link>
+                </Button>
               ) : null}
             </CardContent>
           </Card>

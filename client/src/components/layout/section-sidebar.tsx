@@ -15,22 +15,27 @@ interface SectionSidebarProps {
 
 export function SectionSidebar({ title, items, location }: SectionSidebarProps) {
   const collapsed = useStore($sidebarShownCollapsed);
+  const listed = items.filter((item) => !item.docked);
+  const docked = items.filter((item) => item.docked);
 
   // A phone opens the section from the header's menu instead (SectionMenu), since a rail
   // beside the page leaves the content no room.
   return (
     <nav className={cn(SIDEBAR_RAIL, "hidden md:flex", collapsed && "w-14")} aria-label={`${title} navigation`}>
       <div className="flex-1 overflow-y-auto">
-        {!collapsed && !items.some((item) => item.group) && (
+        {!collapsed && !listed.some((item) => item.group) && (
           <div className="px-4 py-3 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             {title}
           </div>
         )}
 
-        <SectionNavList items={items} location={location} collapsed={collapsed} className={cn(collapsed && "pt-3")} />
+        <SectionNavList items={listed} location={location} collapsed={collapsed} className={cn(collapsed && "pt-3")} />
       </div>
 
       <div className="border-t border-border p-2">
+        {docked.length > 0 && (
+          <SectionNavList items={docked} location={location} collapsed={collapsed} className="p-0 pb-1" />
+        )}
         <button
           type="button"
           onClick={toggleSidebar}

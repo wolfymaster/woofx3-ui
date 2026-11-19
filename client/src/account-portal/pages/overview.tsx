@@ -1,8 +1,11 @@
+import { api } from "@convex/_generated/api";
+import { useMutation } from "convex/react";
 import { Redirect, useSearch } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import { parseCheckoutReturn } from "@/lib/checkout-return";
 import { useOptionalOrganization } from "../organization-context";
 import { PLANS_PATH } from "../portal-pages";
+import { RenameDialog } from "../rename-dialog";
 import { EngineList } from "./engine-list";
 import { OrganizationDashboard } from "./organization-dashboard";
 
@@ -12,6 +15,7 @@ import { OrganizationDashboard } from "./organization-dashboard";
  */
 export default function OverviewPage() {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const rename = useMutation(api.organizations.rename);
   const search = useSearch();
   if (organization?.can.manageBilling && parseCheckoutReturn(search).kind !== "none") {
     return <Redirect to={`${PLANS_PATH}?${search}`} replace />;
@@ -21,6 +25,16 @@ export default function OverviewPage() {
       <PageHeader
         title={organization?.name ?? "Overview"}
         description={organization === null ? "Every engine you can open." : "How this organization stands."}
+        actions={
+          organization?.can.renameOrganization ? (
+            <RenameDialog
+              title="Rename organization"
+              current={organization.name}
+              onRename={(name) => rename({ accountId: organization.accountId, name })}
+              testId="button-rename-organization"
+            />
+          ) : null
+        }
       />
       {organization === null ? <EngineList /> : <OrganizationDashboard organization={organization} />}
     </>

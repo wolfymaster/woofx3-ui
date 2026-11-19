@@ -5,7 +5,13 @@ export const ACCOUNT_PORTAL_PATH = "/account";
 
 export const PLANS_PATH = `${ACCOUNT_PORTAL_PATH}/organization/plans`;
 
-export type PortalPageId = "overview" | "sponsorship" | "payments" | "settings" | "team" | "general" | "plans";
+export const ENGINES_PATH = `${ACCOUNT_PORTAL_PATH}/engines`;
+
+export function enginePath(instanceId: string): string {
+  return `${ENGINES_PATH}/${instanceId}`;
+}
+
+export type PortalPageId = "overview" | "engines" | "sponsorship" | "payments" | "settings" | "team" | "plans";
 
 export interface PortalPage {
   id: PortalPageId;
@@ -15,8 +21,8 @@ export interface PortalPage {
   scopes: readonly PortalScope["kind"][];
   /** The org action a role needs to see the page; null means every signed-in user sees it. */
   visibleWith: keyof OrgCapabilities | null;
-  /** Pages of an organization's Settings sit under that entry in the nav. */
-  inOrganizationSettings?: boolean;
+  /** Sits at the foot of the nav, above the collapse control. */
+  docked?: boolean;
 }
 
 export const PORTAL_PAGES: readonly PortalPage[] = [
@@ -25,6 +31,13 @@ export const PORTAL_PAGES: readonly PortalPage[] = [
     label: "Overview",
     path: ACCOUNT_PORTAL_PATH,
     scopes: ["personal", "organization"],
+    visibleWith: null,
+  },
+  {
+    id: "engines",
+    label: "Engines",
+    path: ENGINES_PATH,
+    scopes: ["organization"],
     visibleWith: null,
   },
   {
@@ -56,20 +69,12 @@ export const PORTAL_PAGES: readonly PortalPage[] = [
     visibleWith: "manageMembers",
   },
   {
-    id: "general",
-    label: "General",
-    path: `${ACCOUNT_PORTAL_PATH}/organization/general`,
-    scopes: ["organization"],
-    visibleWith: "viewOrganization",
-    inOrganizationSettings: true,
-  },
-  {
     id: "plans",
-    label: "Plans",
+    label: "Upgrade",
     path: PLANS_PATH,
     scopes: ["organization"],
     visibleWith: "manageBilling",
-    inOrganizationSettings: true,
+    docked: true,
   },
 ];
 

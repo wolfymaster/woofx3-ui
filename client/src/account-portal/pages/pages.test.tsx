@@ -6,7 +6,7 @@ import { getFunctionName } from "convex/server";
 import { ConvexError } from "convex/values";
 import { createContext, type ReactNode, useContext } from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
-import { Router } from "wouter";
+import { Route, Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { MASKED_EMAIL } from "@/components/team/member-emails";
 import { appLogger } from "@/lib/app-logger";
@@ -77,6 +77,15 @@ mock.module("convex/react", () => ({
     if (name === "organizations:members") {
       return answers.members;
     }
+    if (name === "instances:get") {
+      return { lastEngineActivityAt: 1, url: "https://engine.example" };
+    }
+    if (name === "instances:getPlatformLinks" || name === "moduleRepository:list") {
+      return [];
+    }
+    if (name === "engineMembers:listForEngine") {
+      return { members: [], canManage: true, canManageOrganization: true };
+    }
     if (name === "invitations:listForOrganization") {
       return [];
     }
@@ -133,7 +142,8 @@ mock.module("@/hooks/use-minute-clock", () => ({ useMinuteClock: () => 0 }));
 
 const { default: TeamPage } = await import("./team");
 const { default: PaymentsPage } = await import("./payments");
-const { default: GeneralPage } = await import("./general");
+const { default: EngineDetailPage } = await import("./engine-detail");
+const { default: EnginesPage } = await import("./engines");
 const { default: OverviewPage } = await import("./overview");
 const { default: PlansPage } = await import("./plans");
 const { default: SponsorshipPage } = await import("./sponsorship");
@@ -199,10 +209,11 @@ async function render(
   role: "owner" | "admin" | null,
   page: ReactNode,
   answers: ConvexAnswers = { members: null, meId: "owner-user" },
-  personalScopeOf: "owner" | "admin" | null = null
+  personalScopeOf: "owner" | "admin" | null = null,
+  path = "/account"
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
-  const memory = memoryLocation({ path: "/account" });
+  const memory = memoryLocation({ path });
   await act(async () => {
     renderer = create(
       <Router hook={memory.hook} searchHook={useTestSearch}>
@@ -354,10 +365,76 @@ describe("Overview in the personal scope", () => {
   });
 });
 
-describe("Overview engines rename", () => {
-  test("only the owner sees the rename control", async () => {
-    expect(byTestId(await render("owner", <OverviewPage />), "button-rename-engine-instance-1").length).toBe(1);
-    expect(byTestId(await render("admin", <OverviewPage />), "button-rename-engine-instance-1").length).toBe(0);
+describe("Engines", () => {
+  test("every engine has a Manage button and no inline rename", async () => {
+    for (const role of ["owner", "admin"] as const) {
+      const renderer = await render(role, <EnginesPage />);
+      expect(byTestId(renderer, "button-manage-instance-1").length).toBe(1);
+      expect(byTestId(renderer, "button-rename-engine-instance-1").length).toBe(0);
+    }
+  });
+
+  test("the version and an available upgrade show on the engine's card", async () => {
+    actionAnswers["provisioning:upgradeInfo"] = {
+      available: true,
+      offered: "v2",
+      current: "v1",
+      releaseNotesUrl: null,
+    };
+    const renderer = await render("owner", <EnginesPage />);
+    await settle();
+    expect(text(renderer, "text-version-instance-1")).toEqual(["v1"]);
+    expect(byTestId(renderer, "badge-upgrade-instance-1").length).toBe(1);
+  });
+});
+
+describe("Engine dashboard", () => {
+  async function renderDetail(role: "owner" | "admin", id = "instance-1") {
+    actionAnswers["provisioning:upgradeInfo"] = {
+      available: true,
+      offered: "v2",
+      current: "v1",
+      releaseNotesUrl: null,
+    };
+    actionAnswers["resources:hostedStorageUsage"] = {
+      usedBytes: 1_000_000_000,
+      limitBytes: 5_000_000_000,
+      fileLimitBytes: null,
+    };
+    actionAnswers["moduleStorage:usage"] = { usedBytes: 1_000_000, limitBytes: 10_000_000, over: false };
+    const renderer = await render(
+      role,
+      <Route path="/account/engines/:instanceId">
+        <EngineDetailPage />
+      </Route>,
+      undefined,
+      null,
+      `/account/engines/${id}`
+    );
+    await settle();
+    return renderer;
+  }
+
+  test("shows health, version with the upgrade, limits, people, modules and integrations", async () => {
+    const renderer = await renderDetail("owner");
+    expect(text(renderer, "text-engine-health")).toEqual(["Healthy"]);
+    expect(byTestId(renderer, "badge-engine-upgrade").length).toBe(1);
+    expect(byTestId(renderer, "meter-storage").length).toBe(1);
+    expect(byTestId(renderer, "meter-module-storage").length).toBe(1);
+    expect(byTestId(renderer, "text-engine-seats").length).toBe(1);
+    for (const id of ["card-engine-people", "card-engine-modules", "card-engine-integrations"]) {
+      expect(byTestId(renderer, id).length).toBe(1);
+    }
+    expect(byTestId(renderer, "button-rename-engine-instance-1").length).toBe(1);
+  });
+
+  test("an admin cannot rename the engine", async () => {
+    expect(byTestId(await renderDetail("admin"), "button-rename-engine-instance-1").length).toBe(0);
+  });
+
+  test("an engine of another organization goes back to the list", async () => {
+    const renderer = await renderDetail("owner", "someone-elses");
+    expect(byTestId(renderer, "section-engine-dashboard").length).toBe(0);
   });
 });
 
@@ -431,9 +508,9 @@ describe("Overview and Sponsorship pages", () => {
     expect(page).not.toContain("/mo");
   });
 
-  test("only the owner has the rename control", async () => {
-    expect(byTestId(await render("owner", <GeneralPage />), "button-rename-organization").length).toBe(1);
-    expect(byTestId(await render("admin", <GeneralPage />), "button-rename-organization").length).toBe(0);
+  test("only the owner can rename the organization, from the Overview", async () => {
+    expect(byTestId(await render("owner", <OverviewPage />), "button-rename-organization").length).toBe(1);
+    expect(byTestId(await render("admin", <OverviewPage />), "button-rename-organization").length).toBe(0);
   });
 
   test.each([["admin" as const], [null]])("%p with no sponsorship sees the pitch alone", async (role) => {
