@@ -75,6 +75,9 @@ mock.module("convex/react", () => ({
     if (name === "organizations:members") {
       return answers.members;
     }
+    if (name === "instances:listForCurrentUser") {
+      return [];
+    }
     if (name === "users:getMe") {
       return { _id: answers.meId };
     }

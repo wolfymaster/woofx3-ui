@@ -56,8 +56,17 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-export default function Team({ basePath = "/team" }: { basePath?: string }) {
-  const { instance } = useInstance();
+interface TeamProps {
+  basePath?: string;
+  /** Shows this engine instead of the selected one; null when the caller knows there is none to show. */
+  engineId?: Id<"instances"> | null;
+  /** The engine app links to the account portal; inside the portal that link points at itself. */
+  showManageOrganization?: boolean;
+}
+
+export default function Team({ basePath = "/team", engineId, showManageOrganization = true }: TeamProps) {
+  const { instance: selected, instances } = useInstance();
+  const instance = engineId === undefined ? selected : (instances.find((item) => item._id === engineId) ?? null);
   const { user } = useConvexUser();
   const { visible: hostedWebApp } = useBillingUi();
   const meId = user && "_id" in user ? (user as { _id: Id<"users"> })._id : null;
@@ -104,7 +113,7 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
   }
 
   const manageOrganization =
-    hostedWebApp && teamData?.canManageOrganization ? (
+    showManageOrganization && hostedWebApp && teamData?.canManageOrganization ? (
       <Button variant="outline" asChild data-testid="link-manage-organization">
         <Link href={ACCOUNT_PORTAL_PATH}>
           Manage organization

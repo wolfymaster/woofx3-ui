@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useInstance } from "@/hooks/use-instance";
 import Team from "@/pages/team";
 import { useOptionalOrganization } from "../organization-context";
 import { ACCOUNT_PORTAL_PATH } from "../portal-pages";
@@ -18,9 +19,17 @@ const VIEW_LABELS: Record<TeamView, string> = { organization: "Organization", en
  */
 export default function TeamPage() {
   const organization = useOptionalOrganization()?.organization ?? null;
+  const { instance } = useInstance();
   const [view, setView] = useState<TeamView>("organization");
+  // The selected engine when it belongs to the chosen organization, else that organization's first one.
+  const engines = organization?.engines ?? [];
+  const engineId =
+    organization === null
+      ? undefined
+      : ((engines.find((e) => e.instanceId === instance?._id) ?? engines[0])?.instanceId ?? null);
+  const engineTeam = <Team basePath={TEAM_PATH} engineId={engineId} showManageOrganization={false} />;
   if (organization === null || !organization.can.manageMembers) {
-    return <Team basePath={TEAM_PATH} />;
+    return engineTeam;
   }
   return (
     <div className="space-y-6">
@@ -37,7 +46,7 @@ export default function TeamPage() {
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-      {view === "organization" ? <TeamMembers /> : <Team basePath={TEAM_PATH} />}
+      {view === "organization" ? <TeamMembers /> : engineTeam}
     </div>
   );
 }
