@@ -1,11 +1,11 @@
 import { Loader2, Plus } from "lucide-react";
 import { type ElementType, type ReactNode, useId, useMemo, useState } from "react";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { getDefaultConfigValues } from "@/lib/workflow-presets";

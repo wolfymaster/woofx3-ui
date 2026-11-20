@@ -4,6 +4,7 @@ import {
   type BehaviorDocument,
   bindInputs,
   type CompositionDocument,
+  compositionOfLegacyAlert,
   type InputField,
   inputReferences,
   isPlainObject,
@@ -14,7 +15,7 @@ import {
   stackOrder,
 } from "@woofx3/scene/model";
 import type { AlertComposition } from "@/engine/types";
-import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
+import { DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
 import { expressionCalls } from "@/lib/expression-text";
 import type { VariableOption } from "@/lib/workflow-variables";
 

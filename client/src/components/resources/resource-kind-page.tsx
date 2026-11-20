@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
 import { EmptyState } from "@/components/common/empty-state";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import { ListDetail } from "@/components/layout/list-detail";
 import { LIST_RAIL } from "@/components/layout/sidebar-rail";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
@@ -26,7 +27,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineScope } from "@/engine/context";
 import {
   useCreateResourceInstanceRequest,
