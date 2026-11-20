@@ -1,5 +1,3 @@
-import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
-import type { WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { ExternalLink } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +25,7 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { storedStepsGained, type TriggerPin, triggerFieldValues, withFieldConditions } from "@/lib/alert-triggers";
 import { type OptionLabels, sentenceParts, sentenceText } from "@/lib/condition-sentence";
 import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
+import { commitTrigger, type SavedTrigger } from "@/lib/trigger-commit";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import { incompleteConditionFields } from "@/lib/workflow-presets-json";
 import {
@@ -37,13 +36,6 @@ import {
   treeToDefinition,
   type WorkflowTree,
 } from "@/lib/workflow-tree";
-
-/** The workflow a saved trigger is, as the editor saves it back. */
-export interface SavedTrigger {
-  engineWorkflowId: string;
-  definition: WorkflowDefinition;
-  revision?: number;
-}
 
 interface TriggerEditorProps {
   triggerPreset: TriggerPreset;
@@ -161,66 +153,57 @@ export function TriggerEditor({
 
   const commit = useCallback(
     async (next: WorkflowTree): Promise<boolean | typeof FLOW_REPLACED> => {
-      const missing = incompleteConditionFields(
+      const outcome = await commitTrigger({
+        tree: next,
+        saved,
         conditionFields,
-        triggerFieldValues(next.trigger.conditions, conditionFields)
-      );
-      if (missing.length > 0) {
-        toast({
-          title: "The trigger isn't finished",
-          description: `Choose ${missing.map((field) => field.label.toLowerCase()).join(", ")}, or pick Any.`,
-          variant: "destructive",
-        });
-        return false;
-      }
-      if (countActionSteps(next.steps) === 0) {
-        // Nothing to run yet, so nothing the engine would keep: the trigger waits here for a step.
-        return true;
-      }
-      const definition = treeToDefinition(next);
-      try {
-        if (saved) {
-          definition.id = saved.definition.id;
-          definition.name = customNameRef.current ?? saved.definition.name;
-          const outcome = await updateFromDefinition(
-            saved.engineWorkflowId,
-            escapeDollarKeys(definition),
-            baseRevisionRef.current
-          );
-          if (outcome.conflict) {
-            const read = definitionToTree(unescapeDollarKeys(outcome.definition) as WorkflowDefinition);
-            if (read.editable) {
-              replaceTreeRef.current(read.tree, outcome.revision);
+        customName: customNameRef.current ?? undefined,
+        revision: baseRevisionRef.current,
+        fallbackName: sentenceText(parts) || triggerPreset.name,
+        deps: {
+          incompleteConditionFields,
+          treeToDefinition,
+          create: createFromDefinition,
+          update: updateFromDefinition,
+          setEnabled,
+        },
+      });
+      switch (outcome.kind) {
+        case "incomplete":
+          toast({
+            title: "The trigger isn't finished",
+            description: `Choose ${outcome.fields.join(", ")}, or pick Any.`,
+            variant: "destructive",
+          });
+          return false;
+        case "needs-step":
+          return true;
+        case "conflict":
+          if (outcome.tree !== null) {
+            replaceTreeRef.current(outcome.tree, outcome.revision);
+          }
+          toast(STEPS_CHANGED_TOAST);
+          return FLOW_REPLACED;
+        case "failed":
+          toast({ title: "Failed to save", description: outcome.error, variant: "destructive" });
+          return false;
+        case "saved": {
+          if (outcome.created) {
+            setCreated(outcome.created);
+            if (outcome.enableFailed) {
+              toast({
+                title: "Saved, but not switched on",
+                description: "Switch the trigger on from its card.",
+                variant: "destructive",
+              });
             }
-            toast(STEPS_CHANGED_TOAST);
-            return FLOW_REPLACED;
+            onCreated(outcome.created.engineWorkflowId);
+          } else {
+            baseRevisionRef.current = outcome.revision;
           }
-          baseRevisionRef.current = outcome.revision;
-        } else {
-          const { id: _unsaved, ...unsaved } = definition;
-          const name = customNameRef.current ?? (sentenceText(parts) || triggerPreset.name);
-          const { engineWorkflowId } = await createFromDefinition(escapeDollarKeys({ ...unsaved, name }));
-          setCreated({ engineWorkflowId, definition: { ...definition, id: engineWorkflowId, name } });
-          try {
-            await setEnabled(engineWorkflowId, true);
-          } catch {
-            toast({
-              title: "Saved, but not switched on",
-              description: "Switch the trigger on from its card.",
-              variant: "destructive",
-            });
-          }
-          onCreated(engineWorkflowId);
+          savedTriggerRef.current = JSON.stringify(next.trigger);
+          return true;
         }
-        savedTriggerRef.current = JSON.stringify(next.trigger);
-        return true;
-      } catch (err) {
-        toast({
-          title: "Failed to save",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "destructive",
-        });
-        return false;
       }
     },
     [

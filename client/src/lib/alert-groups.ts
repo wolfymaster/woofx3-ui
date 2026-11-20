@@ -1,3 +1,4 @@
+import { taxonomyLabel, triggerMenuAxis } from "@/lib/taxonomy";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
 /**
@@ -35,68 +36,16 @@ const PLATFORM_AXIS_PREFIX = "platform.";
 const ALERT_AXIS_PREFIX = "alert.";
 
 /**
- * Labels where humanising a segment gives the wrong words. Only the cases a reader
- * would notice; everything else title-cases correctly on its own, and an entry here
- * is a phrase the UI owns rather than one the module author does.
- */
-const LABEL_OVERRIDES: Record<string, string> = {
-  ai: "AI",
-  channelpoints: "Channel Points",
-  counter: "Counters",
-  lifx: "LIFX",
-  obs: "OBS",
-  queue: "Queues",
-  schedule: "Schedules",
-  subscription: "Subscriptions",
-  timer: "Timers",
-  watchstreak: "Watch Streak",
-  hypetrain: "Hype Train",
-};
-
-/**
- * The segments of a trigger's first axis with this prefix, or `undefined` when it has
- * none or the axis is malformed (`alert.`, `alert.a..b`).
- *
- * Only the first matching axis counts. Taxonomy is multi-valued to carry independent
- * axes (`platform.twitch` alongside `alert.follow`), not to put one trigger in two places.
- */
-function axisSegments(preset: Pick<TriggerPreset, "taxonomy">, prefix: string): string[] | undefined {
-  const axis = preset.taxonomy?.find((entry) => entry.startsWith(prefix));
-  if (!axis) {
-    return undefined;
-  }
-  const segments = axis
-    .slice(prefix.length)
-    .split(".")
-    .map((segment) => segment.trim());
-  return segments.every((segment) => segment.length > 0) ? segments : undefined;
-}
-
-/**
  * Where a trigger sits in the Alerts menu: its platform, then each `alert.*` segment.
  * `undefined` when the trigger declares no alert kind.
  */
 export function alertMenuPath(preset: Pick<TriggerPreset, "taxonomy">): string[] | undefined {
-  const alert = axisSegments(preset, ALERT_AXIS_PREFIX);
+  const alert = triggerMenuAxis(preset.taxonomy, ALERT_AXIS_PREFIX)?.segments;
   if (!alert) {
     return undefined;
   }
-  const platform = axisSegments(preset, PLATFORM_AXIS_PREFIX)?.[0] ?? OTHER_PLATFORM_KEY;
+  const platform = triggerMenuAxis(preset.taxonomy, PLATFORM_AXIS_PREFIX)?.segments[0] ?? OTHER_PLATFORM_KEY;
   return [platform, ...alert];
-}
-
-/** `subscriptionGift` → "Subscription Gift"; known segments get their real name. */
-export function taxonomyLabel(segment: string): string {
-  const override = LABEL_OVERRIDES[segment];
-  if (override) {
-    return override;
-  }
-  return segment
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
 }
 
 /** The id a node is addressed by in URLs and lookups. */

@@ -13,29 +13,25 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { FlowSaveBar, StepSaveFooter } from "@/components/flow/flow-save-status";
 import { ObjectActionPicker } from "@/components/flow/object-action-picker";
 import { StepInlineEditor } from "@/components/flow/step-inline-editor";
 import { TriggerConfigPanel } from "@/components/flow/trigger-config-panel";
 import { Button } from "@/components/ui/button";
 import { useResourceInstancesOfKind } from "@/engine/hooks/use-module-resources";
+import { useFlowInteraction } from "@/hooks/use-flow-interaction";
 import type { FlowSave } from "@/hooks/use-flow-save";
-import { useToast } from "@/hooks/use-toast";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { conditionSourcesFor, type EngineConditionSupport, NO_ENGINE_CONDITION_SUPPORT } from "@/lib/condition-builder";
 import type { SentencePart } from "@/lib/condition-sentence";
-import { type FlowSaveView, flowSaveView } from "@/lib/flow-save";
+import type { FlowSaveView } from "@/lib/flow-save";
 import {
   descendantIds,
   type FlowPick,
-  findStepPlace,
   type InsertPoint,
-  insertAtPoint,
   insertPointKey,
-  moveStepInTree,
   sameInsertPoint,
-  stepForPick,
   stepNumbers,
 } from "@/lib/flow-tree";
 import { FORM_SUBMITTED_EVENT, formAnswerVariables } from "@/lib/form-kind";
@@ -43,27 +39,18 @@ import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { SceneRow } from "@/lib/scene-field-options";
 import { type StepSummary, stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
-import { storedExpressionProblem } from "@/lib/variable-display";
 import { isDelayWait } from "@/lib/wait-config";
 import { resolveCatalogAction, resolveCatalogTrigger, triggerNodeLabel } from "@/lib/workflow-node-label";
 import { triggerNodeSummary } from "@/lib/workflow-node-summary";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import {
   type BranchPath,
-  findStepInTree,
   isEditableStep,
-  removeStepFromTree,
   type StepNode,
   updateStepInTree,
   type WorkflowTree,
 } from "@/lib/workflow-tree";
-import {
-  collectStepIds,
-  computeAvailableVariables,
-  isStepIdReferenced,
-  isValidStepId,
-  type VariableOption,
-} from "@/lib/workflow-variables";
+import { collectStepIds, computeAvailableVariables, type VariableOption } from "@/lib/workflow-variables";
 
 export interface FlowEditorProps {
   tree: WorkflowTree;
@@ -140,9 +127,6 @@ function useFlow(): FlowState {
   return flow;
 }
 
-/** Element to focus once the next render lands, since the control that had focus may have moved or gone. */
-type FocusTarget = { attribute: string; value: string } | null;
-
 /**
  * A workflow as a vertical flow: the "When" card, then numbered steps, each condition with
  * its Then and Otherwise branches indented below it. Adding, editing and removing all happen
@@ -164,218 +148,17 @@ export function FlowEditor({
   conditionSupport = NO_ENGINE_CONDITION_SUPPORT,
   save,
 }: FlowEditorProps) {
-  const { toast } = useToast();
-  /** The caller's save, refused while a step holds an expression that can't work. */
-  const commitChecked = useCallback(
-    async (next: WorkflowTree): Promise<boolean> => {
-      const problem = storedExpressionProblem(next.steps);
-      if (problem !== null) {
-        toast({ title: "Fix this expression to save", description: problem, variant: "destructive" });
-        return false;
-      }
-      return onCommit(next);
-    },
-    [onCommit, toast]
-  );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [openPoint, setOpenPoint] = useState<InsertPoint | null>(null);
-  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
-  const [focusTarget, setFocusTarget] = useState<FocusTarget>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const treeRef = useRef(tree);
-  treeRef.current = tree;
-  /**
-   * The tree as it was before the open step was opened or added, so closing it saves only when
-   * something changed and discarding it has something to go back to.
-   */
-  const baselineRef = useRef(tree);
-
-  useEffect(() => {
-    if (!focusTarget) {
-      return;
-    }
-    const selector = `[${focusTarget.attribute}="${CSS.escape(focusTarget.value)}"]`;
-    const element = rootRef.current?.querySelector<HTMLElement>(selector);
-    element?.focus();
-    setFocusTarget(null);
-  }, [focusTarget]);
+  const interaction = useFlowInteraction({
+    tree,
+    onChange,
+    onCommit,
+    save,
+    removeBlockedReason,
+    openChangedRequiresSavedChange: true,
+  });
 
   const numbers = useMemo(() => stepNumbers(tree.steps), [tree.steps]);
   const triggerId = tree.trigger.id;
-
-  const leaveExpanded = useCallback(async (): Promise<boolean> => {
-    if (expandedId === null) {
-      return true;
-    }
-    const current = treeRef.current;
-    if (JSON.stringify(current) === JSON.stringify(baselineRef.current)) {
-      setExpandedId(null);
-      return true;
-    }
-    const ok = await commitChecked(current);
-    if (ok) {
-      setExpandedId(null);
-    }
-    return ok;
-  }, [expandedId, commitChecked]);
-
-  const toggle = useCallback(
-    (id: string) => {
-      void (async () => {
-        if (expandedId === id) {
-          await leaveExpanded();
-          return;
-        }
-        if (await leaveExpanded()) {
-          baselineRef.current = treeRef.current;
-          setExpandedId(id);
-        }
-      })();
-    },
-    [expandedId, leaveExpanded]
-  );
-
-  const openPicker = useCallback(
-    (point: InsertPoint) => {
-      void (async () => {
-        if (await leaveExpanded()) {
-          setOpenPoint(point);
-        }
-      })();
-    },
-    [leaveExpanded]
-  );
-
-  const closePicker = useCallback(() => {
-    if (openPoint) {
-      setFocusTarget({ attribute: "data-insert-point", value: insertPointKey(openPoint) });
-    }
-    setOpenPoint(null);
-  }, [openPoint]);
-
-  const pick = useCallback(
-    (point: InsertPoint, choice: FlowPick) => {
-      let step: StepNode;
-      try {
-        step = stepForPick(choice, tree.steps);
-      } catch (err) {
-        toast({
-          title: "Can't add this action",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "destructive",
-        });
-        return;
-      }
-      baselineRef.current = tree;
-      onChange({ ...tree, steps: insertAtPoint(tree.steps, point, step) });
-      setOpenPoint(null);
-      setExpandedId(step.id);
-      setFocusTarget({ attribute: "data-step-toggle", value: step.id });
-    },
-    [tree, onChange, toast]
-  );
-
-  /** Saves a structural edit at once, keeping the open step open with its baseline moved to what was saved. */
-  const commitStructural = useCallback(
-    async (next: WorkflowTree, closesExpanded: boolean) => {
-      onChange(next);
-      const ok = await commitChecked(next);
-      if (closesExpanded) {
-        setExpandedId(null);
-      } else if (ok) {
-        baselineRef.current = next;
-      }
-    },
-    [onChange, commitChecked]
-  );
-
-  const move = useCallback(
-    (id: string, direction: -1 | 1) => {
-      const steps = moveStepInTree(tree.steps, id, direction);
-      if (steps === tree.steps) {
-        return;
-      }
-      const place = findStepPlace(steps, id);
-      const atEdge = place !== null && (direction === -1 ? place.index === 0 : place.index === place.count - 1);
-      const focusDirection = atEdge ? -direction : direction;
-      setFocusTarget({ attribute: "data-step-move", value: `${id}:${focusDirection}` });
-      void commitStructural({ ...tree, steps }, false);
-    },
-    [tree, commitStructural]
-  );
-
-  const remove = useCallback(
-    (id: string) => {
-      const step = findStepInTree(tree.steps, id);
-      if (!step) {
-        return;
-      }
-      const closesExpanded = expandedId === id || (expandedId !== null && descendantIds(step).includes(expandedId));
-      setConfirmingRemoveId(null);
-      void commitStructural({ ...tree, steps: removeStepFromTree(tree.steps, id) }, closesExpanded);
-    },
-    [tree, expandedId, commitStructural]
-  );
-
-  /**
-   * Renaming rewrites only the step's own id. Order and branches are rebuilt from the tree on
-   * save, so they follow; a `${oldId....}` written into another step's settings does not, and
-   * the toast says so.
-   */
-  const rename = useCallback(
-    (oldId: string, rawNewId: string) => {
-      const newId = rawNewId.trim();
-      if (newId === oldId) {
-        return;
-      }
-      if (!newId || !isValidStepId(newId)) {
-        toast({
-          title: "Invalid step ID",
-          description: "Use only letters, numbers, dots, underscores, and hyphens.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const existingIds = collectStepIds(tree.steps);
-      existingIds.delete(oldId);
-      if (existingIds.has(newId)) {
-        toast({
-          title: "Step ID already in use",
-          description: `"${newId}" is already used by another step in this workflow.`,
-          variant: "destructive",
-        });
-        return;
-      }
-      const referencedElsewhere = isStepIdReferenced(tree.steps, oldId);
-      onChange({ ...tree, steps: updateStepInTree(tree.steps, oldId, (step) => ({ ...step, id: newId })) });
-      setExpandedId(newId);
-      if (referencedElsewhere) {
-        toast({
-          title: "Step ID renamed",
-          description: `Other steps referencing \${${oldId}....} weren't updated — edit them to use \${${newId}....}.`,
-        });
-      }
-    },
-    [tree, onChange, toast]
-  );
-
-  const discardOpen = useCallback(() => {
-    onChange(baselineRef.current);
-    setExpandedId(null);
-  }, [onChange]);
-
-  const openChanged =
-    expandedId !== null &&
-    (save === undefined || save.changed) &&
-    JSON.stringify(tree) !== JSON.stringify(baselineRef.current);
-  const saveView = save
-    ? flowSaveView({
-        changed: save.changed,
-        phase: save.phase,
-        problem: save.problem,
-        notSavedYet: save.notSavedYet,
-      })
-    : null;
 
   const existingStepIds = useMemo(() => collectStepIds(tree.steps), [tree.steps]);
 
@@ -407,7 +190,7 @@ export function FlowEditor({
           availableVariables={availableVariables}
           conditionSources={conditionSourcesFor(availableVariables, triggerRow, conditionSupport)}
           onChange={(next) => onChange({ ...tree, steps: updateStepInTree(tree.steps, step.id, () => next) })}
-          onRename={rename}
+          onRename={interaction.rename}
         />
       );
     },
@@ -420,17 +203,15 @@ export function FlowEditor({
       triggerVariables,
       formAnswers,
       onChange,
-      rename,
+      interaction.rename,
       triggerRow,
       conditionSupport,
     ]
   );
 
   const state: FlowState = {
+    ...interaction,
     numbers,
-    expandedId,
-    openPoint,
-    confirmingRemoveId,
     actionPresets,
     summaryOf: (step) =>
       stepSummary(step, {
@@ -455,43 +236,25 @@ export function FlowEditor({
         scenes,
       }),
     iconOf: (step) => stepIcon(step, catalogActions),
-    placeOf: (id) => findStepPlace(tree.steps, id),
-    removeBlockedReason: (id) => removeBlockedReason?.(tree.steps, id) ?? null,
     renderEditor,
-    saveView,
-    openChanged,
-    discardOpen,
-    toggle,
-    openPicker,
-    closePicker,
-    pick,
-    move,
-    askRemove: setConfirmingRemoveId,
-    cancelRemove: () => {
-      if (confirmingRemoveId) {
-        setFocusTarget({ attribute: "data-step-remove", value: confirmingRemoveId });
-      }
-      setConfirmingRemoveId(null);
-    },
-    remove,
   };
 
   return (
     <FlowContext.Provider value={state}>
-      <div ref={rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
-        {save && saveView && (
+      <div ref={interaction.rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
+        {save && interaction.saveView && (
           <FlowSaveBar
-            view={saveView}
-            hidden={expandedId !== null && expandedId !== triggerId}
-            onRetry={() => void commitChecked(tree)}
+            view={interaction.saveView}
+            hidden={interaction.expandedId !== null && interaction.expandedId !== triggerId}
+            onRetry={interaction.retry}
           />
         )}
         {when ?? (
           <TriggerWhenCard
             tree={tree}
-            expanded={expandedId === triggerId}
-            changed={save !== undefined && openChanged}
-            onToggle={() => toggle(triggerId)}
+            expanded={interaction.expandedId === triggerId}
+            changed={save !== undefined && interaction.openChanged}
+            onToggle={() => interaction.toggle(triggerId)}
             catalogTriggers={catalogTriggers}
             catalogLoading={catalogLoading}
             resourceLabels={resourceLabels}

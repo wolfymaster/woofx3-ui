@@ -7,6 +7,7 @@ import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/p
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
 
+/** A capability row from the engine. */
 export type CatalogTriggerRow = {
   id: string;
   canonicalRef?: string;
@@ -57,7 +58,8 @@ export type CatalogActionRow = {
   moduleLabel?: string;
 };
 
-function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
+/** Normalise one catalog row into a preset. */
+export function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
   const fields = withFieldOptionsOwner(
     withModuleName(parseConfigFields(row.configFields), row.moduleName),
@@ -84,7 +86,8 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   };
 }
 
-function toActionPreset(row: CatalogActionRow): ActionPreset {
+/** The action half of the catalog adapter; see `toTriggerPreset`. */
+export function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
   const fields = withFieldOptionsOwner(
     withModuleName(parseConfigFields(row.configFields), row.moduleName),
@@ -112,6 +115,7 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
   };
 }
 
+/** Reads the catalog and memoises its normalisation. */
 export function useWorkflowCatalog() {
   const { instanceId, isInstanceLoading } = useEngineScope();
   const raw = useRawWorkflowCatalog();

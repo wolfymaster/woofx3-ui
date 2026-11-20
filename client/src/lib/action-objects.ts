@@ -1,8 +1,8 @@
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import { bareKind, parseKindRef, resourceKindMatches } from "@shared/resource-kinds";
 import { Braces, Clock, Hourglass, type LucideIcon, MessageSquare, Puzzle, Radio, Split } from "lucide-react";
-import { taxonomyLabel } from "@/lib/alert-groups";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
+import { actionPlacementEntry, taxonomyLabel } from "@/lib/taxonomy";
 import type { ActionPreset, ConfigField } from "@/lib/workflow-presets";
 
 type SourceTarget = { type: "source"; source: "scenes" | "alertWidgets" };
@@ -177,7 +177,8 @@ const ADVANCED_RANK = MODULE_RANK + 1;
  * lists it under its module; a built-in one is Advanced, the menu's Built-in.
  */
 function actionObjectPlacement(preset: Pick<ActionPreset, "source" | "taxonomy">): ObjectPlacement {
-  const entry = firstTaxonomyEntry(preset.taxonomy);
+  const segments = actionPlacementEntry(preset.taxonomy)?.segments;
+  const entry = segments ? segments.join(".") : undefined;
   if (!entry) {
     if (preset.source === BUILTIN_MODULE_LABEL) {
       return advancedPlacement();
@@ -638,14 +639,4 @@ function escapeRegExp(text: string): string {
 
 function advancedPlacement(): ObjectPlacement {
   return { key: ADVANCED_OBJECT_KEY, label: ADVANCED_LABEL, icon: Braces, rank: ADVANCED_RANK };
-}
-
-/** The first entry, or `undefined` when there is none or it is malformed (`platform.`, `a..b`), as the action menu reads it. */
-function firstTaxonomyEntry(taxonomy: readonly string[] | undefined): string | undefined {
-  const first = taxonomy?.find((entry) => entry.trim() !== "");
-  if (!first) {
-    return undefined;
-  }
-  const segments = first.split(".").map((segment) => segment.trim());
-  return segments.every((segment) => segment.length > 0) ? segments.join(".") : undefined;
 }
