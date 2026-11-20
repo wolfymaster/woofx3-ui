@@ -1,12 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { createCompositionEditor, LocalDocumentSource, textBoxHeight } from "@woofx3/scene/editor";
-import { type CompositionDocument, keyBetween, PROFILES, stackOrder } from "@woofx3/scene/model";
 import {
   alertCompositionOf,
-  alertLayoutChanged,
+  type CompositionDocument,
   compositionOfLegacyAlert,
-  DEFAULT_ALERT_CANVAS,
   isLegacyAlertLayout,
+  keyBetween,
+  PROFILES,
+  stackOrder,
+} from "@woofx3/scene/model";
+import {
+  alertLayoutChanged,
+  DEFAULT_ALERT_CANVAS,
   legacyAlertLayoutOf,
   readAlertComposition,
   storedAlertLayout,

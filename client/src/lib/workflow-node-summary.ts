@@ -1,7 +1,6 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { stackOrder } from "@woofx3/scene/model";
+import { alertCompositionOf, stackOrder } from "@woofx3/scene/model";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
-import { alertCompositionOf } from "@/lib/alert-layout";
 import { shortenExpressions } from "@/lib/expression-text";
 import { toMediaValue } from "@/lib/media-value";
 import { isCommandsSource, parseConfigFields } from "@/lib/parse-config-fields";
