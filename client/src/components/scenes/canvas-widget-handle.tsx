@@ -1,7 +1,7 @@
-import type { CommandResult, CompositionEditor, GestureKind, NodeView, Point } from "@woofx3/scene/editor";
+import type { NodeView } from "@woofx3/scene/editor";
 import { Lock } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { createFrameCoalescer } from "@/lib/frame-coalescer";
+import { memo, useState } from "react";
+import type { StageGestures } from "@/hooks/use-overlay-stage";
 import type { RemoteSelection } from "@/lib/scene-composition";
 import { cn } from "@/lib/utils";
 
@@ -15,23 +15,13 @@ const HANDLE_HIT = 24;
 
 interface CanvasWidgetHandleProps {
   node: NodeView;
-  editor: CompositionEditor;
+  gestures: StageGestures;
   /** The canvas's scale on screen. */
   zoom: number;
   /** The node's place in the stack, bottom first. */
   rank: number;
   /** Other editors that have this widget selected. */
   remote?: RemoteSelection[];
-  /** Where the canvas's top-left corner is on screen, read when a gesture starts. */
-  canvasOrigin: () => Point;
-  /** Told when a gesture's change was refused. */
-  onRefused: (result: CommandResult) => void;
-}
-
-interface PointerUpdate {
-  point: Point;
-  shift: boolean;
-  alt: boolean;
 }
 
 /**
@@ -45,56 +35,21 @@ interface PointerUpdate {
  * commits it as one change. The handle draws the node's box as the editor
  * reports it, mid-gesture included.
  *
- * A gesture captures the pointer on the element it started on, so moves and the
- * release reach this handle wherever the pointer goes, without window listeners.
- * Updates are coalesced to one per animation frame; the editor works from where
- * the gesture started, so a dropped intermediate point loses nothing.
+ * The gesture lifecycle (pointer capture, per-frame updates, the commit on release)
+ * is the stage's: see useOverlayStage.
  *
  * Memoized: a node keeps its identity in the editor's state while unchanged, so
  * dragging one widget re-renders only that widget's handle.
  */
 export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
   node,
-  editor,
+  gestures,
   zoom,
   rank,
   remote,
-  canvasOrigin,
-  onRefused,
 }: CanvasWidgetHandleProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const pointerId = useRef<number | null>(null);
-
-  // Made again with the editor: the scene editor replaces its editor when the document source
-  // changes (the cached scene, then the live session), and a handle mounted before that must
-  // send its moves to the editor its gesture began on.
-  const updates = useMemo(
-    () => createFrameCoalescer<PointerUpdate>(({ point, shift, alt }) => editor.gesture.update(point, { shift, alt })),
-    [editor]
-  );
-
-  useEffect(() => {
-    return () => updates.cancel();
-  }, [updates]);
-
   const isPrimaryPress = (e: React.PointerEvent) => e.isPrimary && e.button === 0;
-
-  const beginGesture = (e: React.PointerEvent<HTMLDivElement>, kind: GestureKind) => {
-    e.stopPropagation();
-    editor.viewport.setOrigin(canvasOrigin());
-    const began = editor.gesture.begin({
-      kind,
-      node: node.id,
-      handle: kind === "resize" ? "se" : undefined,
-      point: { x: e.clientX, y: e.clientY },
-      pointer: e.pointerType === "touch" || e.pointerType === "pen" ? e.pointerType : "mouse",
-    });
-    if (!began) {
-      return;
-    }
-    e.currentTarget.setPointerCapture(e.pointerId);
-    pointerId.current = e.pointerId;
-  };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isPrimaryPress(e)) {
@@ -102,55 +57,14 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
     }
     if (e.shiftKey) {
       e.stopPropagation();
-      editor.dispatch("selection.select", { id: node.id, additive: true });
+      gestures.select(node.id, true);
       return;
     }
-    if (!node.selected) {
-      editor.dispatch("selection.select", { id: node.id });
-    }
-    beginGesture(e, "move");
+    gestures.begin(e, node, "move");
   };
 
   const handleResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isPrimaryPress(e)) {
-      return;
-    }
-    beginGesture(e, "resize");
-  };
-
-  // Pointer events from the resize dot bubble here too, so one handler serves
-  // both gestures.
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (pointerId.current !== e.pointerId) {
-      return;
-    }
-    updates.push({ point: { x: e.clientX, y: e.clientY }, shift: e.shiftKey, alt: e.altKey });
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (pointerId.current !== e.pointerId) {
-      return;
-    }
-    pointerId.current = null;
-    // Commit the final position on release rather than a frame later.
-    updates.flush();
-    if (editor.getState().transient === null) {
-      // Escape cancelled the gesture before the release.
-      return;
-    }
-    const result = editor.gesture.end();
-    if (!result.ok) {
-      onRefused(result);
-    }
-  };
-
-  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (pointerId.current !== e.pointerId) {
-      return;
-    }
-    pointerId.current = null;
-    updates.cancel();
-    editor.gesture.cancel();
+    gestures.begin(e, node, "resize");
   };
 
   const { box, placement } = node;
@@ -181,9 +95,10 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
         boxShadow: remote?.[0] ? `0 0 0 2px ${remote[0].color}` : undefined,
       }}
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
+      // Pointer events from the resize dot bubble here too, so one handler serves both gestures.
+      onPointerMove={gestures.continue}
+      onPointerUp={gestures.end}
+      onPointerCancel={gestures.cancel}
       // The canvas deselects on mousedown, which the browser still fires after
       // pointerdown; a press on a widget must not reach it.
       onMouseDown={(e) => e.stopPropagation()}
