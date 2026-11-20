@@ -2,7 +2,7 @@ import { alertWidgetNamesOf, orphanedAlertTargets } from "@shared/alert-widgets"
 import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
-import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
+import { LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { ArrowLeft, ChevronDown, Link, MoreVertical, RefreshCw, Settings, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +35,7 @@ import {
 import type { InstanceId, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
+import { useRefusedToast } from "@/hooks/use-refused-toast";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { draftSaveStatus } from "@/lib/draft-save-status";
@@ -191,14 +192,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const getBrowserSourceUrl = useBrowserSourceUrlRequest();
   const rotateBrowserSourceUrl = useRotateBrowserSourceUrlRequest();
 
-  const reportRefused = useCallback(
-    (result: CommandResult) => {
-      if (!result.ok) {
-        toast({ title: "This change couldn't be made", description: result.detail, variant: "destructive" });
-      }
-    },
-    [toast]
-  );
+  const reportRefused = useRefusedToast();
 
   // The canvas's own settings are an editor change like any other: one
   // undo, and refused with the editor's reason (a size that is not a

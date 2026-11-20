@@ -1,5 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { type CanvasSize, type CommandResult, canvasSizeOf, type NodeView } from "@woofx3/scene/editor";
+import { type CanvasSize, canvasSizeOf, type NodeView } from "@woofx3/scene/editor";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { PreviewScrub, PreviewTransport } from "@/components/alert-editor/composition-preview-frame";
@@ -24,7 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AlertEditorHandle } from "@/hooks/use-alert-layout-editor";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
-import { useToast } from "@/hooks/use-toast";
+import { useRefusedToast } from "@/hooks/use-refused-toast";
 import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
 import {
   activityEditFor,
@@ -213,21 +213,13 @@ export function useAlertEditorView(
   /** A library alert's values for its own inputs, which the live preview binds. */
   previewInputs?: Record<string, unknown>
 ): AlertEditorView | null {
-  const { toast } = useToast();
   // Keyed by content: a caller may hand the same variables in a new array on every render, and new
   // names would reload the live preview.
   const variablesKey = JSON.stringify(availableVariables.map((variable) => variable.value));
   // biome-ignore lint/correctness/useExhaustiveDependencies: variablesKey stands for availableVariables' content
   const names = useMemo(() => variableNames(availableVariables), [variablesKey]);
   const displayText = useCallback((text: string) => toDisplayText(text, names), [names]);
-  const report = useCallback(
-    (result: CommandResult) => {
-      if (!result.ok) {
-        toast({ title: "This change couldn't be made", description: result.detail, variant: "destructive" });
-      }
-    },
-    [toast]
-  );
+  const report = useRefusedToast();
 
   const editor = session?.editor ?? null;
   const state = session?.state ?? null;
