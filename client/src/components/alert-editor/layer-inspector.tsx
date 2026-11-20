@@ -1,12 +1,12 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { NodeView } from "@woofx3/scene/editor";
 import { Minus, Plus } from "lucide-react";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import { WidgetSettingsForm } from "@/components/scenes/widget-settings-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { type LayerWindow, layerWindowLabel } from "@/lib/behavior-editor";
 import type { VariableOption } from "@/lib/workflow-variables";
 

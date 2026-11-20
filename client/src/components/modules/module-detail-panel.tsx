@@ -21,6 +21,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import { ListField } from "@/components/common/list-field";
 import { CreditsCard } from "@/components/marketplace/credits-card";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
@@ -40,7 +41,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineScope } from "@/engine/context";
 import { useModuleOAuthConnectRequest } from "@/engine/hooks/use-module-oauth";
 import {
