@@ -6,6 +6,7 @@ import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { ArrowLeft, ChevronDown, Link, MoreVertical, RefreshCw, Settings, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +20,6 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
 import { useBrowserSourceUrlRequest, useRotateBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import {

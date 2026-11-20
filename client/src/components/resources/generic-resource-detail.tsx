@@ -1,10 +1,10 @@
 import { Loader2, Play } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useResourceAction } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { type ResourceAction, resourceActions } from "@/lib/resource-actions";
