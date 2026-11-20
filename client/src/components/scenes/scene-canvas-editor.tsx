@@ -1,12 +1,11 @@
 import { alertWidgetNamesOf, orphanedAlertTargets } from "@shared/alert-widgets";
 import { ENGINE_CAPABILITIES } from "@woofx3/api";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
-import type { Version } from "@woofx3/api/scene-editor/document";
-import { LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { ArrowLeft, ChevronDown, Link, MoreVertical, RefreshCw, Settings, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,7 +19,6 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapability } from "@/engine/hooks/use-engine-capabilities";
 import { useBrowserSourceUrlRequest, useRotateBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import {
@@ -34,9 +32,8 @@ import {
 } from "@/engine/hooks/use-scenes";
 import type { InstanceId, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
-import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
+import { useOverlayEditorSession } from "@/hooks/use-overlay-editor-session";
 import { useRefusedToast } from "@/hooks/use-refused-toast";
-import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { draftSaveStatus } from "@/lib/draft-save-status";
 import {
@@ -48,7 +45,6 @@ import {
   storedSceneJson,
 } from "@/lib/scene-composition";
 import { endedUnreadable, repairResultToast } from "@/lib/scene-unread";
-import { useViewerName } from "@/lib/viewer-name";
 import type { Scene, Widget } from "@/types";
 import { type DraftCommand, DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -85,50 +81,38 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // published.
   const repairScene = useRepairSceneRequest();
 
-  // Live editing: this editor's changes go straight to what OBS shows, and
-  // are copied into the draft so a later publish cannot undo them. Each open
-  // editor chooses for itself, and every one starts on the draft.
-  const [live, setLive] = useState(false);
-  const uiVersion: Version = live ? "published" : "draft";
   const sceneId = fetchedScene?.id;
-
-  const myName = useViewerName();
-  const session = useSceneEditorSession({
+  const cacheDocument = useMemo(
+    () => (fetchedScene ? compositionOfStoredScene(sceneOf(fetchedScene)) : null),
+    [fetchedScene]
+  );
+  const {
+    session,
+    composition,
+    live,
+    setLive,
+    uiVersion,
+    syncState,
+    conn,
+    sessionEnded,
+    pendingCommand,
+    draftCommandsEnabled,
+    sessionLoaded,
+    runDraftCommand,
+  } = useOverlayEditorSession({
     instanceId,
     engineSceneId,
+    noun: "scene",
+    profile: PROFILES.scene,
+    catalog,
+    cacheDocument,
     sceneId,
-    editorName: myName,
     unsavedOutsideSession: isDirty,
   });
-  const client = session.client;
-  const syncState = session.state;
-  const sessionLoaded = syncState?.local != null;
-  const conn = syncState?.conn ?? null;
-  const sessionEnded = conn === "gone" || conn === "closed";
   // The canvas takes edits once the session has the scene, and not after it ended.
   const canvasReadOnly = !sessionLoaded || sessionEnded;
-  const pendingCommand = syncState?.pendingCommand ?? null;
-  // One Publish or Discard at a time.
-  const draftCommandsEnabled =
-    syncState !== null &&
-    sessionLoaded &&
-    !sessionEnded &&
-    pendingCommand === null &&
-    (syncState.hasDraft || syncState.pendingItems > 0);
-
-  // Where the canvas's document lives: the version being edited as the sync
-  // client holds it (every pending edit applied), once the client has loaded
-  // the scene. Until then, the cached scene, read-only.
-  const syncSource = useMemo(
-    () => (client !== null ? new SyncDocumentSource({ client, version: uiVersion }) : null),
-    [client, uiVersion]
-  );
-  const [cacheSource, setCacheSource] = useState<LocalDocumentSource | null>(null);
-  const source = syncSource !== null && sessionLoaded ? syncSource : cacheSource;
-  const composition = useCompositionEditor({ source, profile: PROFILES.scene, catalog });
   const editor = composition?.editor ?? null;
   const editorState = composition?.state ?? null;
-  useEditorKeys(editor);
 
   useEffect(() => {
     if (!fetchedScene) {
@@ -137,9 +121,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     // Only the starting name and description, and the canvas shown until the
     // session loads, come from the cache: its later pushes would undo typing.
     setScene((prev) => prev ?? sceneOf(fetchedScene));
-    setCacheSource(
-      (prev) => prev ?? new LocalDocumentSource(compositionOfStoredScene(sceneOf(fetchedScene)), { readOnly: true })
-    );
   }, [fetchedScene]);
 
   const shownDoc = editorState?.doc ?? null;
@@ -388,24 +369,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       });
     }
   }, [scene, shownDoc, createSceneAction, navigate, toast]);
-
-  const runDraftCommand = useCallback(
-    (command: DraftCommand) => {
-      const taken = client !== null && (command === "publish" ? client.publish() : client.discard());
-      if (taken) {
-        return;
-      }
-      toast({
-        title: `${COMMAND_NAME[command]} wasn't sent`,
-        description:
-          conn === "gone"
-            ? "This scene no longer exists on the scene manager."
-            : "The editor hasn't loaded the scene from the scene manager yet.",
-        variant: "destructive",
-      });
-    },
-    [client, conn, toast]
-  );
 
   if (isLoading) {
     return (
@@ -695,8 +658,6 @@ function sceneOf(fetchedScene: FetchedScene): Scene {
     updatedAt: new Date(fetchedScene.updatedAt).toISOString(),
   };
 }
-
-const COMMAND_NAME: Record<DraftCommand, string> = { publish: "Publish", discard: "Discard" };
 
 const SCENE_DRAFT_COPY: DraftLiveCopy = {
   draft: "Edits go to a draft that reaches OBS when you publish it",

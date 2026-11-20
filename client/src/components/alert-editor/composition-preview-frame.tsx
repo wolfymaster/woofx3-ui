@@ -1,4 +1,5 @@
 import { Pause, Play, RotateCcw } from "lucide-react";
+import { EngineFrame } from "@/components/common/engine-frame";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import type { CompositionPreviewController, PreviewFrameBinding } from "@/hooks/use-composition-preview";
@@ -28,28 +29,16 @@ export function CompositionPreviewFrame({
   visible: boolean;
 }) {
   return (
-    // allow-same-origin alongside allow-scripts: the page nests one frame per widget and
-    // reaches them through its own origin, which is the engine's, never this page's.
-    //
-    // pointer-events-none: the stage's layers above take every press; nothing in the
-    // page is interactive.
-    <iframe
-      ref={frame.ref}
+    <EngineFrame
+      frameRef={frame.ref}
       src={frame.src}
       onLoad={frame.onLoad}
       title="Alert preview"
-      sandbox="allow-scripts allow-same-origin"
-      // An engine hostname resolving to a LAN address is otherwise auto-denied by
-      // Chrome's Local Network Access check (see live-scene-preview.tsx).
-      allow="local-network-access autoplay"
-      scrolling="no"
-      className={cn(
-        "pointer-events-none absolute left-0 top-0 border-none bg-transparent",
-        visible ? "opacity-100" : "opacity-0"
-      )}
-      // The page declares no color-scheme; matching it keeps its transparent pixels transparent under a dark theme.
-      style={{ width, height, colorScheme: "light" }}
-      data-testid="alert-preview-frame"
+      allowFeatures="autoplay"
+      className={cn("absolute left-0 top-0", visible ? "opacity-100" : "opacity-0")}
+      width={width}
+      height={height}
+      testId="alert-preview-frame"
     />
   );
 }

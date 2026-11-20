@@ -1,21 +1,20 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import {
   alertWidgetName,
-  type CanvasSize,
   type CommandResult,
   type CompositionEditor,
   type EditorState,
-  type Guide,
   type NodeView,
-  type Point,
 } from "@woofx3/scene/editor";
-import { type ReactNode, useCallback, useMemo, useRef } from "react";
+import { type ReactNode, useCallback, useMemo } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
-import { CANVAS_STAGE_CLASS, type StageZoom } from "@/components/common/stage-area";
+import { CANVAS_STAGE_CLASS } from "@/components/common/stage-area";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
+import { SnapGuides } from "@/components/overlay-editor/snap-guides";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
 import type { SceneWidgetCatalogRow } from "@/engine/types";
+import { useOverlayStage } from "@/hooks/use-overlay-stage";
 import { canvasSettingsOf, catalogWidgetOf, type RemoteSelection } from "@/lib/scene-composition";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { CanvasSummary } from "./canvas-summary";
@@ -52,14 +51,6 @@ interface WidgetLayoutCanvasProps {
   onRefused: (result: CommandResult) => void;
 }
 
-/** A layer as the layers list shows it. */
-interface NodeLayer {
-  id: string;
-  visible: boolean;
-  locked: boolean;
-  node: NodeView;
-}
-
 /**
  * A canvas for placing widgets, drawn from a composition editor's state
  * (`@woofx3/scene/editor`): the widget palette, the scaled canvas with a
@@ -81,14 +72,12 @@ export function WidgetLayoutCanvas({
   readOnly = false,
   onRefused,
 }: WidgetLayoutCanvasProps) {
-  const canvasRef = useRef<HTMLDivElement>(null);
   const settings = useMemo(() => (state.doc === null ? null : canvasSettingsOf(state.doc)), [state.doc]);
   const width = settings?.width ?? 1920;
   const height = settings?.height ?? 1080;
   const background = settings?.backgroundColor ?? "transparent";
   const canvasSize = useMemo(() => ({ width, height }), [width, height]);
   const nodes = state.view.nodes;
-  const zoom = state.viewport.zoom;
 
   const rowFor = useCallback((widgetId: string) => catalog.find((row) => row.widgetId === widgetId), [catalog]);
   const labelOf = useCallback(
@@ -112,54 +101,9 @@ export function WidgetLayoutCanvas({
     [onRefused]
   );
 
-  const onMeasure = useCallback((size: CanvasSize) => editor.viewport.setStage(size), [editor]);
-  const zoomControl: StageZoom = useMemo(
-    () => ({
-      zoom,
-      fit: state.viewport.fit,
-      onMeasure,
-      zoomIn: () => editor.dispatch("view.zoomIn"),
-      zoomOut: () => editor.dispatch("view.zoomOut"),
-      zoomToFit: () => editor.dispatch("view.zoomFit"),
-    }),
-    [editor, zoom, state.viewport.fit, onMeasure]
-  );
+  const stage = useOverlayStage(editor, state, report);
+  const { canvasRef, gestures, layers, moveLayer } = stage;
 
-  const canvasOrigin = useCallback((): Point => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    return rect === undefined ? { x: 0, y: 0 } : { x: rect.left, y: rect.top };
-  }, []);
-
-  // Deselects on mousedown, not click, and only when the press landed directly on
-  // one of the canvas's own background layers.
-  //
-  // Click is the wrong event here: pressing a widget selects it on mousedown and
-  // starts a drag, and the drag moves the widget out from under the cursor — so
-  // mousedown and mouseup land on different elements and the browser dispatches
-  // the resulting click on their common ancestor, which IS one of these background
-  // layers. That made every press-and-twitch on a widget select it and immediately
-  // deselect it: the settings panel flashed open and shut. Mousedown carries no
-  // such ambiguity, and widget handles already stop it propagating.
-  const handleBackgroundMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) {
-        editor.dispatch("selection.clear");
-      }
-    },
-    [editor]
-  );
-
-  const layers = useMemo(
-    (): NodeLayer[] =>
-      [...nodes]
-        .reverse()
-        .map((node) => ({ id: node.id, visible: node.placement.visible, locked: node.placement.locked, node })),
-    [nodes]
-  );
-  const moveLayer = useCallback(
-    (id: string, toIndex: number) => report(editor.nodes.reorder(id, { index: nodes.length - 1 - toIndex })),
-    [editor, nodes.length, report]
-  );
   const toggleVisible = useCallback(
     (id: string) => {
       const placement = editor.getState().doc?.widgets[id];
@@ -189,9 +133,9 @@ export function WidgetLayoutCanvas({
       className={className}
       readOnly={readOnly}
       header={header}
-      zoomControl={zoomControl}
+      zoomControl={stage.zoomControl ?? undefined}
       stageToolbar={`${width} × ${height}`}
-      onDeselect={() => editor.dispatch("selection.clear")}
+      onDeselect={stage.deselect}
       palette={
         <WidgetPalette
           widgets={paletteRows}
@@ -219,14 +163,14 @@ export function WidgetLayoutCanvas({
         <div
           className={CANVAS_STAGE_CLASS}
           style={{ width: width * stageZoom, height: height * stageZoom, background }}
-          onMouseDown={handleBackgroundMouseDown}
+          onMouseDown={stage.deselectOnBackground}
           data-testid="scene-canvas"
         >
           {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
           <div
             ref={canvasRef}
             style={{ transform: `scale(${stageZoom})`, transformOrigin: "top left", width, height }}
-            onMouseDown={handleBackgroundMouseDown}
+            onMouseDown={stage.deselectOnBackground}
           >
             {nodes.map((node) => (
               <WidgetFallbackBackground
@@ -243,22 +187,13 @@ export function WidgetLayoutCanvas({
               <CanvasWidgetHandle
                 key={node.id}
                 node={node}
-                editor={editor}
+                gestures={gestures}
                 zoom={stageZoom}
                 rank={rank}
                 remote={remoteSelections?.[node.id]}
-                canvasOrigin={canvasOrigin}
-                onRefused={onRefused}
               />
             ))}
-            {state.guides.map((guide) => (
-              <SnapGuide
-                key={`${guide.axis}-${guide.position}-${guide.source}`}
-                guide={guide}
-                zoom={stageZoom}
-                above={nodes.length + 10}
-              />
-            ))}
+            <SnapGuides guides={stage.guides} zoom={stageZoom} zIndex={nodes.length + 10} />
           </div>
         </div>
       )}
@@ -310,13 +245,4 @@ export function WidgetLayoutCanvas({
       inspectorFallback={<CanvasSummary width={width} height={height} count={nodes.length} />}
     />
   );
-}
-
-/** A line a dragged widget snapped to, one screen pixel wide at any zoom. */
-function SnapGuide({ guide, zoom, above }: { guide: Guide; zoom: number; above: number }) {
-  const style =
-    guide.axis === "vertical"
-      ? { left: guide.position, top: 0, bottom: 0, width: 1 / zoom, zIndex: above }
-      : { top: guide.position, left: 0, right: 0, height: 1 / zoom, zIndex: above };
-  return <div className="pointer-events-none absolute bg-pink-400" style={style} data-testid="snap-guide" />;
 }

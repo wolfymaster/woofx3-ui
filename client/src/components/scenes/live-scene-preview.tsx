@@ -1,5 +1,6 @@
 import type { PreviewLayoutMessage } from "@woofx3/scene/editor";
 import { useCallback, useEffect, useRef } from "react";
+import { EngineFrame } from "@/components/common/engine-frame";
 import { useScenePreviewUrl } from "@/engine/hooks/use-overlays";
 import type { SceneId } from "@/engine/types";
 
@@ -97,36 +98,18 @@ export function LiveScenePreview({
   }
 
   return (
-    // allow-same-origin is required alongside allow-scripts: the overlay nests one
-    // iframe per widget and needs its own origin preserved to reach them. It grants
-    // no access to this page's origin — the engine is a different host.
-    //
-    // pointer-events-none is required: an iframe swallows pointer events once
-    // the cursor enters it, so a press on the canvas background or between
-    // handles would never reach the canvas. This is a preview surface only —
-    // nothing in it needs to be directly interactive.
-    <iframe
-      ref={frameRef}
+    <EngineFrame
+      frameRef={frameRef}
       // Fires again whenever the overlay reloads (a restarted engine, or a save
       // it could not apply in place); the reloaded page knows only the saved
       // scene, not the draft.
       onLoad={() => postLayout(messageRef.current)}
       src={followDraft || viewByMessage ? withDraftView(overlayUrl) : overlayUrl}
       title="Scene preview"
-      sandbox="allow-scripts allow-same-origin"
-      // Chrome gates a public page reaching a private address behind the Local
-      // Network Access permission, whose default allowlist is `self` — without this
-      // an engine hostname that resolves to a LAN address (split-horizon DNS in dev)
-      // is auto-denied with no prompt. Inert once the engine resolves publicly.
-      allow="local-network-access"
-      scrolling="no"
-      className="absolute inset-0 z-[1] border-none bg-transparent pointer-events-none"
-      // A browser paints an opaque backdrop (white) behind a frame whose document's
-      // color-scheme differs from the iframe element's. The overlay declares none, so
-      // it is light; under this app's dark theme the frame would otherwise hide the
-      // canvas. Matching it keeps the overlay's transparent pixels transparent.
-      style={{ width, height, colorScheme: "light" }}
-      data-testid="live-scene-preview"
+      className="absolute inset-0 z-[1]"
+      width={width}
+      height={height}
+      testId="live-scene-preview"
     />
   );
 }

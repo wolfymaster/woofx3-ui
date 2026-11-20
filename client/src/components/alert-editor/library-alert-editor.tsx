@@ -1,15 +1,8 @@
-import type { Version } from "@woofx3/api/scene-editor/document";
-import { LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { PROFILES } from "@woofx3/scene/model";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { AlertEditorFrame, useAlertEditorView } from "@/components/alert-editor/alert-layout-editor";
-import {
-  type DraftCommand,
-  DraftLiveControls,
-  type DraftLiveCopy,
-  type DraftLiveTestIds,
-} from "@/components/scenes/draft-live-controls";
+import { DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "@/components/scenes/draft-live-controls";
 import { sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
 import { UnreadSceneNotice } from "@/components/scenes/unread-scene-notice";
 import { Button } from "@/components/ui/button";
@@ -18,14 +11,12 @@ import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
 import { useRepairSceneRequest, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import type { InstanceId } from "@/engine/types";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
-import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
-import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
+import { useOverlayEditorSession } from "@/hooks/use-overlay-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert, inputVariableOptions, libraryPreviewInputs } from "@/lib/alert-library";
 import { draftSaveStatus } from "@/lib/draft-save-status";
 import { catalogOfRows } from "@/lib/scene-composition";
 import { repairResultToast } from "@/lib/scene-unread";
-import { useViewerName } from "@/lib/viewer-name";
 
 interface LibraryAlertEditorProps {
   instanceId: InstanceId;
@@ -48,51 +39,31 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   const catalogRows = useSceneWidgetCatalog();
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
-  const myName = useViewerName();
   const getEngineInfo = useEngineInfoRequest();
   const repairScene = useRepairSceneRequest();
   // An alert has no preview page to take sceneManager's origin from, so the socket is
   // opened at the engine's overlay URL, which is sceneManager's public URL.
-  const publicUrl = useCallback(async () => (await getEngineInfo())?.overlayPublicUrl ?? null, [getEngineInfo]);
-
-  // Each open editor chooses for itself whether it edits the published alert, and every one starts on the draft.
-  const [live, setLive] = useState(false);
-  const uiVersion: Version = live ? "published" : "draft";
-  const session = useSceneEditorSession({
+  const socketOrigin = useCallback(async () => (await getEngineInfo())?.overlayPublicUrl ?? null, [getEngineInfo]);
+  const cacheDocument = useMemo(() => (row ? compositionOfLibraryAlert(row) : null), [row]);
+  const {
+    session,
+    composition,
+    live,
+    setLive,
+    syncState,
+    conn,
+    pendingCommand,
+    draftCommandsEnabled,
+    runDraftCommand,
+  } = useOverlayEditorSession({
     instanceId,
     engineSceneId: compositionId,
-    sceneId: undefined,
-    publicUrl,
-    editorName: myName,
-    unsavedOutsideSession: false,
+    noun: "alert",
+    profile: PROFILES.alert,
+    catalog,
+    cacheDocument,
+    socketOrigin,
   });
-  const client = session.client;
-  const syncState = session.state;
-  const sessionLoaded = syncState?.local != null;
-  const conn = syncState?.conn ?? null;
-  const sessionEnded = conn === "gone" || conn === "closed";
-  const pendingCommand = syncState?.pendingCommand ?? null;
-  const draftCommandsEnabled =
-    syncState !== null &&
-    sessionLoaded &&
-    !sessionEnded &&
-    pendingCommand === null &&
-    (syncState.hasDraft || syncState.pendingItems > 0);
-
-  // The published alert from the cache is shown, read-only, until the session has the alert.
-  const [cacheSource, setCacheSource] = useState<LocalDocumentSource | null>(null);
-  useEffect(() => {
-    if (row && cacheSource === null) {
-      setCacheSource(new LocalDocumentSource(compositionOfLibraryAlert(row), { readOnly: true }));
-    }
-  }, [row, cacheSource]);
-  const syncSource = useMemo(
-    () => (client !== null ? new SyncDocumentSource({ client, version: uiVersion }) : null),
-    [client, uiVersion]
-  );
-  const source = syncSource !== null && sessionLoaded && !sessionEnded ? syncSource : cacheSource;
-  const composition = useCompositionEditor({ source, profile: PROFILES.alert, catalog });
-  useEditorKeys(composition?.editor ?? null);
   const handle = useMemo(
     () => (composition === null || catalogRows === undefined ? null : { ...composition, catalogRows }),
     [composition, catalogRows]
@@ -104,20 +75,6 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputKey stands for the declared inputs' content
   const previewInputs = useMemo(() => libraryPreviewInputs(declaredInputs ?? []), [inputKey]);
   const view = useAlertEditorView(handle, inputOptions, previewInputs);
-
-  const runDraftCommand = (command: DraftCommand) => {
-    const taken = client !== null && (command === "publish" ? client.publish() : client.discard());
-    if (!taken) {
-      toast({
-        title: `${command === "publish" ? "Publish" : "Discard"} wasn't sent`,
-        description:
-          conn === "gone"
-            ? "This alert is no longer in the library."
-            : "The editor hasn't loaded the alert from the scene manager yet.",
-        variant: "destructive",
-      });
-    }
-  };
 
   if (row === null) {
     return (

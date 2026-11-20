@@ -24,6 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AlertEditorHandle } from "@/hooks/use-alert-layout-editor";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
+import { useOverlayStage } from "@/hooks/use-overlay-stage";
 import { useRefusedToast } from "@/hooks/use-refused-toast";
 import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
 import {
@@ -196,13 +197,6 @@ export interface AlertEditorView {
   deselect: () => void;
 }
 
-/** A layer as the layers list shows it. */
-interface NodeLayer {
-  id: string;
-  visible: boolean;
-  node: NodeView;
-}
-
 /**
  * The alert editor's parts, drawn from the composition editor's state. Every change
  * goes to the editor, which refuses what it cannot do with a reason shown as a toast.
@@ -251,23 +245,8 @@ export function useAlertEditorView(
     },
   });
 
-  const zoom = state?.viewport.zoom ?? 1;
-  const fit = state?.viewport.fit ?? true;
-  const onMeasure = useCallback((size: CanvasSize) => editor?.viewport.setStage(size), [editor]);
-  const zoomControl: StageZoom | null = useMemo(
-    () =>
-      editor === null
-        ? null
-        : {
-            zoom,
-            fit,
-            onMeasure,
-            zoomIn: () => editor.dispatch("view.zoomIn"),
-            zoomOut: () => editor.dispatch("view.zoomOut"),
-            zoomToFit: () => editor.dispatch("view.zoomFit"),
-          },
-    [editor, zoom, fit, onMeasure]
-  );
+  const stage = useOverlayStage(editor, state, report);
+  const { zoomControl } = stage;
 
   if (session === null || state === null || state.doc === null || zoomControl === null) {
     return null;
@@ -288,9 +267,6 @@ export function useAlertEditorView(
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
   const placeable = new Set(state.palette.map((row) => row.widgetId));
   const paletteRows = catalogRows.filter((row) => placeable.has(row.widgetId));
-  const layers: NodeLayer[] = [...nodes]
-    .reverse()
-    .map((node) => ({ id: node.id, visible: node.placement.visible, node }));
 
   const selected = nodes.find((node) => node.id === state.selection.primary) ?? null;
   const changeWindow = (id: string, window: LayerWindow) => {
@@ -363,7 +339,7 @@ export function useAlertEditorView(
     ),
     layerList: (horizontal = false) => (
       <LayersList
-        layers={layers}
+        layers={stage.layers}
         selectedId={state.selection.primary}
         label={(layer) => labelOf(layer.node)}
         taxonomyOf={(layer) => rowFor(layer.node.placement.widget)?.taxonomy}
@@ -376,7 +352,7 @@ export function useAlertEditorView(
           return duration > 0 ? formatSeconds(duration) : "auto";
         }}
         onSelect={(id) => session.editor.dispatch("selection.select", { id })}
-        onMove={(id, toIndex) => report(session.editor.nodes.reorder(id, { index: nodes.length - 1 - toIndex }))}
+        onMove={stage.moveLayer}
         onDelete={(id) => report(session.editor.nodes.remove([id]))}
         horizontal={horizontal}
         emptyMessage="No layers yet. Add a widget to start."
@@ -388,11 +364,10 @@ export function useAlertEditorView(
         canvas={canvas}
         background={canvasBackgroundOf(doc.layout)}
         nodes={nodes}
-        guides={state.guides}
+        stage={stage}
         zoom={stageZoom}
         layerLabel={labelOf}
         displayText={displayText}
-        onRefused={report}
         preview={preview}
       />
     ),
@@ -408,7 +383,7 @@ export function useAlertEditorView(
         )
       : null,
     scrub: preview.live ? <PreviewScrub preview={preview} playheadMs={state.timeline.playheadMs} /> : null,
-    deselect: () => session.editor.dispatch("selection.clear"),
+    deselect: stage.deselect,
   };
 }
 

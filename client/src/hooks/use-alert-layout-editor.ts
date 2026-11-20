@@ -1,10 +1,10 @@
-import { LocalDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import type { SceneWidgetCatalogRow } from "@/engine/types";
 import { type CompositionEditorHandle, useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { alertLayoutChanged, readAlertComposition, storedAlertLayout } from "@/lib/alert-layout";
+import { localCopySource } from "@/lib/editor-document-source";
 import { catalogOfRows } from "@/lib/scene-composition";
 
 /** A composition editor over an alert, and the installed widgets it places. */
@@ -46,13 +46,14 @@ export function useAlertLayoutEditor(value: unknown): AlertLayoutSession | null 
     setSeed(readAlertComposition(value, nameOf));
   }, [seed, catalogRows, value]);
 
-  const source = useMemo(() => (seed === null ? null : new LocalDocumentSource(seed)), [seed]);
+  const copy = useMemo(() => (seed === null ? null : localCopySource(seed, alertLayoutChanged)), [seed]);
+  const source = copy?.source ?? null;
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
   const composition = useCompositionEditor({ source, profile: PROFILES.alert, catalog });
   useEditorKeys(composition?.editor ?? null);
 
   const doc = composition?.state.doc ?? null;
-  const isDirty = useMemo(() => seed !== null && doc !== null && alertLayoutChanged(seed, doc), [seed, doc]);
+  const isDirty = useMemo(() => copy !== null && doc !== null && copy.changed(doc), [copy, doc]);
   const changedLayout = useCallback(() => (isDirty && doc !== null ? storedAlertLayout(doc) : null), [isDirty, doc]);
 
   const replace = useCallback((next: CompositionDocument) => source?.replace(next), [source]);
