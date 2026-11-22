@@ -137,6 +137,7 @@ jobs:
             /api/package.json
             /connectors/package.json
             /db/package.json
+            /scripts/contracts/package.json
             /sceneManager/package.json
             /shared/common/typescript/package.json
             /shared/clients/typescript/*/package.json
