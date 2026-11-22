@@ -2,6 +2,7 @@ import { escapeDollarKeys } from "@shared/dollar-keys";
 import { Loader2, MessageSquare } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
+import { CommandScheduleCard } from "@/components/commands/command-schedule-card";
 import { CommandWhenCard } from "@/components/commands/command-when-card";
 import { EmptyState } from "@/components/common/empty-state";
 import { FlowEditor } from "@/components/flow/flow-editor";
@@ -27,6 +28,7 @@ import {
 } from "@/engine/hooks/use-chat-commands";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useOpenCommandDraft } from "@/hooks/use-command-draft";
+import { useCommandSchedule } from "@/hooks/use-command-schedule";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -38,6 +40,7 @@ import {
 } from "@/lib/command-drafts";
 import { COMMAND_LIST_PATH } from "@/lib/command-editor-route";
 import { splitCommandInput } from "@/lib/command-input";
+import { bareCommandWord, type ScheduleChoice, scheduleChoiceProblem } from "@/lib/command-schedule";
 import { commandSteps } from "@/lib/command-steps";
 import { commandActionVariables } from "@/lib/command-variables";
 import { storedExpressionProblem } from "@/lib/variable-display";
@@ -87,7 +90,16 @@ export default function CommandEditor() {
   const [saving, setSaving] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
 
-  const isDirty = isCommandDraftDirty(draft);
+  const schedule = useCommandSchedule(existing?.command);
+  // Undefined until the streamer changes it, so the card shows what is stored as it loads.
+  const [scheduleEdit, setScheduleEdit] = useState<ScheduleChoice | undefined>(undefined);
+  const scheduleChoice = scheduleEdit ?? schedule.stored;
+  const scheduleChanged =
+    scheduleEdit !== undefined && JSON.stringify(scheduleEdit) !== JSON.stringify(schedule.stored);
+  const scheduleProblem = scheduleChoiceProblem(scheduleChoice);
+  const [scheduleProblemShown, setScheduleProblemShown] = useState(false);
+
+  const isDirty = isCommandDraftDirty(draft) || scheduleChanged;
 
   // Follows the argument pattern as it is typed, so a `{songTitle}` just added to the
   // command name is offerable in the steps below without saving first.
@@ -124,6 +136,24 @@ export default function CommandEditor() {
     discardAndLeave();
   };
 
+  // The command is already saved by now, so a schedule that fails is reported without keeping
+  // the editor open: saving again would try to create the command a second time.
+  async function saveSchedule(word: string, previousWord: string | undefined) {
+    const renamed = previousWord !== undefined && bareCommandWord(previousWord) !== bareCommandWord(word);
+    if (!schedule.ready || (!scheduleChanged && !renamed)) {
+      return;
+    }
+    try {
+      await schedule.apply(previousWord, word, scheduleChoice);
+    } catch (err: unknown) {
+      toast({
+        title: "The command saved, but its schedule didn't",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  }
+
   async function handleSave() {
     if (!form || !instanceId) {
       return;
@@ -133,6 +163,12 @@ export default function CommandEditor() {
     const { command, argumentPattern } = splitCommandInput(form.command);
     if (!command) {
       setFormError("Command name is required.");
+      return;
+    }
+
+    if (scheduleChanged && scheduleProblem !== null) {
+      setScheduleProblemShown(true);
+      setFormError(scheduleProblem);
       return;
     }
 
@@ -171,6 +207,7 @@ export default function CommandEditor() {
         await createCommand(fields);
         toast({ title: "Command created" });
       }
+      await saveSchedule(command, existing?.command);
       discardAndLeave();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "An error occurred");
@@ -275,6 +312,13 @@ export default function CommandEditor() {
             Steps run in order each time someone uses the command. Type {"{"} in a text field to use what the command
             captured, like the chatter's name or an argument, or what an earlier step handed back.
           </p>
+          <CommandScheduleCard
+            schedules={schedule.schedules}
+            choice={scheduleChoice}
+            onChange={setScheduleEdit}
+            unavailable={schedule.unavailable}
+            problem={scheduleProblemShown ? scheduleProblem : null}
+          />
         </div>
       </div>
 
