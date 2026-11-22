@@ -46,8 +46,8 @@ export function useFireTestEvent() {
     if (!instanceId) {
       toast({
         variant: "destructive",
-        title: "No engine selected",
-        description: "Pick an engine with Switch engine in your profile menu before firing test events.",
+        title: "No woofx3 selected",
+        description: "Pick a woofx3 from your profile menu before sending a test event.",
       });
       return null;
     }
@@ -56,7 +56,7 @@ export function useFireTestEvent() {
       toast({
         variant: "destructive",
         title: "Nothing to fire",
-        description: `${preset.name} does not declare an event.`,
+        description: `${preset.name} can't be tested here.`,
       });
       return null;
     }
@@ -66,10 +66,10 @@ export function useFireTestEvent() {
       const published = await withinTimeout(
         fire({ eventType, eventData, triggerId, triggeredBy: origin }),
         TEST_EVENT_PUBLISH_TIMEOUT_MS,
-        "The engine didn't answer. Check that it is running, then try again."
+        "woofx3 didn't answer. Make sure it's running, then try again."
       );
       if (!published.success) {
-        toast({ variant: "destructive", title: "The engine didn't publish the event", description: published.message });
+        toast({ variant: "destructive", title: "Couldn't send the test event", description: "Try again." });
         return null;
       }
       return triggerId;

@@ -180,7 +180,7 @@ function engineProblem(state: StreamRecapEngineState): EngineProblem | null {
       };
     case "rejected":
       return {
-        message: "Lost the connection to your stream tools. Reconnect under Admin > Engine.",
+        message: "Lost the connection to your stream tools. Reconnect in Admin settings.",
         retryable: false,
       };
     case "unreachable":

@@ -194,7 +194,7 @@ export const HELP_ITEMS: NavItem[] = [
 ];
 
 export const ADMIN_ITEMS: NavItem[] = [
-  { id: "engine", label: "Engine", icon: Server, href: "/admin/engine" },
+  { id: "engine", label: "woofx3", icon: Server, href: "/admin/engine" },
   { id: "integrations", label: "Integrations", icon: Key, href: "/admin/integrations" },
   { id: "storage", label: "Storage", icon: HardDrive, href: "/admin/storage", selfHostedOnly: true },
   { id: "backup", label: "Backup", icon: ArchiveRestore, href: "/admin/backup" },

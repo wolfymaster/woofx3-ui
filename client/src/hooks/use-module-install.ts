@@ -41,7 +41,7 @@ const INSTALL_TIMEOUT_MS = 60_000;
 /** How long the success state is held before the UI moves on. */
 const SUCCESS_LINGER_MS = 1500;
 
-const INSTALL_TIMEOUT_MESSAGE = "Installation timed out. The engine did not respond within 60 seconds.";
+const INSTALL_TIMEOUT_MESSAGE = "That's taking too long. Check your connection and try again.";
 
 /** What the shown and the latest version of a module ask for. */
 export interface ModulePermissionSets {

@@ -608,9 +608,8 @@ function ImportCard({ canImport }: { canImport: boolean }) {
                   ? `${plan.summary.create} items will be created and ${plan.summary.update} of yours replaced. `
                   : ""}
                 {grants.length > 0 ? "People listed in the file will be given access. " : ""}
-                This cannot be undone from here, so export a backup first if you might want to go back. The engine
-                checks everything again as it applies, so the outcome can differ from the preview if something changed
-                meanwhile.
+                This cannot be undone from here, so export a backup first if you might want to go back. Everything is
+                checked again as it applies, so the result can differ from the preview.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
