@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
 import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
+import { configFieldRenderers } from "@/components/common/field-renderers";
 import { functionAvailability, VariableAwareInput } from "@/components/common/variable-aware-input";
 import { ModuleAssetFieldRenderer, withAssetModule } from "@/components/flow/module-asset-field";
 import { StepIdField } from "@/components/flow/step-id-field";
@@ -11,7 +12,6 @@ import { AlertLayoutDialogBody } from "@/components/scenes/alert-layout-field";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
 import {
   appendToken,

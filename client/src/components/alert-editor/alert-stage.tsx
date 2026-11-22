@@ -1,19 +1,12 @@
-import type {
-  CanvasSize,
-  CommandResult,
-  CompositionEditor,
-  GestureKind,
-  Guide,
-  NodeView,
-  WidgetKind,
-} from "@woofx3/scene/editor";
+import type { CanvasSize, CompositionEditor, NodeView, WidgetKind } from "@woofx3/scene/editor";
 import { Film, Sparkles, Square, Volume2 } from "lucide-react";
-import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef } from "react";
+import type { KeyboardEvent } from "react";
 import { CompositionPreviewFrame } from "@/components/alert-editor/composition-preview-frame";
 import { CANVAS_STAGE_CLASS } from "@/components/common/stage-area";
+import { SnapGuides } from "@/components/overlay-editor/snap-guides";
 import { alertWidgetPreview, TextWidgetPreview } from "@/components/scenes/alert-widget-previews";
 import type { CompositionPreviewController } from "@/hooks/use-composition-preview";
-import { createFrameCoalescer } from "@/lib/frame-coalescer";
+import type { OverlayStageView } from "@/hooks/use-overlay-stage";
 import { cn } from "@/lib/utils";
 
 interface AlertStageProps {
@@ -23,15 +16,13 @@ interface AlertStageProps {
   background: string;
   /** The editor's nodes, bottom of the stack first. */
   nodes: readonly NodeView[];
-  /** The lines a gesture snapped to. */
-  guides: readonly Guide[];
+  /** The stage glue shared with the scene canvas: gestures, snap guides, deselect. */
+  stage: OverlayStageView;
   zoom: number;
   /** The label a layer goes by, shared with the layers list. */
   layerLabel: (node: NodeView) => string;
   /** A Text layer's text as the page shows it, with variable references shortened. */
   displayText: (text: string) => string;
-  /** Told when the editor refused a gesture's change, with its reason. */
-  onRefused: (result: CommandResult) => void;
   /**
    * The engine's live preview, framed behind the layers. While it plays the
    * alert, layers draw only their outlines and handles over it, except those
@@ -43,13 +34,6 @@ interface AlertStageProps {
 /** On-screen size of the selected layer's corner handle, and of the press area around it. */
 const HANDLE_DOT = 12;
 const HANDLE_HIT = 32;
-
-interface PointerUpdate {
-  x: number;
-  y: number;
-  shift: boolean;
-  alt: boolean;
-}
 
 /**
  * The alert's canvas at `zoom`, drawn from the composition editor's state:
@@ -77,82 +61,13 @@ export function AlertStage({
   canvas,
   background,
   nodes,
-  guides,
+  stage,
   zoom,
   layerLabel,
   displayText,
-  onRefused,
   preview = null,
 }: AlertStageProps) {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const pointerId = useRef<number | null>(null);
-  // Made again with the editor, which is replaced when its document source changes: moves go
-  // to the editor the gesture began on.
-  const updates = useMemo(
-    () =>
-      createFrameCoalescer<PointerUpdate>(({ x, y, shift, alt }) => editor.gesture.update({ x, y }, { shift, alt })),
-    [editor]
-  );
-  useEffect(() => () => updates.cancel(), [updates]);
-
   const layers = nodes.filter((node) => node.placement.visible);
-
-  const beginGesture = (node: NodeView, kind: GestureKind) => (event: PointerEvent<HTMLElement>) => {
-    if (!event.isPrimary || event.button !== 0 || !canvasRef.current) {
-      return;
-    }
-    event.stopPropagation();
-    if (!node.selected) {
-      editor.dispatch("selection.select", { id: node.id });
-    }
-    const rect = canvasRef.current.getBoundingClientRect();
-    editor.viewport.setOrigin({ x: rect.left, y: rect.top });
-    const began = editor.gesture.begin({
-      kind,
-      node: node.id,
-      handle: kind === "resize" ? "se" : undefined,
-      point: { x: event.clientX, y: event.clientY },
-      pointer: event.pointerType === "touch" || event.pointerType === "pen" ? event.pointerType : "mouse",
-    });
-    if (!began) {
-      return;
-    }
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointerId.current = event.pointerId;
-  };
-
-  // Pointer events from the corner handle bubble to its layer, so one handler serves both gestures.
-  const continueGesture = (event: PointerEvent<HTMLElement>) => {
-    if (pointerId.current !== event.pointerId) {
-      return;
-    }
-    updates.push({ x: event.clientX, y: event.clientY, shift: event.shiftKey, alt: event.altKey });
-  };
-
-  const endGesture = (event: PointerEvent<HTMLElement>) => {
-    if (pointerId.current !== event.pointerId) {
-      return;
-    }
-    pointerId.current = null;
-    updates.flush();
-    if (editor.getState().transient === null) {
-      // Escape cancelled the gesture before the release.
-      return;
-    }
-    const result = editor.gesture.end();
-    if (!result.ok) {
-      onRefused(result);
-    }
-  };
-
-  const cancelGesture = (event: PointerEvent<HTMLElement>) => {
-    if (pointerId.current !== event.pointerId) {
-      return;
-    }
-    pointerId.current = null;
-    updates.cancel();
-    editor.gesture.cancel();
-  };
 
   const sendKey = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing) {
@@ -163,20 +78,12 @@ export function AlertStage({
     }
   };
 
-  // Deselect only when the press lands on the canvas itself: a press on a layer stops
-  // propagation, and a click event would arrive on a common ancestor after a drag.
-  const deselectOnBackground = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      editor.dispatch("selection.clear");
-    }
-  };
-
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the canvas background deselects, and its focused layers send keys to the editor
     <div
       className={CANVAS_STAGE_CLASS}
       style={{ width: canvas.width * zoom, height: canvas.height * zoom, background }}
-      onPointerDown={deselectOnBackground}
+      onPointerDown={stage.deselectOnBackground}
       onKeyDown={sendKey}
     >
       {preview?.frame && (
@@ -188,10 +95,10 @@ export function AlertStage({
         />
       )}
       <div
-        ref={canvasRef}
+        ref={stage.canvasRef}
         className="absolute left-0 top-0 origin-top-left"
         style={{ width: canvas.width, height: canvas.height, transform: `scale(${zoom})` }}
-        onPointerDown={deselectOnBackground}
+        onPointerDown={stage.deselectOnBackground}
       >
         {layers.map((node) => {
           const { box } = node;
@@ -209,10 +116,11 @@ export function AlertStage({
                 height: box.height,
                 transform: box.rotation === 0 ? undefined : `rotate(${box.rotation}deg)`,
               }}
-              onPointerDown={beginGesture(node, "move")}
-              onPointerMove={continueGesture}
-              onPointerUp={endGesture}
-              onPointerCancel={cancelGesture}
+              onPointerDown={(event) => stage.gestures.begin(event, node, "move")}
+              // Pointer events from the corner handle bubble to its layer, so one handler serves both gestures.
+              onPointerMove={stage.gestures.continue}
+              onPointerUp={stage.gestures.end}
+              onPointerCancel={stage.gestures.cancel}
               onFocus={() => {
                 if (!node.selected) {
                   editor.dispatch("selection.select", { id: node.id });
@@ -241,7 +149,7 @@ export function AlertStage({
                     width: HANDLE_HIT / zoom,
                     height: HANDLE_HIT / zoom,
                   }}
-                  onPointerDown={beginGesture(node, "resize")}
+                  onPointerDown={(event) => stage.gestures.begin(event, node, "resize")}
                   data-testid={`stage-layer-${node.id}-resize`}
                 >
                   <span
@@ -253,18 +161,7 @@ export function AlertStage({
             </button>
           );
         })}
-        {guides.map((guide) => (
-          <div
-            key={`${guide.axis}-${guide.position}-${guide.source}`}
-            className="pointer-events-none absolute bg-pink-400"
-            style={
-              guide.axis === "vertical"
-                ? { left: guide.position, top: 0, bottom: 0, width: 1 / zoom }
-                : { top: guide.position, left: 0, right: 0, height: 1 / zoom }
-            }
-            data-testid="snap-guide"
-          />
-        ))}
+        <SnapGuides guides={stage.guides} zoom={zoom} />
       </div>
     </div>
   );

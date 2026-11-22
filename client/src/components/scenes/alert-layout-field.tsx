@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { useAlertLibrary } from "@/engine/hooks/use-alert-library";
 import { useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
+import { useDiscardGuard } from "@/hooks/use-discard-guard";
 import { useToast } from "@/hooks/use-toast";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
 import { readAlertComposition } from "@/lib/alert-layout";
@@ -103,19 +104,11 @@ export function AlertLayoutDialogBody({
   const libraryAlerts = useAlertLibrary();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  // Where to go once the edits are confirmed discarded: back to the step, or to a library alert.
-  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
   const [addingFromLibrary, setAddingFromLibrary] = useState<LibraryAlert | null>(null);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const isDirty = session?.isDirty === true;
-
-  const leaveTo = (go: () => void) => {
-    if (isDirty) {
-      setPendingLeave(() => go);
-      return;
-    }
-    go();
-  };
+  // A departure waits for confirmation to discard the edits: back to the step, or to a library alert.
+  const { leaveTo, isAsking, discard, keepEditing } = useDiscardGuard(isDirty);
   const leave = () => leaveTo(onCancel);
   const addFromLibrary = (alert: LibraryAlert) => {
     setAddingFromLibrary(null);
@@ -195,9 +188,9 @@ export function AlertLayoutDialogBody({
         </div>
       )}
       <DiscardAlertChangesDialog
-        open={pendingLeave !== null}
-        onOpenChange={(open) => (open ? undefined : setPendingLeave(null))}
-        onDiscard={() => pendingLeave?.()}
+        open={isAsking}
+        onOpenChange={(open) => (open ? undefined : keepEditing())}
+        onDiscard={discard}
       />
       {library && (
         <>
