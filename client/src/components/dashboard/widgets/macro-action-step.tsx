@@ -179,8 +179,7 @@ export function MacroActionStepEditor({
         />
       ) : (
         <p className="text-xs text-muted-foreground">
-          This action isn't in the catalog. Its settings are kept as they are. Reinstall the module that provides it, or
-          choose another action.
+          This action isn't available any more. Reinstall its module or pick another action.
         </p>
       )}
     </div>

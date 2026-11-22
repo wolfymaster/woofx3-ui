@@ -1,5 +1,6 @@
 import { Loader2, Megaphone, Radio, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
@@ -111,7 +112,7 @@ export function ShoutoutWidget() {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4 text-center">
         <Radio className="h-8 w-8 text-muted-foreground/50 mb-3" />
-        <p className="text-sm text-muted-foreground">Connect Twitch in Settings to send shoutouts</p>
+        <TwitchConnectNotice to="send shoutouts" />
       </div>
     );
   }

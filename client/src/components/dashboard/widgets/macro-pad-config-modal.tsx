@@ -1,5 +1,6 @@
 import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
 import { isInsideActionPicker } from "@/components/flow/object-action-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,7 @@ import {
   macroButtonLabel,
   typedMacroLabel,
 } from "@/lib/macro-pad";
+import { cn } from "@/lib/utils";
 import { MacroActionStepEditor, useMacroActionSentence } from "./macro-action-step";
 import { MacroColorPicker } from "./macro-color-picker";
 import { MacroIconPicker } from "./macro-icon-picker";
@@ -239,7 +241,7 @@ export function MacroConfigModal({
       >
         <DialogHeader>
           <DialogTitle>{macro ? "Edit Macro" : "Add Macro"}</DialogTitle>
-          <DialogDescription>Configure a macro button that can execute actions when pressed.</DialogDescription>
+          <DialogDescription>Set up what this button does.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -276,19 +278,24 @@ export function MacroConfigModal({
 
           {behaviorLocked && (
             <p className="text-xs text-muted-foreground" data-testid="macro-behavior-locked">
-              This macro has a remote trigger URL, so only an owner or admin can change what it does. You can still
-              change its label, icon and color.
+              Only an owner or admin can change what this button does, because it can be pressed from another device.
+              You can still change its name, icon and color.
             </p>
           )}
 
           <fieldset disabled={behaviorLocked} className="min-w-0">
             <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
-              <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-5">
+              <TabsList
+                className={cn(
+                  "grid h-auto w-full grid-cols-2",
+                  type === "http-request" ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                )}
+              >
                 <TabsTrigger value="send-message">Send Message</TabsTrigger>
                 <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
                 <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
                 <TabsTrigger value="run-action">Action</TabsTrigger>
-                <TabsTrigger value="http-request">HTTP Request</TabsTrigger>
+                {type === "http-request" && <TabsTrigger value="http-request">HTTP Request</TabsTrigger>}
               </TabsList>
 
               <TabsContent value="send-message" className="space-y-4 mt-4">
@@ -296,14 +303,14 @@ export function MacroConfigModal({
                   <Label htmlFor="chat-message">Message</Label>
                   <Textarea
                     id="chat-message"
-                    placeholder="e.g., Welcome in, {{name}}!"
+                    placeholder="e.g., Welcome in!"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     rows={3}
                     maxLength={500}
                     data-testid="input-macro-message"
                   />
-                  <p className="text-xs text-muted-foreground">Posted to chat as the broadcaster.</p>
+                  <p className="text-xs text-muted-foreground">Sent to chat from your account.</p>
                 </div>
               </TabsContent>
 
@@ -323,14 +330,14 @@ export function MacroConfigModal({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Runs the command as the broadcaster.</p>
+                  <p className="text-xs text-muted-foreground">Runs the command as if you typed it.</p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="chat-command-text">Arguments</Label>
                   <Input
                     id="chat-command-text"
-                    placeholder={selectedCommand?.argumentPattern || "e.g., {{channel}}"}
+                    placeholder={selectedCommand?.argumentPattern || "e.g., a username"}
                     value={commandText}
                     onChange={(e) => setCommandText(e.target.value)}
                     data-testid="input-macro-command-text"
@@ -363,7 +370,6 @@ export function MacroConfigModal({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">The workflow to trigger when this macro is executed.</p>
                 </div>
               </TabsContent>
 
@@ -376,9 +382,6 @@ export function MacroConfigModal({
                   catalogLoading={catalogLoading}
                   sentence={actionSentence.sentence}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Runs this one action on the engine, the same way a workflow step would.
-                </p>
               </TabsContent>
 
               <TabsContent value="http-request" className="space-y-4 mt-4">
@@ -386,7 +389,7 @@ export function MacroConfigModal({
                   <Label htmlFor="http-url">URL</Label>
                   <Input
                     id="http-url"
-                    placeholder="https://api.example.com/{{target}}"
+                    placeholder="https://example.com"
                     value={httpUrl}
                     onChange={(e) => setHttpUrl(e.target.value)}
                   />
@@ -432,9 +435,8 @@ export function MacroConfigModal({
             </Tabs>
           </fieldset>
 
-          <div className="rounded-md border border-border p-3 space-y-1.5" data-testid="macro-variables-hint">
-            <p className="text-xs font-medium">Variables</p>
-            {variables.length > 0 ? (
+          {variables.length > 0 && (
+            <div className="rounded-md border border-border p-3 space-y-1.5" data-testid="macro-variables-hint">
               <p className="text-xs text-muted-foreground">
                 Pressing this button will ask for{" "}
                 {variables.map((name, index) => (
@@ -445,13 +447,27 @@ export function MacroConfigModal({
                 ))}
                 .
               </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Write <code className="font-mono">{"{{name}}"}</code> in any text above to be asked for its value each
-                time the button is pressed.
-              </p>
+            </div>
+          )}
+
+          <AdvancedDisclosure testId="macro-advanced">
+            <p className="text-xs text-muted-foreground">
+              Write <code className="font-mono">{"{{name}}"}</code> in any text above to be asked for its value each
+              time the button is pressed.
+            </p>
+            {type !== "http-request" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="self-start"
+                disabled={behaviorLocked}
+                onClick={() => setType("http-request")}
+                data-testid="button-macro-use-http"
+              >
+                Send an HTTP request instead
+              </Button>
             )}
-          </div>
+          </AdvancedDisclosure>
 
           {macro && remoteTriggerSection && (
             <div className="rounded-md border border-border p-3">{remoteTriggerSection}</div>
@@ -463,7 +479,7 @@ export function MacroConfigModal({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!isComplete} data-testid="button-save-macro">
-            {macro ? "Save Changes" : "Add Macro"}
+            {macro ? "Save" : "Add Macro"}
           </Button>
         </DialogFooter>
       </DialogContent>

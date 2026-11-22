@@ -1,5 +1,6 @@
 import { ChevronRight, History, Loader2 } from "lucide-react";
 import { Link } from "wouter";
+import { FinishSetupNote } from "@/components/dashboard/finish-setup-note";
 import { PageHeader } from "@/components/layout/page-header";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Card } from "@/components/ui/card";
@@ -68,7 +69,11 @@ export default function StreamRecaps() {
 
   let content: React.ReactNode;
   if (!isInstanceLoading && !instanceId) {
-    content = <p className="py-16 text-center text-sm text-muted-foreground">No engine connected.</p>;
+    content = (
+      <div className="py-16 text-center">
+        <FinishSetupNote />
+      </div>
+    );
   } else if (rows === undefined) {
     content = (
       <div className="flex justify-center py-16">
@@ -96,10 +101,7 @@ export default function StreamRecaps() {
 
   return (
     <div className="container mx-auto p-6">
-      <PageHeader
-        title="Stream recaps"
-        description="How each stream went: viewers, follows, subs, bits and raids, and who supported you most."
-      />
+      <PageHeader title="Stream recaps" description="How each of your streams went." />
       {content}
     </div>
   );

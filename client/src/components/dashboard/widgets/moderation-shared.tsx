@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import type { ModerationCapabilityStatus } from "@/engine/types";
 
 const PERMISSION_NAMES = {
@@ -21,16 +22,25 @@ export function CapabilityNote({
     return null;
   }
   const action = PERMISSION_NAMES[capability];
-  const text =
-    status === "needs-reconnect"
-      ? `Needs reconnect: reconnect Twitch in Settings → Integrations to ${action}.`
-      : status === "not-allowed"
-        ? `Only the engine's owners and admins can ${action}.`
-        : "Connect Twitch in Settings → Integrations.";
+  const testId = `moderation-note-${capability}`;
+  if (status === "needs-reconnect") {
+    return (
+      <div data-testid={testId}>
+        <TwitchConnectNotice to={action} reconnect />
+      </div>
+    );
+  }
+  if (status === "not-allowed") {
+    return (
+      <p className="text-xs text-muted-foreground" data-testid={testId}>
+        Only owners and admins can {action}.
+      </p>
+    );
+  }
   return (
-    <p className="text-xs text-muted-foreground" data-testid={`moderation-note-${capability}`}>
-      {text}
-    </p>
+    <div data-testid={testId}>
+      <TwitchConnectNotice to="use this" />
+    </div>
   );
 }
 

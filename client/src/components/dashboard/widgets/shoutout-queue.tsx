@@ -90,7 +90,7 @@ function QueueRow({ entry, now, onRemove }: RowProps) {
                   Retrying {untilLabel(entry.nextEligibleAt, now)} · attempt {entry.attempts + 1}
                 </span>
               </TooltipTrigger>
-              <TooltipContent className="max-w-xs">{entry.lastError ?? "The last attempt failed."}</TooltipContent>
+              <TooltipContent className="max-w-xs">The last attempt didn't work.</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

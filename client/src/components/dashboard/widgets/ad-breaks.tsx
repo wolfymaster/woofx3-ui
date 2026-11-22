@@ -2,7 +2,7 @@ import { useStore } from "@nanostores/react";
 import { AD_BREAK_EVENTS, AD_MANAGE_SCOPE, AD_READ_SCOPE } from "@shared/ad-breaks";
 import { AlarmClockOff, Loader2, Megaphone } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "wouter";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { Button } from "@/components/ui/button";
 import { useEngineScope } from "@/engine/context";
 import { useAdScheduleRequest, useSnoozeNextAdRequest } from "@/engine/hooks/use-ad-breaks";
@@ -23,6 +23,7 @@ import {
   runningAdFromBegin,
   scheduleFetch,
 } from "@/lib/ad-break-view";
+import { TRY_AGAIN } from "@/lib/copy";
 import { $nowPerSecond } from "@/lib/now";
 
 /**
@@ -72,10 +73,10 @@ export function AdBreaksWidget() {
         loaded.current = true;
         setFetchState(scheduleFetch(result, Date.now()));
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         // A failed poll keeps the last schedule; only a failed first read is shown.
         if (request === latestRequest.current && !loaded.current) {
-          setFetchState({ status: "error", message: actionErrorMessage(err) });
+          setFetchState({ status: "error", message: TRY_AGAIN });
         }
       });
   }, [instanceId, getSchedule]);
@@ -176,10 +177,7 @@ function AdBreakBody({ view, snoozing, onSnooze }: { view: AdBreakView; snoozing
     case "scopeMissing":
       return (
         <Notice>
-          <span>Twitch has not granted access to your ad schedule.</span>
-          <Link href="/admin/integrations" className="text-primary underline-offset-2 hover:underline">
-            Reconnect Twitch
-          </Link>
+          <TwitchConnectNotice to="see your ad schedule" reconnect />
         </Notice>
       );
     case "error":

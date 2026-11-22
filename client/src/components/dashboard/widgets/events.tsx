@@ -3,6 +3,7 @@ import { Info, ListFilter, Loader2, Radio, RotateCcw, ScrollText, Star } from "l
 import { useMemo } from "react";
 import { Link } from "wouter";
 import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
+import { FinishSetupNote } from "@/components/dashboard/finish-setup-note";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +29,7 @@ import { describeAlertFailure } from "@/lib/alert-failure";
 import { alertRunPath } from "@/lib/alert-run-route";
 import { engineAlertStyle } from "@/lib/alert-status";
 import { type AlertSummary, describeAlert, describeEvent, eventFieldRows } from "@/lib/alert-summary";
+import { TRY_AGAIN } from "@/lib/copy";
 import type { DashboardWidgetProps } from "@/lib/dashboard-widgets/types";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -102,7 +104,9 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-2 space-y-0.5">
           {!instanceId ? (
-            <EmptyFeed>No engine connected</EmptyFeed>
+            <div className="py-8 text-center">
+              <FinishSetupNote />
+            </div>
           ) : rows.length === 0 && loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -143,8 +147,7 @@ function HistoryNote({ status }: { status: EventLogStatus }) {
   if (status !== "error") {
     return null;
   }
-  const reason =
-    "The engine's event log could not be read. Events from before this page loaded will show after it reconnects.";
+  const reason = "Couldn't read past events. They will show once the connection is back.";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -163,9 +166,9 @@ function filterUnavailableReason(state: EventLogSettingsHandle["state"]): string
     case "ready":
       return null;
     case "loading":
-      return "Reading which events your engine records…";
+      return "Reading which events are recorded…";
     case "error":
-      return "Your engine's event choices could not be read. They will be read again when it reconnects.";
+      return "Couldn't read your event choices. They load again once the connection is back.";
   }
 }
 
@@ -200,10 +203,10 @@ function EventsFilterButton({ selection, byEvent }: EventsFilterButtonProps) {
   }
 
   const toggle = (type: string, on: boolean) => {
-    setEnabled(type, on).catch((err: unknown) => {
+    setEnabled(type, on).catch(() => {
       toast({
-        title: "Could not save your event choice",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't save your event choice",
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     });
@@ -230,14 +233,15 @@ function EventsFilterButton({ selection, byEvent }: EventsFilterButtonProps) {
       </Tooltip>
       <PopoverContent align="end" className="w-72 p-0" data-testid="popover-events-filter">
         <div className="px-3 pt-3 pb-2 space-y-1 text-xs text-muted-foreground">
-          <p>Alerts always show. These choose which other events your engine records and shows.</p>
-          <p>
-            Turning one on records it from now on; earlier ones do not fill in. The choice applies to every Events
-            widget on this engine.
-          </p>
+          <p>Alerts always show. Choose which other events to record.</p>
+          <p>Turning one on records it from now on, not past events. Applies to every Events widget.</p>
         </div>
         <div className="max-h-80 overflow-y-auto px-3 pb-3 space-y-3">
-          {groups.length === 0 && <p className="text-sm text-muted-foreground">No modules with events installed.</p>}
+          {groups.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No events to choose from yet. Install a module that adds some.
+            </p>
+          )}
           {groups.map((group) => (
             <div key={group.source}>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{group.source}</p>
@@ -251,9 +255,7 @@ function EventsFilterButton({ selection, byEvent }: EventsFilterButtonProps) {
                       disabled={saving}
                       onCheckedChange={(checked) => toggle(option.type, checked === true)}
                     />
-                    <span className="truncate" title={option.type}>
-                      {option.label}
-                    </span>
+                    <span className="truncate">{option.label}</span>
                   </label>
                 );
               })}
@@ -306,15 +308,10 @@ function EventsRowItem({ row, trigger, summary, onSaveHighlight }: EventsRowItem
             </>
           )}
         </div>
-        {/* The readable title on the row; the advice and the original
-            technical reason both on hover. Falls back to the raw reason for a
-            failure the mapping does not know. */}
+        {/* The readable title on the row and the advice on hover. A failure the mapping does not know reads generically. */}
         {alert?.error && style && (
-          <p
-            className={cn("text-xs truncate mt-0.5", style.color)}
-            title={[failure?.hint, alert.error].filter(Boolean).join("\n\n")}
-          >
-            {failure?.title ?? alert.error}
+          <p className={cn("text-xs truncate mt-0.5", style.color)} title={failure?.hint}>
+            {failure?.title ?? "Something went wrong"}
           </p>
         )}
       </div>
@@ -364,7 +361,7 @@ function AlertRowActions({ alert }: { alert: EngineAlert }) {
             <Button asChild size="icon" variant="ghost" className="h-7 w-7">
               <Link href={alertRunPath(alert.workflowId)}>
                 <ScrollText className="h-3.5 w-3.5" />
-                <span className="sr-only">Open the run that fired this</span>
+                <span className="sr-only">See what ran</span>
               </Link>
             </Button>
           </TooltipTrigger>
@@ -418,14 +415,12 @@ function EventDetailsButton({
         <p className="text-sm font-medium mb-1">{title}</p>
         <p className="text-xs text-muted-foreground mb-2">{trigger?.name ?? row.event?.type}</p>
         {fields.length === 0 ? (
-          <p className="text-xs text-muted-foreground">This event carries no details.</p>
+          <p className="text-xs text-muted-foreground">No more details for this event.</p>
         ) : (
           <dl className="max-h-64 overflow-y-auto space-y-1 text-xs">
             {fields.map((field) => (
               <div key={field.path} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
-                <dt className="text-muted-foreground truncate" title={field.path}>
-                  {field.label}
-                </dt>
+                <dt className="text-muted-foreground truncate">{field.label}</dt>
                 <dd className="break-words">{field.value}</dd>
               </div>
             ))}

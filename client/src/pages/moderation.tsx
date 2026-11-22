@@ -12,6 +12,8 @@ import type {
 import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
+import { SaveBar } from "@/components/common/save-bar";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
@@ -56,7 +58,7 @@ import {
 } from "@/lib/chat-moderation-form";
 import { useLogger } from "@/lib/logger-context";
 
-/** The chat moderation page: what the engine filters in chat, and what it does about it. */
+/** The chat moderation page: what woofx3 filters in chat, and what it does about it. */
 export default function Moderation() {
   const { read, save } = useModerationConfig();
   const { toast } = useToast();
@@ -75,7 +77,7 @@ export default function Moderation() {
   if (read.error !== null) {
     return (
       <Page>
-        <p className="text-sm text-destructive">Could not load chat moderation: {read.error}</p>
+        <p className="text-sm text-destructive">Couldn't load chat moderation. Try again.</p>
       </Page>
     );
   }
@@ -84,7 +86,7 @@ export default function Moderation() {
       <Page>
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground" data-testid="moderation-unsupported">
-            Your engine needs an update before it can moderate chat.
+            Chat moderation needs an update to your setup.
           </CardContent>
         </Card>
       </Page>
@@ -109,8 +111,8 @@ export default function Moderation() {
       // The engine's words name the config's paths, so they go to the log, not the streamer.
       logger.error("Couldn't save chat moderation", { error });
       toast({
-        title: "Could not save chat moderation",
-        description: "Your changes are still on this page. Try saving again in a moment.",
+        title: "Couldn't save chat moderation",
+        description: "Your changes are still on this page. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -125,6 +127,15 @@ export default function Moderation() {
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save
         </Button>
+      }
+      footer={
+        <SaveBar
+          onSave={onSave}
+          saving={saving}
+          disabled={!changed || !canSaveConfig(draft)}
+          dirty={changed}
+          testId="moderation-save-bar"
+        />
       }
     >
       {problem !== null ? (
@@ -150,15 +161,24 @@ export default function Moderation() {
   );
 }
 
-function Page({ actions, children }: { actions?: React.ReactNode; children: React.ReactNode }) {
+function Page({
+  actions,
+  footer,
+  children,
+}: {
+  actions?: React.ReactNode;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="mx-auto max-w-3xl p-6">
       <PageHeader
         title="Chat moderation"
-        description="Filters that run on every chat message. A caught message is removed within about a second of being posted."
+        description="Filters that check every chat message. Caught messages are removed within a second."
         actions={actions}
       />
       {children}
+      {footer}
     </div>
   );
 }
@@ -407,7 +427,7 @@ function FilterParams({
           />
           <NumberField
             id="repetition-length"
-            label="Ignore messages shorter than"
+            label="Ignore messages shorter than (characters)"
             value={value.minLength}
             onChange={(minLength) => onChange({ ...value, minLength })}
           />
@@ -427,7 +447,7 @@ function FilterParams({
           />
           <NumberField
             id={`${filter}-length`}
-            label="Ignore messages shorter than"
+            label="Ignore messages shorter than (characters)"
             value={value.minLength}
             onChange={(minLength) => onChange({ ...value, minLength })}
           />
@@ -457,10 +477,13 @@ function LinksParamsEditor({ params, onChange }: { params: LinksParams; onChange
       </div>
       <NumberField
         id="links-permit"
-        label="Seconds a viewer may post links after a moderator types !permit and their name"
+        label="Permit window (seconds)"
         value={params.permitSeconds}
         onChange={(permitSeconds) => onChange({ ...params, permitSeconds })}
       />
+      <p className="text-sm text-muted-foreground">
+        After a moderator types !permit and a name, that viewer can post links for this long.
+      </p>
     </div>
   );
 }
@@ -476,10 +499,13 @@ function PhrasesEditor({
     onChange({ phrases: params.phrases.map((existing, at) => (at === index ? phrase : existing)) });
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Phrases ignore capitals, accents written in other forms, and hidden characters. Use * for any letters within a
-        word, ? for exactly one letter, [ab] for one of a set of letters, and \b for the edge of a word.
-      </p>
+      <p className="text-sm text-muted-foreground">Capitals and lookalike characters are ignored.</p>
+      <AdvancedDisclosure testId="phrase-patterns-advanced">
+        <p className="text-sm text-muted-foreground">
+          Use * for any letters within a word, ? for exactly one letter, [ab] for one of a set of letters, and \b for
+          the edge of a word.
+        </p>
+      </AdvancedDisclosure>
       {params.phrases.map((phrase, index) => {
         const problem = phraseProblem(phrase.pattern);
         return (
@@ -603,7 +629,6 @@ function ActionsEditor({
           })}
         </div>
       ))}
-      <p className="text-sm text-muted-foreground">A timeout and a ban cannot both be chosen.</p>
       <AlertDialog open={confirmingBan} onOpenChange={setConfirmingBan}>
         <AlertDialogContent>
           <AlertDialogHeader>

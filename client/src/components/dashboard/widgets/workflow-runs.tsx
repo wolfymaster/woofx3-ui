@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Loader2, Play, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { FinishSetupNote } from "@/components/dashboard/finish-setup-note";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,7 +35,7 @@ const statusConfig: Record<
   running: { icon: Loader2, color: "text-blue-500", bg: "bg-blue-500/10", label: "Running", animate: true },
   completed: { icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10", label: "Success", animate: false },
   failed: { icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10", label: "Failed", animate: false },
-  cancelled: { icon: AlertCircle, color: "text-gray-500", bg: "bg-gray-500/10", label: "Cancelled", animate: false },
+  cancelled: { icon: AlertCircle, color: "text-gray-500", bg: "bg-gray-500/10", label: "Canceled", animate: false },
 };
 
 function WorkflowRunItem({ run }: { run: WorkflowRun }) {
@@ -63,17 +64,11 @@ function WorkflowRunItem({ run }: { run: WorkflowRun }) {
             </>
           )}
         </div>
-        {/* Truncated with the advice and the original reason on hover: these
-            rows are narrow, and wrapping would push everything else off screen
-            — but hiding it entirely leaves a red badge nobody can act on. A
-            step failure the mapping does not recognise shows verbatim, which
-            is most of them: only alerts are mapped so far. */}
+        {/* Truncated with the advice on hover: these rows are narrow, and wrapping would push everything else off
+            screen. The raw reason never shows, so a failure the mapping does not recognise reads generically. */}
         {run.error && (
-          <p
-            className={cn("text-xs truncate mt-0.5", config.color)}
-            title={[friendly?.hint, run.error].filter(Boolean).join("\n\n")}
-          >
-            {friendly?.title ?? run.error}
+          <p className={cn("text-xs truncate mt-0.5", config.color)} title={friendly?.hint}>
+            {friendly?.title ?? "Something went wrong"}
           </p>
         )}
       </div>
@@ -130,7 +125,7 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
           {runs.length === 0 ? (
             <div className="py-8 text-center">
               <Play className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
-              <p className="text-sm text-muted-foreground">{instanceId ? "No recent runs" : "No engine connected"}</p>
+              {instanceId ? <p className="text-sm text-muted-foreground">No recent runs</p> : <FinishSetupNote />}
             </div>
           ) : (
             runs.map((run) => <WorkflowRunItem key={run.id} run={run} />)

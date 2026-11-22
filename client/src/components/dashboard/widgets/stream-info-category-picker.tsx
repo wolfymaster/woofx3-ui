@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useSearchCategoriesRequest } from "@/engine/hooks/use-stream-info";
 import type { StreamCategory } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { TRY_AGAIN } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 /** Long enough that a typed word is one Helix call, short enough to feel live. */
@@ -65,10 +66,10 @@ export function CategoryPicker({ value, onChange, disabled }: CategoryPickerProp
           setError(null);
         }
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         if (current) {
           setResults(null);
-          setError(err instanceof Error ? err.message : String(err));
+          setError(TRY_AGAIN);
         }
       });
     return () => {

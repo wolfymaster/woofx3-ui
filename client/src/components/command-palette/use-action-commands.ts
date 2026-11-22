@@ -234,7 +234,7 @@ export function useActionCommands(
           run: async () => {
             const result = await skipCurrentAlert();
             if (!result.ok) {
-              throw new Error(result.reason ?? "The engine refused to skip");
+              throw new Error(result.reason ?? "Couldn't skip the alert");
             }
             return result.skipped > 0 ? "Alert skipped" : "No alert was playing";
           },
@@ -253,7 +253,7 @@ export function useActionCommands(
           run: async () => {
             const result = await clearAlertQueue();
             if (!result.ok) {
-              throw new Error(result.reason ?? "The engine refused to clear the queue");
+              throw new Error(result.reason ?? "Couldn't clear the queue");
             }
             return `Dropped ${result.cleared} waiting alert${result.cleared === 1 ? "" : "s"}`;
           },
@@ -562,10 +562,10 @@ export function useActionCommands(
       if (engineAccess?.renameEngine) {
         result.push({
           id: "app:rename-instance",
-          title: "Rename engine…",
+          title: "Rename woofx3…",
           kind: "action",
           group: APP_GROUP,
-          keywords: ["engine name"],
+          keywords: ["engine name", "woofx3 name"],
           icon: Pencil,
           action: {
             type: "prompt",
@@ -574,7 +574,7 @@ export function useActionCommands(
               submitLabel: (text) => `Rename to “${text}”`,
               run: async (text) => {
                 await renameInstance({ instanceId: current._id, name: text.trim() });
-                return "Engine renamed";
+                return "Renamed";
               },
             },
           },
@@ -582,7 +582,7 @@ export function useActionCommands(
       }
       result.push({
         id: "app:copy-instance-id",
-        title: "Copy engine ID",
+        title: "Copy woofx3 ID",
         kind: "action",
         group: APP_GROUP,
         keywords: ["clipboard", "debug", "support"],
@@ -591,7 +591,7 @@ export function useActionCommands(
           type: "run",
           run: async () => {
             await navigator.clipboard.writeText(current._id);
-            return "Engine ID copied";
+            return "ID copied";
           },
         },
       });
@@ -603,7 +603,7 @@ export function useActionCommands(
         title: candidate.name,
         kind: "action",
         group: APP_GROUP,
-        subtitle: "Switch engine",
+        subtitle: "Switch woofx3",
         keywords: ["instance", "switch", "workspace"],
         meta: candidate._id === instanceId ? "Current" : undefined,
         icon: Server,
@@ -619,7 +619,7 @@ export function useActionCommands(
       result.push(
         {
           id: "app:switch-instance",
-          title: "Switch engine…",
+          title: "Switch woofx3…",
           kind: "action",
           group: APP_GROUP,
           keywords: ["workspace", "engine", "account"],

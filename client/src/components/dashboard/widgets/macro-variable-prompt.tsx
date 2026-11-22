@@ -55,9 +55,7 @@ export function MacroVariablePrompt({ open, onOpenChange, macroLabel, variables,
         <DialogHeader>
           <DialogTitle>{macroLabel}</DialogTitle>
           <DialogDescription>
-            {variables.length === 1
-              ? "This macro needs a value before it runs."
-              : "This macro needs a few values before it runs."}
+            {variables.length === 1 ? "This button needs a value." : "This button needs a few values."}
           </DialogDescription>
         </DialogHeader>
 
@@ -77,7 +75,7 @@ export function MacroVariablePrompt({ open, onOpenChange, macroLabel, variables,
                     handleSubmit();
                   }
                 }}
-                placeholder={`{{${name}}}`}
+                placeholder={humanize(name)}
                 data-testid={`input-macro-variable-${name}`}
               />
             </div>

@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useInstance } from "@/hooks/use-instance";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
+import { TRY_AGAIN } from "@/lib/copy";
 import {
   dismissReconnect,
   isReconnectDismissed,
@@ -58,7 +59,7 @@ export function TwitchReconnectBanner() {
       <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
       <p className="min-w-0 flex-1">
         {message}
-        {connectError && <span className="block text-destructive">{connectError}</span>}
+        {connectError && <span className="block text-destructive">{TRY_AGAIN}</span>}
       </p>
       {twitchLink.viewerCanRelink ? (
         <Button
@@ -73,7 +74,7 @@ export function TwitchReconnectBanner() {
           Reconnect as @{twitchLink.platformUsername}
         </Button>
       ) : (
-        <span className="shrink-0 text-xs text-muted-foreground">Ask an engine admin to reconnect Twitch.</span>
+        <span className="shrink-0 text-xs text-muted-foreground">Ask an owner or admin to reconnect Twitch.</span>
       )}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -85,7 +86,7 @@ export function TwitchReconnectBanner() {
             data-testid="button-banner-dismiss-twitch"
           >
             <X className="h-4 w-4" />
-            <span className="sr-only">Hide until the next session</span>
+            <span className="sr-only">Hide for now</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>Hide until the next session</TooltipContent>

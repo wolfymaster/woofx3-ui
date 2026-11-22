@@ -11,7 +11,7 @@ type SuspendedEntry = Extract<DashboardEntry, { kind: "suspended" }>;
 const REASON_TEXT: Record<SuspendedEntry["reason"], string> = {
   no_payment_method: "The trial ended without a payment method.",
   payment_failed: "A payment didn't go through.",
-  subscription_canceled: "The subscription was cancelled.",
+  subscription_canceled: "The subscription was canceled.",
   provider_ended: "The subscription ended.",
   operator: "woofx3 support paused it.",
 };
@@ -22,14 +22,14 @@ const REASON_TEXT: Record<SuspendedEntry["reason"], string> = {
  * desktop app never shows billing, so there it only explains.
  */
 export function SuspendedEngine({ entry }: { entry: SuspendedEntry }) {
-  const owner = entry.ownerName ?? "the organization's owner";
+  const owner = entry.ownerName ?? "the account owner";
   return (
     <div className="max-w-lg mx-auto p-6">
       <div className="rounded-md border p-6 space-y-4" data-testid="screen-engine-suspended">
         <div className="flex gap-3">
           <PauseCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="space-y-1 text-sm">
-            <p className="font-medium">This engine's subscription isn't active</p>
+            <p className="font-medium">Your subscription isn't active</p>
             <p className="text-muted-foreground">{REASON_TEXT[entry.reason]}</p>
             {!entry.canManageBilling && (
               <p className="text-muted-foreground">Ask the owner, {owner}, to reactivate it.</p>

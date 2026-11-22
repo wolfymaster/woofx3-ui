@@ -2,6 +2,7 @@ import type { RecapSupporter, StreamRecapEngineDetail } from "@shared/stream-rec
 import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
+import { FinishSetupNote } from "@/components/dashboard/finish-setup-note";
 import { PageHeader } from "@/components/layout/page-header";
 import { ClipsCard, TopClipTile } from "@/components/stream-recap/clips-card";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
@@ -19,6 +20,7 @@ import { useRecapMarkers } from "@/hooks/use-recap-markers";
 import { useRecapTimelineEvents } from "@/hooks/use-recap-timeline-events";
 import { type StreamRecapEngineState, useStreamRecapEngineDetail } from "@/hooks/use-stream-recap-engine-detail";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import {
   buildLanePoints,
   clipLayerStatus,
@@ -62,7 +64,7 @@ function BackLink() {
 
 function SegmentBar({ timeline }: { timeline: TimelineSegment[] }) {
   if (timeline.length === 0) {
-    return <p className="text-sm text-muted-foreground">This session never went live.</p>;
+    return <p className="text-sm text-muted-foreground">This stream never went live.</p>;
   }
   return (
     <div className="space-y-2" data-testid="recap-segments">
@@ -125,8 +127,6 @@ function TotalsGrid({ totals }: { totals: SessionBody["totals"] }) {
 
 interface EngineProblem {
   message: string;
-  /** The engine's own error text, when it gave one. */
-  errorText?: string;
   /** Whether trying again could help; a refusal or a missing session will not change on retry. */
   retryable: boolean;
 }
@@ -147,14 +147,6 @@ function EngineNotice({ state, onRetry }: { state: StreamRecapEngineState; onRet
     <div className="flex flex-col items-center gap-3 py-8 text-center" data-testid="recap-engine-notice">
       <WifiOff className="h-6 w-6 text-muted-foreground/60" />
       <p className="text-sm text-muted-foreground max-w-sm">{problem.message}</p>
-      {problem.errorText && (
-        <p
-          className="max-w-sm break-words font-mono text-xs text-muted-foreground"
-          data-testid="text-recap-engine-error"
-        >
-          {problem.errorText}
-        </p>
-      )}
       {problem.retryable && (
         <Button variant="outline" size="sm" onClick={onRetry} data-testid="button-recap-retry">
           <RefreshCw className="h-4 w-4 mr-2" />
@@ -167,7 +159,7 @@ function EngineNotice({ state, onRetry }: { state: StreamRecapEngineState; onRet
 
 function engineProblem(state: StreamRecapEngineState): EngineProblem | null {
   if (state.kind === "error") {
-    return { message: "Couldn't load this from the engine.", errorText: state.message, retryable: true };
+    return { message: "Couldn't load this.", retryable: true };
   }
   if (state.kind !== "loaded") {
     return null;
@@ -178,29 +170,27 @@ function engineProblem(state: StreamRecapEngineState): EngineProblem | null {
       return null;
     case "unregistered":
       return {
-        message: "This engine isn't registered yet, so viewer history and supporters aren't available.",
+        message: "Viewer history and supporters aren't available yet. Finish setup to see them.",
         retryable: false,
       };
     case "unknown_session":
       return {
-        message: "The engine no longer has this session. It may have been merged into another one.",
+        message: "This stream's details are no longer available. It may be part of another stream.",
         retryable: false,
       };
     case "rejected":
       return {
-        message: "The engine refused this dashboard's credentials. Register the engine again under Admin, Engine.",
+        message: "Lost the connection to your stream tools. Reconnect under Admin > Engine.",
         retryable: false,
       };
     case "unreachable":
       return {
-        message: "The engine is offline or didn't answer, so viewer history and supporters can't be shown right now.",
-        errorText: detail.message,
+        message: "Can't reach your stream tools, so viewer history and supporters can't be shown right now.",
         retryable: true,
       };
     case "failed":
       return {
-        message: "The engine couldn't load viewer history and supporters for this stream.",
-        errorText: detail.message,
+        message: "Couldn't load viewer history and supporters.",
         retryable: true,
       };
   }
@@ -231,7 +221,7 @@ function SupporterList({
         {title}
       </h3>
       {supporters.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nobody this stream.</p>
+        <p className="text-sm text-muted-foreground">No supporters this stream.</p>
       ) : (
         <ol className="space-y-1">
           {supporters.map((supporter, index) => (
@@ -284,10 +274,10 @@ function SupportersCard({
     try {
       await sendAnnouncement({ message, color: "primary" });
       toast({ title: "Sent to chat" });
-    } catch (error) {
+    } catch {
       toast({
         title: "Couldn't send to chat",
-        description: error instanceof Error ? error.message : String(error),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {
@@ -395,7 +385,7 @@ function RecapBody({ row, sessionId }: { row: StreamRecap; sessionId: string }) 
   const title = body ? new Date(body.session.startedAt).toLocaleDateString(undefined, DATE_FORMAT) : "Stream recap";
   const description =
     row.summary.kind === "unreadable"
-      ? `A summary from a newer engine version (schema ${row.summary.schemaVersion}) that this dashboard cannot read yet.`
+      ? "This stream's summary is from a newer version of woofx3 and can't be shown yet."
       : segments.length === 0
         ? "Never went live"
         : `Live ${formatLiveDuration(liveDurationMs(segments))}, from ${formatTime(row.summary.session.startedAt)}`;
@@ -430,8 +420,7 @@ function RecapBody({ row, sessionId }: { row: StreamRecap; sessionId: string }) 
         <CardHeader>
           <CardTitle className="text-base">Timeline</CardTitle>
           <CardDescription>
-            Viewers per minute while live, with when follows, subs, gifts, cheers, raids, clips and markers happened.
-            Gaps in the line are minutes that weren't sampled.
+            Viewers over time, with follows, subs, gifts, cheers, raids and clips marked.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -470,9 +459,7 @@ function RecapNotFound() {
     <div className="container mx-auto p-6">
       <BackLink />
       <div className="py-16 text-center" data-testid="recap-not-found">
-        <p className="text-sm text-muted-foreground">
-          There's no recap for this stream. A recap appears once the engine sends the stream's summary.
-        </p>
+        <p className="text-sm text-muted-foreground">No recap for this stream yet.</p>
       </div>
     </div>
   );
@@ -488,7 +475,9 @@ export default function StreamRecapPage() {
   if (!isInstanceLoading && !instanceId) {
     return (
       <div className="container mx-auto p-6">
-        <p className="py-16 text-center text-sm text-muted-foreground">No engine connected.</p>
+        <div className="py-16 text-center">
+          <FinishSetupNote />
+        </div>
       </div>
     );
   }

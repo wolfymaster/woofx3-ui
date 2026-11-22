@@ -235,12 +235,8 @@ export function WebhookEventLogTable() {
       ) : events.length === 0 ? (
         <EmptyState
           icon={Webhook}
-          title="No events logged"
-          description={
-            typeFilter !== "all"
-              ? "Try a different event type filter."
-              : "Events received from the engine will appear here as they arrive."
-          }
+          title="Nothing logged yet."
+          description={typeFilter !== "all" ? "Try a different filter." : "Events appear here as they happen."}
         />
       ) : (
         <Card>

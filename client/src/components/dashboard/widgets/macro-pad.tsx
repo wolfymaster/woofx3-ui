@@ -21,6 +21,7 @@ import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
 import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import type { Macro, MacroId, MacroInput } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import { useLogger } from "@/lib/logger-context";
 import { applyMacroVariables, extractMacroVariables, isHexColor } from "@/lib/macro-pad";
 import { cn } from "@/lib/utils";
@@ -205,7 +206,7 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
     }
     listEngineWorkflows()
       .then(setWorkflows)
-      .catch((error: unknown) => logger.error("Could not list the engine's workflows", { error }));
+      .catch((error: unknown) => logger.error("Could not list the workflows", { error }));
   }, [instanceId, listEngineWorkflows, logger]);
 
   const variableCounts = useMemo(() => {
@@ -228,13 +229,10 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
 
   const failed = useCallback(
     (title: string) => (error: unknown) => {
-      toast({
-        title,
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive",
-      });
+      logger.error(title, { error });
+      toast({ title, description: TRY_AGAIN, variant: "destructive" });
     },
-    [toast]
+    [toast, logger]
   );
 
   const handleAddMacro = useCallback(() => {
@@ -312,9 +310,10 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
           await runMacroOnEngine(macro.id, valuesToPairs(values));
         }
       } catch (error) {
+        logger.error("Macro failed", { error, macroId: macro.id });
         toast({
-          title: `"${macro.label}" failed`,
-          description: error instanceof Error ? error.message : String(error),
+          title: `Couldn't run "${macro.label}"`,
+          description: TRY_AGAIN,
           variant: "destructive",
         });
       } finally {

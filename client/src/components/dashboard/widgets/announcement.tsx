@@ -1,5 +1,6 @@
 import { Loader2, Megaphone, Radio } from "lucide-react";
 import { useState } from "react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +9,7 @@ import { useEngineScope } from "@/engine/context";
 import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 // Twitch accepts exactly these five announcement colors — a fixed swatch set,
@@ -50,10 +52,10 @@ export function AnnouncementWidget() {
       await sendAnnouncement({ message, color });
       setMessage("");
       toast({ title: "Announcement sent" });
-    } catch (error) {
+    } catch {
       toast({
         title: "Couldn't send that announcement",
-        description: error instanceof Error ? error.message : String(error),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {
@@ -65,7 +67,7 @@ export function AnnouncementWidget() {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4 text-center">
         <Radio className="h-8 w-8 text-muted-foreground/50 mb-3" />
-        <p className="text-sm text-muted-foreground">Connect Twitch in Settings to send announcements</p>
+        <TwitchConnectNotice to="send announcements" />
       </div>
     );
   }
@@ -120,11 +122,7 @@ export function AnnouncementWidget() {
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
         Announce
       </Button>
-      {!canAnnounce && twitchLink !== undefined && (
-        <p className="text-xs text-muted-foreground">
-          Reconnect Twitch in Settings → Integrations to grant the announcement permission.
-        </p>
-      )}
+      {!canAnnounce && twitchLink !== undefined && <TwitchConnectNotice to="send announcements" reconnect />}
     </div>
   );
 }

@@ -36,7 +36,7 @@ function PayloadBody({ logId }: { logId: WebhookEventId }) {
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(formatted);
-    toast({ title: "Copied", description: "Payload JSON copied to clipboard." });
+    toast({ title: "Copied", description: "Event details copied." });
   };
 
   return (

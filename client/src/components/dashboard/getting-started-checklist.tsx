@@ -55,7 +55,11 @@ function FixLink({ fix }: { fix: CheckFix }) {
         className={className}
         onClick={() => {
           navigator.clipboard.writeText(fix.text).then(
-            () => toast({ title: "Copied", description: "Paste it into your streaming app as a browser source." }),
+            () =>
+              toast({
+                title: "Copied",
+                description: "In your streaming software, add a browser source and paste the link.",
+              }),
             () => toast({ title: "Couldn't copy", variant: "destructive" })
           );
         }}
@@ -156,12 +160,12 @@ export function useGettingStarted(instanceId: Id<"instances"> | null): GettingSt
           return;
         }
         await navigator.clipboard.writeText(await requestOverlayUrl(scene.id));
-        toast({ title: "Copied", description: "Paste it into your streaming app as a browser source." });
+        toast({ title: "Copied", description: "In your streaming software, add a browser source and paste the link." });
       }
-    } catch (err) {
+    } catch {
       toast({
-        title: "That didn't work",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't finish that step",
+        description: "Try again.",
         variant: "destructive",
       });
     } finally {

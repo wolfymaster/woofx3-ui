@@ -1,4 +1,5 @@
 import { Loader2, ShieldAlert } from "lucide-react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { useModerationAccess } from "@/engine/hooks/use-moderation";
 import { BlockedTermsSection } from "./moderation-blocked-terms";
 import { ChatLockdownSection } from "./moderation-chat-lockdown";
@@ -24,11 +25,11 @@ export function ModerationWidget() {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center">
         <ShieldAlert className="mb-3 h-8 w-8 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">
-          {access === null
-            ? "You are not a member of this engine"
-            : "Connect Twitch in Settings → Integrations to moderate chat"}
-        </p>
+        {access === null ? (
+          <p className="text-sm text-muted-foreground">You don't have access to moderation here.</p>
+        ) : (
+          <TwitchConnectNotice to="moderate chat" />
+        )}
       </div>
     );
   }

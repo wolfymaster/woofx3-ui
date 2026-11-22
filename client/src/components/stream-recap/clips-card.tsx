@@ -1,11 +1,13 @@
 import { Clapperboard, Copy, ExternalLink, Eye, Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
 import type { RecapClip } from "@/engine/types";
 import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import { buildClipShareMessage, formatClipDuration, formatStreamOffset } from "@/lib/recap-clips";
 
 const CREATED_FORMAT: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
@@ -33,10 +35,10 @@ function ClipRow({ clip, canAnnounce }: { clip: RecapClip; canAnnounce: boolean 
     try {
       await sendAnnouncement({ message: buildClipShareMessage(clip), color: "primary" });
       toast({ title: "Clip shared to chat" });
-    } catch (error) {
+    } catch {
       toast({
         title: "Couldn't share to chat",
-        description: error instanceof Error ? error.message : String(error),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {
@@ -89,11 +91,7 @@ function ClipRow({ clip, canAnnounce }: { clip: RecapClip; canAnnounce: boolean 
             </a>
           </Button>
         </div>
-        {!canAnnounce && (
-          <p className="text-xs text-muted-foreground">
-            Connect Twitch with chat announcement access in Settings to share clips to chat.
-          </p>
-        )}
+        {!canAnnounce && <TwitchConnectNotice to="share clips to chat" reconnect />}
       </div>
     </li>
   );
@@ -112,19 +110,18 @@ function ClipsBody({ state, canAnnounce }: { state: ListableClipsState; canAnnou
     case "error":
       return (
         <p className="py-6 text-center text-sm text-muted-foreground" data-testid="recap-clips-error">
-          Couldn't load clips from Twitch. {state.message}
+          Couldn't load clips from Twitch. Try again.
         </p>
       );
     case "never_live":
-      return <p className="py-6 text-center text-sm text-muted-foreground">This session never went live.</p>;
+      return <p className="py-6 text-center text-sm text-muted-foreground">This stream never went live.</p>;
     case "loaded":
       if (state.clips.length === 0) {
         return (
           <div className="flex flex-col items-center gap-2 py-8 text-center" data-testid="recap-clips-empty">
             <Clapperboard className="h-6 w-6 text-muted-foreground/60" />
             <p className="max-w-sm text-sm text-muted-foreground">
-              No clips from this stream yet. Twitch takes a minute or two to list a new clip, so refresh shortly if
-              someone just made one.
+              No clips yet. New clips can take a minute or two to appear.
             </p>
           </div>
         );

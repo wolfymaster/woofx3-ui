@@ -20,6 +20,7 @@ import {
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import { counterGoals, counterValue, goalProgress } from "@/lib/resource-values";
 import { cn } from "@/lib/utils";
@@ -308,10 +309,10 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
     }
     try {
       await (pinned ? unpinCounter(canonicalId) : pinCounter(canonicalId));
-    } catch (error) {
+    } catch {
       toast({
         title: pinned ? "Couldn't take that counter off the bar" : "Couldn't put that counter on the bar",
-        description: error instanceof Error ? error.message : String(error),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     }
@@ -328,10 +329,10 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
       // trimmed in their editor, so send the user straight there.
       window.open(editUrl, "_blank", "noopener,noreferrer");
       toast({ title: "Clip created", description: "Opened Twitch's clip editor to trim and publish it." });
-    } catch (error) {
+    } catch {
       toast({
         title: "Couldn't create the clip",
-        description: error instanceof Error ? error.message : String(error),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {
