@@ -7,7 +7,11 @@
  * engine applies at chat-message time.
  */
 export function splitCommandInput(raw: string): { command: string; argumentPattern: string } {
-  const trimmed = raw.trim().replace(/^!/, "");
+  // The field wraps long commands over several lines; the stored command is always one line.
+  const trimmed = raw
+    .replace(/[\r\n]+/g, "")
+    .trim()
+    .replace(/^!/, "");
   const spaceIndex = trimmed.indexOf(" ");
   if (spaceIndex === -1) {
     return { command: trimmed, argumentPattern: "" };

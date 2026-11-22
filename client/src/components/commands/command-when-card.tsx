@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import type { ChatCommandGroup } from "@/engine/types";
 import type { CommandEditorState, CommandVisibility } from "@/lib/command-drafts";
 import { commandWhenOptions, commandWhenTitle } from "@/lib/command-when";
@@ -65,11 +66,12 @@ export function CommandWhenCard({ value, groups, onChange, defaultExpanded }: Co
         <div className="grid gap-2">
           <Label htmlFor="cmd-name">Command</Label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-muted-foreground">!</span>
-            <Input
+            <span className="absolute left-3 top-2 font-mono text-sm text-muted-foreground">!</span>
+            <Textarea
               id="cmd-name"
               placeholder="sr {songTitle}"
-              className="pl-6 font-mono"
+              rows={3}
+              className="min-h-0 resize-y pl-6 font-mono"
               value={value.command}
               onChange={(e) => onChange((current) => ({ ...current, command: e.target.value }))}
               data-testid="input-command-name"
