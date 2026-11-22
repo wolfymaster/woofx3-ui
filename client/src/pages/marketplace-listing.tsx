@@ -9,6 +9,7 @@ import { isBundleListing, isModuleListing } from "@shared/marketplace-catalog";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { CreditsCard } from "@/components/marketplace/credits-card";
 import { EmoteGrid } from "@/components/marketplace/emote-grid";
 import { ListingArt } from "@/components/marketplace/listing-art";
@@ -100,9 +101,9 @@ export default function MarketplaceListing() {
             <CardContent className="space-y-3 pt-6">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-4 w-4" />
-                <span className="font-medium">Failed to load this listing</span>
+                <span className="font-medium">We couldn't load this. Try again.</span>
               </div>
-              <p className="break-words text-sm text-muted-foreground">{error}</p>
+              <TechnicalDetails text={error} />
               <Button size="sm" variant="outline" onClick={() => void refetch()}>
                 Retry
               </Button>
@@ -114,9 +115,7 @@ export default function MarketplaceListing() {
           <Card>
             <CardContent className="space-y-3 pt-6">
               <p className="font-medium">We couldn't find that listing.</p>
-              <p className="text-sm text-muted-foreground">
-                It may have been retired, or it may not be published to your engine.
-              </p>
+              <p className="text-sm text-muted-foreground">It may have been removed.</p>
               <Button size="sm" variant="outline" onClick={() => navigate(MARKETPLACE_PATH)}>
                 Back to the marketplace
               </Button>
@@ -506,7 +505,6 @@ function ThemeSection({ listing }: { listing: CatalogListingDetail }) {
           <li key={theme.id} className="rounded-lg border p-3">
             <p className="text-sm font-medium">{theme.name}</p>
             {theme.description && <p className="text-xs text-muted-foreground">{theme.description}</p>}
-            <p className="mt-1 font-mono text-[11px] text-muted-foreground">{theme.target}</p>
           </li>
         ))}
       </ul>
@@ -516,7 +514,7 @@ function ThemeSection({ listing }: { listing: CatalogListingDetail }) {
 
 /**
  * The catalog's sections for a module listing. Its triggers, actions, widgets
- * and functions live in the "What's inside" tab; they are listed here from
+ * live in the "What's inside" tab; they are listed here from
  * the catalog only when that tab has nothing to show because the module's
  * detail could not be read.
  */
@@ -531,7 +529,6 @@ function ModuleSections({
     { title: "Triggers", items: module.triggers },
     { title: "Actions", items: module.actions },
     { title: "Widgets", items: module.widgets },
-    { title: "Functions", items: module.functions },
   ];
 
   return (
@@ -544,11 +541,14 @@ function ModuleSections({
               : `${module.themeable.length} of this module's widgets can be reskinned by themes from the marketplace.`}
           </p>
           <ul className="mt-2 flex flex-wrap gap-1.5">
-            {module.themeable.map((contract) => (
-              <Badge key={contract.widgetId} variant="secondary" className="font-mono text-[11px]">
-                {contract.widgetId}
-              </Badge>
-            ))}
+            {module.themeable.map((contract) => {
+              const widget = module.widgets.find((candidate) => candidate.id === contract.widgetId);
+              return widget ? (
+                <Badge key={contract.widgetId} variant="secondary" className="text-[11px]">
+                  {widget.name}
+                </Badge>
+              ) : null;
+            })}
           </ul>
         </Section>
       )}
@@ -556,11 +556,10 @@ function ModuleSections({
       {Object.keys(module.requires).length > 0 && (
         <Section title="Needs installed first">
           <ul className="space-y-1 text-sm">
-            {Object.entries(module.requires).map(([moduleId, range]) => (
+            {Object.keys(module.requires).map((moduleId) => (
               <li key={moduleId} className="flex items-center gap-2">
                 <Check className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="font-medium">{moduleId}</span>
-                <span className="font-mono text-xs text-muted-foreground">{range}</span>
               </li>
             ))}
           </ul>

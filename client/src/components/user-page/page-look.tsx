@@ -104,9 +104,6 @@ export function PageLook({ content, problems, dispatch }: PageLookProps) {
             );
           })}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Sections in a region the new layout lacks move into its first region.
-        </p>
       </fieldset>
 
       <fieldset className="space-y-2">

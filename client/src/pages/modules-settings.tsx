@@ -2,6 +2,7 @@ import { Loader2, Store, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { PageIntro } from "@/components/common/page-intro";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { PageHeader } from "@/components/layout/page-header";
 import { ModuleSettingsSections } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
@@ -34,7 +35,7 @@ export default function ModulesSettings() {
 
   return (
     <div className="h-full overflow-auto p-6 space-y-4">
-      <PageHeader title="Module settings" description="The settings of every module installed on your engine." />
+      <PageHeader title="Module settings" description="The settings for each module you've installed." />
       <PageIntro introId="modules" />
       {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="w-auto" />}
       {oauthResult && <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} />}
@@ -112,7 +113,12 @@ function ModuleSettingsCard({ module }: { module: InstalledModule }) {
       </CardHeader>
       <CardContent>
         {load.state === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-        {load.state === "error" && <p className="text-sm text-destructive">{load.message}</p>}
+        {load.state === "error" && (
+          <div className="space-y-2">
+            <p className="text-sm text-destructive">Couldn't load the settings. Try again.</p>
+            <TechnicalDetails text={load.message} />
+          </div>
+        )}
         {load.state === "loaded" && (
           <ModuleSettingsSections moduleId={load.detail.id} manifestSettings={load.detail.manifestSettings} />
         )}

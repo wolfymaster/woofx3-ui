@@ -1,5 +1,6 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { UninstallUsageRow } from "@/components/modules/uninstall-usage-row";
 import {
   AlertDialog,
@@ -35,12 +36,15 @@ type Props = {
 
 type Phase = "confirm" | "requesting" | "awaiting-engine" | "conflicts" | "error";
 
+const SLOW_UNINSTALL_MESSAGE = "This is taking longer than expected. It may still finish; check back in a minute.";
+
 export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }: Props) {
   const requestModuleUninstall = useUninstallModuleRequest();
   const reconcileUninstall = useReconcileModuleUninstallRequest();
   const [phase, setPhase] = useState<Phase>("confirm");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<ConflictResource[]>([]);
   const [removedKeys, setRemovedKeys] = useState<ReadonlySet<string>>(new Set());
 
@@ -50,6 +54,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
     setPhase("confirm");
     setPendingKey(null);
     setErrorMessage(null);
+    setErrorDetail(null);
     setConflicts([]);
     setRemovedKeys(new Set());
   }, []);
@@ -77,7 +82,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
       return;
     }
     if (uninstallEvent.status === "error") {
-      setErrorMessage(uninstallEvent.message ?? "Uninstall failed on the engine.");
+      setErrorDetail(uninstallEvent.message ?? null);
       const data = uninstallEvent.data as { conflicts?: ConflictResource[] } | undefined;
       const rawConflicts = data?.conflicts;
       const conflictList = Array.isArray(rawConflicts) ? rawConflicts : [];
@@ -107,13 +112,9 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
           }
           return;
         }
-        setErrorMessage(
-          "The engine did not confirm removal within 60 seconds, and the module is still installed. Try again."
-        );
+        setErrorMessage(SLOW_UNINSTALL_MESSAGE);
       } catch {
-        setErrorMessage(
-          "The engine did not respond within 60 seconds. The uninstall may still complete in the background."
-        );
+        setErrorMessage(SLOW_UNINSTALL_MESSAGE);
       }
       setPhase("error");
       setPendingKey(null);
@@ -129,6 +130,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
     }
     setPhase("requesting");
     setErrorMessage(null);
+    setErrorDetail(null);
     setConflicts([]);
     setRemovedKeys(new Set());
     try {
@@ -136,13 +138,14 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
       setPendingKey(result.moduleKey);
       setPhase("awaiting-engine");
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to request uninstall.");
+      setErrorDetail(err instanceof Error ? err.message : null);
       setPhase("error");
     }
   }, [module, requestModuleUninstall]);
 
   const handleRetry = useCallback(() => {
     setErrorMessage(null);
+    setErrorDetail(null);
     setConflicts([]);
     setPendingKey(null);
     setPhase("confirm");
@@ -159,8 +162,6 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
     return null;
   }
 
-  const moduleLabel = `${module.name}@${module.version}`;
-
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className="max-w-xl">
@@ -169,9 +170,8 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
             <AlertDialogHeader>
               <AlertDialogTitle>Remove {module.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will request the engine to uninstall <span className="font-medium">{moduleLabel}</span>. The engine
-                will refuse if any workflows, scenes, or commands still use this module, or another installed module
-                requires it.
+                Anything that uses this module (workflows, scenes, commands) has to be removed first. We'll show you
+                what.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -193,13 +193,11 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
           <>
             <AlertDialogHeader>
               <AlertDialogTitle>Uninstalling {module.name}</AlertDialogTitle>
-              <AlertDialogDescription>
-                Waiting for the engine to confirm removal of <span className="font-medium">{moduleLabel}</span>.
-              </AlertDialogDescription>
+              <AlertDialogDescription>Removing {module.name}…</AlertDialogDescription>
             </AlertDialogHeader>
             <div className="flex items-center gap-3 py-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {phase === "requesting" ? "Sending uninstall request…" : "Engine is working on it…"}
+              Removing…
             </div>
           </>
         )}
@@ -250,6 +248,7 @@ export function UninstallModuleDialog({ open, onOpenChange, module, onSuccess }:
               <AlertDialogDescription>
                 {errorMessage ?? "Something went wrong while uninstalling the module."}
               </AlertDialogDescription>
+              {errorDetail && <TechnicalDetails text={errorDetail} />}
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => onOpenChange(false)}>Close</AlertDialogCancel>

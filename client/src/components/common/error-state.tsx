@@ -10,8 +10,8 @@ interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = "Failed to load data",
-  message = "An error occurred while fetching the data.",
+  title = "Couldn't load this",
+  message = "Check your connection and try again.",
   onRetry,
   compact = false,
 }: ErrorStateProps) {

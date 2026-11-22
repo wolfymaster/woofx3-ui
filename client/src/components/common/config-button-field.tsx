@@ -18,7 +18,7 @@ import { buttonActionOf } from "@/lib/field-options-reference";
 function ConfigButtonField({ field }: { field: FieldDescriptor }) {
   const action = buttonActionOf(field.action);
   if (!action) {
-    return <p className="text-xs text-muted-foreground">{field.label} does nothing on this engine.</p>;
+    return <p className="text-xs text-muted-foreground">{field.label} isn't available here.</p>;
   }
   if (!action.reference) {
     return (

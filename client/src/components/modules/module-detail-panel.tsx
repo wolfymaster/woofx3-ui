@@ -1,14 +1,10 @@
 import type { LocalEndpointSummary } from "@shared/local-endpoints";
 import type { ListingCredit } from "@shared/marketplace-catalog";
-import { functionLocation, type ModuleFunctionSummary } from "@shared/module-function-summary";
 import {
   ArrowLeft,
   Bell,
   Check,
-  ChevronDown,
-  ChevronRight,
   Download,
-  FileCode,
   Loader2,
   Plus,
   Puzzle,
@@ -23,9 +19,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { configFieldRenderers } from "@/components/common/field-renderers";
 import { ListField } from "@/components/common/list-field";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { CreditsCard } from "@/components/marketplace/credits-card";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
-import { ModuleFileContentView, ModuleFilesTab } from "@/components/modules/module-files";
+import { ModuleFilesTab } from "@/components/modules/module-files";
 import { ModuleLicenseKey } from "@/components/modules/module-license-key";
 import {
   ModuleLocalEndpointList,
@@ -36,7 +33,6 @@ import {
 import { ObsConnectionStatus } from "@/components/modules/obs-connection-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,12 +49,11 @@ import {
 import { useModuleSettingsRequest, useUpdateModuleSettingRequest } from "@/engine/hooks/use-modules";
 import type { ManifestResourceKind, ManifestSettingField, ModuleId, ModuleLicenseLookup } from "@/engine/types";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
-import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
+import { useModuleFiles } from "@/hooks/use-module-files";
 import { actionErrorMessage } from "@/lib/action-error";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
 import { listSettingText, listSettingValue } from "@/lib/list-setting-value";
 import { type SettingSource, useMarketplaceMode } from "@/lib/marketplace-mode";
-import { matchFunctionFile } from "@/lib/module-files";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
 import { cn, isNewerVersion } from "@/lib/utils";
@@ -91,8 +86,6 @@ export interface ModuleDetailAction {
   color: string;
 }
 
-export type ModuleDetailFunction = ModuleFunctionSummary;
-
 export interface ModuleDetailWidget {
   slug: string;
   name: string;
@@ -107,7 +100,6 @@ interface ModuleDetailPanelProps {
   module: ModuleDetailMeta;
   triggers: ModuleDetailTrigger[] | undefined;
   actions: ModuleDetailAction[] | undefined;
-  functions: ModuleDetailFunction[] | undefined;
   widgets?: ModuleDetailWidget[] | undefined;
   workflows?: ModuleDetailWorkflow[] | undefined;
   loading?: boolean;
@@ -140,7 +132,7 @@ interface ModuleDetailPanelProps {
 }
 
 type TopTab = "details" | "definitions" | "files" | "settings" | "resources";
-type ResourceType = "actions" | "triggers" | "workflows" | "widgets" | "functions";
+type ResourceType = "actions" | "triggers" | "workflows" | "widgets";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   Chat: <Bell className="h-4 w-4" />,
@@ -158,7 +150,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     module,
     triggers,
     actions,
-    functions,
     widgets,
     workflows,
     loading,
@@ -191,6 +182,8 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     version: module.version,
   });
 
+  const hasSettings = (manifestSettings ?? []).length > 0;
+  const hasResourceKinds = (manifestResourceKinds ?? []).length > 0;
   const updateAvailable =
     module.isInstalled && !!module.latestVersion && isNewerVersion(module.latestVersion, module.version);
 
@@ -235,19 +228,23 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
             DETAILS
           </TopTabButton>
           <TopTabButton active={topTab === "definitions"} onClick={() => setTopTab("definitions")}>
-            DEFINITIONS
+            WHAT'S INSIDE
           </TopTabButton>
           <TopTabButton active={topTab === "files"} onClick={() => setTopTab("files")}>
             FILES
           </TopTabButton>
           {module.isInstalled && (
             <>
-              <TopTabButton active={topTab === "settings"} onClick={() => setTopTab("settings")}>
-                SETTINGS
-              </TopTabButton>
-              <TopTabButton active={topTab === "resources"} onClick={() => setTopTab("resources")}>
-                RESOURCES
-              </TopTabButton>
+              {hasSettings && (
+                <TopTabButton active={topTab === "settings"} onClick={() => setTopTab("settings")}>
+                  SETTINGS
+                </TopTabButton>
+              )}
+              {hasResourceKinds && (
+                <TopTabButton active={topTab === "resources"} onClick={() => setTopTab("resources")}>
+                  RESOURCES
+                </TopTabButton>
+              )}
             </>
           )}
         </div>
@@ -275,14 +272,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
                 }
               />
             ) : topTab === "definitions" ? (
-              <ModuleDefinitions
-                triggers={triggers}
-                actions={actions}
-                functions={functions}
-                widgets={widgets}
-                workflows={workflows}
-                files={moduleFiles}
-              />
+              <ModuleDefinitions triggers={triggers} actions={actions} widgets={widgets} workflows={workflows} />
             ) : topTab === "files" ? (
               <ModuleFilesTab files={moduleFiles} />
             ) : topTab === "settings" ? (
@@ -531,7 +521,6 @@ function ModuleMetaRail({ module }: { module: ModuleDetailMeta }) {
           Update available: v{module.version} → v{module.latestVersion}
         </p>
       )}
-      <MetaRow label="Identifier" value={module.identifier ?? "—"} mono />
       <MetaRow label="Version" value={module.version || "—"} />
       <MetaRow label="Author" value={module.author || "Unknown"} />
       <MetaRow label="Category">
@@ -587,7 +576,6 @@ function MetaRow({
 
 const RESOURCE_NAV: Array<{ type: ResourceType; label: string }> = [
   { type: "actions", label: "Actions" },
-  { type: "functions", label: "Functions" },
   { type: "triggers", label: "Triggers" },
   { type: "widgets", label: "Widgets" },
   { type: "workflows", label: "Workflows" },
@@ -596,34 +584,35 @@ const RESOURCE_NAV: Array<{ type: ResourceType; label: string }> = [
 interface ModuleDefinitionsProps {
   triggers: ModuleDetailTrigger[] | undefined;
   actions: ModuleDetailAction[] | undefined;
-  functions: ModuleDetailFunction[] | undefined;
   widgets: ModuleDetailWidget[] | undefined;
   workflows: ModuleDetailWorkflow[] | undefined;
-  files: ModuleFiles;
 }
 
-/** What a module declares, one kind at a time. A function opens its source file when the file list has it. */
+/** What a module declares, one kind at a time. A kind the module has none of is left out. */
 export function ModuleDefinitions(props: ModuleDefinitionsProps) {
-  const { triggers, actions, functions, widgets, workflows, files } = props;
-  const [activeType, setActiveType] = useState<ResourceType>("actions");
+  const { triggers, actions, widgets, workflows } = props;
+  const [selectedType, setSelectedType] = useState<ResourceType>("actions");
   const counts: Record<ResourceType, number | undefined> = {
     actions: actions?.length,
     triggers: triggers?.length,
     workflows: workflows?.length,
     widgets: widgets?.length,
-    functions: functions?.length,
   };
+  const visibleNav = RESOURCE_NAV.filter((item) => counts[item.type] !== 0);
+  const activeType = visibleNav.some((item) => item.type === selectedType)
+    ? selectedType
+    : (visibleNav[0]?.type ?? selectedType);
   return (
     <div className="flex-1 min-h-0 grid grid-cols-4 gap-6">
       <div className="col-span-1 space-y-1">
-        {RESOURCE_NAV.map((item) => {
+        {visibleNav.map((item) => {
           const count = counts[item.type];
           const isActive = activeType === item.type;
           return (
             <button
               type="button"
               key={item.type}
-              onClick={() => setActiveType(item.type)}
+              onClick={() => setSelectedType(item.type)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors text-left",
                 isActive
@@ -643,16 +632,11 @@ export function ModuleDefinitions(props: ModuleDefinitionsProps) {
       <ScrollArea className="col-span-3 h-full pr-4">
         {activeType === "actions" && <ActionList items={actions} />}
         {activeType === "triggers" && <TriggerList items={triggers} />}
-        {activeType === "functions" && <FunctionList items={functions} files={files} />}
         {activeType === "widgets" && <WidgetList items={widgets} />}
         {activeType === "workflows" && <WorkflowList items={workflows} />}
       </ScrollArea>
     </div>
   );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return <p className="text-sm text-muted-foreground">{message}</p>;
 }
 
 function LoadingState() {
@@ -664,7 +648,7 @@ function TriggerList({ items }: { items: ModuleDetailTrigger[] | undefined }) {
     return <LoadingState />;
   }
   if (items.length === 0) {
-    return <EmptyState message="No triggers" />;
+    return null;
   }
   return (
     <div className="space-y-2">
@@ -691,7 +675,7 @@ function ActionList({ items }: { items: ModuleDetailAction[] | undefined }) {
     return <LoadingState />;
   }
   if (items.length === 0) {
-    return <EmptyState message="No actions" />;
+    return null;
   }
   return (
     <div className="space-y-2">
@@ -713,103 +697,12 @@ function ActionList({ items }: { items: ModuleDetailAction[] | undefined }) {
   );
 }
 
-function FunctionList({ items, files }: { items: ModuleDetailFunction[] | undefined; files: ModuleFiles }) {
-  const { loadList, list } = files;
-  const hasFunctions = items !== undefined && items.length > 0;
-  // The file list is what links a function to its source; fetched only once there is a function to link.
-  useEffect(() => {
-    if (hasFunctions) {
-      loadList();
-    }
-  }, [hasFunctions, loadList]);
-
-  if (items === undefined) {
-    return <LoadingState />;
-  }
-  if (items.length === 0) {
-    return <EmptyState message="No functions" />;
-  }
-  const listed = list.status === "ready" && list.list.available ? list.list.files : [];
-  return (
-    <div className="space-y-2">
-      {items.map((fn) => (
-        <FunctionRow key={fn.qualifiedName} fn={fn} filePath={matchFunctionFile(fn.file, listed)} files={files} />
-      ))}
-    </div>
-  );
-}
-
-/** A function, which opens its source file inline when that file is in the module's file list. */
-function FunctionRow({
-  fn,
-  filePath,
-  files,
-}: {
-  fn: ModuleDetailFunction;
-  filePath: string | null;
-  files: ModuleFiles;
-}) {
-  const [open, setOpen] = useState(false);
-  if (filePath === null) {
-    return (
-      <div className="flex items-start gap-3 p-3 rounded-md border bg-card">
-        <FunctionRowContent fn={fn} />
-      </div>
-    );
-  }
-  const Chevron = open ? ChevronDown : ChevronRight;
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-md border bg-card">
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="flex w-full items-start gap-3 p-3 rounded-md text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          data-testid={`function-row-${fn.qualifiedName}`}
-        >
-          <FunctionRowContent fn={fn} />
-          <Chevron className="h-4 w-4 shrink-0 self-center text-muted-foreground" />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="px-3 pb-3">
-        <ModuleFileContentView files={files} path={filePath} />
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-/** The inside of a function row, kept apart from its container so the row can become a button. */
-function FunctionRowContent({ fn }: { fn: ModuleDetailFunction }) {
-  const location = functionLocation(fn);
-  return (
-    <>
-      <div className="h-8 w-8 rounded flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
-        <FileCode className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium truncate">{fn.name}</p>
-          {fn.runtime && (
-            <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono shrink-0">
-              {fn.runtime}
-            </Badge>
-          )}
-        </div>
-        {location && (
-          <p className="text-xs text-muted-foreground font-mono truncate" title={location}>
-            {location}
-          </p>
-        )}
-      </div>
-    </>
-  );
-}
-
 function WidgetList({ items }: { items: ModuleDetailWidget[] | undefined }) {
   if (items === undefined) {
     return <LoadingState />;
   }
   if (items.length === 0) {
-    return <EmptyState message="No widgets" />;
+    return null;
   }
   return (
     <div className="space-y-2">
@@ -820,7 +713,6 @@ function WidgetList({ items }: { items: ModuleDetailWidget[] | undefined }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{widget.name}</p>
-            <p className="text-xs text-muted-foreground font-mono">{widget.slug}</p>
           </div>
         </div>
       ))}
@@ -833,7 +725,7 @@ function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) 
     return <LoadingState />;
   }
   if (items.length === 0) {
-    return <EmptyState message="This module does not declare any workflows." />;
+    return null;
   }
   return (
     <div className="space-y-2">
@@ -844,7 +736,6 @@ function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) 
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{workflow.name}</p>
-            <p className="text-xs text-muted-foreground font-mono">{workflow.slug}</p>
           </div>
         </div>
       ))}
@@ -857,7 +748,7 @@ function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) 
 function FromCompanionBadge() {
   return (
     <Badge variant="secondary" className="ml-2 text-[10px]">
-      From woofx3 desktop app
+      Set by the desktop app
     </Badge>
   );
 }
@@ -865,7 +756,7 @@ function FromCompanionBadge() {
 /** Under a local endpoint's setting: what editing it does, or how to hand it back to the companion. */
 function SettingSourceNote({ source, onReturn }: { source: SettingSource | undefined; onReturn: () => void }) {
   if (source?.source === "companion") {
-    return <p className="text-xs text-muted-foreground">Editing this stops the woofx3 desktop app from updating it.</p>;
+    return <p className="text-xs text-muted-foreground">If you change this, the desktop app stops updating it.</p>;
   }
   if (source?.source === "manual" && source.companionEnabled) {
     return (
@@ -954,7 +845,7 @@ function SettingsTab({ moduleId, manifestSettings }: SettingsTabProps) {
         setLoadState("loaded");
       })
       .catch((err) => {
-        setLoadError(err instanceof Error ? err.message : "Failed to load settings.");
+        setLoadError(err instanceof Error ? err.message : "Couldn't load the settings.");
         setLoadState("error");
       });
   }
@@ -982,7 +873,8 @@ function SettingsTab({ moduleId, manifestSettings }: SettingsTabProps) {
   if (loadState === "error") {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-destructive">{loadError}</p>
+        <p className="text-sm text-destructive">Couldn't load the settings. Try again.</p>
+        {loadError && <TechnicalDetails text={loadError} />}
       </div>
     );
   }
@@ -1004,7 +896,7 @@ function SettingsTab({ moduleId, manifestSettings }: SettingsTabProps) {
       setSaveSuccess(key);
       setTimeout(() => setSaveSuccess(null), 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save setting.");
+      setSaveError(err instanceof Error ? err.message : "Couldn't save. Try again.");
     } finally {
       setSaving(null);
     }
@@ -1018,7 +910,7 @@ function SettingsTab({ moduleId, manifestSettings }: SettingsTabProps) {
   }
 
   function clearSecret(key: string) {
-    if (!window.confirm("Clear this secret? The module loses it until a new value is saved.")) {
+    if (!window.confirm("Clear this? The module won't have it until you save a new one.")) {
       return;
     }
     void saveSetting(key, "", true);
@@ -1310,7 +1202,7 @@ function SecretSettingRow({
         type="password"
         autoComplete="new-password"
         value={value}
-        placeholder={isSet ? "Stored. Type a new value to replace it." : "Not set"}
+        placeholder={isSet ? "Saved. Type to replace it." : "Not set"}
         onChange={(e) => onChange(e.target.value)}
         className="font-mono text-sm"
       />
@@ -1398,7 +1290,7 @@ function IntegrationSettingButton({
         variant="outline"
         disabled={!instanceId || !supported || starting}
         onClick={() => void handleClick()}
-        title={supported ? undefined : `The "${action.integration}" integration is not available`}
+        title={supported ? undefined : "This isn't available on your setup yet."}
       >
         {field.label}
       </Button>
@@ -1479,7 +1371,7 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
     void syncAction(moduleDbId)
       .catch((err: unknown) => {
         if (!cancelled) {
-          setSyncError(err instanceof Error ? err.message : "Failed to sync resource instances from the engine.");
+          setSyncError(err instanceof Error ? err.message : "Couldn't refresh the list. Try again.");
         }
       })
       .finally(() => {
@@ -1510,25 +1402,20 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
         await syncAction(moduleDbId);
       }
     } catch (err) {
-      setOpError(err instanceof Error ? err.message : "Failed to delete resource.");
+      setOpError(err instanceof Error ? err.message : "Couldn't delete it. Try again.");
     } finally {
       setDeleting(null);
     }
   }
 
   if (!instanceId || !moduleDbId) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Install this module to manage its resource instances.</p>
-      </div>
-    );
+    return <div className="flex-1" />;
   }
 
   return (
     <div className="flex-1 min-h-0 overflow-auto space-y-6">
       <div>
-        <h3 className="text-sm font-semibold">Runtime instances</h3>
-        <p className="text-xs text-muted-foreground">User-created instances of this module&apos;s resource kinds.</p>
+        <h3 className="text-sm font-semibold">Your items</h3>
       </div>
 
       {(opError || syncError) && (
@@ -1550,9 +1437,7 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
       {instances === undefined || (syncing && instances.length === 0 && kindSections.length === 0) ? (
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
       ) : kindSections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No resource instances for this module, and its manifest does not declare any resource kinds.
-        </p>
+        <p className="text-sm text-muted-foreground">Nothing created yet.</p>
       ) : (
         kindSections.map((section) => {
           const kindInstances = (instances ?? []).filter((i) => i.kind === section.kind);
@@ -1581,14 +1466,13 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
               </div>
 
               {kindInstances.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No instances yet.</p>
+                <p className="text-xs text-muted-foreground">Nothing created yet.</p>
               ) : (
                 <div className="space-y-2">
                   {kindInstances.map((inst) => (
                     <div key={inst.canonicalId} className="flex items-center gap-3 p-3 rounded-md border bg-card">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{inst.displayName}</p>
-                        <p className="text-xs text-muted-foreground font-mono truncate">{inst.canonicalId}</p>
                       </div>
                       <Button
                         size="icon"
@@ -1647,14 +1531,9 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete resource</DialogTitle>
+            <DialogTitle>Delete {deleteTarget?.displayName}?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete{" "}
-            <span className="font-medium text-foreground">{deleteTarget?.displayName}</span>? This will also remove its
-            stored value and cannot be undone.
-          </p>
-          <p className="text-xs font-mono text-muted-foreground mt-1">{deleteTarget?.canonicalId}</p>
+          <p className="text-sm text-muted-foreground">This can't be undone.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel

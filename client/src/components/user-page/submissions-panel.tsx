@@ -39,9 +39,7 @@ export function SubmissionsPanel({ formId }: { formId: string }) {
       {status?.atCapacity && (
         <Alert variant="destructive" data-testid="alert-submissions-full">
           <AlertTitle>Your forms have stopped accepting answers</AlertTitle>
-          <AlertDescription>
-            Too many answers are waiting to reach your engine. They'll reopen as those are sent.
-          </AlertDescription>
+          <AlertDescription>Too many answers are waiting to be delivered. They'll reopen as they are.</AlertDescription>
         </Alert>
       )}
       {listStatus === "LoadingFirstPage" && (
@@ -108,13 +106,11 @@ function SubmissionCard({ submission }: { submission: FormSubmission }) {
           ))}
         </dl>
         {submission.status === "pending" && submission.lastError !== null && (
-          <p className="text-xs text-muted-foreground">Last try didn't get through: {submission.lastError}</p>
+          <p className="text-xs text-muted-foreground">Last try didn't get through.</p>
         )}
         {submission.status === "failed" && (
           <div className="flex flex-wrap items-center gap-3">
-            <p className="min-w-0 flex-1 text-sm text-destructive">
-              {submission.failureReason ?? "Your engine refused this answer."}
-            </p>
+            <p className="min-w-0 flex-1 text-sm text-destructive">This answer couldn't be saved.</p>
             <Button
               variant="outline"
               size="sm"

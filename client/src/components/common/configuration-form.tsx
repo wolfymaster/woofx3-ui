@@ -332,7 +332,7 @@ function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererPr
 
   let placeholder: string;
   if (!instanceId) {
-    placeholder = "No engine selected";
+    placeholder = "Nothing to choose from yet";
   } else if (loading) {
     placeholder = "Loading commands...";
   } else if (empty) {
@@ -479,13 +479,13 @@ function VariableToggleWrapper({
             type="button"
             onClick={toggle}
             className="absolute right-0 top-0 text-muted-foreground hover:text-foreground"
-            aria-label={variableMode ? "Use a fixed value" : "Reference a variable instead"}
+            aria-label={variableMode ? "Type a value" : "Use a variable"}
             data-testid={`button-toggle-variable-${field.id}`}
           >
             <Braces className="h-3.5 w-3.5" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>{variableMode ? "Use a fixed value" : "Reference a variable instead"}</TooltipContent>
+        <TooltipContent>{variableMode ? "Type a value" : "Use a variable"}</TooltipContent>
       </Tooltip>
       {variableMode ? (
         <div className="space-y-2 pr-6">

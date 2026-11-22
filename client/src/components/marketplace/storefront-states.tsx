@@ -1,4 +1,5 @@
 import { PackageSearch, Store, WifiOff } from "lucide-react";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { Button } from "@/components/ui/button";
 
 // What the storefront shows when it has nothing to show.
@@ -18,20 +19,13 @@ export function StorefrontError({ message, onRetry }: { message: string; onRetry
       <div className="space-y-1">
         <p className="text-base font-semibold">The marketplace isn't answering</p>
         <p className="max-w-md text-sm text-muted-foreground">
-          Nothing is wrong with your engine — the store is a separate service. Try again in a moment.
+          The store isn't reachable right now. Try again in a moment.
         </p>
       </div>
       <Button size="sm" variant="outline" onClick={onRetry}>
         Try again
       </Button>
-      <details className="max-w-lg text-left">
-        <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-          Technical details
-        </summary>
-        <p className="mt-2 break-words rounded-md bg-muted/60 p-2 font-mono text-[11px] text-muted-foreground">
-          {message}
-        </p>
-      </details>
+      <TechnicalDetails text={message} />
     </div>
   );
 }
@@ -65,9 +59,7 @@ export function StorefrontEmptyCatalog() {
       </span>
       <div className="space-y-1">
         <p className="text-base font-semibold">The store is being stocked</p>
-        <p className="max-w-md text-sm text-muted-foreground">
-          No listings are published to your engine yet. Modules, themes, emotes, overlays and alerts all land here.
-        </p>
+        <p className="max-w-md text-sm text-muted-foreground">Nothing is in the store yet. Check back soon.</p>
       </div>
     </div>
   );

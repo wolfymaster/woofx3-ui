@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
  */
 
 /** Buying needs the engine to take licenses, which an engine older than v0.71.0 does not. */
-const NO_PURCHASE_PATH_MESSAGE = "Buying needs an engine on woofx3 v0.71.0 or newer.";
+const NO_PURCHASE_PATH_MESSAGE = "Update woofx3 to buy this.";
 
 export type ListingInstallState =
   /**
@@ -275,12 +275,12 @@ function unavailableReason(reason: string): string {
     case "superseded":
       return "A newer edition has replaced this one.";
     case "unpriced":
-      return "This listing isn't on sale yet.";
+      return "This isn't available right now.";
     case "not_ready":
-      return "This listing isn't published yet.";
+      return "This isn't available right now.";
     case "commerce_unconfigured":
-      return "Purchases aren't available on this deployment.";
+      return "Buying isn't available on your setup.";
     default:
-      return "This listing can't be installed right now.";
+      return "This isn't available right now.";
   }
 }

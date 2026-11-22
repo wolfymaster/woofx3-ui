@@ -13,6 +13,7 @@ import {
 import { useMutation, useQuery } from "convex/react";
 import { ExternalLink, Globe, Loader2, Plus, RotateCcw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { SaveBar } from "@/components/common/save-bar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -66,11 +67,11 @@ export default function UserPageScreen() {
   if (!instance || !page) {
     return (
       <div className="mx-auto max-w-md p-6 py-16 text-center text-sm text-muted-foreground">
-        Choose an engine you are a member of to edit its page.
+        Pick a channel to edit its page.
       </div>
     );
   }
-  // Keyed by instance, so switching engines starts a fresh editor rather than carrying edits across.
+  // Keyed by instance, so switching channels starts a fresh editor rather than carrying edits across.
   return <UserPageEditor key={instance._id} instanceId={instance._id} page={page} isAdmin={isAdmin} />;
 }
 
@@ -245,7 +246,7 @@ function UserPageEditor({
               onClick={onSave}
               testId="button-save-draft"
             >
-              Save draft
+              Save
             </GatedButton>
             <GatedButton
               gate={publishGate(facts)}
@@ -255,7 +256,7 @@ function UserPageEditor({
               testId="button-publish"
             >
               <Globe className="mr-1.5 h-3.5 w-3.5" />
-              Publish
+              Publish page
             </GatedButton>
           </>
         }
@@ -264,24 +265,21 @@ function UserPageEditor({
       <div className="mb-6 space-y-3 empty:hidden">
         {page.slug === null && (
           <Alert data-testid="alert-no-slug">
-            <AlertTitle>This engine has no woofx3 address</AlertTitle>
-            <AlertDescription>{NO_SLUG_MESSAGE} You can still build the page here.</AlertDescription>
+            <AlertTitle>You don't have a page address yet</AlertTitle>
+            <AlertDescription>{NO_SLUG_MESSAGE}</AlertDescription>
           </Alert>
         )}
         {page.slug !== null && !page.canPublish && (
           <Alert data-testid="alert-not-entitled">
-            <AlertTitle>Publishing needs an upgrade</AlertTitle>
+            <AlertTitle>Publishing isn't available yet</AlertTitle>
             <AlertDescription>{NOT_ENTITLED_MESSAGE}</AlertDescription>
           </Alert>
         )}
         {stale && (
           <Alert variant="destructive" data-testid="alert-stale">
-            <AlertTitle>Someone else saved this page</AlertTitle>
+            <AlertTitle>This page was changed elsewhere</AlertTitle>
             <AlertDescription className="flex flex-wrap items-center gap-3">
-              <span>
-                Their draft is newer than the one you started from. Reload to see it; your unsaved changes here will be
-                lost.
-              </span>
+              <span>Reload to see the latest version. Unsaved changes here will be lost.</span>
               <Button size="sm" variant="outline" onClick={onReload} data-testid="button-reload-draft">
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                 Reload
@@ -347,6 +345,14 @@ function UserPageEditor({
           </Card>
         </aside>
       </div>
+
+      <SaveBar
+        onSave={onSave}
+        saving={busy === "save"}
+        disabled={busy !== null || saveGate.kind !== "enabled"}
+        dirty={dirty}
+        testId="button-save-draft-bar"
+      />
     </div>
   );
 }
@@ -430,7 +436,11 @@ function PageWideProblems({ problems }: { problems: ProblemIndex }) {
 
 function StatusBadge({ status, dirty }: { status: PageStatus; dirty: boolean }) {
   const label =
-    status.kind === "unpublished" ? "Not published" : status.kind === "live" ? "Live" : "Live, newer draft saved";
+    status.kind === "unpublished"
+      ? "Not published"
+      : status.kind === "live"
+        ? "Live"
+        : "Live, with unpublished changes";
   return (
     <div className="mr-1 flex items-center gap-2" data-testid="page-status">
       <Badge variant={status.kind === "unpublished" ? "secondary" : "default"}>

@@ -488,7 +488,7 @@ describe("lockedSectionCopy", () => {
       viewer: { session: signedIn, canSignIn: true, roleCheck: "stopped" },
       action: null,
       pending: false,
-      says: "can't be unlocked",
+      says: "can't see this section",
     },
     {
       name: "not a follower",
@@ -504,7 +504,7 @@ describe("lockedSectionCopy", () => {
       viewer: { session: signedIn, canSignIn: true, roleCheck: "idle" },
       action: null,
       pending: false,
-      says: "can't be unlocked",
+      says: "can't see this section",
     },
   ];
   for (const { name, reason, viewer, action, pending, says } of cases) {

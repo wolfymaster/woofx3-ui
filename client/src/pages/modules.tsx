@@ -2,6 +2,7 @@ import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
 import { Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
@@ -287,9 +288,9 @@ export default function Modules() {
                   <CardContent className="pt-6 space-y-3">
                     <div className="flex items-center gap-2 text-destructive">
                       <XCircle className="h-4 w-4" />
-                      <span className="font-medium">Failed to load module</span>
+                      <span className="font-medium">We couldn't open this module. Try again.</span>
                     </div>
-                    <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
+                    <TechnicalDetails text={moduleDetailError} />
                     <Button variant="outline" size="sm" onClick={() => navigate(MODULES_PATH)}>
                       Back
                     </Button>
@@ -306,7 +307,6 @@ export default function Modules() {
                     module={meta}
                     triggers={detailProps?.triggers}
                     actions={detailProps?.actions}
-                    functions={detailProps?.functions}
                     widgets={detailProps?.widgets}
                     workflows={detailProps?.workflows}
                     loading={moduleDetailLoading || !detailProps}
@@ -350,7 +350,8 @@ export default function Modules() {
           <DialogHeader>
             <DialogTitle>Install failed</DialogTitle>
           </DialogHeader>
-          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{install.error}</pre>
+          <p className="text-sm">Couldn't install this module. Try again.</p>
+          {install.error && <TechnicalDetails text={install.error} />}
         </DialogContent>
       </Dialog>
 

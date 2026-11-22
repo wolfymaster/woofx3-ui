@@ -91,14 +91,14 @@ describe("ListingInstallButton", () => {
   test("without a purchase path the Buy button is disabled and says why", async () => {
     const tree = await render(PURCHASABLE, "overlay");
     expect(button(tree, /Buy for/).props.disabled).toBe(true);
-    expect(JSON.stringify(tree.toJSON())).toContain("v0.71.0");
+    expect(JSON.stringify(tree.toJSON())).toContain("Update woofx3 to buy this.");
   });
 
   test("an organization's member may not buy", async () => {
     access = { manageBilling: false, viewLicenseKeys: false };
     const tree = await render(PURCHASABLE, "overlay", { onPurchase: () => purchases.push("bought") });
     expect(button(tree, /Buy for/).props.disabled).toBe(true);
-    expect(JSON.stringify(tree.toJSON())).toContain("Only the organization's owner can buy this");
+    expect(JSON.stringify(tree.toJSON())).toContain("Only the account owner can change this");
   });
 
   test("a free bundle installs through the bundle install", async () => {
