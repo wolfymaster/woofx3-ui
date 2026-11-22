@@ -5,12 +5,19 @@ import { api } from "./_generated/api";
 import { newBackend } from "./lib/convexTest.testing";
 
 const realFetch = globalThis.fetch;
+const OTHER_TESTS_ENGINE_URL = "https://engine.example/";
 let fetchedUrls: string[] = [];
 
 beforeEach(() => {
   fetchedUrls = [];
   globalThis.fetch = (async (input: string | URL | Request) => {
-    fetchedUrls.push(String(input));
+    const url = String(input);
+    // Other test files in this process leave engine connections running against
+    // this stub host; their retries would land here and fail an assertion that
+    // is about downloads for this listing.
+    if (!url.startsWith(OTHER_TESTS_ENGINE_URL)) {
+      fetchedUrls.push(url);
+    }
     return new Response("{}", { status: 404 });
   }) as typeof fetch;
 });
