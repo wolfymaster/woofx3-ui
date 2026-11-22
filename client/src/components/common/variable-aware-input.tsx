@@ -41,7 +41,7 @@ interface VariableMenu extends TypedReference {
   source: "typed" | "browse";
 }
 
-function functionAvailability(variables: readonly VariableOption[]): FunctionAvailability {
+export function functionAvailability(variables: readonly VariableOption[]): FunctionAvailability {
   if (variables.length === 0 || !variables.every((option) => option.value.startsWith("${"))) {
     return "not-here";
   }

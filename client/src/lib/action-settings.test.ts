@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import {
   appendToken,
+  insertTokenAt,
   isExpressionText,
   isWholeReference,
   MISSING_SETTING_MESSAGE,
@@ -11,6 +12,7 @@ import {
   variableUse,
   withSetting,
 } from "@/lib/action-settings";
+import { variableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 const counter: ConfigField = {
@@ -164,5 +166,27 @@ describe("an expression left as text", () => {
   test("is left to the field's own note in a number setting", () => {
     expect(settingProblem(numberField, "{round(amount)}")).toBeNull();
     expect(settingProblem(numberField, "${round(trigger.data.amount)}")).toBeNull();
+  });
+});
+
+describe("insertTokenAt", () => {
+  const userA = "${trigger.data.variables.userA}";
+  const names = variableNames([{ value: userA, label: "userA", group: "Command", type: "string" }]);
+  const token = "${trigger.data.chatter}";
+
+  test("writes the token at the cursor, not at the end", () => {
+    const stored = `${userA} gives a hug`;
+    const result = insertTokenAt(stored, token, { start: 7, end: 7 }, names, false);
+    expect(result.text).toBe(`${userA}${token} gives a hug`);
+    expect(result.cursor).toBe(7 + token.length);
+  });
+
+  test("replaces a selection", () => {
+    expect(insertTokenAt("Hi there", token, { start: 3, end: 8 }, names, false).text).toBe(`Hi ${token}`);
+  });
+
+  test("counts a shown reference by its short name", () => {
+    const result = insertTokenAt(`${userA}!`, "${other.value}", { start: 7, end: 7 }, names, false);
+    expect(result.text).toBe(`${userA}\${other.value}!`);
   });
 });
