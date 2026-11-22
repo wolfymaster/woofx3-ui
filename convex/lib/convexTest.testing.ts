@@ -50,9 +50,15 @@ function componentModules(dir: string): Record<string, () => Promise<unknown>> {
   return modulesIn(dir, (path) => path.endsWith(".js"));
 }
 
+// convex-test runs scheduled functions on real timers, so a job a test leaves
+// behind keeps running into whichever test starts next. Backends are tracked
+// here so `settleBackends` can let them finish before the next test begins.
+const liveBackends: Array<ReturnType<typeof convexTest>> = [];
+
 /** An in-memory Convex backend with this app's schema, functions and components, for tests that need real queries and mutations. */
 export function newBackend() {
   const t = convexTest(schema, convexModules());
+  liveBackends.push(t);
   t.registerComponent("rateLimiter", rateLimiterSchema, componentModules(RATE_LIMITER_DIR));
   t.registerComponent("migrations", migrationsSchema, componentModules(MIGRATIONS_DIR));
   return t;
@@ -88,4 +94,24 @@ export async function finishScheduledChain(t: ReturnType<typeof newBackend>, max
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   throw new Error(`scheduled functions still waiting after ${maxRounds} rounds`);
+}
+
+/**
+ * Cancels every backend's pending scheduled functions and waits for the ones
+ * already running, then forgets the backends. Self-rescheduling jobs (sweeps)
+ * never finish on their own, so they are cut off rather than drained.
+ */
+export async function settleBackends(): Promise<void> {
+  const settling = liveBackends.splice(0);
+  for (const t of settling as Array<ReturnType<typeof newBackend>>) {
+    await t.run(async (ctx) => {
+      const jobs = await ctx.db.system.query("_scheduled_functions").collect();
+      for (const job of jobs) {
+        if (job.state.kind === "pending") {
+          await ctx.scheduler.cancel(job._id);
+        }
+      }
+    });
+    await t.finishInProgressScheduledFunctions();
+  }
 }
