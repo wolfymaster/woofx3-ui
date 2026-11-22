@@ -26,7 +26,7 @@ export function RenameDialog({ title, current, onRename, testId }: RenameDialogP
       setOpen(false);
       toast({ title: "Renamed" });
     } catch (error) {
-      toast({ title: "Could not rename", description: actionErrorMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't rename. Try again.", description: actionErrorMessage(error), variant: "destructive" });
     } finally {
       setSaving(false);
     }

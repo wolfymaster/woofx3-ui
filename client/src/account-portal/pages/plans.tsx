@@ -86,7 +86,11 @@ function UpgradeOptions({
       const discount = await previewPromotionCode({ accountId: organization.accountId, code });
       setPreview({ code: code.trim(), discount });
     } catch (error) {
-      toast({ title: "Could not check the code", description: actionErrorMessage(error), variant: "destructive" });
+      toast({
+        title: "Couldn't check the code. Try again.",
+        description: actionErrorMessage(error),
+        variant: "destructive",
+      });
     }
   }
 
@@ -120,7 +124,7 @@ function UpgradeOptions({
           return openPortal({ accountId: organization.accountId });
         }
         if (action === "contact_support") {
-          toast({ title: "Organization suspended", description: actionErrorMessage(error), variant: "destructive" });
+          toast({ title: "Account paused", description: actionErrorMessage(error), variant: "destructive" });
           return null;
         }
         throw error;
@@ -132,14 +136,14 @@ function UpgradeOptions({
     <section className="space-y-6" data-testid="section-upgrade-options">
       <div className="space-y-1 text-center">
         <h2 className="text-lg font-semibold">
-          {readOnly ? "Plans for hosted engines" : changesExisting ? "All plans" : "Choose a plan"}
+          {readOnly ? "Hosted plans" : changesExisting ? "All plans" : "Choose a plan"}
         </h2>
         <p className="text-sm text-muted-foreground">
           {readOnly
-            ? "What a hosted engine runs on."
+            ? "What woofx3 runs on when we host it."
             : changesExisting
               ? "Compare plans and change yours any time."
-              : "Pick the plan to run your engine on."}
+              : "Pick a plan to get started."}
         </p>
       </div>
       <fieldset className="mx-auto flex w-fit items-center gap-1 rounded-lg bg-muted p-1">
@@ -283,10 +287,10 @@ function ActivePlan({
         {checkoutNotice}
         {view.kind === "no_subscription_needed" ? (
           <p className="text-center" data-testid="text-no-subscription-needed">
-            No subscription needed for self-hosted engines.
+            No subscription needed for self-hosted woofx3.
           </p>
         ) : null}
-        {view.kind === "no_plan" ? <p className="text-center">Your hosted engine has no plan yet.</p> : null}
+        {view.kind === "no_plan" ? <p className="text-center">Pick a plan below to get started.</p> : null}
         {items.length > 0 ? <BillingSummary items={items} /> : null}
         {notice ? <StatusBanner tone="warning">{notice}</StatusBanner> : null}
         {plan !== null ? <PlanHighlights items={PLAN_DETAILS[plan].highlights} /> : null}
@@ -352,7 +356,11 @@ function ScheduledChangeBanner({
       toast({ title: "You're staying on your plan." });
       onKept();
     } catch (error) {
-      toast({ title: "Could not cancel the change", description: actionErrorMessage(error), variant: "destructive" });
+      toast({
+        title: "Couldn't cancel the change. Try again.",
+        description: actionErrorMessage(error),
+        variant: "destructive",
+      });
     } finally {
       setBusy(false);
     }
@@ -415,7 +423,7 @@ export default function PlansPage() {
 
   return (
     <>
-      <PageHeader title="Plans" description="The plan behind this organization's hosted engines." />
+      <PageHeader title="Plans" description="Your plan and what it includes." />
       <div className="space-y-10">
         {scheduled.change !== null && current !== null ? (
           <ScheduledChangeBanner

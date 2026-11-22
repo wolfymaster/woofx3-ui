@@ -34,10 +34,10 @@ export function PaidFeature({ feature, children, keepSlot = false }: PaidFeature
       return (
         <p className="text-sm text-muted-foreground" data-testid={`paid-feature-upgrade-${feature}`}>
           {IS_DESKTOP ? (
-            "Not on your plan"
+            "Part of a higher plan"
           ) : (
             <>
-              Not on your plan. <Link href={BILLING_PATH}>See plans</Link>
+              Part of a higher plan. <Link href={BILLING_PATH}>See plans</Link>
             </>
           )}
         </p>
@@ -45,7 +45,7 @@ export function PaidFeature({ feature, children, keepSlot = false }: PaidFeature
     case "unavailable":
       return keepSlot ? (
         <p className="text-sm text-muted-foreground" data-testid={`paid-feature-unavailable-${feature}`}>
-          Available on hosted engines
+          Available with a hosted plan
         </p>
       ) : null;
   }

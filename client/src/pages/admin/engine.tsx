@@ -52,7 +52,7 @@ function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; nam
       await updateInstance({ instanceId, name: trimmed });
     } catch (e) {
       toast({
-        title: "Couldn't rename engine",
+        title: "Couldn't rename. Try again.",
         description: actionErrorMessage(e),
         variant: "destructive",
       });
@@ -68,8 +68,8 @@ function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; nam
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Engine name</CardTitle>
-        <CardDescription>The name shown when you switch between engines.</CardDescription>
+        <CardTitle>Name</CardTitle>
+        <CardDescription>The name shown when you switch between your woofx3 setups.</CardDescription>
       </CardHeader>
       <CardContent>
         <form
@@ -80,7 +80,7 @@ function EngineNameCard({ instanceId, name }: { instanceId: Id<"instances">; nam
           }}
         >
           <Input
-            aria-label="Engine name"
+            aria-label="Name"
             maxLength={ENGINE_NAME_MAX_LENGTH}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -158,10 +158,10 @@ function EngineSettings() {
     try {
       const result = await registerInstance({ instanceId: instance._id });
       if (!result.ok) {
-        setRegisterError(result.error);
+        setRegisterError("Couldn't connect. Check the address and try again.");
       }
     } catch (e) {
-      setRegisterError(e instanceof Error ? e.message : String(e));
+      setRegisterError(actionErrorMessage(e));
     } finally {
       setRegistering(false);
     }
@@ -170,7 +170,7 @@ function EngineSettings() {
   const handleTestConnection = useCallback(async () => {
     if (!effectiveUrl) {
       setStatus("error");
-      setErrorMsg("No engine URL configured");
+      setErrorMsg("Enter your server address first.");
       return;
     }
     setStatus("testing");
@@ -186,11 +186,11 @@ function EngineSettings() {
         setStatus("success");
       } else {
         setStatus("error");
-        setErrorMsg(result.error ?? "Unknown error");
+        setErrorMsg("Couldn't connect. Check the address and try again.");
       }
     } catch (e) {
       setStatus("error");
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(actionErrorMessage(e));
     }
 
     resetTimer.current = setTimeout(() => {
@@ -212,7 +212,7 @@ function EngineSettings() {
       <Card>
         <CardContent className="flex items-center gap-2 py-8 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading engine…
+          Loading…
         </CardContent>
       </Card>
     );
@@ -222,7 +222,7 @@ function EngineSettings() {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-muted-foreground">
-          No engine selected. Complete onboarding or pick an engine from the header menu.
+          Nothing selected. Complete onboarding or pick one from the header menu.
         </CardContent>
       </Card>
     );
@@ -248,14 +248,12 @@ function EngineSettings() {
       <EngineNameCard instanceId={instance._id} name={instance.name} />
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Engine configuration</CardTitle>
-          <CardDescription>
-            Endpoint for the selected engine ({instance.name}). Each engine has its own URL.
-          </CardDescription>
+          <CardTitle className="text-lg">Server</CardTitle>
+          <CardDescription>Where {instance.name} runs.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-2">
-            <Label htmlFor="engine-url">Engine URL</Label>
+            <Label htmlFor="engine-url">Server address</Label>
             <div className="flex flex-wrap gap-2">
               <Input
                 id="engine-url"
@@ -295,26 +293,21 @@ function EngineSettings() {
                   : status === "success"
                     ? "Connected"
                     : status === "error"
-                      ? "Failed"
-                      : "Test Connection"}
+                      ? "Not connected"
+                      : "Check connection"}
               </Button>
             </div>
             {saveError && <p className="text-xs text-destructive">{saveError}</p>}
             {status === "error" && errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
-            {status === "success" && <p className="text-xs text-green-500">Engine is reachable.</p>}
-            <p className="text-xs text-muted-foreground">
-              The hostname and port (or full URL) where this engine&apos;s backend API is running. If no protocol is
-              specified, the current page&apos;s protocol will be used.
-            </p>
+            {status === "success" && <p className="text-xs text-green-500">Connected.</p>}
+            <p className="text-xs text-muted-foreground">The address and port where your server is running.</p>
           </div>
           <Separator />
           <div className="grid gap-2">
-            <Label>Registration status</Label>
+            <Label>Connection</Label>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
               <div className={`h-2 w-2 rounded-full ${instance.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
-              <p className="text-sm text-muted-foreground">
-                {instance.clientId ? "Registered with engine" : "Not registered — register from here."}
-              </p>
+              <p className="text-sm text-muted-foreground">{instance.clientId ? "Connected" : "Not connected yet."}</p>
             </div>
             {!instance.clientId && (
               <div className="space-y-1">
@@ -326,20 +319,11 @@ function EngineSettings() {
                   data-testid="button-register-engine"
                 >
                   {registering ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                  Register with engine
+                  Connect
                 </Button>
                 {registerError && <p className="text-xs text-destructive">{registerError}</p>}
-                <p className="text-xs text-muted-foreground">
-                  Exchanges credentials with the engine at this URL. Save the URL first if you just changed it.
-                </p>
               </div>
             )}
-          </div>
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-            <div className="h-2 w-2 rounded-full bg-green-500" />
-            <p className="text-sm text-muted-foreground">
-              Saving the URL updates this engine and reconnects the live connection.
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -363,8 +347,8 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       window.location.href = "/";
     } catch (e) {
       toast({
-        title: "Couldn't delete engine",
-        description: e instanceof Error ? e.message : String(e),
+        title: "Couldn't delete. Try again.",
+        description: actionErrorMessage(e),
         variant: "destructive",
       });
       setDeleting(false);
@@ -381,11 +365,11 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="text-lg text-destructive">Danger zone</CardTitle>
-          <CardDescription>Irreversible actions for this engine.</CardDescription>
+          <CardDescription>Actions that cannot be undone.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="destructive" data-testid="button-delete-instance" onClick={() => setDialogOpen(true)}>
-            Delete Engine
+            Delete woofx3
           </Button>
         </CardContent>
       </Card>
@@ -393,13 +377,11 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete engine</AlertDialogTitle>
+            <AlertDialogTitle>Delete woofx3</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this engine? This action is irreversible and will permanently remove all
-              data associated with this engine, including workflows, scenes, and assets.
-              {managed
-                ? " Your managed engine is shut down and its address is released, so it can be claimed again."
-                : null}
+              Are you sure? This cannot be undone and permanently removes everything in it, including your workflows,
+              scenes and uploads.
+              {managed ? " It is shut down and its address is released, so it can be claimed again." : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -414,7 +396,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
               ) : (
                 <AlertTriangle className="h-4 w-4 mr-2" />
               )}
-              Delete Engine
+              Delete woofx3
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -426,7 +408,7 @@ function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances
 export default function AdminEngine() {
   return (
     <div className="container mx-auto p-6">
-      <PageHeader title="Engine" description="Where this engine lives, and how it stays in sync." />
+      <PageHeader title="Your woofx3" />
 
       <EngineSettings />
     </div>

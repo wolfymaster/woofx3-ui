@@ -96,7 +96,7 @@ export default function Feedback() {
     <div className="container mx-auto p-6 max-w-4xl">
       <PageHeader
         title="Feedback"
-        description="Suggest ideas, report bugs, and vote for what you want next. Everyone on woofx3 sees this board."
+        description="Suggest ideas, report bugs and vote on what comes next."
         actions={
           <Button asChild data-testid="button-feedback-new">
             <Link href={FEEDBACK_NEW_PATH}>

@@ -67,7 +67,11 @@ function ChangeAmountDialog({ sponsorship, onChanged }: { sponsorship: Sponsorsh
       setOpen(false);
       onChanged();
     } catch (error) {
-      toast({ title: "Could not change the amount", description: actionErrorMessage(error), variant: "destructive" });
+      toast({
+        title: "Couldn't change the amount. Try again.",
+        description: actionErrorMessage(error),
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -125,7 +129,7 @@ function SponsorshipCard({ sponsorship, onChanged }: { sponsorship: Sponsorship;
       await cancel({ sponsorshipId: sponsorship.id });
       onChanged();
     } catch (error) {
-      toast({ title: "Could not cancel", description: actionErrorMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't cancel. Try again.", description: actionErrorMessage(error), variant: "destructive" });
     }
   }
 
@@ -231,9 +235,7 @@ export function SponsorshipSection() {
       <CardHeader>
         <CardTitle>Your sponsorship</CardTitle>
         {list.state === "ready" && sponsorships.length === 0 ? (
-          <CardDescription>
-            You aren&apos;t sponsoring woofx3 yet. A sponsorship supports the project, and it shows up here.
-          </CardDescription>
+          <CardDescription>You aren&apos;t sponsoring woofx3 yet.</CardDescription>
         ) : null}
       </CardHeader>
       <CardContent className="space-y-6">

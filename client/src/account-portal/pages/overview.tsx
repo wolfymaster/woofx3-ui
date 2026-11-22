@@ -24,7 +24,7 @@ export default function OverviewPage() {
     <>
       <PageHeader
         title={organization?.name ?? "Overview"}
-        description={organization === null ? "Every engine you can open." : "How this organization stands."}
+        description={organization === null ? "Every woofx3 you can open." : "How this organization stands."}
         actions={
           organization?.can.renameOrganization ? (
             <RenameDialog

@@ -298,7 +298,7 @@ describe("Overview engines", () => {
   test("offers the owner a way to create another engine", async () => {
     const renderer = await render("owner", <OverviewPage />);
     expect(byTestId(renderer, "row-engine-instance-1").length).toBe(1);
-    expect(byTestId(renderer, "button-create-engine").map(textOf)).toEqual(["Create another engine"]);
+    expect(byTestId(renderer, "button-create-engine").map(textOf)).toEqual(["Create another woofx3"]);
   });
 
   test("offers an admin no way to create one", async () => {
@@ -776,7 +776,7 @@ describe("Sponsorship page checkout return", () => {
   test("a cancelled checkout says nothing was charged", async () => {
     search = "sponsorship=cancelled";
     const renderer = await render(null, <SponsorshipPage />);
-    expect(text(renderer, "text-sponsorship-cancelled")).toEqual(["Checkout cancelled. Nothing was charged."]);
+    expect(text(renderer, "text-sponsorship-cancelled")).toEqual(["Checkout canceled. Nothing was charged."]);
   });
 
   test("the organization's checkout keys do not start a sponsorship return", async () => {

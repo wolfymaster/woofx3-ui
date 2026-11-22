@@ -28,7 +28,7 @@ export const SPONSORSHIP_POLL_TEXT: Record<CheckoutPoll["phase"], string> = {
 
 export const SPONSORSHIP_UNTRACKED_TEXT = "Thanks! Your payment is being confirmed, and it shows here in a moment.";
 
-export const SPONSORSHIP_CANCELLED_TEXT = "Checkout cancelled. Nothing was charged.";
+export const SPONSORSHIP_CANCELLED_TEXT = "Checkout canceled. Nothing was charged.";
 
 /** Added to the return address of the card-update page; must match `PAYMENT_METHOD_RETURN_QUERY` in convex/sponsorships.ts. */
 export const PAYMENT_METHOD_RETURN_KEY = "sponsorshipPaymentMethod";

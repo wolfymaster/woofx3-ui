@@ -76,7 +76,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           />
         );
       }
-      return <ErrorFallback onReset={this.handleReset} message={this.state.error?.message} />;
+      return <ErrorFallback onReset={this.handleReset} />;
     }
 
     return this.props.children;

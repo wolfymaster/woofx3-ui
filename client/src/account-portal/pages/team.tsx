@@ -38,7 +38,7 @@ async function run(action: () => Promise<unknown>, success: string) {
     await action();
     toast({ title: success });
   } catch (error) {
-    toast({ title: "Failed", description: actionErrorMessage(error), variant: "destructive" });
+    toast({ title: "Something went wrong", description: actionErrorMessage(error), variant: "destructive" });
   }
 }
 
@@ -128,7 +128,7 @@ function AddToEngine({
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="h-7 gap-1" data-testid={`button-add-engine-${member.userId}`}>
           <Plus className="h-3 w-3" />
-          Add to engine
+          Add to woofx3
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
@@ -178,7 +178,9 @@ function MemberRow({ member, emailsShown, isMe }: { member: OrgMember; emailsSho
             <MemberEmail email={member.email} shown={emailsShown} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {member.engines.length === 0 ? <span className="text-sm text-muted-foreground">No engines</span> : null}
+            {member.engines.length === 0 ? (
+              <span className="text-sm text-muted-foreground">Not on any woofx3</span>
+            ) : null}
             {member.engines.map((engine) => (
               <EngineAccess key={engine.instanceId} member={member} engine={engine} editable={engineAccessChangeable} />
             ))}
@@ -231,7 +233,7 @@ function MemberRow({ member, emailsShown, isMe }: { member: OrgMember; emailsSho
               </Button>
             }
             title={`Remove ${member.name}?`}
-            description={`They lose access to ${organization.name} and all its engines.`}
+            description={`They lose access to ${organization.name} and everything in it.`}
             confirmLabel="Remove"
             destructive
             testId={`button-remove-member-${member.userId}`}
@@ -261,7 +263,7 @@ function PendingInvitations({ invitations }: { invitations: OrganizationInvitati
     <Card data-testid="card-pending-invitations">
       <CardHeader>
         <CardTitle>Pending invitations</CardTitle>
-        <CardDescription>They join the organization with access to the engine they were invited to.</CardDescription>
+        <CardDescription>They get access to the woofx3 they were invited to.</CardDescription>
       </CardHeader>
       <CardContent>
         <ul className="divide-y">
@@ -311,7 +313,7 @@ export default function TeamPage() {
     <>
       <PageHeader
         title="Team"
-        description="Who can open which engine, and what they can do on it."
+        description="Who has access, and what they can do."
         actions={
           <div className="flex items-center gap-2">
             {members && hasMemberEmails(members) ? (
@@ -321,7 +323,7 @@ export default function TeamPage() {
               <Button asChild data-testid="button-invite-member">
                 <Link href={`${TEAM_PATH}/invite`}>
                   <UserPlus className="h-4 w-4 mr-2" />
-                  Invite to an engine
+                  Invite to a woofx3
                 </Link>
               </Button>
             ) : null}
@@ -333,16 +335,14 @@ export default function TeamPage() {
           <CardHeader>
             <CardTitle>Members</CardTitle>
             <CardDescription>
-              Owners and admins have every engine. Members have the engines listed beside them.
+              Owners and admins have access to everything. Members have access to what is listed beside them.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {members === undefined ? (
               <p className="text-sm text-muted-foreground">Loading members...</p>
             ) : members === null ? (
-              <p className="text-sm text-muted-foreground">
-                Your role in this organization doesn&apos;t include its member list.
-              </p>
+              <p className="text-sm text-muted-foreground">You don't have access to the member list.</p>
             ) : (
               <ul className="divide-y">
                 {members.map((member) => (

@@ -6,8 +6,8 @@ const STATE_LABELS: Record<SubscriptionState, string> = {
   trialing: "Trial",
   active: "Active",
   past_due: "Payment needed",
-  suspended: "Suspended",
-  exempt: "Complimentary",
+  suspended: "Paused",
+  exempt: "Free",
 };
 
 const INTERVAL_LABELS: Record<BillingInterval, string> = { month: "monthly", year: "yearly" };
@@ -43,15 +43,15 @@ export function subscriptionNotice(subscription: OrgSubscription): string | null
     case "trialing":
       return subscription.nextBillingAt === null
         ? null
-        : `Your trial ends ${formatDay(subscription.nextBillingAt)}. Add a payment method to keep your engine.`;
+        : `Your trial ends ${formatDay(subscription.nextBillingAt)}. Add a payment method to keep woofx3 running.`;
     case "past_due":
       return subscription.graceEndsAt === null
-        ? "Payment failed. Update your payment method or hosted engines pause."
-        : `Payment failed. Update by ${formatDay(subscription.graceEndsAt)} or hosted engines pause.`;
+        ? "Payment failed. Update your payment method or woofx3 will pause."
+        : `Payment failed. Update your payment method by ${formatDay(subscription.graceEndsAt)} or woofx3 will pause.`;
     case "suspended":
       return subscription.spinDownAt === null
-        ? "Subscription ended. Hosted engines are paused."
-        : `Subscription ended. Hosted engines pause on ${formatDay(subscription.spinDownAt)}.`;
+        ? "Your subscription ended. woofx3 is paused."
+        : `Your subscription ended. woofx3 pauses on ${formatDay(subscription.spinDownAt)}.`;
     case "active":
     case "exempt":
       return null;

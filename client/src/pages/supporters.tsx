@@ -1,6 +1,8 @@
 import type { SupporterMetric, SupporterStream } from "@shared/supporters";
 import { Copy, Gem, Gift, Loader2, Megaphone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { PageHeader } from "@/components/layout/page-header";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
@@ -97,7 +99,7 @@ async function copyToClipboard(text: string): Promise<void> {
     await navigator.clipboard.writeText(text);
     toast({ title: "Copied", description: text });
   } catch {
-    toast({ title: "Could not copy", description: text, variant: "destructive" });
+    toast({ title: "Couldn't copy. Try again.", description: text, variant: "destructive" });
   }
 }
 
@@ -106,14 +108,16 @@ export default function Supporters() {
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
-      <PageHeader
-        title="Supporters"
-        description="The viewers who cheer and gift subs, all time or for one stream. Look anyone up before a thank-you or a VIP decision."
-      />
+      <PageHeader title="Supporters" description="Your top cheerers and sub gifters, all time or per stream." />
       {engineInstanceId ? (
         <SupportersView engineInstanceId={engineInstanceId} />
       ) : (
-        <p className="text-sm text-muted-foreground">No engine available yet.</p>
+        <p className="text-sm text-muted-foreground">
+          Set up your stream to see supporters.{" "}
+          <Link href="/auth/onboarding" className="underline underline-offset-2">
+            Set up
+          </Link>
+        </p>
       )}
     </div>
   );
@@ -467,11 +471,11 @@ function ViewerDetail({ engineInstanceId, viewer }: { engineInstanceId: Instance
       await enqueueShoutout(user);
       toast({
         title: "Shoutout queued",
-        description: `${user.displayName} is shouted out when Twitch's cooldown allows.`,
+        description: `${user.displayName} will get a shoutout as soon as Twitch allows.`,
       });
     } catch (err) {
       toast({
-        title: "Could not queue the shoutout",
+        title: "Couldn't queue the shoutout. Try again.",
         description: supporterErrorText(err),
         variant: "destructive",
       });
@@ -562,9 +566,9 @@ function ViewerDetail({ engineInstanceId, viewer }: { engineInstanceId: Instance
         </Button>
       </div>
       {canShoutOut === false && (
-        <p className="text-xs text-muted-foreground" data-testid="text-shoutout-unavailable">
-          To shout out from here, reconnect Twitch in Settings → Integrations and grant the shoutout permission.
-        </p>
+        <div data-testid="text-shoutout-unavailable">
+          <TwitchConnectNotice to="send shoutouts" reconnect />
+        </div>
       )}
     </div>
   );

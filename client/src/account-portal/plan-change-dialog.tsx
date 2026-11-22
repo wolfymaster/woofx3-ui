@@ -49,7 +49,7 @@ export function outcomeText(outcome: PlanChangeOutcome, names: Readonly<Record<s
     case "scheduled":
       return `You'll move to ${planName(names, outcome.change.plan)} on ${formatDay(outcome.change.at)}.`;
     case "kept":
-      return "The scheduled change was cancelled. You're staying on your plan.";
+      return "The scheduled change was canceled. You're staying on your plan.";
   }
 }
 
@@ -92,7 +92,11 @@ export function PlanChangeDialog({ accountId, target, names, onClose, onChanged 
       toast({ title: outcomeText(outcome, names) });
       onChanged(outcome);
     } catch (error) {
-      toast({ title: "Could not change your plan", description: actionErrorMessage(error), variant: "destructive" });
+      toast({
+        title: "Couldn't change your plan. Try again.",
+        description: actionErrorMessage(error),
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }

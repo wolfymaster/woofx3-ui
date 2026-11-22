@@ -57,6 +57,7 @@ import {
   splitReasons,
   writeCount,
 } from "@/lib/config-backup";
+import { OWNER_ONLY } from "@/lib/copy";
 import { MARKETPLACE_PATH, marketplaceListingPath } from "@/lib/marketplace-route";
 
 const CONFLICT_POLICY_TEXT: Record<ConfigConflictPolicy, { label: string; description: string }> = {
@@ -66,12 +67,11 @@ const CONFLICT_POLICY_TEXT: Record<ConfigConflictPolicy, { label: string; descri
   },
   rename: {
     label: "Import a copy",
-    description:
-      'Import it beside yours under a new name, such as "Raid alert (imported)" or "!hug-imported". Resources keep their id, so a taken one is still skipped.',
+    description: 'Add it next to yours with "(imported)" in the name.',
   },
   overwrite: {
     label: "Replace mine",
-    description: "Replace yours with the imported version. Anything a module installed is never replaced.",
+    description: "Replace yours with the imported version.",
   },
 };
 
@@ -179,8 +179,7 @@ function ExportCard({ instanceName, canExportMembers }: { instanceName: string; 
       <CardHeader>
         <CardTitle className="text-lg">Export</CardTitle>
         <CardDescription>
-          Download what you have built as one file. Tokens, passwords, module settings and the current values of
-          counters, timers and queues are never included.
+          Download your setup as one file. Passwords and account connections are never included.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -198,7 +197,7 @@ function ExportCard({ instanceName, canExportMembers }: { instanceName: string; 
             <p className="text-xs text-muted-foreground">
               Adds the usernames in your command groups and the people a command is granted to. These are other people's
               usernames, so leave this off for a backup you plan to share.
-              {!canExportMembers && " Only owners and admins can include them."}
+              {!canExportMembers && ` ${OWNER_ONLY}`}
             </p>
           </div>
         </div>
@@ -273,7 +272,7 @@ function PlanView({ plan }: { plan: ConfigImportPlan }) {
           <PackageX className="h-4 w-4" />
           <AlertTitle>Missing modules</AlertTitle>
           <AlertDescription>
-            <p className="mb-2">Items that need these modules will not be imported until you install them.</p>
+            <p className="mb-2">Items that need these modules will not be imported. Install them first.</p>
             <ul className="list-disc pl-5">
               {plan.missingModules.map((module) => (
                 <li key={module.moduleId}>
@@ -349,7 +348,7 @@ function ResultView({ result }: { result: ConfigImportResult }) {
       </div>
       {result.summary.failed > 0 && (
         <p className="text-sm text-muted-foreground">
-          Everything else was applied. Importing the same file again skips what made it and retries the rest.
+          The rest was imported. Import the file again to retry the failed items.
         </p>
       )}
 
@@ -535,8 +534,9 @@ function ImportCard({ canImport }: { canImport: boolean }) {
           />
         </div>
 
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">When a name is already taken</h3>
+        <details className="space-y-2" data-testid="section-import-more-options">
+          <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">More options</summary>
+          <h3 className="pt-2 text-sm font-medium">When a name is already taken</h3>
           <RadioGroup
             value={onConflict}
             onValueChange={(value) => {
@@ -559,7 +559,7 @@ function ImportCard({ canImport }: { canImport: boolean }) {
           <p className="text-xs text-muted-foreground">
             Anything identical to what you already have is always skipped.
           </p>
-        </div>
+        </details>
 
         <div className="flex items-start gap-3 rounded-md border p-3">
           <Checkbox
@@ -633,7 +633,7 @@ export default function AdminBackup() {
     <div className="container mx-auto p-6 space-y-6">
       <PageHeader
         title="Backup"
-        description="Save your workflows, commands, groups and resources to a file, bring them in from one, or bring your setup over from Firebot or Streamer.bot."
+        description="Save your setup to a file, restore it, or bring it over from Firebot or Streamer.bot."
       />
 
       {isLoading || (instance && access === undefined) ? (

@@ -32,7 +32,7 @@ function SimilarPosts({ title }: { title: string }) {
   }
   return (
     <div className="space-y-2" data-testid="feedback-similar">
-      <p className="text-sm text-muted-foreground">Already posted? Vote for it instead:</p>
+      <p className="text-sm text-muted-foreground">Is it already here? Vote on it instead.</p>
       <ul className="rounded-md border divide-y divide-border">
         {similar.map((post) => (
           <li key={post._id}>
@@ -121,7 +121,6 @@ export function FeedbackPostForm({
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <p className="text-xs text-muted-foreground">{FEEDBACK_KINDS[kind].description}</p>
           </div>
 
           <div className="space-y-2">

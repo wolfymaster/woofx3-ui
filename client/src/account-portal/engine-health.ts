@@ -28,10 +28,10 @@ const SETTING_UP: ReadonlyArray<NonNullable<OrgEngine["status"]>> = [
 export function engineHealth({ engine, linkNeedsReconnect, lastEngineActivityAt }: HealthInputs): EngineHealth {
   const { status } = engine;
   if (status === "failed") {
-    return { label: "Needs attention", tone: "bad", reasons: ["Its setup failed"] };
+    return { label: "Needs attention", tone: "bad", reasons: ["Setup failed. Try again or contact support."] };
   }
   if (status === "stopped" || status === "stopping") {
-    return { label: "Paused", tone: "neutral", reasons: ["Hosted engines pause when a subscription ends"] };
+    return { label: "Paused", tone: "neutral", reasons: ["Paused because your subscription ended."] };
   }
   if (status === "deprovisioning" || status === "deleted") {
     return { label: "Being deleted", tone: "neutral", reasons: [] };
@@ -43,10 +43,14 @@ export function engineHealth({ engine, linkNeedsReconnect, lastEngineActivityAt 
     return { label: "Setting up", tone: "neutral", reasons: [] };
   }
   if (engine.hosting === "external" && lastEngineActivityAt === null) {
-    return { label: "Not connected yet", tone: "warning", reasons: ["It has not reported in"] };
+    return {
+      label: "Not connected yet",
+      tone: "warning",
+      reasons: ["Hasn't connected yet. Open the dashboard once to start it."],
+    };
   }
   if (linkNeedsReconnect) {
-    return { label: "Needs attention", tone: "warning", reasons: ["A linked streaming account needs reconnecting"] };
+    return { label: "Needs attention", tone: "warning", reasons: ["Your Twitch account needs reconnecting."] };
   }
   return { label: "Healthy", tone: "good", reasons: [] };
 }

@@ -30,7 +30,7 @@ export function VoteButton({ postId, voteCount, hasVoted, className }: VoteButto
     try {
       await toggleVote({ postId });
     } catch (error) {
-      toast({ title: "Could not vote", description: feedbackErrorMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't vote. Try again.", description: feedbackErrorMessage(error), variant: "destructive" });
     } finally {
       setIsPending(false);
     }

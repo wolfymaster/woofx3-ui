@@ -7,7 +7,7 @@ import { PaymentsTable } from "@/billing/payments-table";
 import { StatusBanner } from "@/billing/status-banner";
 import { usePlanPrices } from "@/billing/use-plan-prices";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { invoiceRows } from "../payment-rows";
 import { PLANS_PATH, portalPage } from "../portal-pages";
 import { stateLabel, subscriptionNotice } from "../subscription-text";
@@ -75,7 +75,7 @@ function BillingStats({ organization }: { organization: MyOrganization }) {
       <Stat
         testId="stat-engines"
         icon={<Server className="h-4 w-4" />}
-        label="Engines"
+        label="woofx3"
         value={String(engines.length)}
         detail={`${runningEngines(engines)} running`}
       />
@@ -94,7 +94,6 @@ function RecentPayments({ organization }: { organization: MyOrganization }) {
       <CardHeader className="flex-row items-start justify-between space-y-0">
         <div className="space-y-1.5">
           <CardTitle>Recent payments</CardTitle>
-          <CardDescription>The last {RECENT_PAYMENTS} invoices.</CardDescription>
         </div>
         <Button asChild variant="outline" size="sm">
           <Link href={portalPage("payments").path}>View all</Link>

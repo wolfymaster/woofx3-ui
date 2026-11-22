@@ -78,7 +78,7 @@ function Meter({
         <span>{label}</span>
         <span className="text-muted-foreground">
           {formatStorageBytes(usedBytes)}{" "}
-          {limitBytes === null ? "used, no limit" : `of ${formatStorageBytes(limitBytes)}`}
+          {limitBytes === null ? "used (unlimited)" : `of ${formatStorageBytes(limitBytes)}`}
         </span>
       </div>
       {limitBytes === null ? null : <Progress value={percent} aria-label={`${label} used`} />}
@@ -118,12 +118,12 @@ function Limits({ instanceId, hosted }: { instanceId: Id<"instances">; hosted: b
     <Card data-testid="card-engine-limits">
       <CardHeader>
         <CardTitle>Limits</CardTitle>
-        <CardDescription>What this engine uses of what its plan includes.</CardDescription>
+        <CardDescription>What you've used of your plan.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {!hosted ? (
           <p className="text-sm text-muted-foreground">
-            A self-hosted engine keeps its own storage, so no plan limits apply.
+            Self-hosted woofx3 keeps its own storage, so no plan limits apply.
           </p>
         ) : null}
         {hosted && storage === undefined ? <p className="text-sm text-muted-foreground">Reading storage...</p> : null}
@@ -140,7 +140,7 @@ function Limits({ instanceId, hosted }: { instanceId: Id<"instances">; hosted: b
         ) : null}
         {organization.seats ? (
           <div className="flex justify-between text-sm" data-testid="text-engine-seats">
-            <span>Seats (the whole organization)</span>
+            <span>Team seats (shared by the whole organization)</span>
             <span className="text-muted-foreground">{formatSeats(organization.seats)}</span>
           </div>
         ) : null}
@@ -156,7 +156,6 @@ function People({ instanceId }: { instanceId: Id<"instances"> }) {
       <CardHeader className="flex-row items-start justify-between space-y-0">
         <div className="space-y-1.5">
           <CardTitle>People</CardTitle>
-          <CardDescription>Who can open this engine, and their role on it.</CardDescription>
         </div>
         <Button asChild variant="outline" size="sm">
           <Link href="/account/team">Manage team</Link>
@@ -164,7 +163,7 @@ function People({ instanceId }: { instanceId: Id<"instances"> }) {
       </CardHeader>
       <CardContent>
         {team === undefined ? <p className="text-sm text-muted-foreground">Loading people...</p> : null}
-        {team === null ? <p className="text-sm text-muted-foreground">You can't see who is on this engine.</p> : null}
+        {team === null ? <p className="text-sm text-muted-foreground">You don't have access to this list.</p> : null}
         {team ? (
           <ul className="divide-y">
             {team.members.map((member) => (
@@ -206,7 +205,9 @@ function Modules({ instanceId }: { instanceId: Id<"instances"> }) {
           {modules ? <Badge variant="secondary">{modules.length}</Badge> : null}
         </CardTitle>
         <CardDescription>
-          {unsettled.length > 0 ? `${unsettled.length} not running yet or failed.` : "Everything installed is running."}
+          {unsettled.length > 0
+            ? `${unsettled.length} still installing or failed.`
+            : "Everything installed is running."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -234,7 +235,7 @@ function Modules({ instanceId }: { instanceId: Id<"instances"> }) {
                   {[module.version, module.category, module.author].filter(Boolean).join(" · ")}
                 </span>
                 {isUnsettled(module) && module.statusMessage ? (
-                  <span className="block truncate text-xs text-destructive">{module.statusMessage}</span>
+                  <span className="block truncate text-xs text-destructive">This module needs attention.</span>
                 ) : null}
               </span>
               {isUnsettled(module) ? (
@@ -259,7 +260,7 @@ function Integrations({ instanceId }: { instanceId: Id<"instances"> }) {
     <Card data-testid="card-engine-integrations">
       <CardHeader>
         <CardTitle>Integrations</CardTitle>
-        <CardDescription>The streaming accounts this engine acts on.</CardDescription>
+        <CardDescription>Streaming accounts connected to woofx3.</CardDescription>
       </CardHeader>
       <CardContent>
         {links === undefined ? <p className="text-sm text-muted-foreground">Loading integrations...</p> : null}
@@ -311,7 +312,7 @@ function HealthCard({
       const result = await testConnection({ url });
       setCheck(result.ok ? "ok" : { error: result.error });
     } catch (error) {
-      toast({ title: "Could not check the engine", description: actionErrorMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't check the connection", description: actionErrorMessage(error), variant: "destructive" });
       setCheck("idle");
     }
   }
@@ -320,7 +321,6 @@ function HealthCard({
     <Card data-testid="card-engine-health">
       <CardHeader>
         <CardTitle>Health</CardTitle>
-        <CardDescription>How this engine is doing right now.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className={cn("text-lg font-semibold", TONE_CLASS[health.tone])} data-testid="text-engine-health">
@@ -332,7 +332,7 @@ function HealthCard({
           </p>
         ))}
         <p className="text-muted-foreground" data-testid="text-engine-last-heard">
-          Last heard from the engine: {lastActivityAt === null ? "never" : formatAgo(lastActivityAt, now)}
+          Last active: {lastActivityAt === null ? "never" : formatAgo(lastActivityAt, now)}
         </p>
         {url === null ? null : (
           <div className="flex items-center gap-3">
@@ -345,8 +345,8 @@ function HealthCard({
             >
               Check connection
             </Button>
-            {check === "ok" ? <span className="text-emerald-600 dark:text-emerald-400">Answered</span> : null}
-            {typeof check === "object" ? <span className="text-destructive">{check.error}</span> : null}
+            {check === "ok" ? <span className="text-emerald-600 dark:text-emerald-400">Connected</span> : null}
+            {typeof check === "object" ? <span className="text-destructive">Couldn't connect. Try again.</span> : null}
           </div>
         )}
       </CardContent>
@@ -383,12 +383,12 @@ function EngineDashboard({ engine }: { engine: OrgEngine }) {
             <Button asChild variant="ghost" size="sm">
               <Link href={ENGINES_PATH}>
                 <ArrowLeft className="h-4 w-4 mr-1" />
-                Engines
+                Your woofx3
               </Link>
             </Button>
             {organization.can.renameEngine ? (
               <RenameDialog
-                title="Rename engine"
+                title="Rename"
                 current={engine.name}
                 onRename={(name) => rename({ instanceId: engine.instanceId, name })}
                 testId={`button-rename-engine-${engine.instanceId}`}

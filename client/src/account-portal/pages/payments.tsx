@@ -12,11 +12,11 @@ export default function PaymentsPage() {
 
   return (
     <>
-      <PageHeader title="Payments" description={`What ${organization.name} has paid.`} />
+      <PageHeader title="Payments" />
       <Card data-testid="card-payments">
         <CardHeader>
           <CardTitle>Payment history</CardTitle>
-          <CardDescription>Invoices open on the payment provider. woofx3 keeps no copy of them.</CardDescription>
+          <CardDescription>Invoices open on our payment partner's site.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {invoices.state === "failed" ? (

@@ -49,7 +49,7 @@ function AuthorActions({ postId }: { postId: Id<"feedbackPosts"> }) {
       toast({ title: "Post deleted" });
       navigate(FEEDBACK_PATH);
     } catch (error) {
-      toast({ title: "Could not delete", description: feedbackErrorMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't delete. Try again.", description: feedbackErrorMessage(error), variant: "destructive" });
       setIsDeleting(false);
     }
   };
@@ -122,7 +122,11 @@ function CommentForm({ postId }: { postId: Id<"feedbackPosts"> }) {
       await addComment({ postId, body });
       setBody("");
     } catch (error) {
-      toast({ title: "Could not comment", description: feedbackErrorMessage(error), variant: "destructive" });
+      toast({
+        title: "Couldn't comment. Try again.",
+        description: feedbackErrorMessage(error),
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -30,7 +30,7 @@ type Hosting = "managed" | "external";
  */
 export function NewEngineDialog({
   accountId,
-  label = "Create another engine",
+  label = "Create another woofx3",
   size = "sm",
 }: {
   accountId: Id<"accounts">;
@@ -85,7 +85,7 @@ export function NewEngineDialog({
     const instanceId = await createInstance({ accountId, name: name.trim(), url: url.trim() });
     const result = await registerInstance({ instanceId });
     if (!result.ok) {
-      setError(`We couldn't connect to that server: ${result.error}`);
+      setError("We couldn't connect to that server. Check the address and try again.");
       return null;
     }
     return instanceId;
@@ -125,9 +125,9 @@ export function NewEngineDialog({
         <DialogContent>
           <form onSubmit={submit} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Create another engine</DialogTitle>
+              <DialogTitle>Create another woofx3</DialogTitle>
               <DialogDescription>
-                Your new engine starts fresh, with its own overlays, alerts and streaming account.
+                Your new woofx3 starts fresh, with its own overlays, alerts and streaming account.
               </DialogDescription>
             </DialogHeader>
 
@@ -167,7 +167,7 @@ export function NewEngineDialog({
 
             {chosenHosting === "managed" ? (
               <div>
-                <Label htmlFor="new-engine-slug">Address</Label>
+                <Label htmlFor="new-engine-slug">Page address</Label>
                 <div className="mt-1 flex items-center gap-1">
                   <span className="text-sm text-muted-foreground font-mono shrink-0">{USERNAME_PREFIX}</span>
                   <Input
@@ -213,7 +213,7 @@ export function NewEngineDialog({
               </Button>
               <Button type="submit" disabled={!ready || submitting} data-testid="button-submit-new-engine">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {chosenHosting === "managed" ? "Create engine" : "Connect"}
+                {chosenHosting === "managed" ? "Create" : "Connect"}
               </Button>
             </DialogFooter>
           </form>

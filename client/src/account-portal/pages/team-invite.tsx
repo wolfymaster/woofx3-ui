@@ -15,7 +15,7 @@ export default function TeamInvitePage() {
     <div className="space-y-4">
       {organization.engines.length > 1 ? (
         <div className="mx-auto max-w-2xl space-y-2 px-6 lg:px-8">
-          <Label>Engine</Label>
+          <Label>woofx3</Label>
           <Select value={engineId ?? undefined} onValueChange={(id) => setEngineId(id as typeof engineId)}>
             <SelectTrigger data-testid="select-invite-engine">
               <SelectValue />
