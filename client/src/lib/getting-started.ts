@@ -191,14 +191,14 @@ function twitchProblem(setup: GettingStartedFacts["setup"]): GettingStartedItem[
 }
 
 function overlayItem(finished: boolean): GettingStartedItem {
-  const title = "Add your overlay to your streaming app";
+  const title = "Add your overlay to your streaming software";
   if (finished) {
     return item("overlay", title, "done", "Your overlay is working", {
       fixes: [{ kind: "route", label: "Open your overlay", href: OVERLAY_PAGE_PATH }],
       actions: [{ kind: "copy-overlay-link", label: "Copy link" }],
     });
   }
-  return item("overlay", title, "todo", "Alerts only show on stream once your streaming app has your overlay", {
+  return item("overlay", title, "todo", "Alerts only show on stream once your streaming software has your overlay", {
     fixes: [{ kind: "route", label: "Show me how", href: OVERLAY_PAGE_PATH }],
     actions: [{ kind: "copy-overlay-link", label: "Copy link" }],
   });
@@ -237,11 +237,11 @@ function importItem(done: boolean): GettingStartedItem {
 }
 
 function optionalPlatformsItem(done: boolean): GettingStartedItem {
-  const title = "Using OBS scenes or Spotify? Connect them";
+  const title = "Want scene control or song requests? Add a module";
   if (done) {
     return item("optional-platforms", title, "done", "You've added a platform");
   }
-  return item("optional-platforms", title, "todo", "Add OBS scene control or Spotify song requests", {
+  return item("optional-platforms", title, "todo", "Add scene control or Spotify song requests", {
     fixes: [{ kind: "route", label: "Open the marketplace", href: MARKETPLACE_PATH }],
     actions: [dismissAction("optional-platforms")],
   });

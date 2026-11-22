@@ -21,10 +21,10 @@ export function describeObsStatus(status: ObsStatus): ObsStatusDescription {
     return { tone: "ok", text: `Connected to OBS${where}` };
   }
   if (status.state === "unanswered") {
-    return { tone: "unknown", text: "Can't check OBS right now: the engine did not answer" };
+    return { tone: "unknown", text: "Can't check OBS right now: woofx3 did not answer" };
   }
   if (status.state === "stopped") {
-    return { tone: "unknown", text: "The engine is not connecting to OBS" };
+    return { tone: "unknown", text: "woofx3 is not connecting to OBS" };
   }
   if (status.failure === "authentication") {
     return {
@@ -35,7 +35,7 @@ export function describeObsStatus(status: ObsStatus): ObsStatusDescription {
   if (status.failure === "relay") {
     return {
       tone: "problem",
-      text: "The woofx3 desktop app isn't connected, so the engine can't reach OBS. Open it on your PC.",
+      text: "The woofx3 desktop app isn't connected, so woofx3 can't reach OBS. Open it on your PC.",
     };
   }
   if (status.failure === "unreachable") {

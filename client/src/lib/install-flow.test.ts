@@ -139,7 +139,7 @@ const cases: Case[] = [
     to: {
       step: "failed",
       reason: "owner_must_purchase",
-      message: "Only the organization's owner can buy this. Ask them to purchase it.",
+      message: "Only the account owner can change this.",
     },
     command: null,
   },

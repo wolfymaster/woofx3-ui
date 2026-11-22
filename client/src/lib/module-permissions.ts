@@ -11,7 +11,7 @@ import { unapprovedPermissions } from "@shared/module-permissions";
 const PERMISSION_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "twitch.moderation": "Time out chatters in your Twitch chat",
   "twitch.channel": "Change your stream title, category and tags",
-  "obs.control": "Control OBS: switch scenes, show and hide sources, mute audio inputs",
+  "obs.control": "Control your streaming software: switch scenes, show and hide sources, mute audio inputs",
 };
 
 export interface DescribedPermission {

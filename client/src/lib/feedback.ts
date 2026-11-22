@@ -26,9 +26,9 @@ export const FEEDBACK_STATUSES: Record<FeedbackStatus, { label: string; classNam
 export const FEEDBACK_STATUS_ORDER: FeedbackStatus[] = ["open", "planned", "in_progress", "done", "declined"];
 
 // Must list every value of feedbackKindValidator in convex/lib/feedback.ts.
-export const FEEDBACK_KINDS: Record<FeedbackKind, { label: string; description: string }> = {
-  idea: { label: "Idea", description: "Something new, or a better way to do something" },
-  bug: { label: "Bug", description: "Something that doesn't work the way it should" },
+export const FEEDBACK_KINDS: Record<FeedbackKind, { label: string }> = {
+  idea: { label: "Idea" },
+  bug: { label: "Bug" },
 };
 
 /** The message a Feedback mutation refused with, or a generic one for anything unexpected. */

@@ -38,7 +38,7 @@ export function twitchConnection(health: TwitchScopeHealth, username: string | u
     case "unlinked":
       return { ...base, state: "disconnected", detail: "Twitch isn't connected" };
     case "revoked":
-      return { ...base, state: "disconnected", detail: "Twitch no longer accepts this engine's connection" };
+      return { ...base, state: "disconnected", detail: "Twitch no longer accepts your connection" };
     case "missing": {
       const labels = health.missing.map((capability) => capability.label);
       return { ...base, state: "degraded", detail: `Missing permission for: ${labels.join(", ")}` };

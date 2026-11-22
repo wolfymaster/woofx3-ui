@@ -27,14 +27,14 @@ const META: Record<ListingType, ListingTypeMeta> = {
     plural: "Modules",
     icon: Puzzle,
     hue: 264,
-    blurb: "Installable behaviour: triggers, actions, widgets and workflows.",
+    blurb: "Add new things your stream can do.",
   },
   theme: {
     label: "Theme",
     plural: "Themes",
     icon: Palette,
     hue: 318,
-    blurb: "Reskins a widget of a module you already have. No new behaviour.",
+    blurb: "Changes the look of a module you already have.",
   },
   emote: {
     label: "Emote pack",

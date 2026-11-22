@@ -55,10 +55,10 @@ describe("endedUnreadable", () => {
 });
 
 describe("repairResultToast", () => {
-  it("says how many backups the engine kept, or that nothing needed repairing", () => {
+  it("says how many backups were kept, or that nothing needed repairing", () => {
     expect(repairResultToast({ ok: true, backups: 2 }, "scene")).toEqual({
       title: "Scene repaired",
-      description: "The engine kept a copy of what it couldn't read (2 backups).",
+      description: "A backup copy was kept (2 backups).",
     });
     expect(repairResultToast({ ok: true, backups: 0 }, "alert").description).toBe(
       "Nothing in this alert needed repairing."
@@ -73,6 +73,6 @@ describe("repairResultToast", () => {
     expect(
       repairResultToast({ ok: false, reason: "failed", detail: "the repaired scene could not be saved" }, "scene")
         .description
-    ).toBe("Nothing was changed: the repaired scene could not be saved.");
+    ).toBe("Nothing was changed. Try again.");
   });
 });

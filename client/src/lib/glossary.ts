@@ -25,13 +25,13 @@ const ENTRIES = {
   trigger: {
     term: "Trigger",
     category: "automation",
-    definition: "The event that starts a workflow, such as a follow, a raid, a cheer or a chat command.",
+    definition: "Your rule for when a workflow starts, such as on a follow, a raid, a cheer or a chat command.",
   },
   action: {
-    term: "Action",
+    term: "Step",
     category: "automation",
     definition:
-      "One thing a workflow does, such as send a chat message, play an alert or switch an OBS scene. A workflow runs its actions in order.",
+      "One thing a workflow does, such as send a chat message, play an alert or switch a scene. A workflow runs its steps in order.",
   },
   condition: {
     term: "Condition",
@@ -50,59 +50,40 @@ const ENTRIES = {
     term: "Module",
     category: "setup",
     definition:
-      "An add-on that gives woofx3 new triggers, actions and widgets. Install modules from the marketplace; platforms like Twitch and OBS are modules too.",
+      "Gives woofx3 new triggers, steps and widgets. Install modules from the marketplace; platforms like Twitch are modules too.",
     href: MARKETPLACE_PATH,
   },
   platform: {
     term: "Platform",
     category: "setup",
     definition:
-      "An outside service woofx3 connects to, such as Twitch, OBS or Spotify. Each platform is a module that you install and then connect to your account.",
+      "An outside service woofx3 connects to, such as Twitch or Spotify. Each platform is a module that you install and then connect to your account.",
     href: MARKETPLACE_PATH,
   },
   scene: {
     term: "Scene",
     category: "overlays",
     definition:
-      "A layout of widgets drawn on top of your stream, like alerts, a chat box or a goal bar. Each scene has its own browser source URL.",
+      "A layout of widgets drawn on top of your stream, like alerts, a chat box or a goal bar. Each scene has its own overlay link.",
     href: "/stream/scenes",
   },
   browserSource: {
     term: "Browser source",
     category: "overlays",
     definition:
-      "An OBS source that shows a web page on your stream. Paste a scene's browser source URL into one to put that scene's overlay on screen.",
+      "A source in your streaming software that shows a web page on your stream. Paste a scene's overlay link into one to put it on screen.",
   },
   overlay: {
     term: "Overlay",
     category: "overlays",
     definition:
-      "Graphics drawn over your stream, such as alerts and widgets. woofx3 draws them from a scene, and OBS shows them through a browser source.",
-  },
-  engine: {
-    term: "Engine",
-    category: "setup",
-    definition:
-      "The woofx3 server that runs your workflows, commands and overlays. It keeps running when this site is closed, so automations work while you stream.",
-  },
-  instance: {
-    term: "Engine connection",
-    category: "setup",
-    definition:
-      "Your engine as this site knows it: its address, connected platforms and settings. Everyone on your team works on the same engine.",
+      "Graphics drawn over your stream, such as alerts and widgets. woofx3 draws them from a scene, and your streaming software shows them through a browser source.",
   },
   panel: {
     term: "Panel",
     category: "dashboard",
     definition:
       "One page of your dashboard. Each panel has its own layout and widgets, so you can keep one for going live and another for moderating.",
-    href: "/",
-  },
-  zone: {
-    term: "Zone",
-    category: "dashboard",
-    definition:
-      "An area of a panel's layout that holds widgets. A zone can stack several widgets and you can resize them within it.",
     href: "/",
   },
 } as const satisfies Record<string, GlossaryEntry>;

@@ -23,10 +23,10 @@ export function submissionAnswerText(value: string | boolean): string {
 export function engineProblemMessage(problem: NonNullable<FormSubmissionQueueStatus["engineProblem"]>): string {
   switch (problem) {
     case "not_registered":
-      return "This page's engine isn't set up yet. Answers are saved and will be sent once it is.";
+      return "This page isn't set up yet. Answers are saved and will be sent once it is.";
     case "unreachable":
-      return "We can't reach your engine right now. Answers are saved and will be sent when it's back.";
+      return "We can't reach woofx3 right now. Answers are saved and will be sent when it's back.";
     case "capability_missing":
-      return "Your engine needs an update before it can receive form answers. They're saved until then.";
+      return "Update woofx3 to receive form answers. They're saved until then.";
   }
 }

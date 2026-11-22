@@ -2,17 +2,14 @@ import type { NotRunningWorkflow } from "@/engine/types";
 
 export type { NotRunningWorkflow };
 
-/** Short label for a workflow the engine refused to set up. */
-export const NOT_RUNNING_LABEL = "Not running on its own";
+/** Short label for a workflow that could not be set up. */
+export const NOT_RUNNING_LABEL = "Not running";
 
 /**
  * A refused workflow can often still be run by hand (a test event, "Run now"),
  * so the copy says it will not fire by itself rather than that it is dead.
  */
-export const NOT_RUNNING_EXPLANATION = "The engine couldn't set this workflow up, so it won't fire on its own.";
-
-/** Shown when the engine reported the problem without a reason. */
-export const NO_REASON_GIVEN = "The engine didn't say why.";
+export const NOT_RUNNING_EXPLANATION = "This workflow couldn't be set up, so it won't start by itself.";
 
 /** Dashboard sentence for how many enabled workflows are not running; empty when none. */
 export function notRunningSummary(count: number): string {

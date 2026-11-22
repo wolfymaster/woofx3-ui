@@ -21,7 +21,7 @@ describe("describeObsStatus", () => {
     );
   });
 
-  test("does not blame OBS when the engine did not answer", () => {
+  test("does not blame OBS when woofx3 did not answer", () => {
     expect(describeObsStatus({ state: "unanswered", failure: null, address: null }).tone).toBe("unknown");
   });
 
@@ -42,7 +42,7 @@ describe("describeObsStatus", () => {
     const relay = describeObsStatus({ state: "retrying", failure: "relay", address: null, route: "companion" });
     expect(relay).toEqual({
       tone: "problem",
-      text: "The woofx3 desktop app isn't connected, so the engine can't reach OBS. Open it on your PC.",
+      text: "The woofx3 desktop app isn't connected, so woofx3 can't reach OBS. Open it on your PC.",
     });
   });
 });

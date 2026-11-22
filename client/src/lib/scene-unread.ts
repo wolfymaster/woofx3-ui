@@ -47,15 +47,15 @@ export function repairResultToast(
       description:
         result.backups === 0
           ? `Nothing in this ${noun} needed repairing.`
-          : `The engine kept a copy of what it couldn't read (${result.backups} ${result.backups === 1 ? "backup" : "backups"}).`,
+          : `A backup copy was kept (${result.backups} ${result.backups === 1 ? "backup" : "backups"}).`,
     };
   }
   const why =
     result.reason === "unavailable"
-      ? "The engine didn't answer. Try again in a moment."
+      ? "Couldn't connect. Try again in a moment."
       : result.reason === "not_found"
-        ? `The engine doesn't have this ${noun} any more.`
-        : `Nothing was changed: ${result.detail}.`;
+        ? `This ${noun} was deleted.`
+        : "Nothing was changed. Try again.";
   return { title: `Couldn't repair this ${noun}`, description: why, variant: "destructive" };
 }
 

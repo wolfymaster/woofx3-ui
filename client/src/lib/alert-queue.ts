@@ -1,7 +1,8 @@
 import type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@convex/lib/alertQueueResults";
+import { TRY_AGAIN } from "@/lib/copy";
 
 /**
- * How the engine's answers to the alert-queue controls are worded.
+ * How the answers to the alert-queue controls are worded.
  *
  * The controls show no queue depth. The alert log cannot tell a waiting alert
  * from one on screen: the engine records every alert as `sent` when it is
@@ -22,27 +23,21 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-function sentence(reason: string | undefined, fallback: string): string {
-  const text = reason?.trim() || fallback;
-  const capitalised = `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
-  return capitalised.endsWith(".") ? capitalised : `${capitalised}.`;
-}
-
 /** The toast for an answer with `ok: false`. */
 function refusalToast(reason: string | undefined, title: string): QueueToast {
   if (reason?.trim().toLowerCase().startsWith(NO_OVERLAY_REASON)) {
     return {
       variant: "destructive",
       title: "No overlay is open",
-      description: "Open your alerts browser source; alerts queue and play there.",
+      description: "Open your overlay in your streaming software. Alerts queue and play there.",
     };
   }
-  return { variant: "destructive", title, description: sentence(reason, "the engine gave no reason") };
+  return { variant: "destructive", title, description: TRY_AGAIN };
 }
 
 export function skipResultToast(result: AlertSkipResult): QueueToast {
   if (!result.ok) {
-    return refusalToast(result.reason, "Could not skip the alert");
+    return refusalToast(result.reason, "Couldn't skip the alert");
   }
   if (result.skipped === 0) {
     return { title: "Nothing is playing", description: "There was no alert on screen to skip." };
@@ -52,7 +47,7 @@ export function skipResultToast(result: AlertSkipResult): QueueToast {
 
 export function clearResultToast(result: AlertClearResult): QueueToast {
   if (!result.ok) {
-    return refusalToast(result.reason, "Could not clear the queue");
+    return refusalToast(result.reason, "Couldn't clear the queue");
   }
   if (result.cleared === 0) {
     return { title: "Queue already empty", description: "No alerts were waiting." };
@@ -65,7 +60,7 @@ export function clearResultToast(result: AlertClearResult): QueueToast {
 
 export function replayResultToast(result: AlertReplayResult): QueueToast {
   if (!result.ok) {
-    return refusalToast(result.reason, "Nothing to replay");
+    return refusalToast(result.reason, "Couldn't replay the alert");
   }
   return { title: "Replaying", description: "The alert is queued on your open overlays." };
 }

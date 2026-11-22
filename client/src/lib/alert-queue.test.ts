@@ -16,14 +16,14 @@ describe("skipResultToast", () => {
   test("tells the creator to open the overlay when none is open", () => {
     const toast = skipResultToast({ ok: false, skipped: 0, reason: "no overlay is open" });
     expect(toast.title).toBe("No overlay is open");
-    expect(toast.description).toContain("browser source");
+    expect(toast.description).toContain("streaming software");
     expect(toast.variant).toBe("destructive");
   });
 
-  test("passes any other refusal through as a sentence", () => {
+  test("shows a fixed friendly line for any other refusal", () => {
     const toast = skipResultToast({ ok: false, skipped: 0, reason: "the scene manager did not answer: timeout" });
-    expect(toast.title).toBe("Could not skip the alert");
-    expect(toast.description).toBe("The scene manager did not answer: timeout.");
+    expect(toast.title).toBe("Couldn't skip the alert");
+    expect(toast.description).toBe("Couldn't do that. Try again.");
   });
 });
 
@@ -39,7 +39,7 @@ describe("clearResultToast", () => {
 
   test("reports a refusal", () => {
     expect(clearResultToast({ ok: false, cleared: 0, reason: "no overlay is open" }).title).toBe("No overlay is open");
-    expect(clearResultToast({ ok: false, cleared: 0 }).description).toBe("The engine gave no reason.");
+    expect(clearResultToast({ ok: false, cleared: 0 }).description).toBe("Couldn't do that. Try again.");
   });
 });
 
@@ -50,7 +50,7 @@ describe("replayResultToast", () => {
 
   test("never reads a refusal as success", () => {
     const toast = replayResultToast({ ok: false, reason: "the engine no longer has this alert" });
-    expect(toast.title).toBe("Nothing to replay");
+    expect(toast.title).toBe("Couldn't replay the alert");
     expect(toast.variant).toBe("destructive");
   });
 
