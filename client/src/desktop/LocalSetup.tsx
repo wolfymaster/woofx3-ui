@@ -18,6 +18,7 @@ import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useInstalledModules, useLicensedInstallRequest, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
+import { TRY_AGAIN } from "@/lib/copy";
 import { localDashboardCatalog } from "@/lib/dashboard-widgets/local-catalog";
 import { useLogger } from "@/lib/logger-context";
 import { SETUP_STEPS, setupStepPath } from "@/lib/setup-steps";
@@ -35,6 +36,16 @@ const LOCAL_WIDGET_TYPES: ReadonlySet<string> = new Set(localDashboardCatalog.wi
 interface Consent {
   permissions: string[];
   localEndpoints: string[];
+}
+
+const NEEDS_APPROVAL_MESSAGE =
+  "Twitch didn't get all the permissions it needs. Try again and approve everything listed.";
+
+/** The install was refused for permissions the streamer did not approve; the ids are for the log. */
+class NeedsApprovalError extends Error {
+  constructor(readonly unapproved: string[]) {
+    super(`Not approved: ${unapproved.join(", ")}`);
+  }
 }
 
 /**
@@ -63,13 +74,10 @@ function useFinishConnect() {
           approvedLocalEndpoints: consent.localEndpoints,
         });
         if (outcome.status === "needs_approval") {
-          const asked = [
+          throw new NeedsApprovalError([
             ...outcome.unapproved,
             ...outcome.unapprovedLocalEndpoints.map((id) => `local endpoint ${id}`),
-          ];
-          throw new Error(
-            `Twitch asks for access that was not approved (${asked.join(", ")}). Review it and try again.`
-          );
+          ]);
         }
       }
       if (panels.length === 0) {
@@ -155,7 +163,7 @@ function LocalConnectStep({ onConnected }: { onConnected: () => void }) {
       onConnected();
     } catch (error) {
       logger.error("Could not finish connecting", { error });
-      setSaveError(error instanceof Error ? error.message : "That didn't work. Try again in a moment.");
+      setSaveError(error instanceof NeedsApprovalError ? NEEDS_APPROVAL_MESSAGE : TRY_AGAIN);
     } finally {
       setSaving(false);
     }

@@ -53,7 +53,7 @@ export function RenameEngineDialog({ open, onOpenChange, instanceId, currentName
         setError(result.reason);
       }
     } catch {
-      setError("Something went wrong and your name wasn't changed. Please try again.");
+      setError("Couldn't change your name. Try again.");
     } finally {
       setBusy(false);
     }
@@ -65,8 +65,7 @@ export function RenameEngineDialog({ open, onOpenChange, instanceId, currentName
         <DialogHeader>
           <DialogTitle>Change your name</DialogTitle>
           <DialogDescription>
-            This changes your public page and your address. Your overlays and alerts keep working, nothing restarts, and
-            it's fine to do while you're live.
+            This changes your public page and your address. It's fine to do while you're live.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
@@ -93,8 +92,7 @@ export function RenameEngineDialog({ open, onOpenChange, instanceId, currentName
           )}
         </div>
         <p className="text-sm text-muted-foreground">
-          Old links to {currentName} keep working and lead to the same place, so anyone who has them can still find you.
-          The old name stays yours and nobody else can take it. You can change your name once every 30 days.
+          Old links keep working. You can change your name once every 30 days.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>

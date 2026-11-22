@@ -87,7 +87,7 @@ function DisplayNameCard({ name, fromTwitch }: { name: string; fromTwitch: boole
             disabled={fromTwitch || saving || !trimmed || trimmed === name}
             data-testid="button-save-display-name"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save name"}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
           </Button>
         </form>
       </CardContent>
@@ -214,23 +214,27 @@ function DefaultEngineCard() {
   const save = useSave();
   const engines = instances.filter((candidate) => candidate !== null);
 
+  if (engines.length < 2) {
+    return null;
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Default engine</CardTitle>
-        <CardDescription>The engine that opens when you sign in.</CardDescription>
+        <CardTitle>Default woofx3</CardTitle>
+        <CardDescription>The one that opens when you sign in.</CardDescription>
       </CardHeader>
       <CardContent>
         <Select
           value={settings?.defaultInstanceId ?? NO_DEFAULT}
           disabled={settings === undefined}
           onValueChange={(value) =>
-            save("Default engine saved", () =>
+            save("Default saved", () =>
               setDefaultEngine({ instanceId: value === NO_DEFAULT ? null : (value as Id<"instances">) })
             )
           }
         >
-          <SelectTrigger className="max-w-sm" aria-label="Default engine" data-testid="select-default-engine">
+          <SelectTrigger className="max-w-sm" aria-label="Default woofx3" data-testid="select-default-engine">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -257,15 +261,14 @@ function SetUpOwnEngineCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Set up your own engine</CardTitle>
+        <CardTitle>Set up your own woofx3</CardTitle>
         <CardDescription>
-          You're using an engine someone invited you to. Stream yourself? Get your own, with your own overlay, alerts
-          and commands.
+          You're using someone else's woofx3. Want your own, with your own overlay, alerts and commands?
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Button asChild data-testid="button-setup-own-engine">
-          <Link href={NEW_ENGINE_ONBOARDING_PATH}>Set up your own engine</Link>
+          <Link href={NEW_ENGINE_ONBOARDING_PATH}>Set up your own woofx3</Link>
         </Button>
       </CardContent>
     </Card>
@@ -278,7 +281,7 @@ export default function ProfileSettings() {
 
   return (
     <div className="container mx-auto p-6 max-w-3xl">
-      <PageHeader title="Your settings" description="Your name, password and the engine you open on sign-in." />
+      <PageHeader title="Your settings" description="Your name, password and email." />
       {user && methods ? (
         <div className="space-y-4">
           <DisplayNameCard name={user.name ?? ""} fromTwitch={methods.twitch} />

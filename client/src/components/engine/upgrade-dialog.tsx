@@ -15,10 +15,6 @@ import { buttonVariants } from "@/components/ui/button";
 interface UpgradeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The release the engine moves to. */
-  offered: string;
-  /** The release it runs now, when known. */
-  current: string | null;
   /** Whether the channel is live: viewers would see alerts stop, so it takes a second confirmation. */
   isLive: boolean;
   busy: boolean;
@@ -26,10 +22,10 @@ interface UpgradeDialogProps {
 }
 
 /**
- * Confirms an upgrade: it takes the engine and its overlays offline, so it is
+ * Confirms an update: it takes woofx3 and its overlays offline, so it is
  * never one click, and never two while the channel is live.
  */
-export function UpgradeDialog({ open, onOpenChange, offered, current, isLive, busy, onConfirm }: UpgradeDialogProps) {
+export function UpgradeDialog({ open, onOpenChange, isLive, busy, onConfirm }: UpgradeDialogProps) {
   const [liveWarningShown, setLiveWarningShown] = useState(false);
 
   useEffect(() => {
@@ -50,16 +46,16 @@ export function UpgradeDialog({ open, onOpenChange, offered, current, isLive, bu
               You're live right now
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Alerts will be offline until the engine is back online, usually a few minutes. Follows, subs, raids and
-              other events during the upgrade won't show on stream, and chat commands won't respond.
+              Alerts will be offline until woofx3 is back online, usually a few minutes. Follows, subs, raids and other
+              events during the update won't show on stream, and chat commands won't respond.
             </AlertDialogDescription>
           </AlertDialogHeader>
         ) : (
           <AlertDialogHeader>
-            <AlertDialogTitle>Upgrade to {offered}?</AlertDialogTitle>
+            <AlertDialogTitle>Update woofx3?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your engine and its overlays will be offline for a few minutes while {offered} starts. If {offered}{" "}
-              doesn't start, we'll restore {current ?? "the release you have now"} automatically.
+              Your alerts and overlays will be offline for a few minutes. If the update fails we&apos;ll roll back
+              automatically.
             </AlertDialogDescription>
           </AlertDialogHeader>
         )}
@@ -80,7 +76,7 @@ export function UpgradeDialog({ open, onOpenChange, offered, current, isLive, bu
             data-testid={onLiveStep ? "button-confirm-upgrade-engine-live" : "button-confirm-upgrade-engine"}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {onLiveStep ? "Upgrade while live" : isLive ? "Continue" : "Upgrade"}
+            {onLiveStep ? "Update while live" : isLive ? "Continue" : "Update"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

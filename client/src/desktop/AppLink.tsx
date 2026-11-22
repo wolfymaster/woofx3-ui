@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
-import { actionErrorMessage } from "@/lib/action-error";
+import { useLogger } from "@/lib/logger-context";
 import { appLinkGate, needsAppLink } from "./app-link";
 import { beginAppLink, companionLinkStatus, finishAppLink } from "./host";
 
@@ -21,7 +21,7 @@ type LinkView =
   | { kind: "idle" }
   | { kind: "askReplace"; instanceId: Id<"instances">; companion: OtherCompanion }
   | { kind: "replacing"; instanceId: Id<"instances">; companion: OtherCompanion }
-  | { kind: "failed"; instanceId: Id<"instances">; message: string };
+  | { kind: "failed"; instanceId: Id<"instances"> };
 
 /**
  * Makes this computer the selected instance's companion once an admin is
@@ -39,6 +39,7 @@ export default function AppLink() {
 }
 
 function SignedInAppLink() {
+  const logger = useLogger();
   const { instance, isLoading } = useInstance();
   const isAdmin = useIsInstanceAdmin();
   const linkSignedInApp = useMutation(api.companionPairing.linkSignedInApp);
@@ -61,10 +62,11 @@ function SignedInAppLink() {
         await finishAppLink({ instanceId: result.instanceId, instanceName: result.instanceName });
         setView({ kind: "idle" });
       } catch (error) {
-        setView({ kind: "failed", instanceId, message: actionErrorMessage(error) });
+        logger.error("Could not link this computer", { error });
+        setView({ kind: "failed", instanceId });
       }
     },
-    [linkSignedInApp]
+    [linkSignedInApp, logger]
   );
 
   const instanceId = isLoading ? undefined : (instance?._id ?? null);
@@ -99,8 +101,7 @@ function SignedInAppLink() {
       </button>
       {view.kind === "failed" ? (
         <>
-          <p className="pr-6 text-sm font-medium">This computer could not connect to your engine</p>
-          <p className="mt-1 text-sm text-muted-foreground">{view.message}</p>
+          <p className="pr-6 text-sm font-medium">This computer couldn't connect to woofx3.</p>
           <div className="mt-3 flex justify-end">
             <Button
               size="sm"
@@ -116,7 +117,7 @@ function SignedInAppLink() {
         </>
       ) : (
         <>
-          <p className="pr-6 text-sm font-medium">Use this computer for local connections?</p>
+          <p className="pr-6 text-sm font-medium">Use this computer instead of {view.companion.deviceName}?</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {view.companion.deviceName} handles them now
             {view.companion.lastSeenAt === null

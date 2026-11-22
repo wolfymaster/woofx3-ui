@@ -8,7 +8,6 @@ import { OverlayStage } from "@/components/setup/overlay-stage";
 import { RetryButton } from "@/components/setup/retry-button";
 import { SceneReadyChecklist } from "@/components/setup/scene-ready-checklist";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEngineAlerts, useOverlayOpen } from "@/engine/hooks/use-alert-queue";
 import {
   useApplyDefaultSeedRequest,
@@ -45,7 +44,7 @@ const TICK_MS = 1_000;
 const RECENT_ALERTS_LIMIT = 20;
 const ALERT_SURFACE = "alert";
 const SCENE_ARRIVAL_TIMEOUT_MS = 30_000;
-const FLOW_STEPS = ["Add to your streaming app", "Send a test", "You're ready"];
+const FLOW_STEPS = ["Add to your streaming software", "Send a test", "You're ready"];
 
 /** Phases where the page has just put the streamer's next move in front of them. */
 const FOCUS_ON: ReadonlySet<OverlayPhase["name"]> = new Set([
@@ -95,7 +94,7 @@ function headingOf(phase: OverlayPhase, seedSlow: boolean): string {
     case "no-scene":
       return "You don't have an overlay right now";
     case "waiting":
-      return "Add your overlay to your streaming app";
+      return "Add your overlay to your streaming software";
     case "connected":
       return "Overlay connected";
     case "sending":
@@ -116,15 +115,13 @@ function statusOf(phase: OverlayPhase, seedSlow: boolean): string {
       // The progress panel carries the phase, elapsed time and the tab-safe note.
       return "";
     case "preparing":
-      return seedSlow
-        ? "We keep trying by ourselves, or you can try again now."
-        : "Adding your alerts for follows, subs and bits.";
+      return seedSlow ? "Still trying. You can retry now." : "Adding your alerts for follows, subs and bits.";
     case "build-failed":
-      return "This usually clears up with a retry.";
+      return "";
     case "seed-failed":
-      return "Something stopped us adding it. Trying again usually sorts it out.";
+      return "That didn't work. Try again.";
     case "no-scene":
-      return "It may have been deleted. Make a new one and you'll get a new link to add.";
+      return "Your overlay is gone. Make a new one and add its new link to your streaming software.";
     case "waiting":
       return phase.dropped
         ? "Your overlay disconnected. Waiting for it to come back."
@@ -139,44 +136,19 @@ function statusOf(phase: OverlayPhase, seedSlow: boolean): string {
     case "test-failed":
       return "Nothing played on your overlay.";
     case "finished":
-      return "Your overlay will show follows, subs and bits as they happen. Real ones appear in Events too; tests don't.";
+      return "Follows, subs and bits will now play on your overlay as they happen.";
   }
 }
 
 function SetupInstructions() {
   const { width, height } = DEFAULT_OVERLAY_CANVAS;
-  const sizeStep = `Set the width to ${width} and the height to ${height}, if it asks for a size.`;
   return (
-    <Tabs defaultValue="obs">
-      <TabsList>
-        <TabsTrigger value="obs">OBS</TabsTrigger>
-        <TabsTrigger value="streamlabs">Streamlabs</TabsTrigger>
-        <TabsTrigger value="other">Something else</TabsTrigger>
-      </TabsList>
-      <TabsContent value="obs">
-        <ol className="list-decimal space-y-1 pl-5 text-sm">
-          <li>Under Sources, click + and choose Browser.</li>
-          <li>Paste your link into the URL field.</li>
-          <li>
-            Set the width to {width} and the height to {height}, then click OK.
-          </li>
-        </ol>
-      </TabsContent>
-      <TabsContent value="streamlabs">
-        <ol className="list-decimal space-y-1 pl-5 text-sm">
-          <li>Add a new source to your scene, and pick the one that shows a web page.</li>
-          <li>Paste your link where it asks for a URL.</li>
-          <li>{sizeStep}</li>
-        </ol>
-      </TabsContent>
-      <TabsContent value="other">
-        <ol className="list-decimal space-y-1 pl-5 text-sm">
-          <li>Most streaming apps can show a web page as a source. Add one to your scene.</li>
-          <li>Paste your link where it asks for a URL.</li>
-          <li>{sizeStep}</li>
-        </ol>
-      </TabsContent>
-    </Tabs>
+    <ol className="list-decimal space-y-1 pl-5 text-sm">
+      <li>In your streaming software, add a browser source and paste the link.</li>
+      <li>
+        If it asks for a size, set the width to {width} and the height to {height}.
+      </li>
+    </ol>
   );
 }
 
@@ -187,7 +159,7 @@ function WaitingHelp({ help }: { help: "none" | "hint" | "troubleshoot" }) {
   if (help === "hint") {
     return (
       <p className="text-sm text-muted-foreground" data-testid="text-overlay-hint">
-        Nothing yet. Check that your streaming app is open and the new source is in the scene you&apos;re on.
+        Nothing yet. Check that your streaming software is open and the new source is in the scene you&apos;re on.
       </p>
     );
   }
@@ -196,10 +168,10 @@ function WaitingHelp({ help }: { help: "none" | "hint" | "troubleshoot" }) {
       <p>Still waiting? Check that:</p>
       <ul className="list-disc space-y-1 pl-5">
         <li>the whole link was pasted, with nothing added</li>
-        <li>your streaming app is open, and the source is in your current scene</li>
+        <li>your streaming software is open, and the source is in your current scene</li>
         <li>
-          the source keeps running when it isn&apos;t visible (in OBS, turn off &quot;Shutdown source when not
-          visible&quot;)
+          the source keeps running when it isn&apos;t visible (turn off &quot;Shutdown source when not visible&quot; if
+          it has that option)
         </li>
       </ul>
     </div>
@@ -232,7 +204,7 @@ function OverlayLinkOrRetry({
 function NewTabLink({ url }: { url: string }) {
   return (
     <p className="text-sm text-muted-foreground">
-      Don&apos;t have a streaming app open?{" "}
+      Don&apos;t have streaming software open?{" "}
       <a
         href={url}
         target="_blank"
@@ -473,9 +445,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
               }}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">
-              We can&apos;t make one until your alert widget is available. Try again in a moment.
-            </p>
+            <p className="text-sm text-muted-foreground">We can&apos;t make one yet. Try again in a moment.</p>
           ))}
 
         {phase.name === "waiting" && (
@@ -560,7 +530,7 @@ export function OverlayPage({ engine, onExit, clock = Date.now }: OverlayPagePro
           <>
             {madeNewOverlay && (
               <p className="text-sm text-muted-foreground" data-testid="text-overlay-new-link">
-                This is your new overlay&apos;s link. Your streaming app needs it in place of the old one.
+                This is your new overlay&apos;s link. Your streaming software needs it in place of the old one.
               </p>
             )}
             <OverlayLinkOrRetry url={url} failed={urlFailed} onRetry={retryUrl} />

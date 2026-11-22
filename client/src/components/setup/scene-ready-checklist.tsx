@@ -10,13 +10,13 @@ interface ChecklistItem {
 const { width, height } = DEFAULT_OVERLAY_CANVAS;
 
 const ITEMS: readonly ChecklistItem[] = [
-  { id: "app", label: "Open your streaming app." },
+  { id: "app", label: "Open your streaming software." },
   { id: "source", label: "Add a Browser source to the scene you stream." },
   { id: "size", label: `Set its width to ${width} and its height to ${height}.` },
 ];
 
 /**
- * Something useful to do while the engine is still being built. The steps need
+ * Something useful to do while woofx3 is still being built. The steps need
  * no data from the engine, and the page asks for the link once the build is
  * done, so ticking these off early shortens the rest of setup. Ticks are local:
  * they only remind the streamer where they got to on this visit.
@@ -28,9 +28,7 @@ export function SceneReadyChecklist() {
     <section className="space-y-3 rounded-lg border p-4" data-testid="scene-ready-checklist">
       <div className="space-y-1">
         <h2 className="text-sm font-medium">Get your scene ready</h2>
-        <p className="text-sm text-muted-foreground">
-          Do this now and your overlay will only need its link when your engine is ready.
-        </p>
+        <p className="text-sm text-muted-foreground">Do this while you wait. Later you only need to paste the link.</p>
       </div>
       <ul className="space-y-2">
         {ITEMS.map((item) => (

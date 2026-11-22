@@ -5,6 +5,7 @@ import { EngineBuildProgress } from "@/components/setup/engine-build-progress";
 import { RetryButton } from "@/components/setup/retry-button";
 import { WaitRoomStatusBar } from "@/components/setup/wait-room-status-bar";
 import { Button } from "@/components/ui/button";
+import { TRY_AGAIN } from "@/lib/copy";
 import type { EngineBuild } from "@/lib/engine-build";
 import { LOADING_MESSAGES, nextLoadingMessage } from "@/lib/loading-messages";
 
@@ -132,7 +133,7 @@ export function EngineSplash({
                 We couldn&apos;t finish setting up
               </h1>
               <output className="block max-w-prose text-neutral-300" data-testid="text-splash-failed">
-                This usually clears up with a retry.
+                {TRY_AGAIN}
               </output>
               <div>
                 <RetryButton onRetry={build.retry} testId="button-splash-retry" />
@@ -192,8 +193,7 @@ export function EngineSplash({
                 {LOADING_MESSAGES[messageIndex]}
               </p>
               <output className="block max-w-prose text-neutral-400">
-                Your dashboard is getting ready and opens by itself. You can close this tab and come back; it keeps
-                going.
+                Your dashboard opens by itself. You can close this tab; it keeps going.
               </output>
               {build.stage === "building" && (
                 <EngineBuildProgress build={build} tone="dark" variant="compact" className="max-w-xl" />

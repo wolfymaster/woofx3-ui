@@ -2,6 +2,8 @@ import { Cloud, Loader2, Monitor } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 import { chooseHostMode, type HostModeKind } from "./host";
 
 interface ModeOption {
@@ -23,8 +25,7 @@ const OPTIONS: readonly ModeOption[] = [
   {
     mode: "companion",
     title: "Sign in to woofx3",
-    description:
-      "Use your woofx3 account and its engine. This computer connects it to OBS and the other apps on your network.",
+    description: "Use your woofx3 account. This computer links it to your streaming software and your other apps.",
     action: "Sign in",
     icon: Cloud,
   },
@@ -36,6 +37,7 @@ const OPTIONS: readonly ModeOption[] = [
  * error.
  */
 export function ModeChooser() {
+  const logger = useLogger();
   const [choosing, setChoosing] = useState<HostModeKind | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +46,8 @@ export function ModeChooser() {
     setError(null);
     chooseHostMode(mode).catch((reason: unknown) => {
       setChoosing(null);
-      setError(reason instanceof Error ? reason.message : String(reason));
+      logger.error("Could not choose desktop mode", { error: reason });
+      setError(TRY_AGAIN);
     });
   };
 
@@ -53,7 +56,7 @@ export function ModeChooser() {
       <div className="w-full max-w-2xl space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-semibold">Welcome to woofx3</h1>
-          <p className="text-sm text-muted-foreground">How do you want to run it?</p>
+          <p className="text-sm text-muted-foreground">Where do you want to use it?</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {OPTIONS.map((option) => (

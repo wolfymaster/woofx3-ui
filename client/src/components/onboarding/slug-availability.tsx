@@ -3,6 +3,8 @@ import { slugFormatError, usernameAddress } from "@shared/engine-slug";
 import { useAction } from "convex/react";
 import { Check, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 
 /** Availability is asked for after the typing stops, not on every keystroke. */
 const CHECK_DEBOUNCE_MS = 400;
@@ -27,6 +29,7 @@ export interface SlugCheck {
  * they submit.
  */
 export function useSlugAvailability(slug: string): SlugCheck {
+  const logger = useLogger();
   const checkSlug = useAction(api.provisioning.checkSlug);
   const [availability, setAvailability] = useState<SlugAvailability>({ state: "idle" });
   const [checkError, setCheckError] = useState<string | null>(null);
@@ -57,7 +60,8 @@ export function useSlugAvailability(slug: string): SlugCheck {
           // A check that could not run must not present the name as unusable;
           // creating it is still allowed, and the server decides then.
           setAvailability({ state: "idle" });
-          setCheckError(err instanceof Error ? err.message : String(err));
+          logger.error("Could not check slug", { error: err });
+          setCheckError(TRY_AGAIN);
         }
       }
     }, CHECK_DEBOUNCE_MS);
@@ -66,7 +70,7 @@ export function useSlugAvailability(slug: string): SlugCheck {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [slug, formatError, checkSlug]);
+  }, [slug, formatError, checkSlug, logger]);
 
   return { availability, formatError, checkError };
 }

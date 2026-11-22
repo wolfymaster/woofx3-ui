@@ -73,7 +73,7 @@ function LocalStatusBar() {
           className={cn("font-semibold uppercase tracking-wider", connected ? "text-green-500" : "text-amber-500")}
           data-testid="status-engine-connection"
         >
-          {connected ? "Engine connected" : "Connecting to engine"}
+          {connected ? "woofx3 connected" : "Connecting to woofx3"}
         </span>
         <span className="text-muted-foreground font-mono truncate" data-testid="status-engine-version">
           {formatEngineVersion(engineVersion)}

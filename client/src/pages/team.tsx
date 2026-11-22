@@ -10,7 +10,7 @@ import { EmailVisibilityToggle, hasMemberEmails, MemberEmail } from "@/component
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -88,8 +88,8 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
   if (!instance || !instanceId) {
     return (
       <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
-        <PageHeader title="Team" description="Select an engine to see who can use it." />
-        <p className="text-sm text-muted-foreground mt-4">No engine available yet.</p>
+        <PageHeader title="Team" description="Pick a woofx3 to see its team." />
+        <p className="text-sm text-muted-foreground mt-4">Nothing here yet.</p>
       </div>
     );
   }
@@ -115,11 +115,7 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
-      <PageHeader
-        title="Team"
-        description={`People who can open ${instance.name}, and what they can do on it.`}
-        actions={manageOrganization}
-      />
+      <PageHeader title="Team" description={`Who has access to ${instance.name}.`} actions={manageOrganization} />
 
       <Card>
         <CardHeader>
@@ -129,7 +125,6 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
                 Members
                 <Badge variant="secondary">{members.length + pendingInvites.length}</Badge>
               </CardTitle>
-              <CardDescription data-testid="text-team-engine">Everyone with access to {instance.name}.</CardDescription>
             </div>
             {canManage ? (
               <Button asChild data-testid="button-invite-member">
@@ -161,7 +156,7 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
           {teamData === undefined ? (
             <div className="text-center py-8 text-muted-foreground">Loading members...</div>
           ) : teamData === null ? (
-            <div className="text-center py-8 text-muted-foreground">You don&apos;t have access to this engine.</div>
+            <div className="text-center py-8 text-muted-foreground">You don&apos;t have access to this team.</div>
           ) : (
             <Table>
               <TableHeader>
@@ -287,7 +282,7 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
-                                  Remove from engine
+                                  Remove from team
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

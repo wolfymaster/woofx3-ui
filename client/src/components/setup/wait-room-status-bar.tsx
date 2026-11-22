@@ -34,7 +34,7 @@ export function WaitRoomStatusBar({ build }: { build: BuildingBuild }) {
       <div className="ml-auto flex shrink-0 items-center gap-3">
         <span className="flex items-center gap-1.5" data-testid="wait-room-live-state">
           <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
-          <span className="font-semibold uppercase tracking-wider text-muted-foreground">Offline</span>
+          <span className="font-semibold uppercase tracking-wider text-muted-foreground">Stream: offline</span>
         </span>
         <span
           className="flex items-center gap-1.5 font-system-mono text-muted-foreground"

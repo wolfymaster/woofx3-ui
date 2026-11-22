@@ -24,7 +24,7 @@ function endMessage(end: Exclude<DesktopSignInEnd, { kind: "signed_in" }>): stri
       return "The Twitch sign-in took too long. Please start again.";
     }
     case "browser_not_opened": {
-      return `woofx3 could not open your browser: ${end.reason}`;
+      return "woofx3 couldn't open your browser. Try again.";
     }
   }
 }

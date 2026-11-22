@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useEngineScope } from "@/engine/context";
 import { actionErrorMessage } from "@/lib/action-error";
+import { TRY_AGAIN } from "@/lib/copy";
 import { useLogger } from "@/lib/logger-context";
 import { cn } from "@/lib/utils";
 import {
@@ -196,16 +197,13 @@ function EndpointControls({
             onCheckedChange={(checked) => void run(() => setSharePassword(...ids, checked === true))}
           />
           <Label htmlFor={`share-${module.moduleId}-${endpoint.id}`} className="text-xs font-normal leading-snug">
-            Send the {endpoint.name} password found on this computer to woofx3, so {module.moduleName} (
-            {module.moduleId}) on your cloud engine can sign in. It's stored in your engine's settings for this module.
-            You can type it there instead.
+            Let woofx3 use your {endpoint.name} password so {module.moduleName} can connect. You can enter it yourself
+            in the module's settings instead.
           </Label>
         </div>
       )}
       {endpoint.passwordSetByHand && (
-        <p className="text-xs text-muted-foreground">
-          The password was typed into the module's settings, so the app leaves it alone.
-        </p>
+        <p className="text-xs text-muted-foreground">You set this password yourself, so we won't change it.</p>
       )}
 
       <p className="flex items-center gap-1.5 text-xs">
@@ -217,9 +215,7 @@ function EndpointControls({
           {testText(test)}
         </p>
       )}
-      {endpoint.reportError && (
-        <p className="text-xs text-destructive">Couldn't fill in the module's settings: {endpoint.reportError}</p>
-      )}
+      {endpoint.reportError && <p className="text-xs text-destructive">Couldn't fill in the module's settings.</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </section>
   );
@@ -295,9 +291,7 @@ export function ThisComputerConnections() {
     <Card className="mt-6" id="local-connections" data-testid="this-computer-connections">
       <CardHeader>
         <CardTitle className="text-lg">On this computer</CardTitle>
-        <CardDescription>
-          Apps on this computer or your network that your engine reaches through woofx3.
-        </CardDescription>
+        <CardDescription>Apps on this computer, like your streaming software, that woofx3 connects to.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <ThisComputerBody view={view} />
@@ -308,26 +302,28 @@ export function ThisComputerConnections() {
 
 function ThisComputerBody({ view }: { view: IntegrationsView | null }) {
   if (!view) {
-    return <p className="text-sm text-muted-foreground">This computer isn't linked to this engine.</p>;
+    return <p className="text-sm text-muted-foreground">This computer isn't connected to your woofx3 yet.</p>;
   }
   switch (view.availability.kind) {
     case "off":
     case "loading":
       return <p className="text-sm text-muted-foreground">Loading…</p>;
     case "unavailable":
-      return <p className="text-sm text-muted-foreground">Local connections need a newer woofx3.</p>;
+      return <p className="text-sm text-muted-foreground">Update woofx3 to use this.</p>;
     case "failed":
-      return <p className="text-sm text-destructive">{view.availability.message}</p>;
+      return <p className="text-sm text-destructive">{TRY_AGAIN}</p>;
     case "ready":
       break;
   }
   if (view.modules.length === 0) {
-    return <p className="text-sm text-muted-foreground">None of your modules connect to anything on this computer.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">Nothing you've installed needs a connection to this computer.</p>
+    );
   }
   return (
     <>
       {!view.relayAvailable && (
-        <p className="text-sm text-muted-foreground">Your woofx3 doesn't offer the relay yet.</p>
+        <p className="text-sm text-muted-foreground">Update woofx3 to connect apps on this computer.</p>
       )}
       {view.modules.map((module) => (
         <div key={module.moduleId} className="space-y-2">

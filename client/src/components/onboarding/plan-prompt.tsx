@@ -29,9 +29,9 @@ export function ChoosePlan() {
       <div className="rounded-md border p-4 flex gap-3">
         <CreditCard className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
         <div className="space-y-1 text-sm">
-          <p className="font-medium">Choose a plan to build your engine</p>
+          <p className="font-medium">Pick a plan to continue</p>
           <p className="text-muted-foreground">
-            Your organization's free trial has been used. Pick a plan, and this page carries on once it's active.
+            Your free trial has ended. Pick a plan and this page continues once it's active.
           </p>
         </div>
       </div>

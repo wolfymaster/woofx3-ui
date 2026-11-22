@@ -63,9 +63,9 @@ describe("connectionText", () => {
     expect(connectionText(endpoint(), { kind: "connected" }).tone).toBe("off");
   });
 
-  test("a connected relay says only the relay is connected, not that the app answered", () => {
+  test("a connected link says only that the link is up, not that the app answered", () => {
     expect(connectionText(endpoint({ enabled: true }), { kind: "connected" })).toEqual({
-      text: "Relay connected",
+      text: "Connected",
       tone: "ok",
     });
   });

@@ -1,27 +1,14 @@
 import { formatDistanceToNow } from "date-fns";
-import { CheckCircle2, Circle, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
-
-type StepStatus = "pending" | "running" | "success" | "error";
-
-function StepIcon({ status }: { status: StepStatus }) {
-  if (status === "success") {
-    return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
-  }
-  if (status === "error") {
-    return <XCircle className="h-3.5 w-3.5 text-destructive" />;
-  }
-  if (status === "running") {
-    return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />;
-  }
-  return <Circle className="h-3.5 w-3.5 text-muted-foreground" />;
-}
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 
 export function EngineSyncCard() {
+  const logger = useLogger();
   const state = useEngineSyncState();
   const syncNow = useEngineSyncRequest();
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +20,11 @@ export function EngineSyncCard() {
     try {
       const res = await syncNow();
       if (!res.scheduled) {
-        setError("A sync is already in progress.");
+        setError("Already refreshing.");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      logger.error("Could not start refresh", { error: e });
+      setError(TRY_AGAIN);
     } finally {
       setPending(false);
     }
@@ -47,7 +35,7 @@ export function EngineSyncCard() {
       <Card>
         <CardContent className="flex items-center gap-2 py-6 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading sync state…
+          Loading…
         </CardContent>
       </Card>
     );
@@ -62,31 +50,16 @@ export function EngineSyncCard() {
 
   const lastSyncedLabel =
     syncState && syncState.lastSyncedAt > 0 ? `${formatDistanceToNow(new Date(syncState.lastSyncedAt))} ago` : "Never";
-  const nextSyncLabel = syncState
-    ? syncState.nextEligibleAt <= Date.now()
-      ? "Now"
-      : `in ${formatDistanceToNow(new Date(syncState.nextEligibleAt))}`
-    : "—";
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Engine sync</CardTitle>
-        <CardDescription>
-          Brings this site up to date with everything on your engine. It runs on its own about every 8 hours while the
-          engine is in use.
-        </CardDescription>
+        <CardTitle className="text-lg">Refresh</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">Last synced</div>
-            <div className="mt-1 font-medium">{lastSyncedLabel}</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">Next sync</div>
-            <div className="mt-1 font-medium">{nextSyncLabel}</div>
-          </div>
+        <div className="text-sm">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Last refreshed</div>
+          <div className="mt-1 font-medium">{lastSyncedLabel}</div>
         </div>
 
         <div>
@@ -102,46 +75,13 @@ export function EngineSyncCard() {
             ) : (
               <RefreshCw className="h-4 w-4 mr-2" />
             )}
-            {isRunning ? "Syncing…" : "Sync now"}
+            {isRunning ? "Refreshing…" : "Refresh now"}
           </Button>
           {error && <p className="text-xs text-destructive mt-2">{error}</p>}
         </div>
 
-        {currentRun && (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                {currentRun.steps.filter((s) => s.status === "success").length} of {currentRun.steps.length} steps
-                complete
-              </p>
-              <ul className="space-y-1 text-sm">
-                {currentRun.steps.map((s) => (
-                  <li key={s.name} className="flex items-center gap-2">
-                    <StepIcon status={s.status as StepStatus} />
-                    <span className="capitalize">{s.name}</span>
-                    {s.status === "success" && (
-                      <span className="text-xs text-muted-foreground">({s.itemsProcessed})</span>
-                    )}
-                    {s.error && <span className="text-xs text-destructive">— {s.error}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </>
-        )}
-
         {!currentRun && lastError && syncState?.status === "error" && (
-          <>
-            <Separator />
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-              <p className="font-medium text-destructive">Last sync failed</p>
-              <p className="mt-1 text-xs text-destructive/80">{syncState.lastError || "Unknown error"}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Will retry automatically on the next eligible window.
-              </p>
-            </div>
-          </>
+          <p className="text-sm text-destructive">Couldn&apos;t refresh. We&apos;ll try again automatically.</p>
         )}
       </CardContent>
     </Card>

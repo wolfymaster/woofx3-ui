@@ -12,8 +12,8 @@ import { usePlanPrices } from "@/billing/use-plan-prices";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { actionErrorMessage } from "@/lib/action-error";
 import { CHECKOUT_POLL_TEXT } from "@/lib/checkout-return";
+import { useLogger } from "@/lib/logger-context";
 import { useCheckoutPoll } from "@/lib/use-checkout-poll";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,7 @@ interface OnboardingPlansProps {
  * paid. An organization is only made when one of the two buttons is pressed.
  */
 export function OnboardingPlans({ onStartTrial }: OnboardingPlansProps) {
+  const logger = useLogger();
   const ensureMyAccount = useMutation(api.accounts.ensureMyAccount);
   const startCheckout = useAction(api.billingCommands.startCheckout);
   const { prices, names } = usePlanPrices();
@@ -45,7 +46,8 @@ export function OnboardingPlans({ onStartTrial }: OnboardingPlansProps) {
         const accountId = await ensureMyAccount({});
         return await startCheckout({ accountId, plan: "pro", interval });
       } catch (error) {
-        toast({ title: "Could not start checkout", description: actionErrorMessage(error), variant: "destructive" });
+        logger.error("Could not start checkout", { error });
+        toast({ title: "Couldn't start checkout. Try again.", variant: "destructive" });
         return null;
       }
     });
@@ -56,7 +58,7 @@ export function OnboardingPlans({ onStartTrial }: OnboardingPlansProps) {
       <div className="space-y-1 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">Choose your plan</h1>
         <p className="text-sm text-muted-foreground">
-          Your engine runs your alerts, overlays and chat commands. Pick the plan to run it on.
+          Pick a plan to get your alerts, overlays and chat commands running.
         </p>
       </div>
       <fieldset className="flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-1 w-fit mx-auto backdrop-blur-xl">
@@ -86,7 +88,6 @@ export function OnboardingPlans({ onStartTrial }: OnboardingPlansProps) {
           <Button className="w-full" onClick={onStartTrial} data-testid="button-start-starter-trial">
             Start your {TRIAL_DAYS}-day free trial
           </Button>
-          <p className="text-xs text-center text-muted-foreground">Add payment any time.</p>
         </PlanCard>
         <PlanCard
           plan="pro"
@@ -232,7 +233,7 @@ export function WebPlanStep({
           onClick={onUsePreviewEngine}
           data-testid="button-connect-preview-engine"
         >
-          Connect this preview&apos;s engine
+          Use this preview&apos;s woofx3
         </Button>
       ) : null}
     </div>

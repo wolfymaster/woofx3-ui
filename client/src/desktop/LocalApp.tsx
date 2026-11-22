@@ -26,7 +26,12 @@ const LOCAL_VIEWER_NAME = "This computer";
 type ReadySession = Extract<LocalEngineSession, { kind: "ready" }>;
 
 /** What the startup screen says while the engine is not ready. */
-function startupMessage(session: LocalEngineSession | undefined): { title: string; detail?: string; busy: boolean } {
+function startupMessage(session: LocalEngineSession | undefined): {
+  title: string;
+  detail?: string;
+  reason?: string;
+  busy: boolean;
+} {
   switch (session?.kind) {
     case undefined:
     case "starting":
@@ -34,9 +39,9 @@ function startupMessage(session: LocalEngineSession | undefined): { title: strin
     case "migrating":
       return { title: "Updating woofx3's data…", detail: "This can take a minute after an update.", busy: true };
     case "failed":
-      return { title: "woofx3 is having trouble starting", detail: session.reason, busy: true };
+      return { title: "woofx3 is having trouble starting", reason: session.reason, busy: true };
     case "stopped":
-      return { title: "woofx3 stopped", detail: session.reason, busy: false };
+      return { title: "woofx3 stopped", reason: session.reason, busy: false };
     case "notLocal":
       return { title: "woofx3 is not running on this computer", busy: false };
     case "ready":
@@ -45,13 +50,19 @@ function startupMessage(session: LocalEngineSession | undefined): { title: strin
 }
 
 function EngineStartup({ session }: { session: LocalEngineSession | undefined }) {
-  const { title, detail, busy } = startupMessage(session);
+  const { title, detail, reason, busy } = startupMessage(session);
   return (
     <div className="h-screen w-full flex items-center justify-center bg-background p-6">
       <div className="text-center max-w-md space-y-3" data-testid="local-engine-startup">
         {busy && <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />}
         <p className="text-sm font-medium">{title}</p>
         {detail && <p className="text-xs text-muted-foreground break-words">{detail}</p>}
+        {reason && (
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="mt-1 break-words">{reason}</p>
+          </details>
+        )}
       </div>
     </div>
   );

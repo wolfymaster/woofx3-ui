@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import { AlertTriangle, ArrowUpCircle, CheckCircle2, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,9 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useLiveState } from "@/engine/hooks/use-live-state";
+import { TRY_AGAIN } from "@/lib/copy";
 import { engineAddress } from "@/lib/engine-address";
 import { upgradeHeading, upgradeResult } from "@/lib/engine-upgrade";
 import { engineReleaseNotesUrl } from "@/lib/engine-version";
+import { useLogger } from "@/lib/logger-context";
 import { ProvisioningSteps } from "./provisioning-steps";
 import { RenameEngineDialog } from "./rename-engine-dialog";
 import { UpgradeDialog } from "./upgrade-dialog";
@@ -49,15 +51,15 @@ interface UpgradeInfo {
 }
 
 const STATUS_LABELS: Record<RowStatus, string> = {
-  requested: "Requested",
-  provisioning: "Building",
-  ready: "Ready",
-  registering: "Connecting",
+  requested: "Starting",
+  provisioning: "Starting",
+  ready: "Starting",
+  registering: "Starting",
   registered: "Running",
-  upgrading: "Upgrading",
-  failed: "Failed",
-  deprovisioning: "Deleting",
-  deleted: "Deleted",
+  upgrading: "Updating",
+  failed: "Problem",
+  deprovisioning: "Removing",
+  deleted: "Removed",
 };
 
 /**
@@ -67,7 +69,7 @@ const STATUS_LABELS: Record<RowStatus, string> = {
  */
 function deleteLabel(status: RowStatus, error: string | undefined): string {
   if (status !== "deprovisioning") {
-    return "Delete engine";
+    return "Delete woofx3";
   }
   return error ? "Try delete again" : "Deleting…";
 }
@@ -85,6 +87,15 @@ function statusVariant(status: RowStatus): "default" | "secondary" | "destructiv
   return "secondary";
 }
 
+function Details({ children }: { children: ReactNode }) {
+  return (
+    <details className="mt-1 text-xs text-muted-foreground">
+      <summary className="cursor-pointer">Details</summary>
+      <div className="mt-1 space-y-1">{children}</div>
+    </details>
+  );
+}
+
 /**
  * The engine page for an engine woofx3 runs.
  *
@@ -94,6 +105,7 @@ function statusVariant(status: RowStatus): "default" | "secondary" | "destructiv
  * engine.
  */
 export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
+  const logger = useLogger();
   const provisioning = useQuery(api.provisioning.forInstance, { instanceId });
   const retry = useAction(api.provisioning.retry);
   const deleteEngine = useAction(api.provisioning.deleteManagedEngine);
@@ -163,7 +175,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
       <Card>
         <CardContent className="flex items-center gap-2 py-8 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading engine…
+          Loading…
         </CardContent>
       </Card>
     );
@@ -172,7 +184,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-muted-foreground">
-          This engine is managed, but no provisioning record exists for it.
+          Something went wrong with your setup. Contact support.
         </CardContent>
       </Card>
     );
@@ -193,7 +205,8 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
       await upgradeEngine({ instanceId });
       setUpgradeOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      logger.error("Managed woofx3 action failed", { error: err });
+      setError(TRY_AGAIN);
     } finally {
       setBusy(null);
     }
@@ -205,7 +218,8 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
     try {
       await retry({ instanceId });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      logger.error("Managed woofx3 action failed", { error: err });
+      setError(TRY_AGAIN);
     } finally {
       setBusy(null);
     }
@@ -218,7 +232,8 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
       await deleteEngine({ instanceId });
       setConfirmOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      logger.error("Managed woofx3 action failed", { error: err });
+      setError(TRY_AGAIN);
     } finally {
       setBusy(null);
     }
@@ -230,8 +245,8 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle className="text-lg">Managed Engine</CardTitle>
-              <CardDescription>woofx3 runs this engine for you, at your address.</CardDescription>
+              <CardTitle className="text-lg">Your woofx3</CardTitle>
+              <CardDescription>Hosted and kept up to date for you.</CardDescription>
             </div>
             <Badge variant={statusVariant(status)} data-testid="badge-engine-status">
               {STATUS_LABELS[status] ?? status}
@@ -306,8 +321,11 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
                 <AlertTriangle className="h-4 w-4 text-yellow-500" />
                 Needs attention
               </p>
-              <p className="mt-1 text-xs text-muted-foreground break-words">{flag.reason}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Flagged {new Date(flag.at).toLocaleString()}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Something needs a look. Contact support if it stays.</p>
+              <Details>
+                <p className="break-words">{flag.reason}</p>
+                <p>Flagged {new Date(flag.at).toLocaleString()}</p>
+              </Details>
             </div>
           )}
 
@@ -319,10 +337,10 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
               <div className="min-w-0 flex-1">
                 <p className="font-medium inline-flex items-center gap-1.5">
                   <ArrowUpCircle className="h-4 w-4 text-blue-500" />
-                  Update available: <span className="font-mono">{offered}</span>
+                  Update available
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {isLive ? "You're live: alerts will be offline until the engine is back. " : null}
+                  {isLive ? "You're live: alerts will be offline until woofx3 is back. " : null}
                   {upgradeInfo?.releaseNotesUrl && (
                     <a
                       href={upgradeInfo.releaseNotesUrl}
@@ -343,7 +361,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
                 disabled={busy !== null}
                 data-testid="button-upgrade-engine"
               >
-                Upgrade
+                Update
               </Button>
             </div>
           )}
@@ -364,7 +382,11 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
               )}
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{result.message}</p>
-                {result.detail && <p className="mt-1 text-xs text-muted-foreground break-words">{result.detail}</p>}
+                {result.detail && (
+                  <Details>
+                    <p className="break-words">{result.detail}</p>
+                  </Details>
+                )}
               </div>
               <Button
                 type="button"
@@ -393,9 +415,12 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
 
           {provisioning.error && status !== "registered" && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <p className="text-xs text-destructive/90 break-words" data-testid="text-engine-error">
-                {provisioning.error}
+              <p className="text-xs text-destructive/90" data-testid="text-engine-error">
+                Something went wrong. Try again, or contact support.
               </p>
+              <Details>
+                <p className="break-words">{provisioning.error}</p>
+              </Details>
             </div>
           )}
 
@@ -438,11 +463,11 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this engine?</AlertDialogTitle>
+            <AlertDialogTitle>Delete your woofx3?</AlertDialogTitle>
             <AlertDialogDescription>
-              The engine at {address ?? provisioning.slug} is destroyed, along with its database and everything stored
-              on it. Your organization, scenes and workflows stay here, and the address becomes available to someone
-              else. This cannot be undone.
+              This deletes your hosted woofx3 at {address ?? provisioning.slug} and everything stored on it. Your scenes
+              and workflows stay in your account. Your address becomes free for others to take. This can&apos;t be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -459,7 +484,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
               data-testid="button-confirm-delete-engine"
             >
               {busy === "delete" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Delete engine
+              Delete woofx3
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -477,8 +502,6 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
         <UpgradeDialog
           open={upgradeOpen}
           onOpenChange={setUpgradeOpen}
-          offered={offered}
-          current={upgradeInfo?.current ?? null}
           isLive={isLive}
           busy={busy === "upgrade"}
           onConfirm={() => void handleUpgrade()}

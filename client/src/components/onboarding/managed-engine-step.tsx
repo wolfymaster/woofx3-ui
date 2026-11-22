@@ -8,6 +8,8 @@ import { SlugStatus, slugSubmittable, useSlugAvailability } from "@/components/o
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 
 interface ManagedEngineStepProps {
   instanceId: Id<"instances">;
@@ -20,6 +22,7 @@ interface ManagedEngineStepProps {
  * setup on by itself, through its status.
  */
 export function ManagedEngineStep({ instanceId }: ManagedEngineStepProps) {
+  const logger = useLogger();
   const startManagedEngine = useAction(api.provisioning.startManagedEngine);
 
   const [slug, setSlug] = useState("");
@@ -35,7 +38,8 @@ export function ManagedEngineStep({ instanceId }: ManagedEngineStepProps) {
     try {
       await startManagedEngine({ instanceId, slug });
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : String(err));
+      logger.error("Could not start managed engine", { error: err });
+      setSubmitError(TRY_AGAIN);
       setCreating(false);
     }
   }
@@ -63,9 +67,7 @@ export function ManagedEngineStep({ instanceId }: ManagedEngineStepProps) {
 
         <SlugStatus slug={slug} check={check} />
 
-        <p className="text-xs text-muted-foreground mt-1">
-          Your username is your address on woofx3. You can change it later, once every 30 days.
-        </p>
+        <p className="text-xs text-muted-foreground mt-1">This is your address on woofx3. You can change it later.</p>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

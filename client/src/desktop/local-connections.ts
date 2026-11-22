@@ -39,17 +39,17 @@ export function connectionText(endpoint: EndpointView, relay: RelayView): { text
   }
   switch (relay.kind) {
     case "connected":
-      return { text: "Relay connected", tone: "ok" };
+      return { text: "Connected", tone: "ok" };
     case "connecting":
       return { text: "Connecting…", tone: "pending" };
     case "retrying":
-      return { text: `Offline: ${relay.error}`, tone: "problem" };
+      return { text: "Disconnected", tone: "problem" };
     case "displaced":
-      return { text: "Offline: another connection took over", tone: "problem" };
+      return { text: "Disconnected: another connection took over", tone: "problem" };
     case "refused":
-      return { text: "Offline: woofx3 refused the relay connection", tone: "problem" };
+      return { text: "Disconnected: woofx3 refused the connection", tone: "problem" };
     case "unavailable":
-      return { text: "Offline: your woofx3 doesn't offer the relay yet", tone: "problem" };
+      return { text: "Update woofx3 to connect apps on this computer.", tone: "problem" };
     case "notNeeded":
       return { text: "Offline", tone: "problem" };
   }
@@ -58,11 +58,11 @@ export function connectionText(endpoint: EndpointView, relay: RelayView): { text
 export function testText(result: TestResult): string {
   switch (result.kind) {
     case "ok":
-      return result.protocol ? `Answered (${result.protocol})` : "Answered";
+      return "It's working";
     case "refused":
-      return `No: ${result.reason}`;
+      return "Couldn't connect";
     case "timedOut":
-      return "No answer within 3 seconds";
+      return "No answer";
   }
 }
 

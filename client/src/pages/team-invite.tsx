@@ -125,7 +125,7 @@ export default function TeamInvite({
     return (
       <div className="p-6 lg:p-8 max-w-2xl mx-auto">
         <PageHeader title="Invite a team member" actions={backLink} />
-        <p className="text-sm text-muted-foreground">No engine available yet.</p>
+        <p className="text-sm text-muted-foreground">Nothing here yet.</p>
       </div>
     );
   }
@@ -138,7 +138,7 @@ export default function TeamInvite({
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading" />
         ) : (
           <p className="text-sm text-muted-foreground" data-testid="text-invite-not-allowed">
-            Only engine admins can invite people. Ask an admin of this engine to send the invitation.
+            Only admins can invite people. Ask one to send the invite.
           </p>
         )}
       </div>
@@ -328,9 +328,7 @@ function RoleField({ role, onChange }: { role: InviteRole; onChange: (role: Invi
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">
-        {role === "admin"
-          ? "Can manage this engine, its settings and its team."
-          : "Can use this engine's alerts, scenes, media and other features."}
+        {role === "admin" ? "Can change settings and manage the team." : "Can use alerts, scenes and media."}
       </p>
     </div>
   );

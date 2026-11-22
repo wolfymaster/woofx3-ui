@@ -60,7 +60,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
       <CardHeader>
         <CardTitle className="text-lg">Desktop app</CardTitle>
         <CardDescription>
-          The computer paired with this engine through the woofx3 desktop app. Pairing another computer replaces it.
+          The computer running the woofx3 desktop app for you. Pairing another computer replaces it.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -68,7 +68,8 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         ) : companion === null ? (
           <p className="text-sm text-muted-foreground" data-testid="text-no-companion">
-            No computer paired. Install the woofx3 desktop app on your streaming PC to connect OBS and other local apps.
+            No computer paired. Install the woofx3 desktop app on your streaming PC to connect your streaming software
+            and other local apps.
           </p>
         ) : (
           <div className="flex flex-wrap items-center gap-3" data-testid="row-companion">
@@ -80,7 +81,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
               </p>
             </div>
             {!companion.approvalStands ? (
-              <Badge variant="outline" title="Whoever approved it is no longer an admin of this engine">
+              <Badge variant="outline" title="The person who paired it no longer has access. Pair it again.">
                 Needs pairing again
               </Badge>
             ) : !companion.confirmed ? (
