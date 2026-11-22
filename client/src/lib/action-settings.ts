@@ -1,4 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import { toDisplayText, toStoredText, type VariableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
@@ -164,4 +165,26 @@ export function variablesForSetting(
 export function appendToken(text: unknown, token: string): string {
   const current = typeof text === "string" ? text : "";
   return current === "" || current.endsWith(" ") ? `${current}${token}` : `${current} ${token}`;
+}
+
+/**
+ * The stored text with `token` written over the selection of the field showing it, and where
+ * the cursor belongs afterwards. A field shows short `{name}`s, so the selection counts
+ * characters of that display text, not of the stored one.
+ */
+export function insertTokenAt(
+  stored: string,
+  token: string,
+  selection: { start: number; end: number },
+  names: VariableNames,
+  functions: boolean
+): { text: string; cursor: number } {
+  const display = toDisplayText(stored, names);
+  const shown = toDisplayText(token, names);
+  const start = Math.min(selection.start, display.length);
+  const end = Math.min(Math.max(selection.end, start), display.length);
+  return {
+    text: toStoredText(`${display.slice(0, start)}${shown}${display.slice(end)}`, names, { functions }),
+    cursor: start + shown.length,
+  };
 }

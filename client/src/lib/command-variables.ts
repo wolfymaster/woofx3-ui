@@ -25,7 +25,7 @@ export function commandActionVariables(argumentPattern: string): VariableOption[
     },
     {
       value: "${trigger.data.text}",
-      label: "Arguments",
+      label: "Message text",
       group: GROUP,
       type: "string",
       description: "Everything the chatter typed after the command word.",
