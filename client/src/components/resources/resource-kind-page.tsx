@@ -39,8 +39,10 @@ import {
 } from "@/engine/hooks/use-module-resources";
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
+import { useLogger } from "@/lib/logger-context";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import { pluralKindName } from "@/lib/resource-kind-route";
@@ -79,6 +81,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   const [location, navigate] = useLocation();
   const { instanceId } = useEngineScope();
   const { toast } = useToast();
+  const logger = useLogger();
 
   const kindDefinition = useResourceKind(kind);
   const instances = useResourceInstancesOfKind(kind);
@@ -139,8 +142,8 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
           title={`${title} aren't available yet`}
           description={
             parseKindRef(kind)?.module === WOOFX3_MODULE
-              ? `No installed module provides ${kindName}s. They come with the woofx3 module — restart the engine to install its latest version.`
-              : `No installed module provides ${title.toLowerCase()} called "${kind}". Install the module that does, or check the address.`
+              ? `${capitalize(kindName)}s aren't available yet. Update your setup to get them.`
+              : "That page doesn't exist."
           }
         />
       </div>
@@ -210,7 +213,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                 ) : (
                   <EmptyState
                     icon={icon}
-                    title={selectedId ? `No ${noun} called "${selectedId}"` : `Choose a ${noun}`}
+                    title={selectedId ? `That ${noun} doesn't exist` : `Choose a ${noun}`}
                     description={selectedId ? `It may have been deleted.` : description}
                   />
                 )
@@ -257,9 +260,10 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                           settings,
                         });
                       } catch (err) {
+                        logger.error("Request failed", { error: err });
                         toast({
                           title: "Couldn't save those settings",
-                          description: err instanceof Error ? err.message : String(err),
+                          description: TRY_AGAIN,
                           variant: "destructive",
                         });
                       }
@@ -295,7 +299,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteTarget ? resourceName(deleteTarget) : noun}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Its value is gone for good, and workflows or commands that use it will stop finding it.
+              This can't be undone. Workflows and commands that use it will stop working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -310,9 +314,10 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                   await deleteInstance(deleteTarget.canonicalId);
                   navigate(basePath);
                 } catch (err) {
+                  logger.error("Request failed", { error: err });
                   toast({
                     title: `Couldn't delete ${resourceName(deleteTarget)}`,
-                    description: err instanceof Error ? err.message : String(err),
+                    description: TRY_AGAIN,
                     variant: "destructive",
                   });
                 } finally {

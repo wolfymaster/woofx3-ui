@@ -1,16 +1,11 @@
 import { AlertTriangle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  NO_REASON_GIVEN,
-  NOT_RUNNING_EXPLANATION,
-  NOT_RUNNING_LABEL,
-  type NotRunningWorkflow,
-} from "@/lib/workflow-health";
+import { NOT_RUNNING_EXPLANATION, NOT_RUNNING_LABEL, type NotRunningWorkflow } from "@/lib/workflow-health";
 
 /**
- * A red badge for a workflow the engine refused to set up, opening onto the
- * engine's reason. A button so it works by tap as well as by pointer; clicks
+ * A red badge for a workflow that could not be set up, opening onto a plain
+ * explanation with the reason behind a Details disclosure. A button so it works by tap as well as by pointer; clicks
  * stop here so a badge inside a clickable row does not also open the row.
  */
 export function NotRunningBadge({ health, className }: { health: NotRunningWorkflow; className?: string }) {
@@ -32,7 +27,12 @@ export function NotRunningBadge({ health, className }: { health: NotRunningWorkf
       </PopoverTrigger>
       <PopoverContent className="w-80 text-sm" onClick={(e) => e.stopPropagation()}>
         <p className="font-medium">{NOT_RUNNING_EXPLANATION}</p>
-        <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">{health.reason ?? NO_REASON_GIVEN}</p>
+        {health.reason && (
+          <details className="mt-2 text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="mt-1 whitespace-pre-wrap break-words">{health.reason}</p>
+          </details>
+        )}
       </PopoverContent>
     </Popover>
   );

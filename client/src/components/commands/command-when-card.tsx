@@ -102,6 +102,7 @@ export function CommandWhenCard({ value, groups, onChange, defaultExpanded }: Co
               value={value.priority}
               onChange={(e) => onChange((current) => ({ ...current, priority: Number(e.target.value) }))}
             />
+            <p className="text-xs text-muted-foreground">Higher runs first when two commands match.</p>
           </div>
         </div>
 

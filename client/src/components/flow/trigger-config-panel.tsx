@@ -40,7 +40,7 @@ export function TriggerConfigPanel({
     [configFields, moduleName, canonicalRef]
   );
   if (fields.length === 0) {
-    return <p className="text-sm text-muted-foreground">This trigger has no configurable settings.</p>;
+    return <p className="text-sm text-muted-foreground">Nothing to set up for this trigger.</p>;
   }
   const values = unfinished ?? conditionsToFieldValues(fields, node.conditions);
   return (

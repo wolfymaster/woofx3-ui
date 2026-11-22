@@ -18,6 +18,8 @@ import { useDatabasesSupported } from "@/engine/hooks/use-databases";
 import { useFormSubmissionsSupported } from "@/engine/hooks/use-form-submissions";
 import { useUpdateResourceInstanceRequest } from "@/engine/hooks/use-module-resources";
 import { toast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 import { ProblemIndex } from "@/lib/page-problems";
 import { resourceName } from "@/lib/resource-instance";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
@@ -37,8 +39,7 @@ function questionCount(settings: Record<string, unknown>): number {
 
 /** A woofx3 form: its questions, the answers it has received, and a quick way to save them to a database. */
 export const formView: KindView = {
-  description:
-    "Questions viewers answer on your public page. Each answer can be saved to a database, posted to chat, or start anything else.",
+  description: "Questions viewers answer on your public page. Save the answers to a database or send them to chat.",
   icon: STREAM_OBJECT_ICONS.forms,
   railValue: ({ settings }) => questionCount(settings).toLocaleString(),
   detail: (props) => <FormPanel key={props.instance.canonicalId} {...props} />,
@@ -90,6 +91,7 @@ function FormPanel(props: ResourceDetailProps) {
  */
 function QuestionsCard({ instance, settings }: Pick<ResourceDetailProps, "instance" | "settings">) {
   const updateInstance = useUpdateResourceInstanceRequest();
+  const logger = useLogger();
   const stored = useMemo(() => parseFormFields(settings.fields), [settings.fields]);
   const [draft, setDraft] = useState<FormField[] | null>(null);
   const [showProblems, setShowProblems] = useState(false);
@@ -112,9 +114,10 @@ function QuestionsCard({ instance, settings }: Pick<ResourceDetailProps, "instan
       setDraft(null);
       setShowProblems(false);
     } catch (err) {
+      logger.error("Request failed", { error: err });
       toast({
         title: "Couldn't save those questions",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {

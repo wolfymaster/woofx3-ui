@@ -55,6 +55,7 @@ import {
   commandGroupEditorPath,
 } from "@/lib/command-editor-route";
 import { groupLabel, sortGroups } from "@/lib/group-display";
+import { useLogger } from "@/lib/logger-context";
 import { isRowActionClick } from "@/lib/row-click";
 import { cn } from "@/lib/utils";
 import type { ActionPreset } from "@/lib/workflow-presets";
@@ -162,7 +163,7 @@ export default function Commands() {
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader
         title="Chat Commands"
-        description="Manage chat commands, permission groups, and who can trigger them."
+        description="Chat commands your viewers can use, and who is allowed to use them."
       />
 
       <nav className="mb-6 flex w-fit items-center gap-1 rounded-lg bg-muted p-1 text-muted-foreground">
@@ -224,6 +225,7 @@ function CommandsTab({
   isLoading: boolean;
 }) {
   const { toast } = useToast();
+  const logger = useLogger();
   const [, navigate] = useLocation();
   const { actionPresets } = useWorkflowCatalog();
   const [searchQuery, setSearchQuery] = useState("");
@@ -246,9 +248,9 @@ function CommandsTab({
       await deleteCommand(deleteTarget.engineCommandId);
       toast({ title: "Command deleted" });
     } catch (err: unknown) {
+      logger.error("Failed to delete command", { error: err });
       toast({
-        title: "Failed to delete command",
-        description: err instanceof Error ? err.message : undefined,
+        title: "Couldn't delete the command. Try again.",
         variant: "destructive",
       });
     }
@@ -272,9 +274,9 @@ function CommandsTab({
         argumentPattern: cmd.argumentPattern ?? "",
       });
     } catch (err: unknown) {
+      logger.error("Failed to update command", { error: err });
       toast({
-        title: "Failed to update command",
-        description: err instanceof Error ? err.message : undefined,
+        title: "Couldn't update the command. Try again.",
         variant: "destructive",
       });
     }
@@ -307,7 +309,7 @@ function CommandsTab({
           description={
             searchQuery
               ? "Try adjusting your search."
-              : "Commands are words viewers type in chat, like !socials, that make woofx3 reply or act. Add one with the button above."
+              : "Commands are words viewers type in chat, like !socials. Add one to make your stream reply or do something."
           }
         />
       ) : (
@@ -354,7 +356,7 @@ function CommandsTab({
                     {cmd.workflowError && (
                       <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        Steps need attention
+                        This command's steps need fixing
                       </p>
                     )}
                   </TableCell>
@@ -375,10 +377,10 @@ function CommandsTab({
                             <TooltipTrigger asChild>
                               <span>
                                 <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                                <span className="sr-only">No groups or usernames granted — invocable by no one</span>
+                                <span className="sr-only">No one can use this command</span>
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent>No groups or usernames granted — invocable by no one</TooltipContent>
+                            <TooltipContent>No one can use this command</TooltipContent>
                           </Tooltip>
                         )}
                       </div>
@@ -446,8 +448,7 @@ function CommandsTab({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete command</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {deleteTarget ? `!${deleteTarget.command}` : "this command"}? This action
-              cannot be undone.
+              Delete {deleteTarget ? `!${deleteTarget.command}` : "this command"}? This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -476,6 +477,7 @@ function GroupsTab({
   isLoading: boolean;
 }) {
   const { toast } = useToast();
+  const logger = useLogger();
   const [, navigate] = useLocation();
   const [deleteTarget, setDeleteTarget] = useState<GroupDoc | null>(null);
 
@@ -501,9 +503,9 @@ function GroupsTab({
       await deleteGroup(deleteTarget.engineGroupId);
       toast({ title: "Group deleted" });
     } catch (err: unknown) {
+      logger.error("Failed to delete group", { error: err });
       toast({
-        title: "Failed to delete group",
-        description: err instanceof Error ? err.message : undefined,
+        title: "Couldn't delete the group. Try again.",
         variant: "destructive",
       });
     }
@@ -564,7 +566,7 @@ function GroupsTab({
         <EmptyState
           icon={Users}
           title="No groups found"
-          description="Built-in groups are seeded by the engine for every application, so this usually means the engine hasn't synced yet. Create a custom group, or check the engine connection in Settings."
+          description="Built-in groups (moderators, VIPs and so on) haven't loaded yet. Check your connection in Settings, or make your own group."
           action={{ label: "Add Group", onClick: () => navigate(COMMAND_GROUP_NEW_ROUTE) }}
         />
       ) : (
@@ -574,7 +576,7 @@ function GroupsTab({
               <div className="mb-2">
                 <h3 className="text-sm font-semibold">Built-in</h3>
                 <p className="text-xs text-muted-foreground">
-                  Seeded automatically and kept up to date from chat. They can't be renamed, deleted, or edited by hand.
+                  Set up for you and updated from chat. They can't be changed.
                 </p>
               </div>
               <GroupTable groups={builtInGroups} usageByGroupId={usageByGroupId} />
@@ -590,7 +592,7 @@ function GroupsTab({
             )}
             {customGroups.length === 0 ? (
               <Card className="p-6 text-center text-sm text-muted-foreground">
-                No custom groups yet. Create one to grant a set of usernames access to restricted commands.
+                No groups yet. Make one to let specific people use certain commands.
               </Card>
             ) : (
               <GroupTable groups={customGroups} usageByGroupId={usageByGroupId} onDelete={setDeleteTarget} />
@@ -612,10 +614,10 @@ function GroupsTab({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete group</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteTarget?.name}"?{" "}
+              Delete "{deleteTarget?.name}"?{" "}
               {usageCount > 0
-                ? `It's currently referenced by ${usageCount} command${usageCount === 1 ? "" : "s"} — deleting it won't touch those commands, but the group will no longer grant anyone access through them.`
-                : "This action cannot be undone."}
+                ? `${usageCount} command${usageCount === 1 ? "" : "s"} use${usageCount === 1 ? "s" : ""} this group. Deleting it keeps ${usageCount === 1 ? "it" : "them"}, but its members lose access.`
+                : "This can't be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

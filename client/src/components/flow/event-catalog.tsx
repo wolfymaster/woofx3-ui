@@ -72,7 +72,7 @@ export function EventCatalog({
           id={searchId}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Find an event"
+          placeholder="Find a trigger"
           className="h-9"
           autoFocus
           data-testid={`input-${testId}-search`}
@@ -88,9 +88,7 @@ export function EventCatalog({
           <X className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
-      {groups.length === 0 && (
-        <p className="text-sm text-muted-foreground">No modules with events are installed yet.</p>
-      )}
+      {groups.length === 0 && <p className="text-sm text-muted-foreground">No triggers available yet.</p>}
       {query !== "" ? (
         hits.length === 0 ? (
           <p className="text-sm text-muted-foreground" aria-live="polite">

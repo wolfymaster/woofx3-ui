@@ -74,7 +74,7 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
       <div className="flex flex-col gap-2.5">
         <h2 className="text-2xl font-semibold leading-tight tracking-[-0.02em]">What changes {label}</h2>
         <p className="text-sm text-muted-foreground">
-          Every trigger that runs one of these actions on it. A step added here starts aimed at this {bareKind(kind)}.
+          Everything that changes this {bareKind(kind)}. New steps you add here are set up for it.
         </p>
       </div>
 

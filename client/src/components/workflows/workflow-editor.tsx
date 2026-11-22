@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { conditionFieldsOf, newTriggerTree } from "@/lib/alert-triggers";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 import { isCommandsSource } from "@/lib/parse-config-fields";
 import { type WaitEventChoice, type WaitEventGroup, waitEventGroups } from "@/lib/wait-event";
 import type { TriggerPreset } from "@/lib/workflow-presets";
@@ -49,6 +51,7 @@ function startableGroups(
 export function WorkflowEditor() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const logger = useLogger();
   const { catalogTriggers, catalogActions, triggerPresets, actionPresets, loading } = useWorkflowCatalog();
   const conditionSupport = useEngineConditionSupport();
   const createFromDefinition = useCreateWorkflowRequest();
@@ -93,9 +96,10 @@ export function WorkflowEditor() {
       toast({ title: "Workflow created" });
       navigate(`/stream/workflows/${engineWorkflowId}`);
     } catch (err) {
+      logger.error("Request failed", { error: err });
       toast({
         title: "Failed to create workflow",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
       setCreating(false);
@@ -122,11 +126,11 @@ export function WorkflowEditor() {
           testId="workflow-event"
         />
         <p className="text-xs text-muted-foreground">
-          To answer a chat command, make it on the{" "}
+          To answer a chat command, use the{" "}
           <Link href="/stream/commands" className="underline underline-offset-2 hover:text-foreground">
             Commands page
           </Link>
-          : its steps are a workflow too.
+          .
         </p>
       </div>
     );

@@ -100,9 +100,7 @@ export function WaitStepEditor({ step, catalogTriggers, onChange }: WaitStepEdit
             label="Pause length"
             compact
           />
-          <p className="w-full text-xs text-muted-foreground">
-            Then the next step runs. A pause can be up to 24 hours.
-          </p>
+          <p className="w-full text-xs text-muted-foreground">A pause can be up to 24 hours.</p>
         </div>
       ) : (
         <EventWaitEditor step={step} wait={wait} catalogTriggers={catalogTriggers} onChange={onChange} />
@@ -880,11 +878,7 @@ function TimeLimitEditor({
           </>
         )}
       </div>
-      {!limitOn && (
-        <p className="text-xs text-muted-foreground">
-          Without a limit, the workflow waits until it happens, however long that takes.
-        </p>
-      )}
+      {!limitOn && <p className="text-xs text-muted-foreground">No limit: it waits for as long as it takes.</p>}
     </Section>
   );
 }

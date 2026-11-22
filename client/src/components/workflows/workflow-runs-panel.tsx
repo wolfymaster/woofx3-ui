@@ -29,6 +29,8 @@ import type { RecordedWorkflowRun } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useToast } from "@/hooks/use-toast";
 import { describeAlertFailure } from "@/lib/alert-failure";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 import { workflowRunPath } from "@/lib/workflow-run-route";
@@ -55,6 +57,7 @@ interface WorkflowRunsPanelProps {
 export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const logger = useLogger();
   const runs = useWorkflowRuns(engineWorkflowId, RUN_LIMIT);
   const replay = useReplayWorkflowRunRequest();
   const cancelRun = useCancelWorkflowRunRequest();
@@ -75,10 +78,11 @@ export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) 
       await replay({ engineRunId: run.engineRunId, origin: REPLAY_ORIGIN });
       toast({ title: "Replay requested", description: "It will appear at the top of this list when it starts." });
     } catch (err) {
+      logger.error("Request failed", { error: err });
       toast({
         variant: "destructive",
         title: "Replay could not be started",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
       });
     } finally {
       setReplayingId(null);
@@ -95,10 +99,11 @@ export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) 
       setCancelTarget(null);
       toast(describeStopOutcome(result.outcome, result.status));
     } catch (err) {
+      logger.error("Request failed", { error: err });
       toast({
         variant: "destructive",
         title: "Run could not be stopped",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
       });
     } finally {
       setIsCancelling(false);
@@ -249,9 +254,7 @@ export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) 
           <AlertDialogHeader>
             <AlertDialogTitle>Replay this run?</AlertDialogTitle>
             <AlertDialogDescription>
-              The workflow runs again from the run's recorded trigger event, against its current steps. Its actions
-              happen for real: chat messages are sent and alerts play on your overlays. The replay is added to this
-              list.
+              Runs it again with the same event. Chat messages and alerts will really happen.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -282,10 +285,7 @@ export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) 
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Stop this run?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The engine stops the run: the step in flight is abandoned, though an effect it already sent stands, and no
-              further step runs.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Stops the run. Anything it already did stays done.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isCancelling}>Keep it running</AlertDialogCancel>

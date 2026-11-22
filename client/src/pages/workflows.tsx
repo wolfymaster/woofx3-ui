@@ -20,6 +20,7 @@ import { useMemo, useRef, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageIntro } from "@/components/common/page-intro";
+import { SaveBar } from "@/components/common/save-bar";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
@@ -64,6 +65,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
 import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
+import { useLogger } from "@/lib/logger-context";
 import { SHEET_MOTION } from "@/lib/sheet-motion";
 import { cn } from "@/lib/utils";
 import {
@@ -143,6 +145,7 @@ function WorkflowTableSkeleton() {
 function WorkflowListScreen() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const logger = useLogger();
   const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { catalogTriggers } = useWorkflowCatalog();
 
@@ -192,9 +195,9 @@ function WorkflowListScreen() {
     try {
       await setEnabled(workflow.engineWorkflowId, !workflow.isEnabled);
     } catch (err) {
+      logger.error("Failed to toggle workflow", { error: err });
       toast({
-        title: "Failed to toggle workflow",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't change the workflow. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -212,9 +215,9 @@ function WorkflowListScreen() {
       toast({ title: "Workflow deleted" });
       setDeleteTarget(null);
     } catch (err) {
+      logger.error("Failed to delete workflow", { error: err });
       toast({
-        title: "Failed to delete workflow",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't delete the workflow. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -434,6 +437,7 @@ function CreateWorkflowScreen() {
 function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
 
   const workflows = useWorkflows();
@@ -473,7 +477,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
         <EmptyState
           icon={WorkflowIcon}
           title="Workflow not found"
-          description="It may have been deleted, or it belongs to another engine."
+          description="It may have been deleted."
           action={{ label: "Back to workflows", onClick: () => navigate(LIST_PATH) }}
         />
       </div>
@@ -529,9 +533,9 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
         outcome.conflict ? { title: "The workflow changed, so try the name again" } : { title: "Workflow name updated" }
       );
     } catch (err) {
+      logger.error("Failed to update name", { error: err });
       toast({
-        title: "Failed to update name",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't rename the workflow. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -561,9 +565,9 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       );
       toast(outcome.conflict ? STEPS_CHANGED_TOAST : { title: "Workflow saved" });
     } catch (err) {
+      logger.error("Save failed", { error: err });
       toast({
-        title: "Save failed",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't save the workflow. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -581,9 +585,9 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       setDeleteDialogOpen(false);
       navigate(LIST_PATH);
     } catch (err) {
+      logger.error("Failed to delete workflow", { error: err });
       toast({
-        title: "Failed to delete workflow",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't delete the workflow. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -713,6 +717,15 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
           <WorkflowRunsPanel engineWorkflowId={engineWorkflowId} />
         </div>
       )}
+      {tab === "steps" && (
+        <SaveBar
+          onSave={handleSave}
+          saving={isSaving}
+          disabled={!currentDefinition}
+          dirty={hasUnsavedSteps}
+          testId="button-workflow-save-bar"
+        />
+      )}
 
       <TestRunSheet
         open={testRunOpen}
@@ -766,9 +779,7 @@ function DeleteWorkflowDialog({ name, open, isDeleting, onOpenChange, onConfirm 
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete workflow</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to delete "{name}"? This action cannot be undone.
-          </AlertDialogDescription>
+          <AlertDialogDescription>Delete "{name}"? This can't be undone.</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>

@@ -25,6 +25,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { conditionFieldsOf, eventTriggers, nextTriggerOrder } from "@/lib/alert-triggers";
+import { TRY_AGAIN } from "@/lib/copy";
 import {
   DATABASE_INSERT_ACTION_REF,
   FORM_SUBMITTED_EVENT,
@@ -35,6 +36,7 @@ import {
   formDatabaseWorkflowTree,
   withInsertValues,
 } from "@/lib/form-kind";
+import { useLogger } from "@/lib/logger-context";
 import { resourceActions } from "@/lib/resource-actions";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import { resourceTriggers } from "@/lib/resource-triggers";
@@ -62,6 +64,7 @@ export function SaveFormToDatabaseDialog({
   onClose: () => void;
 }) {
   const id = useId();
+  const logger = useLogger();
   const databases = useResourceInstancesOfKind(DATABASE_KIND);
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
   const workflows = useWorkflows();
@@ -104,7 +107,7 @@ export function SaveFormToDatabaseDialog({
     if (!trigger || !insert || workflows === undefined) {
       toast({
         title: "Couldn't save answers to a database",
-        description: "Update your engine to get forms and databases working together.",
+        description: "Update your setup to connect forms and databases.",
         variant: "destructive",
       });
       return;
@@ -170,9 +173,10 @@ export function SaveFormToDatabaseDialog({
       toast({ title: `Answers now save to ${databaseLabel}` });
       onClose();
     } catch (err) {
+      logger.error("Request failed", { error: err });
       toast({
         title: "Couldn't save answers to a database",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {
@@ -229,12 +233,7 @@ export function SaveFormToDatabaseDialog({
               />
             </div>
           )}
-          {!creating && (
-            <p className="text-xs text-muted-foreground">
-              Questions the database has no column for yet get one. Already saving there? This adds your newest
-              questions.
-            </p>
-          )}
+          {!creating && <p className="text-xs text-muted-foreground">New questions get their own column.</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

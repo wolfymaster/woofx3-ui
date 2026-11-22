@@ -116,7 +116,7 @@ export function StepSaveFooter({
               disabled={saving || view.tone === "blocked"}
               data-testid="button-step-save"
             >
-              {view.tone === "failed" ? "Try again" : "Save changes"}
+              {view.tone === "failed" ? "Try again" : "Save"}
             </Button>
           </>
         ) : (

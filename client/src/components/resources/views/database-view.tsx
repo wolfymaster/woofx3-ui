@@ -45,6 +45,7 @@ import {
 } from "@/engine/hooks/use-databases";
 import { useUpdateResourceInstanceRequest } from "@/engine/hooks/use-module-resources";
 import { toast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import { ProblemIndex } from "@/lib/page-problems";
 import { resourceName } from "@/lib/resource-instance";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
@@ -54,7 +55,7 @@ const PAGE_SIZE = 50;
 /** A woofx3 database: its columns and its rows. */
 export const databaseView: KindView = {
   description:
-    "Tables you keep: form answers, games you played, giveaway entrants. Triggers add and change rows, and columns you choose can show on your public page.",
+    "Tables you keep: form answers, games you played, giveaway entrants. Columns you choose can show on your public page.",
   icon: STREAM_OBJECT_ICONS.databases,
   railValue: ({ settings }) => parseDatabaseColumns(settings).length.toLocaleString(),
   detail: (props) => <DatabasePanel key={props.instance.canonicalId} {...props} />,
@@ -68,10 +69,6 @@ function DatabasePanel(props: ResourceDetailProps) {
       {columns.length > 0 && <RecordsCard databaseId={props.instance.canonicalId} columns={columns} />}
     </div>
   );
-}
-
-function errorText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 // --- Columns ---
@@ -107,8 +104,8 @@ function ColumnsCard({ instance, settings, stored }: ColumnsCardProps) {
       });
       setDraft(null);
       setShowProblems(false);
-    } catch (err) {
-      toast({ title: "Couldn't save those columns", description: errorText(err), variant: "destructive" });
+    } catch {
+      toast({ title: "Couldn't save those columns", description: TRY_AGAIN, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -419,8 +416,8 @@ function RecordsCard({ databaseId, columns }: { databaseId: string; columns: Dat
       }
       setEditing(null);
       records.refetch();
-    } catch (err) {
-      toast({ title: "Couldn't save that row", description: errorText(err), variant: "destructive" });
+    } catch {
+      toast({ title: "Couldn't save that row", description: TRY_AGAIN, variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -567,8 +564,8 @@ function RecordsCard({ databaseId, columns }: { databaseId: string; columns: Dat
                 try {
                   await remove(databaseId, deleting.id);
                   records.refetch();
-                } catch (err) {
-                  toast({ title: "Couldn't delete that row", description: errorText(err), variant: "destructive" });
+                } catch {
+                  toast({ title: "Couldn't delete that row", description: TRY_AGAIN, variant: "destructive" });
                 } finally {
                   setDeleting(null);
                 }

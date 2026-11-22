@@ -103,7 +103,7 @@ export function ActionSettingsEditor({
         <ActionIntro row={row} />
       ) : (
         <p className="text-sm text-muted-foreground" data-testid="text-action-not-installed">
-          The action this step runs isn't installed, so its settings can't be shown. The step is kept as it is.
+          This step's action isn't available, so its settings can't be shown. The step stays as it is.
         </p>
       )}
       {row && fields.length === 0 && <p className="text-sm text-muted-foreground">This action has no settings.</p>}

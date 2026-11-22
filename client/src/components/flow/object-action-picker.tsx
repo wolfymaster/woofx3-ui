@@ -506,8 +506,8 @@ function InstanceChips({
     return (
       <div className="flex flex-col gap-2">
         <p className="text-[13px] text-muted-foreground">
-          {object.noInstances ?? `You have no ${object.label.toLowerCase()} yet.`} The steps below can still be added
-          and pointed at one later.
+          {object.noInstances ?? `You have no ${object.label.toLowerCase()} yet.`} You can add the steps now and choose
+          one later.
         </p>
         {create}
         {target?.type === "source" && (
