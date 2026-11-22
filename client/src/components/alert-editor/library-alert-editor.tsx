@@ -14,6 +14,7 @@ import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useOverlayEditorSession } from "@/hooks/use-overlay-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert, inputVariableOptions, libraryPreviewInputs } from "@/lib/alert-library";
+import { DRAFT_COPY } from "@/lib/copy";
 import { draftSaveStatus } from "@/lib/draft-save-status";
 import { catalogOfRows } from "@/lib/scene-composition";
 import { repairResultToast } from "@/lib/scene-unread";
@@ -81,7 +82,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
         <p className="text-muted-foreground">This alert isn't in the library.</p>
         <p className="text-xs text-muted-foreground">
-          It was deleted, or it was saved a moment ago and the engine hasn't reported it yet.
+          It may have been deleted, or it is still saving. Try again in a moment.
         </p>
         <Button variant="outline" onClick={onBack}>
           Back
@@ -107,10 +108,9 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
       if (result.ok) {
         session.reopen();
       }
-    } catch (err) {
+    } catch {
       toast({
-        title: "Couldn't repair this alert",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't repair this alert. Try again.",
         variant: "destructive",
       });
     }
@@ -121,7 +121,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
       session={handle}
       view={view}
       title={row?.name ?? "Library alert"}
-      context="Alert library · new copies start from what you publish"
+      context="Alert library"
       backLabel="alerts"
       onBack={onBack}
       notice={<UnreadSceneNotice conn={conn} unread={syncState?.unread} noun="alert" onRepair={handleRepair} />}
@@ -161,13 +161,12 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
 }
 
 const ALERT_DRAFT_COPY: DraftLiveCopy = {
-  draft: "Edits go to a draft that new copies don't start from until you publish it",
-  live: "Edits change what new copies start from right away, without publishing",
+  draft: DRAFT_COPY.privateUntilPublished,
+  live: "Edits change what new copies start from right away",
   liveDisabled: "Live edits are already what new copies start from",
-  publish: "Make the draft what new copies start from",
-  discardTitle: "Discard your draft of this alert?",
-  discardDescription:
-    "Every change since the last publish is thrown away. New copies keep starting from the published alert.",
+  publish: DRAFT_COPY.publish,
+  discardTitle: "Discard your changes to this alert?",
+  discardDescription: "Your changes since the last publish are lost.",
 };
 
 const ALERT_DRAFT_TEST_IDS: DraftLiveTestIds = {

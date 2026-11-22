@@ -63,11 +63,6 @@ export function AlertGroupRail({
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
-          {hideUnused && tree.length === 0 && (
-            <p className="px-1 py-2 text-[13px] text-muted-foreground" data-testid="alert-rail-empty">
-              No alerts set up yet. Turn off <em>Hide unused alerts</em> to see everything you can alert on.
-            </p>
-          )}
           {tree.map((platform) => (
             <PlatformSection
               key={alertNodeId(platform.path)}

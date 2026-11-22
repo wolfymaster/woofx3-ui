@@ -35,7 +35,7 @@ export function TriggerPicker({
   selectedId,
   onSelect,
   id = "test-event-trigger",
-  placeholder = "Select a trigger…",
+  placeholder = "Select an event…",
   testId = "test-event",
 }: TriggerPickerProps) {
   const [open, setOpen] = useState(false);
@@ -65,9 +65,9 @@ export function TriggerPicker({
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search triggers…" data-testid={`input-${testId}-search`} />
+          <CommandInput placeholder="Search events…" data-testid={`input-${testId}-search`} />
           <CommandList>
-            <CommandEmpty>No trigger matches.</CommandEmpty>
+            <CommandEmpty>Nothing matches.</CommandEmpty>
             {sections.map((section) => (
               <CommandGroup key={section.id} heading={section.label}>
                 {section.presets.map((preset) => (

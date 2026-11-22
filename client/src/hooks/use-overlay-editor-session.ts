@@ -114,10 +114,7 @@ export function useOverlayEditorSession({
       }
       toast({
         title: `${command === "publish" ? "Publish" : "Discard"} wasn't sent`,
-        description:
-          conn === "gone"
-            ? `This ${noun} no longer exists on the scene manager.`
-            : `The editor hasn't loaded the ${noun} from the scene manager yet.`,
+        description: conn === "gone" ? `This ${noun} was deleted.` : `Still loading. Try again in a moment.`,
         variant: "destructive",
       });
     },

@@ -57,8 +57,8 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
     return (
       <EmptyState
         icon={BellRing}
-        title="No engine connected"
-        description="Pick an engine with Switch engine in your profile menu to see what its alerts have been doing."
+        title="No woofx3 connected"
+        description="Pick one from your profile menu to see its alerts."
       />
     );
   }
@@ -71,8 +71,8 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
     return (
       <EmptyState
         icon={BellRing}
-        title="Alerts are not readable here"
-        description="You aren't on this engine's team. Pick another engine with Switch engine in your profile menu."
+        title="You can't see these alerts"
+        description="Ask the owner to add you, or pick another from your profile menu."
       />
     );
   }
@@ -123,7 +123,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
               </div>
             ) : failuresOnly && shown.length === 0 ? (
               <p className="px-4 py-12 text-center text-sm text-muted-foreground" data-testid="alert-feed-no-failures">
-                No failures in the last {alerts.length} alerts. Nothing to diagnose.
+                No problems in your last {alerts.length} alerts.
               </p>
             ) : (
               <AlertFeed alerts={shown} />
@@ -141,8 +141,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
             <h2 className="text-sm font-semibold">Fire a test alert</h2>
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">
-            Publishes a simulated event. Whatever listens for it runs exactly as it would for a real one — overlays
-            included.
+            Sends a pretend event so you can see your alerts play on your overlay.
           </p>
           <TestEventPicker
             sections={sections}

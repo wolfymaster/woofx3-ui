@@ -315,28 +315,23 @@ export function EventTriggerList({
             <ListHeading className="text-[13px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
               {count === 1 ? "1 trigger" : `${count} triggers`}
             </ListHeading>
-            <code title={`Event: ${event}`} className="min-w-0 truncate font-mono text-xs text-muted-foreground/80">
-              {event}
-            </code>
           </div>
         )}
         {!bare && count > 1 && (
           <p className="px-1 text-xs text-muted-foreground">
-            Every trigger that matches runs, top to bottom, each after the one above it finishes or pauses.
+            All matching triggers run, one after another, top to bottom.
           </p>
         )}
 
         {count === 0 && !draft ? (
           bare ? null : pin ? (
             <p className="rounded-2xl border border-dashed px-5 py-4 text-sm text-muted-foreground">
-              Nothing happens yet. Add a trigger to decide what does.
+              Nothing happens yet. Add a trigger to choose what happens.
             </p>
           ) : (
             <div className="flex flex-col items-center gap-3.5 rounded-2xl border border-dashed px-6 py-14 text-center">
               <p className="text-base font-medium">No triggers yet</p>
-              <p className="max-w-[360px] text-sm text-muted-foreground">
-                Set the conditions and decide what happens when this event fires.
-              </p>
+              <p className="max-w-[360px] text-sm text-muted-foreground">Choose what happens when this event occurs.</p>
               <Button variant="outline" className="h-11 sm:h-10" onClick={() => startDraft()}>
                 Create your first trigger
               </Button>
@@ -515,8 +510,7 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
             <div className="flex flex-col gap-3">
               {storedTogether > 1 ? (
                 <p className="text-sm text-muted-foreground" data-testid="text-triggers-saved-together">
-                  These triggers were saved together in a way that can't be edited here. Open the full editor to change
-                  them, or delete them there and add each trigger again.
+                  This trigger needs the workflow editor.
                 </p>
               ) : (
                 <WorkflowNotEditable reason={read.message} />
@@ -527,7 +521,7 @@ function UnreadableTriggerCard({ trigger, triggerPreset, sentence, isExpanded, o
                 onClick={() => navigate(`/stream/workflows/${row.engineWorkflowId}`)}
               >
                 <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                Open the full editor
+                Open the workflow editor
               </Button>
             </div>
           )}

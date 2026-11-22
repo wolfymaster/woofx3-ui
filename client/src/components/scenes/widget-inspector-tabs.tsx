@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 interface WidgetInspectorTabsProps {
-  /** The widget's own fields, drawn from its schema. */
+  /** The widget's own fields, drawn from its schema; null when it has none, which hides the Settings tab. */
   settings: ReactNode;
   transitions: ReactNode;
   effects: ReactNode;
@@ -30,10 +31,16 @@ const CONTENT_CLASS = "mt-0 min-h-0 flex-1 overflow-y-auto p-4";
 // stylegate:ignore TS-NAM-001 reason="Repo convention names component files in kebab-case, as every neighbouring editor component does."
 export function WidgetInspectorTabs({ settings, transitions, effects, idPrefix }: WidgetInspectorTabsProps) {
   const panes: Record<(typeof TABS)[number]["value"], ReactNode> = { settings, transitions, effects };
+  const tabs = settings === null ? TABS.filter((tab) => tab.value !== "settings") : TABS;
   return (
-    <Tabs key={idPrefix} defaultValue="settings" className="flex min-h-0 flex-1 flex-col">
-      <TabsList className="grid h-9 w-full shrink-0 grid-cols-3 rounded-none border-b bg-transparent p-0">
-        {TABS.map(({ value, label }) => (
+    <Tabs key={idPrefix} defaultValue={tabs[0].value} className="flex min-h-0 flex-1 flex-col">
+      <TabsList
+        className={cn(
+          "grid h-9 w-full shrink-0 rounded-none border-b bg-transparent p-0",
+          tabs.length === 3 ? "grid-cols-3" : "grid-cols-2"
+        )}
+      >
+        {tabs.map(({ value, label }) => (
           <TabsTrigger
             key={value}
             value={value}
@@ -44,7 +51,7 @@ export function WidgetInspectorTabs({ settings, transitions, effects, idPrefix }
           </TabsTrigger>
         ))}
       </TabsList>
-      {TABS.map(({ value }) => (
+      {tabs.map(({ value }) => (
         <TabsContent
           key={value}
           value={value}

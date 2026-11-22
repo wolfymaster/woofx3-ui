@@ -29,7 +29,7 @@ export function TestEventPicker({ sections, selectedId, onSelect, id = "test-eve
   return (
     <>
       <div className="space-y-2 border-b pb-4">
-        <Label htmlFor={id}>Trigger</Label>
+        <Label htmlFor={id}>Event</Label>
         <TriggerPicker id={id} sections={sections} selectedId={selectedId} onSelect={onSelect} />
         {preset && <p className="text-xs text-muted-foreground">{preset.description}</p>}
       </div>
@@ -37,12 +37,10 @@ export function TestEventPicker({ sections, selectedId, onSelect, id = "test-eve
       {preset && Form ? (
         <Form key={preset.id} preset={preset} />
       ) : (
-        // The picker stays on screen either way: a trigger that has gone is
+        // The picker stays on screen either way: an event that has gone is
         // replaced by choosing another, not by reopening the sheet.
         <p className="text-sm text-muted-foreground">
-          {selectedId
-            ? "That trigger is no longer registered on this engine. Pick another one above."
-            : "Pick a trigger to fire."}
+          {selectedId ? "That one isn't available any more. Pick another." : "Choose an event to try."}
         </p>
       )}
     </>

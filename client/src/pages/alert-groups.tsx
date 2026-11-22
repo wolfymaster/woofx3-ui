@@ -18,8 +18,8 @@ export default function AlertGroups() {
       ) : (
         <EmptyState
           icon={Layers}
-          title="Alert groups need a newer engine"
-          description="This engine doesn't have alert groups yet. Update it to make sets of triggers you switch on and off together."
+          title="Alert groups aren't available yet"
+          description="Update woofx3 to switch several alerts on or off together."
         />
       )}
     </div>

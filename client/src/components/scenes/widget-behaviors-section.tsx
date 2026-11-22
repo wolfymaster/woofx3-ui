@@ -630,7 +630,7 @@ function PreviewSwatch({ behavior, compact = false }: { behavior: BehaviorDocume
   };
   const title =
     animation === null
-      ? "This widget plays it in the overlay"
+      ? "Previews in your overlay"
       : behavior.type === "effect"
         ? `Preview (${formatMs(Number(animation.options.duration) * Number(animation.options.iterations))})`
         : "Preview";

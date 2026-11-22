@@ -105,11 +105,11 @@ function AlertFeedRow({ alert, summary }: AlertFeedRowProps) {
               <Button asChild size="icon" variant="ghost" className="h-7 w-7">
                 <Link href={alertRunPath(alert.workflowId)}>
                   <ScrollText className="h-3.5 w-3.5" />
-                  <span className="sr-only">Open the run that fired this</span>
+                  <span className="sr-only">See what happened</span>
                 </Link>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Open the run that fired this</TooltipContent>
+            <TooltipContent>See what happened</TooltipContent>
           </Tooltip>
         )}
         <Tooltip>

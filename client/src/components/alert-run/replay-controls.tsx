@@ -1,4 +1,4 @@
-import { isRecordedOrigin, type ManualRunOrigin, UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
+import { type ManualRunOrigin, UNRECORDED_ORIGIN } from "@shared/manual-run-origin";
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, StepForward } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -65,12 +65,8 @@ export function ReplayControls({ engineRunId, failedStepTaskId, origin = UNRECOR
     try {
       const result = await replay({ engineRunId, fromTaskId, origin });
       setTriggerId(result.triggerId);
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Replay could not be started",
-        description: err instanceof Error ? err.message : String(err),
-      });
+    } catch {
+      toast({ variant: "destructive", title: "Couldn't start the replay. Try again." });
     } finally {
       setBusy(null);
     }
@@ -106,7 +102,7 @@ export function ReplayControls({ engineRunId, failedStepTaskId, origin = UNRECOR
             ) : (
               <StepForward className="h-3.5 w-3.5" />
             )}
-            Resume from {failedStepTaskId}
+            Resume from the failed step
           </Button>
         )}
       </div>
@@ -114,7 +110,7 @@ export function ReplayControls({ engineRunId, failedStepTaskId, origin = UNRECOR
       {outcome?.kind === "waiting" && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Waiting for the engine…
+          Starting…
         </p>
       )}
       {outcome?.kind === "running" && (
@@ -126,14 +122,12 @@ export function ReplayControls({ engineRunId, failedStepTaskId, origin = UNRECOR
       {outcome?.kind === "succeeded" && (
         <p className="flex items-center gap-2 text-xs text-green-500" data-testid="replay-outcome-succeeded">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          {isRecordedOrigin(origin)
-            ? "Replay completed. It is listed in this workflow's runs."
-            : "Replay completed. Replays are not added to the history."}
+          Replay finished.
         </p>
       )}
       {outcome?.kind === "nothingMatched" && (
         <p className="text-xs text-muted-foreground" data-testid="replay-outcome-silent">
-          The engine did not pick up the replay. Check that the workflow service is running.
+          The replay didn't start. Try again, or contact support if it keeps happening.
         </p>
       )}
       {outcome?.kind === "failed" && (

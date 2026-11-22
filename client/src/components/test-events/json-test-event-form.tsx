@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
 import { TestEventForm, type TestEventProps } from "@/components/test-events/test-event-form";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,25 +20,21 @@ export function JsonTestEventForm({ preset, runner }: TestEventProps) {
 
   return (
     <TestEventForm preset={preset} runner={runner} payload={parsed.ok ? parsed.payload : null}>
-      <div className="space-y-2">
-        <Label htmlFor="test-event-payload">Event data</Label>
-        <Textarea
-          id="test-event-payload"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={12}
-          spellCheck={false}
-          className="font-mono text-xs"
-          data-testid="textarea-test-event-payload"
-        />
-        {parsed.ok ? (
-          <p className="text-xs text-muted-foreground">
-            This trigger doesn't describe what it sends — add the fields your workflow reads.
-          </p>
-        ) : (
-          <p className="text-xs text-destructive">{parsed.error}</p>
-        )}
-      </div>
+      <AdvancedDisclosure testId="test-event-advanced">
+        <div className="space-y-2">
+          <Label htmlFor="test-event-payload">Event data</Label>
+          <Textarea
+            id="test-event-payload"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={12}
+            spellCheck={false}
+            className="font-mono text-xs"
+            data-testid="textarea-test-event-payload"
+          />
+          {!parsed.ok && <p className="text-xs text-destructive">{parsed.error}</p>}
+        </div>
+      </AdvancedDisclosure>
     </TestEventForm>
   );
 }

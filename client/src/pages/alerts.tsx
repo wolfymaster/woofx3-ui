@@ -109,11 +109,13 @@ export default function Alerts() {
   // tree, so hiding an entry never stops its URL resolving. Nothing is pruned before
   // the workflows arrive, or the rail would flash empty and then fill in.
   const hideUnused = useStore($hideUnusedAlerts);
-  const railTree = useMemo(
-    () =>
-      hideUnused && workflows !== undefined ? pruneUnusedAlerts(tree, { counts, configuredEvents, selectedId }) : tree,
-    [hideUnused, workflows, tree, counts, configuredEvents, selectedId]
-  );
+  const railTree = useMemo(() => {
+    if (!hideUnused || workflows === undefined) {
+      return tree;
+    }
+    const pruned = pruneUnusedAlerts(tree, { counts, configuredEvents, selectedId });
+    return pruned.length > 0 ? pruned : tree;
+  }, [hideUnused, workflows, tree, counts, configuredEvents, selectedId]);
 
   // Leaving for an entry of the menu drops the jump marker, since that link has no #hash.
   useEffect(() => {
@@ -180,15 +182,15 @@ export default function Alerts() {
                 <>
                   <PageHeader
                     title="Alerts"
-                    description="How your alerts have been going, and a way to fire one yourself. Pick a kind of event from the list to configure what it does."
+                    description="How your alerts are doing. Pick an event on the left to set up what happens."
                   />
                   <AlertsDashboard sections={sections} />
                 </>
               ) : !node ? (
                 <EmptyState
                   icon={Bell}
-                  title="No such event type"
-                  description="Nothing registered reports this kind of event. It may have come from a module that is no longer installed."
+                  title="That alert isn't available"
+                  description="It may belong to a module that was removed."
                   action={{ label: "Back to alerts", onClick: () => navigate(BASE_PATH) }}
                 />
               ) : (

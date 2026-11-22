@@ -20,6 +20,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DRAFT_COPY } from "@/lib/copy";
 import type { DraftSaveStatus } from "@/lib/draft-save-status";
 import { cn } from "@/lib/utils";
 
@@ -116,17 +117,11 @@ export function DraftLiveControls({
                 ) : (
                   <Upload className="h-4 w-4 mr-2" />
                 )}
-                {pendingCommand === "publish" ? "Publishing…" : upToDate ? "Up to date" : "Publish changes"}
+                {pendingCommand === "publish" ? "Publishing…" : upToDate ? "Up to date" : DRAFT_COPY.publish}
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>
-            {live
-              ? copy.liveDisabled
-              : hasDraft
-                ? copy.publish
-                : "Nothing to publish: your draft matches what's on stream"}
-          </TooltipContent>
+          <TooltipContent>{live ? copy.liveDisabled : hasDraft ? copy.publish : "Nothing to publish."}</TooltipContent>
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -151,7 +146,7 @@ export function DraftLiveControls({
               ) : (
                 <Undo2 className="h-4 w-4 mr-2" />
               )}
-              Discard draft
+              Discard changes
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -165,7 +160,7 @@ export function DraftLiveControls({
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction onClick={() => onCommand("discard")} data-testid={testIds.confirmDiscard}>
-              Discard draft
+              Discard changes
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -183,12 +178,10 @@ const SAVE_STATUS_TONE: Record<DraftSaveStatus, StatusTone> = {
 
 function SaveStatusIndicator({ status, live, copy }: { status: DraftSaveStatus; live: boolean; copy: DraftLiveCopy }) {
   const [label, tooltip] = {
-    sending: [live ? "Saving…" : "Saving draft…", "Your latest edits are still being sent"],
-    retrying: ["Retrying save…", "A save didn't go through and is being sent again"],
-    draft: ["Draft saved, not published", copy.publish],
-    saved: live
-      ? ["Live, all changes on stream", copy.live]
-      : ["Draft saved", "Your edits are saved as a draft. Publish changes to put them on stream."],
+    sending: [live ? "Saving…" : "Saving draft…", "Saving your changes"],
+    retrying: ["Retrying save…", "Save failed, trying again"],
+    draft: [DRAFT_COPY.savedNotLive, copy.publish],
+    saved: live ? [DRAFT_COPY.live, copy.live] : ["Draft saved", DRAFT_COPY.privateUntilPublished],
   }[status];
   return (
     <StatusIndicator tone={SAVE_STATUS_TONE[status]} tooltip={tooltip} testId="status-saved">

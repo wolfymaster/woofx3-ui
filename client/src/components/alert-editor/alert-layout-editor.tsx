@@ -136,9 +136,7 @@ export function AlertEditorFrame({
             {view.inspector ? (
               <div className="rounded-2xl border bg-card p-4">{view.inspector}</div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Tap a layer on the canvas to edit it, or add a widget above.
-              </p>
+              <p className="text-sm text-muted-foreground">Pick a layer to edit it, or add a widget.</p>
             )}
           </div>
         </div>
@@ -163,7 +161,7 @@ export function DiscardAlertChangesDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Discard your changes to this alert?</AlertDialogTitle>
           <AlertDialogDescription>
-            The alert goes back to how it was when you opened it. Done keeps your changes instead.
+            The alert goes back to how it was when you opened it. Save keeps your changes instead.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -334,7 +332,7 @@ export function useAlertEditorView(
         widgets={paletteRows}
         onAdd={(row) => report(session.editor.nodes.add(row.widgetId))}
         layout={layout}
-        emptyMessage="No alert widgets are installed."
+        emptyMessage="No widgets available. Get some in Marketplace."
       />
     ),
     layerList: (horizontal = false) => (
@@ -493,10 +491,7 @@ function AlertSummary({ view }: { view: AlertEditorView }) {
   return (
     <div className="flex flex-col gap-4 p-4">
       <h2 className="text-sm font-semibold">Alert</h2>
-      <p className="text-xs text-muted-foreground">
-        Select a layer to edit it, or add a widget from the left. The alert is scaled to fit whichever alert widget
-        plays it.
-      </p>
+      <p className="text-xs text-muted-foreground">Pick a layer to edit it, or add a widget.</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Canvas</dt>
         <dd className="font-mono text-xs leading-5">

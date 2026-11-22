@@ -45,7 +45,7 @@ import {
 } from "@/lib/workflow-groups";
 
 export const SWITCH_EXPLAINER =
-  "Turning this on switches on every trigger in it. Turning it off puts each one back how it was, unless another group that is on still includes it.";
+  "On turns on everything in this group. Off turns it back off, unless another group that's on also has it.";
 
 /** Every trigger card on the instance; undefined until the triggers have loaded. */
 function useGroupableCards(): GroupableCard[] | undefined {
@@ -133,7 +133,7 @@ function WorkflowGroupList() {
         <EmptyState
           icon={Layers}
           title="No alert groups yet"
-          description="Make a group, add the triggers that belong together, and switch them all at once."
+          description="Groups let you switch several alerts on or off together."
         />
       ) : (
         <ul className="divide-y rounded-md border">
@@ -195,7 +195,7 @@ function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }
       <EmptyState
         icon={Layers}
         title="This group isn't here any more"
-        description="It was deleted, or the link is from another engine."
+        description="It was deleted."
         action={{ label: "Back to groups", onClick: () => navigate(ALERT_GROUPS_PATH) }}
       />
     );
@@ -253,10 +253,7 @@ function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }
 
   return (
     <div className="flex flex-col gap-10">
-      <PageHeader
-        title={isNew ? "New alert group" : existing?.name || "Alert group"}
-        description="Triggers you switch on and off together."
-      />
+      <PageHeader title={isNew ? "New alert group" : existing?.name || "Alert group"} />
       {formError && (
         <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {formError}
@@ -287,7 +284,7 @@ function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }
         <div className="flex gap-2">
           <Button onClick={save} disabled={saving} data-testid="button-save-alert-group">
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isNew ? "Create group" : "Save changes"}
+            Save
           </Button>
           <Button variant="ghost" onClick={() => navigate(ALERT_GROUPS_PATH)}>
             Back to groups
@@ -305,7 +302,7 @@ function WorkflowGroupEditor({ engineGroupId }: { engineGroupId: string | null }
           </Section>
           <Section title="Triggers">
             <p className="text-[13px] text-muted-foreground">
-              Each change here is saved straight away. Adding a trigger to a group that is on switches it on.
+              Changes save as you go. Adding to a group that's on turns the alert on.
             </p>
             <GroupMembers group={existing} cards={cards ?? []} />
           </Section>

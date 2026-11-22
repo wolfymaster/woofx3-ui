@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { endedUnreadable, unreadColumnsText, unreadPlacementCount, unreadPlacementsText } from "@/lib/scene-unread";
+import { endedUnreadable, unreadPlacementCount, unreadPlacementsText } from "@/lib/scene-unread";
 
 interface UnreadSceneNoticeProps {
   /** The session's state: whether it ended, and what the engine could not read. */
@@ -44,11 +44,11 @@ export function UnreadSceneNotice({ conn, unread, noun, onRepair }: UnreadSceneN
   }
 
   const title = blocked
-    ? `This engine can't read part of this ${noun}`
-    : `${placements} ${placements === 1 ? "layer" : "layers"} in this ${noun} can't be read`;
+    ? `Part of this ${noun} isn't supported by your woofx3 version`
+    : `${placements} ${placements === 1 ? "layer" : "layers"} in this ${noun} ${placements === 1 ? "isn't" : "aren't"} supported`;
   const explanation = blocked
-    ? `It can't read ${unreadColumnsText(unread)}, so the ${noun} can't be edited. This can happen after moving to an older engine version.`
-    : `${unreadPlacementsText(placements)} This can happen after moving to an older engine version.`;
+    ? `Update woofx3, or repair the ${noun} to remove the unsupported parts.`
+    : unreadPlacementsText(placements);
   const repairLabel = blocked ? `Repair ${noun}` : `Set ${placements === 1 ? "it" : "them"} aside`;
 
   const repair = async () => {
@@ -88,12 +88,7 @@ export function UnreadSceneNotice({ conn, unread, noun, onRepair }: UnreadSceneN
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Repair this {noun}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {blocked
-                ? `What can't be read is removed from the ${noun}, leaving it empty where it was, and everything else stays.`
-                : `The layers that can't be read are removed from the ${noun}; every other layer stays.`}{" "}
-              The engine keeps an exact copy of what it removes, so nothing is lost.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Unsupported parts are removed. A backup copy is kept.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
