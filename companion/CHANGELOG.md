@@ -1,5 +1,22 @@
 # woofx3 desktop changelog
 
+## [0.24.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.23.0...woofx3-v0.24.0) (2026-11-22)
+
+### Features
+
+* **commands:** add helpers for a command's schedule ([b3f64db](https://github.com/wolfymaster/woofx3-ui/commit/b3f64db4644592abf301aa83aafa82e25ed40508))
+* **commands:** run a command on a schedule from its editor ([7f320f5](https://github.com/wolfymaster/woofx3-ui/commit/7f320f5a18fb9e6f5cba02db02e3106d551cd1b3))
+
+## [0.23.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.22.0...woofx3-v0.23.0) (2026-11-22)
+
+### Features
+
+* **commands:** make the command field a multi-line text box ([ac0eedc](https://github.com/wolfymaster/woofx3-ui/commit/ac0eedcd2b6333150d70e3cc50e2484dedec8fe9))
+
+### Bug Fixes
+
+* **ops:** let a nullable enum in the spec admit null ([5fb1208](https://github.com/wolfymaster/woofx3-ui/commit/5fb120843af1d958721ab495759610d00dbc502d))
+
 ## [0.22.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.21.0...woofx3-v0.22.0) (2026-11-19)
 
 ### Features

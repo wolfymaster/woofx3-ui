@@ -1,11 +1,11 @@
 import { BUILTIN_MODULE_LABEL } from "@shared/module-labels";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { ChevronRight } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { configFieldRenderers } from "@/components/common/field-renderers";
-import { VariableAwareInput } from "@/components/common/variable-aware-input";
+import { functionAvailability, VariableAwareInput } from "@/components/common/variable-aware-input";
 import { ModuleAssetFieldRenderer, withAssetModule } from "@/components/flow/module-asset-field";
 import { StepIdField } from "@/components/flow/step-id-field";
 import { AlertLayoutDialogBody } from "@/components/scenes/alert-layout-field";
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
 import {
   appendToken,
+  insertTokenAt,
   isExpressionText,
   isWholeReference,
   settingProblem,
@@ -25,6 +26,7 @@ import {
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { cn } from "@/lib/utils";
+import { variableNames } from "@/lib/variable-display";
 import { resolveCatalogAction } from "@/lib/workflow-node-label";
 import type { ActionNode } from "@/lib/workflow-tree";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -224,6 +226,30 @@ function SettingRow({
   const problem = settingProblem(field, value);
   const canSwitch = use === "replace" && (usingEarlier || offered.length > 0);
 
+  const fieldRef = useRef<HTMLDivElement>(null);
+
+  // The field keeps its selection while a chip is pressed, so the value lands where the cursor was.
+  const insertAtCursor = (token: string) => {
+    const el = fieldRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
+    if (!el) {
+      onChange(appendToken(value, token));
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const result = insertTokenAt(
+      typeof value === "string" ? value : "",
+      token,
+      { start, end: el.selectionEnd ?? start },
+      variableNames(variables),
+      functionAvailability(variables) === "available"
+    );
+    onChange(result.text);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(result.cursor, result.cursor);
+    });
+  };
+
   const switchSource = () => {
     setChosenEarlier(!usingEarlier);
     onChange(undefined);
@@ -234,17 +260,19 @@ function SettingRow({
       {usingEarlier ? (
         <EarlierValue field={field} value={value} offered={offered} onChange={onChange} />
       ) : (
-        <ConfigurationForm
-          fields={[withoutHelp(field)]}
-          values={values}
-          onChange={(next) => onChange(next[field.id])}
-          customRenderers={STEP_RENDERERS}
-          // Text takes earlier values inline; a layout's widgets take them in their own settings.
-          availableVariables={use === "insert" || field.type === "layout" ? variables : []}
-        />
+        <div ref={fieldRef}>
+          <ConfigurationForm
+            fields={[withoutHelp(field)]}
+            values={values}
+            onChange={(next) => onChange(next[field.id])}
+            customRenderers={STEP_RENDERERS}
+            // Text takes earlier values inline; a layout's widgets take them in their own settings.
+            availableVariables={use === "insert" || field.type === "layout" ? variables : []}
+          />
+        </div>
       )}
       {use === "insert" && offered.length > 0 && (
-        <InsertRow field={field} offered={offered} onInsert={(token) => onChange(appendToken(value, token))} />
+        <InsertRow field={field} offered={offered} onInsert={insertAtCursor} />
       )}
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
       {field.hint && (
@@ -325,7 +353,7 @@ function variableSection(group: string): string {
   return group === "Trigger" ? "From the cheer" : "From earlier steps";
 }
 
-/** Earlier values to write into a text setting, each added at the end of what is there. */
+/** Earlier values to write into a text setting, each written at the field's cursor. */
 function InsertRow({
   field,
   offered,

@@ -20,6 +20,10 @@ describe("splitCommandInput", () => {
       argumentPattern: "{index} of {user}",
     });
   });
+
+  test("drops line breaks so a wrapped command is stored as one line", () => {
+    expect(splitCommandInput("sr {song\nTitle}\r\n")).toEqual({ command: "sr", argumentPattern: "{songTitle}" });
+  });
 });
 
 describe("joinCommandInput", () => {

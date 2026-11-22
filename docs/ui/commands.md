@@ -53,6 +53,14 @@ The steps below are any the flow offers: actions picked object first, pauses, wa
 
 A step's alert content opens in the `layout` field's own editor, as it does in the workflow editor.
 
+### Schedule
+
+The card at the bottom of the editor runs the command's steps on a schedule. The streamer picks a schedule they already have or makes one there (name, interval in minutes, and whether it also runs while offline; a new one is started for them).
+
+A schedule is not stored on the command. It is an ordinary workflow on the `schedule.fired` trigger, pinned to the chosen schedule, whose only step is the engine's `command.run` action with the command's name (`useCommandSchedule`, `lib/command-schedule.ts`). The builder shows it like any workflow, and the editor finds a command's schedule by that step, so it lists only workflows that do nothing else. Saving the command applies the schedule choice after the command is saved: it adds, moves or removes those workflows, and renames the step when the command is renamed. If only the schedule part fails, the command stays saved and a toast says so.
+
+`command.run` skips the permission check chat applies, so a scheduled run happens whoever may use the command, and it has no chatter or arguments. An engine without the action shows the card with a note instead of the controls.
+
 ## The alert editor
 
 A step's alert content opens in the `layout` field's dialog (`components/scenes/alert-layout-field.tsx`), from the workflow builder, a command, an alert trigger and anywhere else a module declares a `layout` field, through `configFieldRenderers` in `components/workflows/trigger-config-form.tsx`. The dialog edits a copy of the step's layout: its own Cancel and Done, with Done handing back the edited layout (or nothing when nothing changed). Keys reach the editor from the stage itself there, since the page-wide shortcut listener leaves keys inside a dialog to the dialog.
