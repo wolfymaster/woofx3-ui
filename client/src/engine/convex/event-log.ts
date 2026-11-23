@@ -63,24 +63,18 @@ function useStreamEventsSubscription() {
 }
 
 function useEventsRequest() {
-  const instanceId = useScopeInstanceId();
-  return useCallback(
-    async (query?: EventLogQuery) => transport.listEvents(requireInstance(instanceId), query),
-    [instanceId]
-  );
+  const listEvents = useInstanceAction(api.engineLive.listEvents);
+  return useCallback((query?: EventLogQuery) => listEvents({ query }), [listEvents]);
 }
 
 function useSettingsRequest() {
-  const instanceId = useScopeInstanceId();
-  return useCallback(async () => transport.getEventLogSettings(requireInstance(instanceId)), [instanceId]);
+  const getSettings = useInstanceAction(api.engineLive.getEventLogSettings);
+  return useCallback(() => getSettings({}), [getSettings]);
 }
 
 function useSetSelectionRequest() {
-  const instanceId = useScopeInstanceId();
-  return useCallback(
-    async (selection: EventLogSelection) => transport.setEventLogSelection(requireInstance(instanceId), selection),
-    [instanceId]
-  );
+  const setSelection = useInstanceAction(api.engineLive.setEventLogSelection);
+  return useCallback((selection: EventLogSelection) => setSelection({ selection }), [setSelection]);
 }
 
 export const convexEventLogGateway: EventLogGateway = {
