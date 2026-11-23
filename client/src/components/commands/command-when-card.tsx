@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import type { ChatCommandGroup } from "@/engine/types";
 import type { CommandEditorState, CommandVisibility } from "@/lib/command-drafts";
+import { addCommandInput, removeCommandInput, splitCommandInput, withCommandWord } from "@/lib/command-input";
+import { argumentNames } from "@/lib/command-variables";
 import { commandWhenOptions, commandWhenTitle } from "@/lib/command-when";
 import { groupLabel } from "@/lib/group-display";
 
@@ -29,12 +30,16 @@ const WHEN_TOGGLE_ID = "__command";
 
 /**
  * What runs a chat command, as the "When" card of its flow: the command a chatter types and
- * the arguments it captures, its cooldown, and who can use it. Collapsed, it reads as a
+ * the inputs it captures, its cooldown, and who can use it. Collapsed, it reads as a
  * sentence with those facts under it; "Change" opens the settings in place.
  */
 export function CommandWhenCard({ value, groups, onChange, defaultExpanded }: CommandWhenCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [userInput, setUserInput] = useState("");
+  const [inputDraft, setInputDraft] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
+  const { command: word, argumentPattern } = splitCommandInput(value.command);
+  const inputs = argumentNames(argumentPattern);
   const groupsById = useMemo(() => new Map(groups.map((group) => [group.engineGroupId, group])), [groups]);
   const options = commandWhenOptions(value, (id) => {
     const group = groupsById.get(id);
@@ -54,6 +59,20 @@ export function CommandWhenCard({ value, groups, onChange, defaultExpanded }: Co
     );
   }
 
+  function addInput() {
+    if (!inputDraft.trim()) {
+      return;
+    }
+    const result = addCommandInput(value.command, inputDraft);
+    if (!result.ok) {
+      setInputError(result.error);
+      return;
+    }
+    setInputDraft("");
+    setInputError(null);
+    onChange((current) => ({ ...current, command: result.command }));
+  }
+
   return (
     <FlowWhenCard
       title={<span className="font-mono">{commandWhenTitle(value.command)}</span>}
@@ -62,24 +81,70 @@ export function CommandWhenCard({ value, groups, onChange, defaultExpanded }: Co
       onToggle={() => setExpanded((open) => !open)}
       toggleId={WHEN_TOGGLE_ID}
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         <div className="grid gap-2">
           <Label htmlFor="cmd-name">Command</Label>
           <div className="relative">
             <span className="absolute left-3 top-2 font-mono text-sm text-muted-foreground">!</span>
-            <Textarea
+            <Input
               id="cmd-name"
-              placeholder="sr {songTitle}"
-              rows={3}
-              className="min-h-0 resize-y pl-6 font-mono"
-              value={value.command}
-              onChange={(e) => onChange((current) => ({ ...current, command: e.target.value }))}
+              placeholder="sr"
+              className="pl-6 font-mono"
+              value={word}
+              onChange={(e) =>
+                onChange((current) => ({ ...current, command: withCommandWord(current.command, e.target.value) }))
+              }
               data-testid="input-command-name"
             />
           </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="cmd-input-name">Inputs</Label>
+          {inputs.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {inputs.map((name) => (
+                <Badge key={name} variant="secondary" className="gap-1 pr-1 font-mono">
+                  {name}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange((current) => ({ ...current, command: removeCommandInput(current.command, name) }))
+                    }
+                    className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20"
+                    aria-label={`Remove ${name}`}
+                    data-testid={`button-remove-input-${name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input
+              id="cmd-input-name"
+              placeholder="song title"
+              value={inputDraft}
+              onChange={(e) => {
+                setInputDraft(e.target.value);
+                setInputError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addInput();
+                }
+              }}
+              data-testid="input-command-input-name"
+            />
+            <Button type="button" variant="outline" onClick={addInput} data-testid="button-add-command-input">
+              Add input
+            </Button>
+          </div>
+          {inputError && <p className="text-xs text-destructive">{inputError}</p>}
           <p className="text-xs text-muted-foreground">
-            Everything up to the first space is the command. Add {"{name}"} after it to capture what the chatter types
-            next, like "sr {"{songTitle}"}". Your steps can use it.
+            Inputs are words viewers type after the command, like !sr and a song title.
           </p>
         </div>
 
