@@ -3,9 +3,7 @@ export function CanvasSummary({ width, height, count }: { width: number; height:
   return (
     <div className="flex flex-col gap-4 p-4">
       <h2 className="text-sm font-semibold">Canvas</h2>
-      <p className="text-xs text-muted-foreground">
-        Select a widget on the canvas or in the layers above to edit it, or add one from the left.
-      </p>
+      <p className="text-xs text-muted-foreground">Pick a layer to edit it, or add a widget.</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Size</dt>
         <dd className="font-mono text-xs leading-5">

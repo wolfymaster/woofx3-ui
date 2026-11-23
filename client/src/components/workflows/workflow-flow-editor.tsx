@@ -11,7 +11,9 @@ import { FLOW_REPLACED, useFlowSave } from "@/hooks/use-flow-save";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { TRY_AGAIN } from "@/lib/copy";
 import { STEPS_CHANGED_TOAST } from "@/lib/flow-save";
+import { useLogger } from "@/lib/logger-context";
 import {
   countActionSteps,
   definitionToTree,
@@ -29,7 +31,7 @@ interface WorkflowFlowEditorProps {
   onUnsavedChange?: (unsaved: boolean) => void;
 }
 
-const LAST_ACTION_REASON = "A workflow needs at least one action. Add another action before removing this one.";
+const LAST_ACTION_REASON = "A workflow needs at least one action.";
 
 /** A workflow keeps at least one action, so the last one can't go, nor a condition holding every remaining one. */
 function lastActionReason(steps: StepNode[], id: string): string | null {
@@ -43,6 +45,7 @@ function lastActionReason(steps: StepNode[], id: string): string | null {
 export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange, onUnsavedChange }: WorkflowFlowEditorProps) {
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const { toast } = useToast();
+  const logger = useLogger();
   const conditionSupport = useEngineConditionSupport();
   const updateFromDefinition = useUpdateWorkflowRequest();
   const workflow = useWorkflow(engineWorkflowId);
@@ -110,15 +113,16 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange, onUns
         baseRevisionRef.current = outcome.revision;
         return true;
       } catch (err) {
+        logger.error("Request failed", { error: err });
         toast({
-          title: "Failed to save",
-          description: err instanceof Error ? err.message : String(err),
+          title: "Couldn't save",
+          description: TRY_AGAIN,
           variant: "destructive",
         });
         return false;
       }
     },
-    [toDefinition, updateFromDefinition, engineWorkflowId, toast]
+    [toDefinition, updateFromDefinition, engineWorkflowId, toast, logger]
   );
 
   const save = useFlowSave(tree, handleCommit);

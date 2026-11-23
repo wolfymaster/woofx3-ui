@@ -126,7 +126,7 @@ export default function AcceptInvite() {
             </div>
             <div>
               <CardTitle>Accept invitation</CardTitle>
-              <CardDescription>Join an engine's team on woofx3.</CardDescription>
+              <CardDescription>You've been invited to join a team on woofx3.</CardDescription>
             </div>
           </div>
         </CardHeader>

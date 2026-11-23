@@ -139,10 +139,9 @@ function SceneListScreen() {
       await deleteScene(deleteTarget.engineSceneId);
       toast({ title: "Scene deleted" });
       setDeleteTarget(null);
-    } catch (err) {
+    } catch {
       toast({
-        title: "Failed to delete scene",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't delete the scene. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -154,7 +153,6 @@ function SceneListScreen() {
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader
         title="Scenes"
-        description="Browser source overlays — pick one to lay out its widgets."
         actions={
           <div className="flex items-center gap-3">
             {seed?.neverSeeded === false && (
@@ -163,12 +161,12 @@ function SceneListScreen() {
               </Button>
             )}
             <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-              Adding a scene to OBS
+              Adding a scene to your stream
               <HelpTip term="browserSource" align="end">
                 <ol className="list-decimal pl-4 space-y-1">
-                  <li>Open the scene and copy its browser source URL from the link button.</li>
-                  <li>In OBS, add a source to your scene and choose Browser.</li>
-                  <li>Paste the URL and set the width and height to the scene&apos;s size.</li>
+                  <li>Open the scene and click Copy overlay link.</li>
+                  <li>In your streaming software, add a browser source and paste the link.</li>
+                  <li>Set the width and height to the scene&apos;s size.</li>
                 </ol>
               </HelpTip>
             </span>
@@ -202,7 +200,9 @@ function SceneListScreen() {
             icon={Layers}
             title={scenes.length === 0 ? "No scenes yet" : "No scenes found"}
             description={
-              scenes.length === 0 ? "Create a scene to start laying out overlay widgets." : "Try adjusting your search."
+              scenes.length === 0
+                ? "Create a scene to put alerts and widgets on your stream."
+                : "No scenes match your search."
             }
             action={scenes.length === 0 ? { label: "Create New Scene", onClick: () => setCreateOpen(true) } : undefined}
           />

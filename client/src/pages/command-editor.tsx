@@ -5,6 +5,7 @@ import { useLocation, useParams } from "wouter";
 import { CommandScheduleCard } from "@/components/commands/command-schedule-card";
 import { CommandWhenCard } from "@/components/commands/command-when-card";
 import { EmptyState } from "@/components/common/empty-state";
+import { SaveBar } from "@/components/common/save-bar";
 import { FlowEditor } from "@/components/flow/flow-editor";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import {
@@ -43,6 +44,8 @@ import { splitCommandInput } from "@/lib/command-input";
 import { bareCommandWord, type ScheduleChoice, scheduleChoiceProblem } from "@/lib/command-schedule";
 import { commandSteps } from "@/lib/command-steps";
 import { commandActionVariables } from "@/lib/command-variables";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 import { storedExpressionProblem } from "@/lib/variable-display";
 import type { WorkflowTree } from "@/lib/workflow-tree";
 
@@ -66,6 +69,7 @@ export default function CommandEditor() {
   const draftKey = engineCommandId ?? NEW_COMMAND_KEY;
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const logger = useLogger();
   const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
@@ -146,9 +150,10 @@ export default function CommandEditor() {
     try {
       await schedule.apply(previousWord, word, scheduleChoice);
     } catch (err: unknown) {
+      logger.error("Saving the command schedule failed", { error: err });
       toast({
         title: "The command saved, but its schedule didn't",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     }
@@ -210,7 +215,8 @@ export default function CommandEditor() {
       await saveSchedule(command, existing?.command);
       discardAndLeave();
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : "An error occurred");
+      logger.error("Saving the command failed", { error: err });
+      setFormError(TRY_AGAIN);
     } finally {
       setSaving(false);
     }
@@ -230,7 +236,7 @@ export default function CommandEditor() {
         <EmptyState
           icon={MessageSquare}
           title="This command isn't here any more"
-          description="It was deleted, or the link is from another engine."
+          description="It was deleted."
           action={{ label: "Back to commands", onClick: () => navigate(COMMAND_LIST_PATH) }}
         />
       </div>
@@ -267,7 +273,7 @@ export default function CommandEditor() {
           </Button>
           <Button className="h-11 sm:h-10" onClick={handleSave} disabled={saving} data-testid="button-save-command">
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isNew ? "Create command" : "Save changes"}
+            Save
           </Button>
         </div>
       </header>
@@ -285,7 +291,7 @@ export default function CommandEditor() {
               className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive"
               data-testid="text-command-workflow-error"
             >
-              The engine couldn't set up this command's steps: {existing.workflowError}. Save the command to try again.
+              This command's steps couldn't be set up. Save the command to try again.
             </div>
           )}
 
@@ -309,8 +315,8 @@ export default function CommandEditor() {
             </>
           )}
           <p className="text-xs text-muted-foreground">
-            Steps run in order each time someone uses the command. Type {"{"} in a text field to use what the command
-            captured, like the chatter's name or an argument, or what an earlier step handed back.
+            Steps run in order each time someone uses the command. Type {"{"} in a text box to insert the chatter's
+            name, what they typed, or a result from an earlier step.
           </p>
           <CommandScheduleCard
             schedules={schedule.schedules}
@@ -320,6 +326,13 @@ export default function CommandEditor() {
             problem={scheduleProblemShown ? scheduleProblem : null}
           />
         </div>
+        <SaveBar
+          onSave={handleSave}
+          onCancel={leave}
+          saving={saving}
+          dirty={isDirty}
+          testId="button-save-command-bar"
+        />
       </div>
 
       <AlertDialog open={confirmingLeave} onOpenChange={setConfirmingLeave}>

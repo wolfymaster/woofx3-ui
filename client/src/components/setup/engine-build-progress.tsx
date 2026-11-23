@@ -88,11 +88,7 @@ export function EngineBuildProgress({ build, tone = "light", variant = "full", c
         </span>
       </div>
 
-      <Progress
-        value={build.percent}
-        className={cn("h-1.5", dark && "bg-neutral-800")}
-        aria-label="Engine setup progress"
-      />
+      <Progress value={build.percent} className={cn("h-1.5", dark && "bg-neutral-800")} aria-label="Setup progress" />
 
       {variant === "full" ? (
         <PhaseList build={build} dark={dark} />
@@ -112,12 +108,6 @@ export function EngineBuildProgress({ build, tone = "light", variant = "full", c
           ? "Taking a little longer than usual. Still working on it."
           : "Usually a couple of minutes. You can close this tab; it keeps going."}
       </p>
-
-      {build.slow && build.note && (
-        <p className={cn("text-xs", dark ? "text-neutral-500" : "text-muted-foreground")} data-testid="text-build-note">
-          Waiting on: {build.note}
-        </p>
-      )}
     </div>
   );
 }

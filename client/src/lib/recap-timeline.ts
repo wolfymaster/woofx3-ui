@@ -241,15 +241,15 @@ export function viewerLayerStatus(state: StreamRecapEngineState, hasViewerValues
 function engineEventsProblem(result: Exclude<RecapTimelineEvents, { status: "ok" }>): string {
   switch (result.status) {
     case "unregistered":
-      return "This engine isn't registered yet.";
+      return "Viewer history isn't set up yet.";
     case "unknown_session":
-      return "The engine no longer has this session.";
+      return "This stream's details are no longer available.";
     case "rejected":
-      return "The engine refused this dashboard's credentials.";
+      return "Lost the connection to your stream tools.";
     case "unreachable":
-      return "The engine is offline or didn't answer.";
+      return "Can't reach your stream tools right now.";
     case "failed":
-      return `The engine couldn't load events: ${result.message}`;
+      return `Couldn't load events.`;
   }
 }
 
@@ -259,7 +259,7 @@ export function eventLayersStatus(state: RecapTimelineEventsState): RecapLayerSt
     return LOADING;
   }
   if (state.kind === "error") {
-    return unavailable("Couldn't load events from the engine.");
+    return unavailable("Couldn't load events.");
   }
   if (state.result.status !== "ok") {
     return unavailable(engineEventsProblem(state.result));
@@ -274,11 +274,11 @@ export function clipLayerStatus(state: RecapClipsState): RecapLayerStatus {
     case "loaded":
       return { kind: "ready", count: state.clips.length };
     case "never_live":
-      return unavailable("This session never went live.");
+      return unavailable("This stream never went live.");
     case "error":
       return unavailable(state.message);
     case "unsupported":
-      return unavailable("Clips come from Twitch's clip list, which this connection to the engine can't read.");
+      return unavailable("Clips can't be shown with your current setup.");
   }
 }
 
@@ -290,13 +290,13 @@ export function markerLayerStatus(state: RecapMarkersState): RecapLayerStatus {
     return unavailable(state.message);
   }
   if (state.kind === "unsupported") {
-    return unavailable("Markers come from Twitch's VODs, which this connection to the engine can't read.");
+    return unavailable("Markers can't be shown with your current setup.");
   }
   switch (state.result.status) {
     case "ok":
       return { kind: "ready", count: state.result.markers.length };
     case "never_live":
-      return unavailable("This session never went live.");
+      return unavailable("This stream never went live.");
     case "missing_scope":
       return unavailable("Reconnect Twitch in Settings, Integrations to let the dashboard read stream markers.");
     case "no_vod":

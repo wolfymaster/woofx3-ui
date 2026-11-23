@@ -24,7 +24,7 @@ export function useProviderRedirect() {
       if (!checked.ok) {
         toast({
           title: "Billing is unavailable",
-          description: "The payment page link was not valid, so it was not opened.",
+          description: "We couldn't open the payment page. Try again, or contact support.",
           variant: "destructive",
         });
         setBusy(false);

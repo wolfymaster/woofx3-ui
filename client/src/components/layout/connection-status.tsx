@@ -11,7 +11,6 @@ import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
-import { actionErrorMessage } from "@/lib/action-error";
 import {
   type Connection,
   type ConnectionState,
@@ -24,6 +23,7 @@ import {
   unreportedConnection,
   worstState,
 } from "@/lib/connection-status";
+import { TRY_AGAIN } from "@/lib/copy";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
 import { $relayLimitation, type RelayLimitation } from "@/lib/relay-limitation";
 import { cn } from "@/lib/utils";
@@ -184,7 +184,7 @@ export function ConnectionStatusBar({ engine }: { engine: EngineStatus }) {
         </div>
       </PopoverAnchor>
       <PopoverContent side="top" align="start" className="w-96 space-y-3 text-sm" data-testid="connection-panel">
-        <PanelRow name="Engine" state={<span className={engine.text}>{engine.label}</span>}>
+        <PanelRow name="woofx3" state={<span className={engine.text}>{engine.label}</span>}>
           <span className="font-mono" data-testid="status-engine-version">
             {engine.version}
           </span>
@@ -224,8 +224,8 @@ function RelayRow({ limitation }: { limitation: RelayLimitation }) {
     setBusy(true);
     try {
       await run();
-    } catch (err) {
-      toast({ title: "Couldn't reconnect", description: actionErrorMessage(err), variant: "destructive" });
+    } catch {
+      toast({ title: "Couldn't reconnect", description: TRY_AGAIN, variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -234,7 +234,7 @@ function RelayRow({ limitation }: { limitation: RelayLimitation }) {
   const { reconnect: run } = limitation;
   return (
     <PanelRow
-      name="Relay"
+      name="Local connection"
       state={<AlertTriangle className={cn("h-3.5 w-3.5", STATE_TEXT.degraded)} aria-label="Needs attention" />}
     >
       <p>{limitation.detail}</p>

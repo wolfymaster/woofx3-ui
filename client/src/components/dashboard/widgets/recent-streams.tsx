@@ -1,5 +1,6 @@
 import { History, Loader2 } from "lucide-react";
 import { Link } from "wouter";
+import { FinishSetupNote } from "@/components/dashboard/finish-setup-note";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -27,7 +28,7 @@ function RecentStreamItem({ row }: { row: StreamRecap }) {
   if (row.summary.kind === "unreadable") {
     return (
       <div className="px-3 py-2.5 text-xs text-muted-foreground" data-testid={`recent-stream-${row.sessionId}`}>
-        A summary from a newer engine version (schema {row.summary.schemaVersion}) that this dashboard cannot read yet.
+        This stream's summary is from a newer version of woofx3 and can't be shown yet.
       </div>
     );
   }
@@ -89,9 +90,11 @@ export function RecentStreamsWidget() {
         ) : rows.length === 0 ? (
           <div className="py-8 px-3 text-center">
             <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm text-muted-foreground">
-              {instanceId ? "No streams yet. A stream shows up here once you go live." : "No engine connected"}
-            </p>
+            {instanceId ? (
+              <p className="text-sm text-muted-foreground">No streams yet. A stream shows up here once you go live.</p>
+            ) : (
+              <FinishSetupNote />
+            )}
           </div>
         ) : (
           <div className="divide-y divide-border">

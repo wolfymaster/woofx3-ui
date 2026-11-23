@@ -10,15 +10,15 @@ interface ErrorFallbackProps {
 
 export function ErrorFallback({
   onReset,
-  message = "Something went wrong",
-  resetLabel = "Try Again",
+  message = "Try again. If it keeps happening, tell us on the Feedback page.",
+  resetLabel = "Try again",
 }: ErrorFallbackProps) {
   return (
     <Card className="m-4">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-destructive" />
-          Error
+          Something went wrong
         </CardTitle>
         <CardDescription>{message}</CardDescription>
       </CardHeader>

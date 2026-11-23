@@ -349,8 +349,7 @@ function PickedRow({
 
       {field?.group === VIEWER_GROUP && (
         <p className="text-xs text-muted-foreground">
-          Facts about the viewer come from what WoofX3 has seen of them on your channel. A viewer it hasn't seen yet has
-          no value.
+          Viewer details only exist for people who have already been in your chat.
         </p>
       )}
     </>
@@ -818,7 +817,7 @@ function TypedRow({
         data-testid={`button-condition-pickers-${index}`}
       >
         <ListChecks className="h-3.5 w-3.5" />
-        {canUsePickers ? "Use the pickers" : "Uses a variable or a value the pickers can't show"}
+        {canUsePickers ? "Switch back to the simple editor" : "Uses something the simple editor can't show"}
       </Button>
     </div>
   );

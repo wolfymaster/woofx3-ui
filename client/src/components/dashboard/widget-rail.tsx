@@ -76,7 +76,7 @@ function RailButton({
           onPointerDown={(event) => event.stopPropagation()}
           onClick={onRemove}
           className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-destructive"
-          aria-label={`Remove ${label} from the rail`}
+          aria-label={`Remove ${label}`}
           data-testid={`button-remove-rail-${widget.slotId}`}
         >
           <X className="h-2.5 w-2.5" />
@@ -219,7 +219,7 @@ export function WidgetRail({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="Add a widget to the rail"
+                aria-label="Add a widget"
                 className="mt-1 h-9 w-9 rounded-lg border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={onAddWidget}
                 data-testid="button-add-rail-widget"
@@ -227,7 +227,7 @@ export function WidgetRail({
                 <Plus className="h-4 w-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="left">Add a widget to the rail</TooltipContent>
+            <TooltipContent side="left">Add a widget</TooltipContent>
           </Tooltip>
         )}
       </div>

@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
+import { useLogger } from "@/lib/logger-context";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { getDefaultConfigValues } from "@/lib/workflow-presets";
 
@@ -43,12 +44,11 @@ export function suggestInstanceId(displayName: string): string {
 }
 
 /**
- * Create an instance of a module-declared resource kind: its name, the id it is
- * addressed by, and the values of whatever settings the kind declares.
+ * Create an instance of a module-declared resource kind: its name and the values
+ * of whatever settings the kind declares.
  *
- * The id follows the name until the user edits it, because most people name a
- * counter and do not care what it is called internally — but it is shown,
- * since workflows reference it and it can never change.
+ * The id follows the name until the user edits it under Advanced, because most
+ * people name a counter and do not care what it is called internally.
  */
 export function CreateResourceDialog(props: CreateResourceDialogProps) {
   return (
@@ -81,6 +81,7 @@ export function CreateResourceForm({
   onCreate,
   actionsAs: Actions = InlineActions,
 }: CreateResourceFormProps) {
+  const logger = useLogger();
   const idPrefix = useId();
   const nameInputId = `${idPrefix}-name`;
   const idInputId = `${idPrefix}-id`;
@@ -112,7 +113,8 @@ export function CreateResourceForm({
       await onCreate(resourceInstanceId, displayName.trim(), settings as Record<string, unknown>);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to create the ${kind.name.toLowerCase()}.`);
+      logger.error("Failed to create resource instance", { error: err });
+      setError(`Couldn't create the ${kind.name.toLowerCase()}. Try again.`);
     } finally {
       setCreating(false);
     }
@@ -137,26 +139,22 @@ export function CreateResourceForm({
             data-testid="input-resource-name"
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor={idInputId}>ID</Label>
-          <Input
-            id={idInputId}
-            placeholder="e.g. deaths"
-            value={resourceInstanceId}
-            onChange={(e) => setEditedId(e.target.value)}
-            className="font-mono"
-            data-testid="input-resource-id"
-          />
-          <p
-            className={
-              idIsValid || resourceInstanceId === "" ? "text-xs text-muted-foreground" : "text-xs text-destructive"
-            }
-          >
-            {idIsValid || resourceInstanceId === ""
-              ? "What triggers and actions refer to it by. It can't be changed later."
-              : "Use only letters, numbers, dots, dashes and underscores."}
-          </p>
-        </div>
+        <details className="space-y-2" open={!idIsValid && displayName.trim() !== ""}>
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Advanced</summary>
+          <div className="mt-2 space-y-2">
+            <Label htmlFor={idInputId}>ID</Label>
+            <Input
+              id={idInputId}
+              value={resourceInstanceId}
+              onChange={(e) => setEditedId(e.target.value)}
+              className="font-mono"
+              data-testid="input-resource-id"
+            />
+            {!idIsValid && resourceInstanceId !== "" && (
+              <p className="text-xs text-destructive">Use only letters, numbers, dots, dashes and underscores.</p>
+            )}
+          </div>
+        </details>
         {fields.length > 0 && (
           <ConfigurationForm
             fields={fields as unknown as FieldDescriptor[]}

@@ -50,44 +50,38 @@ export function syncReportToast(report: SyncReport, sceneName: string | undefine
     case "gone":
       return {
         title: `${capitalize(scene)} no longer exists`,
-        description:
-          clauses.length === 0
-            ? "The scene manager doesn't have it any more."
-            : `The scene manager doesn't have it any more, so ${joinList(clauses)}.`,
+        description: clauses.length === 0 ? "It was deleted." : `It was deleted, so ${joinList(clauses)}.`,
       };
     case "closed":
       if (clauses.length === 0) {
         return {
           title: "The scene editor disconnected",
-          description: `The editor for ${scene} lost its connection to the scene manager${
-            report.detail ? ` (${report.detail})` : ""
-          }. Open the scene again to keep editing.`,
+          description: `The editor for ${scene} lost its connection. Open the scene again to keep editing.`,
         };
       }
       return {
         title: "Your last changes may not have been saved",
-        description: `The editor for ${scene} closed before the scene manager confirmed everything: ${joinList(
+        description: `The editor for ${scene} closed before everything was saved: ${joinList(
           clauses
         )}. Open the scene to check it.`,
       };
     case "rejected": {
-      const reason = report.detail ? `: ${report.detail}.` : ".";
       const command = report.items.find(isCommand);
       if (command !== undefined && report.items.length === 1) {
         return {
           title: `${COMMAND_NAME[command.kind]} didn't go through`,
-          description: `The scene manager refused to ${command.kind} the draft of ${scene}${reason}`,
+          description: `Couldn't ${command.kind} the draft of ${scene}. Try again.`,
         };
       }
       return {
         title: "This change couldn't be saved",
-        description: `The scene manager refused a change to ${scene}${reason} It was undone in the editor.`,
+        description: `A change to ${scene} was undone in the editor. Try again.`,
       };
     }
     case "history_lost":
       return {
-        title: "The scene manager lost recent changes",
-        description: `It restarted before saving the last changes to ${scene}, so the editor now shows the scene as the scene manager has it. Check it and redo anything missing.`,
+        title: "Some recent changes were lost",
+        description: `woofx3 restarted before saving the last changes to ${scene}, so the editor shows it as last saved. Check it and redo anything missing.`,
       };
   }
 }

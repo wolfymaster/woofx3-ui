@@ -33,7 +33,7 @@ export function TwitchScopeStatus({ health, platformUsername, canRelink }: Twitc
       Reconnect as @{platformUsername}
     </Button>
   ) : (
-    <span className="text-xs text-muted-foreground">Ask an engine admin to reconnect Twitch.</span>
+    <span className="text-xs text-muted-foreground">Ask an owner or admin to reconnect Twitch.</span>
   );
 
   if (health.state === "ok") {
@@ -41,7 +41,7 @@ export function TwitchScopeStatus({ health, platformUsername, canRelink }: Twitc
       return (
         <div className="flex items-center gap-2 rounded-lg border p-4 text-sm" data-testid="twitch-scope-status">
           <CheckCircle2 className="h-4 w-4 text-green-500" />
-          <span>Every permission the app uses is granted.</span>
+          <span>Twitch is fully connected.</span>
         </div>
       );
     }
@@ -53,7 +53,7 @@ export function TwitchScopeStatus({ health, platformUsername, canRelink }: Twitc
         <div className="flex min-w-0 flex-1 items-start gap-2">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
           <div className="min-w-0 space-y-2">
-            <p>Every required permission is granted. Reconnect to add these optional ones:</p>
+            <p>Connected. These extras are off:</p>
             <OptionalCapabilityBadges capabilities={health.optionalMissing} />
             {connectError && <p className="text-destructive">{connectError}</p>}
             <TwitchApprovalCode linking={linking} onCancel={cancel} />
@@ -73,18 +73,13 @@ export function TwitchScopeStatus({ health, platformUsername, canRelink }: Twitc
         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
         <div className="min-w-0 space-y-2">
           {health.state === "revoked" ? (
-            <p>Twitch refused this connection's token. Actions that talk to Twitch fail until you reconnect.</p>
+            <p>Twitch needs you to sign in again. Alerts and chat features won't work until you do.</p>
           ) : (
             <>
-              <p>The linked account has not granted everything the app uses. These fail until you reconnect:</p>
+              <p>Some permissions are missing, so these features won't work until you reconnect:</p>
               <div className="flex flex-wrap gap-1.5">
                 {health.missing.map((capability) => (
-                  <Badge
-                    key={capability.label}
-                    variant="secondary"
-                    title={capability.missingScopes.join("\n")}
-                    data-testid={`twitch-missing-${capability.label}`}
-                  >
+                  <Badge key={capability.label} variant="secondary" data-testid={`twitch-missing-${capability.label}`}>
                     {capability.label}
                   </Badge>
                 ))}
@@ -108,13 +103,8 @@ function OptionalCapabilityBadges({ capabilities }: { capabilities: MissingTwitc
   return (
     <div className="flex flex-wrap gap-1.5">
       {capabilities.map((capability) => (
-        <Badge
-          key={capability.label}
-          variant="outline"
-          title={capability.missingScopes.join("\n")}
-          data-testid={`twitch-optional-missing-${capability.label}`}
-        >
-          {capability.label}: not granted (optional)
+        <Badge key={capability.label} variant="outline" data-testid={`twitch-optional-missing-${capability.label}`}>
+          {capability.label} (off)
         </Badge>
       ))}
     </div>

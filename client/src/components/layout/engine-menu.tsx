@@ -22,11 +22,11 @@ export function EngineMenuSection() {
     <>
       <DropdownMenuLabel className="flex items-center gap-2 font-normal" data-testid="menu-current-engine">
         <MonitorPlay className="h-4 w-4 text-muted-foreground" />
-        <span className="truncate">Engine: {instance.name}</span>
+        <span className="truncate">{instance.name}</span>
       </DropdownMenuLabel>
       {engines.length > 1 && (
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger data-testid="menu-switch-engine">Switch engine</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger data-testid="menu-switch-engine">Switch woofx3</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-56">
             {engines.map((engine) => (
               <DropdownMenuItem

@@ -35,6 +35,7 @@ import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useOverlayEditorSession } from "@/hooks/use-overlay-editor-session";
 import { useRefusedToast } from "@/hooks/use-refused-toast";
 import { useToast } from "@/hooks/use-toast";
+import { DRAFT_COPY } from "@/lib/copy";
 import { draftSaveStatus } from "@/lib/draft-save-status";
 import {
   type CanvasSettings,
@@ -46,7 +47,7 @@ import {
 } from "@/lib/scene-composition";
 import { endedUnreadable, repairResultToast } from "@/lib/scene-unread";
 import type { Scene, Widget } from "@/types";
-import { type DraftCommand, DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
+import { DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
 import { LiveScenePreview } from "./live-scene-preview";
 import { OrphanedAlertTargetsNotice } from "./orphaned-alert-targets-notice";
 import { UnreadSceneNotice } from "./unread-scene-notice";
@@ -209,10 +210,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const sceneDescription = scene?.description;
   const saveNameAndDescription = useCallback(
     (name: string, description: string | undefined) => {
-      updateSceneAction(engineSceneId, { name, description }).catch((err) =>
+      updateSceneAction(engineSceneId, { name, description }).catch(() =>
         toast({
-          title: "Couldn't save the scene's name",
-          description: err instanceof Error ? err.message : String(err),
+          title: "Couldn't save the scene's name. Try again.",
           variant: "destructive",
         })
       );
@@ -279,10 +279,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       if (result.ok) {
         reopenSession();
       }
-    } catch (err) {
+    } catch {
       toast({
-        title: "Couldn't repair this scene",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't repair this scene. Try again.",
         variant: "destructive",
       });
     }
@@ -295,11 +294,10 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     try {
       const browserSourceUrl = await getBrowserSourceUrl(sceneId);
       await navigator.clipboard.writeText(browserSourceUrl);
-      toast({ title: "Browser source URL copied", description: browserSourceUrl });
-    } catch (err) {
+      toast({ title: "Overlay link copied" });
+    } catch {
       toast({
-        title: "Couldn't copy URL",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't copy the link. Try again.",
         variant: "destructive",
       });
     }
@@ -311,11 +309,10 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     }
     try {
       await navigator.clipboard.writeText(await rotateBrowserSourceUrl(sceneId));
-      toast({ title: "Browser source URL rotated", description: "Old URLs revoked. New URL copied." });
-    } catch (err) {
+      toast({ title: "New overlay link copied", description: "The old one no longer works." });
+    } catch {
       toast({
-        title: "Couldn't rotate URL",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't make a new link. Try again.",
         variant: "destructive",
       });
     }
@@ -333,7 +330,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       abandonSession();
       toast({ title: "Scene deleted" });
       navigate("/stream/scenes");
-    } catch (err) {
+    } catch {
       deletingRef.current = false;
       if (mountedRef.current) {
         setDeleting(false);
@@ -342,8 +339,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       // nor the editor closing saved.
       saveUnsavedName();
       toast({
-        title: "Delete failed",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't delete the scene. Try again.",
         variant: "destructive",
       });
     }
@@ -361,10 +357,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       });
       toast({ title: "Scene duplicated" });
       navigate(`/stream/scenes/${newId}`);
-    } catch (err) {
+    } catch {
       toast({
-        title: "Duplicate failed",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't duplicate the scene. Try again.",
         variant: "destructive",
       });
     }
@@ -381,8 +376,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   if (isAwaitingSync || !scene) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2 text-center">
-        <p className="text-muted-foreground">Waiting for the engine to sync this scene…</p>
-        <p className="text-xs text-muted-foreground">This usually takes a moment after creating a scene.</p>
+        <p className="text-muted-foreground">Getting your scene ready…</p>
       </div>
     );
   }
@@ -431,7 +425,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             data-testid="button-copy-browser-source"
           >
             <Link className="h-4 w-4 mr-2" />
-            Copy OBS URL
+            Copy overlay link
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -440,7 +434,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 size="icon"
                 className="rounded-l-none border-l-0"
                 disabled={!sceneId}
-                aria-label="More browser source options"
+                aria-label="More overlay link options"
                 data-testid="button-browser-source-menu"
               >
                 <ChevronDown className="h-4 w-4" />
@@ -449,7 +443,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleRotateBrowserSource} data-testid="menu-rotate-browser-source">
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Rotate URL (revoke old)
+                Make a new overlay link
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -606,7 +600,7 @@ export function sessionStatusText(state: SceneSyncState | null, live: boolean, n
     case "closed":
       return `Disconnected · open the ${noun} again`;
     case "unavailable":
-      return "Can't reach the scene manager";
+      return "Can't connect. Retrying…";
     case "connecting":
     case "offline":
       return "Reconnecting…";
@@ -617,18 +611,18 @@ export function sessionStatusText(state: SceneSyncState | null, live: boolean, n
     return "Publishing…";
   }
   if (state.pendingCommand === "discard") {
-    return "Discarding draft…";
+    return "Discarding changes…";
   }
   if (state.retrying) {
     return "Saving · retrying…";
   }
   if (state.pendingItems > 0) {
-    return live ? "Saving · going to stream…" : "Saving draft…";
+    return live ? "Saving · going to stream…" : "Saving…";
   }
   if (live) {
-    return "Saved · on stream";
+    return DRAFT_COPY.live;
   }
-  return state.hasDraft ? "Draft saved · not on stream yet" : "Up to date";
+  return state.hasDraft ? DRAFT_COPY.savedNotLive : "Up to date";
 }
 
 /**
@@ -660,12 +654,15 @@ function sceneOf(fetchedScene: FetchedScene): Scene {
 }
 
 const SCENE_DRAFT_COPY: DraftLiveCopy = {
-  draft: "Edits go to a draft that reaches OBS when you publish it",
-  live: "Edits go straight to what's on stream, without publishing",
-  liveDisabled: "Live edits are already on stream",
-  publish: "Put the draft on stream",
-  discardTitle: "Discard your draft of this scene?",
-  discardDescription: "Every change since the last publish is thrown away. What's on stream stays as it is.",
+  draft: DRAFT_COPY.privateUntilPublished,
+  live: "Edits go straight to what's on stream",
+  publish: DRAFT_COPY.publish,
+  publishLabel: DRAFT_COPY.publish,
+  draftStatus: DRAFT_COPY.savedNotLive,
+  matchesStatus: "Matches your stream",
+  liveStatus: DRAFT_COPY.live,
+  discardTitle: "Discard your changes to this scene?",
+  discardDescription: DRAFT_COPY.discardConfirm,
 };
 
 const SCENE_DRAFT_TEST_IDS: DraftLiveTestIds = {

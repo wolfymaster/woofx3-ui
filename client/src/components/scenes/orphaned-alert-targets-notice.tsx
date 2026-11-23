@@ -2,9 +2,9 @@ import type { OrphanedAlertTarget } from "@shared/alert-widgets";
 import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-/** Who plays alerts on a target, in a phrase: `Follow alert (workflow), !hype (command)`. */
+/** Who plays alerts on a target, in a phrase: `Follow alert, !hype`. */
 export function alertTargetUsesText(target: OrphanedAlertTarget): string {
-  return target.uses.map((use) => `${use.name} (${use.kind})`).join(", ");
+  return target.uses.map((use) => use.name).join(", ");
 }
 
 /**
@@ -19,7 +19,7 @@ export function OrphanedAlertTargetsNotice({ targets }: { targets: readonly Orph
   return (
     <Alert className="shrink-0 rounded-none border-x-0 border-t-0" data-testid="notice-orphaned-alert-targets">
       <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Some alerts will have nowhere to play</AlertTitle>
+      <AlertTitle>Some alerts won't show anywhere</AlertTitle>
       <AlertDescription className="space-y-1">
         <ul className="list-disc pl-4">
           {targets.map((target) => (
@@ -29,8 +29,8 @@ export function OrphanedAlertTargetsNotice({ targets }: { targets: readonly Orph
           ))}
         </ul>
         <p>
-          With this change no alert area on any scene has {targets.length === 1 ? "that name" : "those names"}. Name an
-          alert area to match, or change the target in those steps.
+          No alert area is named {targets.length === 1 ? "that" : "those"} now. Rename an alert area to match, or pick a
+          different area in those alerts.
         </p>
       </AlertDescription>
     </Alert>

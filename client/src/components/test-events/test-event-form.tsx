@@ -105,7 +105,7 @@ function TestEventOutcome({
       return (
         <p className="flex items-center gap-2 text-xs text-green-500" data-testid="test-event-outcome-succeeded">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          Its steps ran. The Alerts page shows whether each alert played.
+          Done. Check the Alerts page to see if it played.
         </p>
       );
     case "nothingMatched":

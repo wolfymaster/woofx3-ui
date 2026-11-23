@@ -62,7 +62,7 @@ export function AlertQueueControls({ className }: AlertQueueControlsProps) {
         }}
         data-testid="alert-queue-confirm-clear"
       >
-        <span className="text-xs text-muted-foreground">Drop every alert still waiting?</span>
+        <span className="text-xs text-muted-foreground">Clear every alert still waiting?</span>
         <Button
           size="sm"
           variant="destructive"
@@ -73,7 +73,7 @@ export function AlertQueueControls({ className }: AlertQueueControlsProps) {
           data-testid="button-alert-queue-confirm-clear"
         >
           {pending === "clear" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Drop
+          Clear
         </Button>
         <Button
           size="sm"
@@ -113,7 +113,7 @@ export function AlertQueueControls({ className }: AlertQueueControlsProps) {
         className="h-7 px-2 text-xs"
         disabled={busy}
         onClick={() => setConfirmingClear(true)}
-        title="Drop every alert still waiting to play"
+        title="Clear every alert still waiting to play"
         data-testid="button-alert-queue-clear"
       >
         <ListX className="h-3.5 w-3.5" />

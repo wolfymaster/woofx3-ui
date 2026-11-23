@@ -89,7 +89,7 @@ export type SignInFailure =
   | "exchange_failed";
 
 const SIGN_IN_FAILURE_MESSAGES: Record<SignInFailure, string> = {
-  access_denied: "Sign-in was cancelled on Twitch.",
+  access_denied: "Sign-in was canceled on Twitch.",
   missing_params: "Twitch didn't finish the sign-in. Try again.",
   token_exchange_failed: "Twitch didn't accept the sign-in. Try again.",
   profile_fetch_failed: "We couldn't read your Twitch profile. Try again.",

@@ -86,7 +86,8 @@ export default function Onboarding() {
       const instanceId = await createInstance({ accountId, name: PLACEHOLDER_NAME, url: url.trim() });
       const result = await registerInstance({ instanceId });
       if (!result.ok) {
-        setError(`We couldn't connect to that server: ${result.error}`);
+        logger.warn("Server refused registration", { error: result.error });
+        setError("We couldn't connect to that server. Check the address and try again.");
         return false;
       }
       $currentInstanceId.set(instanceId);
@@ -184,10 +185,8 @@ export default function Onboarding() {
       {route === "choose" && !error && IS_DESKTOP && (
         <Card className={cardClass}>
           <CardHeader>
-            <CardTitle>Set up your streaming engine</CardTitle>
-            <CardDescription>
-              Your engine runs your alerts, overlays and chat commands. How would you like to run it?
-            </CardDescription>
+            <CardTitle>Set up woofx3</CardTitle>
+            <CardDescription>woofx3 runs your alerts, overlays and chat commands.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {managedEngines?.available && (
@@ -206,7 +205,7 @@ export default function Onboarding() {
                 onClick={() => setChosePairedEngine(true)}
                 data-testid="button-connect-preview-engine"
               >
-                Connect this preview&apos;s engine
+                Use this preview&apos;s woofx3
               </Button>
             )}
             <Button
@@ -215,7 +214,7 @@ export default function Onboarding() {
               onClick={chooseOwnEngine}
               data-testid="button-choose-own-engine"
             >
-              I run my own engine
+              I run my own server
             </Button>
           </CardContent>
         </Card>
@@ -238,7 +237,7 @@ export default function Onboarding() {
               </div>
               <div>
                 <CardTitle>Connect your server</CardTitle>
-                <CardDescription>Point woofx3 at the engine you run yourself</CardDescription>
+                <CardDescription>Use a server you run yourself instead of woofx3&apos;s.</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -254,11 +253,7 @@ export default function Onboarding() {
                   className="mt-1 font-mono"
                   required
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {previewEngine
-                    ? `This preview is paired with engine ${previewEngine.version ?? previewEngine.url}.`
-                    : "The address where your server is running. Include the port if it needs one."}
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Where your server runs, like localhost:8080.</p>
               </div>
 
               {error && <p className="text-sm text-destructive">{error}</p>}
@@ -288,7 +283,7 @@ export default function Onboarding() {
 
       {!IS_DESKTOP && (
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          Not setting up an engine today?{" "}
+          Not now?{" "}
           <Link href={ACCOUNT_PATH} className="underline" data-testid="link-go-to-account">
             Go to my account
           </Link>

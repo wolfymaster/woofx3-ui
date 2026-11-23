@@ -441,7 +441,7 @@ export interface RecapTimelineProps {
  * a spike can be matched to what caused it. Each layer can be switched off;
  * the choice is kept per browser in `$recapHiddenLayers`.
  *
- * Minutes the engine did not sample, or failed to read, are gaps in the line
+ * Minutes that were not sampled, or failed to read, are gaps in the line
  * rather than drops to zero, so an outage in sampling is never mistaken for
  * an empty chat.
  */
@@ -487,11 +487,11 @@ export function RecapTimeline({ series, points, statuses, footnote }: RecapTimel
 
       {domain === null ? (
         <p className="py-10 text-center text-sm text-muted-foreground" data-testid="text-recap-timeline-empty">
-          Nothing to place on the timeline for this stream.
+          Nothing to show for this stream.
         </p>
       ) : !showViewers && lanes.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground" data-testid="text-recap-timeline-hidden">
-          Every layer with something to show is switched off.
+          Everything is hidden. Turn a filter on to see it.
         </p>
       ) : (
         <div>

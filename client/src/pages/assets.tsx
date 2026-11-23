@@ -287,12 +287,8 @@ function UploadResourcesModal({ open, onOpenChange, parentId, onUploaded }: Uplo
       try {
         await upload(files, parentId);
         onOpenChange(false);
-      } catch (err: unknown) {
-        toast({
-          title: "Upload failed",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "destructive",
-        });
+      } catch {
+        toast({ title: "Couldn't upload. Try again.", variant: "destructive" });
       } finally {
         // Even a partial batch changed the listing.
         onUploaded();
@@ -306,10 +302,7 @@ function UploadResourcesModal({ open, onOpenChange, parentId, onUploaded }: Uplo
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Upload assets</DialogTitle>
-          <DialogDescription>
-            Files upload straight to storage. Thumbnails for images and video are generated afterwards and appear once
-            ready.
-          </DialogDescription>
+          <DialogDescription>Add images, sounds or videos. Previews appear shortly after uploading.</DialogDescription>
         </DialogHeader>
 
         <button
@@ -466,12 +459,8 @@ export default function Assets() {
         await fn();
         refetch();
         return true;
-      } catch (err: unknown) {
-        toast({
-          title: label,
-          description: err instanceof Error ? err.message : String(err),
-          variant: "destructive",
-        });
+      } catch {
+        toast({ title: label, description: "Try again.", variant: "destructive" });
         return false;
       } finally {
         setBusy(false);
@@ -561,7 +550,7 @@ export default function Assets() {
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader
         title="Media"
-        description="Manage your stream media files and resources."
+        description="Images, sounds and videos for your stream."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -731,7 +720,9 @@ export default function Assets() {
         <Card className="p-12 text-center">
           <FolderOpen className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
           <p className="text-sm text-muted-foreground">
-            {searchQuery || kindFilter.length > 0 ? "Nothing matches those filters." : "This folder is empty."}
+            {searchQuery || kindFilter.length > 0
+              ? "Nothing matches those filters."
+              : "This folder is empty. Upload a file or drag one here."}
           </p>
         </Card>
       ) : viewMode === "grid" ? (
@@ -894,7 +885,7 @@ export default function Assets() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Rename</DialogTitle>
-            <DialogDescription>{renaming?.isFolder ? "Rename this folder." : "Rename this file."}</DialogDescription>
+            <DialogDescription className="sr-only">Rename</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
             <Label htmlFor="rename-value">Name</Label>

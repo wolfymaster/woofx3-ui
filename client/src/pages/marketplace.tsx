@@ -179,7 +179,7 @@ export default function Marketplace({
       return { listings, title: "Trending now", subtitle: "Most installed this week", sort: "trending" as const };
     }
     if (listings.some((listing) => listing.installCount > 0)) {
-      return { listings, title: "Most installed", subtitle: "The catalog's favourites", sort: "popular" as const };
+      return { listings, title: "Most installed", subtitle: "", sort: "popular" as const };
     }
     return { listings: [], title: "", subtitle: "", sort: "popular" as const };
   }, [trending.page]);
@@ -432,7 +432,7 @@ function StorefrontTopBar({
             // One box for the whole marketplace: name, description, author and
             // tags, across modules, themes, emotes, overlays and alerts.
             type="search"
-            placeholder="Search modules, themes, emotes, overlays, alerts…"
+            placeholder="Search the store"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             aria-label="Search the marketplace"

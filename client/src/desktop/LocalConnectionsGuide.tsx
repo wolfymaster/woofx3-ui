@@ -48,9 +48,7 @@ export default function LocalConnectionsGuide() {
         <X className="h-4 w-4" />
       </button>
       <p className="pr-6 text-sm font-medium">Connect {names}?</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Your engine can't reach it until it's set up on this computer.
-      </p>
+      <p className="mt-1 text-sm text-muted-foreground">Alerts and commands can't use it until you do.</p>
       <div className="mt-3 flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={dismiss}>
           Not now

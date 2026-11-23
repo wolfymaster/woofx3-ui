@@ -21,10 +21,10 @@ function endMessage(end: Exclude<DesktopSignInEnd, { kind: "signed_in" }>): stri
       return oauthErrorMessage(end.error, "Twitch");
     }
     case "timed_out": {
-      return "The Twitch sign-in took too long. Please start again.";
+      return "The Twitch sign-in took too long. Start again.";
     }
     case "browser_not_opened": {
-      return `woofx3 could not open your browser: ${end.reason}`;
+      return "woofx3 couldn't open your browser. Try again.";
     }
   }
 }

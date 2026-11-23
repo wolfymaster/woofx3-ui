@@ -81,8 +81,7 @@ export function SaveToLibraryDialog({
         <DialogHeader>
           <DialogTitle>Save to library</DialogTitle>
           <DialogDescription>
-            Saves a copy other alerts can start from. This step keeps its own alert, and the variables it shows become
-            the copy's inputs.
+            Saves this alert so you can reuse it elsewhere. This step keeps its own copy.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">

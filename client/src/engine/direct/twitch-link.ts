@@ -102,7 +102,7 @@ class DeviceLoginFollower {
           }
           if (!result.ok) {
             this.attempt = null;
-            this.report({ type: "refused", error: "The Twitch login was cancelled. Start again." });
+            this.report({ type: "refused", error: "The Twitch login was canceled. Start again." });
             return;
           }
           if (result.state.status === "pending") {

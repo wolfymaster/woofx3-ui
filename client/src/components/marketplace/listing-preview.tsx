@@ -52,7 +52,7 @@ function PreviewDialog({
         <DialogHeader>
           <DialogTitle>{listing.name}</DialogTitle>
           <DialogDescription>
-            {gallery.length > 0 ? "What it looks like before you install it." : "This listing has no screenshots yet."}
+            {gallery.length > 0 ? "What it looks like before you install it." : "No screenshots yet."}
           </DialogDescription>
         </DialogHeader>
 
@@ -101,7 +101,7 @@ function PreviewDialog({
             <div className="space-y-1 text-sm">
               <p className="font-medium">Live preview</p>
               <p className="text-xs text-muted-foreground">
-                {live.caption ?? "Install it, then place it in a scene to see it render live."}
+                {live.caption ?? "Install it and add it to a scene to see it live."}
               </p>
             </div>
           </div>

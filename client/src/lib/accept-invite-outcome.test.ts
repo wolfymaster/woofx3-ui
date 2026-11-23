@@ -14,7 +14,7 @@ describe("acceptRefusalMessage", () => {
   test.each([
     ["already_accepted", "already been used"],
     ["expired", "expired"],
-    ["revoked", "cancelled"],
+    ["revoked", "canceled"],
     ["not_found", "could not find"],
     ["engine_gone", "deleted"],
     ["seats_full", "no free seats"],

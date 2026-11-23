@@ -50,8 +50,8 @@ function EngineStatus({ engine }: { engine: OrgEngine }) {
       ))}
       <p className="text-muted-foreground">
         {engine.lastEngineActivityAt === null
-          ? "Has not reported in yet"
-          : `Last heard ${formatAgo(engine.lastEngineActivityAt, now)}`}
+          ? "Not connected yet"
+          : `Last active ${formatAgo(engine.lastEngineActivityAt, now)}`}
         {engine.linkedChannel ? ` · ${engine.linkedChannel.name} on ${engine.linkedChannel.platform}` : ""}
       </p>
     </div>
@@ -65,22 +65,22 @@ function CreateEngineCta() {
   return (
     <Card className="border-dashed" data-testid="card-create-engine">
       <CardHeader className="items-center text-center">
-        <CardTitle className="text-2xl">Create your streaming engine</CardTitle>
+        <CardTitle className="text-2xl">Set up your stream</CardTitle>
         <CardDescription className="max-w-md">
-          Your engine runs your alerts, overlays and chat commands. We&apos;ll walk you through setting it up.
+          Alerts, overlays and chat commands live here. We&apos;ll walk you through it.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex justify-center pb-8">
         {organization === null ? (
           <Button asChild size="lg">
             <Link href="/auth/onboarding" data-testid="link-set-up-engine">
-              Set up a streaming engine
+              Set up your stream
             </Link>
           </Button>
         ) : organization.can.createEngine ? (
-          <NewEngineDialog accountId={organization.accountId} label="Create an engine" size="lg" />
+          <NewEngineDialog accountId={organization.accountId} label="Create your woofx3" size="lg" />
         ) : (
-          <p className="text-sm text-muted-foreground">Ask an owner of this organization to create one.</p>
+          <p className="text-sm text-muted-foreground">Ask the account owner to create one.</p>
         )}
       </CardContent>
     </Card>
@@ -123,7 +123,7 @@ export function EngineList() {
     <section className="space-y-3" aria-labelledby="heading-engines">
       <div className="flex items-center justify-between gap-3">
         <h2 id="heading-engines" className="text-lg font-semibold">
-          Engines
+          Your woofx3
         </h2>
         {scoped?.can.createEngine ? <NewEngineDialog accountId={scoped.accountId} /> : null}
       </div>

@@ -1,5 +1,6 @@
 import { Maximize2, Radio } from "lucide-react";
 import { useState } from "react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { LiveThumbnail } from "@/components/dashboard/live-thumbnail";
 import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
 import { useLiveState } from "@/engine/hooks/use-live-state";
@@ -16,7 +17,7 @@ export function StreamPreviewWidget() {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4 text-center">
         <Radio className="h-8 w-8 text-muted-foreground/50 mb-3" />
-        <p className="text-sm text-muted-foreground">Connect Twitch in Settings to preview your stream</p>
+        <TwitchConnectNotice to="preview your stream" />
       </div>
     );
   }

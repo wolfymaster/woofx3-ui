@@ -107,8 +107,8 @@ export function CustomThemeEditor() {
       </div>
 
       <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-        Editing <span className="font-medium text-foreground">{mode}</span> mode colors. Switch the mode above to edit
-        the {mode === "dark" ? "light" : "dark"} set; each keeps its own changes.
+        Editing <span className="font-medium text-foreground">{mode}</span> mode colors. Switch mode above to edit the
+        other.
       </p>
 
       {COLOR_GROUPS.map((group) => (

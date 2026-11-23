@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { alertTargetUsesText } from "./orphaned-alert-targets-notice";
 
 describe("alertTargetUsesText", () => {
-  it("names each use with what it is", () => {
+  it("names each use", () => {
     expect(
       alertTargetUsesText({
         target: "sidebar",
@@ -11,6 +11,6 @@ describe("alertTargetUsesText", () => {
           { target: "sidebar", kind: "command", name: "!hype" },
         ],
       })
-    ).toBe("Follow alert (workflow), !hype (command)");
+    ).toBe("Follow alert, !hype");
   });
 });

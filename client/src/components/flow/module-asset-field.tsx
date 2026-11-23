@@ -39,23 +39,16 @@ function AssetChoices({
   onChange,
   assets,
 }: AssetFieldProps & { assets: ModuleAsset[] | null | undefined }) {
-  const kinds = Array.isArray(field.kinds) ? (field.kinds as string[]) : undefined;
   const selected = typeof value === "string" ? value : "";
   const labelId = `${field.id}-label`;
 
   let body: ReactNode;
   if (assets === null) {
-    body = <p className="text-xs text-muted-foreground">This action's module isn't installed, so it has no files.</p>;
+    body = <p className="text-xs text-muted-foreground">No files available for this action.</p>;
   } else if (assets === undefined) {
     body = <p className="text-xs text-muted-foreground">Loading the module's files…</p>;
   } else if (assets.length === 0) {
-    body = (
-      <p className="text-xs text-muted-foreground">
-        {kinds && kinds.length > 0
-          ? `The module ships no ${kinds.join(" or ")} files to choose from.`
-          : "The module ships no files to choose from."}
-      </p>
-    );
+    body = <p className="text-xs text-muted-foreground">No files available for this action.</p>;
   } else {
     const missing = selected !== "" && !assets.some((asset) => asset.canonicalId === selected);
     body = (

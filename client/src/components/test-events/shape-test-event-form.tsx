@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
 import { TestEventForm, type TestEventProps } from "@/components/test-events/test-event-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,19 @@ export function ShapeTestEventForm({ preset, runner }: TestEventProps) {
 
   const payload = jsonText === null ? fieldPayload : parsedJson?.ok ? parsedJson.payload : null;
 
+  const jsonToggle = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-auto self-start px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+      onClick={jsonText === null ? showJson : showFields}
+      data-testid="button-toggle-test-event-json"
+    >
+      {jsonText === null ? "Edit as JSON" : "Back to fields"}
+    </Button>
+  );
+
   return (
     <TestEventForm preset={preset} runner={runner} payload={payload}>
       {jsonText === null ? (
@@ -80,16 +94,11 @@ export function ShapeTestEventForm({ preset, runner }: TestEventProps) {
         </div>
       )}
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-auto self-start px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
-        onClick={jsonText === null ? showJson : showFields}
-        data-testid="button-toggle-test-event-json"
-      >
-        {jsonText === null ? "Edit as JSON" : "Back to fields"}
-      </Button>
+      {jsonText === null ? (
+        <AdvancedDisclosure testId="test-event-advanced">{jsonToggle}</AdvancedDisclosure>
+      ) : (
+        jsonToggle
+      )}
     </TestEventForm>
   );
 }
@@ -160,12 +169,7 @@ function FieldLabel({ field, htmlFor }: { field: TestEventField; htmlFor: string
   return (
     <div className="min-w-0 space-y-0.5">
       <Label htmlFor={htmlFor}>{field.label}</Label>
-      <p className="text-xs text-muted-foreground">
-        {field.description}
-        <span className={field.description ? "ml-1.5 font-mono text-muted-foreground/70" : "font-mono"}>
-          {field.path}
-        </span>
-      </p>
+      {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
     </div>
   );
 }

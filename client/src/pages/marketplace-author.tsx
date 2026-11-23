@@ -3,6 +3,7 @@ import { LISTING_TYPES } from "@shared/marketplace-catalog";
 import { AlertCircle, ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation, useParams } from "wouter";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { ListingCard } from "@/components/marketplace/listing-card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -66,9 +67,9 @@ export default function MarketplaceAuthor() {
             <CardContent className="space-y-2 pt-6">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-4 w-4" />
-                <span className="font-medium">Failed to load this author</span>
+                <span className="font-medium">We couldn't load this. Try again.</span>
               </div>
-              <p className="break-words text-sm text-muted-foreground">{error}</p>
+              <TechnicalDetails text={error} />
             </CardContent>
           </Card>
         )}
@@ -161,9 +162,7 @@ export default function MarketplaceAuthor() {
             )}
 
             {grouped.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Nothing published yet — or nothing visible to this engine.
-              </p>
+              <p className="text-sm text-muted-foreground">Nothing from this creator is available to you yet.</p>
             )}
           </>
         )}

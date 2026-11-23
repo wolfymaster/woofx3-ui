@@ -32,7 +32,7 @@ export function WidgetSettingsForm({
   onChangeSetting,
 }: WidgetSettingsFormProps) {
   if (fields.length === 0) {
-    return <p className="text-xs text-muted-foreground">This widget has no configurable settings.</p>;
+    return null;
   }
   return (
     <ConfigurationForm

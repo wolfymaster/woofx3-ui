@@ -1,6 +1,7 @@
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import {
   ManageResourcesTab,
   ModuleAccessSummary,
@@ -80,10 +81,8 @@ export function ListingModuleTabs({ load, onRetry, rail, children }: ListingModu
             <ModuleDefinitions
               triggers={detail.triggers}
               actions={detail.actions}
-              functions={detail.functions}
               widgets={detail.widgets}
               workflows={detail.workflows}
-              files={files}
             />
           </TabsContent>
           <TabsContent value="files" className="mt-0">
@@ -232,9 +231,6 @@ function OverviewRail({ detail }: { detail: ModuleDetail }) {
         latestVersion={detail.latestVersion}
       />
       <dl className="space-y-3 text-sm">
-        <Fact label="Module id">
-          <span className="break-all font-mono text-xs">{detail.id}</span>
-        </Fact>
         {detail.isInstalled ? (
           <Fact label="Installed version">
             v{detail.version}
@@ -278,9 +274,9 @@ function DetailError({ message, onRetry }: { message: string; onRetry: () => voi
     <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
       <p className="flex items-center gap-2 text-sm font-medium text-destructive">
         <AlertCircle className="h-4 w-4 shrink-0" />
-        Couldn't load this module's README and details
+        Couldn't load this module's details.
       </p>
-      <p className="break-words text-sm text-muted-foreground">{message}</p>
+      <TechnicalDetails text={message} />
       <Button size="sm" variant="outline" onClick={onRetry}>
         <RefreshCw className="mr-2 h-4 w-4" />
         Try again

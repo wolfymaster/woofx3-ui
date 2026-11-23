@@ -1,3 +1,5 @@
+import { ADMIN_ONLY } from "@/lib/copy";
+
 /**
  * What the user page screen shows about publishing: the page's state and
  * whether its Publish and Unpublish buttons work for this viewer. The server
@@ -5,9 +7,9 @@
  * from offering a button that is certain to be refused, and says why.
  */
 
-export const NO_SLUG_MESSAGE = "Only engines with a woofx3 address can have a page.";
-export const NOT_ENTITLED_MESSAGE = "Public pages are available on hosted engines.";
-export const ADMINS_ONLY_MESSAGE = "Only the organization's owner and admins can publish or unpublish the page.";
+export const NO_SLUG_MESSAGE = "Pick an address to publish your page. You can build it now.";
+export const NOT_ENTITLED_MESSAGE = "Publishing needs a plan with public pages.";
+export const ADMINS_ONLY_MESSAGE = ADMIN_ONLY;
 
 export type PageStatus =
   /** Never published, or taken offline. */

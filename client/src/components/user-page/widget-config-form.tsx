@@ -77,7 +77,6 @@ function TextForm({ idPrefix, config, onChange, path, problems }: FormProps<Page
     <TextField
       id={`${idPrefix}-markdown`}
       label="Text"
-      hint="Markdown: **bold**, _italic_, [links](https://example.com), lists and headings."
       multiline
       value={config.markdown}
       onChange={(markdown) => onChange({ ...config, markdown })}
@@ -200,7 +199,7 @@ function LabelField({
     <TextField
       id={`${idPrefix}-label`}
       label="Label"
-      hint="Shown above the value. Leave empty to use its own name."
+      hint="Optional title. Leave empty to use the default."
       value={value ?? ""}
       onChange={onChange}
       path={fieldPath(path, "label")}
@@ -296,7 +295,6 @@ function ImageForm({ idPrefix, config, onChange, path, problems }: FormProps<Pag
         label="Image address"
         type="url"
         placeholder="https://"
-        hint="An https link to the picture."
         value={config.image.url}
         onChange={(url) => onChange({ ...config, image: { kind: "url", url } })}
         path={fieldPath(fieldPath(path, "image"), "url")}
@@ -304,8 +302,7 @@ function ImageForm({ idPrefix, config, onChange, path, problems }: FormProps<Pag
       />
       <TextField
         id={`${idPrefix}-alt`}
-        label="Description"
-        hint="Read aloud to visitors who cannot see the picture."
+        label="Describe the picture (for screen readers)"
         value={config.alt}
         onChange={(alt) => onChange({ ...config, alt })}
         path={fieldPath(path, "alt")}

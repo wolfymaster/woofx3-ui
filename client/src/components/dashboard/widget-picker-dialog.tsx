@@ -7,7 +7,7 @@ import { dashboardWidgetsByCategory, useDashboardCatalog } from "@/lib/dashboard
 interface WidgetPickerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Says where the widget will go, e.g. "Add a widget to the rail". */
+  /** Says where the widget will go, e.g. "Add a widget". */
   title: string;
   onSelect: (type: string) => void;
 }
@@ -44,7 +44,7 @@ export function WidgetPickerDialog({ open, onOpenChange, title, onSelect }: Widg
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col gap-4">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Pick a widget. You can move, resize or remove it until you save.</DialogDescription>
+          <DialogDescription>Pick a widget to add.</DialogDescription>
         </DialogHeader>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

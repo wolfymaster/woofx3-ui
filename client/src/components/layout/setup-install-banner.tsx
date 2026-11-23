@@ -6,6 +6,7 @@ import { Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useInstance } from "@/hooks/use-instance";
+import { TRY_AGAIN } from "@/lib/copy";
 import { describePermissions } from "@/lib/module-permissions";
 
 /**
@@ -57,8 +58,8 @@ function ProblemStrip({
     setBusy(true);
     try {
       await action();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch {
+      setError(TRY_AGAIN);
     } finally {
       setBusy(false);
     }
@@ -88,12 +89,10 @@ function ProblemStrip({
       <p className="min-w-0 flex-1">
         {needsApproval ? (
           <>
-            {name} was not installed: its latest version also asks to {unapproved.join("; ")}.
+            {name} wants new permissions: {unapproved.join("; ")}. Allow to finish installing.
           </>
         ) : (
-          <>
-            Installing {name} failed{install.error ? `: ${install.error}` : "."}
-          </>
+          <>Couldn't install {name}. Retry.</>
         )}
         {error && <span className="block text-destructive">{error}</span>}
       </p>

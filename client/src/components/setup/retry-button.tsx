@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { TRY_AGAIN } from "@/lib/copy";
 
 interface RetryButtonProps {
   onRetry: () => Promise<void>;
@@ -33,7 +34,7 @@ export function RetryButton({ onRetry, label = "Try again", variant = "default",
         {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {label}
       </Button>
-      {failed && <p className="text-sm text-destructive">That didn&apos;t work. Give it a moment and try again.</p>}
+      {failed && <p className="text-sm text-destructive">{TRY_AGAIN}</p>}
     </div>
   );
 }

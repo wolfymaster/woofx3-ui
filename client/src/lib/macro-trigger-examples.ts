@@ -112,7 +112,7 @@ export interface MacroTriggerStatus {
 /** "Enabled · last used 3 minutes ago · 4 uses", as the pad and the editor show it. */
 export function macroTriggerStatusLabel(trigger: MacroTriggerStatus): string {
   if (trigger.needsConfirmation) {
-    return "Paused · an owner or admin must re-confirm it";
+    return "Paused · an owner or admin must approve it again";
   }
   const parts = ["Enabled"];
   if (trigger.lastUsedAt === undefined) {

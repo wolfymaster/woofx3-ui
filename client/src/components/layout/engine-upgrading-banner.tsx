@@ -17,7 +17,7 @@ export function EngineUpgradingBanner() {
       data-testid="banner-engine-upgrading"
     >
       <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
-      <p className="min-w-0 flex-1">Your engine is upgrading. It'll be back in a few minutes.</p>
+      <p className="min-w-0 flex-1">Updating woofx3. Back in a few minutes.</p>
     </div>
   );
 }

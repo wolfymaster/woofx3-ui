@@ -43,7 +43,7 @@ export function ModulePermissionsSection({ permissions }: { permissions: readonl
       {permissions === null ? (
         <p className="flex items-start gap-2 text-sm text-amber-600 dark:text-amber-400">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-          Could not read this module's permissions.
+          We couldn't check what this module can do.
         </p>
       ) : permissions.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nothing that needs your approval.</p>
@@ -60,9 +60,7 @@ export function ModuleLocalEndpointList({ endpoints }: { endpoints: readonly Loc
       {endpoints.map((endpoint) => (
         <li key={endpoint.id} className="flex items-start gap-2 text-sm">
           <Network className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-          <span>
-            {endpoint.name} ({endpoint.protocol}), at the address in its settings
-          </span>
+          <span>{endpoint.name}, at the address in its settings</span>
         </li>
       ))}
     </ul>
@@ -133,7 +131,7 @@ export function ApproveModulePermissionsDialog({
           </AlertDialogTitle>
           <AlertDialogDescription>
             {mode === "install"
-              ? "The module can do these things whenever its workflows or functions run. You can remove the module later to take them away."
+              ? "You can remove the module at any time to take these back."
               : "The new version asks for permissions the installed version did not have. Update only if you trust it with them."}
           </AlertDialogDescription>
         </AlertDialogHeader>

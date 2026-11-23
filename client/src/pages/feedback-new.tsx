@@ -19,7 +19,7 @@ export default function FeedbackNew() {
       <FeedbackPostForm
         initial={EMPTY_DRAFT}
         submitLabel="Post"
-        errorTitle="Could not post"
+        errorTitle="Couldn't post. Try again."
         cancelHref={FEEDBACK_PATH}
         suggestSimilar
         onSubmit={async (draft) => {

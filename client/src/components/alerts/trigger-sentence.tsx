@@ -269,11 +269,11 @@ function Phrase({ step, index }: { step: StepNode; index: number }) {
         type="button"
         className="phrase inline-flex items-baseline gap-1 rounded-md px-1 text-muted-foreground"
         onClick={flow.onOpenAdvanced}
-        aria-label={`${summary.title}. More steps in the full editor`}
+        aria-label={`${summary.title}. More steps in the workflow editor`}
         data-testid={`sentence-uneditable-${step.id}`}
       >
         {summary.title}
-        <span className="text-xs underline underline-offset-2">More in the full editor</span>
+        <span className="text-xs underline underline-offset-2">Edit in workflow editor</span>
       </button>
     );
   }
@@ -390,7 +390,7 @@ function AddPhrase({ point }: { point: InsertPoint }) {
       <div className="phrase-section w-full" data-testid={`sentence-picker-${insertPointKey(point)}`}>
         <ObjectActionPicker
           presets={flow.actionPresets}
-          heading={inBranch ? "Add a step to this branch" : "Add a thing that happens"}
+          heading={inBranch ? "Add a step to this branch" : "Add a step"}
           onPick={(choice) => flow.pick(point, choice)}
           onCancel={flow.closePicker}
         />
@@ -402,12 +402,12 @@ function AddPhrase({ point }: { point: InsertPoint }) {
       type="button"
       className="phrase inline-flex items-baseline gap-1 rounded-md px-1 text-muted-foreground hover:text-foreground"
       onClick={() => flow.openPicker(point)}
-      aria-label={inBranch ? "Add a step to this branch" : "Add a thing that happens"}
+      aria-label={inBranch ? "Add a step to this branch" : "Add a step"}
       data-insert-point={insertPointKey(point)}
       data-testid={`sentence-add-${insertPointKey(point)}`}
     >
       <Plus className="h-3.5 w-3.5 self-center" aria-hidden="true" />
-      {inBranch ? "add a step" : "add a thing that happens"}
+      {inBranch ? "add a step" : "add a step"}
     </button>
   );
 }

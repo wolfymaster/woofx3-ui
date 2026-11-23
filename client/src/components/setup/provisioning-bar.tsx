@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
+import { TRY_AGAIN } from "@/lib/copy";
 import { engineBuildPhaseLabel } from "@/lib/engine-build";
 import { useLogger } from "@/lib/logger-context";
 
@@ -92,8 +93,7 @@ export function ProvisioningBar({ instanceId }: { instanceId: Id<"instances"> })
           {engineBuildPhaseLabel(provisioning.status, steps)}
         </p>
       )}
-      {isFailed && <p className="text-xs text-muted-foreground">This usually clears up with a retry.</p>}
-      {retryFailed && <p className="text-xs text-destructive">That didn&apos;t work. Try again in a moment.</p>}
+      {retryFailed && <p className="text-xs text-destructive">{TRY_AGAIN}</p>}
       {!isFailed && !isDone && <p className="text-xs text-muted-foreground">It keeps going if you close this tab.</p>}
     </div>
   );

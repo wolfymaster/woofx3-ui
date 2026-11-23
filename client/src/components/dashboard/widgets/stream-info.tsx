@@ -9,6 +9,7 @@ import {
 } from "@shared/stream-info";
 import { Bookmark, Check, Flag, Loader2, Radio, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +24,7 @@ import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { StreamInfo, StreamInfoChanges, StreamInfoPresetId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import { comparePreset, draftProblem, formatStreamPosition, isDirty, rebaseDraft } from "@/lib/stream-info-edit";
 import { cn } from "@/lib/utils";
 import { CategoryBoxArt, CategoryPicker } from "./stream-info-category-picker";
@@ -35,10 +37,6 @@ interface EditState {
   /** What Twitch holds, or what it is being told to hold while a save is in flight. */
   saved: StreamInfo;
   draft: StreamInfo;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function Counter({ counter }: { counter: { length: number; max: number; over: boolean; near: boolean } }) {
@@ -66,7 +64,7 @@ export function StreamInfoWidget() {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center">
         <Radio className="mb-3 h-8 w-8 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">Connect Twitch in Settings to edit your stream info</p>
+        <TwitchConnectNotice to="edit your stream info" />
       </div>
     );
   }
@@ -74,10 +72,7 @@ export function StreamInfoWidget() {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center">
         <Radio className="mb-3 h-8 w-8 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">
-          Your Twitch connection is missing the "{STREAM_INFO_SCOPE}" permission. Reconnect Twitch in Settings →
-          Integrations to grant it.
-        </p>
+        <TwitchConnectNotice to="edit your stream info" reconnect />
       </div>
     );
   }
@@ -120,9 +115,9 @@ function StreamInfoEditor() {
         );
         setLoadError(null);
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (started === generation.current) {
-          setLoadError(errorMessage(error));
+          setLoadError(TRY_AGAIN);
         }
       });
   }, [getChannelInfo]);
@@ -159,10 +154,10 @@ function StreamInfoEditor() {
       } else {
         toast({ title: successTitle });
       }
-    } catch (error) {
+    } catch {
       generation.current += 1;
       setEdit(before);
-      toast({ title: "Couldn't update stream info", description: errorMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't update stream info", description: TRY_AGAIN, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -290,16 +285,16 @@ function PresetsSection({ current, draft, draftProblem, busy, onApply }: Presets
       await savePreset({ name: trimmedName, info: draft });
       setName("");
       toast({ title: replaces ? `Updated "${trimmedName}"` : `Saved "${trimmedName}"` });
-    } catch (error) {
-      toast({ title: "Couldn't save preset", description: errorMessage(error), variant: "destructive" });
+    } catch {
+      toast({ title: "Couldn't save preset", description: TRY_AGAIN, variant: "destructive" });
     } finally {
       setSavingPreset(false);
     }
   };
 
   const handleRemove = (presetId: StreamInfoPresetId) => {
-    removePreset(presetId).catch((error: unknown) => {
-      toast({ title: "Couldn't delete preset", description: errorMessage(error), variant: "destructive" });
+    removePreset(presetId).catch(() => {
+      toast({ title: "Couldn't delete preset", description: TRY_AGAIN, variant: "destructive" });
     });
   };
 
@@ -409,10 +404,10 @@ function MarkerSection() {
         description:
           marker.positionSeconds === null ? undefined : `At ${formatStreamPosition(marker.positionSeconds)} in the VOD`,
       });
-    } catch (err) {
+    } catch {
       // Inline rather than a toast: "you're offline" is the common answer, and
       // it should sit next to the button until the next try.
-      setError(errorMessage(err));
+      setError(TRY_AGAIN);
     } finally {
       setBusy(false);
     }

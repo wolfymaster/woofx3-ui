@@ -59,7 +59,7 @@ export default function FeedbackEdit() {
         key={post._id}
         initial={{ kind: post.kind, title: post.title, body: post.body }}
         submitLabel="Save"
-        errorTitle="Could not save"
+        errorTitle="Couldn't save. Try again."
         cancelHref={postPath}
         suggestSimilar={false}
         onSubmit={async (draft) => {

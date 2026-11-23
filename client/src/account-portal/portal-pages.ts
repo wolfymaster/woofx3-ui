@@ -35,7 +35,7 @@ export const PORTAL_PAGES: readonly PortalPage[] = [
   },
   {
     id: "engines",
-    label: "Engines",
+    label: "Your woofx3",
     path: ENGINES_PATH,
     scopes: ["organization"],
     visibleWith: null,

@@ -4,12 +4,12 @@ import { type EngineUpgrade, upgradeHeading, upgradeResult } from "./engine-upgr
 const upgrade: EngineUpgrade = { fromVersion: "v0.1.0", toVersion: "v0.2.0", rollingBack: false };
 
 describe("upgradeHeading", () => {
-  test("names the release the engine is moving to", () => {
-    expect(upgradeHeading(upgrade)).toBe("Upgrading to v0.2.0");
+  test("says woofx3 is updating", () => {
+    expect(upgradeHeading(upgrade)).toBe("Updating woofx3");
   });
 
-  test("names the release being restored once the upgrade is rolling back", () => {
-    expect(upgradeHeading({ ...upgrade, rollingBack: true })).toBe("Restoring v0.1.0");
+  test("says the previous version is restored once the update is rolling back", () => {
+    expect(upgradeHeading({ ...upgrade, rollingBack: true })).toBe("Restoring your previous version");
   });
 });
 
@@ -23,7 +23,7 @@ describe("upgradeResult", () => {
   test("reports a finished upgrade", () => {
     expect(upgradeResult("registered", { ...upgrade, outcome: "succeeded" })).toEqual({
       tone: "success",
-      message: "Upgraded to v0.2.0.",
+      message: "woofx3 is up to date.",
     });
   });
 
@@ -36,7 +36,7 @@ describe("upgradeResult", () => {
     };
     expect(upgradeResult("registered", rolledBack)).toEqual({
       tone: "warning",
-      message: "v0.2.0 didn't start, so we restored v0.1.0. Nothing was lost.",
+      message: "The update didn't work, so we restored your previous version. Nothing was lost.",
       detail: "await_healthy: timeout",
     });
   });
@@ -45,7 +45,7 @@ describe("upgradeResult", () => {
     const failed = { ...upgrade, outcome: "failed" as const, error: "resolve_release: no such tag" };
     expect(upgradeResult("registered", failed)).toEqual({
       tone: "warning",
-      message: "The upgrade couldn't start; your engine wasn't touched.",
+      message: "The update couldn't start. Nothing changed.",
       detail: "resolve_release: no such tag",
     });
   });

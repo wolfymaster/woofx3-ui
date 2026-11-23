@@ -51,7 +51,7 @@ export function lockedSectionCopy(
       }
       return viewer.canSignIn
         ? { message: "Sign in with Twitch to see whether you can view this.", action: "sign_in", pending: false }
-        : { message: "Open this page on woofx3 to sign in and see this.", action: "open_canonical", pending: false };
+        : { message: "Open this page on woofx3.tv to sign in.", action: "open_canonical", pending: false };
     case "roles_unknown":
       switch (viewer.roleCheck) {
         case "reauth":
@@ -61,7 +61,7 @@ export function lockedSectionCopy(
             pending: false,
           };
         case "stopped":
-          return { message: "This section can't be unlocked on this page right now.", action: null, pending: false };
+          return { message: "You can't see this section right now.", action: null, pending: false };
         case "retrying":
           return { message: "Twitch didn't answer. We'll keep trying.", action: null, pending: true };
         case "idle":
@@ -72,7 +72,7 @@ export function lockedSectionCopy(
     case "not_eligible":
       return { message: eligibilityHint(requirement), action: null, pending: false };
     case "unverifiable":
-      return { message: "This section can't be unlocked on this page right now.", action: null, pending: false };
+      return { message: "You can't see this section right now.", action: null, pending: false };
   }
   throw new Error(`no copy for a section locked for ${reason}`);
 }

@@ -89,11 +89,11 @@ export function useCommandSchedule(storedWord: string | undefined): CommandSched
   }, [links]);
 
   const ready = !loading && workflows !== undefined && schedules !== undefined;
-  const unavailable = ready && (!trigger || !runPreset) ? "Update your engine to run commands on a schedule." : null;
+  const unavailable = ready && (!trigger || !runPreset) ? "Update woofx3 to run commands on a schedule." : null;
 
   async function apply(previousWord: string | undefined, word: string, choice: ScheduleChoice): Promise<void> {
     if (!trigger || !runPreset || !instanceId || schedules === undefined) {
-      throw new Error("This engine can't run commands on a schedule yet.");
+      throw new Error("woofx3 can't run commands on a schedule yet.");
     }
     const renamed = previousWord !== undefined && bareCommandWord(previousWord) !== bareCommandWord(word);
     let remaining = links;

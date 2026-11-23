@@ -4,12 +4,14 @@ import { canTriggerRemotely, macroTriggerEndpoint, macroTriggerUrl } from "@conv
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Check, Copy, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AdvancedDisclosure } from "@/components/alerts/advanced-disclosure";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { Macro } from "@/engine/types";
 import { fromMacroId } from "@/lib/cloud-ids";
 import { convexSiteUrl } from "@/lib/convexSiteUrl";
+import { TRY_AGAIN } from "@/lib/copy";
 import { extractMacroVariables } from "@/lib/macro-pad";
 import { type MacroTriggerTarget, macroTriggerExamples, macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
 
@@ -61,42 +63,42 @@ function RevealedTrigger({
       className="space-y-3 rounded-md border border-primary/40 bg-primary/5 p-3"
       data-testid="macro-trigger-revealed"
     >
-      <p className="text-xs font-medium">Copy the token now. It will not be shown again.</p>
+      <p className="text-xs font-medium">Copy the link now. It won't be shown again.</p>
       <div className="space-y-1">
-        <p className="text-[11px] text-muted-foreground">
-          Token, sent as <code className="font-mono">Authorization: Bearer …</code> to {target.endpoint}
-        </p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 min-w-0 break-all rounded bg-muted px-2 py-1 text-xs">{target.token}</code>
-          <CopyButton text={target.token} label="Copy trigger token" />
-        </div>
-      </div>
-      <div className="space-y-1">
-        <p className="text-[11px] text-muted-foreground">
-          Full URL, for a device that cannot set headers. Prefer the header: a URL ends up in logs and history.
-        </p>
+        <p className="text-[11px] text-muted-foreground">Anyone with this link can press the button.</p>
         <div className="flex items-center gap-2">
           <code className="flex-1 min-w-0 break-all rounded bg-muted px-2 py-1 text-xs">{target.url}</code>
-          <CopyButton text={target.url} label="Copy trigger URL" />
+          <CopyButton text={target.url} label="Copy trigger link" />
         </div>
       </div>
-      {examples.map((example) => (
-        <div key={example.id} className="space-y-1">
-          <p className="text-[11px] text-muted-foreground">{example.label}</p>
-          <div className="flex items-start gap-2">
-            <pre className="flex-1 min-w-0 overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted px-2 py-1 text-[11px]">
-              {example.text}
-            </pre>
-            <CopyButton text={example.text} label={`Copy ${example.label} example`} />
+      <AdvancedDisclosure testId="macro-trigger-revealed-advanced">
+        <div className="space-y-1">
+          <p className="text-[11px] text-muted-foreground">
+            Token, sent as <code className="font-mono">Authorization: Bearer …</code> to {target.endpoint}
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 break-all rounded bg-muted px-2 py-1 text-xs">{target.token}</code>
+            <CopyButton text={target.token} label="Copy trigger token" />
           </div>
         </div>
-      ))}
+        {examples.map((example) => (
+          <div key={example.id} className="space-y-1">
+            <p className="text-[11px] text-muted-foreground">{example.label}</p>
+            <div className="flex items-start gap-2">
+              <pre className="flex-1 min-w-0 overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted px-2 py-1 text-[11px]">
+                {example.text}
+              </pre>
+              <CopyButton text={example.text} label={`Copy ${example.label} example`} />
+            </div>
+          </div>
+        ))}
+      </AdvancedDisclosure>
     </div>
   );
 }
 
 /**
- * A macro's remote trigger: a secret URL any device can call to press the
+ * A macro's remote trigger: a secret link any device can call to press the
  * button. Owners and admins manage it; other members see its status only.
  */
 export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProps) {
@@ -124,16 +126,14 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
   if (macro.type === "http-request") {
     return (
       <p className="text-xs text-muted-foreground" data-testid="macro-trigger-unavailable">
-        HTTP request macros run from your browser, so they have no remote trigger. Point the device at that URL directly
-        instead.
+        Can't be pressed from other devices.
       </p>
     );
   }
   if (!canTriggerRemotely(macro.type)) {
     return (
       <p className="text-xs text-muted-foreground" data-testid="macro-trigger-unavailable">
-        Send Message macros post from the dashboard, so they have no remote trigger. Use a chat command that replies
-        instead.
+        Can't be pressed from other devices.
       </p>
     );
   }
@@ -149,8 +149,8 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
     setError(null);
     try {
       await task();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch {
+      setError(TRY_AGAIN);
     } finally {
       setBusy(false);
       setConfirming(null);
@@ -177,7 +177,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
           <p className="text-xs text-muted-foreground">
             {trigger
               ? macroTriggerStatusLabel(trigger)
-              : "A secret URL that presses this button from a Stream Deck, Companion or phone shortcut."}
+              : "A private link that presses this button from a Stream Deck or phone shortcut."}
           </p>
         </div>
         <Switch
@@ -195,9 +195,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
         />
       </div>
 
-      {!status.canManage && (
-        <p className="text-xs text-muted-foreground">Only an owner or admin of this engine can change it.</p>
-      )}
+      {!status.canManage && <p className="text-xs text-muted-foreground">Only owners and admins can change this.</p>}
 
       {trigger?.needsConfirmation && (
         <div
@@ -205,9 +203,8 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
           data-testid="macro-trigger-needs-confirmation"
         >
           <p className="flex-1 text-xs">
-            This macro changed since its URL was approved, or whoever approved it is no longer an owner or admin. The
-            URL refuses presses until{" "}
-            {status.canManage ? "you re-confirm what it does now" : "an owner or admin re-confirms it"}.
+            This button changed since its link was approved, so the link is paused.{" "}
+            {status.canManage ? "Approve it again to turn it back on." : "An owner or admin needs to approve it again."}
           </p>
           {status.canManage && (
             <Button
@@ -231,15 +228,15 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
       {trigger?.lastFailure &&
         trigger.lastFailedAt !== undefined &&
         trigger.lastFailedAt > (trigger.lastUsedAt ?? 0) && (
-          <p className="text-xs text-destructive">Last press failed: {trigger.lastFailure}</p>
+          <p className="text-xs text-destructive">The last press didn't work.</p>
         )}
 
       {confirming && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 p-2">
           <p className="flex-1 text-xs">
             {confirming === "rotate"
-              ? "Make a new URL? The current one stops working immediately."
-              : "Turn off the remote trigger? The URL stops working immediately."}
+              ? "Make a new link? The current one stops working immediately."
+              : "Turn off the remote trigger? The link stops working immediately."}
           </p>
           <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(null)}>
             Cancel
@@ -252,7 +249,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
             onClick={() => void (confirming === "rotate" ? mint() : turnOff())}
             data-testid="button-confirm-macro-trigger"
           >
-            {confirming === "rotate" ? "Rotate" : "Turn off"}
+            {confirming === "rotate" ? "Make new link" : "Turn off"}
           </Button>
         </div>
       )}
@@ -273,7 +270,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
         <div className="space-y-3">
           {!revealedToken && (
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">Lost the URL? Rotate to get a new one.</p>
+              <p className="text-xs text-muted-foreground">Lost the link? Make a new one.</p>
               <Button
                 type="button"
                 size="sm"
@@ -283,7 +280,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
                 data-testid="button-rotate-macro-trigger"
               >
                 <RefreshCw className="mr-1.5 h-3 w-3" />
-                Rotate
+                New link
               </Button>
             </div>
           )}
@@ -291,8 +288,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
             <div className="space-y-0.5">
               <Label htmlFor="macro-trigger-allow-get">Also accept GET</Label>
               <p className="text-xs text-muted-foreground">
-                For devices that can only open a URL. A GET link also fires if a chat app or browser previews it, so
-                never paste it anywhere.
+                Anyone who opens this link presses the button, even a chat preview. Keep it private.
               </p>
             </div>
             <Switch
@@ -311,10 +307,12 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
       )}
 
       {variables.length > 0 && trigger && (
-        <p className="text-xs text-muted-foreground">
-          Send {variables.map((name) => `"${name}"`).join(", ")} as JSON body fields or query parameters; a request
-          missing any of them, or with a line break or other control character in one, is refused.
-        </p>
+        <AdvancedDisclosure testId="macro-trigger-variables-advanced">
+          <p className="text-xs text-muted-foreground">
+            Send {variables.map((name) => `"${name}"`).join(", ")} as JSON body fields or query parameters; a request
+            missing any of them, or with a line break or other control character in one, is refused.
+          </p>
+        </AdvancedDisclosure>
       )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}

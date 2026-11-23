@@ -31,7 +31,7 @@ export function BillingBanner() {
   const message =
     banner.kind === "trial_ending"
       ? `Your trial ends ${day(banner.dateIso)}.`
-      : `Payment needed by ${day(banner.dateIso)}, or hosted engines will be paused.`;
+      : `Add a payment method by ${day(banner.dateIso)} or your stream tools will pause.`;
   return (
     <div
       className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm shrink-0"

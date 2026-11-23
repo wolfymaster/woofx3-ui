@@ -10,13 +10,13 @@ export default function SponsorshipPage() {
   const rows = list.state === "ready" ? sponsorshipRows(list.sponsorships) : [];
   return (
     <>
-      <PageHeader title="Sponsorship" description="Support woofx3 and manage what you give." />
+      <PageHeader title="Sponsorship" description="Support woofx3." />
       <SponsorshipSection />
       {rows.length > 0 ? (
         <Card className="mt-6" data-testid="card-sponsorship-payments">
           <CardHeader>
             <CardTitle>Payments</CardTitle>
-            <CardDescription>Receipts open on the payment provider.</CardDescription>
+            <CardDescription>Receipts open on our payment partner's site.</CardDescription>
           </CardHeader>
           <CardContent>
             <PaymentsTable rows={rows} linkColumn="Receipt" />

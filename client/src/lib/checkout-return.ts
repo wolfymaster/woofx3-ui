@@ -55,7 +55,7 @@ export const CHECKOUT_POLL_TEXT: Record<CheckoutPoll["phase"], string> = {
   timed_out: "Your payment is still processing. Your plan will update here once it is confirmed.",
 };
 
-export const CHECKOUT_CANCELLED_TEXT = "Checkout cancelled. Nothing was charged.";
+export const CHECKOUT_CANCELLED_TEXT = "Checkout canceled. Nothing was charged.";
 
 /**
  * `search` without what a payment page added on its return (`checkout`,

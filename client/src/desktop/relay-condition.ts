@@ -25,7 +25,7 @@ export function relayCondition(view: RelayView, downSince: number | null, now: n
       if (downSince !== null && now - downSince >= RELAY_GRACE_MS) {
         return {
           kind: "limited",
-          detail: "Can't connect to the relay, so your engine can't reach apps on this computer. Still trying.",
+          detail: "Can't connect, so woofx3 can't reach apps on this computer. Still trying.",
           canReconnect: false,
         };
       }
@@ -33,19 +33,19 @@ export function relayCondition(view: RelayView, downSince: number | null, now: n
     case "displaced":
       return {
         kind: "limited",
-        detail: "Another connection took over the relay, so your engine can't reach apps on this computer.",
+        detail: "Another connection took over, so woofx3 can't reach apps on this computer.",
         canReconnect: true,
       };
     case "refused":
       return {
         kind: "limited",
-        detail: "woofx3 refused the relay connection, so your engine can't reach apps on this computer.",
+        detail: "woofx3 refused the connection, so it can't reach apps on this computer.",
         canReconnect: true,
       };
     case "unavailable":
       return {
         kind: "limited",
-        detail: "Your woofx3 doesn't offer the relay yet, so your engine can't reach apps on this computer.",
+        detail: "Update woofx3 to connect apps on this computer.",
         canReconnect: false,
       };
   }

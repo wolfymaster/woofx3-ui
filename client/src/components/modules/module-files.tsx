@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from "react";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -213,7 +214,8 @@ export function ModuleFilesTab({ files }: { files: ModuleFiles }) {
   } else if (list.status === "error") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm text-destructive break-words">Couldn't list this module's files: {list.message}</p>
+        <p className="text-sm text-destructive">Couldn't list this module's files. Try again.</p>
+        <TechnicalDetails text={list.message} />
         <Button variant="outline" size="sm" onClick={loadList}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Try again
@@ -223,13 +225,9 @@ export function ModuleFilesTab({ files }: { files: ModuleFiles }) {
   } else if (list.list.notInstalled) {
     body = <p className="text-sm text-muted-foreground">{INSTALL_TO_BROWSE_MESSAGE}</p>;
   } else if (!list.list.available) {
-    body = (
-      <p className="text-sm text-muted-foreground">
-        This module's files aren't available. It was installed in a way that didn't keep a copy of them.
-      </p>
-    );
+    body = <p className="text-sm text-muted-foreground">This module's files can't be shown.</p>;
   } else if (tree.length === 0) {
-    body = <p className="text-sm text-muted-foreground">This module has no files.</p>;
+    body = <p className="text-sm text-muted-foreground">This module's files can't be shown.</p>;
   } else {
     body = (
       <FileTree

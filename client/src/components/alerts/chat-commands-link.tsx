@@ -17,7 +17,7 @@ export function ChatCommandsLink() {
       data-testid="chat-commands-link"
     >
       <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
-      <span>Chat commands have their own settings.</span>
+      <span>Looking for chat commands?</span>
       <Link href={COMMAND_LIST_PATH} className="font-medium text-primary underline-offset-4 hover:underline">
         Manage chat commands →
       </Link>

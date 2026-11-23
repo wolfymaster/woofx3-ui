@@ -1,5 +1,6 @@
 import { Loader2, Pin, PinOff, Radio, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { TwitchConnectNotice } from "@/components/common/twitch-connect-notice";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +17,7 @@ import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { CurrentPin, PinHistoryEntryId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 
 // Twitch keeps exactly one pinned message per channel, and pinning a new one
 // replaces it — so this shows a single current pin, not a list. The list below
@@ -69,10 +71,10 @@ export function PinnedWidget() {
   }, [refreshCurrent]);
   useAttendedInterval(refreshCurrent, PIN_REFRESH_MS);
 
-  const report = (error: unknown, title: string) => {
+  const report = (title: string) => {
     toast({
       title,
-      description: error instanceof Error ? error.message : String(error),
+      description: TRY_AGAIN,
       variant: "destructive",
     });
   };
@@ -82,8 +84,8 @@ export function PinnedWidget() {
     try {
       await work();
       refreshCurrent();
-    } catch (error) {
-      report(error, failure);
+    } catch {
+      report(failure);
     } finally {
       setBusy(false);
     }
@@ -108,7 +110,10 @@ export function PinnedWidget() {
       if (result.resent) {
         // Worth saying: the original message was too old to pin, so this posted
         // a new copy into chat rather than re-pinning the one people remember.
-        toast({ title: "Posted again and pinned", description: "The original message was no longer pinnable." });
+        toast({
+          title: "Posted again and pinned",
+          description: "The old message couldn't be pinned, so it was sent again.",
+        });
       }
     }, "Couldn't re-pin that");
   };
@@ -124,7 +129,7 @@ export function PinnedWidget() {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4 text-center">
         <Radio className="h-8 w-8 text-muted-foreground/50 mb-3" />
-        <p className="text-sm text-muted-foreground">Connect Twitch in Settings to manage pinned messages</p>
+        <TwitchConnectNotice to="manage pinned messages" />
       </div>
     );
   }
@@ -184,14 +189,8 @@ export function PinnedWidget() {
               {draft.length}/{MAX_MESSAGE_LENGTH}
             </span>
           </div>
-          {!canPin && twitchLink !== undefined && (
-            <p className="text-xs text-muted-foreground">
-              Reconnect Twitch in Settings → Integrations to grant the pinning permission.
-            </p>
-          )}
-          <p className="text-[10px] text-muted-foreground">
-            Pinning posts this as a chat message from your account — Twitch pins messages, not free-floating text.
-          </p>
+          {!canPin && twitchLink !== undefined && <TwitchConnectNotice to="pin messages" reconnect />}
+          <p className="text-[10px] text-muted-foreground">Pinning also posts the message in chat from your account.</p>
         </section>
 
         <section className="space-y-1.5">

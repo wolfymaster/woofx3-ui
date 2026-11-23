@@ -185,16 +185,15 @@ export function TriggerEditor({
           toast(STEPS_CHANGED_TOAST);
           return FLOW_REPLACED;
         case "failed":
-          toast({ title: "Failed to save", description: outcome.error, variant: "destructive" });
+          toast({ title: "Couldn't save", description: "Try again.", variant: "destructive" });
           return false;
         case "saved": {
           if (outcome.created) {
             setCreated(outcome.created);
             if (outcome.enableFailed) {
               toast({
-                title: "Saved, but not switched on",
-                description: "Switch the trigger on from its card.",
-                variant: "destructive",
+                title: "Saved",
+                description: "Turn it on to start using it.",
               });
             }
             onCreated(outcome.created.engineWorkflowId);
@@ -358,12 +357,6 @@ export function TriggerEditor({
             }}
             data-testid="trigger-step-name"
           />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-muted-foreground">Step ID</span>
-            <code className="w-fit text-[13px] text-muted-foreground" data-testid="trigger-step-id">
-              {tree.trigger.id}
-            </code>
-          </div>
         </div>
         {workflows && workflows.length > 0 && <InlineGroupPicker workflows={workflows} />}
         <Button
@@ -375,7 +368,7 @@ export function TriggerEditor({
           data-testid="open-full-editor"
         >
           <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-          Edit this trigger as a workflow →
+          Open in workflow editor
         </Button>
       </AdvancedDisclosure>
       {confirmingDelete ? (

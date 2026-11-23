@@ -19,9 +19,9 @@ export interface UpgradeResult {
   detail?: string;
 }
 
-/** The heading over the run's steps while the engine is down. */
+/** The heading over the run's steps while woofx3 is down. */
 export function upgradeHeading(upgrade: EngineUpgrade): string {
-  return upgrade.rollingBack ? `Restoring ${upgrade.fromVersion}` : `Upgrading to ${upgrade.toVersion}`;
+  return upgrade.rollingBack ? "Restoring your previous version" : "Updating woofx3";
 }
 
 /**
@@ -36,17 +36,17 @@ export function upgradeResult(status: string, upgrade: EngineUpgrade | undefined
   }
   switch (upgrade.outcome) {
     case "succeeded":
-      return { tone: "success", message: `Upgraded to ${upgrade.toVersion}.` };
+      return { tone: "success", message: "woofx3 is up to date." };
     case "rolled_back":
       return {
         tone: "warning",
-        message: `${upgrade.toVersion} didn't start, so we restored ${upgrade.fromVersion}. Nothing was lost.`,
+        message: "The update didn't work, so we restored your previous version. Nothing was lost.",
         detail: upgrade.error,
       };
     case "failed":
       return {
         tone: "warning",
-        message: "The upgrade couldn't start; your engine wasn't touched.",
+        message: "The update couldn't start. Nothing changed.",
         detail: upgrade.error,
       };
   }

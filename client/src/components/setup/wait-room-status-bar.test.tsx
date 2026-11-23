@@ -56,7 +56,7 @@ describe("WaitRoomStatusBar", () => {
   test("keeps the dashboard's offline and uptime segments", async () => {
     const renderer = await render();
 
-    expect(textOf(renderer, "wait-room-live-state")).toBe("Offline");
+    expect(textOf(renderer, "wait-room-live-state")).toBe("Stream: offline");
     expect(textOf(renderer, "wait-room-uptime")).toBe("00:00:00");
   });
 });

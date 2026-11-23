@@ -31,10 +31,7 @@ export function TestEventSheet({ open, onOpenChange, sections, selectedId, onSel
       >
         <SheetHeader>
           <SheetTitle>Test an event</SheetTitle>
-          <SheetDescription>
-            Fires a simulated event at the engine. Workflows listening for it run exactly as they would for a real one —
-            overlays included.
-          </SheetDescription>
+          <SheetDescription>Sends a pretend event so you can see your alerts play on your overlay.</SheetDescription>
         </SheetHeader>
 
         <TestEventPicker sections={sections} selectedId={selectedId} onSelect={onSelect} />

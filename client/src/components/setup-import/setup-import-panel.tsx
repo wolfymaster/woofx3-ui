@@ -17,6 +17,7 @@ import {
   useStartSetupImportRequest,
 } from "@/engine/hooks/use-setup-imports";
 import type { SetupImportReport } from "@/engine/types";
+import { ADMIN_ONLY } from "@/lib/copy";
 import { applyProgress, canRetry, importFileProblem, reviewSummary } from "@/lib/setup-import";
 import { ImportReportView } from "./import-report-view";
 
@@ -24,7 +25,7 @@ const SOURCE_HELP: Record<ImportSource, { steps: string[]; accept: string; choos
   firebot: {
     steps: [
       "In Firebot, open Setups and choose Create New Setup.",
-      "Add everything you want to bring over (commands, events, timers, scheduled tasks, counters, preset effect lists and roles) and save the .firebotsetup file.",
+      "Add everything you want to bring over and save the setup file.",
       "Or skip that and choose a backup: Settings > Backups > Open Backups Folder, then pick the newest .zip.",
     ],
     accept: ".firebotsetup,.json,.zip",
@@ -46,7 +47,7 @@ function errorMessage(error: unknown): string {
 }
 
 interface SetupImportPanelProps {
-  /** Whether the viewer may import: owners and admins only. */
+  /** Whether the viewer may import. */
   canImport: boolean;
   /** Called once an import has been queued, so a wizard can move on while it applies. */
   onQueued?: () => void;
@@ -131,7 +132,7 @@ function ChooseExport({ canImport, onRead }: { canImport: boolean; onRead: () =>
     <div className="space-y-5">
       {!canImport && (
         <Alert>
-          <AlertDescription>Only owners and admins of this engine can import a setup.</AlertDescription>
+          <AlertDescription>{ADMIN_ONLY}</AlertDescription>
         </Alert>
       )}
 
@@ -295,10 +296,7 @@ function ImportProgress({
         <Alert>
           <AlertTitle>Import finished</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>
-              Everything below says how it went. Imported items are ordinary workflows, commands, groups and counters
-              now: change them like anything else you made.
-            </p>
+            <p>Done. Everything you imported can be edited like anything else you made.</p>
             <div className="flex flex-wrap gap-3">
               {canRetry(report) && (
                 <Button size="sm" onClick={() => void run(() => retry(report.id))} disabled={disabled}>

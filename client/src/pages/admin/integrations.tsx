@@ -26,11 +26,10 @@ export default function AdminIntegrations() {
 
   return (
     <div className="container mx-auto p-6">
-      <PageHeader title="Integrations" description="Connect the platforms and services this engine talks to." />
+      <PageHeader title="Integrations" description="Connect your streaming accounts." />
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Connected services</CardTitle>
-          <CardDescription>Manage your connected streaming platforms.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <TwitchIntegrationCard isConnected={isConnected} twitchLink={twitchLink} isLoading={twitchLoading} />
@@ -70,23 +69,26 @@ export default function AdminIntegrations() {
           <ThisComputerConnections />
         </Suspense>
       )}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-lg">API keys</CardTitle>
-          <CardDescription>Manage API keys for external integrations.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">You haven't created any API keys yet.</p>
+      <details className="mt-6" data-testid="section-advanced">
+        <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">Advanced</summary>
+        <Card className="mt-3">
+          <CardHeader>
+            <CardTitle className="text-lg">API keys</CardTitle>
+            <CardDescription>Keys for tools outside woofx3.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">You haven't created any API keys yet.</p>
+              </div>
+              <Button variant="outline" data-testid="button-create-api-key">
+                <Key className="h-4 w-4 mr-2" />
+                Create API Key
+              </Button>
             </div>
-            <Button variant="outline" data-testid="button-create-api-key">
-              <Key className="h-4 w-4 mr-2" />
-              Create API Key
-            </Button>
-          </div>
-        </CardContent>
-      </Card>{" "}
+          </CardContent>
+        </Card>
+      </details>
     </div>
   );
 }

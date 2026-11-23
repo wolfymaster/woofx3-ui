@@ -37,7 +37,7 @@ interface AlertLayoutFieldProps {
 /**
  * A `layout` field: a summary of the placed widgets, and a dialog with the alert
  * editor's stage, layers and inspector. The dialog edits a copy, so closing it
- * without Done leaves the step as it was. On an engine with an alert library, the
+ * without Save leaves the step as it was. On an engine with an alert library, the
  * palette has a Library tab (copy a library alert's layers onto the canvas) and the
  * header a Save to library button (store a copy of this alert there).
  */
@@ -120,7 +120,7 @@ export function AlertLayoutDialogBody({
     session.replace(withLayersOf(current, copy));
     session.editor.dispatch("selection.clear");
     if (unfilled.length > 0) {
-      toast({ title: "Some of its inputs had no value", description: unfilledInputsText(unfilled) });
+      toast({ title: "Some fields were left blank", description: unfilledInputsText(unfilled) });
     }
   };
   const library = (
@@ -147,7 +147,7 @@ export function AlertLayoutDialogBody({
           <DialogTitle>{field.label}</DialogTitle>
           <DialogDescription>
             {view
-              ? `Place widgets on a ${view.canvas.width}×${view.canvas.height} canvas; each alert widget scales it to fit. ${view.lengthLabel}.`
+              ? `Arrange this alert. It's shown at ${view.canvas.width}×${view.canvas.height} and scaled to fit where it appears. ${view.lengthLabel}.`
               : "Loading the alert…"}
           </DialogDescription>
         </div>
@@ -176,7 +176,7 @@ export function AlertLayoutDialogBody({
             disabled={session === null}
             data-testid={`button-done-${field.id}`}
           >
-            Done
+            Save
           </Button>
         </div>
       </DialogHeader>

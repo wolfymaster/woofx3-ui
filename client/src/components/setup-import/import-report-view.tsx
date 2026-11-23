@@ -77,7 +77,7 @@ export function ImportReportView({ report }: { report: SetupImportReport }) {
         <section className="space-y-2">
           <h4 className="flex items-center gap-2 text-sm font-medium">
             <Badge variant="outline">{report.leftovers.length}</Badge>
-            Not part of the import
+            Left behind
           </h4>
           <ul className="divide-y rounded-md border text-sm">
             {report.leftovers.map((leftover, index) => (

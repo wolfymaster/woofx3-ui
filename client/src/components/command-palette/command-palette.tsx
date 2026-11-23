@@ -18,7 +18,6 @@ import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useToast } from "@/hooks/use-toast";
-import { actionErrorMessage } from "@/lib/action-error";
 import {
   inlineArgument,
   type PaletteSection,
@@ -28,6 +27,7 @@ import {
   rankEntries,
   SCOPE_PREFIXES,
 } from "@/lib/command-palette";
+import { TRY_AGAIN } from "@/lib/copy";
 import { $paletteRecents } from "@/lib/stores";
 import { teamInviteAccess } from "@/lib/team-invite-access";
 import { cn } from "@/lib/utils";
@@ -157,10 +157,10 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
       if (message) {
         toast({ title: message });
       }
-    } catch (err) {
+    } catch {
       toast({
-        title: `${label} failed`,
-        description: actionErrorMessage(err),
+        title: `Couldn't run "${label}"`,
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {
@@ -350,7 +350,7 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
         )}
         <CommandInput value={query} onValueChange={changeQuery} placeholder={placeholder} data-testid="palette-input" />
         <CommandList className="max-h-[min(60vh,440px)]">
-          <CommandEmpty>{instance ? "Nothing matches." : "Nothing matches — pick an engine for more."}</CommandEmpty>
+          <CommandEmpty>No results.</CommandEmpty>
           {sections.map((section, sectionIndex) => (
             <div key={section.heading}>
               {sectionIndex > 0 && <CommandSeparator />}

@@ -24,11 +24,11 @@ export default function OverviewPage() {
     <>
       <PageHeader
         title={organization?.name ?? "Overview"}
-        description={organization === null ? "Every engine you can open." : "How this organization stands."}
+        description={organization === null ? "Every woofx3 you can open." : "How this account stands."}
         actions={
           organization?.can.renameOrganization ? (
             <RenameDialog
-              title="Rename organization"
+              title="Rename account"
               current={organization.name}
               onRename={(name) => rename({ accountId: organization.accountId, name })}
               testId="button-rename-organization"

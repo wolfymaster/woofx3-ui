@@ -236,8 +236,8 @@ export function GridWorkspace<T>({
       ) : filteredItems.length === 0 ? (
         emptyState || (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="text-muted-foreground mb-2">No items found</div>
-            <p className="text-sm text-muted-foreground">Try adjusting your search or filter criteria</p>
+            <div className="text-muted-foreground mb-2">Nothing matches</div>
+            <p className="text-sm text-muted-foreground">Clear your search to see everything.</p>
           </div>
         )
       ) : (

@@ -76,16 +76,12 @@ export default function AdminAppearance() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6">
-      <PageHeader title="Appearance" description="Theme mode and colors for this dashboard, saved in this browser." />
+      <PageHeader title="Appearance" description="Colors for this dashboard (saved in this browser)." />
 
       <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Mode</CardTitle>
-            <CardDescription>
-              Every palette has a light and a dark version. System follows your device
-              {modePreference === "system" ? ` (currently ${mode})` : ""}.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-3">
@@ -137,9 +133,6 @@ export default function AdminAppearance() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Custom colors</CardTitle>
-            <CardDescription>
-              Start from a palette and change any color. The dashboard updates as you pick.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {isCustom ? (

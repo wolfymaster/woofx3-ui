@@ -44,7 +44,7 @@ interface PhaseDefinition {
 const PHASES: readonly PhaseDefinition[] = [
   {
     id: "engine",
-    label: "Waking up your engine",
+    label: "Waking up your woofx3",
     detail: "Finding a server and giving it room to run.",
   },
   {
@@ -60,7 +60,7 @@ const PHASES: readonly PhaseDefinition[] = [
   {
     id: "dashboard",
     label: "Connecting your dashboard",
-    detail: "Introducing your engine to woofx3.",
+    detail: "Linking your dashboard to your woofx3.",
   },
 ];
 

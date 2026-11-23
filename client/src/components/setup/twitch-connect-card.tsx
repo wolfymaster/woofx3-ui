@@ -48,7 +48,7 @@ export function TwitchConnectCard({ load, onRetry, failure, busy, onConnect, chi
           <div className="space-y-2">
             <p className="flex items-start gap-2 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              We can't reach Twitch setup right now.
+              We can't reach Twitch right now.
             </p>
             <Button variant="secondary" size="sm" onClick={onRetry} data-testid="button-retry-platforms">
               Try again
@@ -58,7 +58,7 @@ export function TwitchConnectCard({ load, onRetry, failure, busy, onConnect, chi
 
         {load.state === "ready" && (
           <div className="text-sm">
-            <p className="font-medium">What woofx3 can do on your channel:</p>
+            <p className="font-medium">By connecting you allow woofx3 to:</p>
             <ul className="list-disc pl-5 text-muted-foreground" data-testid="list-twitch-permissions">
               <li>Read your chat and stream events, so alerts can play</li>
               {describePermissions(load.permissions).map((permission) => (
@@ -83,9 +83,6 @@ export function TwitchConnectCard({ load, onRetry, failure, busy, onConnect, chi
         </Button>
         {children}
       </div>
-
-      <p className="text-xs text-muted-foreground">More platforms are on the way.</p>
-      <p className="text-xs text-muted-foreground">Connecting means you approve what's listed.</p>
     </>
   );
 }

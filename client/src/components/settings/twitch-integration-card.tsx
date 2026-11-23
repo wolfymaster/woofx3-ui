@@ -105,7 +105,7 @@ export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: Tw
               Disconnect
             </Button>
           ) : (
-            <p className="text-xs text-muted-foreground">Only an owner or admin can disconnect Twitch.</p>
+            <p className="text-xs text-muted-foreground">Only owners and admins can disconnect Twitch.</p>
           )}
         </div>
 
@@ -114,8 +114,7 @@ export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: Tw
             <AlertDialogHeader>
               <AlertDialogTitle>Disconnect Twitch</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to disconnect your Twitch account? This will stop all Twitch-related actions and
-                triggers for this engine.
+                Disconnect Twitch? Your alerts and chat commands will stop until you reconnect.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -148,7 +147,7 @@ export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: Tw
           <p className="text-sm text-muted-foreground">Not connected</p>
           {connectError && <p className="text-sm text-destructive">{connectError}</p>}
           {canManageLink === false && (
-            <p className="text-xs text-muted-foreground">Only an owner or admin can connect Twitch.</p>
+            <p className="text-xs text-muted-foreground">Only owners and admins can connect Twitch.</p>
           )}
           <TwitchApprovalCode linking={linking} onCancel={cancel} />
         </div>

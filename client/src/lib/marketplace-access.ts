@@ -1,4 +1,5 @@
 import type { OrganizationAccess } from "@/engine/types";
+import { OWNER_ONLY } from "@/lib/copy";
 
 // Payments and license keys belong to the organization that owns the engine,
 // so the caller's organization role decides them. The server refuses anyone
@@ -18,4 +19,4 @@ export function canSeeLicenseKey(access: OrganizationAccess | null | undefined):
   return access?.viewLicenseKeys === true;
 }
 
-export const OWNER_MUST_PURCHASE_MESSAGE = "Only the organization's owner can buy this. Ask them to purchase it.";
+export const OWNER_MUST_PURCHASE_MESSAGE = OWNER_ONLY;

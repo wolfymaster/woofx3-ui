@@ -43,7 +43,7 @@ export const IMPORT_SECTION_LABELS: Record<ImportSection, string> = {
   exists: "Already on woofx3",
   needs_module: "Needs a module",
   skipped: "Left out",
-  pending: "Waiting for the engine",
+  pending: "Waiting for woofx3",
   failed: "Failed",
   waiting: "Not imported yet",
 };

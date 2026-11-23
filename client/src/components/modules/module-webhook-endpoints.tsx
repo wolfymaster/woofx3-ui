@@ -34,8 +34,10 @@ export function ModuleWebhookEndpoints({ instanceId, modulePrefix }: ModuleWebho
   return (
     <section className="space-y-3 max-w-xl">
       <div>
-        <h3 className="text-sm font-medium">Webhook endpoints</h3>
-        <p className="text-xs text-muted-foreground">Give each URL to the service that sends this module's webhooks.</p>
+        <h3 className="text-sm font-medium">Web addresses</h3>
+        <p className="text-xs text-muted-foreground">
+          Paste each address into the service that sends data to this module.
+        </p>
       </div>
       {endpoints.map((endpoint) => (
         <WebhookEndpointRow key={endpoint.endpointId} endpoint={endpoint} />

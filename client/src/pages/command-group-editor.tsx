@@ -2,6 +2,7 @@ import { Loader2, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
+import { SaveBar } from "@/components/common/save-bar";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import {
   AlertDialog,
@@ -32,7 +33,9 @@ import {
 import type { ChatCommandGroup } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { COMMAND_GROUPS_PATH } from "@/lib/command-editor-route";
+import { TRY_AGAIN } from "@/lib/copy";
 import { groupLabel } from "@/lib/group-display";
+import { useLogger } from "@/lib/logger-context";
 
 type GroupDoc = ChatCommandGroup;
 
@@ -57,6 +60,7 @@ export default function CommandGroupEditor() {
   const isNew = engineGroupId === undefined;
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const logger = useLogger();
   const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
 
   const groupsRaw = useChatCommandGroups();
@@ -140,7 +144,8 @@ export default function CommandGroupEditor() {
       }
       navigate(COMMAND_GROUPS_PATH);
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : "An error occurred");
+      logger.error("Saving the group failed", { error: err });
+      setFormError(TRY_AGAIN);
     } finally {
       setSaving(false);
     }
@@ -160,7 +165,7 @@ export default function CommandGroupEditor() {
         <EmptyState
           icon={Users}
           title="This group isn't here any more"
-          description="It was deleted, or the link is from another engine."
+          description="It was deleted."
           action={{ label: "Back to groups", onClick: () => navigate(COMMAND_GROUPS_PATH) }}
         />
       </div>
@@ -179,9 +184,9 @@ export default function CommandGroupEditor() {
             <h1 className="text-[17px] font-semibold leading-tight">{title}</h1>
             <p className="truncate text-[13px] text-muted-foreground">
               {readOnly
-                ? "Built-in group — kept up to date from chat"
+                ? "Set up for you"
                 : isNew
-                  ? "A set of chatters you can grant restricted commands to"
+                  ? "People who can use certain commands"
                   : `Used by ${usedBy} command${usedBy === 1 ? "" : "s"}`}
             </p>
           </div>
@@ -193,7 +198,7 @@ export default function CommandGroupEditor() {
             </Button>
             <Button className="h-11 sm:h-10" onClick={handleSave} disabled={saving} data-testid="button-save-group">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isNew ? "Create group" : "Save changes"}
+              Save
             </Button>
           </div>
         )}
@@ -258,7 +263,7 @@ export default function CommandGroupEditor() {
                 <>
                   <p className="text-[13px] text-muted-foreground">
                     {readOnly
-                      ? "Membership of this group is kept up to date from chat automatically. It is shown here for reference and can't be edited — a manual change would be reverted on that user's next message."
+                      ? "Members are updated automatically from chat, so you can't change them here."
                       : "Membership is by chat username. Each change here is saved straight away, separately from the name and description above."}
                   </p>
                   <GroupMembers group={existing} />
@@ -267,6 +272,15 @@ export default function CommandGroupEditor() {
             )}
           </Section>
         </div>
+        {!readOnly && (
+          <SaveBar
+            onSave={handleSave}
+            onCancel={leave}
+            saving={saving}
+            dirty={isDirty}
+            testId="button-save-group-bar"
+          />
+        )}
       </div>
 
       <AlertDialog open={confirmingLeave} onOpenChange={setConfirmingLeave}>
@@ -293,6 +307,7 @@ export default function CommandGroupEditor() {
 function GroupMembers({ group }: { group: GroupDoc }) {
   const readOnly = !!group.isBuiltIn;
   const { toast } = useToast();
+  const logger = useLogger();
   const [usernameInput, setUsernameInput] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -311,9 +326,9 @@ function GroupMembers({ group }: { group: GroupDoc }) {
       await addUserToGroup(group.engineGroupId, username);
       setUsernameInput("");
     } catch (err: unknown) {
+      logger.error("Adding a group member failed", { error: err });
       toast({
-        title: "Failed to add member",
-        description: err instanceof Error ? err.message : undefined,
+        title: "Couldn't add member. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -326,9 +341,9 @@ function GroupMembers({ group }: { group: GroupDoc }) {
     try {
       await removeUserFromGroup(group.engineGroupId, username);
     } catch (err: unknown) {
+      logger.error("Removing a group member failed", { error: err });
       toast({
-        title: "Failed to remove member",
-        description: err instanceof Error ? err.message : undefined,
+        title: "Couldn't remove member. Try again.",
         variant: "destructive",
       });
     } finally {

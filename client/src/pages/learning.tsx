@@ -23,7 +23,7 @@ export default function Learning() {
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
-      <PageHeader title="Learning" description="What the words around woofx3 mean, and where to find each thing." />
+      <PageHeader title="Learning" description="What things in woofx3 mean, and where to find them." />
 
       <div className="space-y-6">
         {CATEGORY_ORDER.map((category) => {

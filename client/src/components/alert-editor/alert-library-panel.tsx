@@ -50,7 +50,7 @@ export function LibraryAlertList({ alerts, onPick, onEdit }: LibraryAlertListPro
   if (alerts.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        The library is empty. Save to library, beside Done in an alert's editor, puts an alert here.
+        Your library is empty. Use Save to library in an alert to add it here.
       </p>
     );
   }
@@ -133,9 +133,8 @@ export function AddLibraryAlertDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Add {alert?.name} to the canvas?</AlertDialogTitle>
           <AlertDialogDescription>
-            {layers === 1 ? "Its widget is" : `All ${layers} of its widgets are`} copied onto this canvas, on top of
-            what's already there. The copies aren't linked to the library: changing the library alert later doesn't
-            change them.
+            {layers === 1 ? "Adds a copy of its widget" : `Adds a copy of its ${layers} widgets`} on top of what's here.
+            Later changes to the library alert won't affect this copy.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -181,7 +180,7 @@ function DeleteLibraryAlertDialog({ alert, onClose }: { alert: LibraryAlert | nu
     try {
       const result = await remove(alert.engineCompositionId);
       if (!result.success) {
-        toast({ title: "The alert wasn't deleted", description: "The engine refused.", variant: "destructive" });
+        toast({ title: "Couldn't delete it. Try again.", variant: "destructive" });
         return;
       }
       toast({ title: `Deleted ${alert.name}` });

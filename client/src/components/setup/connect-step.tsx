@@ -12,6 +12,7 @@ import { TwitchConnectCard, type TwitchPermissionsLoad } from "@/components/setu
 import { AskAdminToConnectTwitch, AskOwnerToChooseUsername } from "@/components/setup/twitch-step";
 import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
+import { TRY_AGAIN } from "@/lib/copy";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { useLogger } from "@/lib/logger-context";
 import { setupStepPath } from "@/lib/setup-steps";
@@ -119,7 +120,7 @@ export function ConnectStep({ instanceId, status }: ConnectStepProps) {
     }
   }
 
-  const failure = saveFailed ? "That didn't work. Try again in a moment." : connectError;
+  const failure = saveFailed ? TRY_AGAIN : connectError;
   const busy = saving || starting;
 
   // Linked some other way before setup finished, such as from the integrations page.

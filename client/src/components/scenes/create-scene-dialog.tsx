@@ -44,10 +44,9 @@ export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateScene
       onOpenChange(false);
       setName("");
       onCreated(engineSceneId);
-    } catch (err) {
+    } catch {
       toast({
-        title: "Create failed",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't create the scene. Try again.",
         variant: "destructive",
       });
     } finally {
@@ -60,7 +59,7 @@ export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateScene
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create a scene</DialogTitle>
-          <DialogDescription>Enter a name for your new scene. You can customize it after creation.</DialogDescription>
+          <DialogDescription>Name your scene. You can change everything later.</DialogDescription>
         </DialogHeader>
         <div className="py-4">
           <Label htmlFor="scene-name">Scene Name</Label>

@@ -18,7 +18,7 @@ import {
   unappliedFields,
   withBoxArt,
 } from "@shared/stream-info";
-import { type UISetting } from "@woofx3/api";
+import type { UISetting } from "@woofx3/api";
 import { z } from "zod";
 import type { StreamInfoGateway } from "@/engine/gateway";
 import type {

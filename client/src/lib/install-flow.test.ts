@@ -139,7 +139,7 @@ const cases: Case[] = [
     to: {
       step: "failed",
       reason: "owner_must_purchase",
-      message: "Only the organization's owner can buy this. Ask them to purchase it.",
+      message: "Only the account owner can change this.",
     },
     command: null,
   },
@@ -228,7 +228,7 @@ const cases: Case[] = [
       step: "failed",
       reason: "payment_elsewhere",
       message:
-        "This payment belongs to a different organization or engine. Switch to the engine you bought it on, then open the link again.",
+        "This payment belongs to a different account or engine. Switch to the engine you bought it on, then open the link again.",
     },
     command: null,
   },
@@ -265,7 +265,7 @@ const cases: Case[] = [
       step: "failed",
       reason: "payment_needs_review",
       message:
-        "Your payment went through, but the module couldn't be added to your organization. woofx3 support will add it or refund you; contact them if you don't hear back.",
+        "Your payment went through, but the module couldn't be added to your account. woofx3 support will add it or refund you; contact them if you don't hear back.",
     },
     command: null,
   },

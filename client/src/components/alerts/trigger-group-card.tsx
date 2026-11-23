@@ -270,9 +270,6 @@ function ApartSteps({ trigger }: { trigger: EventTrigger }) {
     <div className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3">
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-[13px] font-medium">{titles.join(", ")}</span>
-        <span className="text-xs text-muted-foreground">
-          Runs as well, but can't join the list while it's running or another workflow uses it.
-        </span>
       </div>
       <Button
         variant="ghost"
@@ -295,11 +292,6 @@ function AlsoRuns({ modules, afterSteps }: { modules: EventTrigger[]; afterSteps
           <ModuleRow key={module.row.engineWorkflowId} module={module} />
         ))}
       </div>
-      {afterSteps && (
-        <p className="text-xs text-muted-foreground">
-          Starts when the steps above finish or reach a wait. Changing When moves only your steps.
-        </p>
-      )}
     </section>
   );
 }

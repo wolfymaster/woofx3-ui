@@ -141,7 +141,7 @@ export function WidgetLayoutCanvas({
           widgets={paletteRows}
           onAdd={(row) => report(editor.nodes.add(row.widgetId))}
           layout="grid"
-          emptyMessage="No scene widgets are installed."
+          emptyMessage="No widgets available. Get some in Marketplace."
         />
       }
       layers={
@@ -202,16 +202,18 @@ export function WidgetLayoutCanvas({
           <WidgetInspectorTabs
             idPrefix={`scene-${selected.id}`}
             settings={
-              <WidgetSettingsForm
-                widgetCanonicalId={selected.placement.widget}
-                settings={selected.placement.settings}
-                fields={selectedFields}
-                renderers={renderers}
-                availableVariables={availableVariables}
-                onChangeSetting={(key, value) =>
-                  report(editor.nodes.patch(selected.id, { settings: { [key]: value } }))
-                }
-              />
+              selectedFields.length === 0 ? null : (
+                <WidgetSettingsForm
+                  widgetCanonicalId={selected.placement.widget}
+                  settings={selected.placement.settings}
+                  fields={selectedFields}
+                  renderers={renderers}
+                  availableVariables={availableVariables}
+                  onChangeSetting={(key, value) =>
+                    report(editor.nodes.patch(selected.id, { settings: { [key]: value } }))
+                  }
+                />
+              )
             }
             transitions={
               state.doc === null ? null : (

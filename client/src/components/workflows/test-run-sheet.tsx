@@ -29,6 +29,8 @@ import { useTriggerWorkflowRequest, useWorkflowRun } from "@/engine/hooks/use-wo
 import type { WorkflowRunDetail, WorkflowTriggerResult } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 import { SHEET_MOTION } from "@/lib/sheet-motion";
 import {
   settleTestEventOutcome,
@@ -109,8 +111,8 @@ export function TestRunSheet({
         {!isEnabled ? (
           <Alert data-testid="workflow-test-run-disabled">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>This workflow is disabled</AlertTitle>
-            <AlertDescription>The engine only runs enabled workflows. Enable it to test it.</AlertDescription>
+            <AlertTitle>This workflow is turned off</AlertTitle>
+            <AlertDescription>Turn this workflow on to test it.</AlertDescription>
           </Alert>
         ) : (
           <>
@@ -121,22 +123,20 @@ export function TestRunSheet({
                     This workflow only
                   </TabsTrigger>
                   <TabsTrigger value="event" className="flex-1" data-testid="tab-test-run-event">
-                    Publish sample event
+                    Send a test event
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
             )}
             {refusal && (
               <p className="text-xs text-muted-foreground" data-testid="test-run-sample-refused">
-                {refusal} Publishing a sample event is not offered for this trigger; the test below runs this workflow
-                alone.
+                {refusal} Test events aren't available for this trigger, so this runs the workflow alone.
               </p>
             )}
 
             {activeMode === "event" && samplePreset ? (
               <SampleEventTest
                 engineWorkflowId={engineWorkflowId}
-                workflowName={workflowName}
                 preset={samplePreset}
                 otherWorkflows={otherWorkflows}
               />
@@ -159,12 +159,10 @@ interface PendingSample {
 
 function SampleEventTest({
   engineWorkflowId,
-  workflowName,
   preset,
   otherWorkflows,
 }: {
   engineWorkflowId: string;
-  workflowName: string;
   preset: TriggerPreset;
   otherWorkflows: string[];
 }) {
@@ -206,8 +204,7 @@ function SampleEventTest({
     <>
       <div className="space-y-3 border-b pb-4">
         <p className="text-xs text-muted-foreground">
-          Publishes a sample <span className="font-mono">{preset.event}</span> exactly like a real one. This workflow's
-          trigger conditions apply, and its overlays and chat actions happen for real.
+          Sends a pretend {preset.name}, the same as a real one. Chat messages and alerts will really happen.
         </p>
         {otherWorkflows.length > 0 && (
           <Alert
@@ -215,15 +212,15 @@ function SampleEventTest({
             data-testid="test-run-others-warning"
           >
             <AlertTriangle className="h-4 w-4 !text-amber-500" />
-            <AlertTitle>Other workflows will run too</AlertTitle>
+            <AlertTitle>Other workflows will start too</AlertTitle>
             <AlertDescription className="text-xs text-foreground/80">
-              <p>At least these enabled workflows also listen for this event, and the sample starts them as well:</p>
+              <p>These workflows also start on this event:</p>
               <ul className="mt-1 list-disc pl-4">
                 {otherWorkflows.map((name) => (
                   <li key={name}>{name}</li>
                 ))}
               </ul>
-              <p className="mt-1">Use "This workflow only" to run just this one.</p>
+              <p className="mt-1">Choose "This workflow only" to avoid them.</p>
             </AlertDescription>
           </Alert>
         )}
@@ -240,27 +237,18 @@ function SampleEventTest({
       >
         <AlertDialogContent data-testid="test-run-sample-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Publish a real {preset.event}?</AlertDialogTitle>
+            <AlertDialogTitle>Send a real {preset.name}?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
-                  The sample is indistinguishable from the real event. Everything that reacts to it does so for real:
+                  It looks exactly like a real one. Your workflows, overlays and alerts will react as if it happened on
+                  stream.
                 </p>
-                <ul className="list-disc space-y-1 pl-4">
-                  <li>
-                    {otherWorkflows.length > 0
-                      ? `${workflowName} and at least ${otherWorkflows.length === 1 ? "1 other workflow" : `${otherWorkflows.length} other workflows`} run, chat and other actions included.`
-                      : `${workflowName} runs, chat and other actions included, along with any workflow that listens for it.`}
-                  </li>
-                  <li>Overlays play any alert those workflows send.</li>
-                  <li>Browser-source widgets listening for the event receive it.</li>
-                  <li>The dashboard's alert feed records it.</li>
-                </ul>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Don't publish</AlertDialogCancel>
+            <AlertDialogCancel>Don't send</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -268,7 +256,7 @@ function SampleEventTest({
               }}
               data-testid="button-test-run-sample-confirm"
             >
-              Publish sample
+              Send test event
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -277,7 +265,7 @@ function SampleEventTest({
   );
 }
 
-/** One "This workflow only" run: what was asked, and how the engine answered. */
+/** One "This workflow only" run: what was asked, and how it went. */
 interface DirectAttempt {
   triggerData: Record<string, unknown> | undefined;
   dryRun: boolean;
@@ -287,6 +275,7 @@ interface DirectAttempt {
 function DirectTest({ engineWorkflowId, preset }: { engineWorkflowId: string; preset: TriggerPreset | null }) {
   const { instanceId } = useEngineScope();
   const { toast } = useToast();
+  const logger = useLogger();
   const trigger = useTriggerWorkflowRequest();
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState<DirectAttempt | null>(null);
@@ -315,15 +304,16 @@ function DirectTest({ engineWorkflowId, preset }: { engineWorkflowId: string; pr
           },
         }),
         TEST_EVENT_PUBLISH_TIMEOUT_MS,
-        "The engine didn't answer. Check that it is running, then try again."
+        "Couldn't reach your stream setup. Make sure it's running and try again."
       );
       setAttempt({ triggerData, dryRun, result });
       return result.triggerId;
     } catch (err) {
+      logger.error("Request failed", { error: err });
       toast({
         variant: "destructive",
         title: "Test run could not be started",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
       });
       return null;
     } finally {
@@ -344,27 +334,22 @@ function DirectTest({ engineWorkflowId, preset }: { engineWorkflowId: string; pr
   const settings = (
     <div className="space-y-3 text-xs text-muted-foreground">
       <p>Starts this workflow alone, right now. No other workflow runs.</p>
-      {withSample && (
-        <p>
-          The fields below become its <span className="font-mono">trigger.data</span>, and its trigger conditions are
-          checked against them.
-        </p>
-      )}
+      {withSample && <p>Fill in what the event would contain.</p>}
       {!dryRun && (
         <Alert className="border-amber-500/40 text-amber-600 dark:text-amber-400" data-testid="test-run-direct-warning">
           <AlertTriangle className="h-4 w-4 !text-amber-500" />
-          <AlertTitle>Its actions happen for real</AlertTitle>
+          <AlertTitle>This will really happen</AlertTitle>
           <AlertDescription className="text-xs text-foreground/80">
-            Chat messages are sent, alerts play on your overlays, and every other step does what it does live.
+            Chat messages and alerts will really happen. Turn on Preview only to just see what would happen.
           </AlertDescription>
         </Alert>
       )}
       <div className="flex items-start justify-between gap-4 rounded-md border p-3">
         <div className="space-y-0.5">
           <Label htmlFor="test-run-dry-run" className="text-foreground">
-            Dry run (describe, don't do)
+            Preview only
           </Label>
-          <p>Steps with side effects report what they would do instead of doing it.</p>
+          <p>Shows what each step would do without doing it.</p>
         </div>
         <Switch
           id="test-run-dry-run"
@@ -383,7 +368,7 @@ function DirectTest({ engineWorkflowId, preset }: { engineWorkflowId: string; pr
       // The form's key only says a run was asked for; what the engine said
       // lives here, and "Run anyway" replaces it without the form knowing.
       renderOutcome: () => outcome,
-      submitLabel: dryRun ? "Dry run" : "Run now",
+      submitLabel: dryRun ? "Preview" : "Run now",
     };
     return (
       <>
@@ -405,7 +390,7 @@ function DirectTest({ engineWorkflowId, preset }: { engineWorkflowId: string; pr
           data-testid="button-test-run-direct"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {busy ? "Starting…" : dryRun ? "Dry run" : "Run now"}
+          {busy ? "Starting…" : dryRun ? "Preview" : "Run now"}
         </Button>
         {outcome}
       </div>
@@ -430,7 +415,7 @@ function DirectOutcome({
     return (
       <div className="space-y-2 text-xs" data-testid="test-run-conditions-not-met">
         <p className="font-medium text-amber-600 dark:text-amber-400">
-          The sample doesn't match this workflow's trigger conditions, so it did not run.
+          It didn't run because the test event doesn't match this workflow's conditions.
         </p>
         <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
           {result.unmetConditions.map((condition) => (
@@ -516,13 +501,13 @@ function TestRunOutcome({
     <div className="space-y-3" data-testid="test-run-outcome">
       {isDryRun && (
         <Badge variant="outline" className="text-[10px]" data-testid="test-run-dry-run-badge">
-          Dry run: nothing left the engine
+          Preview only: nothing really happened
         </Badge>
       )}
       {outcome.kind === "waiting" && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-          Waiting for the engine to start the run…
+          Starting…
         </p>
       )}
       {outcome.kind === "running" && (
@@ -540,13 +525,13 @@ function TestRunOutcome({
       {outcome.kind === "nothingMatched" && (
         <p className="text-xs text-muted-foreground" data-testid="test-run-silent">
           {mode === "event"
-            ? "This workflow did not run. Its trigger conditions may have filtered out the sample event."
-            : "The engine did not start the run. Check that the workflow service is running."}
+            ? "It didn't run because the test event doesn't match this workflow's conditions."
+            : "The run didn't start. Make sure your stream setup is running and try again."}
         </p>
       )}
       {outcome.kind === "unsettled" && (
         <p className="text-xs text-muted-foreground" data-testid="test-run-unsettled">
-          No result after a minute. The run may still be going: follow it in this workflow's Runs panel.
+          Still running. Check the Runs tab.
         </p>
       )}
       {outcome.kind === "failed" && (
@@ -591,7 +576,7 @@ function TestRunSteps({
   return (
     <div className="space-y-2 rounded-md border p-3" data-testid="test-run-steps">
       {timeline === null ? (
-        <p className="text-xs text-muted-foreground">Waiting for the run's steps…</p>
+        <p className="text-xs text-muted-foreground">Starting…</p>
       ) : timeline.steps.length === 0 ? (
         <p className="text-xs text-muted-foreground">No steps have run yet.</p>
       ) : (

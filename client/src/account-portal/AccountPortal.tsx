@@ -16,7 +16,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useState } from "react";
-import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
+import { Link, Redirect, Route, Switch, useLocation, useSearch } from "wouter";
 import type { NavItem } from "@/components/layout/nav-config";
 import { SectionMenu } from "@/components/layout/section-menu";
 import { SectionSidebar } from "@/components/layout/section-sidebar";
@@ -117,7 +117,7 @@ function ScopeSwitcher() {
           {scope.kind === "personal" && <Check className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Organizations</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Accounts</DropdownMenuLabel>
         {organizations.map((org) => (
           <DropdownMenuItem
             key={org.accountId}
@@ -280,7 +280,12 @@ export default function AccountPortal() {
         <Route path={TEAM_INVITE_PATH} component={TeamInvitePage} />
         <Route path={`${ENGINES_PATH}/:instanceId`} component={EngineDetailPage} />
         <Route>
-          <p className="text-muted-foreground">There&apos;s no such page in the account portal.</p>
+          <p className="text-muted-foreground">
+            We couldn&apos;t find that page.{" "}
+            <Link href={ACCOUNT_PORTAL_PATH} className="underline underline-offset-2">
+              Back to overview
+            </Link>
+          </p>
         </Route>
       </Switch>
     </PortalLayout>

@@ -33,6 +33,7 @@ import {
   useSetDashboardRailWidgetsRequest,
 } from "@/engine/hooks/use-dashboard";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
 import {
   assignWidget,
   configureWidget,
@@ -375,11 +376,11 @@ export function DashboardView() {
       setDraftWidgets(null);
       setDraftRail(null);
       setIsEditing(false);
-    } catch (error) {
+    } catch {
       // Stays in edit mode with the draft intact, so nothing is lost to a retry.
       toast({
         title: "Couldn't save the dashboard",
-        description: error instanceof Error ? error.message : String(error),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     } finally {
@@ -444,7 +445,7 @@ export function DashboardView() {
               setPickerTarget(null);
             }
           }}
-          title={pickerTarget?.kind === "rail" ? "Add a widget to the rail" : "Add a widget"}
+          title="Add a widget"
           onSelect={handlePickWidget}
         />
 
@@ -461,9 +462,7 @@ export function DashboardView() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Remove "{removeTarget?.name}"?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This removes the panel and any widgets placed on it. This can't be undone.
-              </AlertDialogDescription>
+              <AlertDialogDescription>This removes the panel and its widgets.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>

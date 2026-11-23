@@ -67,7 +67,6 @@ function TriggerDetails({ trigger, runStartedAt }: { trigger: TimelineTrigger; r
     <>
       <Attributes
         rows={[
-          ["Event type", <Mono key="type">{trigger.type}</Mono>],
           ["Platform", trigger.platform],
           ["Source", trigger.source],
           ["Occurred", formatInstant(trigger.occurredAt)],
@@ -76,26 +75,29 @@ function TriggerDetails({ trigger, runStartedAt }: { trigger: TimelineTrigger; r
           ["Run started after", latency !== undefined && latency >= 0 ? formatDuration(latency) : undefined],
         ]}
       />
-      {parts ? (
-        <>
-          {parts.data !== undefined && (
+      <TechnicalDetails>
+        <Attributes rows={[["Event type", <Mono key="type">{trigger.type}</Mono>]]} />
+        {parts ? (
+          <>
+            {parts.data !== undefined && (
+              <PayloadPanel
+                title="Event data"
+                value={parts.data}
+                raw={JSON.stringify(parts.data)}
+                testId="alert-run-event-data"
+              />
+            )}
             <PayloadPanel
-              title="Event data"
-              value={parts.data}
-              raw={JSON.stringify(parts.data)}
-              testId="alert-run-event-data"
+              title="Event attributes"
+              value={parts.attributes}
+              raw={JSON.stringify(parts.attributes)}
+              testId="alert-run-event-attributes"
             />
-          )}
-          <PayloadPanel
-            title="Event attributes"
-            value={parts.attributes}
-            raw={JSON.stringify(parts.attributes)}
-            testId="alert-run-event-attributes"
-          />
-        </>
-      ) : (
-        <PayloadPanel title="Event" value={parsePayload(trigger.payload)} raw={trigger.payload} />
-      )}
+          </>
+        ) : (
+          <PayloadPanel title="Event" value={parsePayload(trigger.payload)} raw={trigger.payload} />
+        )}
+      </TechnicalDetails>
     </>
   );
 }
@@ -106,14 +108,20 @@ function RunDetails({ run }: { run: RunRecord }) {
       <Attributes
         rows={[
           ["Workflow", run.workflowName ?? <Mono key="wf">{run.workflowId}</Mono>],
-          ["Workflow id", <Mono key="wfid">{run.workflowId}</Mono>],
-          ["Run id", <Mono key="run">{run.engineRunId}</Mono>],
           ["Triggered by", run.triggeredBy],
           ["Started", formatInstant(run.startedAt)],
           ["Completed", formatInstant(run.completedAt)],
         ]}
       />
       {run.error && <ErrorCallout reason={run.error} />}
+      <TechnicalDetails>
+        <Attributes
+          rows={[
+            ["Workflow id", <Mono key="wfid">{run.workflowId}</Mono>],
+            ["Run id", <Mono key="run">{run.engineRunId}</Mono>],
+          ]}
+        />
+      </TechnicalDetails>
       <p className="text-xs text-muted-foreground">Select a step to see what it was given and what it produced.</p>
     </>
   );
@@ -145,7 +153,7 @@ function StepDetails({ step }: { step: TimelineStep }) {
         />
       )}
       {!step.inputs && !step.outputs && (
-        <p className="text-xs text-muted-foreground">This step recorded no inputs or outputs.</p>
+        <p className="text-xs text-muted-foreground">Nothing was recorded for this step.</p>
       )}
     </>
   );
@@ -162,7 +170,6 @@ function AlertDetails({ alert }: { alert: RunAlertRecord }) {
     <>
       <Attributes
         rows={[
-          ["Alert id", <Mono key="id">{alert.engineAlertId}</Mono>],
           ["Widget", alertTarget(alert.payload) ?? undefined],
           ["Dispatched", formatInstant(alert.dispatchedAt)],
           ["Started playing", formatInstant(alert.playedAt)],
@@ -176,19 +183,22 @@ function AlertDetails({ alert }: { alert: RunAlertRecord }) {
         ]}
       />
       {alert.error && <ErrorCallout reason={alert.error} />}
-      {parameters !== undefined && (
-        <PayloadPanel
-          title="Alert parameters"
-          value={parameters}
-          raw={JSON.stringify(parameters)}
-          testId="alert-run-alert-parameters"
-        />
-      )}
-      {alert.payload === undefined ? (
-        <p className="text-xs text-muted-foreground">The engine has not sent this alert's envelope.</p>
-      ) : (
-        <PayloadPanel title="Envelope" value={envelope} raw={alert.payload} testId="alert-run-alert-envelope" />
-      )}
+      <TechnicalDetails>
+        <Attributes rows={[["Alert id", <Mono key="id">{alert.engineAlertId}</Mono>]]} />
+        {parameters !== undefined && (
+          <PayloadPanel
+            title="Alert parameters"
+            value={parameters}
+            raw={JSON.stringify(parameters)}
+            testId="alert-run-alert-parameters"
+          />
+        )}
+        {alert.payload === undefined ? (
+          <p className="text-xs text-muted-foreground">No alert details were recorded.</p>
+        ) : (
+          <PayloadPanel title="Details" value={envelope} raw={alert.payload} testId="alert-run-alert-envelope" />
+        )}
+      </TechnicalDetails>
     </>
   );
 }
@@ -227,6 +237,17 @@ function Attributes({ rows }: { rows: [label: string, value: ReactNode | undefin
         </div>
       ))}
     </dl>
+  );
+}
+
+function TechnicalDetails({ children }: { children: ReactNode }) {
+  return (
+    <details className="group flex flex-col gap-3" data-testid="alert-run-technical-details">
+      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+        Technical details
+      </summary>
+      <div className="mt-3 flex flex-col gap-3">{children}</div>
+    </details>
   );
 }
 

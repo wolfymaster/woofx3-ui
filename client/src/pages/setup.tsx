@@ -15,6 +15,7 @@ import { useEngineBuild } from "@/components/setup/use-engine-build";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
+import { ADMIN_ONLY } from "@/lib/copy";
 import { IS_DESKTOP } from "@/lib/desktop";
 import { setupWithoutEnginePath } from "@/lib/onboarding-route";
 import {
@@ -128,7 +129,7 @@ export default function Setup() {
           <AskAdminToConnectTwitch />
         ) : (
           <div className="rounded-md border p-4 space-y-3 text-sm" data-testid="text-setup-admin-only">
-            <p>Only an owner or admin can change this organization&apos;s setup.</p>
+            <p>{ADMIN_ONLY}</p>
             <Button asChild variant="outline" size="sm">
               <Link href="/">Back to the dashboard</Link>
             </Button>

@@ -2,6 +2,7 @@ import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
 import { Loader2, Store, Upload, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { ListDetail } from "@/components/layout/list-detail";
 import { InstalledModuleRail } from "@/components/modules/installed-module-rail";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
@@ -18,6 +19,7 @@ import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-
 import type { InstalledModule, ModuleDetail } from "@/engine/types";
 import { useMarketplaceListing } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
+import { useLogger } from "@/lib/logger-context";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import {
   MARKETPLACE_PATH,
@@ -32,6 +34,7 @@ type SelectedModule =
   | { source: "marketplace"; marketplaceId: string };
 
 export default function Modules() {
+  const logger = useLogger();
   const { instanceId: engineInstanceId } = useEngineScope();
   const [location, navigate] = useLocation();
   // `/stream/module-settings/:moduleId?`, or `/stream/modules/:moduleId` from links that
@@ -147,8 +150,9 @@ export default function Modules() {
         }
       })
       .catch((err) => {
+        logger.error("Could not load module details", { error: err, moduleId: detailModuleId });
         if (!cancelled) {
-          setModuleDetailError(err instanceof Error ? err.message : "Failed to load module details.");
+          setModuleDetailError(err instanceof Error ? err.message : String(err));
         }
       })
       .finally(() => {
@@ -159,7 +163,7 @@ export default function Modules() {
     return () => {
       cancelled = true;
     };
-  }, [detailModuleId, detailRefreshKey, engineInstanceId, getModuleDetail]);
+  }, [detailModuleId, detailRefreshKey, engineInstanceId, getModuleDetail, logger]);
 
   // Installing and updating are the same marketplace operation, and both need only the listing id.
   // For an installed module that is the listing it was installed from, derived here from its row —
@@ -309,9 +313,9 @@ export default function Modules() {
                       <CardContent className="pt-6 space-y-3">
                         <div className="flex items-center gap-2 text-destructive">
                           <XCircle className="h-4 w-4" />
-                          <span className="font-medium">Failed to load module</span>
+                          <span className="font-medium">We couldn't open this module. Try again.</span>
                         </div>
-                        <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
+                        <TechnicalDetails text={moduleDetailError} />
                         <Button variant="outline" size="sm" onClick={() => navigate(MODULE_SETTINGS_PATH)}>
                           Back
                         </Button>
@@ -333,7 +337,6 @@ export default function Modules() {
                         module={meta}
                         triggers={detailProps?.triggers}
                         actions={detailProps?.actions}
-                        functions={detailProps?.functions}
                         widgets={detailProps?.widgets}
                         workflows={detailProps?.workflows}
                         loading={moduleDetailLoading || !detailProps}

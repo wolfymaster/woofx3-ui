@@ -52,10 +52,10 @@ function emptyReason(state: FieldOptionsState): string | null {
     return null;
   }
   if (state.error !== null) {
-    return `Could not load options: ${state.error}`;
+    return "Couldn't load the choices. Try again.";
   }
   if (state.empty) {
-    return "No options available.";
+    return "Nothing to pick yet.";
   }
   return null;
 }
@@ -95,7 +95,7 @@ export function InternalSelectField({ field, value, onChange, source }: PickerPr
   if (state.loading) {
     placeholder = "Loading options...";
   } else if (state.empty) {
-    placeholder = "No options available";
+    placeholder = "Nothing to pick yet";
   } else {
     placeholder = field.placeholder ?? `Select ${field.label.toLowerCase()}...`;
   }

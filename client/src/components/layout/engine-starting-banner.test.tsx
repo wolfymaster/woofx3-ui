@@ -7,17 +7,17 @@ import { EngineStartingNotice } from "@/components/layout/engine-starting-banner
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("EngineStartingNotice", () => {
-  test("names the phase and links to the progress screen", async () => {
+  test("links to the progress screen", async () => {
     let renderer: ReactTestRenderer | undefined;
     await act(async () => {
       renderer = create(
         <Router hook={memoryLocation({ path: "/" }).hook}>
-          <EngineStartingNotice phase="Installing your alerts" />
+          <EngineStartingNotice />
         </Router>
       );
     });
     const json = JSON.stringify(renderer?.toJSON());
-    expect(json).toContain("Installing your alerts");
+    expect(json).toContain("stream tools");
     expect(json).toContain("/setup/finish");
   });
 });

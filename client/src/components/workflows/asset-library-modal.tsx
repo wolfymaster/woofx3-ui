@@ -19,6 +19,8 @@ import { useEngineScope } from "@/engine/context";
 import { useResourceUpload } from "@/engine/hooks/use-resource-upload";
 import { type Resource, useResources } from "@/engine/hooks/use-resources";
 import { useToast } from "@/hooks/use-toast";
+import { TRY_AGAIN } from "@/lib/copy";
+import { useLogger } from "@/lib/logger-context";
 import {
   externalMediaValue,
   isExternalMediaValue,
@@ -67,10 +69,11 @@ export function AssetLibraryModal({
   filterTypes,
   current,
   title = "Select an asset",
-  description = "Choose a file from your library, upload a new one, or link to one hosted elsewhere.",
+  description = "Pick a file, upload one, or paste a link.",
 }: AssetLibraryModalProps) {
   const { instanceId } = useEngineScope();
   const { toast } = useToast();
+  const logger = useLogger();
 
   const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Media" }]);
   const [search, setSearch] = useState("");
@@ -81,7 +84,7 @@ export function AssetLibraryModal({
 
   const declaredKind = singleMediaKind(filterTypes);
   const parsedUrl = parseMediaUrl(urlInput);
-  const urlError = urlInput.trim() !== "" && !parsedUrl ? "Enter a full http:// or https:// address." : null;
+  const urlError = urlInput.trim() !== "" && !parsedUrl ? "Paste a full web address, starting with https://." : null;
 
   // Each opening starts from the field's value rather than whatever the last
   // session left behind, so an external URL is shown where it can be edited.
@@ -161,9 +164,10 @@ export function AssetLibraryModal({
         setPicked(first);
       }
     } catch (err: unknown) {
+      logger.error("Request failed", { error: err });
       toast({
         title: "Upload failed",
-        description: err instanceof Error ? err.message : String(err),
+        description: TRY_AGAIN,
         variant: "destructive",
       });
     }
@@ -178,7 +182,7 @@ export function AssetLibraryModal({
         </DialogHeader>
 
         {!instanceId ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">Select an engine to browse assets.</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">Pick a channel to see its files.</p>
         ) : (
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="grid grid-cols-3 w-full">
@@ -362,7 +366,7 @@ export function AssetLibraryModal({
                   id="asset-url-hint"
                   className={cn("text-xs", urlError ? "text-destructive" : "text-muted-foreground")}
                 >
-                  {urlError ?? "Link to a file hosted elsewhere. It must stay reachable for your overlay to show it."}
+                  {urlError ?? "The file has to stay online for your overlay to use it."}
                 </p>
               </form>
               {parsedUrl && <UrlPreview key={parsedUrl.toString()} url={parsedUrl} declaredKind={declaredKind} />}

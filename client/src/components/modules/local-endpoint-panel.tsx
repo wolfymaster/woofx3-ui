@@ -89,9 +89,10 @@ function LocalEndpointRow({ endpoint, situation }: { endpoint: EndpointView; sit
               : `${endpoint.name}: the woofx3 desktop app on ${situation.deviceName} is offline.`}
           </p>
           {situation.address && (
-            <p className="text-xs text-muted-foreground">
-              The app dials <span className="font-mono">{situation.address}</span>.
-            </p>
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer">Details</summary>
+              <span className="font-mono">{situation.address}</span>
+            </details>
           )}
           {endpoint.state?.sharesPassword && endpoint.passwordSetting && (
             <p className="text-xs text-muted-foreground">Password shared by the app.</p>
@@ -102,14 +103,14 @@ function LocalEndpointRow({ endpoint, situation }: { endpoint: EndpointView; sit
   }
   if (situation.kind === "companionNothingFound") {
     const next = endpoint.hasDiscovery
-      ? "then open this page in the app on that computer to turn it on."
-      : "then open this page in the app on that computer to enter its address.";
+      ? "then open this page in the app to turn it on."
+      : "then open this page in the app to enter its address.";
     return (
       <section className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
         <Unplug className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
         <p>
-          The woofx3 desktop app on {situation.deviceName} isn't connecting to {endpoint.name}. Check that{" "}
-          {endpoint.name} is running on that computer, {next}
+          Can't reach {endpoint.name} from the desktop app on {situation.deviceName}. Check {endpoint.name} is running
+          there, {next}
         </p>
       </section>
     );
@@ -118,7 +119,7 @@ function LocalEndpointRow({ endpoint, situation }: { endpoint: EndpointView; sit
   return (
     <section className="space-y-1.5 rounded-md border px-3 py-2 text-sm">
       <p>
-        {endpoint.name} runs on your computer. Install the woofx3 desktop app to connect your engine to it.
+        {endpoint.name} runs on your computer. Install the woofx3 desktop app to connect it to woofx3.
         {downloadUrl && (
           <>
             {" "}
@@ -136,7 +137,7 @@ function LocalEndpointRow({ endpoint, situation }: { endpoint: EndpointView; sit
       </p>
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-        If your engine isn't on the computer running {endpoint.name}, it can't reach 127.0.0.1.
+        If woofx3 isn't on the same computer as {endpoint.name}, it can't reach it.
       </p>
     </section>
   );

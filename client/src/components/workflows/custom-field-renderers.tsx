@@ -85,7 +85,6 @@ function MediaField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
         filterTypes={filterTypes}
         current={assetValue}
         title={`Select ${field.label}`}
-        description={`Choose ${field.mediaType ? `a ${field.mediaType} file` : "an asset"} from your library, upload one, or link to one hosted elsewhere.`}
       />
     </div>
   );
@@ -124,7 +123,7 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
 
   let placeholder: string;
   if (!instanceId || !resourceKind) {
-    placeholder = "No engine selected";
+    placeholder = "No channel selected";
   } else if (loading) {
     placeholder = "Loading...";
   } else if (empty) {
@@ -211,7 +210,7 @@ function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomField
   if (names === undefined) {
     placeholder = "Loading...";
   } else if (noWidgets) {
-    placeholder = "No alert widgets on any scene yet";
+    placeholder = "No alert spots on any scene yet";
   } else {
     placeholder = "Choose an alert widget...";
   }
@@ -236,12 +235,12 @@ function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomField
       </Select>
       {stale !== null && (
         <p className="text-xs text-destructive" data-testid={`warning-${field.id}`}>
-          No scene has an alert widget named "{stale}". Alerts on this step won't show until one does.
+          No alert spot called "{stale}" exists any more, so this alert won't show.
         </p>
       )}
       {typeof field.description === "string" && <p className="text-xs text-muted-foreground">{field.description}</p>}
       <Link href="/stream/scenes" className="text-xs text-primary underline-offset-4 hover:underline">
-        Name alert widgets in the scene editor
+        Add an alert spot in the scene editor
       </Link>
     </div>
   );

@@ -269,7 +269,7 @@ function SceneUsageRow({ row, isRemoved, onRemoved }: UsageRowProps) {
         run: async () => {
           const result = await updateScene(engineSceneId, { widgetsJson: JSON.stringify(cleared.value) });
           if (!result.success) {
-            throw new Error("The engine didn't save the scene. Try again.");
+            throw new Error("Couldn't save the scene. Try again.");
           }
           onRemoved(row.key);
         },

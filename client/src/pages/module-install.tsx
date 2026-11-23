@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { TechnicalDetails } from "@/components/common/technical-details";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   ApproveModulePermissionsDialog,
@@ -309,6 +310,7 @@ function ModuleUpload() {
   const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
 
   const { instanceId } = useEngineScope();
   const installArchive = useModuleArchiveInstallRequest();
@@ -393,7 +395,7 @@ function ModuleUpload() {
       return () => clearTimeout(timer);
     }
     if (installEvent.status === "error") {
-      setInstallError(installEvent.message || "Module installation failed on the engine.");
+      setInstallError(installEvent.message || "Couldn't install this module. Try again.");
       setIsInstalling(false);
       setPendingModuleKey(null);
     }
@@ -405,7 +407,7 @@ function ModuleUpload() {
       return;
     }
     const timer = setTimeout(() => {
-      setInstallError("Installation timed out. The engine did not respond within 60 seconds.");
+      setInstallError("That's taking too long. Check your connection and try again.");
       setIsInstalling(false);
       setPendingModuleKey(null);
     }, 60_000);
@@ -420,7 +422,7 @@ function ModuleUpload() {
         setFiles(extractedFiles);
       } catch (error) {
         logger.error("Failed to extract zip", { error });
-        setInstallError("Failed to extract zip file. Please ensure it is a valid zip archive.");
+        setInstallError("That file isn't a valid zip. Choose a different one.");
       }
     },
     [logger]
@@ -482,7 +484,7 @@ function ModuleUpload() {
       }
 
       if (!file.name.endsWith(".zip")) {
-        setInstallError("Please drop a .zip file.");
+        setInstallError("Drop a .zip file.");
         return;
       }
 
@@ -500,7 +502,6 @@ function ModuleUpload() {
 
   const handleInstall = useCallback(async () => {
     if (!instanceId) {
-      setInstallError("No engine selected. Please select an engine first.");
       return;
     }
 
@@ -527,7 +528,7 @@ function ModuleUpload() {
       setPendingModuleKey(moduleKey);
     } catch (error) {
       logger.error("Failed to install module", { error });
-      setInstallError(error instanceof Error ? error.message : "Failed to install module. Please try again.");
+      setInstallError(error instanceof Error ? error.message : "Couldn't install this module. Try again.");
       setIsInstalling(false);
     }
   }, [files, editedManifest, instanceId, installArchive, logger]);
@@ -550,7 +551,7 @@ function ModuleUpload() {
   if (Object.keys(files).length === 0) {
     return (
       <div className="p-6 lg:p-8">
-        <PageHeader title="Install Module" description="Upload a module zip file to install it." />
+        <PageHeader title="Upload a module" description="Choose the .zip file for a module you made or downloaded." />
 
         <Card
           className={cn("mt-8 transition-colors", isDragging && "border-primary border-2 bg-primary/5")}
@@ -586,94 +587,108 @@ function ModuleUpload() {
     <div className="flex flex-col h-full overflow-hidden">
       <div className="border-b bg-background shrink-0">
         <div className="p-6">
-          <PageHeader title="Install Module" description="Review and edit module files before installation." />
+          <PageHeader title="Upload a module" />
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* File Explorer */}
-        <div className="w-64 border-r bg-muted/30 shrink-0 flex flex-col">
-          <div className="p-3 border-b">
-            <h3 className="text-sm font-semibold">Files</h3>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <FileExplorer files={fileTree} selectedPath={selectedPath} onSelect={setSelectedPath} />
-          </div>
-        </div>
-
-        {/* Editor */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {selectedPath && selectedContent !== null ? (
-            <>
-              <div className="border-b px-4 py-2 flex items-center justify-between bg-muted/30">
-                <div className="flex items-center gap-2">
-                  <File className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{selectedPath}</span>
-                </div>
+        {showFiles && (
+          <>
+            {/* File Explorer */}
+            <div className="w-64 border-r bg-muted/30 shrink-0 flex flex-col">
+              <div className="p-3 border-b">
+                <h3 className="text-sm font-semibold">Files</h3>
               </div>
-              <div className="flex-1">
-                <Editor
-                  height="100%"
-                  language={selectedLanguage}
-                  value={selectedContent}
-                  onChange={(value) => value && handleFileChange(selectedPath, value)}
-                  theme={mode === "dark" ? "vs-dark" : "vs"}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    wordWrap: "on",
-                    automaticLayout: true,
-                  }}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <File className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>
-                  {selectedBytes !== undefined
-                    ? `${selectedPath} is a binary file (${selectedBytes.byteLength.toLocaleString()} bytes) and is installed as it is.`
-                    : "Select a file to edit"}
-                </p>
+              <div className="flex-1 overflow-hidden">
+                <FileExplorer files={fileTree} selectedPath={selectedPath} onSelect={setSelectedPath} />
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Checks & Actions */}
-        <div className="w-80 border-l bg-muted/30 shrink-0 flex flex-col overflow-hidden">
-          <div className="p-4 border-b shrink-0">
-            <h3 className="text-sm font-semibold">Validation Checks</h3>
-          </div>
+            {/* Editor */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {selectedPath && selectedContent !== null ? (
+                <>
+                  <div className="border-b px-4 py-2 flex items-center justify-between bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <File className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">{selectedPath}</span>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <Editor
+                      height="100%"
+                      language={selectedLanguage}
+                      value={selectedContent}
+                      onChange={(value) => value && handleFileChange(selectedPath, value)}
+                      theme={mode === "dark" ? "vs-dark" : "vs"}
+                      options={{
+                        minimap: { enabled: false },
+                        fontSize: 14,
+                        wordWrap: "on",
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <File className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>
+                      {selectedBytes !== undefined
+                        ? `${selectedPath} is a binary file (${selectedBytes.byteLength.toLocaleString()} bytes) and is installed as it is.`
+                        : "Select a file to edit"}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        <div
+          className={cn(
+            "bg-muted/30 flex flex-col overflow-hidden",
+            showFiles ? "w-80 border-l shrink-0" : "mx-auto w-full max-w-xl"
+          )}
+        >
           <div className="flex-1 overflow-hidden p-4">
             {isRunningChecks ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Running checks...
+                Checking…
               </div>
             ) : (
               <ScrollArea className="h-full">
-                <div className="space-y-2">
-                  {checkResults.map((result) => (
-                    <div
-                      key={result.id}
-                      className={cn(
-                        "p-3 rounded-md border text-sm",
-                        result.status === "pass" && "bg-green-500/10 border-green-500/20",
-                        result.status === "fail" && "bg-red-500/10 border-red-500/20",
-                        result.status === "warning" && "bg-yellow-500/10 border-yellow-500/20"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        {result.status === "pass" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                        {result.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
-                        {result.status === "warning" && <AlertCircle className="h-4 w-4 text-yellow-500" />}
-                        <span className="font-medium">{result.name}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">{result.message}</p>
+                <div className="space-y-3">
+                  {allChecksPassed ? (
+                    <div className="flex items-center gap-2 rounded-md border border-green-500/20 bg-green-500/10 p-3 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span>Looks good</span>
                     </div>
-                  ))}
+                  ) : (
+                    checkResults
+                      .filter((result) => result.status !== "pass")
+                      .map((result) => (
+                        <div
+                          key={result.id}
+                          className={cn(
+                            "flex items-start gap-2 rounded-md border p-3 text-sm",
+                            result.status === "fail" && "bg-red-500/10 border-red-500/20",
+                            result.status === "warning" && "bg-yellow-500/10 border-yellow-500/20"
+                          )}
+                        >
+                          {result.status === "fail" && <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />}
+                          {result.status === "warning" && (
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
+                          )}
+                          <span>This module has a problem: {result.message}</span>
+                        </div>
+                      ))
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => setShowFiles((shown) => !shown)}>
+                    {showFiles ? "Hide files" : "Edit files"}
+                  </Button>
                 </div>
               </ScrollArea>
             )}
@@ -686,12 +701,16 @@ function ModuleUpload() {
               <div className="p-3 rounded-md border bg-green-500/10 border-green-500/20">
                 <div className="flex items-center gap-2 text-sm text-green-500">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  <span>Module installed successfully. Redirecting…</span>
+                  <span>Installed. Taking you to it…</span>
                 </div>
               </div>
             ) : (
               <>
-                <Button className="w-full" onClick={handleInstallClick} disabled={!allChecksPassed || isInstalling}>
+                <Button
+                  className="w-full"
+                  onClick={handleInstallClick}
+                  disabled={!allChecksPassed || isInstalling || !instanceId}
+                >
                   {isInstalling ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -706,7 +725,7 @@ function ModuleUpload() {
                 </Button>
                 {!allChecksPassed && !isInstalling && (
                   <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Fix validation errors before installing
+                    This module has a problem and can't be installed.
                   </p>
                 )}
                 {installError && (
@@ -749,7 +768,8 @@ function ModuleUpload() {
           <DialogHeader>
             <DialogTitle>Install failed</DialogTitle>
           </DialogHeader>
-          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
+          <p className="text-sm">Couldn't install this module. Try again.</p>
+          {installError && <TechnicalDetails text={installError} />}
         </DialogContent>
       </Dialog>
     </div>
