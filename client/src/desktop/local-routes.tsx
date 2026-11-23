@@ -1,4 +1,5 @@
 import { lazy, type ReactNode } from "react";
+import { parse } from "regexparam";
 import { MAIN_NAV_SECTIONS, type NavSection, navItemsServed, UTILITY_SECTIONS } from "@/components/layout/nav-config";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_GROUPS_PATH } from "@/lib/alert-groups-route";
@@ -113,9 +114,13 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
 /** Where local mode opens, and where a path it does not serve leads back to. */
 export const LOCAL_HOME_PATH = "/";
 
-/** Whether local mode serves a page at `href`, a path without parameters. */
+/**
+ * Whether local mode serves a page at `href`. A route matches the way the router
+ * matches it, so a nav entry reaches a page registered with optional parameters
+ * (`/stream/module-settings/:moduleId?`) as well as one registered at its exact path.
+ */
 export function servesLocally(href: string): boolean {
-  return href === MARKETPLACE_PATH || LOCAL_ROUTES.some((route) => route.path === href);
+  return href === MARKETPLACE_PATH || LOCAL_ROUTES.some((route) => parse(route.path).pattern.test(href));
 }
 
 /** The app's main sections, cut down to the pages local mode serves. */
