@@ -1,5 +1,32 @@
 # woofx3 desktop changelog
 
+## [0.26.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.25.0...woofx3-v0.26.0) (2026-11-23)
+
+### Features
+
+* **commands:** name the command and its inputs separately instead of typing {name} captures ([bf99afb](https://github.com/wolfymaster/woofx3-ui/commit/bf99afb8ea9a4723792c1aa1267edbc6e8ba7d36))
+* **scenes:** Draft/Live selector with Discard and Publish in plain sight while drafting ([9c30c56](https://github.com/wolfymaster/woofx3-ui/commit/9c30c56222cb4fd8cb22c94cf2953d9e05e1a10c))
+* **ui:** add shared SaveBar, TwitchConnectNotice and common copy constants ([1411b01](https://github.com/wolfymaster/woofx3-ui/commit/1411b013c8ee5658a1d86b46fe6fa97297894562))
+
+### Bug Fixes
+
+* **copy:** drop raw field ids from test-event form, say account on the team page ([8f054f9](https://github.com/wolfymaster/woofx3-ui/commit/8f054f99055c47bb5ffb23c0c4a5c4d47bdb0c8a))
+* **copy:** drop remaining engine wording from recap, test-event, import and backup text ([037cc32](https://github.com/wolfymaster/woofx3-ui/commit/037cc320dbc18d00eca18cf4405ec850901b2b79))
+* **copy:** drop remaining please, owner-or-admin and failed-to wording ([c797640](https://github.com/wolfymaster/woofx3-ui/commit/c797640bb7b0f7e3143987956cedd1f8f65e865b))
+* **copy:** module page shows the readme, not the manifest description or id ([682ab21](https://github.com/wolfymaster/woofx3-ui/commit/682ab21fdf5d06b39d5c8e45158e107623129916))
+* **copy:** new workflow page says Save and drops the repeated trigger sentence ([853d113](https://github.com/wolfymaster/woofx3-ui/commit/853d113cf997a70a32a3164188c27c18266f1344))
+* **copy:** plain-language account, billing, feedback and admin text ([29ab3ca](https://github.com/wolfymaster/woofx3-ui/commit/29ab3ca0fccc314adb011cbe6b16758d3c0ee6c3))
+* **copy:** plain-language alerts, scenes and test-event text ([06bf3ab](https://github.com/wolfymaster/woofx3-ui/commit/06bf3ab7f71e9f8bcb9322a0fcf7751e9acff1f5))
+* **copy:** plain-language dashboard, layout, recap and moderation text ([e3c3d58](https://github.com/wolfymaster/woofx3-ui/commit/e3c3d58e0bf5aa0e0c173544017b7367b71b5486))
+* **copy:** plain-language module, marketplace and user-page text ([9399b26](https://github.com/wolfymaster/woofx3-ui/commit/9399b26d72c4040d2a21e79c8479788e273f7315))
+* **copy:** plain-language setup, onboarding, settings and desktop text ([9b592aa](https://github.com/wolfymaster/woofx3-ui/commit/9b592aae3f640d7ebcfda72a6e7175258bc65842))
+* **copy:** plain-language workflow, command and resource text, with Save bars ([1546c47](https://github.com/wolfymaster/woofx3-ui/commit/1546c4778c4d3fc1db111ba46e7e4f799ac0c797))
+* **copy:** say account instead of organization and module instead of add-on ([95a98eb](https://github.com/wolfymaster/woofx3-ui/commit/95a98ebaa1bcc3e1a62c60b9434fd265b74de013))
+* **copy:** say owners and admins where both roles may act, owner only where only the owner may ([7c4f8f1](https://github.com/wolfymaster/woofx3-ui/commit/7c4f8f1115ccf62c5ed212e025cf6397ac71e123))
+* **copy:** shared wording in lib helpers ([78e1f4e](https://github.com/wolfymaster/woofx3-ui/commit/78e1f4ebfd55dbdcdc83605e30342c081bc8de34))
+* **copy:** warn when a command word has spaces, log swallowed errors, trim page intros that repeat ([983eec3](https://github.com/wolfymaster/woofx3-ui/commit/983eec3f6f217cd10e4b44403275be16fd7e4476))
+* **scenes:** show which of Draft and Live is selected ([5ca15f7](https://github.com/wolfymaster/woofx3-ui/commit/5ca15f73982847c80d7b2a3972fc119ff79cf0a3))
+
 ## [0.25.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.24.0...woofx3-v0.25.0) (2026-11-23)
 
 ### Features
