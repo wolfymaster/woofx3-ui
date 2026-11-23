@@ -105,7 +105,7 @@ export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: Tw
               Disconnect
             </Button>
           ) : (
-            <p className="text-xs text-muted-foreground">Only the account owner can disconnect Twitch.</p>
+            <p className="text-xs text-muted-foreground">Only owners and admins can disconnect Twitch.</p>
           )}
         </div>
 
@@ -147,7 +147,7 @@ export function TwitchIntegrationCard({ isConnected, twitchLink, isLoading }: Tw
           <p className="text-sm text-muted-foreground">Not connected</p>
           {connectError && <p className="text-sm text-destructive">{connectError}</p>}
           {canManageLink === false && (
-            <p className="text-xs text-muted-foreground">Only the account owner can connect Twitch.</p>
+            <p className="text-xs text-muted-foreground">Only owners and admins can connect Twitch.</p>
           )}
           <TwitchApprovalCode linking={linking} onCancel={cancel} />
         </div>

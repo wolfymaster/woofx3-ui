@@ -10,7 +10,7 @@ export function AskAdminToConnectTwitch() {
     <div className="rounded-md border p-4 flex gap-3" data-testid="text-twitch-ask-admin">
       <Users className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
       <div className="space-y-1 text-sm">
-        <p className="font-medium">Ask the account owner to connect Twitch</p>
+        <p className="font-medium">Ask an owner or admin to connect Twitch</p>
         <p className="text-muted-foreground">This page updates when they do.</p>
       </div>
     </div>

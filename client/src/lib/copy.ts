@@ -1,6 +1,10 @@
 /** Wording used on more than one screen, kept in one place so it cannot drift. */
 
+/** Owners alone: billing, purchases, renaming, creating or deleting a woofx3, member emails. */
 export const OWNER_ONLY = "Only the account owner can change this.";
+
+/** Owners and admins: everything about running a woofx3 and its team. */
+export const ADMIN_ONLY = "Only owners and admins can change this.";
 
 export const TRY_AGAIN = "Couldn't do that. Try again.";
 

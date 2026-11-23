@@ -420,7 +420,7 @@ export function MacroPad({ useRemoteTriggers }: MacroPadProps) {
                       }
                       deleteBlockedReason={
                         macro.id in remoteTriggerStatuses && !canManage
-                          ? "This macro has a remote trigger URL, so only the account owner can delete it"
+                          ? "This macro has a remote trigger URL, so only owners and admins can delete it"
                           : undefined
                       }
                       onRun={() => handlePress(macro)}

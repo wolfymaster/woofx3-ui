@@ -57,7 +57,7 @@ import {
   splitReasons,
   writeCount,
 } from "@/lib/config-backup";
-import { OWNER_ONLY } from "@/lib/copy";
+import { ADMIN_ONLY } from "@/lib/copy";
 import { MARKETPLACE_PATH, marketplaceListingPath } from "@/lib/marketplace-route";
 
 const CONFLICT_POLICY_TEXT: Record<ConfigConflictPolicy, { label: string; description: string }> = {
@@ -197,7 +197,7 @@ function ExportCard({ instanceName, canExportMembers }: { instanceName: string; 
             <p className="text-xs text-muted-foreground">
               Adds the usernames in your command groups and the people a command is granted to. These are other people's
               usernames, so leave this off for a backup you plan to share.
-              {!canExportMembers && ` ${OWNER_ONLY}`}
+              {!canExportMembers && ` ${ADMIN_ONLY}`}
             </p>
           </div>
         </div>
@@ -496,7 +496,7 @@ function ImportCard({ canImport }: { canImport: boolean }) {
       <CardContent className="space-y-6">
         {!canImport && (
           <Alert>
-            <AlertDescription>Only owners and admins of this engine can import a backup.</AlertDescription>
+            <AlertDescription>Only owners and admins can import a backup.</AlertDescription>
           </Alert>
         )}
 

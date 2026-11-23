@@ -63,7 +63,7 @@ describe("macroTriggerStatusLabel", () => {
 
   test("says paused when it needs re-confirming", () => {
     expect(macroTriggerStatusLabel({ useCount: 3, needsConfirmation: true })).toBe(
-      "Paused · the account owner must approve it again"
+      "Paused · an owner or admin must approve it again"
     );
   });
 });

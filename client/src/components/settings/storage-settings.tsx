@@ -13,7 +13,7 @@ import { useSetStorageConfigRequest, useStorageConfigRequest } from "@/engine/ho
 import { useEngineInfoRequest, useSetOverlayPublicUrlRequest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { OWNER_ONLY, TRY_AGAIN } from "@/lib/copy";
+import { ADMIN_ONLY, TRY_AGAIN } from "@/lib/copy";
 import { useLogger } from "@/lib/logger-context";
 
 interface StorageConfig {
@@ -141,7 +141,7 @@ export function StorageSettings() {
           className="rounded-md border px-4 py-3 text-sm text-muted-foreground"
           data-testid="storage-settings-read-only"
         >
-          {OWNER_ONLY}
+          {ADMIN_ONLY}
         </p>
       )}
       <fieldset disabled={!canEdit} className="m-0 space-y-6 border-0 p-0">

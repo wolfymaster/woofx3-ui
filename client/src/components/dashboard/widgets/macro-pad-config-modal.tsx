@@ -278,7 +278,7 @@ export function MacroConfigModal({
 
           {behaviorLocked && (
             <p className="text-xs text-muted-foreground" data-testid="macro-behavior-locked">
-              Only an owner or admin can change what this button does, because it can be pressed from another device.
+              Only owners and admins can change what this button does, because it can be pressed from another device.
               You can still change its name, icon and color.
             </p>
           )}

@@ -74,7 +74,7 @@ export function TwitchReconnectBanner() {
           Reconnect as @{twitchLink.platformUsername}
         </Button>
       ) : (
-        <span className="shrink-0 text-xs text-muted-foreground">Ask the account owner to reconnect Twitch.</span>
+        <span className="shrink-0 text-xs text-muted-foreground">Ask an owner or admin to reconnect Twitch.</span>
       )}
       <Tooltip>
         <TooltipTrigger asChild>

@@ -1,4 +1,4 @@
-import { OWNER_ONLY } from "@/lib/copy";
+import { ADMIN_ONLY } from "@/lib/copy";
 
 /**
  * What the user page screen shows about publishing: the page's state and
@@ -9,7 +9,7 @@ import { OWNER_ONLY } from "@/lib/copy";
 
 export const NO_SLUG_MESSAGE = "Pick an address to publish your page. You can build it now.";
 export const NOT_ENTITLED_MESSAGE = "Publishing needs a plan with public pages.";
-export const ADMINS_ONLY_MESSAGE = OWNER_ONLY;
+export const ADMINS_ONLY_MESSAGE = ADMIN_ONLY;
 
 export type PageStatus =
   /** Never published, or taken offline. */

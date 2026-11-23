@@ -109,7 +109,7 @@ function ProblemStrip({
           {needsApproval ? "Allow and install" : "Retry"}
         </Button>
       ) : (
-        <span className="shrink-0 text-xs text-muted-foreground">Ask the account owner to fix this.</span>
+        <span className="shrink-0 text-xs text-muted-foreground">Ask an owner or admin to fix this.</span>
       )}
     </div>
   );

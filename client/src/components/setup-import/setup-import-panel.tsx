@@ -17,7 +17,7 @@ import {
   useStartSetupImportRequest,
 } from "@/engine/hooks/use-setup-imports";
 import type { SetupImportReport } from "@/engine/types";
-import { OWNER_ONLY } from "@/lib/copy";
+import { ADMIN_ONLY } from "@/lib/copy";
 import { applyProgress, canRetry, importFileProblem, reviewSummary } from "@/lib/setup-import";
 import { ImportReportView } from "./import-report-view";
 
@@ -132,7 +132,7 @@ function ChooseExport({ canImport, onRead }: { canImport: boolean; onRead: () =>
     <div className="space-y-5">
       {!canImport && (
         <Alert>
-          <AlertDescription>{OWNER_ONLY}</AlertDescription>
+          <AlertDescription>{ADMIN_ONLY}</AlertDescription>
         </Alert>
       )}
 

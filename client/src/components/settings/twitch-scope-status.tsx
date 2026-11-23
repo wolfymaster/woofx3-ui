@@ -33,7 +33,7 @@ export function TwitchScopeStatus({ health, platformUsername, canRelink }: Twitc
       Reconnect as @{platformUsername}
     </Button>
   ) : (
-    <span className="text-xs text-muted-foreground">Ask the account owner to reconnect Twitch.</span>
+    <span className="text-xs text-muted-foreground">Ask an owner or admin to reconnect Twitch.</span>
   );
 
   if (health.state === "ok") {
