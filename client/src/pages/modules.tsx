@@ -19,7 +19,7 @@ import type { InstalledModule, ModuleDetail } from "@/engine/types";
 import { useMarketplaceListing } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
-import { installedModulePath, MODULES_PATH } from "@/lib/marketplace-route";
+import { installedModulePath, MODULE_SETTINGS_PATH, moduleSettingsPath } from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
 
 type SelectedModule =
@@ -210,8 +210,10 @@ export default function Modules() {
 
   const handleUninstallSuccess = () => {
     setUninstallTarget(null);
-    navigate(MODULES_PATH);
+    navigate(MODULE_SETTINGS_PATH);
   };
+
+  const backToSettings = () => navigate(moduleSettingsPath(routeModuleId));
 
   const detailProps = useMemo(() => {
     if (!moduleDetail) {
@@ -283,13 +285,13 @@ export default function Modules() {
     <>
       <ListDetail
         hasSelection={routeModuleId !== undefined}
-        back={{ href: MODULES_PATH, label: "installed modules" }}
+        back={{ href: moduleSettingsPath(routeModuleId), label: "settings" }}
         list={
           <InstalledModuleRail
-            title="Installed modules"
+            title="Module settings"
             modules={installedList}
             selectedId={routeModuleId}
-            hrefFor={installedModulePath}
+            hrefFor={moduleSettingsPath}
           />
         }
         detail={
@@ -306,7 +308,7 @@ export default function Modules() {
                           <span className="font-medium">Failed to load module</span>
                         </div>
                         <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
-                        <Button variant="outline" size="sm" onClick={() => navigate(MODULES_PATH)}>
+                        <Button variant="outline" size="sm" onClick={backToSettings}>
                           Back
                         </Button>
                       </CardContent>
@@ -330,7 +332,7 @@ export default function Modules() {
                         widgets={detailProps?.widgets}
                         workflows={detailProps?.workflows}
                         loading={moduleDetailLoading || !detailProps}
-                        onBack={() => navigate(MODULES_PATH)}
+                        onBack={backToSettings}
                         moduleDbId={detailProps?.moduleDbId}
                         manifestSettings={detailProps?.manifestSettings}
                         manifestResourceKinds={detailProps?.manifestResourceKinds}

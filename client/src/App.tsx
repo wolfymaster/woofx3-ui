@@ -40,6 +40,7 @@ import {
   legacyModulesRedirect,
   MARKETPLACE_BROWSE_ROUTE,
   MARKETPLACE_UPLOAD_PATH,
+  MODULE_SETTINGS_PATH,
   MODULE_SETTINGS_ROUTE,
   MODULES_MODULE_ROUTE,
   MODULES_PATH,
@@ -310,7 +311,9 @@ function AppRoutes() {
                     <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
                     {/* Modules group of the Stream tab */}
-                    <Route path={MODULES_PATH} component={Modules} />
+                    <Route path={MODULES_PATH}>
+                      <Redirect to={MODULE_SETTINGS_PATH} />
+                    </Route>
                     <Route path={MODULE_SETTINGS_ROUTE} component={ModulesSettings} />
                     <Route path={MODULES_MODULE_ROUTE} component={Modules} />
                     <Route path={LEGACY_MODULES_PATH} component={LegacyModulesRedirect} />
