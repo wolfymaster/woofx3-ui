@@ -169,12 +169,7 @@ function FieldLabel({ field, htmlFor }: { field: TestEventField; htmlFor: string
   return (
     <div className="min-w-0 space-y-0.5">
       <Label htmlFor={htmlFor}>{field.label}</Label>
-      <p className="text-xs text-muted-foreground">
-        {field.description}
-        <span className={field.description ? "ml-1.5 font-mono text-muted-foreground/70" : "font-mono"}>
-          {field.path}
-        </span>
-      </p>
+      {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
     </div>
   );
 }

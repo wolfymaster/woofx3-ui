@@ -107,7 +107,7 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
     hostedWebApp && teamData?.canManageOrganization ? (
       <Button variant="outline" asChild data-testid="link-manage-organization">
         <Link href={ACCOUNT_PORTAL_PATH}>
-          Manage organization
+          Manage account
           <ArrowUpRight className="h-4 w-4 ml-2" />
         </Link>
       </Button>
@@ -226,7 +226,7 @@ export default function Team({ basePath = "/team" }: { basePath?: string }) {
                         <div className="flex flex-col items-start gap-1">
                           <RoleBadge role={member.engineRole} />
                           {engineRoleIsChangeable(member) ? null : (
-                            <span className="text-xs text-muted-foreground">Organization {member.orgRole}</span>
+                            <span className="text-xs text-muted-foreground">Account {member.orgRole}</span>
                           )}
                         </div>
                       </TableCell>
