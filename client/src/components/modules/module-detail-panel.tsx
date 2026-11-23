@@ -183,9 +183,9 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
   } = props;
 
   const [pickedTab, setTopTab] = useState<TopTab | null>(null);
-  // Opens on Settings for an installed module that has some, otherwise on Details.
-  const topTab: TopTab =
-    pickedTab ?? (module.isInstalled && (manifestSettings?.length ?? 0) > 0 ? "settings" : "details");
+  // An installed module opens on Settings even when it declares none, so every module lands on the same tab.
+  const topTab: TopTab = pickedTab ?? (module.isInstalled ? "settings" : "details");
+  pickedTab ?? (module.isInstalled && (manifestSettings?.length ?? 0) > 0 ? "settings" : "details");
   const moduleFiles = useModuleFiles({
     moduleId: module.identifier,
     isInstalled: module.isInstalled,
