@@ -14,6 +14,7 @@ import {
 import {
   MARKETPLACE_BROWSE_ROUTE,
   MARKETPLACE_PATH,
+  MODULE_SETTINGS_ROUTE,
   MODULES_MODULE_ROUTE,
   MODULES_PATH,
 } from "@/lib/marketplace-route";
@@ -100,7 +101,8 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/workflows/:id", render: () => <Workflows /> },
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
-  { path: MODULES_PATH, render: () => <ModulesSettings /> },
+  { path: MODULES_PATH, render: () => <Modules /> },
+  { path: MODULE_SETTINGS_ROUTE, render: () => <ModulesSettings /> },
   { path: MODULES_MODULE_ROUTE, render: () => <Modules /> },
   { path: MARKETPLACE_BROWSE_ROUTE, render: () => <MarketplaceSection /> },
   { path: "/help/learning", render: () => <Learning /> },

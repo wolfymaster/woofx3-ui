@@ -2,6 +2,8 @@ import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
 import { Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { ListDetail } from "@/components/layout/list-detail";
+import { InstalledModuleRail } from "@/components/modules/installed-module-rail";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
@@ -275,75 +277,99 @@ export default function Modules() {
       ? { moduleId: meta.identifier, listingId: shownModule.marketplaceListingId }
       : undefined;
 
+  const installedList = (installedModules ?? []).filter((module) => module.status === "installed");
+
   return (
     <>
-      <div className="h-full flex flex-col overflow-hidden">
-        {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="mx-6 mt-4 w-auto" />}
-        {selectedModule ? (
-          <>
-            {moduleDetailError ? (
-              <div className="p-6 overflow-auto">
-                <Card className="max-w-xl">
-                  <CardContent className="pt-6 space-y-3">
-                    <div className="flex items-center gap-2 text-destructive">
-                      <XCircle className="h-4 w-4" />
-                      <span className="font-medium">Failed to load module</span>
+      <ListDetail
+        hasSelection={routeModuleId !== undefined}
+        back={{ href: MODULES_PATH, label: "installed modules" }}
+        list={
+          <InstalledModuleRail
+            title="Installed modules"
+            modules={installedList}
+            selectedId={routeModuleId}
+            hrefFor={installedModulePath}
+          />
+        }
+        detail={
+          <div className="h-full min-w-0 flex-1 flex flex-col overflow-hidden">
+            {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="mx-6 mt-4 w-auto" />}
+            {selectedModule ? (
+              <>
+                {moduleDetailError ? (
+                  <div className="p-6 overflow-auto">
+                    <Card className="max-w-xl">
+                      <CardContent className="pt-6 space-y-3">
+                        <div className="flex items-center gap-2 text-destructive">
+                          <XCircle className="h-4 w-4" />
+                          <span className="font-medium">Failed to load module</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
+                        <Button variant="outline" size="sm" onClick={() => navigate(MODULES_PATH)}>
+                          Back
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : meta ? (
+                  <div className="flex-1 min-h-0 flex flex-col">
+                    {oauthResult && (
+                      <ModuleOAuthResultBanner
+                        result={oauthResult}
+                        onDismiss={dismissOauthResult}
+                        className="mx-6 mt-4"
+                      />
+                    )}
+                    <div className="flex-1 min-h-0">
+                      <ModuleDetailPanel
+                        module={meta}
+                        triggers={detailProps?.triggers}
+                        actions={detailProps?.actions}
+                        functions={detailProps?.functions}
+                        widgets={detailProps?.widgets}
+                        workflows={detailProps?.workflows}
+                        loading={moduleDetailLoading || !detailProps}
+                        onBack={() => navigate(MODULES_PATH)}
+                        moduleDbId={detailProps?.moduleDbId}
+                        manifestSettings={detailProps?.manifestSettings}
+                        manifestResourceKinds={detailProps?.manifestResourceKinds}
+                        permissions={detailProps?.permissions}
+                        latestPermissions={detailProps?.latestPermissions}
+                        localEndpoints={detailProps?.localEndpoints}
+                        latestLocalEndpoints={detailProps?.latestLocalEndpoints}
+                        credits={creditedListing?.credits}
+                        license={licensedModule}
+                        onRemove={removableModule ? () => handleDelete(removableModule) : undefined}
+                        onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
+                        onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
+                        isInstalling={install.isInstalling}
+                        installDisabled={meta.isInstalled}
+                        installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
+                        installProgressMessage={install.progressMessage}
+                        installSucceeded={install.succeeded}
+                        installError={install.error}
+                        onDismissError={() => {
+                          install.dismissError();
+                          setShowErrorDetails(false);
+                        }}
+                      />
                     </div>
-                    <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
-                    <Button variant="outline" size="sm" onClick={() => navigate(MODULES_PATH)}>
-                      Back
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            ) : meta ? (
-              <div className="flex-1 min-h-0 flex flex-col">
-                {oauthResult && (
-                  <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} className="mx-6 mt-4" />
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
                 )}
-                <div className="flex-1 min-h-0">
-                  <ModuleDetailPanel
-                    module={meta}
-                    triggers={detailProps?.triggers}
-                    actions={detailProps?.actions}
-                    functions={detailProps?.functions}
-                    widgets={detailProps?.widgets}
-                    workflows={detailProps?.workflows}
-                    loading={moduleDetailLoading || !detailProps}
-                    onBack={() => navigate(MODULES_PATH)}
-                    moduleDbId={detailProps?.moduleDbId}
-                    manifestSettings={detailProps?.manifestSettings}
-                    manifestResourceKinds={detailProps?.manifestResourceKinds}
-                    permissions={detailProps?.permissions}
-                    latestPermissions={detailProps?.latestPermissions}
-                    localEndpoints={detailProps?.localEndpoints}
-                    latestLocalEndpoints={detailProps?.latestLocalEndpoints}
-                    credits={creditedListing?.credits}
-                    license={licensedModule}
-                    onRemove={removableModule ? () => handleDelete(removableModule) : undefined}
-                    onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
-                    onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
-                    isInstalling={install.isInstalling}
-                    installDisabled={meta.isInstalled}
-                    installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
-                    installProgressMessage={install.progressMessage}
-                    installSucceeded={install.succeeded}
-                    installError={install.error}
-                    onDismissError={() => {
-                      install.dismissError();
-                      setShowErrorDetails(false);
-                    }}
-                  />
-                </div>
-              </div>
+              </>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground">
+                {installedList.length === 0 ? "No modules installed yet." : "Pick a module to see what it adds."}
               </div>
             )}
-          </>
-        ) : null}
-      </div>
+          </div>
+        }
+      />
 
       <Dialog open={showErrorDetails} onOpenChange={setShowErrorDetails}>
         <DialogContent>

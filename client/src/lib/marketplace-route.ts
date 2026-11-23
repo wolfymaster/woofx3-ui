@@ -5,11 +5,11 @@ import { LISTING_TYPES, type ListingType } from "@shared/marketplace-catalog";
  *
  * The Marketplace tab is the storefront, and `/marketplace/upload` installs a
  * module from a zip. What is installed lives in the Stream tab's Modules group:
- * `/stream/modules` is every installed module's settings on one page, and
- * `/stream/modules/:moduleId` opens one module. The `/marketplace/installed`
- * and `/modules` paths that held them before still answer and redirect there,
- * as does a module's OAuth return (`/modules?integration=...`, which lands on
- * the settings page).
+ * `/stream/modules` lists the installed modules, `/stream/modules/:moduleId` opens
+ * one, and `/stream/module-settings/:moduleId?` edits one module's settings. The
+ * `/marketplace/installed` and `/modules` paths that held them before still answer
+ * and redirect there, as does a module's OAuth return (`/modules?integration=...`,
+ * which lands on the settings page).
  */
 
 export const MARKETPLACE_PATH = "/marketplace";
@@ -18,6 +18,8 @@ export const MARKETPLACE_AUTHOR_ROUTE = "/marketplace/author/:slug";
 export const MARKETPLACE_UPLOAD_PATH = "/marketplace/upload";
 export const MODULES_PATH = "/stream/modules";
 export const MODULES_MODULE_ROUTE = "/stream/modules/:moduleId";
+export const MODULE_SETTINGS_PATH = "/stream/module-settings";
+export const MODULE_SETTINGS_ROUTE = `${MODULE_SETTINGS_PATH}/:moduleId?`;
 export const LEGACY_MODULES_PATH = "/modules";
 export const LEGACY_MODULES_ROUTE = "/modules/:rest";
 export const LEGACY_INSTALLED_PATH = "/marketplace/installed";
@@ -89,6 +91,11 @@ export function installedModulePath(moduleId: string): string {
   return `${MODULES_PATH}/${encodeURIComponent(moduleId)}`;
 }
 
+/** The settings page, opened on one module when given its id. */
+export function moduleSettingsPath(moduleId?: string): string {
+  return moduleId === undefined ? MODULE_SETTINGS_PATH : `${MODULE_SETTINGS_PATH}/${encodeURIComponent(moduleId)}`;
+}
+
 /** `path` with `search` (with or without its `?`) appended when there is one. */
 function withSearch(path: string, search: string): string {
   const query = search.startsWith("?") ? search.slice(1) : search;
@@ -102,7 +109,7 @@ function withSearch(path: string, search: string): string {
  */
 export function legacyModulesRedirect(rest: string | undefined, search: string): string {
   if (rest === undefined || rest === "installed") {
-    return withSearch(MODULES_PATH, search);
+    return withSearch(MODULE_SETTINGS_PATH, search);
   }
   if (rest === "install") {
     return withSearch(MARKETPLACE_UPLOAD_PATH, search);

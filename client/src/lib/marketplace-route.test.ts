@@ -84,14 +84,14 @@ describe("marketplace filter", () => {
 
 describe("legacyModulesRedirect", () => {
   test.each([
-    ["the bare path", undefined, "", "/stream/modules"],
+    ["the bare path", undefined, "", "/stream/module-settings"],
     [
       "the bare path, keeping an OAuth return's query",
       undefined,
       "?integration=spotify&oauth_code=abc",
-      "/stream/modules?integration=spotify&oauth_code=abc",
+      "/stream/module-settings?integration=spotify&oauth_code=abc",
     ],
-    ["the installed list", "installed", "", "/stream/modules"],
+    ["the installed list", "installed", "", "/stream/module-settings"],
     ["the upload page", "install", "", "/marketplace/upload"],
     ["a module's page", "woofx3_obs", "", "/stream/modules/woofx3_obs"],
     ["a module's page with an encoded id", "a%20b", "", "/stream/modules/a%20b"],

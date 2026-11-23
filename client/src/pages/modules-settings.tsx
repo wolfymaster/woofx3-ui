@@ -1,19 +1,24 @@
 import { Loader2, Store, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { PageIntro } from "@/components/common/page-intro";
-import { PageHeader } from "@/components/layout/page-header";
+import { ListDetail } from "@/components/layout/list-detail";
+import { InstalledModuleRail, moduleRouteId } from "@/components/modules/installed-module-rail";
 import { ModuleSettingsSections } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ModuleStorageOverLimitAlert } from "@/components/modules/module-storage-usage";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import type { InstalledModule, ModuleDetail } from "@/engine/types";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
-import { installedModulePath, MARKETPLACE_PATH, MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
-import { bareModuleKey } from "@/lib/module-key";
+import {
+  installedModulePath,
+  MARKETPLACE_PATH,
+  MARKETPLACE_UPLOAD_PATH,
+  MODULE_SETTINGS_PATH,
+  moduleSettingsPath,
+} from "@/lib/marketplace-route";
 
 type SettingsLoad =
   | { state: "loading" }
@@ -21,58 +26,83 @@ type SettingsLoad =
   | { state: "loaded"; detail: ModuleDetail };
 
 /**
- * Every installed module's settings on one page, a section per module. A module that
- * declares none has no section; its page, under the same tab, still shows what it adds.
+ * One module's settings at a time, picked from a rail of the installed modules, so the
+ * page stays as short as one module however many are installed. With no module in the
+ * route it opens the first one; a phone shows the rail until one is picked.
  */
 export default function ModulesSettings() {
   const modules = useInstalledModules();
   const mode = useMarketplaceMode();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [oauthResult, dismissOauthResult] = mode.useOAuthReturn();
   const { usage: moduleStorage } = useModuleStorageUsage();
   const installed = (modules ?? []).filter((module) => module.status === "installed");
+  const segments = location.split("/").filter(Boolean);
+  const routeModuleId = segments.length >= 3 ? decodeURIComponent(segments[2]) : undefined;
+  const selected = installed.find((m) => routeModuleId === moduleRouteId(m) || routeModuleId === m.id) ?? installed[0];
 
-  return (
-    <div className="h-full overflow-auto p-6 space-y-4">
-      <PageHeader title="Module settings" description="The settings of every module installed on your engine." />
-      <PageIntro introId="modules" />
+  const banners = (
+    <>
       {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="w-auto" />}
       {oauthResult && <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} />}
-      {modules === undefined && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-      {modules !== undefined && installed.length === 0 && (
-        <Card className="max-w-xl">
-          <CardContent className="pt-6 space-y-3">
-            <p className="font-medium">No modules installed yet</p>
-            <p className="text-sm text-muted-foreground">
-              {mode.uploads
-                ? "Add one from the marketplace, or upload a module you made yourself."
-                : "Add one from the marketplace."}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {mode.uploads && (
-                <Button size="sm" onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}>
-                  <Upload className="h-3.5 w-3.5 mr-1.5" />
-                  Upload a module
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => navigate(MARKETPLACE_PATH)}>
-                <Store className="h-3.5 w-3.5 mr-1.5" />
-                Browse the marketplace
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      {installed.map((module) => (
-        <ModuleSettingsCard key={module.id} module={module} />
-      ))}
-    </div>
+    </>
+  );
+
+  if (modules === undefined) {
+    return <Loader2 className="m-6 h-5 w-5 animate-spin text-muted-foreground" />;
+  }
+
+  if (installed.length === 0) {
+    return (
+      <div className="p-6 space-y-4 max-w-xl">
+        <PageIntro introId="modules" />
+        {banners}
+        <p className="font-medium">No modules installed yet</p>
+        <p className="text-sm text-muted-foreground">
+          {mode.uploads
+            ? "Add one from the marketplace, or upload a module you made yourself."
+            : "Add one from the marketplace."}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {mode.uploads && (
+            <Button size="sm" onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}>
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+              Upload a module
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => navigate(MARKETPLACE_PATH)}>
+            <Store className="h-3.5 w-3.5 mr-1.5" />
+            Browse the marketplace
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ListDetail
+      hasSelection={routeModuleId !== undefined}
+      back={{ href: MODULE_SETTINGS_PATH, label: "modules" }}
+      list={
+        <InstalledModuleRail
+          title="Module settings"
+          modules={installed}
+          selectedId={selected.id === routeModuleId ? selected.id : moduleRouteId(selected)}
+          hrefFor={moduleSettingsPath}
+        />
+      }
+      detail={
+        <div className="h-full min-w-0 flex-1 overflow-auto p-6 space-y-4">
+          {banners}
+          <ModuleSettingsPane key={selected.id} module={selected} />
+        </div>
+      }
+    />
   );
 }
 
-function ModuleSettingsCard({ module }: { module: InstalledModule }) {
+function ModuleSettingsPane({ module }: { module: InstalledModule }) {
   const getModuleDetail = useModuleDetailRequest();
-  const [, navigate] = useLocation();
   const [load, setLoad] = useState<SettingsLoad>({ state: "loading" });
 
   useEffect(() => {
@@ -94,29 +124,25 @@ function ModuleSettingsCard({ module }: { module: InstalledModule }) {
     };
   }, [module.id, getModuleDetail]);
 
-  if (load.state === "loaded" && load.detail.manifestSettings.length === 0) {
-    return null;
-  }
-
   return (
-    <Card className="max-w-2xl" data-testid={`module-settings-${module.id}`}>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">{module.name}</CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(installedModulePath(bareModuleKey(module.moduleKey) ?? module.id))}
-        >
-          Open
+    <section className="max-w-2xl space-y-5" data-testid={`module-settings-${module.id}`}>
+      <header className="flex items-start justify-between gap-4 border-b border-border pb-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight truncate">{module.name}</h1>
+          {module.description && <p className="mt-1 text-sm text-muted-foreground">{module.description}</p>}
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={installedModulePath(moduleRouteId(module))}>Open module</Link>
         </Button>
-      </CardHeader>
-      <CardContent>
-        {load.state === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-        {load.state === "error" && <p className="text-sm text-destructive">{load.message}</p>}
-        {load.state === "loaded" && (
-          <ModuleSettingsSections moduleId={load.detail.id} manifestSettings={load.detail.manifestSettings} />
-        )}
-      </CardContent>
-    </Card>
+      </header>
+      {load.state === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      {load.state === "error" && <p className="text-sm text-destructive">{load.message}</p>}
+      {load.state === "loaded" && load.detail.manifestSettings.length === 0 && (
+        <p className="text-sm text-muted-foreground">{module.name} has no settings to change.</p>
+      )}
+      {load.state === "loaded" && load.detail.manifestSettings.length > 0 && (
+        <ModuleSettingsSections moduleId={load.detail.id} manifestSettings={load.detail.manifestSettings} />
+      )}
+    </section>
   );
 }

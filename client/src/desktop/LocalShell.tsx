@@ -13,7 +13,6 @@ import { useEngineVersion } from "@/engine/hooks/use-engine-version";
 import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAlertGroupsNavItems } from "@/hooks/use-alert-groups-nav-items";
-import { useInstalledModuleNavItems } from "@/hooks/use-installed-module-nav-items";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { cn } from "@/lib/utils";
 import { LOCAL_NAV_SECTIONS, LOCAL_UTILITY_SECTIONS } from "./local-routes";
@@ -109,7 +108,6 @@ function LocalStatusBar() {
 export function LocalShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   useLiveConnection();
-  const installedModuleItems = useInstalledModuleNavItems();
   const alertGroupsItems = useAlertGroupsNavItems();
   const activeSection = [...LOCAL_NAV_SECTIONS, ...LOCAL_UTILITY_SECTIONS].find((section) =>
     isSectionActive(section, location)
@@ -118,7 +116,6 @@ export function LocalShell({ children }: { children: ReactNode }) {
     ? withDynamicItems(activeSection.children, {
         alertGroups: alertGroupsItems,
         resourceKinds: [],
-        installedModules: installedModuleItems,
       })
     : null;
 
