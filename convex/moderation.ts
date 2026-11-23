@@ -90,7 +90,7 @@ async function authorizeModeration(
   }
   const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
   if (!membership) {
-    throw new ConvexError("Not a member of this engine");
+    throw new ConvexError("You don't have access to this woofx3.");
   }
   const rule = CAPABILITY_RULES[capability];
   if (!rule.roles.includes(membership.role)) {

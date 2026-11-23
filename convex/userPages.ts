@@ -135,11 +135,11 @@ export const publish = mutation({
     if (!userPagesAllowed(instance.hosting)) {
       throw userPageRefusal({
         code: "not_entitled",
-        message: "Public pages are available on hosted engines",
+        message: "Public pages need a hosted woofx3",
       });
     }
     if ((await pageSlugForInstance(ctx, instanceId)) === null) {
-      throw userPageRefusal({ code: "no_slug", message: "Pages can be published from managed engines only" });
+      throw userPageRefusal({ code: "no_slug", message: "Pages can only be published from a hosted woofx3" });
     }
     const page = await requirePage(ctx, instanceId);
     const draft = await requireRevision(ctx, page.draftRevisionId);

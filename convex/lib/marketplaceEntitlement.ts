@@ -47,7 +47,7 @@ function buyerRefForAccount(accountId: Id<"accounts">): string {
 async function instanceForBuyer(ctx: ActionCtx, instanceId: Id<"instances">) {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance) {
-    throw new ConvexError("Engine not found");
+    throw new ConvexError("We couldn't find your woofx3.");
   }
   return instance;
 }
@@ -158,7 +158,7 @@ export async function acquireListing(
 
 /** What the streamer is told about a listing their account does not hold. */
 export function notBoughtMessage(listingName: string): string {
-  return `${listingName} hasn't been bought in this organization.`;
+  return `${listingName} hasn't been bought in this account.`;
 }
 
 /**

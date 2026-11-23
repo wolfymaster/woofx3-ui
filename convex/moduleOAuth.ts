@@ -103,12 +103,12 @@ export const start = action({
     }
     const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
     if (membership === null) {
-      throw new ConvexError("You are not a member of this engine.");
+      throw new ConvexError("You don't have access to this woofx3.");
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     const engine = engineCredentials(instance);
     if (!instance || !engine) {
-      throw new ConvexError("This engine is not connected yet.");
+      throw new ConvexError("Your woofx3 isn't connected yet.");
     }
 
     const resolved = await resolveConnect(ctx, instance, engine, moduleId, integration);

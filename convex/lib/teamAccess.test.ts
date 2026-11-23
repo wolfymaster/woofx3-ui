@@ -129,7 +129,7 @@ describe("org role resolution", () => {
     expect(role).toBe("admin");
     await expect(
       t.run((ctx) => requireActionFor(ctx, userId, { org: org.accountId }, "manageBilling"))
-    ).rejects.toThrow("Your organization role doesn't allow this");
+    ).rejects.toThrow("Your account role doesn't allow this");
   });
 
   test("a user with two membership rows resolves to a role instead of throwing", async () => {

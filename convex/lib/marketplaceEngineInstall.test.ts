@@ -272,7 +272,7 @@ describe("installModuleThroughEngine", () => {
   test("payment_required is the refusal the Convex path's acquire raises for a 402", async () => {
     const t = moduleInstallDeps(async () => ({ status: "payment_required", name: "OBS Scenes", version: "1.4.2" }));
     const message = await convexErrorMessage(installModuleThroughEngine(t.deps, APPROVAL));
-    expect(message).toBe("OBS Scenes hasn't been bought in this organization.");
+    expect(message).toBe("OBS Scenes hasn't been bought in this account.");
     expect(message).toBe(
       acquireRefusal(new MarketplaceError(402, "payment_required", "payment required"), "OBS Scenes")
     );
@@ -356,17 +356,13 @@ describe("engineFailure", () => {
       409,
       "This module's license is already on as many engines as it allows. Remove it from another engine, then try again.",
     ],
-    [
-      "not_entitled",
-      403,
-      "This organization's license doesn't unlock this module. Reload the page, then install it again.",
-    ],
-    ["buyer_mismatch", 403, "This module's license belongs to another organization, so it can't be installed here."],
-    ["account_required", 401, "Sign in with your organization to get this listing."],
+    ["not_entitled", 403, "This account's license doesn't unlock this module. Reload the page, then install it again."],
+    ["buyer_mismatch", 403, "This module's license belongs to another account, so it can't be installed here."],
+    ["account_required", 401, "Sign in with your account to get this listing."],
     ["entitlement_revoked", 403, "Your access to this listing has ended, so it can't be installed again."],
     ["downloads_blocked", 410, "This listing has been pulled from the marketplace and can't be installed."],
     ["rate_limited", 429, "The marketplace is busy right now. Try again in a moment."],
-    ["payment_required", 402, "This module hasn't been bought in this organization yet."],
+    ["payment_required", 402, "This module hasn't been bought in this account yet."],
     ["listing_not_found", 404, "This listing is no longer in the marketplace."],
     ["module_not_found", 404, "This listing is no longer in the marketplace."],
     ["listing_unavailable", 409, unavailable],

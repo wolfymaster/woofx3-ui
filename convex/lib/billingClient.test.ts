@@ -313,7 +313,7 @@ describe("error mapping", () => {
     expect(refusal).toBeInstanceOf(ConvexError);
     expect(refusal.data).toEqual({
       code: "suspended_by_operator",
-      message: "Your organization's account is suspended. Contact woofx3 support.",
+      message: "Your account is suspended. Contact woofx3 support.",
     });
     for (const code of ["subscription_not_found", "unreachable", "payment_unavailable"] as const) {
       const { message } = billingConvexError({ code, message: "plane words" }).data;

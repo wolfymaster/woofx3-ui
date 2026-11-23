@@ -161,9 +161,9 @@ const INSTALL_REFUSAL_COPY: ReadonlyMap<string, string> = new Map(
     ...MARKETPLACE_REFUSAL_COPY,
     listing_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
     module_not_found: MARKETPLACE_REFUSAL_COPY.not_found,
-    payment_required: "This module hasn't been bought in this organization yet.",
-    not_entitled: "This organization's license doesn't unlock this module. Reload the page, then install it again.",
-    buyer_mismatch: "This module's license belongs to another organization, so it can't be installed here.",
+    payment_required: "This module hasn't been bought in this account yet.",
+    not_entitled: "This account's license doesn't unlock this module. Reload the page, then install it again.",
+    buyer_mismatch: "This module's license belongs to another account, so it can't be installed here.",
     activation_limit:
       "This module's license is already on as many engines as it allows. Remove it from another engine, then try again.",
   })

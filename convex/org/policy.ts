@@ -224,8 +224,8 @@ export async function requireActionFor<A extends Action>(
   if (account === null) {
     throw new ConvexError<Refusal>(
       "org" in subject
-        ? { code: "organization_not_found", accountId: subject.org, message: "Organization not found" }
-        : { code: "engine_not_found", instanceId: subject.engine, message: "Engine not found" }
+        ? { code: "organization_not_found", accountId: subject.org, message: "Account not found" }
+        : { code: "engine_not_found", instanceId: subject.engine, message: "We couldn't find your woofx3." }
     );
   }
   const roles = await rolesIn(ctx, account, userId, subject);
@@ -235,7 +235,7 @@ export async function requireActionFor<A extends Action>(
       action,
       message: isEngineAction(action)
         ? "Your role on this engine doesn't allow this"
-        : "Your organization role doesn't allow this",
+        : "Your account role doesn't allow this",
     });
   }
   if ("engine" in subject && isEngineAction(action) && ENGINE_ACTIONS_REFUSED_WHILE_SUSPENDED.has(action)) {

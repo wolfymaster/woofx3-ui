@@ -108,7 +108,7 @@ async function connect(
     }
   }
   if (!context.clientId || !context.clientSecret) {
-    throw new ConvexError("This engine is not registered yet.");
+    throw new ConvexError("Your woofx3 isn't set up yet.");
   }
   const { url, clientId, clientSecret } = context;
   return () => createEngineRpcSession<EngineApi & ConfigBundleEngineApi>(url, clientId, clientSecret);

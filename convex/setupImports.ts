@@ -692,7 +692,7 @@ async function applyCounter(
   }
   const kind = await ctx.runQuery(internal.setupImports.counterKind, { instanceId });
   if (!kind) {
-    return { outcome: "needs_module", message: "Needs a newer engine." };
+    return { outcome: "needs_module", message: "Needs a newer woofx3." };
   }
   const result = await createEngineRpcSession<EngineApi>(
     instance.url,
@@ -824,7 +824,7 @@ async function applyWorkflow(
           );
   } catch (err) {
     if (err instanceof EngineConfirmationTimeout) {
-      return { outcome: "pending", message: "The engine has not confirmed it yet; it shows as imported once it does." };
+      return { outcome: "pending", message: "Not confirmed yet. It shows as imported once it is." };
     }
     throw err;
   }

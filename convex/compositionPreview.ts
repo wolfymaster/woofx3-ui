@@ -43,7 +43,7 @@ export const getUrl = action({
       return null;
     }
     if (typeof answer.url !== "string" || !(answer.expiresInSeconds > 0)) {
-      throw new ConvexError("The engine answered the preview request with something that is not a preview URL.");
+      throw new ConvexError("The preview didn't come back. Try again.");
     }
     // Counted from before the request, so the browser never holds it past the engine's own expiry.
     return { url: answer.url, expiresAt: requestedAt + answer.expiresInSeconds * 1000 };
