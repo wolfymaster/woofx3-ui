@@ -17,6 +17,12 @@ import { DRAFT_COPY } from "@/lib/copy";
 import type { DraftSaveStatus } from "@/lib/draft-save-status";
 import { cn } from "@/lib/utils";
 
+/**
+ * A tooltip trigger wrapped around a toggle item overwrites the item's own `data-state`, so the
+ * selected look keys off `aria-checked`, which only the item sets.
+ */
+const MODE_ITEM = "aria-checked:bg-primary aria-checked:text-primary-foreground aria-checked:hover:bg-primary/90";
+
 export type DraftCommand = "publish" | "discard";
 
 /** The tooltips, which name what the document is and where publishing it shows. */
@@ -101,7 +107,11 @@ export function DraftLiveControls({
         >
           <Tooltip>
             <TooltipTrigger asChild>
-              <ToggleGroupItem value="draft" className="rounded-r-none" data-testid={`${testIds.live}-draft`}>
+              <ToggleGroupItem
+                value="draft"
+                className={cn(MODE_ITEM, "rounded-r-none")}
+                data-testid={`${testIds.live}-draft`}
+              >
                 Draft
               </ToggleGroupItem>
             </TooltipTrigger>
@@ -109,7 +119,11 @@ export function DraftLiveControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <ToggleGroupItem value="live" className="rounded-l-none border-l-0" data-testid={`${testIds.live}-live`}>
+              <ToggleGroupItem
+                value="live"
+                className={cn(MODE_ITEM, "rounded-l-none border-l-0")}
+                data-testid={`${testIds.live}-live`}
+              >
                 Live
               </ToggleGroupItem>
             </TooltipTrigger>
