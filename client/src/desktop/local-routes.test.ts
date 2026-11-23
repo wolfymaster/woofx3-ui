@@ -154,6 +154,11 @@ describe("local navigation", () => {
     }
   });
 
+  test("lists Module Settings under the Stream sidebar", () => {
+    const stream = LOCAL_NAV_SECTIONS.find((section) => section.id === "stream");
+    expect(stream?.children?.some((child) => child.id === "modules-settings")).toBe(true);
+  });
+
   test("leaves out Team, which needs an account", () => {
     expect(LOCAL_UTILITY_SECTIONS.some((section) => section.id === "team")).toBe(false);
   });
