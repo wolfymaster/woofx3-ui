@@ -389,7 +389,7 @@ const INVITE_REFUSED =
   "This invitation couldn't be sent. Your account may have no free seats, or this person may already be on this engine";
 
 const NOT_IN_ORGANIZATION =
-  "You can invite people who are already in your account. Ask the account owner to invite someone new";
+  "You can invite people who are already in your account. Ask an owner or admin to invite someone new";
 
 /**
  * Writes the invitation after re-checking, inside the transaction, that the
