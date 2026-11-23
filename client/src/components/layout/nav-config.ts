@@ -12,12 +12,12 @@ import {
   MessageSquare,
   MessageSquarePlus,
   Palette,
+  Puzzle,
   Radio,
   ScrollText,
   Server,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
   Store,
   ToggleRight,
   Users,
@@ -27,7 +27,7 @@ import { ALERT_GROUPS_PATH } from "@/lib/alert-groups-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { MODERATION_PATH } from "@/lib/chat-moderation-form";
 import { FEEDBACK_PATH } from "@/lib/feedback";
-import { MARKETPLACE_PATH, MODULES_PATH } from "@/lib/marketplace-route";
+import { MARKETPLACE_PATH, MODULE_SETTINGS_PATH, MODULES_PATH } from "@/lib/marketplace-route";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
@@ -160,10 +160,10 @@ export const STREAM_ITEMS: NavItem[] = [
   },
   {
     id: "modules-settings",
-    label: "Settings",
-    icon: SlidersHorizontal,
-    href: MODULES_PATH,
-    exact: true,
+    label: "Module Settings",
+    icon: Puzzle,
+    href: MODULE_SETTINGS_PATH,
+    owns: [MODULES_PATH],
     group: STREAM_GROUPS.modules,
   },
   {
@@ -267,24 +267,15 @@ export function withResourceKindItems(items: NavItem[], extra: NavItem[]): NavIt
   return withGroupItems(items, STREAM_GROUPS.data, extra);
 }
 
-/** `items` with `extra` after Settings in the Modules group: one entry per installed module. */
-export function withInstalledModuleItems(items: NavItem[], extra: NavItem[]): NavItem[] {
-  return withGroupItems(items, STREAM_GROUPS.modules, extra);
-}
-
-/** Entries the engine and the installed modules add to a menu, merged by `withDynamicItems`. */
+/** Entries the engine adds to a menu, merged by `withDynamicItems`. */
 export interface DynamicNavItems {
   alertGroups: NavItem[];
   resourceKinds: NavItem[];
-  installedModules: NavItem[];
 }
 
 /** `items` with every dynamic entry in its place: what a shell shows for a menu section. */
 export function withDynamicItems(items: NavItem[], dynamic: DynamicNavItems): NavItem[] {
-  return withInstalledModuleItems(
-    withResourceKindItems(withAlertGroupsItems(items, dynamic.alertGroups), dynamic.resourceKinds),
-    dynamic.installedModules
-  );
+  return withResourceKindItems(withAlertGroupsItems(items, dynamic.alertGroups), dynamic.resourceKinds);
 }
 
 export function findActiveSection(location: string): NavSection | null {

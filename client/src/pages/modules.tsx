@@ -1,8 +1,10 @@
 import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
-import { Loader2, XCircle } from "lucide-react";
+import { Loader2, Store, Upload, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { TechnicalDetails } from "@/components/common/technical-details";
+import { ListDetail } from "@/components/layout/list-detail";
+import { InstalledModuleRail } from "@/components/modules/installed-module-rail";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
@@ -19,7 +21,12 @@ import { useMarketplaceListing } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { useLogger } from "@/lib/logger-context";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
-import { installedModulePath, MODULES_PATH } from "@/lib/marketplace-route";
+import {
+  MARKETPLACE_PATH,
+  MARKETPLACE_UPLOAD_PATH,
+  MODULE_SETTINGS_PATH,
+  moduleSettingsPath,
+} from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
 
 type SelectedModule =
@@ -30,11 +37,12 @@ export default function Modules() {
   const logger = useLogger();
   const { instanceId: engineInstanceId } = useEngineScope();
   const [location, navigate] = useLocation();
-  // `/stream/modules/:moduleId`: the module's id is an installed module's bare key,
-  // or a marketplace id for one not installed yet.
+  // `/stream/module-settings/:moduleId?`, or `/stream/modules/:moduleId` from links that
+  // predate it: the module's id is an installed module's bare key, or a marketplace id for
+  // one not installed yet. With none in the route, the first installed module is shown.
   const segments = location.split("/").filter(Boolean);
-  const routeModuleId =
-    segments[0] === "stream" && segments[1] === "modules" && segments.length >= 3
+  const pathModuleId =
+    segments[0] === "stream" && (segments[1] === "modules" || segments[1] === "module-settings") && segments.length >= 3
       ? decodeURIComponent(segments[2])
       : undefined;
 
@@ -70,6 +78,8 @@ export default function Modules() {
   }, [selectedModule, install]);
 
   const installedModules = useInstalledModules();
+  const installedList = (installedModules ?? []).filter((module) => module.status === "installed");
+  const routeModuleId = pathModuleId ?? installedList[0]?.id;
 
   useEffect(() => {
     if (routeModuleId === undefined) {
@@ -106,7 +116,7 @@ export default function Modules() {
     }
     const marketplaceId = bareModuleKey(install.pendingModuleKey);
     if (marketplaceId && marketplaceId !== routeModuleId) {
-      navigate(installedModulePath(marketplaceId));
+      navigate(moduleSettingsPath(marketplaceId));
     }
   }, [install.succeeded, install.pendingModuleKey, routeModuleId, navigate]);
 
@@ -142,7 +152,7 @@ export default function Modules() {
       .catch((err) => {
         logger.error("Could not load module details", { error: err, moduleId: detailModuleId });
         if (!cancelled) {
-          setModuleDetailError("Couldn't open this module. Try again.");
+          setModuleDetailError(err instanceof Error ? err.message : String(err));
         }
       })
       .finally(() => {
@@ -212,7 +222,7 @@ export default function Modules() {
 
   const handleUninstallSuccess = () => {
     setUninstallTarget(null);
-    navigate(MODULES_PATH);
+    navigate(MODULE_SETTINGS_PATH);
   };
 
   const detailProps = useMemo(() => {
@@ -281,80 +291,99 @@ export default function Modules() {
 
   return (
     <>
-      <div className="h-full flex flex-col overflow-hidden">
-        {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="mx-6 mt-4 w-auto" />}
-        {selectedModule ? (
-          <>
-            {moduleDetailError ? (
-              <div className="p-6 overflow-auto">
-                <Card className="max-w-xl">
-                  <CardContent className="pt-6 space-y-3">
-                    <div className="flex items-center gap-2 text-destructive">
-                      <XCircle className="h-4 w-4" />
-                      <span className="font-medium">We couldn't open this module. Try again.</span>
+      <ListDetail
+        hasSelection={pathModuleId !== undefined}
+        back={{ href: MODULE_SETTINGS_PATH, label: "modules" }}
+        list={
+          <InstalledModuleRail
+            title="Modules"
+            modules={installedList}
+            selectedId={routeModuleId}
+            hrefFor={moduleSettingsPath}
+          />
+        }
+        detail={
+          <div className="h-full min-w-0 flex-1 flex flex-col overflow-hidden">
+            {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="mx-6 mt-4 w-auto" />}
+            {selectedModule ? (
+              <>
+                {moduleDetailError ? (
+                  <div className="p-6 overflow-auto">
+                    <Card className="max-w-xl">
+                      <CardContent className="pt-6 space-y-3">
+                        <div className="flex items-center gap-2 text-destructive">
+                          <XCircle className="h-4 w-4" />
+                          <span className="font-medium">We couldn't open this module. Try again.</span>
+                        </div>
+                        <TechnicalDetails text={moduleDetailError} />
+                        <Button variant="outline" size="sm" onClick={() => navigate(MODULE_SETTINGS_PATH)}>
+                          Back
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : meta ? (
+                  <div className="flex-1 min-h-0 flex flex-col">
+                    {oauthResult && (
+                      <ModuleOAuthResultBanner
+                        result={oauthResult}
+                        onDismiss={dismissOauthResult}
+                        className="mx-6 mt-4"
+                      />
+                    )}
+                    <div className="flex-1 min-h-0">
+                      <ModuleDetailPanel
+                        key={detailModuleId}
+                        module={meta}
+                        triggers={detailProps?.triggers}
+                        actions={detailProps?.actions}
+                        widgets={detailProps?.widgets}
+                        workflows={detailProps?.workflows}
+                        loading={moduleDetailLoading || !detailProps}
+                        moduleDbId={detailProps?.moduleDbId}
+                        manifestSettings={detailProps?.manifestSettings}
+                        manifestResourceKinds={detailProps?.manifestResourceKinds}
+                        permissions={detailProps?.permissions}
+                        latestPermissions={detailProps?.latestPermissions}
+                        localEndpoints={detailProps?.localEndpoints}
+                        latestLocalEndpoints={detailProps?.latestLocalEndpoints}
+                        credits={creditedListing?.credits}
+                        license={licensedModule}
+                        onRemove={removableModule ? () => handleDelete(removableModule) : undefined}
+                        onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
+                        onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
+                        isInstalling={install.isInstalling}
+                        installDisabled={meta.isInstalled}
+                        installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
+                        installProgressMessage={install.progressMessage}
+                        installSucceeded={install.succeeded}
+                        installError={install.error}
+                        onDismissError={() => {
+                          install.dismissError();
+                          setShowErrorDetails(false);
+                        }}
+                      />
                     </div>
-                    <TechnicalDetails text={moduleDetailError} />
-                    <Button variant="outline" size="sm" onClick={() => navigate(MODULES_PATH)}>
-                      Back
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            ) : meta ? (
-              <div className="flex-1 min-h-0 flex flex-col">
-                {oauthResult && (
-                  <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} className="mx-6 mt-4" />
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
                 )}
-                <div className="flex-1 min-h-0">
-                  <ModuleDetailPanel
-                    module={meta}
-                    triggers={detailProps?.triggers}
-                    actions={detailProps?.actions}
-                    widgets={detailProps?.widgets}
-                    workflows={detailProps?.workflows}
-                    loading={moduleDetailLoading || !detailProps}
-                    onBack={() => navigate(MODULES_PATH)}
-                    moduleDbId={detailProps?.moduleDbId}
-                    manifestSettings={detailProps?.manifestSettings}
-                    manifestResourceKinds={detailProps?.manifestResourceKinds}
-                    permissions={detailProps?.permissions}
-                    latestPermissions={detailProps?.latestPermissions}
-                    localEndpoints={detailProps?.localEndpoints}
-                    latestLocalEndpoints={detailProps?.latestLocalEndpoints}
-                    credits={creditedListing?.credits}
-                    license={licensedModule}
-                    onRemove={removableModule ? () => handleDelete(removableModule) : undefined}
-                    onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
-                    onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
-                    isInstalling={install.isInstalling}
-                    installDisabled={meta.isInstalled}
-                    installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
-                    installProgressMessage={install.progressMessage}
-                    installSucceeded={install.succeeded}
-                    installError={install.error}
-                    onDismissError={() => {
-                      install.dismissError();
-                      setShowErrorDetails(false);
-                    }}
-                  />
-                </div>
-              </div>
+              </>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
+              <NoModulesInstalled />
             )}
-          </>
-        ) : null}
-      </div>
+          </div>
+        }
+      />
 
       <Dialog open={showErrorDetails} onOpenChange={setShowErrorDetails}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Install failed</DialogTitle>
           </DialogHeader>
-          <p className="text-sm">Couldn't install this module. Try again.</p>
-          {install.error && <TechnicalDetails text={install.error} />}
+          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{install.error}</pre>
         </DialogContent>
       </Dialog>
 
@@ -373,5 +402,32 @@ export default function Modules() {
         />
       )}
     </>
+  );
+}
+
+function NoModulesInstalled() {
+  const mode = useMarketplaceMode();
+  const [, navigate] = useLocation();
+  return (
+    <div className="p-6 space-y-3 max-w-xl">
+      <p className="font-medium">No modules installed yet</p>
+      <p className="text-sm text-muted-foreground">
+        {mode.uploads
+          ? "Add one from the marketplace, or upload a module you made yourself."
+          : "Add one from the marketplace."}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {mode.uploads && (
+          <Button size="sm" onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Upload a module
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={() => navigate(MARKETPLACE_PATH)}>
+          <Store className="h-3.5 w-3.5 mr-1.5" />
+          Browse the marketplace
+        </Button>
+      </div>
+    </div>
   );
 }

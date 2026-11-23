@@ -11,7 +11,6 @@ import {
   STREAM_ITEMS,
   withAlertGroupsItems,
   withDynamicItems,
-  withInstalledModuleItems,
   withResourceKindItems,
 } from "@/components/layout/nav-config";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
@@ -51,25 +50,20 @@ describe("isNavItemActive", () => {
 describe("Modules group", () => {
   const settings = STREAM_ITEMS.find((item) => item.id === "modules-settings");
   if (!settings) {
-    throw new Error("the Settings entry is missing from STREAM_ITEMS");
+    throw new Error("the Module Settings entry is missing from STREAM_ITEMS");
   }
-  const obs = { id: "module:obs", label: "OBS", icon: alerts.icon, href: "/stream/modules/woofx3_obs" };
 
-  test("Settings is marked on its own page only, not on a module's page", () => {
-    expect(isNavItemActive(settings, "/stream/modules")).toBe(true);
-    expect(isNavItemActive(settings, "/stream/modules/woofx3_obs")).toBe(false);
+  test("is marked on a module's settings", () => {
+    expect(isNavItemActive(settings, "/stream/module-settings")).toBe(true);
+    expect(isNavItemActive(settings, "/stream/module-settings/woofx3_obs")).toBe(true);
   });
 
-  test("installed modules follow Settings under the group's heading", () => {
-    const merged = withInstalledModuleItems(STREAM_ITEMS, [obs]);
-    const at = merged.findIndex((item) => item.id === obs.id);
-    expect(merged[at - 1].id).toBe("modules-settings");
-    expect(merged[at].group).toBe(STREAM_GROUPS.modules);
+  test("stays marked on the full module page it links to", () => {
+    expect(isNavItemActive(settings, "/stream/modules/woofx3_obs")).toBe(true);
   });
 
-  test("leaves a menu without the group as it is", () => {
-    const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
-    expect(withInstalledModuleItems(helpOnly, [obs])).toEqual(helpOnly);
+  test("sits under the group's heading", () => {
+    expect(settings.group).toBe(STREAM_GROUPS.modules);
   });
 });
 
@@ -98,12 +92,10 @@ describe("withDynamicItems", () => {
     const merged = withDynamicItems(STREAM_ITEMS, {
       alertGroups: [ALERT_GROUPS_ITEM],
       resourceKinds: [dynamic("wheel")],
-      installedModules: [dynamic("module:obs")],
     });
     const ids = merged.map((item) => item.id);
     expect(ids[ids.indexOf("alerts") + 1]).toBe("alert-groups");
     expect(ids[ids.indexOf("databases") + 1]).toBe("wheel");
-    expect(ids[ids.indexOf("modules-settings") + 1]).toBe("module:obs");
   });
 
   test("leaves a menu without those places as it is", () => {
@@ -112,7 +104,6 @@ describe("withDynamicItems", () => {
       withDynamicItems(helpOnly, {
         alertGroups: [ALERT_GROUPS_ITEM],
         resourceKinds: [dynamic("wheel")],
-        installedModules: [dynamic("module:obs")],
       })
     ).toEqual(helpOnly);
   });
