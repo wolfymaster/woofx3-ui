@@ -18,6 +18,7 @@ import { convexModuleOAuthGateway } from "./module-oauth";
 import { convexModuleResourcesGateway } from "./module-resources";
 import { convexModulesGateway } from "./modules";
 import { convexOverlaysGateway } from "./overlays";
+import { convexLogsGateway } from "./logs";
 import { convexPageIntrosGateway } from "./page-intros";
 import { convexPinsGateway } from "./pins";
 import { convexRequestsGateway } from "./requests";
@@ -75,4 +76,5 @@ export const convexEngineGateway: EngineGateway = {
   streamInfo: convexStreamInfoGateway,
   pageIntros: convexPageIntrosGateway,
   dashboard: convexDashboardGateway,
+  logs: convexLogsGateway,
 };

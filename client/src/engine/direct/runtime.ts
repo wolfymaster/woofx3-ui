@@ -40,6 +40,8 @@ export interface DirectRuntime {
   readonly logger: Logger;
   readonly config: DirectGatewayConfig;
   readonly newId: IdSource;
+  /** The HTTP origin of the engine the session targets, for the plain routes beside the RPC endpoint. */
+  engineOrigin(): Promise<string>;
   /** Runs one RPC on the live session; see `EngineSession.call`. */
   call<T>(name: Extract<keyof DirectEngineApi, string>, invoke: (api: DirectEngineApi) => PromiseLike<T>): Promise<T>;
   /** `DirectRuntimeDeps.ping` with the session's connect deadline. */
@@ -104,6 +106,7 @@ export function createDirectRuntime(deps: DirectRuntimeDeps): DirectRuntime {
     logger,
     config,
     newId: deps.newId,
+    engineOrigin: async () => new URL((await deps.targets.current()).url).origin,
     call: (name, invoke) => connection.session.call(name, invoke),
     ping: (url) => withDeadline(clock, "ping", config.session.connectTimeoutMs, deps.ping(url)),
     start: () => {

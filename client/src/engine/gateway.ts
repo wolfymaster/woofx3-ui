@@ -6,6 +6,10 @@ import type {
   DatabaseRecordPage,
   DatabaseRecordUpdate,
   DatabaseRecordUpdateResult,
+  LogAccessScope,
+  LogFileInfo,
+  LogPage,
+  LogQuery,
 } from "@woofx3/api";
 import type {
   AdSchedule,
@@ -249,6 +253,27 @@ export interface PageIntrosGateway {
   useDismissRequest(): (introId: string) => Promise<void>;
 }
 
+/** An address the browser may open on the engine for one log scope, good until `expiresAt`. */
+export interface LogAccessGrant {
+  /** The engine's HTTP origin; the stream and export paths hang off it. */
+  origin: string;
+  token: string;
+  /** ISO 8601. */
+  expiresAt: string;
+}
+
+export interface LogsRequests {
+  listFiles(): Promise<LogFileInfo[]>;
+  query(query: LogQuery): Promise<LogPage>;
+  /** Asking for `"export"` rejects unless the viewer is an instance admin or owner. */
+  access(scope: LogAccessScope): Promise<LogAccessGrant>;
+}
+
+/** The engine's own logs, read where the engine runs; the live tail and the zip are fetched straight from it. */
+export interface LogsGateway {
+  useLogsRequests(): LogsRequests;
+}
+
 export interface EngineGateway {
   readonly status: StatusGateway;
   readonly resources: ResourcesGateway;
@@ -284,6 +309,7 @@ export interface EngineGateway {
   readonly streamInfo: StreamInfoGateway;
   readonly pageIntros: PageIntrosGateway;
   readonly dashboard: DashboardGateway;
+  readonly logs: LogsGateway;
 }
 
 /** Engine reachability, version and stream state. */
