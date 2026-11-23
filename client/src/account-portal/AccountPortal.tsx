@@ -117,7 +117,7 @@ function ScopeSwitcher() {
           {scope.kind === "personal" && <Check className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Organizations</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Accounts</DropdownMenuLabel>
         {organizations.map((org) => (
           <DropdownMenuItem
             key={org.accountId}

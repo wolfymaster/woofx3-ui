@@ -140,7 +140,7 @@ function Limits({ instanceId, hosted }: { instanceId: Id<"instances">; hosted: b
         ) : null}
         {organization.seats ? (
           <div className="flex justify-between text-sm" data-testid="text-engine-seats">
-            <span>Team seats (shared by the whole organization)</span>
+            <span>Team seats (shared by the whole account)</span>
             <span className="text-muted-foreground">{formatSeats(organization.seats)}</span>
           </div>
         ) : null}

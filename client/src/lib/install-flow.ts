@@ -139,9 +139,9 @@ const PAYMENT_PENDING_MESSAGE =
 const PAYMENT_EXPIRED_MESSAGE =
   "That checkout expired before it was paid, so nothing was charged. Buy it again to install it.";
 const PAYMENT_ELSEWHERE_MESSAGE =
-  "This payment belongs to a different organization or engine. Switch to the engine you bought it on, then open the link again.";
+  "This payment belongs to a different account or engine. Switch to the engine you bought it on, then open the link again.";
 const PAYMENT_NEEDS_REVIEW_MESSAGE =
-  "Your payment went through, but the module couldn't be added to your organization. woofx3 support will add it or refund you; contact them if you don't hear back.";
+  "Your payment went through, but the module couldn't be added to your account. woofx3 support will add it or refund you; contact them if you don't hear back.";
 
 function stay(state: InstallFlowState): InstallTransition {
   return { state, command: null };

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 const NAV: Array<{ path: string; label: string }> = [
   { path: "/features", label: "Features" },
-  { path: "/marketplace", label: "Add-on marketplace" },
+  { path: "/marketplace", label: "Module marketplace" },
   { path: "/pricing", label: "Pricing" },
   { path: "/community", label: "Community" },
 ];

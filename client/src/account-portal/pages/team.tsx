@@ -216,7 +216,7 @@ function MemberRow({ member, emailsShown, isMe }: { member: OrgMember; emailsSho
                   )
                 }
               >
-                Make organization {OTHER_ROLE[member.role as ChangeableRole]}
+                Make account {OTHER_ROLE[member.role as ChangeableRole]}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

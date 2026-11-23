@@ -275,7 +275,7 @@ export function GettingStartedChecklist({ gettingStarted }: { gettingStarted: Ge
           onClick={dismiss}
           data-testid="button-dismiss-getting-started"
         >
-          Dismiss for everyone in this organization
+          Dismiss for everyone in this account
         </Button>
       </div>
     </div>
