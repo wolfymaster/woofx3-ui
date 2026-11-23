@@ -66,6 +66,7 @@ jobs:
             /sceneManager/package.json
             /shared/common/typescript/package.json
             /shared/clients/typescript/*/package.json
+            /scripts/contracts/package.json
             /shared/clients/typescript/api/
             /shared/clients/typescript/scene/
           sparse-checkout-cone-mode: false
@@ -150,6 +151,7 @@ jobs:
             /sceneManager/package.json
             /shared/common/typescript/package.json
             /shared/clients/typescript/*/package.json
+            /scripts/contracts/package.json
             /shared/clients/typescript/api/
             /shared/clients/typescript/scene/
           sparse-checkout-cone-mode: false
