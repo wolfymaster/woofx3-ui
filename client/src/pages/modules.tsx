@@ -17,6 +17,7 @@ import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-
 import type { InstalledModule, ModuleDetail } from "@/engine/types";
 import { useMarketplaceListing } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
+import { useLogger } from "@/lib/logger-context";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import { installedModulePath, MODULES_PATH } from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
@@ -26,6 +27,7 @@ type SelectedModule =
   | { source: "marketplace"; marketplaceId: string };
 
 export default function Modules() {
+  const logger = useLogger();
   const { instanceId: engineInstanceId } = useEngineScope();
   const [location, navigate] = useLocation();
   // `/stream/modules/:moduleId`: the module's id is an installed module's bare key,
@@ -138,6 +140,7 @@ export default function Modules() {
         }
       })
       .catch((err) => {
+        logger.error("Could not load module details", { error: err, moduleId: detailModuleId });
         if (!cancelled) {
           setModuleDetailError("Couldn't open this module. Try again.");
         }
@@ -150,7 +153,7 @@ export default function Modules() {
     return () => {
       cancelled = true;
     };
-  }, [detailModuleId, detailRefreshKey, engineInstanceId, getModuleDetail]);
+  }, [detailModuleId, detailRefreshKey, engineInstanceId, getModuleDetail, logger]);
 
   // Installing and updating are the same marketplace operation, and both need only the listing id.
   // For an installed module that is the listing it was installed from, derived here from its row —

@@ -38,6 +38,7 @@ export function CommandWhenCard({ value, groups, onChange, defaultExpanded }: Co
   const [userInput, setUserInput] = useState("");
   const [inputDraft, setInputDraft] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
+  const [wordHadSpace, setWordHadSpace] = useState(false);
   const { command: word, argumentPattern } = splitCommandInput(value.command);
   const inputs = argumentNames(argumentPattern);
   const groupsById = useMemo(() => new Map(groups.map((group) => [group.engineGroupId, group])), [groups]);
@@ -91,12 +92,14 @@ export function CommandWhenCard({ value, groups, onChange, defaultExpanded }: Co
               placeholder="sr"
               className="pl-6 font-mono"
               value={word}
-              onChange={(e) =>
-                onChange((current) => ({ ...current, command: withCommandWord(current.command, e.target.value) }))
-              }
+              onChange={(e) => {
+                setWordHadSpace(/\s/.test(e.target.value));
+                onChange((current) => ({ ...current, command: withCommandWord(current.command, e.target.value) }));
+              }}
               data-testid="input-command-name"
             />
           </div>
+          {wordHadSpace && <p className="text-xs text-destructive">A command is one word. Add inputs for the rest.</p>}
         </div>
 
         <div className="grid gap-2">

@@ -227,7 +227,7 @@ function WorkflowListScreen() {
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-      <PageHeader title="Workflows" description="Automations that run when something happens on your stream." />
+      <PageHeader title="Workflows" />
       <PageIntro introId="workflows" />
 
       <div className="space-y-6">

@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import type { InstalledModule, ModuleDetail } from "@/engine/types";
+import { useLogger } from "@/lib/logger-context";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import { installedModulePath, MARKETPLACE_PATH, MARKETPLACE_UPLOAD_PATH } from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
@@ -35,7 +36,7 @@ export default function ModulesSettings() {
 
   return (
     <div className="h-full overflow-auto p-6 space-y-4">
-      <PageHeader title="Module settings" description="The settings for each module you've installed." />
+      <PageHeader title="Module settings" />
       <PageIntro introId="modules" />
       {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="w-auto" />}
       {oauthResult && <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} />}
@@ -72,6 +73,7 @@ export default function ModulesSettings() {
 }
 
 function ModuleSettingsCard({ module }: { module: InstalledModule }) {
+  const logger = useLogger();
   const getModuleDetail = useModuleDetailRequest();
   const [, navigate] = useLocation();
   const [load, setLoad] = useState<SettingsLoad>({ state: "loading" });
@@ -86,6 +88,7 @@ function ModuleSettingsCard({ module }: { module: InstalledModule }) {
         }
       })
       .catch((err: unknown) => {
+        logger.error("Could not load module settings", { error: err });
         if (!cancelled) {
           setLoad({ state: "error", message: "Couldn't load settings. Try again." });
         }
@@ -93,7 +96,7 @@ function ModuleSettingsCard({ module }: { module: InstalledModule }) {
     return () => {
       cancelled = true;
     };
-  }, [module.id, getModuleDetail]);
+  }, [module.id, getModuleDetail, logger]);
 
   if (load.state === "loaded" && load.detail.manifestSettings.length === 0) {
     return null;

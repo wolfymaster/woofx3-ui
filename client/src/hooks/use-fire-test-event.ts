@@ -2,6 +2,7 @@ import { type ManualRunOrigin, TEST_RUN_ORIGIN } from "@shared/manual-run-origin
 import { useEngineScope } from "@/engine/context";
 import { usePublishTestEventRequest, useSimulateTwitchEventRequest } from "@/engine/hooks/use-test-events";
 import { useToast } from "@/hooks/use-toast";
+import { useLogger } from "@/lib/logger-context";
 import { TEST_EVENT_PUBLISH_TIMEOUT_MS, withinTimeout } from "@/lib/test-event-outcome";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
@@ -33,6 +34,7 @@ const TWITCH_PLATFORM_AXIS = "platform.twitch";
  * simulator for other platforms.
  */
 export function useFireTestEvent() {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const simulateTwitchEvent = useSimulateTwitchEventRequest();
   const publishEvent = usePublishTestEventRequest();
@@ -74,6 +76,7 @@ export function useFireTestEvent() {
       }
       return triggerId;
     } catch (err) {
+      logger.error("Could not send the test event", { error: err, eventType });
       toast({
         variant: "destructive",
         title: "Couldn't send the test event",

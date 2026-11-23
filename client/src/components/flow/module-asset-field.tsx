@@ -39,7 +39,6 @@ function AssetChoices({
   onChange,
   assets,
 }: AssetFieldProps & { assets: ModuleAsset[] | null | undefined }) {
-  const kinds = Array.isArray(field.kinds) ? (field.kinds as string[]) : undefined;
   const selected = typeof value === "string" ? value : "";
   const labelId = `${field.id}-label`;
 

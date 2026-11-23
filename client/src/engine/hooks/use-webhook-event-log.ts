@@ -1,6 +1,7 @@
 import { useEngineGateway, useEngineScope } from "@/engine/context";
 import type { WebhookEventId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
+import { useLogger } from "@/lib/logger-context";
 
 /**
  * Returns a callback that re-fires a logged engineEventLog row's
@@ -8,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
  * use-fire-trigger.ts's UX contract (toast on success/failure).
  */
 export function useRetriggerEvent() {
+  const logger = useLogger();
   const { instanceId } = useEngineScope();
   const retrigger = useEngineGateway().eventLog.useRetriggerRequest();
   const { toast } = useToast();
@@ -28,6 +30,7 @@ export function useRetriggerEvent() {
         description: `${eventType} → ${result.message}`,
       });
     } catch (err) {
+      logger.error("Could not retrigger event", { error: err, logId });
       toast({
         variant: "destructive",
         title: "Couldn't resend the event",
