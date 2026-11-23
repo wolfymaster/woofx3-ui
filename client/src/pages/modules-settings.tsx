@@ -1,16 +1,27 @@
+import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
 import { Loader2, Store, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { PageIntro } from "@/components/common/page-intro";
 import { ListDetail } from "@/components/layout/list-detail";
 import { InstalledModuleRail, moduleRouteId } from "@/components/modules/installed-module-rail";
-import { ModuleSettingsSections } from "@/components/modules/module-detail-panel";
+import {
+  InstallErrorBanner,
+  ModuleAccessSummary,
+  ModuleInstallActions,
+  ModuleReadme,
+  ModuleSettingsSections,
+} from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
+import { ApproveModulePermissionsDialog } from "@/components/modules/module-permissions";
 import { ModuleStorageOverLimitAlert } from "@/components/modules/module-storage-usage";
+import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import type { InstalledModule, ModuleDetail } from "@/engine/types";
+import { useModuleInstall } from "@/hooks/use-module-install";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
 import {
   installedModulePath,
@@ -19,6 +30,8 @@ import {
   MODULE_SETTINGS_PATH,
   moduleSettingsPath,
 } from "@/lib/marketplace-route";
+import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
+import { isNewerVersion } from "@/lib/utils";
 
 type SettingsLoad =
   | { state: "loading" }
@@ -103,8 +116,14 @@ export default function ModulesSettings() {
 
 function ModuleSettingsPane({ module }: { module: InstalledModule }) {
   const getModuleDetail = useModuleDetailRequest();
+  const [, navigate] = useLocation();
   const [load, setLoad] = useState<SettingsLoad>({ state: "loading" });
+  const [removing, setRemoving] = useState(false);
+  // getModuleDetail is a one-shot action, so an update that lands has to ask for the detail again.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const install = useModuleInstall(() => setRefreshKey((key) => key + 1));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey re-triggers the fetch, it is not read in the body
   useEffect(() => {
     let cancelled = false;
     setLoad({ state: "loading" });
@@ -122,27 +141,120 @@ function ModuleSettingsPane({ module }: { module: InstalledModule }) {
     return () => {
       cancelled = true;
     };
-  }, [module.id, getModuleDetail]);
+  }, [module.id, getModuleDetail, refreshKey]);
+
+  const detail = load.state === "loaded" ? load.detail : null;
+  const listingId = installedListing(module)?.listingId ?? null;
+  const updateAvailable = !!detail?.latestVersion && isNewerVersion(detail.latestVersion, detail.version);
+  const updatePermissions = useMemo(
+    () =>
+      updateAvailable && detail?.latestPermissions
+        ? permissionsToApprove(detail.latestPermissions, detail.permissions ?? [])
+        : [],
+    [updateAvailable, detail]
+  );
+  const updateLocalEndpoints = useMemo(
+    () =>
+      updateAvailable && detail?.latestLocalEndpoints
+        ? localEndpointsToApprove(detail.latestLocalEndpoints, detail.localEndpoints ?? [])
+        : [],
+    [updateAvailable, detail]
+  );
+
+  function requestUpdate() {
+    if (!detail || !listingId) {
+      return;
+    }
+    install.request({
+      marketplaceId: listingId,
+      mode: "update",
+      moduleName: detail.name,
+      permissionSets: {
+        permissions: detail.permissions,
+        latestPermissions: detail.latestPermissions,
+        localEndpoints: detail.localEndpoints,
+        latestLocalEndpoints: detail.latestLocalEndpoints,
+      },
+    });
+  }
+
+  const hasSettings = (detail?.manifestSettings.length ?? 0) > 0;
 
   return (
     <section className="max-w-2xl space-y-5" data-testid={`module-settings-${module.id}`}>
-      <header className="flex items-start justify-between gap-4 border-b border-border pb-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight truncate">{module.name}</h1>
-          {module.description && <p className="mt-1 text-sm text-muted-foreground">{module.description}</p>}
+      <header className="space-y-3 border-b border-border pb-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="flex items-baseline gap-2 text-xl font-semibold tracking-tight">
+              <span className="truncate">{module.name}</span>
+              <span className="shrink-0 text-sm font-normal text-muted-foreground">
+                v{detail?.version ?? module.version}
+              </span>
+            </h1>
+            {module.description && <p className="mt-1 text-sm text-muted-foreground">{module.description}</p>}
+          </div>
+          <div className="flex shrink-0 items-start gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={installedModulePath(moduleRouteId(module))}>Open module</Link>
+            </Button>
+            <ModuleInstallActions
+              module={{
+                name: module.name,
+                description: module.description,
+                version: detail?.version ?? module.version,
+                latestVersion: detail?.latestVersion,
+                author: module.author ?? "",
+                category: module.category ?? "Utilities",
+                tags: module.tags,
+                isInstalled: true,
+              }}
+              updateAvailable={updateAvailable}
+              onUpdate={listingId ? requestUpdate : undefined}
+              onRemove={module.provenance === "builtIn" ? undefined : () => setRemoving(true)}
+              isInstalling={install.isInstalling}
+              installProgressMessage={install.progressMessage}
+            />
+          </div>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={installedModulePath(moduleRouteId(module))}>Open module</Link>
-        </Button>
+        {install.error && <InstallErrorBanner error={install.error} onDismissError={install.dismissError} />}
       </header>
       {load.state === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       {load.state === "error" && <p className="text-sm text-destructive">{load.message}</p>}
-      {load.state === "loaded" && load.detail.manifestSettings.length === 0 && (
-        <p className="text-sm text-muted-foreground">{module.name} has no settings to change.</p>
+      {detail && (
+        // Keyed by module so each opens on its settings, or on Details when it has none.
+        <Tabs key={module.id} defaultValue={hasSettings ? "settings" : "details"}>
+          <TabsList>
+            <TabsTrigger value="settings" disabled={!hasSettings}>
+              Settings
+            </TabsTrigger>
+            <TabsTrigger value="details">Details</TabsTrigger>
+          </TabsList>
+          <TabsContent value="settings" className="mt-4">
+            <ModuleSettingsSections moduleId={detail.id} manifestSettings={detail.manifestSettings} />
+          </TabsContent>
+          <TabsContent value="details" className="mt-4">
+            <ModuleAccessSummary
+              className="mb-4"
+              permissions={detail.permissions}
+              localEndpoints={detail.localEndpoints}
+              updatePermissions={updatePermissions}
+              updateLocalEndpoints={updateLocalEndpoints}
+              latestVersion={detail.latestVersion}
+            />
+            <ModuleReadme readme={detail.readme} />
+          </TabsContent>
+        </Tabs>
       )}
-      {load.state === "loaded" && load.detail.manifestSettings.length > 0 && (
-        <ModuleSettingsSections moduleId={load.detail.id} manifestSettings={load.detail.manifestSettings} />
-      )}
+      <ApproveModulePermissionsDialog {...install.approvalDialogProps} />
+      <UninstallModuleDialog
+        open={removing}
+        onOpenChange={setRemoving}
+        module={removing ? module : null}
+        onSuccess={() => {
+          setRemoving(false);
+          navigate(MODULE_SETTINGS_PATH);
+        }}
+      />
     </section>
   );
 }

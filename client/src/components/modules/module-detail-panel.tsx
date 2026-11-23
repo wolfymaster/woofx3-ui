@@ -346,7 +346,7 @@ interface ModuleInstallActionsProps {
   installSucceeded?: boolean;
 }
 
-function ModuleInstallActions({
+export function ModuleInstallActions({
   module,
   updateAvailable,
   onInstall,
@@ -419,7 +419,7 @@ function ModuleInstallActions({
   );
 }
 
-function InstallErrorBanner({ error, onDismissError }: { error: string; onDismissError?: () => void }) {
+export function InstallErrorBanner({ error, onDismissError }: { error: string; onDismissError?: () => void }) {
   return (
     <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 ml-12">
       <div className="flex items-start justify-between gap-2">

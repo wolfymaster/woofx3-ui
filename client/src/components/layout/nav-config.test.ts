@@ -48,27 +48,22 @@ describe("isNavItemActive", () => {
 });
 
 describe("Modules group", () => {
-  const entry = (id: string) => {
-    const found = STREAM_ITEMS.find((item) => item.id === id);
-    if (!found) {
-      throw new Error(`the ${id} entry is missing from STREAM_ITEMS`);
-    }
-    return found;
-  };
+  const settings = STREAM_ITEMS.find((item) => item.id === "modules-settings");
+  if (!settings) {
+    throw new Error("the Module Settings entry is missing from STREAM_ITEMS");
+  }
 
-  test("Installed Modules is marked on a module's page, Module Settings is not", () => {
-    expect(isNavItemActive(entry("modules"), "/stream/modules/woofx3_obs")).toBe(true);
-    expect(isNavItemActive(entry("modules-settings"), "/stream/modules/woofx3_obs")).toBe(false);
+  test("is marked on a module's settings", () => {
+    expect(isNavItemActive(settings, "/stream/module-settings")).toBe(true);
+    expect(isNavItemActive(settings, "/stream/module-settings/woofx3_obs")).toBe(true);
   });
 
-  test("Module Settings is marked on a module's settings, Installed Modules is not", () => {
-    expect(isNavItemActive(entry("modules-settings"), "/stream/module-settings/woofx3_obs")).toBe(true);
-    expect(isNavItemActive(entry("modules"), "/stream/module-settings/woofx3_obs")).toBe(false);
+  test("stays marked on the full module page it links to", () => {
+    expect(isNavItemActive(settings, "/stream/modules/woofx3_obs")).toBe(true);
   });
 
-  test("both sit under the group's heading", () => {
-    expect(entry("modules").group).toBe(STREAM_GROUPS.modules);
-    expect(entry("modules-settings").group).toBe(STREAM_GROUPS.modules);
+  test("sits under the group's heading", () => {
+    expect(settings.group).toBe(STREAM_GROUPS.modules);
   });
 });
 

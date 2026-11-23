@@ -18,7 +18,6 @@ import {
   Server,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
   Store,
   ToggleRight,
   Users,
@@ -159,12 +158,12 @@ export const STREAM_ITEMS: NavItem[] = [
     href: "/stream/databases",
     group: STREAM_GROUPS.data,
   },
-  { id: "modules", label: "Installed Modules", icon: Puzzle, href: MODULES_PATH, group: STREAM_GROUPS.modules },
   {
     id: "modules-settings",
     label: "Module Settings",
-    icon: SlidersHorizontal,
+    icon: Puzzle,
     href: MODULE_SETTINGS_PATH,
+    owns: [MODULES_PATH],
     group: STREAM_GROUPS.modules,
   },
   {
