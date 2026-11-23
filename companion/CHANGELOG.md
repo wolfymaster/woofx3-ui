@@ -1,5 +1,20 @@
 # woofx3 desktop changelog
 
+## [0.25.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.24.0...woofx3-v0.25.0) (2026-11-23)
+
+### Features
+
+* **ui:** fold module details into Module Settings ([d506f01](https://github.com/wolfymaster/woofx3-ui/commit/d506f019863977375b69c61d6f692ad03363e9b4))
+* **ui:** make the module details page the Module Settings page ([e187c36](https://github.com/wolfymaster/woofx3-ui/commit/e187c366d5dba04466fd7df00b5e815733f598b4))
+* **ui:** open a module's full page inside Module Settings ([100d3de](https://github.com/wolfymaster/woofx3-ui/commit/100d3de2c32a2ac5766c8bc2dc5acb85a2a857c0))
+* **ui:** split modules into Installed Modules and Module Settings ([65c9201](https://github.com/wolfymaster/woofx3-ui/commit/65c9201111338a7cbb7c50297c5c386a7eafc3c3))
+* **ui:** use the module page's tab style on Module Settings ([e31a0a4](https://github.com/wolfymaster/woofx3-ui/commit/e31a0a48b98ebaaadc23a1d69dc9fe828dbf67b0))
+
+### Bug Fixes
+
+* **commands:** insert a chosen value at the cursor; call the command text 'Message text' ([209b64d](https://github.com/wolfymaster/woofx3-ui/commit/209b64d7663af301a6c4e370f747810db933caf0))
+* **ui:** open every installed module on its Settings tab ([2c40a1d](https://github.com/wolfymaster/woofx3-ui/commit/2c40a1d7e0cc8b13d57163b7a2cd2d37d26821d8))
+
 ## [0.24.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.23.0...woofx3-v0.24.0) (2026-11-22)
 
 ### Features
