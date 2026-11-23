@@ -158,7 +158,7 @@ export async function acquireListing(
 
 /** What the streamer is told about a listing their account does not hold. */
 export function notBoughtMessage(listingName: string): string {
-  return `${listingName} hasn't been bought in this organization.`;
+  return `${listingName} hasn't been bought in this account.`;
 }
 
 /**

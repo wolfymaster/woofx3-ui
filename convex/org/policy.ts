@@ -235,7 +235,7 @@ export async function requireActionFor<A extends Action>(
       action,
       message: isEngineAction(action)
         ? "Your role on this engine doesn't allow this"
-        : "Your organization role doesn't allow this",
+        : "Your account role doesn't allow this",
     });
   }
   if ("engine" in subject && isEngineAction(action) && ENGINE_ACTIONS_REFUSED_WHILE_SUSPENDED.has(action)) {

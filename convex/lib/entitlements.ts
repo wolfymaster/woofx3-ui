@@ -75,7 +75,7 @@ export const ENTITLEMENT_LIMITS = {
   // Counts accountMembers, owner included; checked by orgSeatsFull whenever
   // someone new would join the org (lib/entitlementAccess.ts).
   "org.members": {
-    description: "People in the organization",
+    description: "People in the account",
     unit: "seats",
     default: 5,
   },
@@ -83,7 +83,7 @@ export const ENTITLEMENT_LIMITS = {
   // is requested (org/engines.ts). The default is the allowance of an org with
   // no plan: its first engine only.
   "org.managedEngines": {
-    description: "Managed engines in the organization",
+    description: "Managed engines in the account",
     unit: "engines",
     default: 1,
   },

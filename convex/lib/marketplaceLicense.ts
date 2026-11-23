@@ -49,7 +49,7 @@ export type AcquireForInstallResult =
  * (`engineFailure`). The marketplace's own wording is meant for API callers.
  */
 export const MARKETPLACE_REFUSAL_COPY = {
-  account_required: "Sign in with your organization to get this listing.",
+  account_required: "Sign in with your account to get this listing.",
   entitlement_revoked: "Your access to this listing has ended, so it can't be installed again.",
   not_found: "This listing is no longer in the marketplace.",
   downloads_blocked: "This listing has been pulled from the marketplace and can't be installed.",

@@ -89,16 +89,16 @@ describe("startCheckout", () => {
     const { adminId, accountId } = await seedOrg(t);
     await expect(
       as(t, adminId).action(api.billingCommands.startCheckout, { accountId, plan: "starter", interval: "month" })
-    ).rejects.toThrow("Your organization role doesn't allow this");
+    ).rejects.toThrow("Your account role doesn't allow this");
     expect(seen).toEqual([]);
   });
 
   test.each([
-    ["already_subscribed", "This organization already has a subscription. Change it in Manage billing."],
+    ["already_subscribed", "This account already has a subscription. Change it in Manage billing."],
     ["subscription_exists", "Your payment method needs attention. Update it in the billing portal."],
-    ["suspended_by_operator", "Your organization's account is suspended. Contact woofx3 support."],
-    ["checkout_in_progress", "A payment for this organization is being confirmed. Check back in a few minutes."],
-    ["account_not_found", "We could not find this organization's billing account. Contact woofx3 support."],
+    ["suspended_by_operator", "Your account is suspended. Contact woofx3 support."],
+    ["checkout_in_progress", "A payment for this account is being confirmed. Check back in a few minutes."],
+    ["account_not_found", "We could not find this account's billing. Contact woofx3 support."],
     ["checkout_not_found", "We could not find that checkout. Choose a plan to start again."],
     ["payment_refused", "We could not start your payment. Please contact support if this continues."],
   ])("%s reaches the portal with its code and wording", async (code, message) => {
@@ -180,7 +180,7 @@ describe("startMarketplaceCheckout", () => {
       409,
       "This purchase is already paid and is being confirmed. Try installing again in a minute.",
     ],
-    ["intent_not_found", 404, "We could not find that purchase for this organization. Click Buy again to start over."],
+    ["intent_not_found", 404, "We could not find that purchase for this account. Click Buy again to start over."],
     ["marketplace_not_configured", 503, "Module purchases aren't set up on this deployment."],
   ])("%s reaches the browser with its code and wording", async (code, status, message) => {
     const t = newBackend();
@@ -221,7 +221,7 @@ describe("openPortal", () => {
     const t = newBackend();
     const { ownerId, adminId, accountId } = await seedOrg(t);
     await expect(as(t, adminId).action(api.billingCommands.openPortal, { accountId })).rejects.toThrow(
-      "Your organization role doesn't allow this"
+      "Your account role doesn't allow this"
     );
     answers["/portal-sessions"] = { status: 409, body: { error: { code: "no_customer", message: "x" } } };
     expect(await errorData(as(t, ownerId).action(api.billingCommands.openPortal, { accountId }))).toEqual({
@@ -242,7 +242,7 @@ describe("plan changes", () => {
     const t = newBackend();
     const { adminId, accountId } = await seedOrg(t);
     const admin = as(t, adminId);
-    const refusal = "Your organization role doesn't allow this";
+    const refusal = "Your account role doesn't allow this";
     await expect(admin.action(api.billingCommands.previewPlanChange, { accountId, ...target })).rejects.toThrow(
       refusal
     );
@@ -306,7 +306,7 @@ describe("plan changes", () => {
     answers["/plan-change"] = { status: 409, body: { error: { code: "not_subscribed", message: "plane words" } } };
     expect(await errorData(owner.action(api.billingCommands.changePlan, { accountId, ...target }))).toEqual({
       code: "not_subscribed",
-      message: "This organization has no subscription to change. Choose a plan first.",
+      message: "This account has no subscription to change. Choose a plan first.",
     });
   });
 
