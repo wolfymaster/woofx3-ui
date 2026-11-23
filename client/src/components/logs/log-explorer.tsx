@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEngineGateway } from "@/engine/context";
-import { EMPTY_LOG_FILTER, type LogFilter, logExportUrl } from "./log-urls";
 import { LogRow } from "./log-row";
+import { EMPTY_LOG_FILTER, type LogFilter, logExportUrl } from "./log-urls";
 import { type TailMode, useLogExplorer } from "./use-log-explorer";
 
+const SKELETON_ROWS = Array.from({ length: 12 }, (_, row) => `skeleton-${row}`);
 const ALL = "all";
 const LEVELS: LogLevel[] = ["trace", "debug", "info", "warn", "error", "fatal"];
 const ESTIMATED_ROW_PX = 28;
@@ -120,7 +121,10 @@ export function LogExplorer() {
             ))}
           </SelectContent>
         </Select>
-        <Button variant={tail === "live" ? "default" : "outline"} onClick={() => setTail(tail === "live" ? "paused" : "live")}>
+        <Button
+          variant={tail === "live" ? "default" : "outline"}
+          onClick={() => setTail(tail === "live" ? "paused" : "live")}
+        >
           <Radio className="mr-2 size-4" />
           {tail === "live" ? "Live" : "Go live"}
         </Button>
@@ -139,12 +143,16 @@ export function LogExplorer() {
       <div ref={scroller} className="h-[calc(100vh-17rem)] overflow-auto rounded-md border bg-card">
         {explorer.isLoading ? (
           <div className="space-y-1 p-3">
-            {Array.from({ length: 12 }, (_, row) => (
+            {SKELETON_ROWS.map((row) => (
               <Skeleton key={row} className="h-5 w-full" />
             ))}
           </div>
         ) : records.length === 0 ? (
-          <EmptyState icon={ScrollText} title="No logs match" description="Try a wider time range, a lower level, or a shorter search." />
+          <EmptyState
+            icon={ScrollText}
+            title="No logs match"
+            description="Try a wider time range, a lower level, or a shorter search."
+          />
         ) : (
           <div style={{ height: virtualizer.getTotalSize() }} className="relative w-full">
             {items.map((item) => (
@@ -155,12 +163,18 @@ export function LogExplorer() {
                 className="absolute left-0 top-0 w-full"
                 style={{ transform: `translateY(${item.start}px)` }}
               >
-                <LogRow record={records[item.index]} expanded={expanded.has(records[item.index].cursor)} onToggle={toggle} />
+                <LogRow
+                  record={records[item.index]}
+                  expanded={expanded.has(records[item.index].cursor)}
+                  onToggle={toggle}
+                />
               </div>
             ))}
           </div>
         )}
-        {explorer.isLoadingMore ? <p className="p-2 text-center text-xs text-muted-foreground">Loading older logs...</p> : null}
+        {explorer.isLoadingMore ? (
+          <p className="p-2 text-center text-xs text-muted-foreground">Loading older logs...</p>
+        ) : null}
       </div>
     </div>
   );

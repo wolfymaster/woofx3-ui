@@ -47,9 +47,7 @@ export const LogRow = memo(function LogRow({ record, expanded, onToggle }: LogRo
           {record.message}
         </span>
       </button>
-      {expanded ? (
-        <pre className="overflow-x-auto bg-muted/40 px-9 py-2">{JSON.stringify(record, null, 2)}</pre>
-      ) : null}
+      {expanded ? <pre className="overflow-x-auto bg-muted/40 px-9 py-2">{JSON.stringify(record, null, 2)}</pre> : null}
     </div>
   );
 });
