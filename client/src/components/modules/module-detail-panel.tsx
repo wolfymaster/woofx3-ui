@@ -310,7 +310,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
   );
 }
 
-function TopTabButton({
+export function TopTabButton({
   active,
   onClick,
   children,

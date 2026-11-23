@@ -11,13 +11,13 @@ import {
   ModuleInstallActions,
   ModuleReadme,
   ModuleSettingsSections,
+  TopTabButton,
 } from "@/components/modules/module-detail-panel";
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog } from "@/components/modules/module-permissions";
 import { ModuleStorageOverLimitAlert } from "@/components/modules/module-storage-usage";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useInstalledModules, useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import type { InstalledModule, ModuleDetail } from "@/engine/types";
@@ -119,6 +119,7 @@ function ModuleSettingsPane({ module }: { module: InstalledModule }) {
   const [, navigate] = useLocation();
   const [load, setLoad] = useState<SettingsLoad>({ state: "loading" });
   const [removing, setRemoving] = useState(false);
+  const [pickedTab, setPickedTab] = useState<"settings" | "details" | null>(null);
   // getModuleDetail is a one-shot action, so an update that lands has to ask for the detail again.
   const [refreshKey, setRefreshKey] = useState(0);
   const install = useModuleInstall(() => setRefreshKey((key) => key + 1));
@@ -179,6 +180,8 @@ function ModuleSettingsPane({ module }: { module: InstalledModule }) {
   }
 
   const hasSettings = (detail?.manifestSettings.length ?? 0) > 0;
+  // Opens on Settings, or on Details for a module with none.
+  const tab = pickedTab ?? (hasSettings ? "settings" : "details");
 
   return (
     <section className="max-w-2xl space-y-5" data-testid={`module-settings-${module.id}`}>
@@ -221,29 +224,33 @@ function ModuleSettingsPane({ module }: { module: InstalledModule }) {
       {load.state === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       {load.state === "error" && <p className="text-sm text-destructive">{load.message}</p>}
       {detail && (
-        // Keyed by module so each opens on its settings, or on Details when it has none.
-        <Tabs key={module.id} defaultValue={hasSettings ? "settings" : "details"}>
-          <TabsList>
-            <TabsTrigger value="settings" disabled={!hasSettings}>
-              Settings
-            </TabsTrigger>
-            <TabsTrigger value="details">Details</TabsTrigger>
-          </TabsList>
-          <TabsContent value="settings" className="mt-4">
+        <>
+          <div className="flex gap-6 border-b">
+            {hasSettings && (
+              <TopTabButton active={tab === "settings"} onClick={() => setPickedTab("settings")}>
+                SETTINGS
+              </TopTabButton>
+            )}
+            <TopTabButton active={tab === "details"} onClick={() => setPickedTab("details")}>
+              DETAILS
+            </TopTabButton>
+          </div>
+          {tab === "settings" ? (
             <ModuleSettingsSections moduleId={detail.id} manifestSettings={detail.manifestSettings} />
-          </TabsContent>
-          <TabsContent value="details" className="mt-4">
-            <ModuleAccessSummary
-              className="mb-4"
-              permissions={detail.permissions}
-              localEndpoints={detail.localEndpoints}
-              updatePermissions={updatePermissions}
-              updateLocalEndpoints={updateLocalEndpoints}
-              latestVersion={detail.latestVersion}
-            />
-            <ModuleReadme readme={detail.readme} />
-          </TabsContent>
-        </Tabs>
+          ) : (
+            <div>
+              <ModuleAccessSummary
+                className="mb-4"
+                permissions={detail.permissions}
+                localEndpoints={detail.localEndpoints}
+                updatePermissions={updatePermissions}
+                updateLocalEndpoints={updateLocalEndpoints}
+                latestVersion={detail.latestVersion}
+              />
+              <ModuleReadme readme={detail.readme} />
+            </div>
+          )}
+        </>
       )}
       <ApproveModulePermissionsDialog {...install.approvalDialogProps} />
       <UninstallModuleDialog
