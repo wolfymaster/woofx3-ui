@@ -241,7 +241,7 @@ export const rename = mutation({
     if (trimmed === "" || trimmed.length > MAX_ORGANIZATION_NAME_LENGTH) {
       throw new ConvexError({
         code: "invalid_name",
-        message: `An organization name is 1 to ${MAX_ORGANIZATION_NAME_LENGTH} characters`,
+        message: `An account name is 1 to ${MAX_ORGANIZATION_NAME_LENGTH} characters`,
       });
     }
     await ctx.db.patch(accountId, { name: trimmed });

@@ -22,7 +22,7 @@ export const list = action({
     await requireInstanceRoleInAction(ctx, instanceId);
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance?.clientId || !instance.clientSecret) {
-      throw new ConvexError("This engine is not registered yet");
+      throw new ConvexError("Your woofx3 isn't set up yet.");
     }
     try {
       const raw = await createEngineRpcSession<ViewerFactsApi>(

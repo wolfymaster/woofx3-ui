@@ -389,7 +389,7 @@ const INVITE_REFUSED =
   "This invitation couldn't be sent. Your organization may have no free seats, or this person may already be on this engine";
 
 const NOT_IN_ORGANIZATION =
-  "You can invite people who are already in your organization. Ask its owner or an admin to invite someone new";
+  "You can invite people who are already in your account. Ask the account owner to invite someone new";
 
 /**
  * Writes the invitation after re-checking, inside the transaction, that the
@@ -462,7 +462,7 @@ export const insertInvitation = internalMutation({
         if (user?.email !== undefined && normalizeEmail(user.email) === normalized) {
           throw hidesMembers
             ? new ConvexError({ code: "invite_refused", message: INVITE_REFUSED })
-            : new ConvexError({ code: "already_on_engine", message: "That user is already on this engine" });
+            : new ConvexError({ code: "already_on_engine", message: "That person is already on your team" });
         }
       }
 
@@ -473,7 +473,7 @@ export const insertInvitation = internalMutation({
       if (existing.some((r) => isPendingFor(r, instance._id, now))) {
         throw new ConvexError({
           code: "already_invited",
-          message: "An invitation to this engine is already pending for this email",
+          message: "An invitation is already pending for this email",
         });
       }
 

@@ -338,7 +338,7 @@ export const loadClips = action({
       throw new ConvexError("Couldn't refresh the Twitch connection. Reconnect Twitch in Settings, Integrations.");
     }
     if (!token) {
-      throw new ConvexError("Twitch isn't connected for this instance. Connect it in Settings, Integrations.");
+      throw new ConvexError("Twitch isn't connected yet. Connect it under Admin > Integrations.");
     }
 
     const clips = await fetchClipsInWindow(
@@ -428,7 +428,7 @@ export const loadMarkers = action({
       return { status: "never_live" };
     }
     if (!link) {
-      throw new ConvexError("Twitch isn't connected for this instance. Connect it in Settings, Integrations.");
+      throw new ConvexError("Twitch isn't connected yet. Connect it under Admin > Integrations.");
     }
     if (!MARKER_READ_SCOPES.some((scope) => link.scopes.includes(scope))) {
       return { status: "missing_scope" };

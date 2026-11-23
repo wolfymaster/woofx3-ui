@@ -18,11 +18,11 @@ export const get = action({
     }
     const membership = await ctx.runQuery(internal.lib.instanceAccess.usableEngineMembership, { instanceId, userId });
     if (!membership) {
-      throw new ConvexError("You are not a member of this engine");
+      throw new ConvexError("You don't have access to this woofx3.");
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance?.clientId || !instance.clientSecret) {
-      throw new ConvexError("This engine is not registered yet");
+      throw new ConvexError("Your woofx3 isn't set up yet.");
     }
     const raw = await createEngineRpcSession<ObsStatusApi>(
       instance.url,

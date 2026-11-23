@@ -196,7 +196,7 @@ export const update = mutation({
     if (instance.hosting === "managed") {
       throw new ConvexError({
         code: "managed_engine_url",
-        message: "A hosted engine's address is set by woofx3 and can't be changed",
+        message: "A hosted woofx3's address is set for you and can't be changed",
       });
     }
     await requireActionFor(ctx, userId, { engine: instanceId }, "changeEngineUrl");

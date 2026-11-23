@@ -91,7 +91,7 @@ export const setRole = mutation({
     if (role === "member" && (await orgRoleOf(ctx, account, targetUserId)) === "admin") {
       throw new ConvexError({
         code: "org_admin_has_every_engine",
-        message: "Organization admins are admins on every engine. Change their organization role first",
+        message: "Account admins already have access everywhere. Change their account role first",
       });
     }
     await grantEngineRole(ctx, instanceId, targetUserId, role);
@@ -109,7 +109,7 @@ export const remove = mutation({
     if ((await orgRoleOf(ctx, account, targetUserId)) === "admin") {
       throw new ConvexError({
         code: "org_admin_has_every_engine",
-        message: "Organization admins have every engine. Change their organization role first",
+        message: "Account admins already have access everywhere. Change their account role first",
       });
     }
     await ctx.db.delete(membership._id);
@@ -139,7 +139,7 @@ export const add = mutation({
       throw new Error(`Engine ${instanceId} belongs to missing org ${instance.accountId}`);
     }
     if ((await orgRoleOf(ctx, account, targetUserId)) === null) {
-      throw new ConvexError({ code: "not_in_organization", message: "Invite them to the engine instead" });
+      throw new ConvexError({ code: "not_in_organization", message: "Invite them to your woofx3 instead" });
     }
     await grantEngineRole(ctx, instanceId, targetUserId, role);
     await resyncRelayIfBridging(ctx, instanceId);

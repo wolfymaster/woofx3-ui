@@ -437,7 +437,7 @@ async function installStarterPack(
         return {
           itemId: item.id,
           outcome: "pending",
-          message: "The engine has not confirmed it yet. It will show as installed once it does.",
+          message: "Not confirmed yet. It shows as installed once it is.",
         };
       }
       await ctx.runMutation(internal.starterPacks.releaseItem, { rowId: claim.rowId });

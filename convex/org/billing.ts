@@ -99,7 +99,7 @@ function refuseSuspended(billing: OrgBilling): never {
   throw new ConvexError<SuspendedRefusal>({
     code: "org_suspended",
     reason: billing.summary.stateReason,
-    message: "This organization's subscription isn't active. The owner can reactivate it in Billing.",
+    message: "This account's subscription isn't active. The account owner can reactivate it in Billing.",
   });
 }
 

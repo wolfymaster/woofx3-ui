@@ -47,7 +47,7 @@ function buyerRefForAccount(accountId: Id<"accounts">): string {
 async function instanceForBuyer(ctx: ActionCtx, instanceId: Id<"instances">) {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance) {
-    throw new ConvexError("Engine not found");
+    throw new ConvexError("We couldn't find your woofx3.");
   }
   return instance;
 }

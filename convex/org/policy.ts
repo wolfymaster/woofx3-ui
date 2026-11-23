@@ -224,8 +224,8 @@ export async function requireActionFor<A extends Action>(
   if (account === null) {
     throw new ConvexError<Refusal>(
       "org" in subject
-        ? { code: "organization_not_found", accountId: subject.org, message: "Organization not found" }
-        : { code: "engine_not_found", instanceId: subject.engine, message: "Engine not found" }
+        ? { code: "organization_not_found", accountId: subject.org, message: "Account not found" }
+        : { code: "engine_not_found", instanceId: subject.engine, message: "We couldn't find your woofx3." }
     );
   }
   const roles = await rolesIn(ctx, account, userId, subject);

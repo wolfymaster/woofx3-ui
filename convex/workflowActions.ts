@@ -376,7 +376,7 @@ export const cancelRun = action({
     const rpc = createEngineRpcSession<TestRunEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const result = await rpc.cancelWorkflow(engineRunId, "Cancelled from the dashboard");
     if (result?.outcome !== "cancelled" && result?.outcome !== "already_finished") {
-      throw new ConvexError("The engine answered the cancel without an outcome.");
+      throw new ConvexError("Couldn't cancel the run. Try again.");
     }
     return { outcome: result.outcome, status: result.status };
   },

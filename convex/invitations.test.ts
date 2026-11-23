@@ -152,7 +152,7 @@ describe("invitations.create", () => {
     await addUser(t, "on@example.com", { org, orgRole: "member", engineRole: "member" });
     await addUser(t, "off@example.com", { org, orgRole: "member", engineRole: null });
     await expect(invite(t, org.ownerId, org.instanceId, "on@example.com")).rejects.toMatchObject({
-      data: { code: "already_on_engine", message: "That user is already on this engine" },
+      data: { code: "already_on_engine", message: "That person is already on your team" },
     });
     await invite(t, org.ownerId, org.instanceId, "off@example.com");
   });
