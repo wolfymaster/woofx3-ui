@@ -656,8 +656,11 @@ function sceneOf(fetchedScene: FetchedScene): Scene {
 const SCENE_DRAFT_COPY: DraftLiveCopy = {
   draft: DRAFT_COPY.privateUntilPublished,
   live: "Edits go straight to what's on stream",
-  liveDisabled: "Live edits are already on stream",
   publish: DRAFT_COPY.publish,
+  publishLabel: DRAFT_COPY.publish,
+  draftStatus: DRAFT_COPY.savedNotLive,
+  matchesStatus: "Matches your stream",
+  liveStatus: DRAFT_COPY.live,
   discardTitle: "Discard your changes to this scene?",
   discardDescription: DRAFT_COPY.discardConfirm,
 };

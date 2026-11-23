@@ -163,8 +163,11 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
 const ALERT_DRAFT_COPY: DraftLiveCopy = {
   draft: DRAFT_COPY.privateUntilPublished,
   live: "Edits change what new copies start from right away",
-  liveDisabled: "Live edits are already what new copies start from",
-  publish: DRAFT_COPY.publish,
+  publish: "Publish so new copies start from these changes",
+  publishLabel: "Publish",
+  draftStatus: "Draft saved. Not published yet.",
+  matchesStatus: "Matches the published alert",
+  liveStatus: "Live",
   discardTitle: "Discard your changes to this alert?",
   discardDescription: "Your changes since the last publish are lost.",
 };

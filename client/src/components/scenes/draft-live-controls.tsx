@@ -1,4 +1,4 @@
-import { ChevronDown, Loader2, Undo2, Upload } from "lucide-react";
+import { Loader2, Undo2, Upload } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import {
   AlertDialog,
@@ -11,14 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DRAFT_COPY } from "@/lib/copy";
 import type { DraftSaveStatus } from "@/lib/draft-save-status";
@@ -32,16 +25,22 @@ export interface DraftLiveCopy {
   draft: string;
   /** What live updating on means: edits reach their audience as they are made. */
   live: string;
-  /** Why Discard and Publish are off while live updating. */
-  liveDisabled: string;
   publish: string;
+  /** The Publish button's label. */
+  publishLabel: string;
+  /** Status while edits wait in a draft. */
+  draftStatus: string;
+  /** Status while there is no draft and nothing waits to be published. */
+  matchesStatus: string;
+  /** Status while live updating. */
+  liveStatus: string;
   /** The question Discard asks before throwing the draft away. */
   discardTitle: string;
   discardDescription: string;
 }
 
 export interface DraftLiveTestIds {
-  /** The switch that turns live updating on or off. */
+  /** The Draft/Live selector; its two options add "-draft" and "-live". */
   live: string;
   discard: string;
   /** The confirmation's Discard button. */
@@ -63,12 +62,12 @@ interface DraftLiveControlsProps {
 }
 
 /**
- * A sync editor's live updating switch, save status and Publish button. The switch sits
- * in the header, not a menu, because it decides where every edit goes. The status says
- * whether edits have been saved and, while not live updating, that saved edits wait in a
- * draft until published. Publish carries a menu with the rarer command, discarding the
- * draft, and has a fixed width, so starting a command never moves anything in the header.
- * A draft cannot be brought back once discarded, so Discard asks first.
+ * A sync editor's Draft/Live selector, save status, and Discard and Publish buttons. The
+ * selector sits in the header because it decides where every edit goes. The status says
+ * whether edits have been saved and, in Draft, that saved edits wait until published.
+ * Discard and Publish sit in plain sight in Draft, where they apply, and are hidden in
+ * Live, where every edit is already published. A draft cannot be brought back once
+ * discarded, so Discard asks first.
  */
 export function DraftLiveControls({
   live,
@@ -81,76 +80,74 @@ export function DraftLiveControls({
   copy,
   testIds,
 }: DraftLiveControlsProps) {
-  const disabled = live || !commandsEnabled;
-  const upToDate = disabled && pendingCommand === null && (live || !hasDraft);
+  const canAct = !live && commandsEnabled && pendingCommand === null && hasDraft;
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   return (
     <>
       <div className="flex items-center gap-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-2">
-              <Switch id={testIds.live} checked={live} onCheckedChange={onLiveChange} data-testid={testIds.live} />
-              <Label htmlFor={testIds.live} className="cursor-pointer whitespace-nowrap text-xs font-normal">
-                Live Update
-              </Label>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>{live ? copy.live : copy.draft}</TooltipContent>
-        </Tooltip>
+        <ToggleGroup
+          type="single"
+          value={live ? "live" : "draft"}
+          onValueChange={(mode) => {
+            if (mode !== "") {
+              onLiveChange(mode === "live");
+            }
+          }}
+          variant="outline"
+          size="sm"
+          className="gap-0"
+          aria-label="Where your edits go"
+          data-testid={testIds.live}
+        >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <ToggleGroupItem value="draft" className="rounded-r-none" data-testid={`${testIds.live}-draft`}>
+                Draft
+              </ToggleGroupItem>
+            </TooltipTrigger>
+            <TooltipContent>{copy.draft}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <ToggleGroupItem value="live" className="rounded-l-none border-l-0" data-testid={`${testIds.live}-live`}>
+                Live
+              </ToggleGroupItem>
+            </TooltipTrigger>
+            <TooltipContent>{copy.live}</TooltipContent>
+          </Tooltip>
+        </ToggleGroup>
         <SaveStatusIndicator status={saveStatus} live={live} copy={copy} />
       </div>
-      <div className="flex items-center">
-        {/* The span carries the tooltip, which a disabled button cannot. */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={disabled ? 0 : undefined} className="inline-flex">
-              <Button
-                onClick={() => onCommand("publish")}
-                disabled={disabled}
-                variant={upToDate ? "outline" : "default"}
-                className="w-40 rounded-r-none"
-                data-testid={testIds.publish}
-              >
-                {pendingCommand === "publish" ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                {pendingCommand === "publish" ? "Publishing…" : upToDate ? "Up to date" : DRAFT_COPY.publish}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{live ? copy.liveDisabled : hasDraft ? copy.publish : "Nothing to publish."}</TooltipContent>
-        </Tooltip>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="icon"
-              variant={upToDate ? "outline" : "default"}
-              className={cn("rounded-l-none border-l", !upToDate && "border-primary-foreground/25")}
-              aria-label="More publish options"
-              data-testid={`${testIds.publish}-menu`}
-            >
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem
-              onClick={() => setConfirmingDiscard(true)}
-              disabled={disabled}
-              data-testid={testIds.discard}
-            >
-              {pendingCommand === "discard" ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Undo2 className="h-4 w-4 mr-2" />
-              )}
-              Discard changes
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {!live && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setConfirmingDiscard(true)}
+            disabled={!canAct}
+            data-testid={testIds.discard}
+          >
+            {pendingCommand === "discard" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Undo2 className="h-4 w-4 mr-2" />
+            )}
+            {DRAFT_COPY.discard}
+          </Button>
+          <Button
+            onClick={() => onCommand("publish")}
+            disabled={!canAct}
+            className="min-w-40"
+            data-testid={testIds.publish}
+          >
+            {pendingCommand === "publish" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4 mr-2" />
+            )}
+            {pendingCommand === "publish" ? "Publishing…" : copy.publishLabel}
+          </Button>
+        </div>
+      )}
       <AlertDialog open={confirmingDiscard} onOpenChange={setConfirmingDiscard}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -160,7 +157,7 @@ export function DraftLiveControls({
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction onClick={() => onCommand("discard")} data-testid={testIds.confirmDiscard}>
-              Discard changes
+              {DRAFT_COPY.discard}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -180,8 +177,8 @@ function SaveStatusIndicator({ status, live, copy }: { status: DraftSaveStatus; 
   const [label, tooltip] = {
     sending: [live ? "Saving…" : "Saving draft…", "Saving your changes"],
     retrying: ["Retrying save…", "Save failed, trying again"],
-    draft: [DRAFT_COPY.savedNotLive, copy.publish],
-    saved: live ? [DRAFT_COPY.live, copy.live] : ["Draft saved", DRAFT_COPY.privateUntilPublished],
+    draft: [copy.draftStatus, copy.publish],
+    saved: live ? [copy.liveStatus, copy.live] : [copy.matchesStatus, DRAFT_COPY.privateUntilPublished],
   }[status];
   return (
     <StatusIndicator tone={SAVE_STATUS_TONE[status]} tooltip={tooltip} testId="status-saved">
