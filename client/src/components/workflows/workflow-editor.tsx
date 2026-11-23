@@ -141,9 +141,6 @@ export function WorkflowEditor() {
   return (
     <div className="flex max-w-3xl flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm text-muted-foreground">
-          Starts when <span className="font-medium text-foreground">{triggerPreset.name}</span> happens.
-        </p>
         <Button
           variant="ghost"
           size="sm"
@@ -171,9 +168,9 @@ export function WorkflowEditor() {
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={() => void create()} disabled={!hasAction || creating} data-testid="button-create-workflow">
           {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-          Create workflow
+          Save
         </Button>
-        {!hasAction && <p className="text-sm text-muted-foreground">Add an action to create the workflow.</p>}
+        {!hasAction && <p className="text-sm text-muted-foreground">Add a step to save the workflow.</p>}
       </div>
     </div>
   );
