@@ -40,6 +40,8 @@ import {
   legacyModulesRedirect,
   MARKETPLACE_BROWSE_ROUTE,
   MARKETPLACE_UPLOAD_PATH,
+  MODULE_SETTINGS_PATH,
+  MODULE_SETTINGS_ROUTE,
   MODULES_MODULE_ROUTE,
   MODULES_PATH,
 } from "@/lib/marketplace-route";
@@ -80,7 +82,6 @@ const Logs = lazy(() => import("@/pages/logs"));
 const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
 const Modules = lazy(() => import("@/pages/modules"));
-const ModulesSettings = lazy(() => import("@/pages/modules-settings"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Scenes = lazy(() => import("@/pages/scenes"));
 const Setup = lazy(() => import("@/pages/setup"));
@@ -309,7 +310,8 @@ function AppRoutes() {
                     <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
                     {/* Modules group of the Stream tab */}
-                    <Route path={MODULES_PATH} component={ModulesSettings} />
+                    <Route path={MODULES_PATH} component={Modules} />
+                    <Route path={MODULE_SETTINGS_ROUTE} component={Modules} />
                     <Route path={MODULES_MODULE_ROUTE} component={Modules} />
                     <Route path={LEGACY_MODULES_PATH} component={LegacyModulesRedirect} />
                     <Route path={LEGACY_MODULES_ROUTE} component={LegacyModulesRedirect} />

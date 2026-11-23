@@ -111,7 +111,6 @@ interface ModuleDetailPanelProps {
   widgets?: ModuleDetailWidget[] | undefined;
   workflows?: ModuleDetailWorkflow[] | undefined;
   loading?: boolean;
-  onBack: () => void;
   onInstall?: () => void;
   onRemove?: () => void;
   onUpdate?: () => void;
@@ -162,7 +161,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     widgets,
     workflows,
     loading,
-    onBack,
     onInstall,
     onRemove,
     onUpdate,
@@ -184,7 +182,10 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     license,
   } = props;
 
-  const [topTab, setTopTab] = useState<TopTab>("details");
+  const [pickedTab, setTopTab] = useState<TopTab | null>(null);
+  // An installed module opens on Settings even when it declares none, so every module lands on the same tab.
+  const topTab: TopTab = pickedTab ?? (module.isInstalled ? "settings" : "details");
+  pickedTab ?? (module.isInstalled && (manifestSettings?.length ?? 0) > 0 ? "settings" : "details");
   const moduleFiles = useModuleFiles({
     moduleId: module.identifier,
     isInstalled: module.isInstalled,
@@ -198,10 +199,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     <div className="flex flex-col h-full">
       <div className="px-6 pt-6 pb-3 shrink-0 space-y-3">
         <div className="flex items-start gap-4">
-          {/* A phone gets the list's back link above the page instead (ListDetail). */}
-          <Button variant="ghost" size="icon" onClick={onBack} className="hidden shrink-0 mt-0.5 md:inline-flex">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-semibold truncate">{module.name}</h2>
@@ -231,6 +228,11 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
 
       <div className="px-6 border-b shrink-0">
         <div className="flex gap-6">
+          {module.isInstalled && (
+            <TopTabButton active={topTab === "settings"} onClick={() => setTopTab("settings")}>
+              SETTINGS
+            </TopTabButton>
+          )}
           <TopTabButton active={topTab === "details"} onClick={() => setTopTab("details")}>
             DETAILS
           </TopTabButton>
@@ -241,14 +243,9 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
             FILES
           </TopTabButton>
           {module.isInstalled && (
-            <>
-              <TopTabButton active={topTab === "settings"} onClick={() => setTopTab("settings")}>
-                SETTINGS
-              </TopTabButton>
-              <TopTabButton active={topTab === "resources"} onClick={() => setTopTab("resources")}>
-                RESOURCES
-              </TopTabButton>
-            </>
+            <TopTabButton active={topTab === "resources"} onClick={() => setTopTab("resources")}>
+              RESOURCES
+            </TopTabButton>
           )}
         </div>
       </div>
@@ -1026,7 +1023,7 @@ function SettingsTab({ moduleId, manifestSettings }: SettingsTabProps) {
 
   return (
     <ScrollArea className="flex-1">
-      <div className="space-y-6 max-w-xl">
+      <div className="max-w-2xl divide-y divide-border [&>*]:py-5 [&>*:first-child]:pt-0">
         {saveError && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
             {saveError}

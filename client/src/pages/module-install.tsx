@@ -29,7 +29,7 @@ import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useInstalledModules, useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useTheme } from "@/hooks/use-theme";
 import { useLogger } from "@/lib/logger-context";
-import { MODULES_PATH } from "@/lib/marketplace-route";
+import { MODULE_SETTINGS_PATH } from "@/lib/marketplace-route";
 import { buildModuleArchive, computeModuleKey, readModuleArchive, textFilesOf } from "@/lib/module-archive";
 import { getLanguageFromPath } from "@/lib/module-files";
 import { bareModuleKey } from "@/lib/module-key";
@@ -389,7 +389,7 @@ function ModuleUpload() {
       return;
     }
     if (installEvent.status === "success") {
-      const timer = setTimeout(() => navigate(MODULES_PATH), SUCCESS_REDIRECT_DELAY_MS);
+      const timer = setTimeout(() => navigate(MODULE_SETTINGS_PATH), SUCCESS_REDIRECT_DELAY_MS);
       return () => clearTimeout(timer);
     }
     if (installEvent.status === "error") {
