@@ -6,8 +6,8 @@ export const PASSWORD_MIN_LENGTH = 8;
 export type RegisterErrorKind = "password" | "challenge" | "exists-or-unknown";
 
 const CHALLENGE_MESSAGES: Record<SignUpChallengeErrorCode, string> = {
-  sign_up_challenge_failed: "Please complete the check that confirms you're a person, then try again.",
-  sign_up_challenge_unavailable: "We couldn't confirm you're a person just now. Please try again in a moment.",
+  sign_up_challenge_failed: "Complete the check that confirms you're a person, then try again.",
+  sign_up_challenge_unavailable: "We couldn't confirm you're a person just now. Try again in a moment.",
 };
 
 function challengeMessage(err: unknown): string | null {

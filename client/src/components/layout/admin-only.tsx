@@ -25,7 +25,7 @@ export function AdminOnly({ children }: { children: ReactNode }) {
       <div className="max-w-md mx-auto p-6 py-16 text-center space-y-3" data-testid="admin-only-refusal">
         <ShieldAlert className="h-8 w-8 mx-auto text-muted-foreground" />
         <h1 className="text-lg font-semibold">Admins only</h1>
-        <p className="text-sm text-muted-foreground">Only owners and admins can change this. Ask one of them.</p>
+        <p className="text-sm text-muted-foreground">Only the account owner can change this. Ask them.</p>
         <Button asChild variant="outline" size="sm">
           <Link href="/">Back to the dashboard</Link>
         </Button>

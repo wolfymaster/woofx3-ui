@@ -484,7 +484,7 @@ function ModuleUpload() {
       }
 
       if (!file.name.endsWith(".zip")) {
-        setInstallError("Please drop a .zip file.");
+        setInstallError("Drop a .zip file.");
         return;
       }
 

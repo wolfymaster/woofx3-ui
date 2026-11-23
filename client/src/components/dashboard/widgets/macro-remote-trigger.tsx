@@ -195,7 +195,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
         />
       </div>
 
-      {!status.canManage && <p className="text-xs text-muted-foreground">Only an owner or admin can change this.</p>}
+      {!status.canManage && <p className="text-xs text-muted-foreground">Only the account owner can change this.</p>}
 
       {trigger?.needsConfirmation && (
         <div
@@ -204,7 +204,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
         >
           <p className="flex-1 text-xs">
             This button changed since its link was approved, so the link is paused.{" "}
-            {status.canManage ? "Approve it again to turn it back on." : "An owner or admin needs to approve it again."}
+            {status.canManage ? "Approve it again to turn it back on." : "The account owner needs to approve it again."}
           </p>
           {status.canManage && (
             <Button

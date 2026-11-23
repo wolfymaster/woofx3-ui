@@ -30,8 +30,8 @@ export function useRetriggerEvent() {
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Failed to retrigger event",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't resend the event",
+        description: "Try again.",
       });
     }
   };

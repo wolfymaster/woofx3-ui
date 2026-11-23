@@ -21,8 +21,8 @@ describe("registerError", () => {
   });
 
   test.each([
-    ["sign_up_challenge_failed", "complete the check"],
-    ["sign_up_challenge_unavailable", "try again in a moment"],
+    ["sign_up_challenge_failed", "Complete the check"],
+    ["sign_up_challenge_unavailable", "Try again in a moment"],
   ])("explains a failed bot check (%s)", (code, says) => {
     const result = registerError(new ConvexError({ code }));
     expect(result.kind).toBe("challenge");

@@ -98,7 +98,7 @@ export function WorkflowEditor() {
     } catch (err) {
       logger.error("Request failed", { error: err });
       toast({
-        title: "Failed to create workflow",
+        title: "Couldn't create the workflow",
         description: TRY_AGAIN,
         variant: "destructive",
       });

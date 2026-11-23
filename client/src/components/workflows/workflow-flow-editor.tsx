@@ -115,7 +115,7 @@ export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange, onUns
       } catch (err) {
         logger.error("Request failed", { error: err });
         toast({
-          title: "Failed to save",
+          title: "Couldn't save",
           description: TRY_AGAIN,
           variant: "destructive",
         });

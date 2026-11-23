@@ -139,7 +139,7 @@ export default function Modules() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setModuleDetailError(err instanceof Error ? err.message : "Failed to load module details.");
+          setModuleDetailError("Couldn't open this module. Try again.");
         }
       })
       .finally(() => {

@@ -87,7 +87,7 @@ function ModuleSettingsCard({ module }: { module: InstalledModule }) {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setLoad({ state: "error", message: err instanceof Error ? err.message : "Failed to load settings." });
+          setLoad({ state: "error", message: "Couldn't load settings. Try again." });
         }
       });
     return () => {

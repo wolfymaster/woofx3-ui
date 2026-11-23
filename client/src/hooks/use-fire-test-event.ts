@@ -76,8 +76,8 @@ export function useFireTestEvent() {
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Failed to fire event",
-        description: err instanceof Error ? err.message : String(err),
+        title: "Couldn't send the test event",
+        description: "Try again.",
       });
       return null;
     }

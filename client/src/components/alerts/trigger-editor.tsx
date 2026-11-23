@@ -185,7 +185,7 @@ export function TriggerEditor({
           toast(STEPS_CHANGED_TOAST);
           return FLOW_REPLACED;
         case "failed":
-          toast({ title: "Failed to save", description: outcome.error, variant: "destructive" });
+          toast({ title: "Couldn't save", description: "Try again.", variant: "destructive" });
           return false;
         case "saved": {
           if (outcome.created) {
