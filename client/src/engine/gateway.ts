@@ -272,6 +272,8 @@ export interface LogsRequests {
 /** The engine's own logs, read where the engine runs; the live tail and the zip are fetched straight from it. */
 export interface LogsGateway {
   useLogsRequests(): LogsRequests;
+  /** Whether the viewer may download the logs; undefined while that is not yet known. */
+  useCanExport(): Live<boolean>;
 }
 
 export interface EngineGateway {

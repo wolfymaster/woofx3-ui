@@ -15,6 +15,8 @@ export function directLogsGateway(runtime: DirectRuntime): LogsGateway {
     return { origin, ...grant };
   };
   return {
+    // A lone computer has one person on it, who owns the engine.
+    useCanExport: () => true,
     useLogsRequests: () => ({
       listFiles: useEngineRequest(listFiles),
       query: useEngineRequest(query),

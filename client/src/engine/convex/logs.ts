@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { LogsGateway } from "@/engine/gateway";
+import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useInstanceAction } from "./scope";
 
 // The engine's log routes are plain HTTP, so Convex first checks the viewer
@@ -7,6 +8,7 @@ import { useInstanceAction } from "./scope";
 // address; the browser then dials the engine itself.
 
 export const convexLogsGateway: LogsGateway = {
+  useCanExport: useIsInstanceAdmin,
   useLogsRequests: () => {
     const listFiles = useInstanceAction(api.engineLogs.listFiles);
     const query = useInstanceAction(api.engineLogs.search);
