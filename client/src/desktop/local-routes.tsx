@@ -47,7 +47,6 @@ const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
 const MarketplaceSection = lazy(() => import("@/pages/marketplace-section"));
 const Modules = lazy(() => import("@/pages/modules"));
-const ModulesSettings = lazy(() => import("@/pages/modules-settings"));
 const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Scenes = lazy(() => import("@/pages/scenes"));
@@ -101,8 +100,8 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/stream/workflows/:id", render: () => <Workflows /> },
   { path: "/stream/workflows/:id/edit", render: () => <Workflows /> },
   { path: "/stream/assets", render: () => <Assets /> },
-  { path: MODULES_PATH, render: () => <ModulesSettings /> },
-  { path: MODULE_SETTINGS_ROUTE, render: () => <ModulesSettings /> },
+  { path: MODULES_PATH, render: () => <Modules /> },
+  { path: MODULE_SETTINGS_ROUTE, render: () => <Modules /> },
   { path: MODULES_MODULE_ROUTE, render: () => <Modules /> },
   { path: MARKETPLACE_BROWSE_ROUTE, render: () => <MarketplaceSection /> },
   { path: "/help/learning", render: () => <Learning /> },

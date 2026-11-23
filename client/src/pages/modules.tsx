@@ -1,5 +1,5 @@
 import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
-import { Loader2, XCircle } from "lucide-react";
+import { Loader2, Store, Upload, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ListDetail } from "@/components/layout/list-detail";
@@ -19,7 +19,12 @@ import type { InstalledModule, ModuleDetail } from "@/engine/types";
 import { useMarketplaceListing } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { useMarketplaceMode } from "@/lib/marketplace-mode";
-import { installedModulePath, MODULE_SETTINGS_PATH, moduleSettingsPath } from "@/lib/marketplace-route";
+import {
+  MARKETPLACE_PATH,
+  MARKETPLACE_UPLOAD_PATH,
+  MODULE_SETTINGS_PATH,
+  moduleSettingsPath,
+} from "@/lib/marketplace-route";
 import { bareModuleKey } from "@/lib/module-key";
 
 type SelectedModule =
@@ -29,11 +34,12 @@ type SelectedModule =
 export default function Modules() {
   const { instanceId: engineInstanceId } = useEngineScope();
   const [location, navigate] = useLocation();
-  // `/stream/modules/:moduleId`: the module's id is an installed module's bare key,
-  // or a marketplace id for one not installed yet.
+  // `/stream/module-settings/:moduleId?`, or `/stream/modules/:moduleId` from links that
+  // predate it: the module's id is an installed module's bare key, or a marketplace id for
+  // one not installed yet. With none in the route, the first installed module is shown.
   const segments = location.split("/").filter(Boolean);
-  const routeModuleId =
-    segments[0] === "stream" && segments[1] === "modules" && segments.length >= 3
+  const pathModuleId =
+    segments[0] === "stream" && (segments[1] === "modules" || segments[1] === "module-settings") && segments.length >= 3
       ? decodeURIComponent(segments[2])
       : undefined;
 
@@ -69,6 +75,8 @@ export default function Modules() {
   }, [selectedModule, install]);
 
   const installedModules = useInstalledModules();
+  const installedList = (installedModules ?? []).filter((module) => module.status === "installed");
+  const routeModuleId = pathModuleId ?? installedList[0]?.id;
 
   useEffect(() => {
     if (routeModuleId === undefined) {
@@ -105,7 +113,7 @@ export default function Modules() {
     }
     const marketplaceId = bareModuleKey(install.pendingModuleKey);
     if (marketplaceId && marketplaceId !== routeModuleId) {
-      navigate(installedModulePath(marketplaceId));
+      navigate(moduleSettingsPath(marketplaceId));
     }
   }, [install.succeeded, install.pendingModuleKey, routeModuleId, navigate]);
 
@@ -213,8 +221,6 @@ export default function Modules() {
     navigate(MODULE_SETTINGS_PATH);
   };
 
-  const backToSettings = () => navigate(moduleSettingsPath(routeModuleId));
-
   const detailProps = useMemo(() => {
     if (!moduleDetail) {
       return null;
@@ -279,16 +285,14 @@ export default function Modules() {
       ? { moduleId: meta.identifier, listingId: shownModule.marketplaceListingId }
       : undefined;
 
-  const installedList = (installedModules ?? []).filter((module) => module.status === "installed");
-
   return (
     <>
       <ListDetail
-        hasSelection={routeModuleId !== undefined}
-        back={{ href: moduleSettingsPath(routeModuleId), label: "settings" }}
+        hasSelection={pathModuleId !== undefined}
+        back={{ href: MODULE_SETTINGS_PATH, label: "modules" }}
         list={
           <InstalledModuleRail
-            title="Module settings"
+            title="Modules"
             modules={installedList}
             selectedId={routeModuleId}
             hrefFor={moduleSettingsPath}
@@ -308,7 +312,7 @@ export default function Modules() {
                           <span className="font-medium">Failed to load module</span>
                         </div>
                         <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
-                        <Button variant="outline" size="sm" onClick={backToSettings}>
+                        <Button variant="outline" size="sm" onClick={() => navigate(MODULE_SETTINGS_PATH)}>
                           Back
                         </Button>
                       </CardContent>
@@ -332,7 +336,6 @@ export default function Modules() {
                         widgets={detailProps?.widgets}
                         workflows={detailProps?.workflows}
                         loading={moduleDetailLoading || !detailProps}
-                        onBack={backToSettings}
                         moduleDbId={detailProps?.moduleDbId}
                         manifestSettings={detailProps?.manifestSettings}
                         manifestResourceKinds={detailProps?.manifestResourceKinds}
@@ -365,9 +368,7 @@ export default function Modules() {
                 )}
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground">
-                {installedList.length === 0 ? "No modules installed yet." : "Pick a module to see what it adds."}
-              </div>
+              <NoModulesInstalled />
             )}
           </div>
         }
@@ -397,5 +398,32 @@ export default function Modules() {
         />
       )}
     </>
+  );
+}
+
+function NoModulesInstalled() {
+  const mode = useMarketplaceMode();
+  const [, navigate] = useLocation();
+  return (
+    <div className="p-6 space-y-3 max-w-xl">
+      <p className="font-medium">No modules installed yet</p>
+      <p className="text-sm text-muted-foreground">
+        {mode.uploads
+          ? "Add one from the marketplace, or upload a module you made yourself."
+          : "Add one from the marketplace."}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {mode.uploads && (
+          <Button size="sm" onClick={() => navigate(MARKETPLACE_UPLOAD_PATH)}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Upload a module
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={() => navigate(MARKETPLACE_PATH)}>
+          <Store className="h-3.5 w-3.5 mr-1.5" />
+          Browse the marketplace
+        </Button>
+      </div>
+    </div>
   );
 }
