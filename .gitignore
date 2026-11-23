@@ -25,7 +25,7 @@ docs/.vitepress/dist
 docs/superpowers/
 
 # scripts/check.sh output
-logs/
+/logs/
 
 # The engine release the desktop installer bundles (companion/scripts/fetch-engine.ts).
 companion/src-tauri/engine/
