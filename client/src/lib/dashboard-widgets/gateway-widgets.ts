@@ -89,7 +89,7 @@ export const streamPreviewWidget: DashboardWidgetDefinition = {
 export const announcementWidget: DashboardWidgetDefinition = {
   type: "announcement",
   label: "Announcement",
-  description: "Send a coloured announcement to chat.",
+  description: "Send a colored announcement to chat.",
   icon: Megaphone,
   category: "stream",
   component: AnnouncementWidget,

@@ -202,7 +202,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
                 <span className="text-primary shrink-0">{categoryIcons[module.category]}</span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground line-clamp-2">{module.description}</p>
           </div>
           {!loading && (
             <ModuleInstallActions
@@ -447,7 +446,6 @@ function DetailsTab({
 }) {
   return (
     <ScrollArea className="flex-1 h-full pr-4">
-      {module.identifier && <h3 className="text-xl font-bold font-mono mb-4">{module.identifier}</h3>}
       <ModuleAccessSummary
         className="mb-4"
         permissions={permissions}
@@ -456,7 +454,7 @@ function DetailsTab({
         updateLocalEndpoints={updateLocalEndpoints}
         latestVersion={module.latestVersion}
       />
-      <ModuleReadme readme={module.readme} />
+      <ModuleReadme readme={module.readme || module.description} />
     </ScrollArea>
   );
 }
@@ -507,7 +505,7 @@ export function ModuleReadme({ readme }: { readme: string | undefined }) {
       {readme ? (
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{readme}</ReactMarkdown>
       ) : (
-        <p className="text-sm text-muted-foreground not-prose">No README provided.</p>
+        <p className="text-sm text-muted-foreground not-prose">Nothing more to read about this module yet.</p>
       )}
     </div>
   );

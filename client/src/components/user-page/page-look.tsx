@@ -107,8 +107,8 @@ export function PageLook({ content, problems, dispatch }: PageLookProps) {
       </fieldset>
 
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Accent colour</legend>
-        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Accent colour">
+        <legend className="text-sm font-medium">Accent color</legend>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Accent color">
           {ACCENT_IDS.map((accent) => {
             const selected = content.theme.accent === accent;
             return (
