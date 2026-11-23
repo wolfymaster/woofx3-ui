@@ -27,9 +27,9 @@
         "default-src": "'self'",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: blob: https:",
+        "img-src": "'self' data: blob: https: http://127.0.0.1:* http://localhost:*",
         "font-src": "'self' data:",
-        "media-src": "'self' blob: https:",
+        "media-src": "'self' blob: https: http://127.0.0.1:* http://localhost:*",
         "frame-src": "https: http://127.0.0.1:* http://localhost:*",
         "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
       },
@@ -37,9 +37,9 @@
         "default-src": "'self'",
         "script-src": "'self' 'unsafe-inline'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: blob: https:",
+        "img-src": "'self' data: blob: https: http://127.0.0.1:* http://localhost:*",
         "font-src": "'self' data:",
-        "media-src": "'self' blob: https:",
+        "media-src": "'self' blob: https: http://127.0.0.1:* http://localhost:*",
         "frame-src": "https: http://127.0.0.1:* http://localhost:*",
         "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
       }
