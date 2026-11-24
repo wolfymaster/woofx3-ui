@@ -204,6 +204,7 @@ import type * as lib_shoutoutEngineRequest from "../lib/shoutoutEngineRequest.js
 import type * as lib_shoutoutSchedule from "../lib/shoutoutSchedule.js";
 import type * as lib_signUpChallenge from "../lib/signUpChallenge.js";
 import type * as lib_starterPackLedger from "../lib/starterPackLedger.js";
+import type * as lib_streamEvents from "../lib/streamEvents.js";
 import type * as lib_teamAccess from "../lib/teamAccess.js";
 import type * as lib_tokenCipher from "../lib/tokenCipher.js";
 import type * as lib_turnstile from "../lib/turnstile.js";
@@ -308,6 +309,7 @@ import type * as shoutouts from "../shoutouts.js";
 import type * as sponsorships from "../sponsorships.js";
 import type * as starterPacks from "../starterPacks.js";
 import type * as storage from "../storage.js";
+import type * as streamEvents from "../streamEvents.js";
 import type * as streamInfo from "../streamInfo.js";
 import type * as streamRecap from "../streamRecap.js";
 import type * as streamSessionSummaries from "../streamSessionSummaries.js";
@@ -544,6 +546,7 @@ declare const fullApi: ApiFromModules<{
   "lib/shoutoutSchedule": typeof lib_shoutoutSchedule;
   "lib/signUpChallenge": typeof lib_signUpChallenge;
   "lib/starterPackLedger": typeof lib_starterPackLedger;
+  "lib/streamEvents": typeof lib_streamEvents;
   "lib/teamAccess": typeof lib_teamAccess;
   "lib/tokenCipher": typeof lib_tokenCipher;
   "lib/turnstile": typeof lib_turnstile;
@@ -648,6 +651,7 @@ declare const fullApi: ApiFromModules<{
   sponsorships: typeof sponsorships;
   starterPacks: typeof starterPacks;
   storage: typeof storage;
+  streamEvents: typeof streamEvents;
   streamInfo: typeof streamInfo;
   streamRecap: typeof streamRecap;
   streamSessionSummaries: typeof streamSessionSummaries;
