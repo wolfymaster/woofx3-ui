@@ -21,7 +21,8 @@ function generateSecret(byteLength = 32): string {
     .join("");
 }
 
-type RegisterResult = { ok: true; clientId: string } | { ok: false; error: string };
+/** Carries no credential: the result goes to whoever connected the engine, and the engine's client id and secret are for Convex alone. */
+type RegisterResult = { ok: true } | { ok: false; error: string };
 
 /**
  * The registration handshake, as both onboarding paths run it: the user
@@ -91,7 +92,7 @@ export async function performRegistration(
       await ctx.scheduler.runAfter(0, internal.engineEventQueue.moveToQueue, { instanceId });
     }
 
-    return { ok: true, clientId: result.clientId };
+    return { ok: true };
   } catch (err) {
     const message = registrationFailureMessage(err);
     logger.error("registration: handshake failed", { instanceId, error: message });
