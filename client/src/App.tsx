@@ -15,6 +15,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { hostedEngineGateway, InstanceEngineScope } from "@/engine/boot/hosted";
 import { EngineGatewayProvider } from "@/engine/context";
+import { AdminAccessProvider } from "@/lib/admin-access";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_GROUPS_PATH, LEGACY_ALERT_GROUPS_PATH, legacyAlertGroupsRedirect } from "@/lib/alert-groups-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
@@ -29,6 +30,7 @@ import {
 import { IS_DESKTOP } from "@/lib/desktop";
 import { FeatureSourceProvider } from "@/lib/feature-source";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
+import { hostedAdminAccess } from "@/lib/hosted-admin-access";
 import { hostedFeatureSource } from "@/lib/hosted-feature-source";
 import { hostedMarketplaceMode } from "@/lib/hosted-marketplace-mode";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
@@ -438,29 +440,31 @@ function App() {
         <EngineGatewayProvider gateway={hostedEngineGateway}>
           <AccountViewerName>
             <MarketplaceModeProvider mode={hostedMarketplaceMode}>
-              <FeatureSourceProvider source={hostedFeatureSource}>
-                <TooltipProvider>
-                  <Suspense fallback={<SplashScreen />}>
-                    <AppRoutes />
-                  </Suspense>
-                  {DesktopAppLink && (
-                    <Suspense fallback={null}>
-                      <DesktopAppLink />
+              <AdminAccessProvider source={hostedAdminAccess}>
+                <FeatureSourceProvider source={hostedFeatureSource}>
+                  <TooltipProvider>
+                    <Suspense fallback={<SplashScreen />}>
+                      <AppRoutes />
                     </Suspense>
-                  )}
-                  {DesktopRelayWatch && (
-                    <Suspense fallback={null}>
-                      <DesktopRelayWatch />
-                    </Suspense>
-                  )}
-                  {DesktopLocalConnectionsGuide && (
-                    <Suspense fallback={null}>
-                      <DesktopLocalConnectionsGuide />
-                    </Suspense>
-                  )}
-                  <Toaster />
-                </TooltipProvider>
-              </FeatureSourceProvider>
+                    {DesktopAppLink && (
+                      <Suspense fallback={null}>
+                        <DesktopAppLink />
+                      </Suspense>
+                    )}
+                    {DesktopRelayWatch && (
+                      <Suspense fallback={null}>
+                        <DesktopRelayWatch />
+                      </Suspense>
+                    )}
+                    {DesktopLocalConnectionsGuide && (
+                      <Suspense fallback={null}>
+                        <DesktopLocalConnectionsGuide />
+                      </Suspense>
+                    )}
+                    <Toaster />
+                  </TooltipProvider>
+                </FeatureSourceProvider>
+              </AdminAccessProvider>
             </MarketplaceModeProvider>
           </AccountViewerName>
         </EngineGatewayProvider>

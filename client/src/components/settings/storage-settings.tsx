@@ -1,6 +1,3 @@
-import { api } from "@convex/_generated/api";
-import { roleSatisfies } from "@convex/lib/instanceRoles";
-import { useQuery } from "convex/react";
 import { ChevronRight, Save } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { useEngineScope } from "@/engine/context";
 import { useSetStorageConfigRequest, useStorageConfigRequest } from "@/engine/hooks/use-engine-config";
 import { useEngineInfoRequest, useSetOverlayPublicUrlRequest } from "@/engine/hooks/use-engine-status";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { useStorageAccess } from "@/lib/admin-access";
 import { ADMIN_ONLY, TRY_AGAIN } from "@/lib/copy";
 import { useLogger } from "@/lib/logger-context";
 
@@ -43,7 +40,6 @@ function isValidBaseUrl(value: string): boolean {
 }
 
 export function StorageSettings() {
-  const { instance } = useInstance();
   const { instanceId } = useEngineScope();
   const getConfig = useStorageConfigRequest();
   const setConfig = useSetStorageConfigRequest();
@@ -51,12 +47,7 @@ export function StorageSettings() {
   const setOverlayPublicUrl = useSetOverlayPublicUrlRequest();
   const { toast } = useToast();
   const logger = useLogger();
-  // Both settings change the engine for everyone on the instance, so the
-  // server accepts them from an owner or admin only. Undefined while loading,
-  // which keeps the form read-only rather than flashing editable.
-  const viewerRole = useQuery(api.instances.viewerRole, instance ? { instanceId: instance._id } : "skip");
-  const canEdit = roleSatisfies(viewerRole, "admin");
-  const isManaged = instance?.hosting === "managed";
+  const { canEdit, loaded: accessLoaded, managed: isManaged } = useStorageAccess();
 
   const [config, setConfigState] = useState<StorageConfig>({
     provider: "file",
@@ -136,7 +127,7 @@ export function StorageSettings() {
 
   return (
     <div className="space-y-6">
-      {viewerRole !== undefined && !canEdit && (
+      {accessLoaded && !canEdit && (
         <p
           className="rounded-md border px-4 py-3 text-sm text-muted-foreground"
           data-testid="storage-settings-read-only"

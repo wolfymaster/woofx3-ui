@@ -1,4 +1,3 @@
-import { api } from "@convex/_generated/api";
 import {
   CONFIG_CONFLICT_POLICIES,
   CONFIG_SECTIONS,
@@ -11,7 +10,6 @@ import {
   type ConfigSection,
   chunkText,
 } from "@convex/lib/configBundle";
-import { useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { Download, FileUp, Loader2, PackageX, Upload, UserPlus } from "lucide-react";
 import { useRef, useState } from "react";
@@ -42,8 +40,8 @@ import {
   useConfigImportPreviewRequest,
   useConfigImportRequest,
 } from "@/engine/hooks/use-engine-config";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { type BackupAccess, useBackupAccess } from "@/lib/admin-access";
 import {
   type AccessGrant,
   accessGrants,
@@ -153,7 +151,7 @@ function SectionPicker({
   );
 }
 
-function ExportCard({ instanceName, canExportMembers }: { instanceName: string; canExportMembers: boolean }) {
+function ExportCard({ access }: { access: BackupAccess }) {
   const exportConfig = useConfigExportRequest();
   const { toast } = useToast();
   const [sections, setSections] = useState<ConfigSection[]>([...CONFIG_SECTIONS]);
@@ -163,8 +161,11 @@ function ExportCard({ instanceName, canExportMembers }: { instanceName: string; 
   async function handleExport() {
     setIsExporting(true);
     try {
-      const chunks = await exportConfig({ include: sections, includeMembers });
-      const fileName = backupFileName(instanceName, new Date());
+      const chunks = await exportConfig({
+        include: sections,
+        includeMembers: access.supportsMembers && includeMembers,
+      });
+      const fileName = backupFileName(access.engineName, new Date());
       saveTextFile(fileName, chunks.join(""));
       toast({ title: "Backup downloaded", description: fileName });
     } catch (error) {
@@ -185,22 +186,24 @@ function ExportCard({ instanceName, canExportMembers }: { instanceName: string; 
       <CardContent className="space-y-6">
         <SectionPicker idPrefix="export" sections={sections} onChange={setSections} disabled={isExporting} />
 
-        <div className="flex items-start gap-3 rounded-md border p-3">
-          <Checkbox
-            id="export-members"
-            checked={includeMembers}
-            disabled={isExporting || !canExportMembers}
-            onCheckedChange={(checked) => setIncludeMembers(checked === true)}
-          />
-          <div className="space-y-0.5">
-            <Label htmlFor="export-members">Include group members (personal data)</Label>
-            <p className="text-xs text-muted-foreground">
-              Adds the usernames in your command groups and the people a command is granted to. These are other people's
-              usernames, so leave this off for a backup you plan to share.
-              {!canExportMembers && ` ${ADMIN_ONLY}`}
-            </p>
+        {access.supportsMembers && (
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Checkbox
+              id="export-members"
+              checked={includeMembers}
+              disabled={isExporting || !access.canExportMembers}
+              onCheckedChange={(checked) => setIncludeMembers(checked === true)}
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="export-members">Include group members (personal data)</Label>
+              <p className="text-xs text-muted-foreground">
+                Adds the usernames in your command groups and the people a command is granted to. These are other
+                people's usernames, so leave this off for a backup you plan to share.
+                {!access.canExportMembers && ` ${ADMIN_ONLY}`}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         <Button onClick={handleExport} disabled={isExporting || sections.length === 0}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -393,7 +396,7 @@ interface PickedFile {
   chunks: string[];
 }
 
-function ImportCard({ canImport }: { canImport: boolean }) {
+function ImportCard({ canImport, supportsMembers }: { canImport: boolean; supportsMembers: boolean }) {
   const previewImport = useConfigImportPreviewRequest();
   const importConfig = useConfigImportRequest();
   const { toast } = useToast();
@@ -561,24 +564,28 @@ function ImportCard({ canImport }: { canImport: boolean }) {
           </p>
         </details>
 
-        <div className="flex items-start gap-3 rounded-md border p-3">
-          <Checkbox
-            id="import-members"
-            checked={applyMembers}
-            disabled={disabled}
-            onCheckedChange={(checked) => {
-              setApplyMembers(checked === true);
-              resetOutcome();
-            }}
-          />
-          <div className="space-y-0.5">
-            <Label htmlFor="import-members">Also apply group members and per-user command access from this file</Label>
-            <p className="text-xs text-muted-foreground">
-              Off by default: a file from someone else could give their chosen usernames access to your commands. Turn
-              this on to restore your own backup's members; the preview lists everyone who would get access.
-            </p>
+        {supportsMembers && (
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Checkbox
+              id="import-members"
+              checked={applyMembers}
+              disabled={disabled}
+              onCheckedChange={(checked) => {
+                setApplyMembers(checked === true);
+                resetOutcome();
+              }}
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="import-members">
+                Also apply group members and per-user command access from this file
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Off by default: a file from someone else could give their chosen usernames access to your commands. Turn
+                this on to restore your own backup's members; the preview lists everyone who would get access.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex flex-wrap gap-3">
           <Button onClick={handlePreview} disabled={disabled || !file || sections.length === 0}>
@@ -624,8 +631,7 @@ function ImportCard({ canImport }: { canImport: boolean }) {
 }
 
 export default function AdminBackup() {
-  const { instance, isLoading } = useInstance();
-  const access = useQuery(api.configBackup.access, instance ? { instanceId: instance._id } : "skip");
+  const access = useBackupAccess();
   const { instanceId: engineInstanceId } = useEngineScope();
 
   return (
@@ -635,14 +641,14 @@ export default function AdminBackup() {
         description="Save your setup to a file, restore it, or bring it over from Firebot or Streamer.bot."
       />
 
-      {isLoading || (instance && access === undefined) ? (
+      {access === undefined ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      ) : !instance || !engineInstanceId || !access?.canExport ? (
+      ) : !engineInstanceId || access === null ? (
         <p className="text-sm text-muted-foreground">Select an engine you are a member of to back it up.</p>
       ) : (
         <>
-          <ExportCard instanceName={instance.name} canExportMembers={access.canExportMembers} />
-          <ImportCard canImport={access.canImport} />
+          <ExportCard access={access} />
+          <ImportCard canImport={access.canImport} supportsMembers={access.supportsMembers} />
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Bring your setup from Firebot or Streamer.bot</CardTitle>

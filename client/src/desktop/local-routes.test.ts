@@ -140,7 +140,12 @@ describe("local navigation", () => {
   test("reaches Integrations through Admin, in the utility cluster", () => {
     const admin = LOCAL_UTILITY_SECTIONS.find((section) => section.id === "admin");
     expect(admin?.href).toBe("/admin/integrations");
-    expect(admin?.children?.map((child) => child.href)).toEqual(["/admin/integrations", "/admin/appearance"]);
+    expect(admin?.children?.map((child) => child.href)).toEqual([
+      "/admin/integrations",
+      "/admin/storage",
+      "/admin/backup",
+      "/admin/appearance",
+    ]);
   });
 
   // The signed-in header shows Admin as an icon on the right, never as a main tab.

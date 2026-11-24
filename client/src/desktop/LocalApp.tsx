@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocalEngineGatewayProvider } from "@/engine/boot/local";
 import { useDefaultSeedStatus } from "@/engine/hooks/use-default-seed";
+import { AdminAccessProvider } from "@/lib/admin-access";
 import type { EngineTargetSource } from "@/lib/engine-session/target";
 import { FeatureSourceProvider } from "@/lib/feature-source";
 import { MarketplaceModeProvider } from "@/lib/marketplace-mode";
@@ -13,6 +14,7 @@ import { overlayPageRedirects } from "@/lib/setup-steps";
 import { ViewerNameProvider } from "@/lib/viewer-name";
 import type { LocalEngineSession } from "./host";
 import { LocalShell } from "./LocalShell";
+import { localAdminAccess } from "./local-admin-access";
 import { localFeatureSource } from "./local-feature-source";
 import { localGatewayHost } from "./local-gateway-host";
 import { localMarketplaceMode } from "./local-marketplace-mode";
@@ -127,34 +129,36 @@ function LocalPages({ session }: { session: ReadySession }) {
     <LocalEngineGatewayProvider targets={targets} host={localGatewayHost}>
       <ViewerNameProvider name={LOCAL_VIEWER_NAME}>
         <MarketplaceModeProvider mode={localMarketplaceMode}>
-          <FeatureSourceProvider source={localFeatureSource}>
-            <TooltipProvider>
-              <Switch>
-                <Route path={`${LOCAL_SETUP_PATH}/:step?`}>
-                  <Suspense fallback={<PageLoading />}>
-                    <LocalSetup />
-                  </Suspense>
-                </Route>
-                <Route>
-                  <LocalSetupGuard>
-                    <LocalShell>
-                      <Suspense fallback={<PageLoading />}>
-                        <Switch>
-                          {LOCAL_ROUTES.map((route) => (
-                            <Route key={route.path} path={route.path}>
-                              {(params) => route.render(params)}
-                            </Route>
-                          ))}
-                          <Route component={ToLocalHome} />
-                        </Switch>
-                      </Suspense>
-                    </LocalShell>
-                  </LocalSetupGuard>
-                </Route>
-              </Switch>
-              <Toaster />
-            </TooltipProvider>
-          </FeatureSourceProvider>
+          <AdminAccessProvider source={localAdminAccess}>
+            <FeatureSourceProvider source={localFeatureSource}>
+              <TooltipProvider>
+                <Switch>
+                  <Route path={`${LOCAL_SETUP_PATH}/:step?`}>
+                    <Suspense fallback={<PageLoading />}>
+                      <LocalSetup />
+                    </Suspense>
+                  </Route>
+                  <Route>
+                    <LocalSetupGuard>
+                      <LocalShell>
+                        <Suspense fallback={<PageLoading />}>
+                          <Switch>
+                            {LOCAL_ROUTES.map((route) => (
+                              <Route key={route.path} path={route.path}>
+                                {(params) => route.render(params)}
+                              </Route>
+                            ))}
+                            <Route component={ToLocalHome} />
+                          </Switch>
+                        </Suspense>
+                      </LocalShell>
+                    </LocalSetupGuard>
+                  </Route>
+                </Switch>
+                <Toaster />
+              </TooltipProvider>
+            </FeatureSourceProvider>
+          </AdminAccessProvider>
         </MarketplaceModeProvider>
       </ViewerNameProvider>
     </LocalEngineGatewayProvider>

@@ -35,7 +35,9 @@ export interface LocalRoute {
 }
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
+const AdminBackup = lazy(() => import("@/pages/admin/backup"));
 const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
+const AdminStorage = lazy(() => import("@/pages/admin/storage"));
 const AlertGroups = lazy(() => import("@/pages/alert-groups"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
@@ -109,6 +111,8 @@ export const LOCAL_ROUTES: readonly LocalRoute[] = [
   { path: "/help/logs", render: () => <Logs /> },
   { path: "/admin/appearance", render: () => <AdminAppearance /> },
   { path: "/admin/integrations", render: () => <AdminIntegrations /> },
+  { path: "/admin/storage", render: () => <AdminStorage /> },
+  { path: "/admin/backup", render: () => <AdminBackup /> },
 ];
 
 /** Where local mode opens, and where a path it does not serve leads back to. */
