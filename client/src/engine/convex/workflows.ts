@@ -26,7 +26,7 @@ import type { WorkflowRun as TransportWorkflowRun } from "@/lib/transport/interf
 import { startVisibleInterval } from "@/lib/visible-interval";
 import { toModuleId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
-import { requireInstance, useInstanceAction, useScopeInstanceId } from "./scope";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 type CatalogRow = NonNullable<FunctionReturnType<typeof api.workflowCatalog.get>>;
 type RunDetailRow = NonNullable<FunctionReturnType<typeof api.workflowRuns.runWithSteps>>;

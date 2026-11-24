@@ -58,8 +58,9 @@ function useStreamEventsSubscription() {
   const instanceId = useScopeInstanceId();
   return useCallback(
     (types: readonly string[], onFrame: (frame: StreamEventFrame) => void) => {
+      const instance = requireInstance(instanceId);
       const wanted = new Set(types);
-      const watch = convex.watchQuery(api.streamEvents.recent, { instanceId: requireInstance(instanceId) });
+      const watch = convex.watchQuery(api.streamEvents.recent, { instanceId: instance });
       let seen: Set<string> | null = null;
       const read = () => {
         const rows = watch.localQueryResult();
