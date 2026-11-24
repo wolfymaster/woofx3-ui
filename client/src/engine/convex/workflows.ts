@@ -22,7 +22,6 @@ import type {
   WorkflowTrigger,
 } from "@/engine/types";
 import { $documentVisible } from "@/lib/stores";
-import type { WorkflowRun as TransportWorkflowRun } from "@/lib/transport/interface";
 import { startVisibleInterval } from "@/lib/visible-interval";
 import { toModuleId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
@@ -264,7 +263,20 @@ function useRuns(engineWorkflowId: string, limit: number) {
   return useMappedList(rows, toRecordedWorkflowRun);
 }
 
-export function toWorkflowRun(run: TransportWorkflowRun): WorkflowRun {
+/** A run as the engine's run poll returns it. */
+interface PolledWorkflowRun {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: WorkflowRun["status"];
+  startedAt: Date;
+  completedAt?: Date;
+  triggeredBy?: string;
+  error?: string;
+  progress?: number;
+}
+
+export function toWorkflowRun(run: PolledWorkflowRun): WorkflowRun {
   return {
     id: run.id,
     workflowId: run.workflowId,
@@ -289,7 +301,7 @@ function useRunsSubscription() {
         listRuns({})
           .then((runs) => {
             for (const run of runs) {
-              onRun(toWorkflowRun(run as unknown as TransportWorkflowRun));
+              onRun(toWorkflowRun(run as unknown as PolledWorkflowRun));
             }
           })
           .catch(() => {

@@ -4,36 +4,17 @@ import { useQuery } from "convex/react";
 import { useCallback, useEffect } from "react";
 import type { SessionGateway } from "@/engine/gateway";
 import type { Live, OrganizationAccess } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useLogger } from "@/lib/logger-context";
-import { $documentVisible, $engineUrl } from "@/lib/stores";
-import { transport } from "@/lib/transport";
+import { $documentVisible } from "@/lib/stores";
 import { startVisibleInterval } from "@/lib/visible-interval";
 import { $engineReachable, ENGINE_PROBE_INTERVAL_MS } from "./engine-reachable";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
-// The live connection is the browser transport's WebSocket session, opened
-// with the URL and client credentials Convex recorded for the instance at
-// registration. `$engineUrl` stands in for an instance with no URL, for local
-// overrides.
+// There is no connection to the engine from the browser: Convex holds the
+// instance's credentials and makes every call, so "live" here means probing
+// that the engine answers and reading its capabilities once it does.
 
 function useLiveConnection(): void {
-  const { instance, isLoading } = useInstance();
-  const fallbackUrl = useStore($engineUrl);
-
-  useEffect(() => {
-    if (isLoading) {
-      return;
-    }
-
-    const urlFromInstance = instance?.url?.trim();
-    const url = urlFromInstance && urlFromInstance.length > 0 ? urlFromInstance : fallbackUrl;
-    const clientId = instance?.clientId ?? undefined;
-    const clientSecret = instance?.clientSecret ?? undefined;
-
-    transport.connect(url, clientId, clientSecret);
-  }, [isLoading, instance, fallbackUrl]);
-
   useEngineProbe();
   useCapabilitiesRefresh();
 }
