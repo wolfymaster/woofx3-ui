@@ -2,6 +2,7 @@ import type {
   MacroId,
   ModuleId,
   SceneId,
+  SetupImportId,
   ShoutoutEntryId,
   StreamHighlightId,
   StreamInfoPresetId,
@@ -75,5 +76,14 @@ export function toWebhookEventId(eventId: string): WebhookEventId {
 }
 
 export function fromWebhookEventId(id: WebhookEventId): string {
+  return id as string;
+}
+
+/** An import is the id the gateway minted for it, which names its settings in the engine's local UI settings. */
+export function toSetupImportId(id: string): SetupImportId {
+  return id as SetupImportId;
+}
+
+export function fromSetupImportId(id: SetupImportId): string {
   return id as string;
 }

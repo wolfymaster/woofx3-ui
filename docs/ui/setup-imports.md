@@ -94,6 +94,17 @@ Apply works in slices of about four minutes and schedules the next slice, so a l
 
 **Waiting.** An import queued before setup finishes does not start until it does (`setup.complete` schedules `setupImports.resumeQueued`). It then waits while setup's modules install and its starter packs are pending, as starter packs do for their triggers to sync. Outside setup it waits for the engine to register. Either wait gives up after 30 minutes and applies anyway, so what is still missing shows as `needs_module`. An engine that never registers leaves the import `stalled`, and **Try again** starts it.
 
+## Local mode
+
+The desktop app's local mode runs the same import against its own engine, with no account. It converts the export in the app and keeps the import in the engine's UI settings, one setting for the import and one for each item, under the `setupImports` namespace. The app itself creates the items, one at a time, recording each outcome as it goes, so the report fills in as it does in the hosted app, and leaving the page does not stop it.
+
+What differs:
+
+- There is no waiting on setup or on the engine registering; the app is connected to the engine before the page opens.
+- A workflow is confirmed by the engine's answer to the create, so `pending` does not occur.
+- An import cut off by closing the app shows as stalled, and **Try again** carries on with the items that have no outcome yet.
+- Backups and imports carry no group members in local mode.
+
 ## Source formats
 
 Neither tool documents its export format, so these are recorded here.
@@ -121,8 +132,11 @@ Neither tool documents its export format, so these are recorded here.
   - variables: `templates.ts`, `events.ts`;
   - the engine shapes: `compile.ts`;
   - file opening: `decode.ts`;
-  - the model: `types.ts`.
+  - the model: `types.ts`;
+  - turning a document into reviewed items: `plan.ts`;
+  - creating one item on the engine: `apply.ts`, which asks the engine for what it needs through the `ImportEngine` interface.
 
   All of it is pure, with tests next to each file.
-- `convex/setupImports.ts`: analyze, review, start, apply, retry, discard.
+- `convex/setupImports.ts`: analyze, review, start, apply, retry, discard, with Convex as the store and the engine's RPC as the `ImportEngine`.
+- `client/src/engine/direct/setup-imports.ts`: the same operations for the desktop app's local mode, with no Convex.
 - `client/src/lib/setup-import.ts`: report sections and summaries.

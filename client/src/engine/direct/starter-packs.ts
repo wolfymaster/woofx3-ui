@@ -110,7 +110,7 @@ export function starterPackStates(
   return states;
 }
 
-function toStarterCatalog(catalog: WorkflowCatalog): StarterCatalog {
+export function toStarterCatalog(catalog: WorkflowCatalog): StarterCatalog {
   return {
     triggers: catalog.triggers.map(({ event, canonicalRef }) => ({ event, canonicalRef })),
     actions: catalog.actions.map(({ canonicalRef, handlerType, functionCall, configFields }) => ({

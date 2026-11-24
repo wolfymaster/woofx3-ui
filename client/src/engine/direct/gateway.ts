@@ -1,5 +1,5 @@
 import type { DesktopHostState } from "@/engine/desktop-host";
-import type { EngineGateway, ModuleOAuthGateway, SetupImportsGateway } from "@/engine/gateway";
+import type { EngineGateway, ModuleOAuthGateway } from "@/engine/gateway";
 import { directAdBreaksGateway } from "./ad-breaks";
 import { directAlertLibraryGateway } from "./alert-library";
 import { directAlertQueueGateway } from "./alert-queue";
@@ -25,6 +25,7 @@ import { directResourcesGateway } from "./resources";
 import type { DirectRuntime } from "./runtime";
 import { directScenesGateway } from "./scenes";
 import { directSessionGateway } from "./session";
+import { directSetupImportsGateway } from "./setup-imports";
 import { directShoutoutsGateway } from "./shoutouts";
 import { directStarterPacksGateway } from "./starter-packs";
 import { directStatusGateway } from "./status";
@@ -32,7 +33,7 @@ import { directStreamInfoGateway } from "./stream-info";
 import { directStreamOpsGateway } from "./stream-ops";
 import { directTwitchChatGateway } from "./twitch-chat";
 import { directTwitchLinkGateway } from "./twitch-link";
-import { unsupportedRead, unsupportedRequest } from "./unsupported";
+import { unsupportedRequest } from "./unsupported";
 import { directWorkflowsGateway } from "./workflows";
 
 // Namespaces whose data the Convex gateway keeps in its own tables, and that
@@ -42,14 +43,6 @@ import { directWorkflowsGateway } from "./workflows";
 const moduleOAuth: ModuleOAuthGateway = {
   useConnectRequest: unsupportedRequest("moduleOAuth.useConnectRequest"),
   useFinishRequest: unsupportedRequest("moduleOAuth.useFinishRequest"),
-};
-
-const setupImports: SetupImportsGateway = {
-  useLatest: unsupportedRead("setupImports.useLatest"),
-  useAnalyzeRequest: unsupportedRequest("setupImports.useAnalyzeRequest"),
-  useStartRequest: unsupportedRequest("setupImports.useStartRequest"),
-  useRetryRequest: unsupportedRequest("setupImports.useRetryRequest"),
-  useDiscardRequest: unsupportedRequest("setupImports.useDiscardRequest"),
 };
 
 /**
@@ -79,7 +72,7 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     twitchLink: directTwitchLinkGateway(runtime),
     overlays: directOverlaysGateway(runtime),
     moduleOAuth,
-    setupImports,
+    setupImports: directSetupImportsGateway(runtime),
     starterPacks: directStarterPacksGateway(runtime),
     defaultSeed: directDefaultSeedGateway(runtime),
     adBreaks: directAdBreaksGateway(runtime),
