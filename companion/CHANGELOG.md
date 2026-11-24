@@ -1,5 +1,19 @@
 # woofx3 desktop changelog
 
+## [0.27.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.26.0...woofx3-v0.27.0) (2026-11-24)
+
+### Features
+
+* **engine:** stream events reach the dashboard through Convex ([56140ca](https://github.com/wolfymaster/woofx3-ui/commit/56140cae40f4317dc97eb08f46db28d2623cace1))
+
+### Bug Fixes
+
+* **alerts:** remove obsolete System group ([cf79c8c](https://github.com/wolfymaster/woofx3-ui/commit/cf79c8c9f73cf7694696f42096d7dcbf959f85d9))
+* **desktop:** allow local engine images and media in the CSP ([d365c41](https://github.com/wolfymaster/woofx3-ui/commit/d365c41a8235676878d5f788bd9f6c82e3d41f01))
+* **desktop:** match nav entries against parameterised local routes ([63234bc](https://github.com/wolfymaster/woofx3-ui/commit/63234bc11ece9333878bae51ff9ee48d318ceaba))
+* **engine:** a stream-event subscription refuses before it watches ([23f043c](https://github.com/wolfymaster/woofx3-ui/commit/23f043cbe3a977e5abe4d04544bf0a06834d144c))
+* **instances:** a browser no longer receives the engine's credentials ([adfc891](https://github.com/wolfymaster/woofx3-ui/commit/adfc891f7c249e6bf23fb6e9d4308f62fd7cfadb))
+
 ## [0.26.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.25.0...woofx3-v0.26.0) (2026-11-23)
 
 ### Features
