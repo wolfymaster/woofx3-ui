@@ -47,6 +47,14 @@ describe("alertMenuPath", () => {
     expect(alertMenuPath(preset("t", "Donation", ["alert.donation"]))).toEqual([OTHER_PLATFORM_KEY, "donation"]);
   });
 
+  test("a system trigger is configured on its resource page, not in Alerts", () => {
+    expect(
+      alertMenuPath(
+        preset("t", "Counter Goal Met", ["system.counter", "platform.system", "alert.counter"], "goal.reached")
+      )
+    ).toBeUndefined();
+  });
+
   // The regression the declared axis replaced: grouping by the leading event segment
   // put every `channel.*` event in one bucket once events became scope-first.
   test("does not collapse events that share a scope", () => {
@@ -153,6 +161,14 @@ describe("buildAlertTree", () => {
       preset("t3", "Chat command", ["system.chat"], "chat.command.*"),
     ]);
     expect(outline(tree)).toEqual([{ Twitch: ["Follow"] }]);
+  });
+
+  test("no System platform appears in the tree", () => {
+    const tree = buildAlertTree([
+      preset("t1", "Counter Goal Met", ["system.counter", "platform.system", "alert.counter"], "goal.reached"),
+      preset("t2", "Channel cheer", ["platform.twitch", "alert.cheer"], "channel.cheer"),
+    ]);
+    expect(outline(tree)).toEqual([{ Twitch: ["Cheer"] }]);
   });
 
   test("orders kinds by label and presets by name", () => {

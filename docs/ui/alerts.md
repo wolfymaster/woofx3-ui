@@ -1,6 +1,6 @@
 # Alert triggers
 
-Choosing a kind of event on the Alerts rail (`/stream/alerts/<platform>/<kind>…`) replaces the dashboard with that event's **triggers**: what happens when it fires, and when. The same list appears on resource pages (Counters, Timers, Queues), filtered to one engine. See [Shell & routing](./overview.md) for the rail, the dashboard and the test sheet.
+Choosing a kind of event on the Alerts rail (`/stream/alerts/<platform>/<kind>…`) replaces the dashboard with that event's **triggers**: what happens when it fires, and when. The same list appears on resource pages (Counters, Timers, Queues), filtered to one engine. A trigger declared with `platform.system` is left out of the rail: its resource page is where it is set up. See [Shell & routing](./overview.md) for the rail, the dashboard and the test sheet.
 
 ## Triggers and workflows
 
