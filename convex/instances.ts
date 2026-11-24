@@ -17,14 +17,26 @@ import { can, requireAction, requireActionFor, requireActionInAction, viewerRole
 import { markFirstRun } from "./provisioningInternal";
 
 /**
- * An instance row as members may see it. `webhookSecret` authenticates the
- * engine's callbacks to Convex and no browser has a use for it. `clientSecret`
- * stays: the browser's live WebSocket to the engine authenticates with it
- * (the Convex gateway's `session.useLiveConnection`, client/src/engine/convex/session.ts).
+ * An instance row as a browser may see it. The engine's client id and secret
+ * are a service token for Convex alone: a member of a hosted engine must never
+ * hold them, because they would let that member call the engine directly. The
+ * webhook secret and the events token's hash are for the engine's own
+ * callbacks. A browser that needs to know whether the engine registered reads
+ * `engineRegistered`.
  */
-function withoutWebhookSecret(instance: Doc<"instances">): Omit<Doc<"instances">, "webhookSecret"> {
-  const { webhookSecret: _webhookSecret, ...rest } = instance;
-  return rest;
+type InstanceView = Omit<Doc<"instances">, "clientId" | "clientSecret" | "webhookSecret" | "eventsTokenHash"> & {
+  engineRegistered: boolean;
+};
+
+function toInstanceView(instance: Doc<"instances">): InstanceView {
+  const {
+    clientId,
+    clientSecret: _clientSecret,
+    webhookSecret: _webhookSecret,
+    eventsTokenHash: _eventsTokenHash,
+    ...rest
+  } = instance;
+  return { ...rest, engineRegistered: Boolean(clientId) };
 }
 
 /**
@@ -53,7 +65,7 @@ export const listForCurrentUser = query({
     const instances = await Promise.all(memberships.map((m) => ctx.db.get(m.instanceId)));
     return instances
       .filter((instance) => instance !== null)
-      .map((instance) => ({ ...withoutWebhookSecret(instance), ownedByMe: ownedAccountIds.has(instance.accountId) }));
+      .map((instance) => ({ ...toInstanceView(instance), ownedByMe: ownedAccountIds.has(instance.accountId) }));
   },
 });
 
@@ -65,7 +77,7 @@ export const get = query({
       return null;
     }
     const instance = await ctx.db.get(args.instanceId);
-    return instance ? withoutWebhookSecret(instance) : null;
+    return instance ? toInstanceView(instance) : null;
   },
 });
 

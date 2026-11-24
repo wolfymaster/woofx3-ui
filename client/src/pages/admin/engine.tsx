@@ -235,8 +235,8 @@ function EngineSettings() {
       <div className="space-y-4">
         <EngineNameCard instanceId={instance._id} name={instance.name} />
         <ManagedEngineCard instanceId={instance._id} />
-        {instance.clientId && engineInstanceId && <ModuleStorageCard />}
-        {instance.clientId && engineInstanceId && <EngineSyncCard />}
+        {instance.engineRegistered && engineInstanceId && <ModuleStorageCard />}
+        {instance.engineRegistered && engineInstanceId && <EngineSyncCard />}
         <CompanionCard instanceId={instance._id} />
         <DangerZone instanceId={instance._id} managed />
       </div>
@@ -306,10 +306,12 @@ function EngineSettings() {
           <div className="grid gap-2">
             <Label>Connection</Label>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-              <div className={`h-2 w-2 rounded-full ${instance.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
-              <p className="text-sm text-muted-foreground">{instance.clientId ? "Connected" : "Not connected yet."}</p>
+              <div className={`h-2 w-2 rounded-full ${instance.engineRegistered ? "bg-green-500" : "bg-yellow-500"}`} />
+              <p className="text-sm text-muted-foreground">
+                {instance.engineRegistered ? "Connected" : "Not connected yet."}
+              </p>
             </div>
-            {!instance.clientId && (
+            {!instance.engineRegistered && (
               <div className="space-y-1">
                 <Button
                   type="button"
