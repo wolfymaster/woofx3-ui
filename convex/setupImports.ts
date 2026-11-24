@@ -19,11 +19,11 @@ import { addGroupMemberInEngine, createCommandInEngine, createGroupInEngine } fr
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { findEngineMergeTarget } from "./lib/engineWorkflows";
 import { requireInstanceRole, requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { flattenSteps } from "./lib/setupImport/build";
-import { compileCommandActions, compileWorkflow, missingRequirementMessage } from "./lib/setupImport/compile";
-import { convertFirebot } from "./lib/setupImport/firebot";
-import { asRecord, asString } from "./lib/setupImport/read";
-import { convertStreamerbot } from "./lib/setupImport/streamerbot";
+import { flattenSteps } from "@shared/setup-import/build";
+import { compileCommandActions, compileWorkflow, missingRequirementMessage } from "@shared/setup-import/compile";
+import { convertFirebot } from "@shared/setup-import/firebot";
+import { asRecord, asString } from "@shared/setup-import/read";
+import { convertStreamerbot } from "@shared/setup-import/streamerbot";
 import {
   IMPORT_KIND_ORDER,
   type ImportCommandSpec,
@@ -33,7 +33,7 @@ import {
   type ImportPlan,
   type ImportWorkflowSpec,
   itemReadiness,
-} from "./lib/setupImport/types";
+} from "@shared/setup-import/types";
 import { isInstanceMember } from "./lib/teamAccess";
 import { findResourceKind } from "./resourceKinds";
 import { starterCatalog } from "./starterPacks";

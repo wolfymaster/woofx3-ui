@@ -8,7 +8,7 @@ Only owners and admins can import.
 
 ## Flow
 
-1. **Open the export in the browser.** `convex/lib/setupImport/decode.ts`, shared with the client:
+1. **Open the export in the browser.** `shared/setup-import/decode.ts`, shared with the client:
    - **Firebot**: a `.firebotsetup` file, or a backup zip from Settings > Backups. A backup is the whole profile, sounds and overlay files included, so only the JSON files the import reads are unzipped (with `fflate`). The profile Firebot was last signed into is used, and its files are gathered into the same `components` shape a setup file has.
    - **Streamer.bot**: an export string pasted from Import/Export, or a `.sb` file.
 2. **Convert and review.** The opened document is sent to `setupImports.analyze` in chunks, because Convex limits one string to 1 MiB. `analyze` converts it, then stores the result as a `setupImports` row with one `setupImportItems` row per engine object. Nothing reaches the engine yet. The panel shows each item with what it does and what could not come over.
@@ -37,7 +37,7 @@ Converting does not need the catalog. Items name actions by canonical ref (`woof
 - Firebot run-effect-list and preset lists, and Streamer.bot Run Action and groups, are copied in at the call site;
 - counter updates, shoutouts, clips, stream markers, stream title/category, timeouts, OBS scene switches, OBS source show/hide and OBS mute map onto their woofx3 actions.
 
-**Variables.** `$user`, `$arg[1]`, `%user%`, `%input0%` and the event variables become `${trigger.data...}` expressions, using the event's own field names (`convex/lib/setupImport/events.ts`, which must match the module manifests' `emits`). A variable woofx3 has no value for in that context is left as written and named in the report.
+**Variables.** `$user`, `$arg[1]`, `%user%`, `%input0%` and the event variables become `${trigger.data...}` expressions, using the event's own field names (`shared/setup-import/events.ts`, which must match the module manifests' `emits`). A variable woofx3 has no value for in that context is left as written and named in the report.
 
 ## What does not, and why it is never widened
 
@@ -111,12 +111,12 @@ Neither tool documents its export format, so these are recorded here.
 
 - An export string is `base64("SBAE" + gzip(JSON))`. The JSON is `{ meta, data: { actions, commands, timers, queues, ... }, version }`.
 - Schema 23 (1.0.x) nests sub-actions. An if/else (type 120) holds its branches as sub-actions of type 99901 and 99902. Older schemas keep a flat `actions` list with `actionGroups`, and their if/else runs other actions.
-- Trigger and sub-action types are numbers. The ones used, and which were inferred from the C# `EventType` order rather than seen in an export, are listed in `convex/lib/setupImport/streamerbot.ts`.
+- Trigger and sub-action types are numbers. The ones used, and which were inferred from the C# `EventType` order rather than seen in an export, are listed in `shared/setup-import/streamerbot.ts`.
 - Commands and timed actions link to actions through triggers 401 (`commandId`) and 701 (`timerId`).
 
 ## Code
 
-- `convex/lib/setupImport/`:
+- `shared/setup-import/`:
   - converters: `firebot.ts`, `streamerbot.ts`;
   - variables: `templates.ts`, `events.ts`;
   - the engine shapes: `compile.ts`;
