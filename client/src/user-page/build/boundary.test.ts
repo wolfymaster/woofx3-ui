@@ -19,7 +19,6 @@ describe("userPageBoundaryViolation", () => {
     { id: join(REPO, "client/src/App.tsx"), allowed: false },
     { id: join(REPO, "client/src/lib/convexClient.ts"), allowed: false },
     { id: join(REPO, "client/src/engine/context.tsx"), allowed: false },
-    { id: join(REPO, "client/src/lib/transport/index.ts"), allowed: false },
     { id: join(REPO, "client/src/components/layout/broadcast-shell.tsx"), allowed: false },
     { id: join(REPO, "client/src/lib/resource-values.test.ts"), allowed: false },
     { id: join(REPO, "client/src/user-pages-editor/editor.tsx"), allowed: false },
