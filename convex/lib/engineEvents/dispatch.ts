@@ -49,6 +49,12 @@ import { recordRunFromWebhook, recordRunStepFromWebhook, updateRunFromWebhook } 
 import { ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "../engineAlertLifecycle";
 import { SESSION_SUMMARY_EVENT_TYPE } from "../sessionSummary";
 import {
+  readPushedFrame,
+  STREAM_EVENT_CORRELATION_KEY,
+  STREAM_EVENT_PUSHED_EVENT_TYPE,
+  STREAM_EVENT_TTL_MS,
+} from "../streamEvents";
+import {
   engineResponseTransient,
   runLifecycleTransient,
   storageChangedTransient,
@@ -125,6 +131,22 @@ export async function applyEngineEvent(
     return result.outcome === "invalid"
       ? { kind: "invalid", reason: `Invalid workflow health: ${result.reason}` }
       : APPLIED;
+  }
+
+  if (eventType === STREAM_EVENT_PUSHED_EVENT_TYPE) {
+    const frame = readPushedFrame((event as unknown as { frame?: unknown }).frame);
+    if (!frame) {
+      return { kind: "invalid", reason: "stream.event.pushed needs a frame with a type and a time" };
+    }
+    await emitTransientEvent(ctx, {
+      instanceId,
+      correlationKey: STREAM_EVENT_CORRELATION_KEY,
+      type: frame.type,
+      status: "success",
+      data: frame,
+      ttlMs: STREAM_EVENT_TTL_MS,
+    });
+    return APPLIED;
   }
 
   // Written to transientEvents like the other workflow.run.* lifecycle events,

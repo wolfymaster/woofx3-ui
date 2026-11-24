@@ -59,7 +59,7 @@ describe("onboardingRoute", () => {
     },
     {
       name: "a registered instance is past all of this",
-      facts: { ...none, wantsOwnEngine: true, instances: [{ clientId: "c", hosting: "external" }] },
+      facts: { ...none, wantsOwnEngine: true, instances: [{ engineRegistered: true, hosting: "external" }] },
       route: "setup",
     },
     {
@@ -73,7 +73,7 @@ describe("onboardingRoute", () => {
 });
 
 describe("enginesForOnboarding", () => {
-  const invited = { clientId: "c", hosting: "managed" as const, ownedByMe: false };
+  const invited = { engineRegistered: true, hosting: "managed" as const, ownedByMe: false };
   const mine = { hosting: "managed" as const, ownedByMe: true };
 
   test.each([

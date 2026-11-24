@@ -77,13 +77,6 @@ already filed and open in this repo. Nothing below duplicates them.
 - **Size:** large
 - **Description:** Resolved by removal. There is no desktop UI: the browser is the only management surface, so `TauriTransport` and the `isTauri()` branch were deleted. The Tauri app under `companion/` is a tray companion that pairs with an instance, not a UI (see `docs/ui/companion.md`).
 
-### BrowserTransport polling silently swallows all errors
-
-- **Files:** `client/src/lib/transport/browser-transport.ts:93-158`
-- **Category:** bug-ux
-- **Size:** medium
-- **Description:** Empty `catch {}` blocks in chat/events/workflow-run pollers mean that if the engine WS session drops, the UI shows stale data forever with no "disconnected" indicator or retry/backoff.
-
 ## Scenes / modules
 
 ### Orphaned OBS browser-source page + placeholder widget-asset endpoint

@@ -1,39 +1,49 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import { useQuery } from "convex/react";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import type { SessionGateway } from "@/engine/gateway";
 import type { Live, OrganizationAccess } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useLogger } from "@/lib/logger-context";
-import { $engineUrl } from "@/lib/stores";
-import { transport } from "@/lib/transport";
-import { $engineConnected } from "@/lib/transport/engine-connection";
+import { $documentVisible } from "@/lib/stores";
+import { startVisibleInterval } from "@/lib/visible-interval";
+import { $engineReachable, ENGINE_PROBE_INTERVAL_MS } from "./engine-reachable";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
-// The live connection is the browser transport's WebSocket session, opened
-// with the URL and client credentials Convex recorded for the instance at
-// registration. `$engineUrl` stands in for an instance with no URL, for local
-// overrides.
+// There is no connection to the engine from the browser: Convex holds the
+// instance's credentials and makes every call, so "live" here means probing
+// that the engine answers and reading its capabilities once it does.
 
 function useLiveConnection(): void {
-  const { instance, isLoading } = useInstance();
-  const fallbackUrl = useStore($engineUrl);
+  useEngineProbe();
+  useCapabilitiesRefresh();
+}
 
+/** A function that asks Convex whether the engine answers and records the result. */
+function useProbeRequest(): () => Promise<void> {
+  const health = useInstanceAction(api.engineLive.health);
+  return useCallback(async () => {
+    try {
+      $engineReachable.set((await health({})).connected);
+    } catch {
+      // Not being able to ask is the same, to a reader, as the engine not answering.
+      $engineReachable.set(false);
+    }
+  }, [health]);
+}
+
+/** Probes on mount and then on a cadence while the tab is visible; a different instance starts from not reachable. */
+function useEngineProbe(): void {
+  const instanceId = useScopeInstanceId();
+  const probe = useProbeRequest();
   useEffect(() => {
-    if (isLoading) {
+    if (instanceId === null) {
+      $engineReachable.set(false);
       return;
     }
-
-    const urlFromInstance = instance?.url?.trim();
-    const url = urlFromInstance && urlFromInstance.length > 0 ? urlFromInstance : fallbackUrl;
-    const clientId = instance?.clientId ?? undefined;
-    const clientSecret = instance?.clientSecret ?? undefined;
-
-    transport.connect(url, clientId, clientSecret);
-  }, [isLoading, instance, fallbackUrl]);
-
-  useCapabilitiesRefresh();
+    void probe();
+    return startVisibleInterval(() => void probe(), ENGINE_PROBE_INTERVAL_MS, $documentVisible);
+  }, [instanceId, probe]);
 }
 
 /**
@@ -45,7 +55,7 @@ function useLiveConnection(): void {
 function useCapabilitiesRefresh(): void {
   const logger = useLogger();
   const instanceId = useScopeInstanceId();
-  const connected = useStore($engineConnected);
+  const connected = useStore($engineReachable);
   const refresh = useInstanceAction(api.engineCapabilities.refresh);
 
   useEffect(() => {
@@ -67,13 +77,8 @@ function useCapabilities(): Live<readonly string[]> {
   return capabilities ?? [];
 }
 
-// The transport is a module singleton, so this keeps its identity without memoising.
-const reconnectNow = (): void => {
-  transport.reconnectNow();
-};
-
 function useConnected(): boolean {
-  return useStore($engineConnected);
+  return useStore($engineReachable);
 }
 
 function useOrganizationAccess(): Live<OrganizationAccess | null> {
@@ -83,7 +88,7 @@ function useOrganizationAccess(): Live<OrganizationAccess | null> {
 
 export const convexSessionGateway: SessionGateway = {
   useLiveConnection,
-  useReconnectRequest: () => reconnectNow,
+  useReconnectRequest: useProbeRequest,
   useConnected,
   useCapabilities,
   useOrganizationAccess,
