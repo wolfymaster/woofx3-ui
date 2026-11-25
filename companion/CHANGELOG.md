@@ -1,5 +1,16 @@
 # woofx3 desktop changelog
 
+## [0.29.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.28.0...woofx3-v0.29.0) (2026-11-25)
+
+### Features
+
+* **local-mode:** import Firebot and Streamer.bot setups without an account ([9d07cd7](https://github.com/wolfymaster/woofx3-ui/commit/9d07cd71ea95ea121bef7bcfb7f60dc4ac3a8173))
+* **local-mode:** serve the Storage and Backup admin pages ([434f53f](https://github.com/wolfymaster/woofx3-ui/commit/434f53ffdfca7fbb1b5830d221b1b3011b9cb91e))
+
+### Bug Fixes
+
+* **logs:** live tail retries with backoff and drops malformed frames ([abdde67](https://github.com/wolfymaster/woofx3-ui/commit/abdde67e93b89dd0556e2fda0378a53c0926eab4))
+
 ## [0.28.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.27.0...woofx3-v0.28.0) (2026-11-25)
 
 ### Features
