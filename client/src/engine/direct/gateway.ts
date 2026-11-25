@@ -12,6 +12,7 @@ import { directDefaultSeedGateway } from "./default-seed";
 import { directConfigGateway } from "./engine-config";
 import { directEventLogGateway } from "./event-log";
 import { directFormSubmissionsGateway } from "./form-submissions";
+import { directLogsGateway } from "./logs";
 import { directMacrosGateway } from "./macros";
 import { directMarketplaceGateway } from "./marketplace";
 import { directModerationGateway } from "./moderation";
@@ -87,5 +88,6 @@ export function createDirectEngineGateway(runtime: DirectRuntime, host: DesktopH
     streamInfo: directStreamInfoGateway(runtime),
     pageIntros: directPageIntrosGateway(runtime),
     dashboard: directDashboardGateway(runtime),
+    logs: directLogsGateway(runtime),
   };
 }

@@ -113,7 +113,7 @@ export default function Onboarding() {
   useEffect(() => {
     if (route === "setup" && instances) {
       const current =
-        instances.find((instance) => instance.clientId) ??
+        instances.find((instance) => instance.engineRegistered) ??
         instances.find((instance) => instance.hosting === "managed") ??
         instances[0];
       $currentInstanceId.set(current._id);

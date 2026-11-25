@@ -2,7 +2,7 @@ import type { StreamEventFrame } from "@woofx3/api";
 
 /**
  * A local listener on the engine's stream-event push and the event types it
- * takes; see `WoofxTransport.subscribeStreamEvents`.
+ * takes.
  */
 export interface StreamListener {
   types: ReadonlySet<string>;
