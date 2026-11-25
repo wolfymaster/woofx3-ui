@@ -2,26 +2,26 @@ import type { LogRecordItem } from "@woofx3/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEngineGateway } from "@/engine/context";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { parseLogRecord, type ReconnectConfig, reconnectDelay } from "./log-tail";
 import { type LogFilter, logStreamUrl } from "./log-urls";
 
 /** Whether new records are pushed into the list as the engine writes them. */
 export type TailMode = "paused" | "live";
 
-export interface LogExplorerConfig {
+export interface LogExplorerConfig extends ReconnectConfig {
   /** How long a search box must sit still before it queries. */
   searchDebounceMs: number;
   /** Records kept in memory; the oldest drop off once a live tail passes it. */
   maxRecords: number;
   pageSize: number;
-  /** Wait before asking for a new live address after the stream drops. */
-  reconnectDelayMs: number;
 }
 
 export const DEFAULT_LOG_EXPLORER_CONFIG: LogExplorerConfig = {
   searchDebounceMs: 300,
   maxRecords: 5000,
   pageSize: 200,
-  reconnectDelayMs: 1000,
+  reconnectBaseMs: 1000,
+  reconnectMaxMs: 30000,
 };
 
 export interface LogExplorer {
@@ -144,6 +144,12 @@ export function useLogExplorer(
     let retry: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
     let lastId: string | null = null;
+    let failures = 0;
+
+    const retryLater = () => {
+      retry = setTimeout(connect, reconnectDelay(failures, config, Math.random));
+      failures += 1;
+    };
 
     const connect = () => {
       access("stream")
@@ -155,19 +161,26 @@ export function useLogExplorer(
           source = stream;
           stream.addEventListener("log", (event) => {
             const message = event as MessageEvent<string>;
+            const record = parseLogRecord(message.data);
+            if (record === null) {
+              return;
+            }
             lastId = message.lastEventId;
-            const record = JSON.parse(message.data) as LogRecordItem;
+            failures = 0;
             setRecords((held) => mergeNewest(held, record, config.maxRecords));
           });
           // A closed source is a refused address (it expired or the engine restarted): ask for a fresh one.
           stream.addEventListener("error", () => {
             if (stream.readyState === EventSource.CLOSED && !stopped) {
-              retry = setTimeout(connect, config.reconnectDelayMs);
+              retryLater();
             }
           });
         })
         .catch((cause: unknown) => {
           setError(cause instanceof Error ? cause.message : String(cause));
+          if (!stopped) {
+            retryLater();
+          }
         });
     };
     connect();
@@ -179,7 +192,7 @@ export function useLogExplorer(
         clearTimeout(retry);
       }
     };
-  }, [tail, access, text, levelsKey, servicesKey, config.maxRecords, config.reconnectDelayMs]);
+  }, [tail, access, text, levelsKey, servicesKey, config.maxRecords, config.reconnectBaseMs, config.reconnectMaxMs]);
 
   return { records, isLoading, isLoadingMore, error, hasMore: nextCursor !== null, loadMore, services };
 }
