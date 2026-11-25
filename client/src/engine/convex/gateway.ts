@@ -11,6 +11,7 @@ import { convexDatabasesGateway } from "./databases";
 import { convexDefaultSeedGateway } from "./default-seed";
 import { convexEventLogGateway } from "./event-log";
 import { convexFormSubmissionsGateway } from "./form-submissions";
+import { convexLogsGateway } from "./logs";
 import { convexMacrosGateway } from "./macros";
 import { convexMarketplaceGateway } from "./marketplace";
 import { convexModerationGateway } from "./moderation";
@@ -75,4 +76,5 @@ export const convexEngineGateway: EngineGateway = {
   streamInfo: convexStreamInfoGateway,
   pageIntros: convexPageIntrosGateway,
   dashboard: convexDashboardGateway,
+  logs: convexLogsGateway,
 };
