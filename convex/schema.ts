@@ -1206,7 +1206,7 @@ export default defineSchema({
     .index("by_correlation", ["correlationKey"]),
 
   // setupImports: a streamer's setup brought over from Firebot or Streamer.bot
-  // (convex/lib/setupImport). Converted when the file is read, reviewed, then
+  // (shared/setup-import). Converted when the file is read, reviewed, then
   // applied by convex/setupImports.ts through the same engine calls the UI
   // makes. `leftovers` are parts of the setup woofx3 has no place for at all.
   setupImports: defineTable({
@@ -1230,7 +1230,7 @@ export default defineSchema({
   }).index("by_instance", ["instanceId", "createdAt"]),
 
   // setupImportItems: one engine object an import creates, and how creating it
-  // went. `spec` is the converted item (lib/setupImport/types.ts), stored with
+  // went. `spec` is the converted item (shared/setup-import/types.ts), stored with
   // `$` keys escaped. `engineId` is the engine id of the workflow, command or
   // group, or the canonical id of a counter. Items with the same source and
   // key are the same thing from the same file, so importing it again finds

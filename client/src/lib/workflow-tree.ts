@@ -29,7 +29,7 @@ export interface WorkflowTree {
  *   owns it (nothing, for the top list), every later step on the one before it, and a condition
  *   lists only its direct children. This is what the editor writes.
  * - `chained`: one chain through every step in reading order, and a condition lists every step
- *   inside it, nested ones included. Setup import (`convex/lib/setupImport/compile.ts`) writes this.
+ *   inside it, nested ones included. Setup import (`shared/setup-import/compile.ts`) writes this.
  * - `listed`: steps inside a branch have no `dependsOn`; every other step depends on the task
  *   written before it, and a condition lists only its direct children. Definitions saved by
  *   earlier versions of this editor use it.

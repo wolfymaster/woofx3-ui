@@ -16,6 +16,7 @@ import type { DirectRuntime } from "./runtime";
 export const UI_SETTING_NAMESPACES = {
   pageIntros: "pageIntros",
   starterPacks: "starterPacks",
+  setupImports: "setupImports",
   defaultSeed: "defaultSeed",
   dashboardLayouts: "dashboardLayouts",
   dashboardNotes: "dashboardNotes",
@@ -79,6 +80,26 @@ export async function putUISetting(
     throw new Error(`${member}: the engine refused an unconditional write to ${namespace}/${key}`);
   }
   await runtime.queryClient.invalidateQueries({ queryKey: k.uiSettings.namespace(namespace) });
+}
+
+/**
+ * Writes one setting unconditionally and puts the stored setting into the
+ * namespace's cached read instead of reading the namespace again. For a run of
+ * writes, such as an import's progress, where a read after each would cost more
+ * than the writes.
+ */
+export async function storeUISetting(
+  runtime: DirectRuntime,
+  namespace: UISettingNamespace,
+  key: string,
+  value: UISettingValue,
+  member: string
+): Promise<void> {
+  const result = await runtime.call("setUISetting", (api) => api.setUISetting(namespace, key, value));
+  if (!result.ok) {
+    throw new Error(`${member}: the engine refused an unconditional write to ${namespace}/${key}`);
+  }
+  cacheWritten(runtime, result.setting);
 }
 
 /** What a read-modify-write makes of a setting: a value to store, or no write at all. */

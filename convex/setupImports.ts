@@ -1,5 +1,13 @@
-import { escapeDollarKeys, unescapeDollarKeys } from "@shared/dollar-keys";
 import { COUNTER_KIND } from "@shared/resource-kinds";
+import { type AppliedItems, applyImportItem, type ImportEngine, type ImportOutcome } from "@shared/setup-import/apply";
+import {
+  convertDocument,
+  ImportDocumentError,
+  MAX_IMPORT_ITEMS,
+  type PlannedItem,
+  planItems,
+} from "@shared/setup-import/plan";
+import type { ImportPlan, ImportSource } from "@shared/setup-import/types";
 import type { StarterCatalog } from "@shared/starter-packs";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
@@ -19,21 +27,6 @@ import { addGroupMemberInEngine, createCommandInEngine, createGroupInEngine } fr
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { findEngineMergeTarget } from "./lib/engineWorkflows";
 import { requireInstanceRole, requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { flattenSteps } from "./lib/setupImport/build";
-import { compileCommandActions, compileWorkflow, missingRequirementMessage } from "./lib/setupImport/compile";
-import { convertFirebot } from "./lib/setupImport/firebot";
-import { asRecord, asString } from "./lib/setupImport/read";
-import { convertStreamerbot } from "./lib/setupImport/streamerbot";
-import {
-  IMPORT_KIND_ORDER,
-  type ImportCommandSpec,
-  type ImportCounterSpec,
-  type ImportGroupSpec,
-  type ImportItem,
-  type ImportPlan,
-  type ImportWorkflowSpec,
-  itemReadiness,
-} from "./lib/setupImport/types";
 import { isInstanceMember } from "./lib/teamAccess";
 import { findResourceKind } from "./resourceKinds";
 import { starterCatalog } from "./starterPacks";
@@ -49,7 +42,7 @@ import type { CatalogBundle } from "./workflowCatalogContext";
  * Bringing a streamer's setup over from Firebot or Streamer.bot.
  *
  * `analyze` converts the export (opened in the browser by
- * lib/setupImport/decode.ts) and stores the result for review. `start` queues
+ * shared/setup-import/decode.ts) and stores the result for review. `start` queues
  * it, and `apply` creates each item through the same functions the workflow
  * builder, command editor, groups page and counters page use, so the engine
  * sees ordinary user-made objects. Applying runs in the background in slices,
@@ -60,7 +53,6 @@ import type { CatalogBundle } from "./workflowCatalogContext";
 const sourceValidator = v.union(v.literal("firebot"), v.literal("streamerbot"));
 
 /** More than any real setup has; keeps one import inside a few mutations' write limits. */
-const MAX_IMPORT_ITEMS = 2000;
 const INSERT_BATCH = 100;
 
 /** An apply that has not reported back within this long is taken to have died. */
@@ -81,42 +73,6 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function stepLabels(item: ImportItem): string[] {
-  if (item.kind === "command") {
-    return item.spec.steps.map((step) => step.label);
-  }
-  if (item.kind === "workflow") {
-    return flattenSteps(item.spec.steps).map((step) => step.label);
-  }
-  return [];
-}
-
-function convertDocument(source: "firebot" | "streamerbot", text: string): ImportPlan {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new ConvexError("The import could not be read. Choose the file again.");
-  }
-  const document = asRecord(parsed);
-  if (!document) {
-    throw new ConvexError("The import could not be read. Choose the file again.");
-  }
-  const name = asString(document.name);
-  if (source === "firebot") {
-    const components = asRecord(document.components);
-    if (!components) {
-      throw new ConvexError("This is not a Firebot setup.");
-    }
-    return convertFirebot({ name, components });
-  }
-  const exported = asRecord(document.export);
-  if (!exported) {
-    throw new ConvexError("This is not a Streamer.bot export.");
-  }
-  return convertStreamerbot({ name, export: exported });
-}
-
 /**
  * Convert an opened export and keep it for review. Nothing reaches the engine
  * until `start`. The document arrives in chunks because Convex caps a single
@@ -130,25 +86,17 @@ export const analyze = action({
   },
   handler: async (ctx, { instanceId, source, documentChunks }): Promise<{ importId: Id<"setupImports"> }> => {
     const userId = await requireInstanceRoleInAction(ctx, instanceId, "admin");
-    const plan = convertDocument(source, documentChunks.join(""));
-    if (plan.items.length > MAX_IMPORT_ITEMS) {
-      throw new ConvexError(`This setup has ${plan.items.length} items; an import takes at most ${MAX_IMPORT_ITEMS}.`);
+    let plan: ImportPlan;
+    let items: PlannedItem[];
+    try {
+      plan = convertDocument(source, documentChunks.join(""));
+      items = planItems(plan);
+    } catch (err) {
+      if (err instanceof ImportDocumentError) {
+        throw new ConvexError(err.message);
+      }
+      throw err;
     }
-    const order = (item: ImportItem) => IMPORT_KIND_ORDER.indexOf(item.kind);
-    const items = plan.items
-      .map((item, index) => ({ item, index }))
-      .sort((a, b) => order(a.item) - order(b.item) || a.index - b.index)
-      .map(({ item }, index) => ({
-        order: index,
-        key: item.key,
-        kind: item.kind,
-        name: item.name,
-        origin: item.origin,
-        readiness: itemReadiness(item),
-        notes: item.notes,
-        steps: stepLabels(item),
-        spec: escapeDollarKeys(item.spec),
-      }));
 
     const importId: Id<"setupImports"> = await ctx.runMutation(internal.setupImports.createRun, {
       instanceId,
@@ -595,272 +543,116 @@ export const completion = internalQuery({
   },
 });
 
-type Outcome = { outcome: ImportItemOutcome; message?: string; engineId?: string };
-
 interface ApplyContext {
   ctx: ActionCtx;
   instanceId: Id<"instances">;
   importId: Id<"setupImports">;
-  source: "firebot" | "streamerbot";
+  source: ImportSource;
   instance: InstanceContext;
   catalog: StarterCatalog;
-  /** Outcome and engine id of every item applied so far, by key. */
-  done: Map<string, { outcome: ImportItemOutcome; engineId: string | null }>;
+  /** Mints the key a workflow create is matched to the engine's echo by. */
+  newCorrelationKey: () => string;
 }
 
-function blockingMessage(item: Doc<"setupImportItems">): string {
-  return item.notes.find((note) => note.blocking === true)?.message ?? "woofx3 cannot run it yet.";
-}
-
-/** Canonical ids of the counters this import created or found, by item key. */
-function counterIds(apply: ApplyContext): Map<string, string> {
-  const ids = new Map<string, string>();
-  for (const [key, entry] of apply.done) {
-    if ((entry.outcome === "created" || entry.outcome === "exists") && entry.engineId !== null) {
-      ids.set(key, entry.engineId);
-    }
-  }
-  return ids;
-}
-
-/** A key's engine id when its item went in, created now or found already there. */
-function usableId(apply: ApplyContext, key: string): string | null {
-  const entry = apply.done.get(key);
-  if (!entry || (entry.outcome !== "created" && entry.outcome !== "exists")) {
-    return null;
-  }
-  return entry.engineId;
-}
-
-async function applyGroup(apply: ApplyContext, item: Doc<"setupImportItems">, spec: ImportGroupSpec): Promise<Outcome> {
+/** The engine as an import sees it in the hosted app: Convex's mirror to look things up, the engine's own API to change them. */
+function convexImportEngine(apply: ApplyContext): ImportEngine {
   const { ctx, instanceId, instance } = apply;
-  const found = await ctx.runQuery(internal.setupImports.existing, {
-    instanceId,
-    source: apply.source,
-    key: item.key,
-    kind: "group",
-    name: spec.name,
-  });
-  if (found) {
-    return {
-      outcome: "exists",
-      engineId: found.engineId,
-      message: `You already have a group called ${spec.name}; imported commands use it and its members are left as they are.`,
-    };
-  }
-  const engineId = await createGroupInEngine(ctx, instanceId, instance, {
-    name: spec.name,
-    description: spec.description,
-  });
-  const failedMembers: string[] = [];
-  for (const member of spec.members) {
-    try {
-      await addGroupMemberInEngine(ctx, instanceId, instance, engineId, member);
-    } catch {
-      failedMembers.push(member);
-    }
-  }
+  const rpc = () => createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
   return {
-    outcome: "created",
-    engineId,
-    message:
-      failedMembers.length > 0
-        ? `Could not add ${failedMembers.join(", ")} to it; add them on the Groups page.`
-        : undefined,
+    source: apply.source,
+    catalog: apply.catalog,
+    findExisting: (kind, item, name) =>
+      ctx.runQuery(internal.setupImports.existing, {
+        instanceId,
+        source: apply.source,
+        key: item.key,
+        kind,
+        name,
+      }),
+    counterModule: async () => {
+      const kind = await ctx.runQuery(internal.setupImports.counterKind, { instanceId });
+      return kind ? kind.moduleName : null;
+    },
+    createCounter: async (moduleName, spec) => {
+      const result = await rpc().createResourceInstance(
+        moduleName,
+        "counter",
+        spec.resourceInstanceId,
+        spec.displayName,
+        {
+          lifetime: "forever",
+          initialValue: spec.initialValue,
+          step: 1,
+        }
+      );
+      return result.canonicalId;
+    },
+    builtInGroupIds: (names) => ctx.runQuery(internal.starterPacks.builtInGroupIds, { instanceId, names: [...names] }),
+    createGroup: (group) => createGroupInEngine(ctx, instanceId, instance, group),
+    addGroupMember: async (engineGroupId, username) => {
+      await addGroupMemberInEngine(ctx, instanceId, instance, engineGroupId, username);
+    },
+    createCommand: (command) => createCommandInEngine(ctx, instanceId, instance, command),
+    placeWorkflow: async (item, definition) => {
+      const correlationKey = apply.newCorrelationKey();
+      await ctx.runMutation(internal.setupImports.setCorrelation, {
+        itemId: item.ref as Id<"setupImportItems">,
+        correlationKey,
+      });
+      try {
+        const target = await findEngineMergeTarget(instance, definition.trigger as Record<string, unknown>);
+        const engineId =
+          target === undefined
+            ? await createWorkflowInEngine(
+                ctx,
+                instanceId,
+                instance,
+                // Carries delay waits and `$ref`s, which the shared WorkflowDefinition type does not model.
+                definition as unknown as Omit<WorkflowDefinition, "id">,
+                correlationKey
+              )
+            : await appendWorkflowSteps(
+                ctx,
+                instanceId,
+                instance,
+                target,
+                definition.tasks as unknown as readonly Record<string, unknown>[],
+                correlationKey
+              );
+        // Its enabled state is set by completeImportItemByCorrelation when the
+        // create's echo arrives.
+        return { engineId };
+      } catch (err) {
+        if (err instanceof EngineConfirmationTimeout) {
+          return "pending";
+        }
+        throw err;
+      }
+    },
   };
 }
 
-async function applyCounter(
+async function applyItem(
   apply: ApplyContext,
-  item: Doc<"setupImportItems">,
-  spec: ImportCounterSpec
-): Promise<Outcome> {
-  const { ctx, instanceId, instance } = apply;
-  const found = await ctx.runQuery(internal.setupImports.existing, {
-    instanceId,
-    source: apply.source,
-    key: item.key,
-    kind: "counter",
-    name: spec.resourceInstanceId,
-  });
-  if (found) {
-    return {
-      outcome: "exists",
-      engineId: found.engineId,
-      message: `You already have a counter "${spec.resourceInstanceId}"; imported steps use it.`,
-    };
-  }
-  const kind = await ctx.runQuery(internal.setupImports.counterKind, { instanceId });
-  if (!kind) {
-    return { outcome: "needs_module", message: "Needs a newer woofx3." };
-  }
-  const result = await createEngineRpcSession<EngineApi>(
-    instance.url,
-    instance.clientId,
-    instance.clientSecret
-  ).createResourceInstance(kind.moduleName, "counter", spec.resourceInstanceId, spec.displayName, {
-    lifetime: "forever",
-    initialValue: spec.initialValue,
-    step: 1,
-  });
-  return { outcome: "created", engineId: result.canonicalId };
-}
-
-async function applyCommand(
-  apply: ApplyContext,
-  item: Doc<"setupImportItems">,
-  spec: ImportCommandSpec,
-  imported: ImportItem
-): Promise<Outcome> {
-  const { ctx, instanceId, instance, catalog } = apply;
-  const missing = missingRequirementMessage(imported, catalog);
-  if (missing) {
-    return { outcome: "needs_module", message: missing };
-  }
-  const found = await ctx.runQuery(internal.setupImports.existing, {
-    instanceId,
-    source: apply.source,
-    key: item.key,
-    kind: "command",
-    name: spec.command,
-  });
-  if (found) {
-    return { outcome: "exists", message: `You already have !${spec.command}; yours is kept.` };
-  }
-
-  const groupIds: string[] = [];
-  if (spec.access.builtIn.length > 0) {
-    const ids: Record<string, string> = await ctx.runQuery(internal.starterPacks.builtInGroupIds, {
-      instanceId,
-      names: spec.access.builtIn,
-    });
-    for (const name of spec.access.builtIn) {
-      const id = ids[name];
-      if (id === undefined) {
-        return {
-          outcome: "failed",
-          message: `The ${name} group has not synced from the engine yet. Try again shortly.`,
-        };
-      }
-      groupIds.push(id);
-    }
-  }
-  for (const key of spec.access.groupKeys) {
-    const id = usableId(apply, key);
-    if (id === null) {
-      // Leaving the group out would open the command to more people than before.
-      return { outcome: "skipped", message: "A group it is limited to was not imported, so it was left out." };
-    }
-    groupIds.push(id);
-  }
-
-  const restricted = groupIds.length > 0 || spec.access.usernames.length > 0;
-  const engineId = await createCommandInEngine(ctx, instanceId, instance, {
-    command: spec.command,
-    actions: compileCommandActions(spec.steps, catalog, counterIds(apply)),
-    cooldown: spec.cooldown,
-    enabled: spec.enabled,
-    visibility: restricted ? "restricted" : "public",
-    groupIds,
-    usernames: spec.access.usernames,
-  });
-  return { outcome: "created", engineId };
-}
-
-async function applyWorkflow(
-  apply: ApplyContext,
-  item: Doc<"setupImportItems">,
-  spec: ImportWorkflowSpec,
-  imported: ImportItem
-): Promise<Outcome> {
-  const { ctx, instanceId, instance, catalog } = apply;
-  if (spec.commandKey !== undefined) {
-    const command = apply.done.get(spec.commandKey);
-    if (command?.outcome !== "created") {
-      return {
-        outcome: "skipped",
-        message: "Its chat command was not created, so this part of it was left out too.",
-      };
-    }
-  }
-  const missing = missingRequirementMessage(imported, catalog);
-  if (missing) {
-    return { outcome: "needs_module", message: missing };
-  }
-  const found = await ctx.runQuery(internal.setupImports.existing, {
-    instanceId,
-    source: apply.source,
-    key: item.key,
-    kind: "workflow",
-    name: spec.name,
-  });
-  if (found) {
-    return { outcome: "exists", engineId: found.engineId, message: "An earlier import already created it." };
-  }
-
-  const definition = compileWorkflow(spec, catalog, counterIds(apply));
-  const correlationKey = crypto.randomUUID();
-  await ctx.runMutation(internal.setupImports.setCorrelation, { itemId: item._id, correlationKey });
-  let engineId: string;
-  try {
-    const target = await findEngineMergeTarget(instance, definition.trigger as Record<string, unknown>);
-    engineId =
-      target === undefined
-        ? await createWorkflowInEngine(
-            ctx,
-            instanceId,
-            instance,
-            // Carries delay waits and `$ref`s, which the shared WorkflowDefinition type does not model.
-            definition as unknown as Omit<WorkflowDefinition, "id">,
-            correlationKey
-          )
-        : await appendWorkflowSteps(
-            ctx,
-            instanceId,
-            instance,
-            target,
-            definition.tasks as unknown as readonly Record<string, unknown>[],
-            correlationKey
-          );
-  } catch (err) {
-    if (err instanceof EngineConfirmationTimeout) {
-      return { outcome: "pending", message: "Not confirmed yet. It shows as imported once it is." };
-    }
-    throw err;
-  }
-  // Its enabled state is set by completeImportItemByCorrelation when the
-  // create's echo arrives.
-  return { outcome: "created", engineId };
-}
-
-async function applyItem(apply: ApplyContext, item: Doc<"setupImportItems">): Promise<Outcome> {
+  applied: AppliedItems,
+  item: Doc<"setupImportItems">
+): Promise<ImportOutcome> {
   if (item.outcome === "pending" && item.correlationKey !== undefined) {
     const engineId = await apply.ctx.runQuery(internal.setupImports.completion, {
       correlationKey: item.correlationKey,
     });
     return engineId === null ? { outcome: "pending", message: item.message } : { outcome: "created", engineId };
   }
-  if (item.readiness === "unsupported") {
-    return { outcome: "skipped", message: blockingMessage(item) };
-  }
-  const imported = {
+  return applyImportItem(convexImportEngine(apply), applied, {
+    ref: item._id,
     key: item.key,
+    kind: item.kind,
     name: item.name,
     origin: item.origin,
     notes: item.notes,
-    kind: item.kind,
-    spec: unescapeDollarKeys(item.spec),
-  } as ImportItem;
-  switch (imported.kind) {
-    case "group":
-      return applyGroup(apply, item, imported.spec);
-    case "counter":
-      return applyCounter(apply, item, imported.spec);
-    case "command":
-      return applyCommand(apply, item, imported.spec, imported);
-    case "workflow":
-      return applyWorkflow(apply, item, imported.spec, imported);
-  }
+    readiness: item.readiness,
+    spec: item.spec,
+  });
 }
 
 /**
@@ -930,7 +722,7 @@ export const apply = internalAction({
       source: run.source,
       instance: { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret },
       catalog: starterCatalog(bundle),
-      done,
+      newCorrelationKey: () => crypto.randomUUID(),
     };
 
     const deadline = Date.now() + APPLY_SLICE_MS;
@@ -941,9 +733,9 @@ export const apply = internalAction({
         unfinished = true;
         break;
       }
-      let outcome: Outcome;
+      let outcome: ImportOutcome;
       try {
-        outcome = await applyItem(apply, item);
+        outcome = await applyItem(apply, done, item);
       } catch (err) {
         outcome = { outcome: "failed", message: errorMessage(err) };
       }

@@ -2,12 +2,11 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import { StorageSettings } from "@/components/settings/storage-settings";
-import { useInstance } from "@/hooks/use-instance";
+import { useStorageAccess } from "@/lib/admin-access";
 
 export default function AdminStorage() {
-  const { instance } = useInstance();
   const [, navigate] = useLocation();
-  const managed = instance?.hosting === "managed";
+  const { managed } = useStorageAccess();
 
   // The menu leaves this page out for a managed engine, which has no storage settings;
   // a saved link or a switch of instance can still land here.

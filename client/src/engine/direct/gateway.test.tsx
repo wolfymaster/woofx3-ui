@@ -32,8 +32,8 @@ test("a namespace with no engine home rejects, naming the member", async () => {
   const gateway = createDirectEngineGateway(harness.runtime, {
     shoutoutQueue: new FakeShoutoutQueueHost(),
   });
-  const start = renderDirect(() => gateway.setupImports.useStartRequest()).current();
-  const error = await start("import" as never).catch((caught: unknown) => caught);
+  const start = renderDirect(() => gateway.moduleOAuth.useConnectRequest()).current();
+  const error = await start({} as never).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(GatewayUnsupportedError);
-  expect(String(error)).toContain("setupImports.useStartRequest");
+  expect(String(error)).toContain("moduleOAuth.useConnectRequest");
 });

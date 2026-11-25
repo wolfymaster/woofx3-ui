@@ -1,6 +1,6 @@
 import { chunkText } from "@convex/lib/configBundle";
-import { decodeFirebotFile, decodeStreamerbotExport, ImportFileError } from "@convex/lib/setupImport/decode";
-import { IMPORT_SOURCE_LABELS, type ImportSource } from "@convex/lib/setupImport/types";
+import { decodeFirebotFile, decodeStreamerbotExport, ImportFileError } from "@shared/setup-import/decode";
+import { IMPORT_SOURCE_LABELS, type ImportSource } from "@shared/setup-import/types";
 import { FileUp, Loader2, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

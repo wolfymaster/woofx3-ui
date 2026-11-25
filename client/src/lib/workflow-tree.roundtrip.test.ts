@@ -1,7 +1,7 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: fixtures hold engine ${...} expressions as plain strings
 import { describe, expect, test } from "bun:test";
-import { compileWorkflow } from "@convex/lib/setupImport/compile";
-import type { ImportStep, ImportWorkflowSpec } from "@convex/lib/setupImport/types";
+import { compileWorkflow } from "@shared/setup-import/compile";
+import type { ImportStep, ImportWorkflowSpec } from "@shared/setup-import/types";
 import {
   buildStarterWorkflow,
   STARTER_PACKS,
