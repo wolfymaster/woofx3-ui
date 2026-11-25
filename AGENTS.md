@@ -11,7 +11,7 @@ Multi-tenant **control plane** (React + Vite + Convex): auth, instances, assets,
 
 ## Documentation (architecture and design)
 
-Narrative docs live under **`docs/`** (VitePress, `docs/package.json`). They describe routes, shells, and how screens use Convex vs `WoofxTransport` vs legacy TanStack Query paths.
+Narrative docs live under **`docs/`** (VitePress, `docs/package.json`). They describe routes, shells, and how screens use Convex vs legacy TanStack Query paths.
 
 - Entry: `docs/index.md` — product tour: `docs/ui/overview.md` — patterns/ADRs: `docs/patterns/`
 
@@ -26,7 +26,7 @@ bun run docs:build
 - **UI → engine (mutations that should be trusted):** browser → **Convex action** → engine HTTP API. **Do not** call the engine from the browser for these paths.
 - **All engine API calls from Convex use capnweb HTTP batch RPC** via `createEngineRpcSession(url, clientId, clientSecret)` in `convex/lib/engineInstanceUrl.ts`. This creates a gateway, calls `gateway.authenticate()`, and returns the Api stub — all pipelined in one batch.
 - **capnweb HTTP batch is single-use**: the batch fires on the first `await` and the session is consumed. Never `await` authenticate separately — chain the API call: `await createEngineRpcSession(...).someMethod()`. Multiple independent calls need separate sessions. Convex does not support WebSocket, so `newWebSocketRpcSession` cannot be used in Convex actions.
-- **`WoofxTransport`** (`client/src/lib/transport/`) — **only** for realtime browser↔engine WebSocket. Uses `newWebSocketRpcSession` + `gateway.authenticate()`. **Not** for Convex-proxied calls.
+- **The browser never connects to the engine.** An instance's client id and secret are a service token that only Convex holds: no query or action may return them to a browser. Engine calls go through Convex actions (`convex/engineLive.ts`, `instanceEngine` in `convex/lib/instanceEngine.ts`), and pushed stream events reach the browser as `stream.event.pushed` callbacks stored by Convex.
 - **Engine → UI:** events go through the woofx3 maintenance event queue, which posts them in batches to `/api/engine-events/batch`; each event handler is a plain function called from `convex/lib/engineEvents/dispatch.ts` and must be **idempotent**. Requests the engine waits on POST to `/api/webhooks/woofx3` with an `Authorization: Bearer <callbackToken>` header.
 
 Account sharing is **Convex-only**; the engine has no user/account model.
@@ -78,7 +78,7 @@ Summary (see `CLAUDE.md` for the full list): `internal*` for private APIs; valid
 - **Biome** — 2 spaces, double quotes, semicolons, ES5 trailing commas, 120 cols.
 - **Wouter v3** — redirect with `<Redirect to="..." />`, or `navigate` in an effect when the redirect follows other logic.
 - **State:** Nanostores for UI-only; Convex for persisted data.
-- **Engine access:** through the engine gateway (`client/src/engine/`); only the Convex adapter (`client/src/engine/convex/`) imports `client/src/lib/transport/`. Do not use deprecated `rpc-client.ts`.
+- **Engine access:** through the engine gateway (`client/src/engine/`). Do not use deprecated `rpc-client.ts`.
 - **Shadcn** in `client/src/components/ui/` — compose, don’t edit primitives.
 - **Instance-scoped queries:** `useQuery(api.foo.bar, instance ? { instanceId: instance._id } : "skip")`.
 

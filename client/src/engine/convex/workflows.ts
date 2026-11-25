@@ -21,11 +21,11 @@ import type {
   WorkflowRunStep,
   WorkflowTrigger,
 } from "@/engine/types";
-import { transport } from "@/lib/transport";
-import type { WorkflowRun as TransportWorkflowRun } from "@/lib/transport/interface";
+import { $documentVisible } from "@/lib/stores";
+import { startVisibleInterval } from "@/lib/visible-interval";
 import { toModuleId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
-import { requireInstance, useInstanceAction, useScopeInstanceId } from "./scope";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 type CatalogRow = NonNullable<FunctionReturnType<typeof api.workflowCatalog.get>>;
 type RunDetailRow = NonNullable<FunctionReturnType<typeof api.workflowRuns.runWithSteps>>;
@@ -263,7 +263,20 @@ function useRuns(engineWorkflowId: string, limit: number) {
   return useMappedList(rows, toRecordedWorkflowRun);
 }
 
-export function toWorkflowRun(run: TransportWorkflowRun): WorkflowRun {
+/** A run as the engine's run poll returns it. */
+interface PolledWorkflowRun {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: WorkflowRun["status"];
+  startedAt: Date;
+  completedAt?: Date;
+  triggeredBy?: string;
+  error?: string;
+  progress?: number;
+}
+
+export function toWorkflowRun(run: PolledWorkflowRun): WorkflowRun {
   return {
     id: run.id,
     workflowId: run.workflowId,
@@ -277,14 +290,27 @@ export function toWorkflowRun(run: TransportWorkflowRun): WorkflowRun {
   };
 }
 
-// The live transport holds one session, to the current instance's engine;
-// this still refuses while the scope has no instance, like every other call.
+/** How often the engine's runs are read while the tab is visible. */
+const RUNS_POLL_INTERVAL_MS = 10_000;
+
 function useRunsSubscription() {
-  const instanceId = useScopeInstanceId();
+  const listRuns = useInstanceAction(api.engineLive.workflowRuns);
   return useCallback(
-    (onRun: (run: WorkflowRun) => void) =>
-      transport.subscribeWorkflowRuns(requireInstance(instanceId), (run) => onRun(toWorkflowRun(run))),
-    [instanceId]
+    (onRun: (run: WorkflowRun) => void) => {
+      const poll = () => {
+        listRuns({})
+          .then((runs) => {
+            for (const run of runs) {
+              onRun(toWorkflowRun(run as unknown as PolledWorkflowRun));
+            }
+          })
+          .catch(() => {
+            // A poll that fails is retried by the next tick; the engine being away shows in the connection state.
+          });
+      };
+      return startVisibleInterval(poll, RUNS_POLL_INTERVAL_MS, $documentVisible);
+    },
+    [listRuns]
   );
 }
 

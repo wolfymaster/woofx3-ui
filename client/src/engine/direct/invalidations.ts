@@ -109,6 +109,8 @@ export const INVALIDATIONS: { readonly [T in EngineEventType]: Invalidation<T> }
   [EngineEventType.OVERLAY_TOKEN_REVOKED]: () => [k.scenes.browserSources()],
   // A notification for approvers; nothing here caches pending pairings.
   [EngineEventType.CLIENT_PAIRING_STARTED]: NONE,
+  // The direct runtime is pushed stream events by its own subscription.
+  [EngineEventType.STREAM_EVENT_PUSHED]: NONE,
   [EngineEventType.COMMAND_CREATED]: COMMANDS,
   [EngineEventType.COMMAND_UPDATED]: COMMANDS,
   [EngineEventType.COMMAND_DELETED]: COMMANDS,

@@ -5,8 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { DatabaseRecordsView, DatabasesGateway } from "@/engine/gateway";
 import { useFetched } from "@/engine/hooks/use-fetched";
 import type { ReadOptions } from "@/engine/types";
-import { transport } from "@/lib/transport";
-import { requireInstance, useScopeInstanceId } from "./scope";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 // Rows are the engine's own, read over the live transport like the event log.
 // Convex keeps none of them; it only records, as a transient event, that a
@@ -36,10 +35,11 @@ function useRefetchOnChange(databaseId: string, refetch: () => void): void {
 
 function useRecords(databaseId: string, view: DatabaseRecordsView, options?: ReadOptions) {
   const instanceId = useScopeInstanceId();
+  const list = useInstanceAction(api.engineLive.listDatabaseRecords);
   const request = useCallback(
     (args: { databaseId: string; view: DatabaseRecordsView }) =>
-      transport.listDatabaseRecords(requireInstance(instanceId), { databaseId: args.databaseId, ...args.view }),
-    [instanceId]
+      list({ query: { databaseId: args.databaseId, ...args.view } }),
+    [list]
   );
   const fetched = useFetched(request, instanceId && options?.enabled !== false ? { databaseId, view } : "skip");
   useRefetchOnChange(databaseId, fetched.refetch);
@@ -48,11 +48,8 @@ function useRecords(databaseId: string, view: DatabaseRecordsView, options?: Rea
 
 function useRecord(databaseId: string, recordId: string, options?: ReadOptions) {
   const instanceId = useScopeInstanceId();
-  const request = useCallback(
-    (args: { databaseId: string; recordId: string }) =>
-      transport.getDatabaseRecord(requireInstance(instanceId), args.databaseId, args.recordId),
-    [instanceId]
-  );
+  const get = useInstanceAction(api.engineLive.getDatabaseRecord);
+  const request = useCallback((args: { databaseId: string; recordId: string }) => get(args), [get]);
   const fetched = useFetched(
     request,
     instanceId && recordId !== "" && options?.enabled !== false ? { databaseId, recordId } : "skip"
@@ -62,28 +59,18 @@ function useRecord(databaseId: string, recordId: string, options?: ReadOptions) 
 }
 
 function useCreateRequest() {
-  const instanceId = useScopeInstanceId();
-  return useCallback(
-    (create: DatabaseRecordCreate) => transport.createDatabaseRecord(requireInstance(instanceId), create),
-    [instanceId]
-  );
+  const create = useInstanceAction(api.engineLive.createDatabaseRecord);
+  return useCallback((record: DatabaseRecordCreate) => create({ create: record }), [create]);
 }
 
 function useUpdateRequest() {
-  const instanceId = useScopeInstanceId();
-  return useCallback(
-    (update: DatabaseRecordUpdate) => transport.updateDatabaseRecord(requireInstance(instanceId), update),
-    [instanceId]
-  );
+  const update = useInstanceAction(api.engineLive.updateDatabaseRecord);
+  return useCallback((record: DatabaseRecordUpdate) => update({ update: record }), [update]);
 }
 
 function useDeleteRequest() {
-  const instanceId = useScopeInstanceId();
-  return useCallback(
-    (databaseId: string, recordId: string) =>
-      transport.deleteDatabaseRecord(requireInstance(instanceId), databaseId, recordId),
-    [instanceId]
-  );
+  const remove = useInstanceAction(api.engineLive.deleteDatabaseRecord);
+  return useCallback((databaseId: string, recordId: string) => remove({ databaseId, recordId }), [remove]);
 }
 
 export const convexDatabasesGateway: DatabasesGateway = {

@@ -15,7 +15,9 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
  * (`channel.follow`, `channel.cheer`), every channel event collapsed into one group.
  *
  * A trigger with no `alert.*` axis is not an alert type, so workflow and module
- * lifecycle triggers are never offered as things to alert on.
+ * lifecycle triggers are never offered as things to alert on. A `platform.system`
+ * trigger is not either: the resource it is about has its own page (Counters sits
+ * under Data), so it is configured there rather than in the Alerts menu.
  */
 export interface AlertNode {
   /**
@@ -34,18 +36,23 @@ export const OTHER_PLATFORM_KEY = "other";
 
 const PLATFORM_AXIS_PREFIX = "platform.";
 const ALERT_AXIS_PREFIX = "alert.";
+/** Not a platform to group by: these triggers belong to a resource page, not Alerts. */
+const SYSTEM_PLATFORM_KEY = "system";
 
 /**
  * Where a trigger sits in the Alerts menu: its platform, then each `alert.*` segment.
- * `undefined` when the trigger declares no alert kind.
+ * `undefined` when the trigger is not an alert kind offered here.
  */
 export function alertMenuPath(preset: Pick<TriggerPreset, "taxonomy">): string[] | undefined {
+  const declaredPlatform = triggerMenuAxis(preset.taxonomy, PLATFORM_AXIS_PREFIX)?.segments[0];
+  if (declaredPlatform === SYSTEM_PLATFORM_KEY) {
+    return undefined;
+  }
   const alert = triggerMenuAxis(preset.taxonomy, ALERT_AXIS_PREFIX)?.segments;
   if (!alert) {
     return undefined;
   }
-  const platform = triggerMenuAxis(preset.taxonomy, PLATFORM_AXIS_PREFIX)?.segments[0] ?? OTHER_PLATFORM_KEY;
-  return [platform, ...alert];
+  return [declaredPlatform ?? OTHER_PLATFORM_KEY, ...alert];
 }
 
 /** The id a node is addressed by in URLs and lookups. */

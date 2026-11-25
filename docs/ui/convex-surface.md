@@ -49,6 +49,6 @@ Paths evolve — read `http.ts` and the imported route modules when integrating.
 
 - **UI → engine (sensitive / server):** Convex **actions** call the instance’s engine URL with its client credentials — not the browser.
 - **Engine → UI:** engine **events** reach Convex in batches through the maintenance event queue; the engine's **requests** hit `/api/webhooks/woofx3` with the engine’s callback token.
-- **Browser ↔ engine (realtime):** **`WoofxTransport`** only — not used for Convex proxy calls.
+- **Browser ↔ engine:** none. The browser never holds an instance's engine credentials and never calls the engine's `/api`. Pushed stream events reach it from Convex, which the engine forwards them to as callbacks.
 
 This file is only a map; precise contracts belong next to the functions and in `CLAUDE.md`.
