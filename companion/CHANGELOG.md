@@ -1,5 +1,16 @@
 # woofx3 desktop changelog
 
+## [0.28.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.27.0...woofx3-v0.28.0) (2026-11-25)
+
+### Features
+
+* **logs:** a log explorer on Help -> Logs ([a2ba158](https://github.com/wolfymaster/woofx3-ui/commit/a2ba158c220f39745ec18af55cc8aa65bf94e703))
+* **logs:** LogsGateway for the direct and hosted runtimes ([7fe8bb1](https://github.com/wolfymaster/woofx3-ui/commit/7fe8bb11b3c5386ef5c2da40d13b2b40dd78df57))
+
+### Bug Fixes
+
+* **logs:** keep the hosted request functions stable across renders ([5673b11](https://github.com/wolfymaster/woofx3-ui/commit/5673b119fa183c681d7afab814060e4d8e1f2285))
+
 ## [0.27.0](https://github.com/wolfymaster/woofx3-ui/compare/woofx3-v0.26.0...woofx3-v0.27.0) (2026-11-24)
 
 ### Features
